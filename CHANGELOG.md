@@ -9,10 +9,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 ## 0.7.0 — English
 
 ### In the third beta (0.7.0-beta.3)
-- **The program is now called Verbaliox** (it was VerbaScribe): the window, the launcher `Verbaliox.exe`,
-  the repository and the release files. At the first start the data folder `%LOCALAPPDATA%\VerbaScribe`
-  becomes `%LOCALAPPDATA%\Verbaliox` with the library, settings and API keys; Obsidian notes and backups made
-  before stay recognised. The old `VerbaScribe.exe` is removed by itself once the new launcher is there.
+- **A new name: Verbaliox** — the window, the launcher `Verbaliox.exe`, the repository and the release
+  files. At the first start the library, settings and API keys move to the data folder
+  `%LOCALAPPDATA%\Verbaliox` by themselves; Obsidian notes and backups made before are still recognised.
 
 ### In the second beta (0.7.0-beta.2)
 - **Dubbing:** an environment made for Chatterbox before (updated with git or by an older version) is
@@ -34,10 +33,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 ## 0.7.0
 
 ### В третьей бете (0.7.0-beta.3)
-- **Программа теперь называется Verbaliox** (была VerbaScribe): окно, лаунчер `Verbaliox.exe`, репозиторий
-  и файлы релиза. При первом запуске папка данных `%LOCALAPPDATA%\VerbaScribe` становится
-  `%LOCALAPPDATA%\Verbaliox` вместе с медиатекой, настройками и API-ключами; заметки Obsidian и резервные
-  копии, сделанные раньше, по-прежнему узнаются. Старый `VerbaScribe.exe` удаляется сам, когда рядом есть новый.
+- **Новое имя — Verbaliox**: окно, лаунчер `Verbaliox.exe`, репозиторий и файлы релиза. При первом запуске
+  медиатека, настройки и API-ключи сами переходят в папку данных `%LOCALAPPDATA%\Verbaliox`; заметки Obsidian
+  и резервные копии, сделанные раньше, по-прежнему узнаются.
 
 ### Во второй бете (0.7.0-beta.2)
 - **Дубляж:** окружение, сделанное раньше для Chatterbox (обновлённое через git или старой версией), больше
