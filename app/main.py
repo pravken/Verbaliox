@@ -187,6 +187,12 @@ async def lifespan(_app: FastAPI):
     except Exception:
         traceback.print_exc()
 
+    try:
+        from app import secret_store
+
+        secret_store.rewrap_former()  # API keys saved before the program had its present name
+    except Exception:
+        traceback.print_exc()
     idle_unload.start()
     from app import onnx_gpu
 
