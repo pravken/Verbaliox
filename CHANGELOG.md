@@ -8,6 +8,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the fourth beta (0.7.0-beta.4)
+- API keys are stored under the program's new name: keys saved before are read and saved again at the
+  first start. Install this beta in place of the third one.
+
 ### In the third beta (0.7.0-beta.3)
 - **A new name: Verbaliox** — the window, the launcher `Verbaliox.exe`, the repository and the release
   files. At the first start the library, settings and API keys move to the data folder
@@ -31,6 +35,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+### В четвёртой бете (0.7.0-beta.4)
+- API-ключи хранятся под новым именем программы: сохранённые раньше читаются и пересохраняются при первом
+  запуске. Эту бету можно ставить вместо третьей.
 
 ### В третьей бете (0.7.0-beta.3)
 - **Новое имя — Verbaliox**: окно, лаунчер `Verbaliox.exe`, репозиторий и файлы релиза. При первом запуске
