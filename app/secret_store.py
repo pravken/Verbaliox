@@ -13,9 +13,9 @@ import sys
 from datetime import datetime
 from typing import Dict, Optional
 
-# The DPAPI entropy of keys saved since the first version: it stays the old name of the program,
-# otherwise keys saved before the rename to Verbaliox could not be read back
-_ENTROPY = b"VerbaScribe API key"
+_ENTROPY = b"Verbaliox API key"
+# Keys saved before the rename: read with the entropy of that time and saved again (rewrap_former)
+_FORMER_ENTROPY = b"VerbaScribe API key"
 
 
 class _Blob(ctypes.Structure):
@@ -27,11 +27,11 @@ def _blob(data: bytes) -> _Blob:
     return _Blob(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_ubyte)))
 
 
-def _dpapi(data: bytes, protect: bool) -> bytes:
+def _dpapi(data: bytes, protect: bool, entropy_bytes: bytes = _ENTROPY) -> bytes:
     """CryptProtectData / CryptUnprotectData have the same argument list:
     (data in, description, entropy, reserved, prompt, flags, data out)."""
     crypt32, kernel32 = ctypes.windll.crypt32, ctypes.windll.kernel32
-    src, entropy, out = _blob(data), _blob(_ENTROPY), _Blob()
+    src, entropy, out = _blob(data), _blob(entropy_bytes), _Blob()
     fn = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
     CRYPTPROTECT_UI_FORBIDDEN = 0x1
     if not fn(ctypes.byref(src), None, ctypes.byref(entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(out)):
@@ -51,7 +51,11 @@ def protect(text: str) -> str:
 def unprotect(stored: str) -> Optional[str]:
     try:
         if stored.startswith("dpapi:"):
-            return _dpapi(base64.b64decode(stored[6:]), False).decode("utf-8")
+            blob = base64.b64decode(stored[6:])
+            try:
+                return _dpapi(blob, False).decode("utf-8")
+            except OSError:
+                return _dpapi(blob, False, _FORMER_ENTROPY).decode("utf-8")
         if stored.startswith("plain:"):
             return stored[6:]
     except Exception:
@@ -89,6 +93,38 @@ def get_secret(name: str) -> Optional[str]:
         row = conn.execute("SELECT value FROM secrets WHERE name = ?", (name,)).fetchone()
         conn.close()
     return unprotect(row[0]) if row else None
+
+
+def rewrap_former() -> int:
+    """Keys saved with the former entropy are saved again with the current one (called at start; a
+    current key is left alone). Returns how many were saved again."""
+    if sys.platform != "win32":
+        return 0
+    from app.database import _db_lock
+
+    done = 0
+    with _db_lock:
+        conn = _conn()
+        try:
+            for name, stored in conn.execute("SELECT name, value FROM secrets").fetchall():
+                if not stored.startswith("dpapi:"):
+                    continue
+                blob = base64.b64decode(stored[6:])
+                try:
+                    _dpapi(blob, False)
+                    continue  # already current
+                except OSError:
+                    pass
+                try:
+                    value = _dpapi(blob, False, _FORMER_ENTROPY).decode("utf-8")
+                except OSError:
+                    continue  # another account's key: the UI says it cannot be read
+                conn.execute("UPDATE secrets SET value = ? WHERE name = ?", (protect(value), name))
+                done += 1
+            conn.commit()
+        finally:
+            conn.close()
+    return done
 
 
 def delete_secret(name: str) -> None:

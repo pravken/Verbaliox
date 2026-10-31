@@ -3,7 +3,7 @@ The release key of Verbaliox (see app/release_sign.py and docs/release-signing.m
 
   python tools/release_key.py generate [--out FILE]
       A new key. Prints the public key for app/updater.py (RELEASE_PUBLIC_KEY) and writes the
-      secret to FILE (verbascribe-release.key by default): keep it offline, and put its text into
+      secret to FILE (verbaliox-release.key by default): keep it offline, and put its text into
       the RELEASE_SIGNING_KEY secret of the repository's Actions. Never commit it.
 
   python tools/release_key.py sign SHA256SUMS.txt --tag vX.Y.Z
@@ -30,8 +30,8 @@ from app import release_sign  # noqa: E402
 
 def _secret() -> tuple:
     text = os.environ.get("RELEASE_SIGNING_KEY", "").strip()
-    # The prefix keeps the program's former name: the secret in GitHub Actions was made with it
-    m = re.fullmatch(r"verbascribe-release-key:([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)", text)
+    # The prefix is the program's name when the key was made; any name is taken
+    m = re.fullmatch(r"[a-z]+-release-key:([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)", text)
     if not m:
         sys.exit("RELEASE_SIGNING_KEY is empty or not a key made by tools/release_key.py generate")
     seed, key_id = base64.b64decode(m.group(1)), base64.b64decode(m.group(2))
@@ -50,7 +50,7 @@ def main() -> None:
     ap.add_argument("action", choices=["generate", "sign", "verify"])
     ap.add_argument("file", nargs="?")
     ap.add_argument("--tag", default="")
-    ap.add_argument("--out", default="verbascribe-release.key")
+    ap.add_argument("--out", default="verbaliox-release.key")
     a = ap.parse_args()
 
     if a.action == "generate":
@@ -61,7 +61,7 @@ def main() -> None:
             print("Warning: the secret is written inside the program folder. Move it out and never commit it.")
         seed, key_id = release_sign.new_key()
         out.parent.mkdir(parents=True, exist_ok=True)
-        secret = f"verbascribe-release-key:{base64.b64encode(seed).decode()}:{base64.b64encode(key_id).decode()}"
+        secret = f"verbaliox-release-key:{base64.b64encode(seed).decode()}:{base64.b64encode(key_id).decode()}"
         out.write_text(secret + "\n", encoding="utf-8")
         print(f"Secret key written to {out.resolve()}")
         print("Put its whole text into the repository secret RELEASE_SIGNING_KEY (Settings → Secrets and variables → Actions).")
