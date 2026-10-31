@@ -11,12 +11,12 @@
    ```
    git clone --branch claude/sweet-maxwell-uaextf https://github.com/pravken/Verbaliox D:\Temp\Verbaliox-key
    cd /d D:\Temp\Verbaliox-key
-   python tools\release_key.py generate --out D:\Projects\_Secret_Keys\VerbaScribe\verbascribe-release.key
+   python tools\release_key.py generate --out D:\Projects\_Secret_Keys\Verbaliox\verbaliox-release.key
    ```
 
    Секрет кладите вне клона (`--out` с полным путём, папка создаётся сама). Скрипт напишет путь к файлу секрета и строку открытого ключа. Клон потом можно удалить.
 
-2. **Секрет — в GitHub.** Откройте репозиторий → Settings → Secrets and variables → Actions → New repository secret. Имя `RELEASE_SIGNING_KEY`, значение — весь текст файла секрета (строка `verbascribe-release-key:…` — префикс остался от прежнего имени программы, так и нужно).
+2. **Секрет — в GitHub.** Откройте репозиторий → Settings → Secrets and variables → Actions → New repository secret. Имя `RELEASE_SIGNING_KEY`, значение — весь текст файла секрета (строка `…-release-key:…`).
 
 3. **Сохраните файл секрета** в надёжном месте офлайн (менеджер паролей, зашифрованная флешка). Если он пропадёт, придётся выпустить версию с новым открытым ключом, а уже установленные копии примут её только вручную.
 
