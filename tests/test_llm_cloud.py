@@ -168,3 +168,34 @@ class CloudApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FormerEntropyTest(unittest.TestCase):
+    """API keys saved before the program had its present name are read and saved again."""
+
+    def _fake_dpapi(self, data, protect, entropy=secret_store._ENTROPY):
+        # a stand-in for DPAPI: the entropy is bound into the blob and must match to read it back
+        if protect:
+            return entropy + b"|" + data
+        tag, _, body = data.partition(b"|")
+        if tag != entropy:
+            raise OSError("DPAPI failed")
+        return body
+
+    def test_a_key_of_the_former_entropy_is_read_and_rewrapped(self):
+        import base64
+
+        with mock.patch.object(secret_store, "_dpapi", self._fake_dpapi), mock.patch.object(secret_store.sys, "platform", "win32"):
+            old = "dpapi:" + base64.b64encode(secret_store._FORMER_ENTROPY + b"|sk-old-key-1234").decode()
+            conn = secret_store._conn()
+            conn.execute("INSERT OR REPLACE INTO secrets VALUES ('former_key', ?, '2026-10-01 00:00:00')", (old,))
+            conn.commit()
+            conn.close()
+            self.assertEqual(secret_store.get_secret("former_key"), "sk-old-key-1234")
+            self.assertEqual(secret_store.rewrap_former(), 1)
+            conn = secret_store._conn()
+            stored = conn.execute("SELECT value FROM secrets WHERE name = 'former_key'").fetchone()[0]
+            conn.close()
+            self.assertTrue(base64.b64decode(stored[6:]).startswith(secret_store._ENTROPY + b"|"))
+            self.assertEqual(secret_store.get_secret("former_key"), "sk-old-key-1234")
+            self.assertEqual(secret_store.rewrap_former(), 0)  # nothing left to do

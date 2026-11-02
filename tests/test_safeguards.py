@@ -228,7 +228,7 @@ class UpdateSourceTest(unittest.TestCase):
 
         base = updater.DOWNLOAD_PREFIX + "v9.0.0/"
         release = {"tag_name": "v9.0.0", "assets": [
-            {"name": "VerbaScribe-v9.0.0.zip", "browser_download_url": base + "VerbaScribe-v9.0.0.zip", "digest": "sha256:" + "a" * 64},
+            {"name": "Verbaliox-v9.0.0.zip", "browser_download_url": base + "Verbaliox-v9.0.0.zip", "digest": "sha256:" + "a" * 64},
             {"name": "SHA256SUMS.txt", "browser_download_url": "https://evil.example/SHA256SUMS.txt"},
         ]}
         real = httpx.Client
@@ -236,11 +236,11 @@ class UpdateSourceTest(unittest.TestCase):
         db.init_db()
         with mock.patch("httpx.Client", side_effect=lambda **kw: real(transport=transport, **kw)):
             latest = updater.check(force=True)["latest"]
-        self.assertEqual(latest["zip_url"], base + "VerbaScribe-v9.0.0.zip")
+        self.assertEqual(latest["zip_url"], base + "Verbaliox-v9.0.0.zip")
         self.assertIsNone(latest["sums_url"])  # a file from another host is ignored
         self.assertEqual(latest["zip_digest"], "a" * 64)
 
-        sums = f"{'b' * 64}  VerbaScribe-v9.0.0.zip\n"
+        sums = f"{'b' * 64}  Verbaliox-v9.0.0.zip\n"
         transport = httpx.MockTransport(lambda req: httpx.Response(200, text=sums))
         # the checksums are compared here; the signature has its tests in tests/test_updater.py
         with mock.patch("httpx.Client", side_effect=lambda **kw: real(transport=transport, **kw)), \
@@ -264,7 +264,7 @@ class PinnedDownloadsTest(unittest.TestCase):
 
         req = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8")
         version = re.search(r"^onnxruntime==([\w.]+)", req, flags=re.M).group(1)
-        self.assertIn((version, "cp310"), WHEEL_HASHES)  # setup.bat and the release build use Python 3.10
+        self.assertIn((version, "cp311"), WHEEL_HASHES)  # setup.bat and the release build use Python 3.11
 
     def test_hugging_face_downloads_name_a_revision(self):
         import re
@@ -272,7 +272,7 @@ class PinnedDownloadsTest(unittest.TestCase):
 
         root = Path(__file__).resolve().parents[1] / "app"
         # Not pinned yet: the commit has to be read on the PC (Hugging Face is closed to the cloud session)
-        known = {("dub_worker.py", '"adefossez/HTDemucs", "htdemucs.yaml"'), ("dub_worker.py", '"adefossez/HTDemucs", f"{sig}.safetensors"')}
+        known = set()
         loose = []
         for f in sorted(root.glob("*.py")):
             for m in re.finditer(r"\b(?:hf_hub_download|snapshot_download)\(([^()]*(?:\([^()]*\)[^()]*)*)\)", f.read_text(encoding="utf-8")):

@@ -2,7 +2,7 @@
 Installs the optional Translate & Dub environment (.venv-dub) from the app, on explicit request.
 
 Runs the same steps as setup_dub.bat: create the venv (uv if available, otherwise the standard
-venv module), install requirements-dub.txt, install chatterbox-tts without its demo-only deps,
+venv module), install requirements-dub.txt, install voxcpm without its demo and training deps,
 then check that the packages really import. Only a successful check marks the environment as
 ready, so an interrupted or failed install never enables the Dub button.
 """
@@ -23,18 +23,25 @@ from app.pyenv import ensure_pip, find_uv as _find_uv
 
 DUB_VENV = APP_DIR / ".venv-dub"
 DUB_PYTHON = DUB_VENV / "Scripts" / "python.exe" if sys.platform == "win32" else DUB_VENV / "bin" / "python"
-DUB_READY_MARKER = DUB_VENV / "verbascribe-dub-ready.txt"
+DUB_READY_MARKER = DUB_VENV / "verbaliox-dub-ready.txt"
+# The mark of an environment installed while the program was called VerbaScribe: taken over as is
+_FORMER_MARKER = DUB_VENV / "verbascribe-dub-ready.txt"
+if _FORMER_MARKER.is_file() and not DUB_READY_MARKER.exists():
+    try:
+        _FORMER_MARKER.rename(DUB_READY_MARKER)
+    except OSError:
+        pass
 # Both are locks with hashes (pip --require-hashes): a package changed on PyPI after the lock is refused
 REQUIREMENTS = APP_DIR / "requirements-dub.txt"
-CHATTERBOX_REQUIREMENTS = APP_DIR / "requirements-dub-chatterbox.txt"  # installed with --no-deps
-TORCH_INDEX = "https://download.pytorch.org/whl/cu124"
-DOWNLOAD_SIZE_GB = 6
-MIN_FREE_GB = 9  # packages (~6 GB) plus room for the model weights downloaded on the first dub
+VOXCPM_REQUIREMENTS = APP_DIR / "requirements-dub-voxcpm.txt"  # installed with --no-deps
+TORCH_INDEX = "https://download.pytorch.org/whl/cu126"
+DOWNLOAD_SIZE_GB = 5  # the environment takes 4.5 GB on disk (torch 2.11+cu126, VoxCPM2, Demucs)
+MIN_FREE_GB = 10  # packages (~4.5 GB) plus room for the model weights (~5 GB) downloaded on the first dub
 
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 # perth silently sets its watermarker to None when an import fails, which only breaks at dub time
 _VERIFY_CODE = (
-    "import torch, demucs, chatterbox, perth; "
+    "import torch, demucs, voxcpm, perth, num2words; "
     "assert perth.PerthImplicitWatermarker is not None, 'perth watermarker failed to import'; "
     "print('cuda=' + str(torch.cuda.is_available()))"
 )
@@ -64,7 +71,7 @@ def _set(**kw: Any) -> None:
 def _requirements_hash() -> str:
     try:
         # The same as app/updater.py _dub_requirements_hash
-        return hashlib.sha256(b"".join(f.read_bytes() for f in (REQUIREMENTS, CHATTERBOX_REQUIREMENTS) if f.is_file())).hexdigest()
+        return hashlib.sha256(b"".join(f.read_bytes() for f in (REQUIREMENTS, VOXCPM_REQUIREMENTS) if f.is_file())).hexdigest()
     except OSError:
         return ""
 
@@ -78,11 +85,22 @@ def _marked_requirements() -> Optional[str]:
     return m.group(1) if m else None
 
 
+def _has_voxcpm() -> bool:
+    """The voice model's package is in .venv-dub (an environment made before 0.7.0 has Chatterbox)."""
+    return any(DUB_VENV.glob("Lib/site-packages/voxcpm")) or any(DUB_VENV.glob("lib/python*/site-packages/voxcpm"))
+
+
 def is_outdated() -> bool:
     """The environment was made for an older requirements-dub.txt (an update changed it): it needs
-    its packages installed again before dubbing."""
+    its packages installed again before dubbing. A ready mark without the requirements it was made
+    with (an old version, or a folder updated with git) counts as outdated when the voice model's
+    package is missing: such an environment was made for Chatterbox."""
+    if not DUB_READY_MARKER.is_file():
+        return False
     marked = _marked_requirements()
-    return marked is not None and marked != _requirements_hash()
+    if marked is None:
+        return not _has_voxcpm()
+    return marked != _requirements_hash()
 
 
 def _verify() -> bool:
@@ -167,6 +185,23 @@ def _run(cmd: List[str], start_pct: int, end_pct: int, env: Dict[str, str]) -> i
     return rc
 
 
+def _venv_python_version() -> tuple:
+    """The Python of .venv-dub from its pyvenv.cfg ("version_info = 3.10.11"); (0,) when unknown."""
+    try:
+        for line in (DUB_VENV / "pyvenv.cfg").read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() in ("version_info", "version"):
+                return tuple(int(x) for x in value.strip().split(".")[:2])
+    except (OSError, ValueError):
+        pass
+    return (0,)
+
+
+def _has_chatterbox() -> bool:
+    """chatterbox-tts in .venv-dub: an environment made for the voice model before 0.6.0."""
+    return any(DUB_VENV.glob("Lib/site-packages/chatterbox*")) or any(DUB_VENV.glob("lib/python*/site-packages/chatterbox*"))
+
+
 def _install() -> None:
     env = dict(os.environ)
     env["PATH"] = os.pathsep.join(
@@ -177,16 +212,24 @@ def _install() -> None:
     try:
         DUB_READY_MARKER.unlink(missing_ok=True)
         _set(step="venv", progress=2)
+        if DUB_PYTHON.is_file() and _venv_python_version() < (3, 11):
+            # Made on Python 3.10 before: the lock is for 3.11 now, the environment is made again
+            _log("Окружение дубляжа на Python 3.10: создаётся заново на 3.11")
+            shutil.rmtree(DUB_VENV, ignore_errors=True)
+        elif DUB_PYTHON.is_file() and _has_chatterbox():
+            # The voice model before 0.6.0: an install on top would keep its packages (pykakasi, GPL)
+            _log("Окружение дубляжа с Chatterbox: создаётся заново для VoxCPM2")
+            shutil.rmtree(DUB_VENV, ignore_errors=True)
         if not DUB_PYTHON.is_file():
             if uv:
                 # A uv-managed Python avoids the Store Python's AppData virtualization
-                if _run([uv, "venv", str(DUB_VENV), "--python", "3.10", "--python-preference", "only-managed"], 2, 8, env) != 0:
-                    _run([uv, "venv", str(DUB_VENV), "--python", "3.10"], 2, 8, env)
+                if _run([uv, "venv", str(DUB_VENV), "--python", "3.11", "--python-preference", "only-managed"], 2, 8, env) != 0:
+                    _run([uv, "venv", str(DUB_VENV), "--python", "3.11"], 2, 8, env)
             if not DUB_PYTHON.is_file():
                 base = getattr(sys, "_base_executable", None) or sys.executable
                 _run([base, "-m", "venv", str(DUB_VENV)], 2, 8, env)
             if not DUB_PYTHON.is_file():
-                raise RuntimeError("Не удалось создать окружение .venv-dub (нужен Python 3.10 или uv)")
+                raise RuntimeError("Не удалось создать окружение .venv-dub (нужен Python 3.11 или uv)")
 
         _set(step="packages", progress=8)
         if uv:
@@ -206,21 +249,21 @@ def _install() -> None:
         if rc != 0:
             raise RuntimeError("Не удалось установить пакеты (подробности в журнале)")
 
-        _set(step="chatterbox", progress=85)
+        _set(step="voxcpm", progress=85)
         cmd = (
             [uv, "pip", "install", "--python", str(DUB_PYTHON), "--no-deps", "--require-hashes",
-             "-r", str(CHATTERBOX_REQUIREMENTS)]
+             "-r", str(VOXCPM_REQUIREMENTS)]
             if uv
-            else [str(DUB_PYTHON), "-m", "pip", "install", "--no-deps", "--require-hashes", "-r", str(CHATTERBOX_REQUIREMENTS)]
+            else [str(DUB_PYTHON), "-m", "pip", "install", "--no-deps", "--require-hashes", "-r", str(VOXCPM_REQUIREMENTS)]
         )
         if _run(cmd, 85, 92, env) != 0:
-            raise RuntimeError("Не удалось установить chatterbox-tts (подробности в журнале)")
+            raise RuntimeError("Не удалось установить voxcpm (подробности в журнале)")
 
         _set(step="verify", progress=93)
-        _log("Проверка: импорт torch, demucs, chatterbox…")
+        _log("Проверка: импорт torch, demucs, voxcpm…")
         if not _verify():
             raise RuntimeError("Пакеты установлены, но не загружаются (подробности в журнале)")
-        _log("Окружение дубляжа готово. Веса моделей (~3 ГБ) скачаются при первом дубляже.")
+        _log("Окружение дубляжа готово. Веса моделей (~5 ГБ) скачаются при первом дубляже.")
         _set(active=False, progress=100, step="done", done=True, error="")
     except Exception as e:
         _log(f"ОШИБКА: {e}")

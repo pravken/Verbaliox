@@ -1,4 +1,6 @@
-# VerbaScribe
+<p align="center"><img src="docs/cover-en.png" alt="Verbaliox records, transcribes and analyzes meetings on your computer" width="100%"></p>
+
+# Verbaliox
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6.svg)](#requirements)
@@ -11,7 +13,7 @@
 <a name="english"></a>
 ## English
 
-**VerbaScribe** is a Windows desktop app for transcribing audio and video on your own computer. It recognizes speech, splits it by speaker, and can optionally summarize the transcript or answer questions about it with a local language model through [Ollama](https://ollama.com).
+**Verbaliox** is a Windows desktop app for transcribing audio and video on your own computer. It recognizes speech, splits it by speaker, and can optionally summarize the transcript or answer questions about it with a local language model through [Ollama](https://ollama.com).
 
 Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA, or CPU). The app needs no account or API key. If you want, analysis can use a cloud model instead (OpenAI, Anthropic Claude, Google Gemini or an OpenAI-compatible service) with your own API key; it is off by default. Network access is described [below](#network-access).
 
@@ -59,17 +61,17 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 
 ### Getting started
 
-**Option A — release archive.** Download `VerbaScribe-vX.Y.Z.zip` from [Releases](https://github.com/pravken/VerbaScribe/releases), check it against `SHA256SUMS.txt`, unpack it and run `VerbaScribe.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
+**Option A — release archive.** Download `Verbaliox-vX.Y.Z.zip` from [Releases](https://github.com/pravken/Verbaliox/releases), check it against `SHA256SUMS.txt`, unpack it and run `Verbaliox.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
 
-Unpack the archive to a regular folder you can write to, such as `D:\VerbaScribe`, not `Program Files`: the app creates `.venv` and `models` next to itself. The `.exe` alone is not enough, it is only the launcher for the program files in the archive. On the first start the launcher offers to install the Python environment (`setup.bat`). This downloads several gigabytes and usually takes 10–20 minutes, depending on your connection. Later starts take seconds, and new versions are installed from **Settings → General**.
+Unpack the archive to a regular folder you can write to, such as `D:\Verbaliox`, not `Program Files`: the app creates `.venv` and `models` next to itself. The `.exe` alone is not enough, it is only the launcher for the program files in the archive. On the first start the launcher offers to install the Python environment (`setup.bat`). This downloads several gigabytes and usually takes 10–20 minutes, depending on your connection. Later starts take seconds, and new versions are installed from **Settings → General**.
 
-`VerbaScribe.exe` is not code-signed. On the first start Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway** (compare the file with `SHA256SUMS.txt` first). If Windows blocks the scripts of the unpacked folder, right-click the downloaded `.zip` → **Properties → Unblock** before unpacking. Keep the folder path short (under about 150 characters, e.g. `D:\VerbaScribe`): some CUDA libraries and model files have long names, and Windows refuses paths over 260 characters unless long paths are turned on.
+`Verbaliox.exe` is not code-signed. On the first start Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway** (compare the file with `SHA256SUMS.txt` first). If Windows blocks the scripts of the unpacked folder, right-click the downloaded `.zip` → **Properties → Unblock** before unpacking. Keep the folder path short (under about 150 characters, e.g. `D:\Verbaliox`): some CUDA libraries and model files have long names, and Windows refuses paths over 260 characters unless long paths are turned on.
 
 **Option B — from source.**
 
 ```bash
-git clone https://github.com/pravken/VerbaScribe.git
-cd VerbaScribe
+git clone https://github.com/pravken/Verbaliox.git
+cd Verbaliox
 start.bat
 ```
 
@@ -77,7 +79,7 @@ On first launch `setup.bat` creates a Python virtual environment (`.venv`) and i
 
 In a folder cloned with git the app still reports new versions but never installs them itself: run `update.bat` (or `update.bat <branch>` to switch branches). It puts files changed in the folder aside with `git stash`, updates the branch and installs the packages when `requirements.txt` changed.
 
-**"This app is partially blocked" (Smart App Control).** Windows 11 with Smart App Control on blocks program files without a digital signature, and Python libraries often have none. `setup.bat` notices it and builds the environment on the signed Python from python.org (installing Python 3.10 with winget if needed), but some library files may still be blocked. If the app does not start or a feature fails, turn Smart App Control off: **Windows Security → App & browser control → Smart App Control settings → Off** (it cannot be turned back on without reinstalling Windows; Defender keeps protecting the PC). An environment made by an older `setup.bat` uses an unsigned Python: delete the `.venv` folder and run `setup.bat` again.
+**"This app is partially blocked" (Smart App Control).** Windows 11 with Smart App Control on blocks program files without a digital signature, and Python libraries often have none. `setup.bat` notices it and builds the environment on the signed Python from python.org (installing Python 3.11 with winget if needed), but some library files may still be blocked. If the app does not start or a feature fails, turn Smart App Control off: **Windows Security → App & browser control → Smart App Control settings → Off** (it cannot be turned back on without reinstalling Windows; Defender keeps protecting the PC). An environment made by an older `setup.bat` uses an unsigned Python: delete the `.venv` folder and run `setup.bat` again.
 
 <a name="translate-text"></a>
 ### Translate text
@@ -104,36 +106,34 @@ what was translated before a cancel is kept.
 ### Translate & dub
 
 The **Dub** button in a recording's header translates every phrase with your local Ollama model, synthesizes it in the
-original speaker's voice with [Chatterbox Multilingual](https://github.com/resemble-ai/chatterbox) (23 languages,
+original speaker's voice with [VoxCPM2](https://github.com/OpenBMB/VoxCPM) (OpenBMB; 23 languages here,
 including Russian and English), keeps the music and ambience separated by [Demucs](https://github.com/adefossez/demucs),
-fits each phrase to the original timing and saves a new file to the `dubs` subfolder of the data folder (`%LOCALAPPDATA%\VerbaScribe\dubs`). It runs as a normal job in the
+fits each phrase to the original timing and saves a new file to the `dubs` subfolder of the data folder (`%LOCALAPPDATA%\Verbaliox\dubs`). It runs as a normal job in the
 processing queue, with progress and **Cancel**.
 
 - **Install once:** click **Install** in the Dub window (or run `setup_dub.bat`). It creates a separate environment `.venv-dub` (~6 GB of packages); about
-  3 GB of model weights are downloaded into `models\dub\` on the first job. The separate environment is needed
-  because Chatterbox pins library versions that conflict with the main app.
-- **Requirements:** NVIDIA GPU with ~4 GB free VRAM for the TTS (measured peak 3.5 GB) plus whatever your Ollama
+  5 GB of model weights are downloaded into `models\dub\` on the first job. The separate environment keeps the
+  voice model's libraries apart from the main app's.
+- **Requirements:** NVIDIA GPU with ~7 GB free VRAM for the TTS (measured peak 5.7–6.4 GB) plus whatever your Ollama
   model needs during translation (the LLM is unloaded before synthesis). A 7B+ Ollama model is recommended for
   translation quality.
-- **Speed (RTX 3090):** a 34-second clip took ~95 s on the first run (including model loading) and ~57 s warm;
-  expect roughly 1.3–1.5 minutes of processing per minute of speech. Details in [docs/dubbing.md](docs/dubbing.md).
+- **Speed (RTX 3090):** VoxCPM2 voices a second of speech in about 1.45 s (bench-report/tts-candidates.md);
+  expect roughly 2–2.5 minutes of processing per minute of speech. Details in [docs/dubbing.md](docs/dubbing.md).
 - **Consent and labelling:** the app asks you to confirm that the speakers agreed to having their voices cloned.
   Output files carry `.AI-dub.<lang>.` in the name, an "AI-generated dub" notice in the file metadata, an
-  "AI dub … synthetic cloned voice" audio-track title and Chatterbox's inaudible Perth watermark. The original
+  "AI dub … synthetic cloned voice" audio-track title and the inaudible Perth watermark on every phrase. The original
   audio is kept as a second track, and the translation is saved as `.srt` next to the file.
 - **Limitations:** no lip-sync; phrases are sped up (max 1.6×) or trimmed to fit; some accent of the source
   language remains; overlapping speech and diarization errors are carried into the dub; translation can be
   wrong, especially with small models.
-- **Licenses of the dubbing environment:** everything in it is free for commercial use; the one copyleft
-  package is [pykakasi](https://codeberg.org/miurahr/pykakasi) (**GPL v3**), which Chatterbox uses to read
-  kanji in Japanese dubs. It runs only in the separate dubbing process and is downloaded by the installer,
-  not shipped with VerbaScribe. If you do not want it: `.venv-dub\Scripts\python.exe -m pip uninstall pykakasi`
-  (Japanese dubs then skip the kanji conversion; other languages are not affected).
+- **Licenses of the dubbing environment:** everything in it is free for commercial use. Numbers are read as
+  words with [num2words](https://github.com/savoirfairelinux/num2words) (**LGPL-2.1**), which runs only in the
+  separate dubbing process and is downloaded by the installer, not shipped with Verbaliox.
 
 <a name="network-access"></a>
 ### Network access
 
-VerbaScribe has no telemetry. It connects to the internet only for these actions:
+Verbaliox has no telemetry. It connects to the internet only for these actions:
 
 | When | Where |
 | :--- | :--- |
@@ -145,9 +145,9 @@ VerbaScribe has no telemetry. It connects to the internet only for these actions
 | You download an Ollama model | Ollama's model registry, via your local Ollama |
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
-| Your first dubbing job | Hugging Face (Chatterbox and Demucs weights) |
+| Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
 | You click **Download FFmpeg** in Settings | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
-| App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest VerbaScribe release, nothing about you or your computer |
+| App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer |
 | You click **Install** for an update | github.com: the release archive and `SHA256SUMS.txt`; PyPI and download.pytorch.org if the new version needs other Python packages. The checksum proves the archive arrived complete and unchanged. Once the author's release key is set up, `SHA256SUMS.txt` is also signed (`SHA256SUMS.txt.minisig`, minisign format) and the app installs only releases signed with it ([docs/release-signing.md](docs/release-signing.md)) |
 | Only if you turned on a cloud model in Settings → Analysis: an overview, a question, a title or an Obsidian note is made | The chosen service (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` or your Base URL): the transcript text of that recording, or the fragments found for a library question. Audio and video are never sent. The API key is stored encrypted with Windows DPAPI |
 
@@ -155,11 +155,11 @@ The user interface, fonts and scripts are served locally. The built-in server li
 
 ### Where your data is stored
 
-Recordings, extracted audio, the database and exports are kept in `%LOCALAPPDATA%\VerbaScribe` (shown in Settings). Set the `VERBASCRIBE_DATA_DIR` environment variable to use another folder. Speech models stay in the program's `models` folder (`VERBASCRIBE_MODELS_DIR` overrides it). Earlier versions kept data in the program's `data` folder; it is moved automatically on the first start (copied, verified, then removed, with a `MOVED.txt` note left behind). Files you added by disk path are never moved.
+Recordings, extracted audio, the database and exports are kept in `%LOCALAPPDATA%\Verbaliox` (shown in Settings). Set the `VERBALIOX_DATA_DIR` environment variable to use another folder. Speech models stay in the program's `models` folder (`VERBALIOX_MODELS_DIR` overrides it). Earlier versions kept data in the program's `data` folder; it is moved automatically on the first start (copied, verified, then removed, with a `MOVED.txt` note left behind). Files you added by disk path are never moved.
 
 ### Licenses
 
-VerbaScribe's own code is released under the [MIT License](LICENSE). Models and libraries keep their own licenses; check them yourself before commercial use:
+Verbaliox's own code is released under the [MIT License](LICENSE). Models and libraries keep their own licenses; check them yourself before commercial use:
 
 | Component | License |
 | :--- | :--- |
@@ -181,16 +181,17 @@ VerbaScribe's own code is released under the [MIT License](LICENSE). Models and 
 | SoundCard (system audio recording) | BSD-3 |
 | yt-dlp (installed when you first import by link) | Unlicense |
 | FFmpeg (optional download, Gyan.dev essentials build) | GPL v3 |
-| Chatterbox Multilingual TTS (optional dubbing) | MIT |
+| [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) TTS (optional dubbing) | Apache 2.0 |
+| Perth watermark `resemble-perth` (optional dubbing) | MIT |
 | Demucs `htdemucs` (optional dubbing) | MIT |
-| pykakasi (optional dubbing, Japanese only, see [Translate & dub](#translate-dub)) | GPL v3 |
+| num2words (optional dubbing: numbers as words) | LGPL 2.1 |
 | Inter, JetBrains Mono fonts | SIL Open Font License |
 
 Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). If you download other models through Ollama, check their terms.
 
 ### Support
 
-VerbaScribe is free. If it saves you time, you can support its development on [Ko-fi](https://ko-fi.com/pravken).
+Verbaliox is free. If it saves you time, you can support its development on [Ko-fi](https://ko-fi.com/pravken).
 
 ### Development
 
@@ -212,7 +213,9 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 <a name="русский"></a>
 ## Русский
 
-**VerbaScribe** — настольное приложение для Windows, которое расшифровывает аудио и видео на вашем компьютере. Оно распознаёт речь, разделяет её по спикерам и, если нужно, составляет краткое содержание или отвечает на вопросы по тексту с помощью локальной языковой модели через [Ollama](https://ollama.com).
+<p align="center"><img src="docs/cover-ru.png" alt="Verbaliox записывает, расшифровывает и анализирует встречи на вашем компьютере" width="100%"></p>
+
+**Verbaliox** — настольное приложение для Windows, которое расшифровывает аудио и видео на вашем компьютере. Оно распознаёт речь, разделяет её по спикерам и, если нужно, составляет краткое содержание или отвечает на вопросы по тексту с помощью локальной языковой модели через [Ollama](https://ollama.com).
 
 Записи и расшифровки обрабатываются и хранятся локально (видеокарта NVIDIA через CUDA или процессор). Аккаунт и API-ключи не нужны. По желанию анализ можно выполнять облачной моделью (OpenAI, Anthropic Claude, Google Gemini или OpenAI-совместимый сервис) с вашим API-ключом; по умолчанию это выключено. Какие сетевые подключения бывают, описано [ниже](#сеть).
 
@@ -260,17 +263,17 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 
 ### Как начать
 
-**Вариант А — архив релиза.** Скачайте `VerbaScribe-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/VerbaScribe/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `VerbaScribe.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
+**Вариант А — архив релиза.** Скачайте `Verbaliox-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/Verbaliox/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `Verbaliox.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
 
-Распакуйте архив в обычную папку с правом записи, например `D:\VerbaScribe`, а не в `Program Files`: рядом с программой создаются `.venv` и `models`. Одного `.exe` недостаточно, это лишь лаунчер для файлов программы из архива. При первом запуске лаунчер предложит установить окружение Python (`setup.bat`). Скачивается несколько гигабайт, обычно это занимает 10–20 минут, в зависимости от скорости интернета. Следующие запуски занимают секунды, а новые версии устанавливаются из **Настройки → Общие**.
+Распакуйте архив в обычную папку с правом записи, например `D:\Verbaliox`, а не в `Program Files`: рядом с программой создаются `.venv` и `models`. Одного `.exe` недостаточно, это лишь лаунчер для файлов программы из архива. При первом запуске лаунчер предложит установить окружение Python (`setup.bat`). Скачивается несколько гигабайт, обычно это занимает 10–20 минут, в зависимости от скорости интернета. Следующие запуски занимают секунды, а новые версии устанавливаются из **Настройки → Общие**.
 
-`VerbaScribe.exe` не подписан цифровой подписью. При первом запуске SmartScreen может показать «Система Windows защитила ваш компьютер»: нажмите **Подробнее → Выполнить в любом случае** (перед этим сверьте файл с `SHA256SUMS.txt`). Если Windows блокирует скрипты распакованной папки, перед распаковкой откройте свойства скачанного `.zip` и отметьте **Разблокировать**. Путь к папке лучше держать коротким (не длиннее ~150 символов, например `D:\VerbaScribe`): у некоторых библиотек CUDA и файлов моделей длинные имена, а Windows не принимает пути длиннее 260 символов, если не включены длинные пути.
+`Verbaliox.exe` не подписан цифровой подписью. При первом запуске SmartScreen может показать «Система Windows защитила ваш компьютер»: нажмите **Подробнее → Выполнить в любом случае** (перед этим сверьте файл с `SHA256SUMS.txt`). Если Windows блокирует скрипты распакованной папки, перед распаковкой откройте свойства скачанного `.zip` и отметьте **Разблокировать**. Путь к папке лучше держать коротким (не длиннее ~150 символов, например `D:\Verbaliox`): у некоторых библиотек CUDA и файлов моделей длинные имена, а Windows не принимает пути длиннее 260 символов, если не включены длинные пути.
 
 **Вариант Б — из исходников.**
 
 ```bash
-git clone https://github.com/pravken/VerbaScribe.git
-cd VerbaScribe
+git clone https://github.com/pravken/Verbaliox.git
+cd Verbaliox
 start.bat
 ```
 
@@ -278,7 +281,7 @@ start.bat
 
 В папке, склонированной через git, приложение сообщает о новых версиях, но само их не устанавливает: запустите `update.bat` (или `update.bat <ветка>`, чтобы перейти на другую ветку). Он откладывает изменённые в папке файлы через `git stash`, обновляет ветку и ставит пакеты, если изменился `requirements.txt`.
 
-**«Это приложение частично заблокировано» (интеллектуальное управление приложениями).** В Windows 11 с включённым Smart App Control блокируются файлы программ без цифровой подписи, а у библиотек Python её часто нет. `setup.bat` это замечает и собирает окружение на подписанном Python с python.org (при необходимости ставит Python 3.10 через winget), но отдельные файлы библиотек всё равно могут блокироваться. Если приложение не запускается или какая-то функция не работает, выключите эту защиту: **Безопасность Windows → Управление приложениями/браузером → Параметры интеллектуального управления приложениями → Выкл.** (обратно её включить можно только переустановкой Windows; Defender продолжает защищать компьютер). Окружение, созданное старым `setup.bat`, использует неподписанный Python: удалите папку `.venv` и снова запустите `setup.bat`.
+**«Это приложение частично заблокировано» (интеллектуальное управление приложениями).** В Windows 11 с включённым Smart App Control блокируются файлы программ без цифровой подписи, а у библиотек Python её часто нет. `setup.bat` это замечает и собирает окружение на подписанном Python с python.org (при необходимости ставит Python 3.11 через winget), но отдельные файлы библиотек всё равно могут блокироваться. Если приложение не запускается или какая-то функция не работает, выключите эту защиту: **Безопасность Windows → Управление приложениями/браузером → Параметры интеллектуального управления приложениями → Выкл.** (обратно её включить можно только переустановкой Windows; Defender продолжает защищать компьютер). Окружение, созданное старым `setup.bat`, использует неподписанный Python: удалите папку `.venv` и снова запустите `setup.bat`.
 
 <a name="дубляж"></a>
 <a name="перевод-текста"></a>
@@ -305,35 +308,33 @@ start.bat
 ### Перевод и дубляж
 
 Кнопка **Дубляж** в шапке записи переводит каждую фразу локальной моделью Ollama, озвучивает её голосом участника
-через [Chatterbox Multilingual](https://github.com/resemble-ai/chatterbox) (23 языка, в том числе русский и английский),
+через [VoxCPM2](https://github.com/OpenBMB/VoxCPM) (OpenBMB; здесь 23 языка, в том числе русский и английский),
 сохраняет музыку и фон, отделённые [Demucs](https://github.com/adefossez/demucs), подгоняет фразы под исходный тайминг
-и записывает новый файл в подпапку `dubs` папки данных (`%LOCALAPPDATA%\VerbaScribe\dubs`). Работает как обычная задача в очереди обработки, с прогрессом и кнопкой
+и записывает новый файл в подпапку `dubs` папки данных (`%LOCALAPPDATA%\Verbaliox\dubs`). Работает как обычная задача в очереди обработки, с прогрессом и кнопкой
 **Отменить**.
 
 - **Установка один раз:** нажмите **Установить** в окне «Дубляж» (или запустите `setup_dub.bat`). Создаётся отдельное окружение `.venv-dub` (~6 ГБ пакетов);
-  ещё ~3 ГБ весов моделей скачиваются в `models\dub\` при первом дубляже. Отдельное окружение нужно, потому что
-  Chatterbox жёстко фиксирует версии библиотек, несовместимые с основным приложением.
-- **Требования:** видеокарта NVIDIA, ~4 ГБ свободной видеопамяти под синтез (замеренный пик 3,5 ГБ) плюс память под
+  ещё ~5 ГБ весов моделей скачиваются в `models\dub\` при первом дубляже. Отдельное окружение держит библиотеки
+  модели голоса отдельно от основного приложения.
+- **Требования:** видеокарта NVIDIA, ~7 ГБ свободной видеопамяти под синтез (замеренный пик 5,7–6,4 ГБ) плюс память под
   модель Ollama на этапе перевода (перед синтезом LLM выгружается). Для качества перевода рекомендуется модель 7B+.
-- **Скорость (RTX 3090):** клип на 34 секунды — ~95 с при первом запуске (с загрузкой моделей) и ~57 с повторно;
-  ориентир — 1,3–1,5 минуты обработки на минуту речи. Подробности в [docs/dubbing.md](docs/dubbing.md).
+- **Скорость (RTX 3090):** VoxCPM2 озвучивает секунду речи примерно за 1,45 с (bench-report/tts-candidates.md);
+  ориентир — 2–2,5 минуты обработки на минуту речи. Подробности в [docs/dubbing.md](docs/dubbing.md).
 - **Согласие и маркировка:** приложение просит подтвердить, что участники согласны на клонирование голоса.
   Итоговые файлы помечены: `.AI-dub.<язык>.` в имени, пометка «AI-generated dub» в метаданных, название аудиодорожки
-  «AI dub … synthetic cloned voice» и неслышимый водяной знак Perth от Chatterbox. Оригинальный звук сохраняется второй
+  «AI dub … synthetic cloned voice» и неслышимый водяной знак Perth на каждой фразе. Оригинальный звук сохраняется второй
   дорожкой, перевод — рядом в `.srt`.
 - **Ограничения:** нет синхронизации губ; фразы ускоряются (до 1,6×) или обрезаются под тайминг; остаётся акцент
   исходного языка; перебивания и ошибки диаризации переходят в дубляж; перевод может быть неточным, особенно на
   маленьких моделях.
-- **Лицензии окружения дубляжа:** всё в нём бесплатно и для коммерческого использования; единственный пакет с
-  копилефтом — [pykakasi](https://codeberg.org/miurahr/pykakasi) (**GPL v3**), через него Chatterbox читает
-  иероглифы в японском дубляже. Он работает только в отдельном процессе дубляжа и скачивается установщиком, в
-  поставку VerbaScribe не входит. Если он вам не нужен: `.venv-dub\Scripts\python.exe -m pip uninstall pykakasi`
-  (японский дубляж тогда пропускает перевод иероглифов в каны, другие языки не затронуты).
+- **Лицензии окружения дубляжа:** всё в нём бесплатно и для коммерческого использования. Числа читаются словами
+  через [num2words](https://github.com/savoirfairelinux/num2words) (**LGPL-2.1**): он работает только в отдельном
+  процессе дубляжа и скачивается установщиком, в поставку Verbaliox не входит.
 
 <a name="сеть"></a>
 ### Сетевые подключения
 
-Телеметрии в VerbaScribe нет. В интернет приложение обращается только в этих случаях:
+Телеметрии в Verbaliox нет. В интернет приложение обращается только в этих случаях:
 
 | Когда | Куда |
 | :--- | :--- |
@@ -345,9 +346,9 @@ start.bat
 | Вы скачиваете модель Ollama | Реестр моделей Ollama, через вашу локальную Ollama |
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |
-| Первый запуск дубляжа | Hugging Face (веса Chatterbox и Demucs) |
+| Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |
 | Вы нажимаете **Скачать FFmpeg** в настройках | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
-| Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии VerbaScribe, без каких-либо данных о вас или компьютере |
+| Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере |
 | Вы нажимаете **Установить** для обновления | github.com: архив релиза и `SHA256SUMS.txt`; PyPI и download.pytorch.org, если новой версии нужны другие пакеты Python. Контрольная сумма подтверждает, что архив дошёл целым и неизменным. Когда настроен ключ автора, `SHA256SUMS.txt` ещё и подписан (`SHA256SUMS.txt.minisig`, формат minisign), и программа ставит только релизы с этой подписью ([docs/release-signing.md](docs/release-signing.md)) |
 | Только если в «Настройки → Анализ» включена облачная модель: создаётся обзор, ответ на вопрос, название или заметка Obsidian | Выбранный сервис (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` или ваш Base URL): текст расшифровки этой записи, а для вопросов по медиатеке — найденные фрагменты. Аудио и видео не отправляются. API-ключ хранится зашифрованным (Windows DPAPI) |
 
@@ -355,15 +356,15 @@ start.bat
 
 ### Где хранятся данные
 
-Записи, извлечённый звук, база и экспорт лежат в `%LOCALAPPDATA%\VerbaScribe` (путь виден в настройках). Другую папку можно задать переменной окружения `VERBASCRIBE_DATA_DIR`. Модели распознавания остаются в папке программы `models` (переопределяется `VERBASCRIBE_MODELS_DIR`). Раньше данные хранились в папке программы `data`; при первом запуске она переносится автоматически (копирование, проверка, затем удаление; на старом месте остаётся `MOVED.txt`). Файлы, добавленные по пути на диске, не переносятся.
+Записи, извлечённый звук, база и экспорт лежат в `%LOCALAPPDATA%\Verbaliox` (путь виден в настройках). Другую папку можно задать переменной окружения `VERBALIOX_DATA_DIR`. Модели распознавания остаются в папке программы `models` (переопределяется `VERBALIOX_MODELS_DIR`). Раньше данные хранились в папке программы `data`; при первом запуске она переносится автоматически (копирование, проверка, затем удаление; на старом месте остаётся `MOVED.txt`). Файлы, добавленные по пути на диске, не переносятся.
 
 ### Лицензии
 
-Код VerbaScribe распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Единственный пакет с копилефтом — pykakasi (GPL v3) в необязательном окружении дубляжа, только для японского (см. [Перевод и дубляж](#дубляж)). Если скачиваете через Ollama другие модели, проверьте и их условия.
+Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
 
 ### Поддержать проект
 
-VerbaScribe бесплатна. Если она экономит вам время, можно поддержать разработку на [Ko-fi](https://ko-fi.com/pravken).
+Verbaliox бесплатна. Если она экономит вам время, можно поддержать разработку на [Ko-fi](https://ko-fi.com/pravken).
 
 ### Разработка
 
