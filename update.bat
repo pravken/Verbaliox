@@ -4,23 +4,23 @@ setlocal EnableDelayedExpansion
 rem git may replace this very file while it runs: the work is done by a copy in %TEMP%
 if not defined VS_UPDATE_DIR (
     set "VS_UPDATE_DIR=%~dp0"
-    copy /y "%~f0" "%TEMP%\verbascribe-update.bat" >nul
-    call "%TEMP%\verbascribe-update.bat" %*
+    copy /y "%~f0" "%TEMP%\verbaliox-update.bat" >nul
+    call "%TEMP%\verbaliox-update.bat" %*
     set "VS_RC=!errorlevel!"
     rem the block was read whole before it ran: the copy can go
-    del "%TEMP%\verbascribe-update.bat" >nul 2>nul
+    del "%TEMP%\verbaliox-update.bat" >nul 2>nul
     exit /b !VS_RC!
 )
 cd /d "%VS_UPDATE_DIR%"
 
-rem Updates VerbaScribe from GitHub with git (a folder cloned with git, next to VerbaScribe.exe).
+rem Updates Verbaliox from GitHub with git (a folder cloned with git, next to Verbaliox.exe).
 rem   update.bat            - the branch the folder is on now (main when none)
 rem   update.bat <branch>   - switches to that branch, e.g. update.bat main
 rem Files changed in the folder (by the in-app updater or by hand) are put aside with git stash,
 rem not deleted: "git stash list" shows them. models\, .venv\ and the data are not touched.
 
 echo ==============================================================
-echo   VerbaScribe - Update from GitHub
+echo   Verbaliox - Update from GitHub
 echo ==============================================================
 
 where git >nul 2>nul
@@ -34,9 +34,9 @@ if not exist ".git" (
     goto :fail
 )
 
-tasklist /fi "imagename eq VerbaScribe.exe" 2>nul | find /i "VerbaScribe.exe" >nul
+tasklist /fi "imagename eq Verbaliox.exe" 2>nul | find /i "Verbaliox.exe" >nul
 if not errorlevel 1 (
-    echo VerbaScribe is running. Close it ^(also in the tray^), then press any key.
+    echo Verbaliox is running. Close it ^(also in the tray^), then press any key.
     pause >nul
 )
 
@@ -85,6 +85,10 @@ if errorlevel 1 (
         echo       No .venv yet: running setup.bat...
         call "%~dp0setup.bat"
     ) else (
+        rem An environment made on Python 3.10 is moved to 3.11 (app/envmove.py): a new .venv is
+        rem made next to it and replaces it only when every package is installed
+        ".venv\Scripts\python.exe" -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
+        if errorlevel 1 goto :move_env
         echo       The package list changed: installing...
         where uv >nul 2>nul
         if not errorlevel 1 (
@@ -101,13 +105,29 @@ if errorlevel 1 (
     echo       Unchanged.
 )
 
+:packages_done
 echo.
 echo Done: branch %BRANCH%, now at:
 git log -1 --oneline
 echo.
-choice /m "Start VerbaScribe now"
-if not errorlevel 2 if exist "VerbaScribe.exe" start "" "%VS_UPDATE_DIR%VerbaScribe.exe"
+choice /m "Start Verbaliox now"
+if not errorlevel 2 if exist "Verbaliox.exe" start "" "%VS_UPDATE_DIR%Verbaliox.exe"
 exit /b 0
+
+:move_env
+echo       Moving the Python environment to Python 3.11 ^(several GB, once^)...
+set "BASEPY="
+for /f "delims=" %%p in ('".venv\Scripts\python.exe" -m app.envmove prepare') do set "BASEPY=%%p"
+if not defined BASEPY (
+    echo Could not create the Python 3.11 environment: see logs\update.log in the data folder.
+    goto :fail
+)
+"%BASEPY%" -m app.envmove run --no-restart
+if errorlevel 1 (
+    echo The previous environment is kept: Verbaliox still works as before.
+    goto :fail
+)
+goto :packages_done
 
 :fail
 echo.

@@ -1,4 +1,4 @@
-# VerbaScribe — правила для сессий Claude
+# Verbaliox — правила для сессий Claude
 
 Локальная программа для Windows: запись и расшифровка встреч, анализ, перевод, дубляж. FastAPI + окно
 pywebview (WebView2), SQLite, модели на ПК пользователя. Отвечай пользователю по-русски.
@@ -19,8 +19,8 @@ pywebview (WebView2), SQLite, модели на ПК пользователя. �
 
 ## Работа на ПК пользователя (локальная сессия)
 
-- Не трогай настоящую папку данных (`%LOCALAPPDATA%\VerbaScribe`) и модели (`<папка программы>\models`):
-  работай с копиями через `VERBASCRIBE_DATA_DIR` и `VERBASCRIBE_MODELS_DIR` во временных папках.
+- Не трогай настоящую папку данных (`%LOCALAPPDATA%\Verbaliox`; до первого запуска версии с новым именем — `%LOCALAPPDATA%\VerbaScribe`) и модели (`<папка программы>\models`):
+  работай с копиями через `VERBALIOX_DATA_DIR` и `VERBALIOX_MODELS_DIR` во временных папках.
 
 ## Как вести изменения
 
@@ -37,7 +37,7 @@ python -m compileall -q app run.py build_exe.py tests
 ```
 
 Браузерный smoke-тест — как в `.github/workflows/ci.yml`: сервер `uvicorn app.main:app --port 8799`
-с временными `VERBASCRIBE_DATA_DIR`/`VERBASCRIBE_MODELS_DIR` (демо-записи: `python tests/ui/seed.py`), затем
+с временными `VERBALIOX_DATA_DIR`/`VERBALIOX_MODELS_DIR` (демо-записи: `python tests/ui/seed.py`), затем
 `node tests/ui/smoke.mjs` и `node tests/ui/scenarios.mjs` (сценарии; `SHOTS=<папка>` — скриншоты шагов).
 
 - **Стили:** `static/vendor/tailwind.css` собирается заранее. Новый класс Tailwind в разметке или
@@ -54,7 +54,8 @@ python -m compileall -q app run.py build_exe.py tests
 Старые релизы и теги не удаляются.
 
 1. Записать изменения в `CHANGELOG.md` (раздел `## X.Y.Z` по-русски и `## X.Y.Z — English`): он
-   становится текстом страницы релиза, беты берут раздел своей будущей версии.
+   становится текстом страницы релиза (английский раздел там всегда первым, `tools/release_notes.py`), беты
+   берут раздел своей будущей версии.
 2. Поднять `__version__` в `app/__init__.py` (для беты — `X.Y.Z-beta.N`, тег должен совпадать),
    влить в `main` через PR.
 3. Actions → Release → Run workflow на `main` с тегом `vX.Y.Z` (или `vX.Y.Z-beta.N`). Workflow сам
