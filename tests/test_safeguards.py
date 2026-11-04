@@ -288,7 +288,8 @@ class FfmpegOnStartTest(unittest.TestCase):
     def test_downloads_only_when_missing_on_windows(self):
         from app import ffmpeg_manager as fm
 
-        with mock.patch.object(fm.sys, "platform", "win32"), mock.patch.object(fm, "start_ffmpeg_download") as start:
+        with mock.patch.object(fm.sys, "platform", "win32"), mock.patch.object(fm, "start_ffmpeg_download") as start, \
+                mock.patch.dict(fm.os.environ, {"VERBALIOX_NO_FFMPEG_AUTO": ""}):
             with mock.patch.object(fm, "find_tool", return_value=None):
                 self.assertTrue(fm.ensure_on_start())
             with mock.patch.object(fm, "find_tool", return_value="C:/bin/ffmpeg.exe"):
