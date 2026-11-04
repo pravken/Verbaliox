@@ -3,6 +3,7 @@ import re
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -324,6 +325,18 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+def _close_ollama_app(seconds: float = 10.0) -> None:
+    """The Ollama installer opens its own app (a window and a tray icon) when it ends: it is closed, the
+    program starts the Ollama server itself, without a window, when analysis needs it."""
+    if sys.platform != "win32":
+        return
+    flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+    end = time.time() + seconds
+    while time.time() < end:  # the app may appear a moment after the installer ends
+        subprocess.run(["taskkill", "/F", "/IM", "ollama app.exe"], capture_output=True, creationflags=flags)
+        time.sleep(0.5)
+
+
 def _install_ollama_if_needed() -> bool:
     """
     If Ollama is not installed on Windows, installs it automatically via winget
@@ -363,6 +376,7 @@ def _install_ollama_if_needed() -> bool:
 
     proc.wait()
     time.sleep(2.0)
+    _close_ollama_app()
 
     if find_ollama_executable() is not None:
         _append_log("Ollama успешно установлена на компьютер!")
