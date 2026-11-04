@@ -657,7 +657,7 @@ function updateWhisperModelsUI(models) {
   renderTxModelBar();
 
   if (catalogBox && whisperList.length > 0) {
-    catalogBox.innerHTML = whisperList.map(item => {
+    catalogBox.innerHTML = modelCompareTable(whisperList.map(i => ({ ...i, size: modelSizeLabel(i) })), { mark: activeModel }) + whisperList.map(item => {
       const isSelected = item.id === activeModel;
       const desc = state.uiLang === 'en' ? item.desc_en : item.desc_ru;
       const isDownloadingThis = (st.active && st.model_id === item.id) || (item.engine === 'onnx' && item.downloading);
@@ -708,7 +708,6 @@ function updateWhisperModelsUI(models) {
               ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
             </div>
             ${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label mt-1">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
-            ${modelMeters(item.id)}
             <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
             ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}
           </div>
@@ -810,7 +809,6 @@ function openLlmPicker() {
           <span class="text-[11px] font-mono text-apple-tertiary">${escapeHtml(m.size || '')}</span>
           ${tag}${m.installed ? `<span class="llm-tag">${escapeHtml(t('llmPickInstalled'))}</span>` : ''}
         </span>
-        ${modelMeters(m.id)}
         <span class="llm-line"><b>${escapeHtml(t('llmPickGood'))}</b> ${escapeHtml(en ? m.good_en : m.good_ru)}</span>
         <span class="llm-line"><b>${escapeHtml(t('llmPickWeak'))}</b> ${escapeHtml(en ? m.weak_en : m.weak_ru)}</span>
       </button>`;
@@ -824,6 +822,7 @@ function openLlmPicker() {
         <p>${escapeHtml(t('llmMemIntro'))}</p>
         <ul><li>${escapeHtml(t('llmMemContext'))}</li><li>${escapeHtml(t('llmMemBuffers'))}</li><li>${escapeHtml(t('llmMemOthers'))}</li></ul>
         <p>${escapeHtml(t('llmMemExample'))}</p><p>${escapeHtml(t('llmMemLess'))}</p></div>` : ''}
+      ${modelCompareTable(list, { mark: pick })}
       <div class="llm-list" role="radiogroup">${cards}</div>
       <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNoteLlm'))}</p>
       <div class="flex items-center gap-2 pt-1">
@@ -873,7 +872,7 @@ function openFirstRunWizard(data) {
   const modelText = id => `<span class="block min-w-0 flex-1">
       <span class="flex items-baseline justify-between gap-3"><span class="text-white font-medium">${escapeHtml(formatModelName(id))}</span>
         <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></span>
-      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span>${modelMeters(id)}</span>`;
+      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span></span>`;
   const modelLine = id => `<div class="flex text-[11.5px] pt-1.5 mt-1.5 border-t border-white/5">${modelText(id)}</div>`;
   const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
       <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
@@ -895,14 +894,13 @@ function openFirstRunWizard(data) {
         if (p.models) inner += p.models.map(modelLine).join('');
         return choice(`preset:${p.id}`, on, title, inner);
       }).join('');
-      // own choice: the models with what each is for, ticked below the sets (no controls inside a button)
-      const own = st.preset !== 'custom' ? '' : `<div class="rounded-xl border border-white/10 px-3 py-1 divide-y divide-white/5">${catalog.map(i => `<label class="flex items-start gap-2.5 py-2 text-[11.5px] cursor-pointer">
-            <input type="checkbox" class="tk-check shrink-0" data-model="${escapeHtml(i.id)}" ${st.custom.has(i.id) ? 'checked' : ''}>
-            ${modelText(i.id)}</label>`).join('')}</div>`;
+      // The models side by side under the sets; for an own choice they are ticked right in it
+      const compare = `<div class="text-xs text-white font-medium pt-1">${escapeHtml(t(st.preset === 'custom' ? 'frPickModels' : 'mcTitle'))}</div>
+        ${modelCompareTable(catalog.map(i => ({ ...i, size: wizardSizeText(wizardSizeMb(i)) })), st.preset === 'custom' ? { check: st.custom } : {})}`;
       body = `<p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('frIntro'))}</p>
         <div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</span></div>
         <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frPresetQ'))}</div>
-        <div class="space-y-2" role="radiogroup">${cards}</div>${own}
+        <div class="space-y-2" role="radiogroup">${cards}</div>${compare}
         <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNote'))}</p>`;
     } else if (st.step === 1) {
       const local = escapeHtml(t('frAiLocal')) + (picks.gpu ? tag(t('frRecommended')) : '');
@@ -1535,36 +1533,58 @@ function hasFastGpu() {
   return !!(hw.cuda_available && Number(hw.vram_total_gb || 0) >= 4);
 }
 
-// The three meters of a model (speech or analysis) as one line; '' for a model with no measurements
-function modelMeters(id) {
-  const m = MODEL_METERS[id];
-  if (!m) return '';
-  const gpu = hasFastGpu();
-  const parts = [];
-  if (m.acc) {
-    const langs = ['ru', 'en'].map(lang => {
-      const name = t(lang === 'ru' ? 'mmRu' : 'mmEn');
-      if (!m.acc[lang]) {  // the model does not know this language at all
-        const tip = t('mmNoLangTip').replace('{lang}', () => name);
-        return `<span class="mm mm-no" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}"><span class="mm-x" aria-hidden="true">✕</span><span class="mm-sub">${escapeHtml(name)}</span></span>`;
-      }
-      const [n, wer] = m.acc[lang];
-      const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => String(wer).replace('.', state.uiLang === 'en' ? '.' : ','));
-      return `<span class="mm" title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${t('mmAccuracy')} ${name}: ${n}/5. ${tip}`)}">${meterDots(n)}<span class="mm-sub">${escapeHtml(name)}</span></span>`;
-    }).join('');
-    parts.push(`<span class="mm-group"><span class="mm-label">${escapeHtml(t('mmAccuracy'))}</span><span class="mm-line">${langs}</span></span>`);
-  } else {
-    const tip = t('mmQualityTip');
-    parts.push(`<span class="mm-group" title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${t('mmQuality')}: ${m.quality}/5`)}"><span class="mm-label">${escapeHtml(t('mmQuality'))}</span><span class="mm-line">${meterDots(m.quality)}</span></span>`);
+function meterNum(x) { return String(x).replace('.', state.uiLang === 'en' ? '.' : ','); }
+
+// One cell of the comparison: accuracy in a language (or a red cross where the model does not know it)
+function meterAccCell(m, lang) {
+  const name = t(lang === 'ru' ? 'mmRu' : 'mmEn');
+  if (!m.acc[lang]) {
+    const tip = t('mmNoLangTip').replace('{lang}', () => name);
+    return `<td class="mc-no" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}"><span class="mm-x" aria-hidden="true">✕</span></td>`;
   }
-  const [sn, sx] = m.speed[gpu ? 'gpu' : 'cpu'];
-  const speedTip = sx ? t('mmSpeedTip').replace('{x}', () => sx).replace('{where}', () => t(gpu ? 'mmOnGpu' : 'mmOnCpu'))
-    : sn <= 1 ? t('mmCpuSlow') : t(gpu ? 'mmOnGpu' : 'mmOnCpu');
-  parts.push(`<span class="mm-group" title="${escapeHtml(speedTip)}" aria-label="${escapeHtml(`${t('mmSpeed')}: ${sn}/5. ${speedTip}`)}"><span class="mm-label">${escapeHtml(t('mmSpeed'))}</span><span class="mm-line">${meterDots(sn)}${sn <= 1 ? `<span class="mm-sub mm-warn">${escapeHtml(t('mmSlowShort'))}</span>` : ''}</span></span>`);
-  const mem = m.ram && (!gpu || !m.vram) ? t('mmRam').replace('{n}', () => String(m.ram).replace('.', state.uiLang === 'en' ? '.' : ','))
-    : t('mmVram').replace('{n}', () => String(m.vram).replace('.', state.uiLang === 'en' ? '.' : ','));
-  parts.push(`<span class="mm-group" title="${escapeHtml(t('mmLoadTip'))}" aria-label="${escapeHtml(`${t('mmLoad')}: ${m.load[0]}/5, ${mem}`)}"><span class="mm-label">${escapeHtml(t('mmLoad'))}</span><span class="mm-line">${meterDots(m.load[0], 'mm-load')}<span class="mm-sub">${escapeHtml(mem)}</span></span></span>`);
-  return `<span class="mm-row">${parts.join('')}</span>`;
+  const [n, wer] = m.acc[lang];
+  const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => meterNum(wer));
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5. ${tip}`)}">${meterDots(n)}</td>`;
+}
+
+function meterSpeedCell(m) {
+  const gpu = hasFastGpu();
+  const [n, x] = m.speed[gpu ? 'gpu' : 'cpu'];
+  const tip = x ? t('mmSpeedTip').replace('{x}', () => x).replace('{where}', () => t(gpu ? 'mmOnGpu' : 'mmOnCpu'))
+    : n <= 1 ? t('mmCpuSlow') : t(gpu ? 'mmOnGpu' : 'mmOnCpu');
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5. ${tip}`)}">${meterDots(n)}${n <= 1 ? `<span class="mc-sub mm-warn">${escapeHtml(t('mcSlow'))}</span>` : ''}</td>`;
+}
+
+function meterLoadCell(m) {
+  const ram = m.ram && (!hasFastGpu() || !m.vram);
+  const mem = ram ? t('mmRam').replace('{n}', () => meterNum(m.ram)) : t('mmVram').replace('{n}', () => meterNum(m.vram));
+  const short = (ram ? t('mcRam') : t('mcVram')).replace('{n}', () => meterNum(ram ? m.ram : m.vram));
+  return `<td title="${escapeHtml(`${mem}. ${t('mmLoadTip')}`)}" aria-label="${escapeHtml(`${m.load[0]}/5, ${mem}`)}">${meterDots(m.load[0], 'mm-load')}<span class="mc-sub">${escapeHtml(short)}</span></td>`;
+}
+
+// Models side by side: a row per model, a column per measure, so each measure reads down its column.
+// items: [{id, size, installed}]; opts.check: a Set of ticked ids (a column of checkboxes, the wizard's
+// own choice); opts.mark: the id to highlight (the chosen one)
+function modelCompareTable(items, opts = {}) {
+  const rows = items.filter(i => MODEL_METERS[i.id]);
+  if (!rows.length) return '';
+  const llm = !MODEL_METERS[rows[0].id].acc;
+  // Speech: «Accuracy» over its two languages (a second header row), the rest span both rows
+  const span = llm ? '' : ' rowspan="2"';
+  const head = [opts.check ? `<th class="mc-check"${span}></th>` : '', `<th class="mc-name"${span}>${escapeHtml(t('mcModel'))}</th>`,
+    llm ? `<th>${escapeHtml(t('mmQuality'))}</th>` : `<th colspan="2" class="mc-group">${escapeHtml(t('mmAccuracy'))}</th>`,
+    `<th${span}>${escapeHtml(t('mmSpeed'))}</th>`, `<th${span}>${escapeHtml(t('mmLoad'))}</th>`, `<th class="mc-size"${span}>${escapeHtml(t('mcSize'))}</th>`].join('')
+    + (llm ? '' : `</tr><tr><th class="mc-lang">${escapeHtml(t('mmRu'))}</th><th class="mc-lang">${escapeHtml(t('mmEn'))}</th>`);
+  const body = rows.map(i => {
+    const m = MODEL_METERS[i.id];
+    const cells = llm
+      ? `<td title="${escapeHtml(t('mmQualityTip'))}">${meterDots(m.quality)}</td>`
+      : meterAccCell(m, 'ru') + meterAccCell(m, 'en');
+    const check = opts.check ? `<td class="mc-check"><input type="checkbox" class="tk-check" data-model="${escapeHtml(i.id)}" aria-label="${escapeHtml(formatModelName(i.id))}" ${opts.check.has(i.id) ? 'checked' : ''}></td>` : '';
+    return `<tr class="${i.id === opts.mark ? 'mc-on' : ''}">${check}<td class="mc-name">${escapeHtml(formatModelName(i.id))}</td>${cells}${meterSpeedCell(m)}${meterLoadCell(m)}
+      <td class="mc-size">${i.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(i.size || '')}</td></tr>`;
+  }).join('');
+  return `<div class="mc-wrap"><table class="mc-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 // What each speech model is for, said where a model is chosen
