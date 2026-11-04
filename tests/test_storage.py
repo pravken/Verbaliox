@@ -227,6 +227,24 @@ class RenamedDataDirTest(unittest.TestCase):
         self.assertTrue((self.new / "uploads" / "call.mp4").is_file())
         self.assertEqual(len(list(self.root.glob("Verbaliox.before-rename-*"))), 1)
 
+    def test_a_refused_rename_puts_the_aside_folder_back(self):
+        from pathlib import Path
+        from unittest import mock
+
+        (self.new / "logs").mkdir(parents=True)
+        real = Path.rename
+
+        def refuse_old(p, dest):
+            if Path(p) == self.old.resolve():
+                raise PermissionError("in use")
+            return real(p, dest)
+
+        with mock.patch.object(Path, "rename", refuse_old):
+            with self.assertRaises(OSError):
+                migrate_renamed_data_dir(self.old, self.new)
+        self.assertTrue((self.new / "logs").is_dir())
+        self.assertEqual(list(self.root.glob("Verbaliox.before-rename-*")), [])
+
     def test_a_library_in_the_new_folder_is_never_overwritten(self):
         self.new.mkdir()
         conn = sqlite3.connect(self.new / "meetings.db")
