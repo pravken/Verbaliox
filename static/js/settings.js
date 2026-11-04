@@ -1542,8 +1542,13 @@ function modelMeters(id) {
   const gpu = hasFastGpu();
   const parts = [];
   if (m.acc) {
-    const langs = Object.entries(m.acc).map(([lang, [n, wer]]) => {
+    const langs = ['ru', 'en'].map(lang => {
       const name = t(lang === 'ru' ? 'mmRu' : 'mmEn');
+      if (!m.acc[lang]) {  // the model does not know this language at all
+        const tip = t('mmNoLangTip').replace('{lang}', () => name);
+        return `<span class="mm mm-no" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}"><span class="mm-x" aria-hidden="true">✕</span><span class="mm-sub">${escapeHtml(name)}</span></span>`;
+      }
+      const [n, wer] = m.acc[lang];
       const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => String(wer).replace('.', state.uiLang === 'en' ? '.' : ','));
       return `<span class="mm" title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${t('mmAccuracy')} ${name}: ${n}/5. ${tip}`)}">${meterDots(n)}<span class="mm-sub">${escapeHtml(name)}</span></span>`;
     }).join('');
