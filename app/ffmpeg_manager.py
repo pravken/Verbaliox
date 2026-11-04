@@ -8,6 +8,7 @@ is pinned below. Only ffmpeg.exe, ffprobe.exe and the license are extracted.
 """
 
 import hashlib
+import os
 import shutil
 import sys
 import threading
@@ -115,7 +116,9 @@ def _download_and_install() -> None:
 def ensure_on_start() -> bool:
     """At the start of the app: FFmpeg is fetched by itself when there is none (Windows), so recording,
     import and export work without a visit to the settings. Returns True when a download started."""
-    if sys.platform != "win32" or find_tool("ffmpeg") and find_tool("ffprobe"):
+    if sys.platform != "win32" or os.environ.get("VERBALIOX_NO_FFMPEG_AUTO") == "1":
+        return False  # the tests: nothing is downloaded into their data folder
+    if find_tool("ffmpeg") and find_tool("ffprobe"):
         return False
     start_ffmpeg_download()
     return True
