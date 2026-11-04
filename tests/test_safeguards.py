@@ -299,3 +299,28 @@ class FfmpegOnStartTest(unittest.TestCase):
                 mock.patch.object(fm, "start_ffmpeg_download") as start:
             self.assertFalse(fm.ensure_on_start())
             start.assert_not_called()
+
+
+class SetupWindowTest(unittest.TestCase):
+    """The setup window of the launcher (build_exe.py) reads the steps setup.bat writes."""
+
+    def test_setup_bat_speaks_to_the_window(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        bat = (root / "setup.bat").read_bytes()
+        self.assertNotIn(b"\n", bat.replace(b"\r\n", b""))  # cmd needs CRLF for its labels
+        text = bat.decode("ascii")
+        for step in ("uv", "venv", "packages"):
+            self.assertIn(f"echo ##STEP {step}", text)
+            self.assertIn(f'"##STEP {step}"', (root / "build_exe.py").read_text(encoding="utf-8"))
+        self.assertIn('if not defined QUIET pause', text)
+
+    def test_ollama_window_is_closed_after_its_install(self):
+        from app import ollama_client as oc
+
+        with mock.patch.object(oc.sys, "platform", "win32"), mock.patch.object(oc.subprocess, "run") as run, \
+                mock.patch.object(oc.time, "sleep"):
+            oc._close_ollama_app(seconds=0.01)
+        self.assertTrue(run.called)
+        self.assertEqual(run.call_args[0][0], ["taskkill", "/F", "/IM", "ollama app.exe"])
