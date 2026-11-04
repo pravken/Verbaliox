@@ -966,6 +966,7 @@ def main() -> None:
                 from app import autostart
 
                 autostart.sync()  # the Run key follows the setting and this program folder
+                autostart.sync_installed_version()  # "Installed apps" shows the version updated in place
             except Exception as e:
                 print(f"[autostart] {e}", file=sys.stderr)
             tray = None

@@ -78,3 +78,33 @@ def sync() -> None:
             set_enabled(False)
     except OSError as e:
         print(f"[autostart] not changed: {e}", file=sys.stderr)
+
+
+# The entry of Verbaliox-Setup.exe in "Installed apps" (installer/verbaliox.iss, AppId): the program
+# updates itself afterwards, so the version shown there follows the running one
+UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2C1B8E-4E7A-4C3B-9A51-7D0E2B5C9F14}_is1"
+
+
+def sync_installed_version() -> None:
+    """DisplayVersion of the installer's entry, when this program folder is the one it installed."""
+    if sys.platform != "win32":
+        return
+    import winreg
+
+    from app import __version__
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY, 0,
+                            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE) as key:
+            location = str(winreg.QueryValueEx(key, "InstallLocation")[0]).rstrip("\\/")
+            if Path(location).resolve() != APP_DIR.resolve():
+                return
+            try:
+                shown = str(winreg.QueryValueEx(key, "DisplayVersion")[0])
+            except OSError:
+                shown = ""
+            if shown != __version__:
+                winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, __version__)
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Verbaliox")
+    except OSError:
+        pass

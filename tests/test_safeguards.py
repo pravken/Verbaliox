@@ -343,6 +343,10 @@ class InstallerTest(unittest.TestCase):
         for name in (VALUE_NAME, FORMER_VALUE_NAME):  # "Start with Windows" goes with the program
             self.assertIn(f'ValueName: "{name}"; Flags: uninsdeletevalue', iss)
         self.assertIn("AppMutex=Local\\Verbaliox.Desktop.Window", iss)
+        from app.autostart import UNINSTALL_KEY
+
+        app_id = UNINSTALL_KEY.rsplit("\\", 1)[1].removesuffix("_is1")
+        self.assertIn("AppId={" + app_id + "\n", iss)  # the program updates this entry's version
         self.assertIn('"Local\\\\Verbaliox.Desktop.Window"', (root / "run.py").read_text(encoding="utf-8"))
         self.assertIn("OutputBaseFilename=Verbaliox-Setup-v{#AppVersion}", iss)
         wf = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")

@@ -19,6 +19,7 @@
 #endif
 
 [Setup]
+; The same id in app/autostart.py (UNINSTALL_KEY): the program keeps the version shown in "Installed apps"
 AppId={{6F2C1B8E-4E7A-4C3B-9A51-7D0E2B5C9F14}
 AppName=Verbaliox
 AppVersion={#AppVersion}
