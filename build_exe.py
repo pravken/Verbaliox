@@ -193,6 +193,24 @@ class VerbalioxLauncher
     static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
     [STAThread]
+    // .venv\verbaliox-requirements.sha256 (app/pyenv.py) against requirements.txt; no mark: an environment
+    // from before the mark, which the program marks as current at its start
+    static bool RequirementsChanged(string baseDir)
+    {
+        try
+        {
+            string mark = Path.Combine(baseDir, ".venv", "verbaliox-requirements.sha256");
+            string req = Path.Combine(baseDir, "requirements.txt");
+            if (!File.Exists(mark) || !File.Exists(req)) return false;
+            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+            {
+                string now = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(req))).Replace("-", "").ToLowerInvariant();
+                return now != File.ReadAllText(mark).Trim().ToLowerInvariant();
+            }
+        }
+        catch { return false; }
+    }
+
     static void Main(string[] args)
     {
         try
@@ -211,9 +229,15 @@ class VerbalioxLauncher
         Application.EnableVisualStyles();
         // First run on a new PC where .venv is not yet created: the setup window (SetupWindow below)
         // lists what the program needs and installs it once the user confirms
-        if (!File.Exists(venvPython))
+        // A newer version installed over this one (the installer, or an archive unpacked over the folder)
+        // brings a requirements.txt the environment was not made from: the same window updates it
+        if (File.Exists(venvPython) && File.Exists(setupBat) && RequirementsChanged(baseDir))
         {
-            if (File.Exists(setupBat) && !SetupWindow.Run(baseDir, setupBat, UiLanguage() != "en"))
+            if (!SetupWindow.Run(baseDir, setupBat, UiLanguage() != "en", true)) return;
+        }
+        else if (!File.Exists(venvPython))
+        {
+            if (File.Exists(setupBat) && !SetupWindow.Run(baseDir, setupBat, UiLanguage() != "en", false))
             {
                 return;
             }
@@ -472,17 +496,18 @@ class SetupWindow
     Panel track, runner;
     TextBox log;
     Button primary, secondary, details;
-    bool succeeded, running, failed, envDone, ollamaInstalled;
+    bool succeeded, running, failed, envDone, ollamaInstalled, update;
     Process current;
     DateTime started;
     Timer anim;
 
     string T(string r, string e) { return ru ? r : e; }
 
-    public static bool Run(string baseDir, string setupBat, bool ru)
+    // update: .venv exists and gets the libraries of the new version (it is never removed then)
+    public static bool Run(string baseDir, string setupBat, bool ru, bool update)
     {
         SetupWindow w = new SetupWindow();
-        w.ru = ru; w.baseDir = baseDir; w.setupBat = setupBat;
+        w.ru = ru; w.baseDir = baseDir; w.setupBat = setupBat; w.update = update;
         w.Build();
         Application.Run(w.form);
         return w.succeeded;
@@ -591,9 +616,13 @@ class SetupWindow
         logo.SetBounds(24, 22, 48, 48);
         logo.Image = VerbalioxLauncher.LoadLogo(Path.Combine(baseDir, "assets", "icon.ico"));
         form.Controls.Add(logo);
-        form.Controls.Add(NewLabel(T("Добро пожаловать в Verbaliox", "Welcome to Verbaliox"), 14f, true, System.Drawing.Color.White, 84, 22, 480, 30));
-        intro = NewLabel(T("Для работы программе нужны компоненты ниже. Всё ставится в папку программы и в ваш профиль — права администратора не нужны.",
-                           "The program needs the parts below. Everything goes into the program folder and your profile — no administrator rights needed."),
+        form.Controls.Add(NewLabel(update ? T("Обновление Verbaliox", "Updating Verbaliox") : T("Добро пожаловать в Verbaliox", "Welcome to Verbaliox"),
+                                   14f, true, System.Drawing.Color.White, 84, 22, 480, 30));
+        intro = NewLabel(update
+                           ? T("Новой версии нужны обновлённые библиотеки среды программы. Записи, настройки и модели остаются на месте.",
+                               "The new version needs updated libraries of the program environment. Recordings, settings and models stay as they are.")
+                           : T("Для работы программе нужны компоненты ниже. Всё ставится в папку программы и в ваш профиль — права администратора не нужны.",
+                               "The program needs the parts below. Everything goes into the program folder and your profile — no administrator rights needed."),
                          9.5f, false, Text2, 84, 52, 492, 40);
         form.Controls.Add(intro);
 
@@ -686,7 +715,7 @@ class SetupWindow
         details.Click += delegate { log.Visible = !log.Visible; log.BringToFront(); };
         secondary = NewButton(T("Отмена", "Cancel"), 330, 510, 110, false);
         secondary.Click += delegate { if (running || failed) OpenLog(); else form.Close(); };
-        primary = NewButton(T("Установить", "Install"), 450, 510, 126, true);
+        primary = NewButton(update ? T("Обновить", "Update") : T("Установить", "Install"), 450, 510, 126, true);
         primary.Click += delegate { if (succeeded) form.Close(); else Start(); };
         form.AcceptButton = primary;
 
@@ -714,7 +743,7 @@ class SetupWindow
                 }
                 // A half environment would look ready to the next start: it goes, so the setup runs again
                 string venv = Path.Combine(baseDir, ".venv");
-                if (!envDone && Directory.Exists(venv)) Directory.Delete(venv, true);
+                if (!envDone && !update && Directory.Exists(venv)) Directory.Delete(venv, true);
             }
             catch { }
         };
@@ -774,7 +803,7 @@ class SetupWindow
         intro.Text = T("Идёт установка. Это займёт несколько минут — большая часть уходит на загрузку библиотек.",
                        "Installing. It takes a few minutes — most of it is downloading the libraries.");
         primary.Enabled = false;
-        primary.Text = T("Установка…", "Installing…");
+        primary.Text = update ? T("Обновление…", "Updating…") : T("Установка…", "Installing…");
         secondary.Text = T("Журнал", "Log");
         details.Visible = true;
         ollama.Check.Enabled = false;

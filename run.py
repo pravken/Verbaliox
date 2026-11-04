@@ -930,6 +930,9 @@ def main() -> None:
             return
         envmove.cleanup(APP_DIR, DATA_DIR)
         drop_former_launcher(APP_DIR)
+        from app.pyenv import mark_requirements
+
+        mark_requirements(APP_DIR, only_if_missing=True)  # an environment from before the mark
         write_pid_file()
         # A previous instance may still be releasing the port for a moment
         for _ in range(50):

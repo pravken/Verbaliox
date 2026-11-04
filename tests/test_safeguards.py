@@ -388,3 +388,41 @@ class ModelSetupSelectTest(unittest.TestCase):
     def test_select_flag(self):
         self.assertTrue(self._run(True).called)
         self.assertFalse(self._run(False).called)
+
+
+class RequirementsMarkTest(unittest.TestCase):
+    """.venv records the requirements.txt it was installed from; the launcher updates it on a mismatch."""
+
+    def test_mark_written_and_kept(self):
+        import tempfile
+        from pathlib import Path
+
+        from app.pyenv import REQUIREMENTS_MARK, mark_requirements, requirements_hash
+
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d)
+            (app / "requirements.txt").write_text("a==1\n", encoding="utf-8")
+            mark_requirements(app)  # no .venv: nothing to mark
+            self.assertFalse((app / REQUIREMENTS_MARK).exists())
+            (app / ".venv").mkdir()
+            mark_requirements(app, only_if_missing=True)
+            first = (app / REQUIREMENTS_MARK).read_text(encoding="ascii")
+            self.assertEqual(first, requirements_hash(app))
+            (app / "requirements.txt").write_text("a==2\n", encoding="utf-8")
+            mark_requirements(app, only_if_missing=True)  # a mark from an older install stays as it is
+            self.assertEqual((app / REQUIREMENTS_MARK).read_text(encoding="ascii"), first)
+            mark_requirements(app)
+            self.assertNotEqual((app / REQUIREMENTS_MARK).read_text(encoding="ascii"), first)
+
+    def test_setup_and_launcher_use_the_same_mark(self):
+        from pathlib import Path
+
+        import build_exe
+        from app.pyenv import REQUIREMENTS_MARK
+
+        root = Path(__file__).resolve().parent.parent
+        bat = (root / "setup.bat").read_text(encoding="utf-8")
+        self.assertIn(REQUIREMENTS_MARK.name, bat)
+        self.assertIn("if not defined UPDATE rmdir /s /q .venv", bat)  # an update never removes .venv
+        self.assertIn('"' + REQUIREMENTS_MARK.name + '"', build_exe.CS_SOURCE)
+        self.assertIn("RequirementsChanged(baseDir)", build_exe.CS_SOURCE)
