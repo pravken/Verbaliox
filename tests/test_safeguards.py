@@ -340,3 +340,18 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("installer\\verbaliox.iss", wf)
         self.assertIn("Verbaliox-Setup-*.exe", wf)
         self.assertIn('$setup.FullName -Algorithm SHA256', wf)  # in SHA256SUMS.txt, so signed
+
+
+class DisplaySanitizeTest(unittest.TestCase):
+    """Colours, times and ids from the database reach markup only as #rrggbb and numbers (a backup
+    restored from elsewhere could carry markup in them)."""
+
+    def test_hostile_values_are_neutralized(self):
+        from app.database import _sanitize_display
+
+        d = {"speakers": {"S1": {"name": "A", "color": '"><button data-click="fetch">'}, "S2": {"color": "#30D158"}},
+             "segments": [{"id": "1 onclick", "start": '"><b>', "end": "12.5", "text": "x"}]}
+        _sanitize_display(d)
+        self.assertEqual(d["speakers"]["S1"]["color"], "#0A84FF")
+        self.assertEqual(d["speakers"]["S2"]["color"], "#30D158")
+        self.assertEqual((d["segments"][0]["id"], d["segments"][0]["start"], d["segments"][0]["end"]), (0, 0.0, 12.5))

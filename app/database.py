@@ -1,6 +1,6 @@
 import json
-import re
 import os
+import re
 import sqlite3
 import threading
 import uuid
@@ -1580,6 +1580,38 @@ def set_meeting_processing(meeting_id: int, processing: Dict[str, Any]) -> None:
         conn.close()
 
 
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+DEFAULT_SPEAKER_COLOR = "#0A84FF"
+
+
+def _num(value: Any) -> float:
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return x if x == x and abs(x) != float("inf") else 0.0
+
+
+def _sanitize_display(d: Dict[str, Any]) -> None:
+    """What the page puts into markup as is: times and ids are numbers, colours are #rrggbb. A
+    database restored from someone else's backup cannot carry markup in them (the app itself only
+    ever writes such values)."""
+    speakers = d.get("speakers")
+    if isinstance(speakers, dict):
+        for info in speakers.values():
+            if isinstance(info, dict) and not _COLOR_RE.match(str(info.get("color") or "")):
+                info["color"] = DEFAULT_SPEAKER_COLOR
+    else:
+        d["speakers"] = {}
+    for seg in d.get("segments") or []:
+        seg["start"], seg["end"] = _num(seg.get("start")), _num(seg.get("end"))
+        if "id" in seg:
+            try:
+                seg["id"] = int(seg["id"])
+            except (TypeError, ValueError):
+                seg["id"] = 0
+
+
 def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[str, Any]:
     d["has_segments_backup"] = bool(d.pop("segments_backup_json", ""))
     d["pending_exports"] = _loads_list(d.pop("pending_exports_json", None))
@@ -1603,6 +1635,7 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
         else:
             d[target] = default_val
     d["dubs"] = [_dub_paths_from_storage(x) for x in d.get("dubs") or [] if isinstance(x, dict)]
+    _sanitize_display(d)
     # Translations are matched to the current segments here, so every response carries their state
     from app.translation import resolve_all
 
