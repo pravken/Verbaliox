@@ -229,7 +229,10 @@ def gpu_for_job(model_id: str) -> bool:
     """Whether a transcription job runs this model on the GPU now: enough free video memory left."""
     if not enabled():
         return False
-    from app.asr_onnx import ONNX_MODELS
+    from app.asr_onnx import ONNX_MODELS, _key, _loaded
+
+    if _key(model_id, True) in _loaded:  # already on the video card (the language check loaded it)
+        return True
 
     need = float(ONNX_MODELS.get(model_id, {}).get("vram_gb", 3.0))
     try:

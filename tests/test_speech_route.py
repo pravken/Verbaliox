@@ -36,6 +36,8 @@ class SpeechRouteTest(unittest.TestCase):
         self.assertEqual(sr.lang_of_text("Let us start with what we finished this week, then the plans"), "other")
         self.assertEqual(sr.lang_of_text("Давайте почнемо з того, що встигли зробити за цей тиждень, її"), "other")
         self.assertIsNone(sr.lang_of_text("Да"))
+        self.assertEqual(sr.lang_of_text("Добар дан, хајде да почнемо са оним што смо урадили ове недеље"), "other")  # Serbian
+        self.assertEqual(sr.lang_of_text("Сәлеметсіз бе, осы аптада не істегенімізден бастайық"), "other")  # Kazakh
 
 
 if __name__ == "__main__":
