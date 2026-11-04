@@ -15,7 +15,7 @@ function renderFfmpegStatus(st) {
   } else if (st.available) {
     textEl.textContent = `${st.source === 'downloaded' ? t('ffmpegDownloaded') : t('ffmpegSystem')} · ${st.ffmpeg}`;
   } else {
-    textEl.textContent = dl.error ? `${t('ffmpegMissing')} · ${dl.error}` : t('ffmpegMissing');
+    textEl.textContent = dl.error ? `${t('ffmpegMissing')} · ${serverText(dl.error)}` : t('ffmpegMissing');
   }
   textEl.title = textEl.textContent;
   btn.classList.toggle('hidden', st.available || dl.active || !st.can_download);

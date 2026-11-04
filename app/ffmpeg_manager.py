@@ -1,5 +1,6 @@
 """
-Locates FFmpeg and, only when the user asks for it, downloads a pinned Windows build.
+Locates FFmpeg and downloads a pinned Windows build: by itself at the start when none is found
+(ensure_on_start), or when the user asks for it in Settings.
 
 Lookup order: the copy downloaded by Verbaliox (<data>/bin), then FFmpeg on PATH.
 The download is a fixed release of the "essentials" build by Gyan Doshi (the build linked from

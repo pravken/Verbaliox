@@ -183,7 +183,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | PyTorch, torchaudio | BSD-3 |
 | SoundCard (system audio recording) | BSD-3 |
 | yt-dlp (installed when you first import by link) | Unlicense |
-| FFmpeg (optional download, Gyan.dev essentials build) | GPL v3 |
+| FFmpeg (downloaded at the first start when missing, Gyan.dev essentials build) | GPL v3 |
 | [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) TTS (optional dubbing) | Apache 2.0 |
 | Perth watermark `resemble-perth` (optional dubbing) | MIT |
 | Demucs `htdemucs` (optional dubbing) | MIT |
