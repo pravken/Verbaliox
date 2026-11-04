@@ -11,6 +11,33 @@ from typing import Optional
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+# The requirements.txt the environment was installed from (its SHA-256). The launcher compares it with
+# the requirements.txt next to it: the installer or an archive unpacked over an older version brings new
+# libraries, and the setup window then installs them into the existing .venv
+REQUIREMENTS_MARK = Path(".venv") / "verbaliox-requirements.sha256"
+
+
+def requirements_hash(app_dir: Path) -> str:
+    import hashlib
+
+    try:
+        return hashlib.sha256((app_dir / "requirements.txt").read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def mark_requirements(app_dir: Path, only_if_missing: bool = False) -> None:
+    """Records requirements.txt as installed in .venv: after setup.bat and the updater install it, and
+    at start for an environment made before the mark existed (it is taken as current then)."""
+    mark = app_dir / REQUIREMENTS_MARK
+    digest = requirements_hash(app_dir)
+    if not digest or not mark.parent.is_dir() or (only_if_missing and mark.exists()):
+        return
+    try:
+        mark.write_text(digest, encoding="ascii")
+    except OSError:
+        pass
+
 
 def find_uv() -> Optional[str]:
     """uv on PATH or where its installers put it (the app may start without the updated PATH)."""
