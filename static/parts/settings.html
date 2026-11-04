@@ -3,7 +3,7 @@
   <div id="modal-settings" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "settings"]'>
     <div class="sx-shell modal-card w-full max-w-5xl" style="height: min(88vh, 820px);">
       <!-- Back to the screen the settings were opened from (Esc does the same) -->
-      <button data-click="closeModal" data-click-args='["settings"]' data-i18n-title="tipCloseSettings" title="Закрыть настройки (Esc)" data-i18n-aria="tipCloseSettings" aria-label="Закрыть настройки (Esc)" class="dlg-x dlg-x-corner">✕</button>
+      <button data-click="closeModal" data-click-args='["settings"]' data-i18n-title="tipCloseSettings" title="Закрыть настройки (Esc)" data-i18n-aria="tipCloseSettings" aria-label="Закрыть настройки (Esc)" class="sx-close"><span data-i18n="close">Закрыть</span><span aria-hidden="true">✕</span></button>
 
       <!-- Sections, the search and the note about saving -->
       <aside class="sx-nav">
