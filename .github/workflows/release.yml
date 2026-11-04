@@ -70,7 +70,7 @@ jobs:
             choco install innosetup -y --no-progress
             if ($LASTEXITCODE -ne 0) { throw "Installing Inno Setup failed" }
           }
-          $ver = $env:TAG.TrimStart('v')
+          $ver = $env:TAG.TrimStart('v') -replace '[\\/:*?"<>|]', '-'  # a build without a tag carries the branch name
           $num = ($ver -split '-')[0]
           if ($num -notmatch '^\d+(\.\d+){0,3}$') { $num = '0.0.0' }
           & $iscc /Q "/DAppVersion=$ver" "/DNumericVersion=$num" "/DSourceDir=$PWD\dist\$name" "/DOutputDir=$PWD" installer\verbaliox.iss
