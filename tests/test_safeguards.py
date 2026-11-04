@@ -280,3 +280,47 @@ class PinnedDownloadsTest(unittest.TestCase):
                 if "revision=" not in args and "*args" not in args and (f.name, args.strip()) not in known:
                     loose.append(f"{f.name}: {args.strip()[:80]}")
         self.assertEqual(loose, [])
+
+
+class FfmpegOnStartTest(unittest.TestCase):
+    """FFmpeg is fetched by itself at the start when there is none (Windows)."""
+
+    def test_downloads_only_when_missing_on_windows(self):
+        from app import ffmpeg_manager as fm
+
+        with mock.patch.object(fm.sys, "platform", "win32"), mock.patch.object(fm, "start_ffmpeg_download") as start, \
+                mock.patch.dict(fm.os.environ, {"VERBALIOX_NO_FFMPEG_AUTO": ""}):
+            with mock.patch.object(fm, "find_tool", return_value=None):
+                self.assertTrue(fm.ensure_on_start())
+            with mock.patch.object(fm, "find_tool", return_value="C:/bin/ffmpeg.exe"):
+                self.assertFalse(fm.ensure_on_start())
+        self.assertEqual(start.call_count, 1)
+        with mock.patch.object(fm.sys, "platform", "linux"), mock.patch.object(fm, "find_tool", return_value=None), \
+                mock.patch.object(fm, "start_ffmpeg_download") as start:
+            self.assertFalse(fm.ensure_on_start())
+            start.assert_not_called()
+
+
+class SetupWindowTest(unittest.TestCase):
+    """The setup window of the launcher (build_exe.py) reads the steps setup.bat writes."""
+
+    def test_setup_bat_speaks_to_the_window(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        bat = (root / "setup.bat").read_bytes()
+        self.assertNotIn(b"\n", bat.replace(b"\r\n", b""))  # cmd needs CRLF for its labels
+        text = bat.decode("ascii")
+        for step in ("uv", "venv", "packages"):
+            self.assertIn(f"echo ##STEP {step}", text)
+            self.assertIn(f'"##STEP {step}"', (root / "build_exe.py").read_text(encoding="utf-8"))
+        self.assertIn('if not defined QUIET pause', text)
+
+    def test_ollama_window_is_closed_after_its_install(self):
+        from app import ollama_client as oc
+
+        with mock.patch.object(oc.sys, "platform", "win32"), mock.patch.object(oc.subprocess, "run") as run, \
+                mock.patch.object(oc.time, "sleep"):
+            oc._close_ollama_app(seconds=0.01)
+        self.assertTrue(run.called)
+        self.assertEqual(run.call_args[0][0], ["taskkill", "/F", "/IM", "ollama app.exe"])

@@ -1,6 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
+rem /quiet: started by the setup window of Verbaliox.exe, which shows the "##STEP" lines as its progress
+rem and the rest in its log; no pause at the end
+set "QUIET="
+if /i "%~1"=="/quiet" set "QUIET=1"
 
 echo ==============================================================
 echo   Verbaliox - First-Run Environment Setup
@@ -17,6 +21,7 @@ if "%SAC%"=="0x2" set "SAC=2"
 
 where uv >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
+    echo ##STEP uv
     echo [0/2] Installing uv package manager...
     winget install --id=astral-sh.uv -e --accept-source-agreements --accept-package-agreements >nul 2>nul
     set "PATH=%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
@@ -25,6 +30,7 @@ if %ERRORLEVEL% NEQ 0 (
 set "SIGNED_PY="
 if not "%SAC%"=="0" call :find_signed_python
 if not "%SAC%"=="0" if not defined SIGNED_PY (
+    echo ##STEP python
     echo [0/2] Smart App Control is on: installing Python 3.11 from python.org ^(signed^)...
     winget install --id=Python.Python.3.11 -e --scope user --accept-source-agreements --accept-package-agreements >nul 2>nul
     call :find_signed_python
@@ -33,6 +39,7 @@ if not "%SAC%"=="0" call :sac_warning
 
 where uv >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
+    echo ##STEP venv
     echo [1/2] Creating Python 3.11 virtual environment via uv...
     if defined SIGNED_PY (
         echo       Python: !SIGNED_PY!
@@ -41,6 +48,7 @@ if %ERRORLEVEL% EQU 0 (
         rem Prefer a uv-managed Python: the Microsoft Store Python virtualizes AppData and hides files from other programs
         uv venv .venv --python 3.11 --python-preference only-managed || uv venv .venv --python 3.11
     )
+    echo ##STEP packages
     echo [2/2] Installing dependencies via uv...
     rem requirements.txt is an exact lock with SHA-256 hashes (see requirements.in)
     uv pip install --python ".venv\Scripts\python.exe" -r requirements.txt --require-hashes --index-strategy unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cu126
@@ -48,12 +56,14 @@ if %ERRORLEVEL% EQU 0 (
     goto :done
 )
 
+echo ##STEP venv
 echo [1/2] Creating Python virtual environment...
 if defined SIGNED_PY (
     "!SIGNED_PY!" -m venv .venv
 ) else (
     py -3.11 -m venv .venv 2>nul || python -m venv .venv
 )
+echo ##STEP packages
 echo [2/2] Installing dependencies via pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt --require-hashes --extra-index-url https://download.pytorch.org/whl/cu126
@@ -75,7 +85,7 @@ echo   Installing the libraries failed (see the messages above).
 echo   Check the internet connection and run setup.bat again.
 echo ==============================================================
 rmdir /s /q .venv
-pause
+if not defined QUIET pause
 exit /b 1
 
 rem --- Python 3.11 from python.org: the usual install folders, then the py launcher (never the

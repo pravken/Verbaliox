@@ -8,6 +8,22 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the fifth beta (0.7.0-beta.5)
+- **A simpler first start.** The welcome window offers ready sets: meetings in Russian, Russian and
+  English, many languages, or your own choice — each model says what it is for and how much it weighs.
+  AI analysis is a separate step: none (transcripts only), on this computer or a cloud model.
+- **A model per language.** Russian speech can go to its own model (GigaAM) and other languages to the
+  main one (Whisper Turbo or Parakeet); with the language left to detection, the first minute decides.
+  Settings → Speech models → «Model for Russian speech».
+- **FFmpeg downloads by itself** at the first start: recording, import and export work without a visit
+  to the settings.
+- **A setup window instead of the console** at the very first start: what the program needs and what each
+  part is for (the environment, the NVIDIA driver — CUDA comes with the environment, FFmpeg, Ollama if you
+  want local analysis), confirmed with «Install», with progress and a log. Ollama installs silently and its
+  own window no longer pops up.
+- **Model meters:** every speech and analysis model shows accuracy (per language), speed on this
+  computer and load in five dots, with the measured numbers in the tooltip.
+
 ### In the fourth beta (0.7.0-beta.4)
 - API keys are stored under the program's new name: keys saved before are read and saved again at the
   first start. Install this beta in place of the third one.
@@ -35,6 +51,21 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+### В пятой бете (0.7.0-beta.5)
+- **Простая первая настройка.** Окно приветствия предлагает готовые наборы: встречи на русском, русский
+  и английский, много языков или своя настройка — у каждой модели написано, для чего она и сколько весит.
+  ИИ-анализ — отдельный шаг: без него (только расшифровка), на этом компьютере или облачная модель.
+- **Модель под язык.** Русскую речь распознаёт своя модель (GigaAM), остальные языки — основная (Whisper
+  Turbo или Parakeet); если язык не указан, его определяет первая минута записи. «Настройки → Модели речи →
+  Модель для русской речи».
+- **FFmpeg скачивается сам** при первом запуске: запись, импорт и экспорт работают без похода в настройки.
+- **Окно установки вместо консоли** при самом первом запуске: что нужно программе и для чего каждая часть
+  (среда программы, драйвер NVIDIA — CUDA входит в среду, FFmpeg, Ollama — если нужен анализ на компьютере),
+  подтверждение кнопкой «Установить», прогресс и журнал. Ollama ставится тихо, её собственное окно больше не
+  выскакивает.
+- **Шкалы моделей:** у каждой модели распознавания и анализа — точность (по языкам), скорость на этом
+  компьютере и нагрузка в пяти делениях, с цифрами замеров в подсказке.
 
 ### В четвёртой бете (0.7.0-beta.4)
 - API-ключи хранятся под новым именем программы: сохранённые раньше читаются и пересохраняются при первом
