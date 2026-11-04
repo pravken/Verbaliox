@@ -1096,7 +1096,8 @@ async function startWhisperModelDownload(modelId, keepMain = false) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       whisper_model: modelId,
-      install_diarizer: true
+      install_diarizer: true,
+      select: !keepMain
     })
   });
 
