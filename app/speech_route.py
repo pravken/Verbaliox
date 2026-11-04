@@ -32,6 +32,13 @@ def default_choice(settings: Dict[str, str]) -> str:
     return AUTO if routing_on(settings) else main_model(settings)
 
 
+# Letters of Cyrillic alphabets other than Russian: Ukrainian, Belarusian, Serbian, Macedonian, Kazakh,
+# Kyrgyz, Mongolian, Tajik, Tatar, Bashkir. Bulgarian has none of its own: Whisper or Parakeet hears it
+OTHER_CYRILLIC = set("іїєґўђћљњџјѓќѕәғқңөұүһҳҷӣӯҙҫҡ") | set("ІЇЄҐЎЂЋЉЊЏЈЃЌЅӘҒҚҢӨҰҮҺҲҶӢӮҘҪҠ")
+# Whisper's own probability of the language it names, below which the first minute tells nothing
+MIN_LANG_PROBABILITY = 0.5
+
+
 def lang_of_text(text: str) -> Optional[str]:
     """"ru", another language, or None when there is too little text to tell. Ukrainian, Belarusian and
     the like are written in Cyrillic too: their own letters keep them away from the Russian model."""
@@ -41,7 +48,7 @@ def lang_of_text(text: str) -> Optional[str]:
     cyr = [ch for ch in letters if "Ѐ" <= ch <= "ӿ"]
     if len(cyr) < len(letters) * 0.5:
         return "other"
-    if any(ch in "іїєґўІЇЄҐЎ" for ch in cyr):
+    if any(ch in OTHER_CYRILLIC for ch in cyr):
         return "other"
     return "ru"
 

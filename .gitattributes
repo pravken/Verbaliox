@@ -1,0 +1,2 @@
+# Batch files keep CRLF byte for byte (cmd finds labels unreliably in LF-only files): no conversion
+*.bat -text

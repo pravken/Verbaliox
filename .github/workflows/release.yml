@@ -63,7 +63,20 @@ jobs:
           Expand-Archive source.zip -DestinationPath dist
           Copy-Item Verbaliox.exe "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "$name.zip"
-          Get-FileHash Verbaliox.exe, "$name.zip" -Algorithm SHA256 |
+          # The same folder as one installer (installer/verbaliox.iss, Inno Setup 6): the runner image
+          # has it, else it comes from Chocolatey at a fixed version (this job signs what it builds)
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --version=6.4.3 -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Installing Inno Setup failed" }
+          }
+          $ver = $env:TAG.TrimStart('v') -replace '[\\/:*?"<>|]', '-'  # a build without a tag carries the branch name
+          $num = ($ver -split '-')[0]
+          if ($num -notmatch '^\d+(\.\d+){0,3}$') { $num = '0.0.0' }
+          & $iscc /Q "/DAppVersion=$ver" "/DNumericVersion=$num" "/DSourceDir=$PWD\dist\$name" "/DOutputDir=$PWD" installer\verbaliox.iss
+          if ($LASTEXITCODE -ne 0) { throw "Building the installer failed" }
+          $setup = Get-ChildItem "Verbaliox-Setup-*.exe" | Select-Object -First 1
+          Get-FileHash Verbaliox.exe, "$name.zip", $setup.FullName -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
             Set-Content -Encoding utf8 SHA256SUMS.txt
           Get-Content SHA256SUMS.txt
@@ -96,6 +109,7 @@ jobs:
           name: verbaliox-release
           path: |
             Verbaliox-*.zip
+            Verbaliox-Setup-*.exe
             Verbaliox.exe
             SHA256SUMS.txt
             SHA256SUMS.txt.minisig
@@ -109,7 +123,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem Verbaliox-*.zip | ForEach-Object Name) + @('Verbaliox.exe', 'SHA256SUMS.txt')
+          $files = @(Get-ChildItem Verbaliox-*.zip, Verbaliox-Setup-*.exe | ForEach-Object Name) + @('Verbaliox.exe', 'SHA256SUMS.txt')
           if (Test-Path SHA256SUMS.txt.minisig) { $files += 'SHA256SUMS.txt.minisig' }
           # @(...) keeps these arrays: an if returning one item gives a plain string, and splatting a
           # string passes its characters one by one (a beta's --prerelease became "-", "-", "p", …)

@@ -31,6 +31,7 @@ INTS = {"num_speakers": (0, 20), "idle_unload_minutes": (0, 24 * 60), "media_ret
 FLOATS = {"dub_voice_cfg": (1.0, 3.0)}  # VoxCPM2 guidance (cfg_value)
 CHOICES = {"llm_provider": {"ollama", "cloud"}, "date_folders": {"off", "day", "month", "year_month"},
            "record_source_mode": {"mic", "system", "both"}, "ui_scale": {"75", "90", "100", "115", "130", "150"}}
+SPEECH_MODELS = {"whisper_model", "speech_model_ru", "live_whisper_model"}
 FOLDERS = {"recordings_dir", "export_dir", "obsidian_vault", "watch_folder"}
 
 
@@ -106,6 +107,15 @@ def clean(key: str, value: Any) -> str:
         return str(min(hi, max(lo, x)))
     if key in CHOICES:
         if text_s not in CHOICES[key]:
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
+    if key in SPEECH_MODELS:
+        from app.asr_onnx import ONNX_MODELS
+        from app.model_manager import WHISPER_CATALOG, WHISPER_REPLACED
+
+        # Only a model of the catalog: faster-whisper would take any other name as a Hugging Face repository
+        known = {m["id"] for m in WHISPER_CATALOG} | set(ONNX_MODELS) | set(WHISPER_REPLACED) | {"", "auto"}
+        if text_s not in known:
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
     if key == "dictation_translate_to":

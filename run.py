@@ -930,6 +930,9 @@ def main() -> None:
             return
         envmove.cleanup(APP_DIR, DATA_DIR)
         drop_former_launcher(APP_DIR)
+        from app.pyenv import mark_requirements
+
+        mark_requirements(APP_DIR, only_if_missing=True)  # an environment from before the mark
         write_pid_file()
         # A previous instance may still be releasing the port for a moment
         for _ in range(50):
@@ -963,6 +966,7 @@ def main() -> None:
                 from app import autostart
 
                 autostart.sync()  # the Run key follows the setting and this program folder
+                autostart.sync_installed_version()  # "Installed apps" shows the version updated in place
             except Exception as e:
                 print(f"[autostart] {e}", file=sys.stderr)
             tray = None

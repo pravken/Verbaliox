@@ -1269,7 +1269,7 @@ function renderSpeakerPillsBar() {
     const label = named ? (s.name || '?').trim().slice(0, 1).toUpperCase() : String(i + 1);
     return `<button data-click="filterBySpeaker" data-click-args='[${jsArg(spkId)}]' data-contextmenu="openSpeakerChipMenu" data-contextmenu-args='[{"$": "event"}, ${jsArg(spkId)}]'
       title="${escapeHtml(`${s.name}\n${t('tipFilterSpeaker')} · ${t('tipSpeakerChipVoice')}`)}"
-      class="spk-chip ${active ? 'spk-chip-on' : ''}" style="--spk:${s.color}">${escapeHtml(label)}</button>`;
+      class="spk-chip ${active ? 'spk-chip-on' : ''}" style="--spk:${escapeHtml(s.color)}">${escapeHtml(label)}</button>`;
   }).join('');
 
   container.innerHTML = html;
@@ -1343,7 +1343,7 @@ async function renameSpeakerPrompt(spkId) {
   // in place at the first shown line of this speaker, as from the line itself
   const seg = (m.segments || []).find(x => x.speaker === spkId && document.getElementById(`seg-${x.id}`));
   if (seg) {
-    document.getElementById(`seg-${seg.id}`).scrollIntoView({ block: 'center' });
+    document.getElementById(`seg-${Number(seg.id) || 0}`).scrollIntoView({ block: 'center' });
     startInlineSpeakerRename(seg.id);
     return;
   }
@@ -1541,7 +1541,7 @@ function transcriptSegmentHtml(seg, idx) {
   }
 
   const mergeBtnHtml = idx > 0 ? `
-    <button data-click="mergeSegmentWithPrevious" data-click-args='[${seg.id}]'
+    <button data-click="mergeSegmentWithPrevious" data-click-args='[${Number(seg.id) || 0}]'
       title="${escapeHtml(t('tipMergeSegment'))}"
       class="seg-merge-btn opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 inline-flex items-center gap-1 text-[11.5px] text-apple-tertiary hover:text-apple-blue transition">
       ${SVG_ICONS.mergeUp}
@@ -1550,7 +1550,7 @@ function transcriptSegmentHtml(seg, idx) {
   ` : '';
 
   return `
-    <div id="seg-${seg.id}" data-start="${seg.start}" data-end="${seg.end}"
+    <div id="seg-${Number(seg.id) || 0}" data-start="${Number(seg.start) || 0}" data-end="${Number(seg.end) || 0}"
       class="segment-row group px-3.5 py-2.5 flex items-baseline gap-4 hover:bg-white/[0.02]">
       <button data-click="seekPlayer" data-click-args='[${Number(seg.start) || 0}]'
         title="${escapeHtml(t('tipSeekTimestamp'))}"
@@ -1561,9 +1561,9 @@ function transcriptSegmentHtml(seg, idx) {
       <div class="flex-1 min-w-0">
         <div class="flex items-center justify-between mb-0.5">
           <div class="flex items-center min-w-0">
-          <select data-change="changeSegmentSpeaker" data-change-args='[${seg.id}, {"$": "value"}]'
+          <select data-change="changeSegmentSpeaker" data-change-args='[${Number(seg.id) || 0}, {"$": "value"}]'
             title="${escapeHtml(t('tipChangeSegSpeaker'))}"
-            style="color: ${spk.color}"
+            style="color: ${escapeHtml(spk.color)}"
             class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">
             ${speakerOptionsHtml(seg.speaker)}
           </select>
@@ -1574,13 +1574,13 @@ function transcriptSegmentHtml(seg, idx) {
           </div>
           <div class="flex items-center gap-2.5">
             ${mergeBtnHtml}
-            <button data-click="openInlineSegmentEditor" data-click-args='[${seg.id}]'
+            <button data-click="openInlineSegmentEditor" data-click-args='[${Number(seg.id) || 0}]'
               title="${escapeHtml(t('tipEditSegment'))}" class="seg-edit-btn">
               ${SVG_ICONS.pencil}<span>${t('editBtn')}</span>
             </button>
           </div>
         </div>
-        <div id="seg-text-${seg.id}" class="text-[13.5px] text-apple-label/90 leading-relaxed">
+        <div id="seg-text-${Number(seg.id) || 0}" class="text-[13.5px] text-apple-label/90 leading-relaxed">
           ${bodyHtml}
         </div>
       </div>
@@ -1681,12 +1681,12 @@ function findActiveItem(items, t, pad, startOf = x => x.s, endOf = x => x.e) {
 function transcriptSegmentElement(i, renderIfNeeded) {
   const seg = tx.items[i];
   if (!seg) return null;
-  let el = document.getElementById(`seg-${seg.id}`);
+  let el = document.getElementById(`seg-${Number(seg.id) || 0}`);
   if (!el && renderIfNeeded) {
     const chunk = document.querySelector(`#transcript-inner .tx-chunk[data-chunk="${Math.floor(i / TX_CHUNK)}"]`);
     if (chunk) {
       renderTranscriptChunk(chunk);
-      el = document.getElementById(`seg-${seg.id}`);
+      el = document.getElementById(`seg-${Number(seg.id) || 0}`);
     }
   }
   return el;

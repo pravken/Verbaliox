@@ -2,9 +2,12 @@
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 rem /quiet: started by the setup window of Verbaliox.exe, which shows the "##STEP" lines as its progress
-rem and the rest in its log; no pause at the end
+rem and the rest in its log; no pause at the end. An existing .venv is kept and its libraries are
+rem brought to requirements.txt (a newer version installed over an older one)
 set "QUIET="
 if /i "%~1"=="/quiet" set "QUIET=1"
+set "UPDATE="
+if exist ".venv\Scripts\python.exe" set "UPDATE=1"
 
 echo ==============================================================
 echo   Verbaliox - First-Run Environment Setup
@@ -41,7 +44,9 @@ where uv >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo ##STEP venv
     echo [1/2] Creating Python 3.11 virtual environment via uv...
-    if defined SIGNED_PY (
+    if exist ".venv\Scripts\python.exe" (
+        echo       .venv exists: updating its libraries
+    ) else if defined SIGNED_PY (
         echo       Python: !SIGNED_PY!
         uv venv .venv --python "!SIGNED_PY!"
     ) else (
@@ -58,7 +63,9 @@ if %ERRORLEVEL% EQU 0 (
 
 echo ##STEP venv
 echo [1/2] Creating Python virtual environment...
-if defined SIGNED_PY (
+if exist ".venv\Scripts\python.exe" (
+    echo       .venv exists: updating its libraries
+) else if defined SIGNED_PY (
     "!SIGNED_PY!" -m venv .venv
 ) else (
     py -3.11 -m venv .venv 2>nul || python -m venv .venv
@@ -70,13 +77,15 @@ echo [2/2] Installing dependencies via pip...
 if errorlevel 1 goto :install_failed
 
 :done
+rem The requirements this environment has (app/pyenv.py REQUIREMENTS_MARK): the launcher compares it
+".venv\Scripts\python.exe" -c "import hashlib; open(r'.venv\verbaliox-requirements.sha256', 'w').write(hashlib.sha256(open('requirements.txt', 'rb').read()).hexdigest())"
 echo.
 echo ==============================================================
 echo   Setup complete. Launching Verbaliox...
 echo ==============================================================
 goto :eof
 
-rem --- An environment half installed would look ready to the launcher and fail at start: it is
+rem --- A new environment half installed would look ready to the launcher and fail at start: it is
 rem --- removed, so the next start runs the setup again
 :install_failed
 echo.
@@ -84,7 +93,9 @@ echo ==============================================================
 echo   Installing the libraries failed (see the messages above).
 echo   Check the internet connection and run setup.bat again.
 echo ==============================================================
-rmdir /s /q .venv
+rem An environment that was there before stays: its mark is still the old one, so the next start
+rem tries the update again
+if not defined UPDATE rmdir /s /q .venv
 if not defined QUIET pause
 exit /b 1
 

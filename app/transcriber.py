@@ -691,7 +691,11 @@ def _detect_speech_language(wav_path: Path, main: str, device: str, compute_type
         clip = wav_path.with_name(wav_path.stem + ".lang.wav")
         try:
             sf.write(str(clip), audio, sr)
-            segs = asr_onnx.transcribe(main, clip, speech_route.DETECT_SECONDS, lambda _r: None, lambda: None)
+            from app import onnx_gpu
+
+            # Where the recording would run, so the job reuses this copy instead of loading a second one
+            segs = asr_onnx.transcribe(main, clip, speech_route.DETECT_SECONDS, lambda _r: None, lambda: None,
+                                       gpu=onnx_gpu.gpu_for_job(main))
         finally:
             clip.unlink(missing_ok=True)
         return speech_route.lang_of_text(" ".join(s["text"] for s in segs))
@@ -699,6 +703,9 @@ def _detect_speech_language(wav_path: Path, main: str, device: str, compute_type
         return None
     model, _ = _get_whisper_model(main, device, compute_type)  # kept: the recording likely needs it next
     _segments, info = model.transcribe(audio, language=None, vad_filter=True, beam_size=1)
+    # Silence or music in the first minute: Whisper still names a language, with a low probability
+    if float(getattr(info, "language_probability", 0.0) or 0.0) < speech_route.MIN_LANG_PROBABILITY:
+        return None
     return "ru" if (info.language or "") == "ru" else "other"
 
 
@@ -952,6 +959,10 @@ def _process_meeting_job(meeting_id: int) -> None:
                 lambda: _detect_speech_language(wav_path, speech_route.main_model(settings), device, compute_type))
             if routed_lang == "ru" and lang_setting in ("auto", "", None):
                 lang_setting = "ru"
+            from app import asr_onnx as _onnx
+
+            if _onnx.is_onnx_model(model_name) and not _onnx.is_onnx_model(speech_route.main_model(settings)):
+                release_whisper_model()  # Whisper heard the language; GigaAM / Parakeet does the rest
             _check_cancel(meeting_id)
         pretty_whisper = format_whisper_model_name(model_name)
         # "mixed": people switch languages (Russian and English in one call): detected per window
