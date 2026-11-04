@@ -2299,3 +2299,5 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .mm-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
 .mm-dots i.on { background: #0A84FF; }
 .mm-load i.on { background: #FFB340; }
+.mm-x { color: #FF453A; font-weight: 700; font-size: 11px; line-height: 1; width: 38px; }
+.mm-no .mm-sub { color: #FF453A; }
