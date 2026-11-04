@@ -446,3 +446,63 @@ class SpeechModelSettingTest(unittest.TestCase):
         for key in ("whisper_model", "speech_model_ru", "live_whisper_model"):
             with self.assertRaises(ValueError):
                 validate_setting(key, "someone/evil-repo")
+
+
+class PartialTranscriptModelTest(unittest.TestCase):
+    """A fragment a cancelled run left gets no model at the next start, so it never becomes a version."""
+
+    def test_fragment_of_a_cancelled_run(self):
+        from app.database import (create_meeting, get_connection, get_meeting, init_db, save_meeting_results,
+                                  update_meeting_fields, update_meeting_progress)
+
+        init_db()
+        m = create_meeting(title="x", filename="x.wav", media_path="")
+        update_meeting_fields(m["id"], model_name="auto")
+        save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "speaker": "S", "text": "обрывок"}],
+                             speakers={"S": {"name": "A", "color": "#0A84FF"}})
+        update_meeting_progress(m["id"], status="cancelled")
+        conn = get_connection()
+        conn.execute("UPDATE meetings SET transcript_model = 'auto' WHERE id = ?", (m["id"],))  # an older start
+        conn.commit()
+        conn.close()
+        init_db()
+        self.assertEqual(get_meeting(m["id"])["transcript_model"], "")
+
+
+class OnnxDeleteTest(unittest.TestCase):
+    """Deleting one GigaAM / Parakeet model leaves the other loaded and waits for live captions."""
+
+    def test_only_the_deleted_model_is_released(self):
+        from app import asr_onnx
+
+        with mock.patch.dict(asr_onnx._loaded, {"gigaam-v3": object(), "parakeet-v3": object()}, clear=True):
+            asr_onnx.delete_model("gigaam-v3")
+            self.assertEqual(list(asr_onnx._loaded), ["parakeet-v3"])
+
+    def test_refused_while_live_captions_use_it(self):
+        from fastapi import HTTPException
+
+        from app import live
+        import app.main  # noqa: F401 - the routers import from it
+        from app.api.system import api_onnx_delete
+
+        with mock.patch.object(live, "model_in_use", return_value=True), \
+                mock.patch("app.asr_onnx.delete_model") as delete:
+            with self.assertRaises(HTTPException) as e:
+                api_onnx_delete("parakeet-v3")
+        self.assertEqual(e.exception.status_code, 409)
+        delete.assert_not_called()
+
+
+class UrlImportRestartTest(unittest.TestCase):
+    """A download by link still running is not started a second time."""
+
+    def test_running_download_is_not_doubled(self):
+        import threading
+
+        from app import url_import
+
+        with mock.patch.dict(url_import._cancel, {77: threading.Event()}), \
+                mock.patch.object(url_import.threading, "Thread") as thread:
+            self.assertFalse(url_import.restart(77, "https://example.com/v"))
+        thread.assert_not_called()

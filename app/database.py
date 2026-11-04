@@ -266,8 +266,13 @@ def init_db() -> None:
             cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('meeting_flags_v1', '1')")
         moved = _move_segments_to_table(conn)
         # Transcripts made before the versions: by the model the recording names
+        # Only a completed one: the fragment a cancelled or failed run left is no version of any model, and
+        # "auto" names no model (each run stores the one it used)
         cur.execute("UPDATE meetings SET transcript_model = model_name, transcript_at = COALESCE(completed_at, '') "
-                    "WHERE COALESCE(transcript_model, '') = '' AND has_transcript = 1")
+                    "WHERE COALESCE(transcript_model, '') = '' AND has_transcript = 1 AND status = 'completed' "
+                    "AND COALESCE(model_name, '') NOT IN ('', 'auto')")
+        # What earlier versions of this line wrote for such fragments
+        cur.execute("UPDATE meetings SET transcript_model = '' WHERE transcript_model = 'auto'")
         if cur.execute("PRAGMA user_version").fetchone()[0] < _FTS_SCHEMA_VERSION:
             # First start with the index (or a newer index format): build it from stored transcripts
             cur.execute("DELETE FROM segments_fts")
@@ -314,6 +319,9 @@ _MEETING_EXTRA_COLUMNS = {
     "processing_json": "TEXT DEFAULT '{}'",  # what is done to the sound and text when transcribed (see effective_processing)
     "transcript_model": "TEXT DEFAULT ''",
     "transcript_at": "TEXT DEFAULT ''",
+    # The speech language the user chose ("auto", "mixed", "ru"...): language holds the one heard, which a
+    # transcription overwrites; a new run starts from this choice ('' before the first run: language is it)
+    "language_choice": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -1031,7 +1039,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 
 
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
-    allowed = {"title", "model_name", "language", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
+    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
                "transcript_verified", "audio_path",
                "local_only", "series_id"}
     items = [(k, v) for k, v in fields.items() if k in allowed]

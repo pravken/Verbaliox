@@ -117,6 +117,57 @@ await step('studio source', async () => {
   expect(await page.evaluate(() => document.getElementById('record-source-select').value) === 'mic', 'the Studio source was reset');
 });
 
+// First-run wizard: a set is chosen and its settings are written; nothing is really downloaded here
+await step('first run wizard', async () => {
+  const sent = [];
+  const stub = r => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  await page.route('**/api/settings', r => {
+    if (r.request().method() !== 'POST') return r.continue();
+    sent.push(r.request().postDataJSON().settings);
+    return stub(r);
+  });
+  for (const url of ['**/api/models/setup', '**/api/onnx-models/**', '**/api/ffmpeg/install', '**/api/ollama/**']) await page.route(url, stub);
+  await page.evaluate(() => { document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()); openFirstRunWizard(state.system); });
+  await sleep(300);
+  await page.click('#first-run-wizard button[data-pick="preset:ruen"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  await page.click('#first-run-wizard button[data-pick="ai:none"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  await sleep(600);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  const first = sent[0] || {};
+  expect(!(await page.$('#first-run-wizard')), 'the wizard stayed open');
+  expect(first.speech_model_ru === 'gigaam-v3', `Russian model not set: ${JSON.stringify(first)}`);
+  expect(['parakeet-v3', 'large-v3-turbo'].includes(first.whisper_model), `main model not set: ${JSON.stringify(first)}`);
+  expect(first.language === 'auto', `language not left to detection: ${JSON.stringify(first)}`);
+});
+
+// The cloud choice keeps the speech settings: its consent is asked in Settings → Analysis (no stub here:
+// the real server must accept the request)
+await step('first run wizard, cloud', async () => {
+  for (const url of ['**/api/models/setup', '**/api/onnx-models/**', '**/api/ffmpeg/install', '**/api/ollama/**']) {
+    await page.route(url, r => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  }
+  let status = 0;
+  const watch = r => { if (r.url().endsWith('/api/settings') && r.request().method() === 'POST' && !status) status = r.status(); };
+  page.on('response', watch);
+  await page.evaluate(() => openFirstRunWizard(state.system));
+  await sleep(300);
+  await page.click('#first-run-wizard button[data-pick="preset:ruen"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  await page.click('#first-run-wizard button[data-pick="ai:cloud"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  await sleep(800);
+  page.off('response', watch);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  expect(status === 200, `the settings were refused (HTTP ${status})`);
+  const v = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+  expect(v.speech_model_ru === 'gigaam-v3', `Russian model not saved: ${v.speech_model_ru}`);
+  await page.evaluate(() => closeModal('settings'));
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

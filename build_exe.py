@@ -491,7 +491,7 @@ class SetupWindow
 
     class Row
     {
-        public Panel Box; public Label Dot; public Label Right; public Label Purpose; public CheckBox Check;
+        public Panel Box; public Label Dot; public Label Title; public Label Right; public Label Purpose; public CheckBox Check;
     }
 
     bool ru;
@@ -502,7 +502,7 @@ class SetupWindow
     Panel track, runner;
     TextBox log;
     Button primary, secondary, details;
-    bool succeeded, running, failed, envDone, ollamaInstalled, update;
+    bool succeeded, running, failed, envDone, ollamaInstalled, update, ollamaTouched;
     Process current;
     DateTime started;
     Timer anim;
@@ -549,7 +549,8 @@ class SetupWindow
             r.Box.Controls.Add(r.Dot);
             x = 36;
         }
-        r.Box.Controls.Add(NewLabel(title, 10f, true, System.Drawing.Color.White, x, 9, 250, 22));
+        r.Title = NewLabel(title, 10f, true, System.Drawing.Color.White, x, 9, 250, 22);
+        r.Box.Controls.Add(r.Title);
         r.Right = NewLabel(right, 9f, false, Text2, 290, 11, 248, 20);
         r.Right.TextAlign = System.Drawing.ContentAlignment.TopRight;
         r.Box.Controls.Add(r.Right);
@@ -605,6 +606,60 @@ class SetupWindow
         catch { return false; }
     }
 
+    // The video card row once nvidia-smi (name, driver) or the list of video adapters answered
+    void ShowGpu(string nv, bool card)
+    {
+        System.Drawing.Color gpuColor = Text2;
+        if (nv != null)
+        {
+            string[] parts = nv.Split(',');
+            string ver = parts.Length > 1 ? parts[1].Trim() : "";
+            double v; bool old = double.TryParse(ver, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) && v < 528.33;
+            gpuColor = old ? Amber : Green;
+            gpu.Title.Text = parts[0].Trim();
+            gpu.Purpose.Text = old ? T("Обновите драйвер с nvidia.com, иначе распознавание пойдёт на процессоре", "Update the driver from nvidia.com, or recognition runs on the CPU")
+                                   : T("Ускоряет распознавание в 2–10 раз. CUDA уже входит в среду программы", "Speeds recognition up 2–10 times. CUDA comes with the program environment");
+            gpu.Right.Text = old ? T("драйвер " + ver + " устарел", "driver " + ver + " is too old") : T("драйвер " + ver + " ✓", "driver " + ver + " ✓");
+        }
+        else if (card)
+        {
+            gpuColor = Amber;
+            gpu.Purpose.Text = T("Драйвер не найден: поставьте его с nvidia.com, чтобы распознавание шло на видеокарте", "No driver found: install it from nvidia.com to run recognition on the video card");
+            gpu.Right.Text = T("нужен драйвер", "driver needed");
+        }
+        else
+        {
+            gpu.Purpose.Text = T("Не найдена: программа работает на процессоре, GigaAM и Parakeet и так быстрые", "Not found: the program runs on the CPU, GigaAM and Parakeet are fast there too");
+            gpu.Right.Text = T("не обязательно", "optional");
+        }
+        gpu.Right.ForeColor = gpuColor; gpu.Dot.ForeColor = gpuColor;
+        // Local analysis is offered ticked with a working NVIDIA card (it is slow on the processor)
+        if (!ollamaInstalled && !ollamaTouched && !running && ollama.Check.Enabled) ollama.Check.Checked = nv != null && gpuColor == Green;
+        if (nv == null || gpuColor == Amber)
+        {
+            gpu.Right.Cursor = Cursors.Hand;
+            gpu.Right.Click += delegate { try { Process.Start("https://www.nvidia.com/drivers"); } catch { } };
+        }
+    }
+
+    // winget hands an installer to its own server process, outside the tree taskkill /T ends: the
+    // installers this setup started (the Python of python.org, Ollama) and that server stop on cancel too
+    void KillStrayInstallers()
+    {
+        foreach (Process p in Process.GetProcesses())
+        {
+            try
+            {
+                string n = p.ProcessName;
+                bool ours = n.StartsWith("python-3.11", StringComparison.OrdinalIgnoreCase)
+                    || n.Equals("OllamaSetup", StringComparison.OrdinalIgnoreCase)
+                    || n.Equals("WindowsPackageManagerServer", StringComparison.OrdinalIgnoreCase);
+                if (ours && p.StartTime >= started) { p.Kill(); p.WaitForExit(5000); }
+            }
+            catch { }
+        }
+    }
+
     void Build()
     {
         form = new Form();
@@ -636,39 +691,18 @@ class SetupWindow
             T("Python и библиотеки: распознавание речи, разделение по участникам, интерфейс", "Python and libraries: speech recognition, speakers, the interface"),
             T("≈ 4 ГБ · обязательно", "≈ 4 GB · required"), false);
 
-        string nv = NvidiaInfo();
-        string gpuRight; System.Drawing.Color gpuColor = Text2;
-        if (nv != null)
+        // nvidia-smi and PowerShell take seconds: the window shows first, the row fills in when they answer
+        gpu = AddRow(176, T("Видеокарта NVIDIA", "NVIDIA video card"),
+            T("Проверка видеокарты и драйвера…", "Checking the video card and its driver…"), T("проверка…", "checking…"), false);
+        form.Shown += delegate
         {
-            string[] parts = nv.Split(',');
-            string ver = parts.Length > 1 ? parts[1].Trim() : "";
-            double v; bool old = double.TryParse(ver, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) && v < 528.33;
-            gpuRight = old ? T("драйвер " + ver + " устарел", "driver " + ver + " is too old") : T("драйвер " + ver + " ✓", "driver " + ver + " ✓");
-            gpuColor = old ? Amber : Green;
-            gpu = AddRow(176, parts[0].Trim(),
-                old ? T("Обновите драйвер с nvidia.com, иначе распознавание пойдёт на процессоре", "Update the driver from nvidia.com, or recognition runs on the CPU")
-                    : T("Ускоряет распознавание в 2–10 раз. CUDA уже входит в среду программы", "Speeds recognition up 2–10 times. CUDA comes with the program environment"),
-                gpuRight, false);
-        }
-        else if (HasNvidiaCard())
-        {
-            gpuColor = Amber;
-            gpu = AddRow(176, T("Видеокарта NVIDIA", "NVIDIA video card"),
-                T("Драйвер не найден: поставьте его с nvidia.com, чтобы распознавание шло на видеокарте", "No driver found: install it from nvidia.com to run recognition on the video card"),
-                T("нужен драйвер", "driver needed"), false);
-        }
-        else
-        {
-            gpu = AddRow(176, T("Видеокарта NVIDIA", "NVIDIA video card"),
-                T("Не найдена: программа работает на процессоре, GigaAM и Parakeet и так быстрые", "Not found: the program runs on the CPU, GigaAM and Parakeet are fast there too"),
-                T("не обязательно", "optional"), false);
-        }
-        gpu.Right.ForeColor = gpuColor; gpu.Dot.ForeColor = gpuColor;
-        if (nv == null || gpuColor == Amber)
-        {
-            gpu.Right.Cursor = Cursors.Hand;
-            gpu.Right.Click += delegate { try { Process.Start("https://www.nvidia.com/drivers"); } catch { } };
-        }
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string nv = NvidiaInfo();
+                bool card = nv != null || HasNvidiaCard();
+                Ui(delegate { ShowGpu(nv, card); });
+            });
+        };
 
         // The copy the program downloaded before (app/ffmpeg_manager.py), else one on PATH
         string ff = File.Exists(Path.Combine(VerbalioxLauncher.DataDir(), "bin", "ffmpeg.exe"))
@@ -682,7 +716,8 @@ class SetupWindow
         ollama = AddRow(320, "Ollama",
             T("ИИ-анализ на компьютере: обзоры и задачи. Можно поставить позже", "AI analysis on this computer: summaries and tasks. Can be added later"),
             ollamaInstalled ? T("уже есть ✓", "found ✓") : T("≈ 1 ГБ · по желанию", "≈ 1 GB · optional"), true);
-        ollama.Check.Checked = !ollamaInstalled && nv != null && gpuColor == Green;
+        ollama.Check.Checked = false;  // ticked once the video card is found (ShowGpu), unless the user chose
+        ollama.Check.Click += delegate { ollamaTouched = true; };
         ollama.Check.Enabled = !ollamaInstalled;
         if (ollamaInstalled) ollama.Right.ForeColor = Green;
 
@@ -740,7 +775,7 @@ class SetupWindow
             if (MessageBox.Show(form, T("Прервать установку? Её можно будет начать заново.", "Stop the setup? It can be started again."),
                     "Verbaliox", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) { e.Cancel = true; return; }
             running = false;
-            // setup.bat and what it started (uv, pip, winget) stop with it; a half environment is removed at the next start
+            // setup.bat and what it started (uv, pip, winget and the installers winget runs) stop with it; a half environment is removed at the next start
             try
             {
                 if (current != null && !current.HasExited)
@@ -749,6 +784,7 @@ class SetupWindow
                     kill.WaitForExit(10000);
                     current.WaitForExit(5000);
                 }
+                KillStrayInstallers();
                 // A half environment would look ready to the next start: it goes, so the setup runs again
                 string venv = Path.Combine(baseDir, ".venv");
                 if (!envDone && !update && Directory.Exists(venv)) Directory.Delete(venv, true);

@@ -240,7 +240,7 @@ const TX_PROC_GROUPS = [
 
 function txProc(m) {
   if (!state.txProc || state.txProc.id !== m.id) {
-    state.txProc = { id: m.id, values: { ...(m.processing || {}) }, language: m.language || 'auto', speakers: Number(m.num_speakers_hint || 0) };
+    state.txProc = { id: m.id, values: { ...(m.processing || {}) }, language: m.language_choice || m.language || 'auto', speakers: Number(m.num_speakers_hint || 0) };
   }
   return state.txProc;
 }
@@ -265,7 +265,8 @@ function renderTxProcMenu() {
       <p class="text-[11px] text-apple-tertiary">${escapeHtml(t('txProcApplies'))}</p>`;
   const [lang, spk] = box.querySelectorAll('select');
   lang.value = p.language;
-  if (lang.value !== p.language) lang.value = 'auto';
+  // A language the list does not have (heard by an older version): what is shown is what is sent
+  if (lang.value !== p.language) { lang.value = 'auto'; p.language = 'auto'; }
   spk.value = String(p.speakers);
 }
 

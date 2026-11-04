@@ -156,3 +156,118 @@ class ProcessMeetingJobTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class AutoModelJobTest(unittest.TestCase):
+    """model "auto": the language of the first minute picks the Russian model or the main one."""
+
+    _run = ProcessMeetingJobTest._run  # the same stand-ins, without repeating its tests
+
+    def setUp(self):
+        ProcessMeetingJobTest.setUp(self)
+        from app.database import update_meeting_fields
+
+        update_settings({"whisper_model": "parakeet-v3", "speech_model_ru": "gigaam-v3"})
+        update_meeting_fields(self.mid, model_name="auto", language="auto")
+
+    def _models_used(self, heard):
+        used = []
+
+        def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
+            used.append(model)
+            return NEW
+
+        with mock.patch.object(transcriber, "_detect_speech_language", return_value=heard) as detect:
+            m = self._run(transcribe)
+        detect.assert_called_once()
+        return used, m
+
+    def test_russian_speech_goes_to_the_russian_model(self):
+        used, m = self._models_used("ru")
+        self.assertEqual(used, ["gigaam-v3"])
+        self.assertEqual(m["status"], "completed")
+
+    def test_other_speech_goes_to_the_main_model(self):
+        used, m = self._models_used("other")
+        self.assertEqual(used, ["parakeet-v3"])
+        self.assertEqual(m["status"], "completed")
+
+    def test_undecided_speech_goes_to_the_main_model(self):
+        used, _m = self._models_used(None)
+        self.assertEqual(used, ["parakeet-v3"])
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class DetectSpeechLanguageTest(unittest.TestCase):
+    """_detect_speech_language: the letters GigaAM / Parakeet write, or Whisper's guess and its probability."""
+
+    def setUp(self):
+        import numpy as np
+        import soundfile as sf
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.wav = Path(self.tmp.name) / "a.wav"
+        sf.write(str(self.wav), np.zeros(16000, dtype="float32"), 16000)
+
+    def test_onnx_model_reads_the_letters(self):
+        from app import asr_onnx, onnx_gpu
+
+        text = [{"text": "Давайте начнём с того, что успели сделать за эту неделю"}]
+        with mock.patch.object(asr_onnx, "is_installed", return_value=True), \
+                mock.patch.object(onnx_gpu, "gpu_for_job", return_value=False), \
+                mock.patch.object(asr_onnx, "transcribe", return_value=text):
+            self.assertEqual(transcriber._detect_speech_language(self.wav, "parakeet-v3", "cpu", "int8"), "ru")
+        self.assertFalse(list(Path(self.tmp.name).glob("*.lang.wav")))  # the clip is removed
+
+    def test_whisper_needs_a_confident_guess(self):
+        from types import SimpleNamespace
+
+        model = mock.Mock()
+        with mock.patch("app.model_manager.is_whisper_model_installed", return_value=True), \
+                mock.patch.object(transcriber, "_get_whisper_model", return_value=(model, None)):
+            model.transcribe.return_value = ([], SimpleNamespace(language="ru", language_probability=0.95))
+            self.assertEqual(transcriber._detect_speech_language(self.wav, "large-v3-turbo", "cpu", "int8"), "ru")
+            model.transcribe.return_value = ([], SimpleNamespace(language="en", language_probability=0.9))
+            self.assertEqual(transcriber._detect_speech_language(self.wav, "large-v3-turbo", "cpu", "int8"), "other")
+            model.transcribe.return_value = ([], SimpleNamespace(language="ru", language_probability=0.2))
+            self.assertIsNone(transcriber._detect_speech_language(self.wav, "large-v3-turbo", "cpu", "int8"))
+
+    def test_a_model_not_downloaded_is_not_fetched_for_this(self):
+        from app import asr_onnx
+
+        with mock.patch.object(asr_onnx, "is_installed", return_value=False), \
+                mock.patch.object(asr_onnx, "transcribe") as tr:
+            self.assertIsNone(transcriber._detect_speech_language(self.wav, "gigaam-v3", "cpu", "int8"))
+        tr.assert_not_called()
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class LanguageChoiceTest(unittest.TestCase):
+    """The language chosen for a recording stays for the next run; the one heard is stored apart."""
+
+    _run = ProcessMeetingJobTest._run
+
+    def setUp(self):
+        ProcessMeetingJobTest.setUp(self)
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, model_name="parakeet-v3", language="mixed")
+
+    def test_several_languages_stay_chosen(self):
+        mixed = [{"start": 0.0, "end": 1.0, "text": "Давайте начнём встречу", "words": []},
+                 {"start": 1.0, "end": 2.0, "text": "and then we talk about the plan for this week", "words": []}]
+        for _ in range(2):
+            m = self._run(lambda *a, **k: [dict(s) for s in mixed])
+            self.assertEqual(m["status"], "completed")
+            self.assertEqual(m["language_choice"], "mixed")
+            self.assertEqual([s.get("lang") for s in m["segments"]], ["ru", "en"])  # per phrase, every run
+
+    def test_a_german_transcript_is_not_taken_for_english(self):
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, language="auto", language_choice="")
+        german = [{"start": 0.0, "end": 2.0, "text": "Wir haben heute nicht viel Zeit und die Aufgabe ist eine andere", "words": []}]
+        m = self._run(lambda *a, **k: german)
+        self.assertEqual((m["language"], m["language_choice"]), ("de", "auto"))
