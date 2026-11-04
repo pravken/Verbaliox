@@ -492,3 +492,17 @@ class OnnxDeleteTest(unittest.TestCase):
                 api_onnx_delete("parakeet-v3")
         self.assertEqual(e.exception.status_code, 409)
         delete.assert_not_called()
+
+
+class UrlImportRestartTest(unittest.TestCase):
+    """A download by link still running is not started a second time."""
+
+    def test_running_download_is_not_doubled(self):
+        import threading
+
+        from app import url_import
+
+        with mock.patch.dict(url_import._cancel, {77: threading.Event()}), \
+                mock.patch.object(url_import.threading, "Thread") as thread:
+            self.assertFalse(url_import.restart(77, "https://example.com/v"))
+        thread.assert_not_called()
