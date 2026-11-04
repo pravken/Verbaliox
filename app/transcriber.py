@@ -673,6 +673,35 @@ def _batch_size_for(device: str, hw: Dict[str, Any]) -> int:
     return 4
 
 
+def _detect_speech_language(wav_path: Path, main: str, device: str, compute_type: str) -> Optional[str]:
+    """The language of the first minute, heard by the main model (app/speech_route.py): Whisper names
+    it, GigaAM / Parakeet write text whose letters show it. None when it cannot tell (too little
+    speech, the model not downloaded: it is not fetched only for this)."""
+    import soundfile as sf
+
+    from app import asr_onnx, speech_route
+    from app.model_manager import is_whisper_model_installed
+
+    audio, sr = sf.read(str(wav_path), dtype="float32", frames=int(16000 * speech_route.DETECT_SECONDS))
+    if getattr(audio, "ndim", 1) > 1:
+        audio = audio.mean(axis=1)
+    if asr_onnx.is_onnx_model(main):
+        if not asr_onnx.is_installed(main):
+            return None
+        clip = wav_path.with_name(wav_path.stem + ".lang.wav")
+        try:
+            sf.write(str(clip), audio, sr)
+            segs = asr_onnx.transcribe(main, clip, speech_route.DETECT_SECONDS, lambda _r: None, lambda: None)
+        finally:
+            clip.unlink(missing_ok=True)
+        return speech_route.lang_of_text(" ".join(s["text"] for s in segs))
+    if not is_whisper_model_installed(main):
+        return None
+    model, _ = _get_whisper_model(main, device, compute_type)  # kept: the recording likely needs it next
+    _segments, info = model.transcribe(audio, language=None, vad_filter=True, beam_size=1)
+    return "ru" if (info.language or "") == "ru" else "other"
+
+
 def _start_transcription(
     whisper_model: WhisperModel,
     wav_path: Path,
@@ -909,10 +938,22 @@ def _process_meeting_job(meeting_id: int) -> None:
         from app.model_manager import format_whisper_model_name
 
         model_name = meeting.get("model_name") or settings.get("whisper_model") or "large-v3-turbo"
-        pretty_whisper = format_whisper_model_name(model_name)
         device = settings.get("device") or hw["recommended_device"]
         compute_type = settings.get("compute_type") or hw["recommended_compute_type"]
         lang_setting = meeting.get("language") or settings.get("language") or "auto"
+        from app import speech_route
+
+        if model_name == speech_route.AUTO:
+            # The model for Russian or the main one, by the language of the speech (app/speech_route.py)
+            if speech_route.routing_on(settings) and lang_setting in ("auto", "", None):
+                update_meeting_progress(meeting_id, stage_text="Определение языка речи...")
+            model_name, routed_lang = speech_route.resolve(
+                settings, lang_setting,
+                lambda: _detect_speech_language(wav_path, speech_route.main_model(settings), device, compute_type))
+            if routed_lang == "ru" and lang_setting in ("auto", "", None):
+                lang_setting = "ru"
+            _check_cancel(meeting_id)
+        pretty_whisper = format_whisper_model_name(model_name)
         # "mixed": people switch languages (Russian and English in one call): detected per window
         mixed = lang_setting == "mixed"
         language = None if lang_setting in ("auto", "mixed", "", None) else lang_setting

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
 from app.paths import DATA_DIR, UPLOADS_DIR
+from app import speech_route
 from app.settings_schema import as_int
 from app.database import create_meeting, get_all_settings, get_meeting
 from app.transcriber import enqueue_meeting_job
@@ -230,7 +231,7 @@ def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, h
         filename=dest.name,
         media_path=str(dest),
         language=settings.get("language", "auto"),
-        model_name=settings.get("whisper_model", "large-v3-turbo"),
+        model_name=speech_route.default_choice(settings),
         num_speakers_hint=as_int(settings.get("num_speakers"), 0),
         source="recording",
         owns_media=True,

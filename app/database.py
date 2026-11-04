@@ -131,6 +131,7 @@ def init_db() -> None:
 
         default_settings = {
             "whisper_model": hw["recommended_whisper_model"],
+            "speech_model_ru": "",  # a model of its own for Russian speech (app/speech_route.py); "" = the main one
             "device": hw["recommended_device"],
             "compute_type": hw["recommended_compute_type"],
             "language": "auto",
