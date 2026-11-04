@@ -8,6 +8,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the sixth beta (0.7.0-beta.6)
+- **An installer:** `Verbaliox-Setup-vX.Y.Z.exe` installs the program for your user (no administrator
+  rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, with a Start menu entry, an optional desktop icon and
+  an uninstaller in «Installed apps» that asks before removing the recordings and models. The zip stays
+  as the portable version.
+
 ### In the fifth beta (0.7.0-beta.5)
 - **A simpler first start.** The welcome window offers ready sets: meetings in Russian, Russian and
   English, many languages, or your own choice — each model says what it is for and how much it weighs.
@@ -51,6 +57,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+### В шестой бете (0.7.0-beta.6)
+- **Установщик:** `Verbaliox-Setup-vX.Y.Z.exe` ставит программу для вашего пользователя (без прав
+  администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, с ярлыком в «Пуске», значком на рабочем столе по
+  желанию и удалением через «Установленные приложения», которое спрашивает, стирать ли записи и модели.
+  Zip остаётся портативной версией.
 
 ### В пятой бете (0.7.0-beta.5)
 - **Простая первая настройка.** Окно приветствия предлагает готовые наборы: встречи на русском, русский
