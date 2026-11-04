@@ -8,6 +8,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the seventh beta (0.7.0-beta.7)
+- **First start:** a set with several models besides GigaAM (say Parakeet and Whisper Turbo) asks which
+  one is the main model for other languages and mixed speech, instead of taking the first.
+- Moving the data folder to the new name rewrites only stored file paths: a transcript or note that
+  mentions the old folder stays as written.
+
 ### In the sixth beta (0.7.0-beta.6)
 - **An installer:** `Verbaliox-Setup-vX.Y.Z.exe` installs the program for your user (no administrator
   rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, with a Start menu entry, an optional desktop icon and
@@ -68,6 +74,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+### В седьмой бете (0.7.0-beta.7)
+- **Первый запуск:** если в наборе кроме GigaAM несколько моделей (например, Parakeet и Whisper Turbo),
+  мастер спрашивает, какая из них основная для других языков и смешанной речи, а не берёт первую.
+- При переносе папки данных на новое имя меняются только сохранённые пути к файлам: расшифровка или
+  заметка, где упомянута старая папка, остаётся как была.
 
 ### В шестой бете (0.7.0-beta.6)
 - **Установщик:** `Verbaliox-Setup-vX.Y.Z.exe` ставит программу для вашего пользователя (без прав
