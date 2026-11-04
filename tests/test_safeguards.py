@@ -355,3 +355,28 @@ class DisplaySanitizeTest(unittest.TestCase):
         self.assertEqual(d["speakers"]["S1"]["color"], "#0A84FF")
         self.assertEqual(d["speakers"]["S2"]["color"], "#30D158")
         self.assertEqual((d["segments"][0]["id"], d["segments"][0]["start"], d["segments"][0]["end"]), (0, 0.0, 12.5))
+
+
+class ModelSetupSelectTest(unittest.TestCase):
+    """A Whisper model downloaded as the Russian model (select=False) does not replace the main one."""
+
+    def _run(self, select):
+        from app import model_manager as mm
+
+        class _Now:
+            def __init__(self, target, daemon=None):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        with mock.patch.object(mm, "_download_hf_repo_with_progress"), \
+                mock.patch.object(mm, "update_settings") as upd, \
+                mock.patch.object(mm.threading, "Thread", _Now):
+            mm._setup_state["active"] = False
+            mm.start_models_setup(mm.WHISPER_CATALOG[0]["id"], install_diarizer=False, select=select)
+        return upd
+
+    def test_select_flag(self):
+        self.assertTrue(self._run(True).called)
+        self.assertFalse(self._run(False).called)
