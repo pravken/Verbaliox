@@ -21,6 +21,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   part is for (the environment, the NVIDIA driver — CUDA comes with the environment, FFmpeg, Ollama if you
   want local analysis), confirmed with «Install», with progress and a log. Ollama installs silently and its
   own window no longer pops up.
+- **Model meters:** every speech and analysis model shows accuracy (per language), speed on this
+  computer and load in five dots, with the measured numbers in the tooltip.
 
 ### In the fourth beta (0.7.0-beta.4)
 - API keys are stored under the program's new name: keys saved before are read and saved again at the
@@ -62,6 +64,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   (среда программы, драйвер NVIDIA — CUDA входит в среду, FFmpeg, Ollama — если нужен анализ на компьютере),
   подтверждение кнопкой «Установить», прогресс и журнал. Ollama ставится тихо, её собственное окно больше не
   выскакивает.
+- **Шкалы моделей:** у каждой модели распознавания и анализа — точность (по языкам), скорость на этом
+  компьютере и нагрузка в пяти делениях, с цифрами замеров в подсказке.
 
 ### В четвёртой бете (0.7.0-beta.4)
 - API-ключи хранятся под новым именем программы: сохранённые раньше читаются и пересохраняются при первом
