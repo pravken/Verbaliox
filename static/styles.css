@@ -1834,7 +1834,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 
 /* --- The settings page: sections on the left, the section on the right (static/js/settings.js) --- */
 .sx-shell {
-  display: flex; min-height: 0; overflow: hidden; border-radius: 16px;
+  position: relative; display: flex; min-height: 0; overflow: hidden; border-radius: 16px;
   background: #15161A; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); box-shadow: var(--shadow-dialog);
 }
 .settings-page > .sx-shell { max-width: 1180px; }
