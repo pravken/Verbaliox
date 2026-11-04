@@ -947,7 +947,13 @@ def _process_meeting_job(meeting_id: int) -> None:
         model_name = meeting.get("model_name") or settings.get("whisper_model") or "large-v3-turbo"
         device = settings.get("device") or hw["recommended_device"]
         compute_type = settings.get("compute_type") or hw["recommended_compute_type"]
-        lang_setting = meeting.get("language") or settings.get("language") or "auto"
+        # The language chosen for the recording: kept apart from the one heard (stored in language below),
+        # so "several languages" or "auto" stay for the next run
+        lang_setting = meeting.get("language_choice") or meeting.get("language") or settings.get("language") or "auto"
+        if not meeting.get("language_choice"):
+            from app.database import update_meeting_fields
+
+            update_meeting_fields(meeting_id, language_choice=lang_setting)
         from app import speech_route
 
         if model_name == speech_route.AUTO:

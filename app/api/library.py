@@ -552,6 +552,7 @@ def api_reconfigure_meeting(meeting_id: int, payload: MeetingReconfigurePayload)
         meeting_id,
         model_name=payload.model_name.strip() or "large-v3-turbo",
         language=payload.language.strip() or "auto",
+        language_choice=payload.language.strip() or "auto",
         num_speakers_hint=max(0, int(payload.num_speakers_hint)),
     )
     if payload.processing is not None:

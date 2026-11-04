@@ -241,3 +241,33 @@ class DetectSpeechLanguageTest(unittest.TestCase):
                 mock.patch.object(asr_onnx, "transcribe") as tr:
             self.assertIsNone(transcriber._detect_speech_language(self.wav, "gigaam-v3", "cpu", "int8"))
         tr.assert_not_called()
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class LanguageChoiceTest(unittest.TestCase):
+    """The language chosen for a recording stays for the next run; the one heard is stored apart."""
+
+    _run = ProcessMeetingJobTest._run
+
+    def setUp(self):
+        ProcessMeetingJobTest.setUp(self)
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, model_name="parakeet-v3", language="mixed")
+
+    def test_several_languages_stay_chosen(self):
+        mixed = [{"start": 0.0, "end": 1.0, "text": "Давайте начнём встречу", "words": []},
+                 {"start": 1.0, "end": 2.0, "text": "and then we talk about the plan for this week", "words": []}]
+        for _ in range(2):
+            m = self._run(lambda *a, **k: [dict(s) for s in mixed])
+            self.assertEqual(m["status"], "completed")
+            self.assertEqual(m["language_choice"], "mixed")
+            self.assertEqual([s.get("lang") for s in m["segments"]], ["ru", "en"])  # per phrase, every run
+
+    def test_a_german_transcript_is_not_taken_for_english(self):
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, language="auto", language_choice="")
+        german = [{"start": 0.0, "end": 2.0, "text": "Wir haben heute nicht viel Zeit und die Aufgabe ist eine andere", "words": []}]
+        m = self._run(lambda *a, **k: german)
+        self.assertEqual((m["language"], m["language_choice"]), ("de", "auto"))

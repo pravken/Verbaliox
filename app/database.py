@@ -314,6 +314,9 @@ _MEETING_EXTRA_COLUMNS = {
     "processing_json": "TEXT DEFAULT '{}'",  # what is done to the sound and text when transcribed (see effective_processing)
     "transcript_model": "TEXT DEFAULT ''",
     "transcript_at": "TEXT DEFAULT ''",
+    # The speech language the user chose ("auto", "mixed", "ru"...): language holds the one heard, which a
+    # transcription overwrites; a new run starts from this choice ('' before the first run: language is it)
+    "language_choice": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -1031,7 +1034,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 
 
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
-    allowed = {"title", "model_name", "language", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
+    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
                "transcript_verified", "audio_path",
                "local_only", "series_id"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
