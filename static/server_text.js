@@ -72,6 +72,7 @@ const SERVER_TEXT_EN = {
   "Запись экрана средствами приложения доступна только в Windows": "Screen recording by the app works on Windows only",
   "Идут живые субтитры — удалите модель после записи": "Live captions are running — delete the model after the recording",
   "Идёт распознавание — удалите модель после него": "Transcription is running — delete the model after it",
+  "Скачивание по ссылке ещё идёт": "The download by link is still running",
   "Идёт установка окружения": "The environment is being installed",
   "Извлечение аудиодорожки (FFmpeg 16 kHz mono)...": "Extracting the audio (FFmpeg 16 kHz mono)...",
   "Исходный видеофайл не найден": "The source video file was not found",

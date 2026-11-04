@@ -68,11 +68,16 @@ def start(url: str, model_name: str, language: str, num_speakers: int, folder_id
     return get_meeting(m["id"]) or m
 
 
-def restart(meeting_id: int, url: str) -> None:
+def restart(meeting_id: int, url: str) -> bool:
+    """False while a download of this recording still runs: a second one would share its cancel and
+    leave one of the two files behind."""
     from app.database import update_meeting_progress
 
+    if meeting_id in _cancel:
+        return False
     update_meeting_progress(meeting_id, status="downloading", progress=1, stage_text="Скачивание по ссылке…", error_message="")
     threading.Thread(target=_download, args=(meeting_id, url), daemon=True, name=f"url_import_{meeting_id}").start()
+    return True
 
 
 def _drop_files(stem: str) -> None:
