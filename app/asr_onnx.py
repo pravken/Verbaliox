@@ -329,9 +329,30 @@ def loaded_models() -> List[str]:
     return list(dict.fromkeys(k.split("@")[0] for k in _loaded))
 
 
+# Frequent short words of the Latin-script languages Parakeet hears most: enough to tell them apart in a
+# transcript (a German meeting is not taken for English)
+_STOPWORDS = {
+    "en": {"the", "and", "is", "are", "you", "that", "this", "with", "for", "have", "not", "what", "we"},
+    "de": {"und", "der", "die", "das", "ist", "nicht", "ich", "wir", "sie", "mit", "auf", "ein", "eine"},
+    "fr": {"le", "la", "les", "et", "est", "pas", "nous", "vous", "une", "des", "que", "pour", "dans"},
+    "es": {"el", "los", "las", "y", "es", "que", "no", "una", "por", "para", "con", "pero", "muy"},
+    "it": {"il", "che", "non", "per", "una", "sono", "della", "come", "anche", "questo", "gli", "ma"},
+    "pt": {"o", "os", "que", "não", "uma", "para", "com", "por", "mais", "isso", "você", "são"},
+    "nl": {"de", "het", "een", "en", "is", "niet", "dat", "wij", "ik", "met", "voor", "maar"},
+    "pl": {"nie", "się", "jest", "że", "to", "na", "jak", "ale", "tak", "czy", "jestem", "już"},
+}
+
+
 def guess_language(text: str) -> str:
+    """The language of a transcript by its letters (Cyrillic: Russian or Ukrainian) and, for Latin
+    script, by its most frequent short words; English when nothing tells."""
     cyr = sum(1 for ch in text if "\u0400" <= ch <= "\u04ff")
-    return "ru" if cyr > len(text) * 0.3 else "en"
+    if cyr > len(text) * 0.3:
+        return "uk" if any(ch in "іїєґІЇЄҐ" for ch in text) else "ru"
+    words = re.findall(r"[^\W\d_]+", text.lower())
+    counts = {lang: sum(1 for w in words if w in sw) for lang, sw in _STOPWORDS.items()}
+    best = max(counts, key=counts.get)
+    return best if counts[best] >= 3 and counts[best] > counts["en"] else "en"
 
 
 _UNK_IN_WORD = re.compile(r"(?<=[а-яё])<unk>(?=[а-яё])", re.IGNORECASE)
