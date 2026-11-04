@@ -1839,10 +1839,17 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 }
 .settings-page > .sx-shell { max-width: 1180px; }
 .sx-close { position: absolute; top: 14px; right: 14px; z-index: 10; display: inline-flex; align-items: center; gap: 7px; height: 28px;
-  padding: 0 10px 0 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.07); color: var(--hc-dim, #AEAEB2);
+  padding: 0 10px 0 12px; border-radius: 14px; background: #26272B; color: var(--hc-dim, #AEAEB2); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   font-size: 12px; font-weight: 500; transition: background-color var(--dur-fast), color var(--dur-fast); }
-.sx-close:hover { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; }
+.sx-close:hover { background: #34353A; color: #FFFFFF; }
 .sx-close:active { transform: scale(0.97); }
+/* A card's title with its status badge: in a narrow column the badge goes under the title instead of
+   squeezing it into a word per line */
+.sx-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.sx-card-head > div { flex: 1 1 15rem; min-width: 0; }
+/* A model card (Settings → Speech models): in a narrow column its buttons go under the text */
+.sx-model-card { flex-wrap: wrap; }
+.sx-model-card > .min-w-0 { flex: 1 1 15rem; }
 /* the section's reset button stays clear of «Close» in the corner */
 #modal-settings .sx-reset-row { padding-right: 104px; }
 .sx-nav {

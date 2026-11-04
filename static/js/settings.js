@@ -697,7 +697,7 @@ function updateWhisperModelsUI(models) {
       }
 
       return `
-        <div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+        <div class="sx-model-card p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
           isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
         }">
           <div class="min-w-0 flex-1">
