@@ -2294,7 +2294,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tk-legend span { text-transform: none; letter-spacing: 0; }  /* the marks of the legend read as words */
 
 /* Model comparison (settings.js modelCompareTable): a row per model, a column per measure, five dots each */
-.mc-wrap { flex-shrink: 0; overflow-x: auto; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
+.mc-wrap { container-type: inline-size; flex-shrink: 0; overflow-x: auto; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
 .mc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; line-height: 1.3; }
 .mc-table th { text-align: left; font-weight: 500; color: var(--hc-dim, #8E8E93); padding: 6px 8px; white-space: nowrap; border-bottom: 1px solid rgba(255, 255, 255, 0.08); vertical-align: bottom; }
 .mc-table th.mc-group { padding-bottom: 2px; border-bottom: 0; text-align: center; }
@@ -2308,6 +2308,19 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 th.mc-size { font-family: inherit; }
 .mc-check { width: 30px; padding-right: 0 !important; }
 .mc-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--hc-dim, #8E8E93); }
+/* A narrow place (a small window, a narrow column): the size and the memory notes go (the tooltips
+   keep them), names wrap, cells get closer */
+@container (max-width: 440px) {
+  .mc-table th, .mc-table td { padding: 6px 5px; }
+  .mc-table .mc-size { display: none; }
+  .mc-table .mc-sub:not(.mm-warn) { display: none; }
+  .mc-table td.mc-name { white-space: normal; }
+}
+@container (max-width: 340px) {
+  .mc-table .mc-sub { display: none; }
+  .mm-dots { gap: 1px; }
+  .mm-dots i { width: 5px; height: 5px; }
+}
 .mm-warn { color: #FFB340; }
 .mm-dots { display: inline-flex; gap: 2px; vertical-align: middle; }
 .mm-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
