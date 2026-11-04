@@ -61,7 +61,7 @@ def api_ffmpeg_status() -> Dict[str, Any]:
 
 @router.post("/api/ffmpeg/install")
 def api_ffmpeg_install() -> Dict[str, Any]:
-    """Downloads the pinned FFmpeg build into the user data folder (only on explicit request)."""
+    """Downloads the pinned FFmpeg build into the user data folder (the button; the first start does it by itself)."""
     return start_ffmpeg_download()
 
 @router.post("/api/onnx-models/{model_id}/download")
