@@ -41,6 +41,7 @@ WORKER_ANSWER_SEC = 60.0  # a window not answered in this time: the worker hangs
 WORKER_RETRY_SEC = (5.0, 15.0, 30.0, 60.0)  # waits before starting a worker again after failures
 
 _sessions: Dict[str, "LiveSession"] = {}
+BAD_WINDOWS_RESTART = 3  # caption windows in a row the worker failed before it is started again
 _sessions_lock = threading.Lock()
 
 
@@ -68,6 +69,7 @@ class _CaptionWorker:
         # window of audio: after each failure the next try waits longer (WORKER_RETRY_SEC)
         self.failures = 0
         self.retry_at = 0.0
+        self.bad_windows = 0  # windows in a row the worker answered with an error
         self.last_error = ""
         threading.Thread(target=self._reaper, daemon=True, name="live_worker_reaper").start()
 
@@ -131,7 +133,14 @@ class _CaptionWorker:
                     res = json.loads(line)
                     self.last_used = time.time()
                     if not res.get("ok"):
+                        # One bad window: the worker is fine (live_worker.py answers and goes on), the
+                        # window is skipped. Several in a row: something broke, it is started again
+                        self.bad_windows += 1
+                        if self.bad_windows < BAD_WINDOWS_RESTART:
+                            return [], None, 0.0
+                        self.bad_windows = 0
                         raise RuntimeError(res.get("error") or "ошибка распознавания")
+                    self.bad_windows = 0
                     segs = [_Seg(float(a), float(b), str(t)) for a, b, t in res["segments"]]
                     return segs, res.get("language"), float(res.get("prob") or 0.0)
                 except (OSError, ValueError, RuntimeError) as e:
