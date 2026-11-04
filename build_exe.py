@@ -357,14 +357,20 @@ class VerbalioxLauncher
     };
 
     // The app's UI language, saved by the app in its data folder (default Russian)
+    // The app's data folder: VERBALIOX_DATA_DIR, else %LOCALAPPDATA%\Verbaliox (app/paths.py)
+    internal static string DataDir()
+    {
+        string data = Environment.GetEnvironmentVariable("VERBALIOX_DATA_DIR");
+        if (string.IsNullOrEmpty(data))
+            data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox");
+        return data;
+    }
+
     static string UiLanguage()
     {
         try
         {
-            string data = Environment.GetEnvironmentVariable("VERBALIOX_DATA_DIR");
-            if (string.IsNullOrEmpty(data))
-                data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox");
-            string f = Path.Combine(data, "ui-lang.txt");
+            string f = Path.Combine(DataDir(), "ui-lang.txt");
             if (File.Exists(f)) return File.ReadAllText(f).Trim();
         }
         catch { }
@@ -664,7 +670,9 @@ class SetupWindow
             gpu.Right.Click += delegate { try { Process.Start("https://www.nvidia.com/drivers"); } catch { } };
         }
 
-        string ff = ToolPath("ffmpeg.exe");
+        // The copy the program downloaded before (app/ffmpeg_manager.py), else one on PATH
+        string ff = File.Exists(Path.Combine(VerbalioxLauncher.DataDir(), "bin", "ffmpeg.exe"))
+            ? Path.Combine(VerbalioxLauncher.DataDir(), "bin", "ffmpeg.exe") : ToolPath("ffmpeg.exe");
         ffmpeg = AddRow(248, "FFmpeg",
             T("Запись, видео и аудио любых форматов, экспорт", "Recording, video and audio of any format, export"),
             ff != null ? T("уже есть ✓", "found ✓") : T("≈ 100 МБ · скачается при запуске", "≈ 100 MB · downloads at start"), false);
@@ -796,7 +804,7 @@ class SetupWindow
         running = true;
         failed = false;
         intro.ForeColor = Text2;
-        string logs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox", "logs");
+        string logs = Path.Combine(VerbalioxLauncher.DataDir(), "logs");
         try { Directory.CreateDirectory(logs); } catch { }
         logPath = Path.Combine(logs, "setup.log");
         try { File.WriteAllText(logPath, "Verbaliox setup " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + Environment.NewLine); } catch { }
