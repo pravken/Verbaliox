@@ -225,6 +225,7 @@ const SERVER_TEXT_EN = {
   "Студийная очистка голоса и подавление шума (FFmpeg Denoise + Loudnorm)...": "Studio voice cleanup and noise removal (FFmpeg Denoise + Loudnorm)...",
   "Шумоподавление и нормализация громкости (FFmpeg)...": "Noise reduction and loudness normalization (FFmpeg)...",
   "Шумоподавление (FFmpeg)...": "Noise reduction (FFmpeg)...",
+  "Определение языка речи...": "Detecting the language of the speech...",
   "Нормализация громкости (FFmpeg)...": "Loudness normalization (FFmpeg)...",
   "Субтитры доступны после полной расшифровки записи": "Subtitles are available once the recording is fully transcribed",
   "Субтитры этой записи не идут": "Captions of this recording are not running",

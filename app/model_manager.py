@@ -48,7 +48,7 @@ def remove_retired_models() -> None:
 
     replaced = {**WHISPER_REPLACED, **asr_onnx.REPLACED}
     settings = get_all_settings()
-    changes = {k: replaced[v] for k in ("whisper_model", "live_whisper_model") if (v := settings.get(k)) in replaced}
+    changes = {k: replaced[v] for k in ("whisper_model", "live_whisper_model", "speech_model_ru") if (v := settings.get(k)) in replaced}
     if changes:
         update_settings(changes)
     for old in WHISPER_REPLACED:

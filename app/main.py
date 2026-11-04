@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
+from app import speech_route
 from app.paths import APP_DIR as BASE_DIR, MEDIA_EXTENSIONS, SESSION_TOKEN_FILE, UPLOADS_DIR, recordings_dir
 from app.settings_schema import as_int
 from app.database import (
@@ -387,7 +388,7 @@ def _queue_file(title: str, dest: Path, has_video: Optional[bool]) -> Dict[str, 
     m = create_meeting(
         title=title[:300], filename=dest.name, media_path=str(dest),
         language=settings.get("language", "auto"),
-        model_name=settings.get("whisper_model", "large-v3-turbo"),
+        model_name=speech_route.default_choice(settings),
         num_speakers_hint=as_int(settings.get("num_speakers"), 0),
         source="recording", owns_media=True, title_is_default=True, has_video=has_video,
     )
