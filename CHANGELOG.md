@@ -8,6 +8,23 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the sixth beta (0.7.0-beta.6)
+- **An installer:** `Verbaliox-Setup-vX.Y.Z.exe` installs the program for your user (no administrator
+  rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, with a Start menu entry, an optional desktop icon and
+  an uninstaller in «Installed apps» that asks before removing the recordings and models. The zip stays
+  as the portable version.
+- **A new version over an older one:** when the installer or an unpacked zip brings other libraries, the
+  setup window updates the program environment at the next start. The recordings, settings and models stay.
+- «Installed apps» shows the version the program updated itself to; uninstalling also removes «Start with
+  Windows».
+- A Whisper model downloaded as the model for Russian no longer replaces the main model.
+- Language detection: a first minute of silence or music no longer decides, Serbian, Kazakh and other
+  Cyrillic languages stay with the main model, and the check no longer loads a second copy of the model.
+- Security: a backup restored from elsewhere can no longer put markup into the page through speaker
+  colours or segment numbers; the speech model settings take only models of the catalog.
+- Model meters show memory on the processor on a PC without a video card; the FFmpeg download error is
+  translated; batch files use Windows line endings.
+
 ### In the fifth beta (0.7.0-beta.5)
 - **A simpler first start.** The welcome window offers ready sets: meetings in Russian, Russian and
   English, many languages, or your own choice — each model says what it is for and how much it weighs.
@@ -51,6 +68,23 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+### В шестой бете (0.7.0-beta.6)
+- **Установщик:** `Verbaliox-Setup-vX.Y.Z.exe` ставит программу для вашего пользователя (без прав
+  администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, с ярлыком в «Пуске», значком на рабочем столе по
+  желанию и удалением через «Установленные приложения», которое спрашивает, стирать ли записи и модели.
+  Zip остаётся портативной версией.
+- **Новая версия поверх старой:** если установщик или распакованный zip приносит другие библиотеки, окно
+  установки при следующем запуске обновит среду программы. Записи, настройки и модели остаются.
+- «Установленные приложения» показывают версию, до которой программа обновилась сама; при удалении
+  убирается и «Запуск вместе с Windows».
+- Модель Whisper, скачанная как модель для русского, больше не заменяет основную.
+- Определение языка: первая минута тишины или музыки больше не решает, сербский, казахский и другие
+  кириллические языки остаются у основной модели, а проверка не загружает вторую копию модели.
+- Безопасность: резервная копия из чужих рук больше не может внести разметку в страницу через цвета
+  участников или номера фраз; в настройки моделей распознавания попадают только модели из каталога.
+- Шкалы моделей на ПК без видеокарты показывают оперативную память; ошибка загрузки FFmpeg переводится;
+  bat-файлы — с переводами строк Windows.
 
 ### В пятой бете (0.7.0-beta.5)
 - **Простая первая настройка.** Окно приветствия предлагает готовые наборы: встречи на русском, русский

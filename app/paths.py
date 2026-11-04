@@ -266,7 +266,17 @@ def migrate_renamed_data_dir(old: Optional[Path] = None, target: Optional[Path] 
         aside = target.with_name(f"{target.name}.before-rename-{datetime.now():%Y%m%d-%H%M%S}")
         target.rename(aside)
     target.parent.mkdir(parents=True, exist_ok=True)
-    old.rename(target)  # _log writes into DATA_DIR: nothing is logged before this line
+    try:
+        old.rename(target)  # _log writes into DATA_DIR: nothing is logged before this line
+    except OSError:
+        # Refused (a file of the old folder is open): the folder set aside goes back, so the next start
+        # does not set aside one more folder with the log written below
+        if aside:
+            try:
+                aside.rename(target)
+            except OSError:
+                pass
+        raise
     if aside:
         _log(f"{target} existed without recordings; kept it as {aside.name}")
     rewritten = _rewrite_moved_root(target / "meetings.db", old, target)

@@ -343,8 +343,8 @@ async function renderTalkAnalytics() {
       ${metric(String(questions), t('spQuestions'))}${metric(longest ? spMinutes(longest.seconds) : '—', t('spLongest'))}
     </div>
     <div class="sp-card2"><span class="sp-cap">${escapeHtml(t('spShare'))}</span>
-      <div class="sp-sharebar">${a.speakers.map(r => `<span style="width:${r.share}%;background:${r.color}" title="${escapeHtml(r.name)} ${r.share}%"></span>`).join('')}</div>
-      <div class="sp-legend">${a.speakers.map(r => `<span><i style="background:${r.color}"></i>${escapeHtml(r.name)} <em>${r.share}%</em></span>`).join('')}</div>
+      <div class="sp-sharebar">${a.speakers.map(r => `<span style="width:${Number(r.share) || 0}%;background:${escapeHtml(r.color)}" title="${escapeHtml(r.name)} ${Number(r.share) || 0}%"></span>`).join('')}</div>
+      <div class="sp-legend">${a.speakers.map(r => `<span><i style="background:${escapeHtml(r.color)}"></i>${escapeHtml(r.name)} <em>${Number(r.share) || 0}%</em></span>`).join('')}</div>
     </div>
     <div class="sp-card2"><span class="sp-cap">${escapeHtml(t('spWhoWhen'))} <em>· ${escapeHtml(t('spWhoWhenHint'))}</em></span>
       ${lanes}<div class="sp-lane-row sp-ticks"><span></span><span class="sp-tickline">${ticks}</span></div>

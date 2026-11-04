@@ -304,6 +304,7 @@ def _download_hf_repo_with_progress(
 def start_models_setup(
     whisper_model_id: str,
     install_diarizer: bool = True,
+    select: bool = True,
 ) -> Dict[str, Any]:
     pretty_name = format_whisper_model_name(whisper_model_id)
     with _setup_lock:
@@ -339,8 +340,11 @@ def start_models_setup(
                 base_pct=2,
                 span_pct=82 if install_diarizer else 96,
             )
-            update_settings({"whisper_model": whisper_model_id})
-            _log(f"Модель {item['name']} успешно установлена и выбрана по умолчанию!")
+            if select:
+                update_settings({"whisper_model": whisper_model_id})
+                _log(f"Модель {item['name']} успешно установлена и выбрана по умолчанию!")
+            else:
+                _log(f"Модель {item['name']} успешно установлена")
 
             # 2. Download Speaker Diarization Model (SpeechBrain ECAPA-TDNN)
             if install_diarizer and not is_diarizer_installed():

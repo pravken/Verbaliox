@@ -91,6 +91,8 @@ def api_models_status() -> Dict[str, Any]:
 class ModelsSetupPayload(BaseModel):
     whisper_model: str = "large-v3-turbo"
     install_diarizer: bool = True
+    # False: only download (the Russian model, or for later); the main model stays as it is
+    select: bool = True
 
 @router.post("/api/models/setup")
 def api_models_setup(payload: ModelsSetupPayload) -> Dict[str, Any]:
@@ -99,6 +101,7 @@ def api_models_setup(payload: ModelsSetupPayload) -> Dict[str, Any]:
     return start_models_setup(
         whisper_model_id=payload.whisper_model.strip(),
         install_diarizer=payload.install_diarizer,
+        select=payload.select,
     )
 
 @router.delete("/api/models/{model_id}")
