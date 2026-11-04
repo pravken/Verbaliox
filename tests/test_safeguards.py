@@ -324,3 +324,19 @@ class SetupWindowTest(unittest.TestCase):
             oc._close_ollama_app(seconds=0.01)
         self.assertTrue(run.called)
         self.assertEqual(run.call_args[0][0], ["taskkill", "/F", "/IM", "ollama app.exe"])
+
+
+class InstallerTest(unittest.TestCase):
+    """installer/verbaliox.iss: per user, and its file goes out with the release and its checksums."""
+
+    def test_installer_is_per_user_and_released(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        iss = (root / "installer" / "verbaliox.iss").read_text(encoding="utf-8")
+        self.assertIn("PrivilegesRequired=lowest", iss)  # no administrator rights; the app updates itself
+        self.assertIn("OutputBaseFilename=Verbaliox-Setup-v{#AppVersion}", iss)
+        wf = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn("installer\\verbaliox.iss", wf)
+        self.assertIn("Verbaliox-Setup-*.exe", wf)
+        self.assertIn('$setup.FullName -Algorithm SHA256', wf)  # in SHA256SUMS.txt, so signed

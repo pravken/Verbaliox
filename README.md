@@ -62,7 +62,9 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 
 ### Getting started
 
-**Option A — release archive.** Download `Verbaliox-vX.Y.Z.zip` from [Releases](https://github.com/pravken/Verbaliox/releases), check it against `SHA256SUMS.txt`, unpack it and run `Verbaliox.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
+**Option A — installer.** Download `Verbaliox-Setup-vX.Y.Z.exe` from [Releases](https://github.com/pravken/Verbaliox/releases) and run it: it installs the program for your user (no administrator rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, adds it to the Start menu and to «Installed apps» (uninstalling asks whether to remove the recordings and models too), then starts it. Built with [Inno Setup](https://jrsoftware.org/isinfo.php) from [`installer/verbaliox.iss`](installer/verbaliox.iss).
+
+**Option A2 — portable archive.** Download `Verbaliox-vX.Y.Z.zip` from [Releases](https://github.com/pravken/Verbaliox/releases), check it against `SHA256SUMS.txt`, unpack it and run `Verbaliox.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
 
 Unpack the archive to a regular folder you can write to, such as `D:\Verbaliox`, not `Program Files`: the app creates `.venv` and `models` next to itself. The `.exe` alone is not enough, it is only the launcher for the program files in the archive. On the first start the launcher opens a setup window: it lists what the program needs and what each part is for (the program environment, FFmpeg, the NVIDIA driver check, Ollama if you want local AI analysis) and installs it once you press **Install**, with progress and a log instead of a console. CUDA needs no separate install: it comes with the environment; only the NVIDIA driver is needed. This downloads several gigabytes and usually takes 10–20 minutes, depending on your connection. Later starts take seconds, and new versions are installed from **Settings → General**.
 
@@ -187,6 +189,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Demucs `htdemucs` (optional dubbing) | MIT |
 | num2words (optional dubbing: numbers as words) | LGPL 2.1 |
 | Inter, JetBrains Mono fonts | SIL Open Font License |
+| Inno Setup (builds `Verbaliox-Setup.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
 Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). If you download other models through Ollama, check their terms.
 
@@ -265,7 +268,9 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 
 ### Как начать
 
-**Вариант А — архив релиза.** Скачайте `Verbaliox-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/Verbaliox/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `Verbaliox.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
+**Вариант А — установщик.** Скачайте `Verbaliox-Setup-vX.Y.Z.exe` со страницы [Releases](https://github.com/pravken/Verbaliox/releases) и запустите: программа ставится для вашего пользователя (без прав администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, появляется в меню «Пуск» и в «Установленных приложениях» (при удалении спросит, стирать ли записи и модели) и сразу запускается. Собирается [Inno Setup](https://jrsoftware.org/isinfo.php) из [`installer/verbaliox.iss`](installer/verbaliox.iss).
+
+**Вариант А2 — портативный архив.** Скачайте `Verbaliox-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/Verbaliox/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `Verbaliox.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
 
 Распакуйте архив в обычную папку с правом записи, например `D:\Verbaliox`, а не в `Program Files`: рядом с программой создаются `.venv` и `models`. Одного `.exe` недостаточно, это лишь лаунчер для файлов программы из архива. При первом запуске лаунчер открывает окно установки: в нём перечислено, что нужно программе и для чего каждая часть (среда программы, FFmpeg, проверка драйвера NVIDIA, Ollama — если нужен ИИ-анализ на компьютере), и всё ставится по кнопке **Установить**, с прогрессом и журналом вместо консоли. CUDA отдельно ставить не нужно: она входит в среду программы, нужен только драйвер NVIDIA. Скачивается несколько гигабайт, обычно это занимает 10–20 минут, в зависимости от скорости интернета. Следующие запуски занимают секунды, а новые версии устанавливаются из **Настройки → Общие**.
 
