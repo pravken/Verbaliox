@@ -1,4 +1,4 @@
-; Verbaliox-Setup.exe: the program files and the launcher in one installer (Inno Setup 6).
+﻿; Verbaliox-Setup.exe: the program files and the launcher in one installer (Inno Setup 6).
 ; Built by the release workflow (.github/workflows/release.yml) from the same folder as the zip:
 ;   ISCC.exe /DAppVersion=0.7.0-beta.6 /DNumericVersion=0.7.0 /DSourceDir=<full path>\dist\Verbaliox-v0.7.0-beta.6 /DOutputDir=<full path> installer\verbaliox.iss
 ; Installed for the current user (no administrator rights), into %LOCALAPPDATA%\Programs\Verbaliox:
@@ -28,9 +28,10 @@ AppPublisher=pravken
 AppPublisherURL=https://github.com/pravken/Verbaliox
 AppSupportURL=https://github.com/pravken/Verbaliox/issues
 AppUpdatesURL=https://github.com/pravken/Verbaliox/releases
+; Only for the current user: the program updates itself and writes .venv and models next to itself,
+; which a Program Files install (administrator) would not allow
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
-DefaultDirName={autopf}\Verbaliox
+DefaultDirName={userpf}\Verbaliox
 DefaultGroupName=Verbaliox
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
@@ -46,6 +47,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; The program files are replaced by the program's own updates: an old file the new version no longer has
 ; is removed by the updater, not here
 CloseApplications=yes
+; The running window (run.py makes this mutex): setup and uninstall ask to close it first
+AppMutex=Local\Verbaliox.Desktop.Window
 RestartApplications=no
 
 [Languages]
@@ -72,6 +75,11 @@ Name: "{autodesktop}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{
 
 [Run]
 Filename: "{app}\Verbaliox.exe"; Description: "{cm:RunAfter}"; Flags: nowait postinstall skipifsilent
+
+[Registry]
+; "Start with Windows" (app/autostart.py) is removed with the program; nothing is written at install
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Verbaliox"; Flags: uninsdeletevalue dontcreatekey
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "VerbaScribe"; Flags: uninsdeletevalue dontcreatekey
 
 [UninstallDelete]
 ; What the program made next to itself: the environment, caches, the dubbing environment, the launcher

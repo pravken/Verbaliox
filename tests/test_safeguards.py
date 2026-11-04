@@ -335,6 +335,14 @@ class InstallerTest(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         iss = (root / "installer" / "verbaliox.iss").read_text(encoding="utf-8")
         self.assertIn("PrivilegesRequired=lowest", iss)  # no administrator rights; the app updates itself
+        self.assertNotIn("PrivilegesRequiredOverridesAllowed", iss)  # and no switch to Program Files
+        self.assertTrue((root / "installer" / "verbaliox.iss").read_bytes().startswith(b"\xef\xbb\xbf"))  # Russian texts as UTF-8
+        from app.autostart import FORMER_VALUE_NAME, VALUE_NAME
+
+        for name in (VALUE_NAME, FORMER_VALUE_NAME):  # "Start with Windows" goes with the program
+            self.assertIn(f'ValueName: "{name}"; Flags: uninsdeletevalue', iss)
+        self.assertIn("AppMutex=Local\\Verbaliox.Desktop.Window", iss)
+        self.assertIn('"Local\\\\Verbaliox.Desktop.Window"', (root / "run.py").read_text(encoding="utf-8"))
         self.assertIn("OutputBaseFilename=Verbaliox-Setup-v{#AppVersion}", iss)
         wf = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("installer\\verbaliox.iss", wf)
