@@ -2703,7 +2703,7 @@ function clearSettingsSearch(keepTab) {
 }
 
 function settingsSearchKey(e) {
-  if (e.key === 'Escape') { e.preventDefault(); clearSettingsSearch(); return; }
+  if (e.key === 'Escape') { if (!e.target.value) return; e.preventDefault(); clearSettingsSearch(); return; }  // empty: Esc closes the settings
   if (e.key !== 'Enter') return;
   e.preventDefault();
   const card = [...document.querySelectorAll('#modal-settings [data-stab]:not(.hidden) > :not(.sx-section-head):not(.hidden)')][0];
@@ -2828,3 +2828,14 @@ async function fillSettingsVersion() {
   const d = await fetch('/api/about').then(r => r.json()).catch(() => null);
   if (d?.version) el.textContent = d.version;
 }
+
+// Esc closes the settings, back to the screen they were opened from. A dialog over them (a question,
+// a picker) handles its own Esc first and stops it; the search field clears itself first.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  const modal = document.getElementById('modal-settings');
+  if (!modal || modal.classList.contains('hidden')) return;
+  if (document.querySelector('#llm-picker, #first-run-wizard')) return;
+  e.preventDefault();
+  closeModal('settings');
+});
