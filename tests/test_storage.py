@@ -583,7 +583,8 @@ class TranscriptVersionsTest(unittest.TestCase):
         database.save_meeting_results(self.mid, segments=[{"id": 0, "start": 0, "end": 1, "text": "старая"}])
         with database._db_lock:
             conn = database.get_connection()
-            conn.execute("UPDATE meetings SET transcript_model = '', model_name = 'large-v3' WHERE id = ?", (self.mid,))
+            conn.execute("UPDATE meetings SET transcript_model = '', model_name = 'large-v3', status = 'completed' "
+                         "WHERE id = ?", (self.mid,))
             conn.commit()
             conn.close()
         database.init_db()

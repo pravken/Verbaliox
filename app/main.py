@@ -457,6 +457,15 @@ def recover_orphan_recordings() -> int:
         if part.stat().st_size < 4096:
             part.unlink(missing_ok=True)
             continue
+        if has_video is None:
+            # The page records the microphone alone or with the screen: the file says which, so a
+            # recovered screen recording is not taken for audio (a recording's source says audio)
+            try:
+                from app.video_subtitles import probe_media
+
+                has_video = probe_media(part)["has_video"]
+            except Exception:
+                has_video = None
         try:
             _salvage_parts("Восстановленная запись", [(part, has_video)])
             n += 1

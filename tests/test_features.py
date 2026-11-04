@@ -1,5 +1,6 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import threading
+import time
 import unittest
 
 import numpy as np
@@ -478,6 +479,28 @@ class LiveCaptionFailureTest(unittest.TestCase):
                     w.transcribe(np.zeros(16000, dtype=np.float32), "ru")
         self.assertEqual(len(starts), 1)  # the next try waits WORKER_RETRY_SEC
         self.assertGreater(w.retry_at, 0)
+
+
+    def test_one_bad_window_does_not_restart_the_worker(self):
+        import io
+        import json as _json
+        from unittest import mock
+
+        from app import live
+
+        w = live._CaptionWorker.__new__(live._CaptionWorker)
+        w.proc = mock.Mock(stdin=io.BytesIO(), poll=lambda: None)
+        w.lock, w.last_used, w.stderr_tail, w.model_name = threading.Lock(), 0.0, [], ""
+        w.failures, w.retry_at, w.last_error, w.bad_windows = 0, 0.0, "", 0
+        bad = _json.dumps({"ok": False, "error": "bad window"})
+        with mock.patch.object(w, "_readline", return_value=bad), mock.patch.object(w, "_kill") as kill:
+            self.assertEqual(w.transcribe(np.zeros(16000, dtype=np.float32), "ru"), ([], None, 0.0))
+            kill.assert_not_called()  # skipped, the worker goes on
+            w.transcribe(np.zeros(16000, dtype=np.float32), "ru")
+            w.retry_at = time.time() + 60  # no second start in this test
+            with self.assertRaises(RuntimeError):  # several in a row: started again
+                w.transcribe(np.zeros(16000, dtype=np.float32), "ru")
+            kill.assert_called()
 
 
 class CutStderrTest(unittest.TestCase):
