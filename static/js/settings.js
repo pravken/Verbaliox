@@ -980,10 +980,15 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick) {
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
     language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
-  if (ai === 'cloud') settings.llm_provider = 'cloud';
+  // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
+  // here, the server would refuse the whole request and every choice of the wizard would be lost
   if (ai === 'local') settings.llm_provider = 'ollama';
-  await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const saved = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings }) }).catch(() => null);
+  if (!saved || !saved.ok) {
+    const err = saved ? await saved.json().catch(() => ({})) : {};
+    showError(serverText(err.detail) || t('errorGeneric'));
+  }
   state.speechModelRu = roles.ru;
   document.getElementById('set-whisper-model').value = roles.main;
   if (!(data.ffmpeg || {}).available && (data.ffmpeg || {}).can_download) fetch('/api/ffmpeg/install', { method: 'POST' }).catch(() => null);
