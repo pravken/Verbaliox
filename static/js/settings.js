@@ -866,9 +866,12 @@ function openFirstRunWizard(data) {
   const item = id => catalog.find(i => i.id === id);
   const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
   const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
-  const modelLine = id => `<div class="flex items-baseline gap-2 text-[11.5px]"><span class="text-white font-medium shrink-0">${escapeHtml(formatModelName(id))}</span>
-      <span class="text-apple-secondary flex-1 min-w-0">${escapeHtml(modelPurpose(id))}</span>
-      <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></div>`;
+  // A model: its name and size on one line, what it is for under them (long purposes wrap evenly)
+  const modelText = id => `<span class="block min-w-0 flex-1">
+      <span class="flex items-baseline justify-between gap-3"><span class="text-white font-medium">${escapeHtml(formatModelName(id))}</span>
+        <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></span>
+      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span></span>`;
+  const modelLine = id => `<div class="flex text-[11.5px] pt-1.5 mt-1.5 border-t border-white/5">${modelText(id)}</div>`;
   const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
       <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
   const llmItem = llmCatalog.find(m => m.id === picks.llm) || { size: '' };
@@ -890,11 +893,9 @@ function openFirstRunWizard(data) {
         return choice(`preset:${p.id}`, on, title, inner);
       }).join('');
       // own choice: the models with what each is for, ticked below the sets (no controls inside a button)
-      const own = st.preset !== 'custom' ? '' : `<div class="rounded-xl border border-white/10 p-3 space-y-1.5">${catalog.map(i => `<label class="flex items-baseline gap-2 text-[11.5px] cursor-pointer">
-            <input type="checkbox" class="tk-check" data-model="${escapeHtml(i.id)}" ${st.custom.has(i.id) ? 'checked' : ''}>
-            <span class="text-white font-medium shrink-0">${escapeHtml(formatModelName(i.id))}</span>
-            <span class="text-apple-secondary flex-1 min-w-0">${escapeHtml(modelPurpose(i.id))}</span>
-            <span class="font-mono text-apple-tertiary shrink-0">${i.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(i)))}</span></label>`).join('')}</div>`;
+      const own = st.preset !== 'custom' ? '' : `<div class="rounded-xl border border-white/10 px-3 py-1 divide-y divide-white/5">${catalog.map(i => `<label class="flex items-start gap-2.5 py-2 text-[11.5px] cursor-pointer">
+            <input type="checkbox" class="tk-check shrink-0" data-model="${escapeHtml(i.id)}" ${st.custom.has(i.id) ? 'checked' : ''}>
+            ${modelText(i.id)}</label>`).join('')}</div>`;
       body = `<p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('frIntro'))}</p>
         <div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</span></div>
         <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frPresetQ'))}</div>
