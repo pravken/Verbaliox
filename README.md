@@ -54,7 +54,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 ### Requirements
 
 - Windows 10/11 (64-bit)
-- [FFmpeg](https://ffmpeg.org): either in `PATH` (e.g. `winget install Gyan.FFmpeg`) or downloaded from **Settings → Download FFmpeg** (a pinned build, checked by SHA-256)
+- [FFmpeg](https://ffmpeg.org): either in `PATH` (e.g. `winget install Gyan.FFmpeg`) or, when there is none, downloaded by the app at its first start (a pinned build, checked by SHA-256; also **Settings → Download FFmpeg**)
 - An NVIDIA GPU with CUDA and a recent driver is recommended; a CPU works but is noticeably slower
 - An internet connection for the first start, which installs the Python environment
 - Disk space: about 7 GB for the Python environment (`.venv`, mostly PyTorch with CUDA), about 0.5–3 GB per Whisper model, plus Ollama models if you use summaries
@@ -146,7 +146,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
 | Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
-| You click **Download FFmpeg** in Settings | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
+| First start without FFmpeg in `PATH` (or **Download FFmpeg** in Settings) | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
 | App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer |
 | You click **Install** for an update | github.com: the release archive and `SHA256SUMS.txt`; PyPI and download.pytorch.org if the new version needs other Python packages. The checksum proves the archive arrived complete and unchanged. Once the author's release key is set up, `SHA256SUMS.txt` is also signed (`SHA256SUMS.txt.minisig`, minisign format) and the app installs only releases signed with it ([docs/release-signing.md](docs/release-signing.md)) |
 | Only if you turned on a cloud model in Settings → Analysis: an overview, a question, a title or an Obsidian note is made | The chosen service (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` or your Base URL): the transcript text of that recording, or the fragments found for a library question. Audio and video are never sent. The API key is stored encrypted with Windows DPAPI |
@@ -256,7 +256,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 ### Требования
 
 - Windows 10/11 (64-bit)
-- [FFmpeg](https://ffmpeg.org): в `PATH` (например, `winget install Gyan.FFmpeg`) или скачанный из **Настройки → Скачать FFmpeg** (закреплённая сборка с проверкой SHA-256)
+- [FFmpeg](https://ffmpeg.org): в `PATH` (например, `winget install Gyan.FFmpeg`) или, если его нет, скачивается программой при первом запуске (закреплённая сборка с проверкой SHA-256; также **Настройки → Скачать FFmpeg**)
 - Желательна видеокарта NVIDIA с CUDA и свежим драйвером; на процессоре работает, но заметно медленнее
 - Интернет при первом запуске: в это время устанавливается окружение Python
 - Место на диске: около 7 ГБ под окружение Python (`.venv`, в основном PyTorch с CUDA), примерно 0,5–3 ГБ на модель Whisper и ещё место под модели Ollama, если нужны саммари
@@ -347,7 +347,7 @@ start.bat
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |
 | Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |
-| Вы нажимаете **Скачать FFmpeg** в настройках | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
+| Первый запуск без FFmpeg в `PATH` (или **Скачать FFmpeg** в настройках) | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
 | Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере |
 | Вы нажимаете **Установить** для обновления | github.com: архив релиза и `SHA256SUMS.txt`; PyPI и download.pytorch.org, если новой версии нужны другие пакеты Python. Контрольная сумма подтверждает, что архив дошёл целым и неизменным. Когда настроен ключ автора, `SHA256SUMS.txt` ещё и подписан (`SHA256SUMS.txt.minisig`, формат minisign), и программа ставит только релизы с этой подписью ([docs/release-signing.md](docs/release-signing.md)) |
 | Только если в «Настройки → Анализ» включена облачная модель: создаётся обзор, ответ на вопрос, название или заметка Obsidian | Выбранный сервис (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` или ваш Base URL): текст расшифровки этой записи, а для вопросов по медиатеке — найденные фрагменты. Аудио и видео не отправляются. API-ключ хранится зашифрованным (Windows DPAPI) |

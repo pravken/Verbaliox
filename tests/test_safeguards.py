@@ -280,3 +280,21 @@ class PinnedDownloadsTest(unittest.TestCase):
                 if "revision=" not in args and "*args" not in args and (f.name, args.strip()) not in known:
                     loose.append(f"{f.name}: {args.strip()[:80]}")
         self.assertEqual(loose, [])
+
+
+class FfmpegOnStartTest(unittest.TestCase):
+    """FFmpeg is fetched by itself at the start when there is none (Windows)."""
+
+    def test_downloads_only_when_missing_on_windows(self):
+        from app import ffmpeg_manager as fm
+
+        with mock.patch.object(fm.sys, "platform", "win32"), mock.patch.object(fm, "start_ffmpeg_download") as start:
+            with mock.patch.object(fm, "find_tool", return_value=None):
+                self.assertTrue(fm.ensure_on_start())
+            with mock.patch.object(fm, "find_tool", return_value="C:/bin/ffmpeg.exe"):
+                self.assertFalse(fm.ensure_on_start())
+        self.assertEqual(start.call_count, 1)
+        with mock.patch.object(fm.sys, "platform", "linux"), mock.patch.object(fm, "find_tool", return_value=None), \
+                mock.patch.object(fm, "start_ffmpeg_download") as start:
+            self.assertFalse(fm.ensure_on_start())
+            start.assert_not_called()
