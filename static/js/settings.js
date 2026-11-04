@@ -1511,18 +1511,19 @@ function modelSizeLabel(item) {
 
 // --- Model meters: accuracy, speed and load in five dots, from the measurements in bench-report/
 // (FLEURS read speech, RTX 3090: report.md, gpu-report.md). Speed follows this computer: with an NVIDIA
-// card the GPU figures, without one the CPU ones. The real numbers are in the tooltips.
+// card the GPU figures, without one the CPU ones. The real numbers are in the tooltips. Memory: ram on
+// the processor (faster-whisper int8, Ollama), vram on the video card.
 const MODEL_METERS = {
   'gigaam-v3': { acc: { ru: [5, 3.8] }, speed: { cpu: [4, '30'], gpu: [5, '50'] }, load: [1], ram: 1.4, vram: 2.5 },
   'parakeet-v3': { acc: { ru: [4, 5.5], en: [4, 7.8] }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
-  'large-v3-turbo': { acc: { ru: [5, 4.0], en: [5, 5.8] }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], vram: 2.2 },
-  'large-v3': { acc: { ru: [5, 3.8], en: [5, 5.7] }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], vram: 3.9 },
+  'large-v3-turbo': { acc: { ru: [5, 4.0], en: [5, 5.8] }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
+  'large-v3': { acc: { ru: [5, 3.8], en: [5, 5.7] }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
   // Analysis: quality from the comparison on real recordings (bench-report/report.md, «Анализ») and
   // the model size; speed and memory from the size of each model
-  'qwen2.5:1.5b': { quality: 2, speed: { cpu: [4, ''], gpu: [5, ''] }, load: [1], vram: 2 },
-  'qwen3.5:4b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], vram: 5 },
-  'qwen3:8b': { quality: 4, speed: { cpu: [1, ''], gpu: [4, ''] }, load: [3], vram: 10 },
-  'qwen3:14b': { quality: 5, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [5], vram: 12 },
+  'qwen2.5:1.5b': { quality: 2, speed: { cpu: [4, ''], gpu: [5, ''] }, load: [1], ram: 2, vram: 2 },
+  'qwen3.5:4b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 5, vram: 5 },
+  'qwen3:8b': { quality: 4, speed: { cpu: [1, ''], gpu: [4, ''] }, load: [3], ram: 10, vram: 10 },
+  'qwen3:14b': { quality: 5, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [5], ram: 12, vram: 12 },
 };
 
 function meterDots(n, cls) {
