@@ -8,6 +8,22 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the eighth beta (0.7.0-beta.8)
+- **First start with a cloud model** no longer loses the choices of the welcome window (models, Russian
+  routing, language); the cloud consent is asked in Settings → Analysis right after.
+- **The speech language chosen for a recording stays chosen:** «several languages» or «auto» are no longer
+  replaced by the language heard, so «Transcribe again» and Retry use your choice. GigaAM / Parakeet tell
+  German, French, Spanish, Italian, Portuguese, Dutch, Polish and Ukrainian transcripts apart from English.
+- A fragment of a cancelled or failed transcription no longer appears as a transcript version «auto».
+- Deleting GigaAM or Parakeet no longer stops live captions running on the other one; it waits for live
+  captions and transcription like Whisper.
+- Live captions skip one window they could not recognize instead of restarting the recognizer.
+- A screen recording recovered after a crash keeps its picture.
+- A summary no longer unloads the speech models of a transcription running at the same time; a download by
+  link is not started twice.
+- The setup window opens at once (the video card is checked in the background) and its cancel also stops
+  the installers winget runs. Unused interface texts removed; more tests.
+
 ### In the seventh beta (0.7.0-beta.7)
 - **First start:** a set with several models besides GigaAM (say Parakeet and Whisper Turbo) asks which
   one is the main model for other languages and mixed speech, instead of taking the first.
@@ -74,6 +90,23 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+### В восьмой бете (0.7.0-beta.8)
+- **Первый запуск с облачной моделью** больше не теряет выбор окна приветствия (модели, модель для русского,
+  язык); согласие на облако спрашивается сразу после этого в «Настройки → Анализ».
+- **Язык речи, выбранный для записи, остаётся выбранным:** «несколько языков» и «авто» больше не заменяются
+  услышанным языком, поэтому «Распознать заново» и «Повторить» берут ваш выбор. GigaAM и Parakeet отличают
+  от английского немецкие, французские, испанские, итальянские, португальские, нидерландские, польские и
+  украинские расшифровки.
+- Обрывок отменённого или сбойного распознавания больше не появляется как версия расшифровки «авто».
+- Удаление GigaAM или Parakeet больше не останавливает живые субтитры на другой модели и, как у Whisper,
+  ждёт окончания субтитров и распознавания.
+- Живые субтитры пропускают одно нераспознанное окно, а не перезапускают распознавание.
+- Запись экрана, восстановленная после сбоя, остаётся видео.
+- Обзор больше не выгружает модели распознавания, пока идёт расшифровка; скачивание по ссылке не
+  запускается дважды.
+- Окно установки открывается сразу (видеокарта проверяется в фоне), а «Отмена» в нём останавливает и
+  установщики, запущенные через winget. Убраны неиспользуемые тексты интерфейса, добавлены тесты.
 
 ### В седьмой бете (0.7.0-beta.7)
 - **Первый запуск:** если в наборе кроме GigaAM несколько моделей (например, Parakeet и Whisper Turbo),
