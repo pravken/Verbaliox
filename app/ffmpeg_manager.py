@@ -112,6 +112,15 @@ def _download_and_install() -> None:
         part.unlink(missing_ok=True)
 
 
+def ensure_on_start() -> bool:
+    """At the start of the app: FFmpeg is fetched by itself when there is none (Windows), so recording,
+    import and export work without a visit to the settings. Returns True when a download started."""
+    if sys.platform != "win32" or find_tool("ffmpeg") and find_tool("ffprobe"):
+        return False
+    start_ffmpeg_download()
+    return True
+
+
 def start_ffmpeg_download() -> Dict[str, Any]:
     if sys.platform != "win32":
         return {**ffmpeg_status(), "error": "Автоматическая установка доступна только в Windows"}

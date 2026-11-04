@@ -188,6 +188,12 @@ async def lifespan(_app: FastAPI):
         traceback.print_exc()
 
     try:
+        from app import ffmpeg_manager
+
+        ffmpeg_manager.ensure_on_start()  # none yet (first start): fetched without a visit to the settings
+    except Exception:
+        traceback.print_exc()
+    try:
         from app import secret_store
 
         secret_store.rewrap_former()  # API keys saved before the program had its present name
