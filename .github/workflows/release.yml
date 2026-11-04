@@ -64,10 +64,10 @@ jobs:
           Copy-Item Verbaliox.exe "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "$name.zip"
           # The same folder as one installer (installer/verbaliox.iss, Inno Setup 6): the runner image
-          # has it, else it comes from Chocolatey
+          # has it, else it comes from Chocolatey at a fixed version (this job signs what it builds)
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
+            choco install innosetup --version=6.4.3 -y --no-progress
             if ($LASTEXITCODE -ne 0) { throw "Installing Inno Setup failed" }
           }
           $ver = $env:TAG.TrimStart('v') -replace '[\\/:*?"<>|]', '-'  # a build without a tag carries the branch name
