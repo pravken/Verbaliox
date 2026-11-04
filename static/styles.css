@@ -2285,3 +2285,17 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .sp-cap em { text-transform: none; }
 .tk-cap-note { text-transform: none; }
 .tk-legend span { text-transform: none; letter-spacing: 0; }  /* the marks of the legend read as words */
+
+/* Model meters (settings.js modelMeters): accuracy, speed and load in five dots, three even columns
+   (a label over its dots), so the models line up under each other */
+.mm-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 12px; margin-top: 6px; font-size: 11px; line-height: 1.35; max-width: 34rem; }
+.mm-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mm-label { color: var(--hc-dim, #8E8E93); }
+.mm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.mm { display: inline-flex; align-items: center; gap: 4px; }
+.mm-sub { color: var(--hc-dim, #8E8E93); }
+.mm-warn { color: #FFB340; }
+.mm-dots { display: inline-flex; gap: 2px; }
+.mm-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.mm-dots i.on { background: #0A84FF; }
+.mm-load i.on { background: #FFB340; }

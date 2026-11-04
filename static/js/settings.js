@@ -708,6 +708,7 @@ function updateWhisperModelsUI(models) {
               ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
             </div>
             ${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label mt-1">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
+            ${modelMeters(item.id)}
             <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
             ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}
           </div>
@@ -809,6 +810,7 @@ function openLlmPicker() {
           <span class="text-[11px] font-mono text-apple-tertiary">${escapeHtml(m.size || '')}</span>
           ${tag}${m.installed ? `<span class="llm-tag">${escapeHtml(t('llmPickInstalled'))}</span>` : ''}
         </span>
+        ${modelMeters(m.id)}
         <span class="llm-line"><b>${escapeHtml(t('llmPickGood'))}</b> ${escapeHtml(en ? m.good_en : m.good_ru)}</span>
         <span class="llm-line"><b>${escapeHtml(t('llmPickWeak'))}</b> ${escapeHtml(en ? m.weak_en : m.weak_ru)}</span>
       </button>`;
@@ -823,6 +825,7 @@ function openLlmPicker() {
         <ul><li>${escapeHtml(t('llmMemContext'))}</li><li>${escapeHtml(t('llmMemBuffers'))}</li><li>${escapeHtml(t('llmMemOthers'))}</li></ul>
         <p>${escapeHtml(t('llmMemExample'))}</p><p>${escapeHtml(t('llmMemLess'))}</p></div>` : ''}
       <div class="llm-list" role="radiogroup">${cards}</div>
+      <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNoteLlm'))}</p>
       <div class="flex items-center gap-2 pt-1">
         <button data-a="cloud" class="ui-btn ui-btn-subtle">${escapeHtml(t('noAiCloud'))}</button>
         <span class="flex-1"></span>
@@ -870,7 +873,7 @@ function openFirstRunWizard(data) {
   const modelText = id => `<span class="block min-w-0 flex-1">
       <span class="flex items-baseline justify-between gap-3"><span class="text-white font-medium">${escapeHtml(formatModelName(id))}</span>
         <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></span>
-      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span></span>`;
+      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span>${modelMeters(id)}</span>`;
   const modelLine = id => `<div class="flex text-[11.5px] pt-1.5 mt-1.5 border-t border-white/5">${modelText(id)}</div>`;
   const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
       <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
@@ -899,7 +902,8 @@ function openFirstRunWizard(data) {
       body = `<p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('frIntro'))}</p>
         <div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</span></div>
         <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frPresetQ'))}</div>
-        <div class="space-y-2" role="radiogroup">${cards}</div>${own}`;
+        <div class="space-y-2" role="radiogroup">${cards}</div>${own}
+        <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNote'))}</p>`;
     } else if (st.step === 1) {
       const local = escapeHtml(t('frAiLocal')) + (picks.gpu ? tag(t('frRecommended')) : '');
       body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frLlmQ'))}</div>
@@ -1504,6 +1508,58 @@ async function fillDictationTranslateLangs(value) {
 // has ↓ and its size: the job downloads it first (app/transcriber.py), the hint under the list says so
 function modelSizeLabel(item) {
   return item.size || (item.size_mb >= 1000 ? (item.size_mb / 1024).toFixed(1) + ' GB' : (item.size_mb || '') + ' MB');
+}
+
+// --- Model meters: accuracy, speed and load in five dots, from the measurements in bench-report/
+// (FLEURS read speech, RTX 3090: report.md, gpu-report.md). Speed follows this computer: with an NVIDIA
+// card the GPU figures, without one the CPU ones. The real numbers are in the tooltips.
+const MODEL_METERS = {
+  'gigaam-v3': { acc: { ru: [5, 3.8] }, speed: { cpu: [4, '30'], gpu: [5, '50'] }, load: [1], ram: 1.4, vram: 2.5 },
+  'parakeet-v3': { acc: { ru: [4, 5.5], en: [4, 7.8] }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
+  'large-v3-turbo': { acc: { ru: [5, 4.0], en: [5, 5.8] }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], vram: 2.2 },
+  'large-v3': { acc: { ru: [5, 3.8], en: [5, 5.7] }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], vram: 3.9 },
+  // Analysis: quality from the comparison on real recordings (bench-report/report.md, «Анализ») and
+  // the model size; speed and memory from the size of each model
+  'qwen2.5:1.5b': { quality: 2, speed: { cpu: [4, ''], gpu: [5, ''] }, load: [1], vram: 2 },
+  'qwen3.5:4b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], vram: 5 },
+  'qwen3:8b': { quality: 4, speed: { cpu: [1, ''], gpu: [4, ''] }, load: [3], vram: 10 },
+  'qwen3:14b': { quality: 5, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [5], vram: 12 },
+};
+
+function meterDots(n, cls) {
+  return `<span class="mm-dots ${cls || ''}" aria-hidden="true">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+}
+
+function hasFastGpu() {
+  const hw = (state.system || {}).hardware || {};
+  return !!(hw.cuda_available && Number(hw.vram_total_gb || 0) >= 4);
+}
+
+// The three meters of a model (speech or analysis) as one line; '' for a model with no measurements
+function modelMeters(id) {
+  const m = MODEL_METERS[id];
+  if (!m) return '';
+  const gpu = hasFastGpu();
+  const parts = [];
+  if (m.acc) {
+    const langs = Object.entries(m.acc).map(([lang, [n, wer]]) => {
+      const name = t(lang === 'ru' ? 'mmRu' : 'mmEn');
+      const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => String(wer).replace('.', state.uiLang === 'en' ? '.' : ','));
+      return `<span class="mm" title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${t('mmAccuracy')} ${name}: ${n}/5. ${tip}`)}">${meterDots(n)}<span class="mm-sub">${escapeHtml(name)}</span></span>`;
+    }).join('');
+    parts.push(`<span class="mm-group"><span class="mm-label">${escapeHtml(t('mmAccuracy'))}</span><span class="mm-line">${langs}</span></span>`);
+  } else {
+    const tip = t('mmQualityTip');
+    parts.push(`<span class="mm-group" title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${t('mmQuality')}: ${m.quality}/5`)}"><span class="mm-label">${escapeHtml(t('mmQuality'))}</span><span class="mm-line">${meterDots(m.quality)}</span></span>`);
+  }
+  const [sn, sx] = m.speed[gpu ? 'gpu' : 'cpu'];
+  const speedTip = sx ? t('mmSpeedTip').replace('{x}', () => sx).replace('{where}', () => t(gpu ? 'mmOnGpu' : 'mmOnCpu'))
+    : sn <= 1 ? t('mmCpuSlow') : t(gpu ? 'mmOnGpu' : 'mmOnCpu');
+  parts.push(`<span class="mm-group" title="${escapeHtml(speedTip)}" aria-label="${escapeHtml(`${t('mmSpeed')}: ${sn}/5. ${speedTip}`)}"><span class="mm-label">${escapeHtml(t('mmSpeed'))}</span><span class="mm-line">${meterDots(sn)}${sn <= 1 ? `<span class="mm-sub mm-warn">${escapeHtml(t('mmSlowShort'))}</span>` : ''}</span></span>`);
+  const mem = m.ram && (!gpu || !m.vram) ? t('mmRam').replace('{n}', () => String(m.ram).replace('.', state.uiLang === 'en' ? '.' : ','))
+    : t('mmVram').replace('{n}', () => String(m.vram).replace('.', state.uiLang === 'en' ? '.' : ','));
+  parts.push(`<span class="mm-group" title="${escapeHtml(t('mmLoadTip'))}" aria-label="${escapeHtml(`${t('mmLoad')}: ${m.load[0]}/5, ${mem}`)}"><span class="mm-label">${escapeHtml(t('mmLoad'))}</span><span class="mm-line">${meterDots(m.load[0], 'mm-load')}<span class="mm-sub">${escapeHtml(mem)}</span></span></span>`);
+  return `<span class="mm-row">${parts.join('')}</span>`;
 }
 
 // What each speech model is for, said where a model is chosen
