@@ -17,6 +17,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   Settings → Speech models → «Model for Russian speech».
 - **FFmpeg downloads by itself** at the first start: recording, import and export work without a visit
   to the settings.
+- **A setup window instead of the console** at the very first start: what the program needs and what each
+  part is for (the environment, the NVIDIA driver — CUDA comes with the environment, FFmpeg, Ollama if you
+  want local analysis), confirmed with «Install», with progress and a log. Ollama installs silently and its
+  own window no longer pops up.
 
 ### In the fourth beta (0.7.0-beta.4)
 - API keys are stored under the program's new name: keys saved before are read and saved again at the
@@ -54,6 +58,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Turbo или Parakeet); если язык не указан, его определяет первая минута записи. «Настройки → Модели речи →
   Модель для русской речи».
 - **FFmpeg скачивается сам** при первом запуске: запись, импорт и экспорт работают без похода в настройки.
+- **Окно установки вместо консоли** при самом первом запуске: что нужно программе и для чего каждая часть
+  (среда программы, драйвер NVIDIA — CUDA входит в среду, FFmpeg, Ollama — если нужен анализ на компьютере),
+  подтверждение кнопкой «Установить», прогресс и журнал. Ollama ставится тихо, её собственное окно больше не
+  выскакивает.
 
 ### В четвёртой бете (0.7.0-beta.4)
 - API-ключи хранятся под новым именем программы: сохранённые раньше читаются и пересохраняются при первом
