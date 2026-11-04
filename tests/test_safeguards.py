@@ -426,3 +426,18 @@ class RequirementsMarkTest(unittest.TestCase):
         self.assertIn("if not defined UPDATE rmdir /s /q .venv", bat)  # an update never removes .venv
         self.assertIn('"' + REQUIREMENTS_MARK.name + '"', build_exe.CS_SOURCE)
         self.assertIn("RequirementsChanged(baseDir)", build_exe.CS_SOURCE)
+
+
+class SpeechModelSettingTest(unittest.TestCase):
+    """The speech model settings take only models of the catalog (D3)."""
+
+    def test_only_catalog_models(self):
+        from app.settings_schema import clean as validate_setting
+
+        self.assertEqual(validate_setting("whisper_model", "large-v3-turbo"), "large-v3-turbo")
+        self.assertEqual(validate_setting("speech_model_ru", "gigaam-v3"), "gigaam-v3")
+        self.assertEqual(validate_setting("speech_model_ru", ""), "")
+        self.assertEqual(validate_setting("live_whisper_model", "auto"), "auto")
+        for key in ("whisper_model", "speech_model_ru", "live_whisper_model"):
+            with self.assertRaises(ValueError):
+                validate_setting(key, "someone/evil-repo")
