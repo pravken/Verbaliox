@@ -348,10 +348,10 @@ class InstallerTest(unittest.TestCase):
         app_id = UNINSTALL_KEY.rsplit("\\", 1)[1].removesuffix("_is1")
         self.assertIn("AppId={" + app_id + "\n", iss)  # the program updates this entry's version
         self.assertIn('"Local\\\\Verbaliox.Desktop.Window"', (root / "run.py").read_text(encoding="utf-8"))
-        self.assertIn("OutputBaseFilename=Verbaliox-Setup-v{#AppVersion}", iss)
+        self.assertIn("OutputBaseFilename=Verbaliox-Installer-v{#AppVersion}", iss)
         wf = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("installer\\verbaliox.iss", wf)
-        self.assertIn("Verbaliox-Setup-*.exe", wf)
+        self.assertIn("Verbaliox-Installer-*.exe", wf)
         self.assertIn('$setup.FullName -Algorithm SHA256', wf)  # in SHA256SUMS.txt, so signed
 
 

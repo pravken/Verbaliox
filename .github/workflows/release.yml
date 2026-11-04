@@ -75,7 +75,7 @@ jobs:
           if ($num -notmatch '^\d+(\.\d+){0,3}$') { $num = '0.0.0' }
           & $iscc /Q "/DAppVersion=$ver" "/DNumericVersion=$num" "/DSourceDir=$PWD\dist\$name" "/DOutputDir=$PWD" installer\verbaliox.iss
           if ($LASTEXITCODE -ne 0) { throw "Building the installer failed" }
-          $setup = Get-ChildItem "Verbaliox-Setup-*.exe" | Select-Object -First 1
+          $setup = Get-ChildItem "Verbaliox-Installer-*.exe" | Select-Object -First 1
           Get-FileHash Verbaliox.exe, "$name.zip", $setup.FullName -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
             Set-Content -Encoding utf8 SHA256SUMS.txt
@@ -109,7 +109,7 @@ jobs:
           name: verbaliox-release
           path: |
             Verbaliox-*.zip
-            Verbaliox-Setup-*.exe
+            Verbaliox-Installer-*.exe
             Verbaliox.exe
             SHA256SUMS.txt
             SHA256SUMS.txt.minisig
@@ -123,7 +123,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem Verbaliox-*.zip, Verbaliox-Setup-*.exe | ForEach-Object Name) + @('Verbaliox.exe', 'SHA256SUMS.txt')
+          $files = @(Get-ChildItem Verbaliox-*.zip, Verbaliox-Installer-*.exe | ForEach-Object Name) + @('Verbaliox.exe', 'SHA256SUMS.txt')
           if (Test-Path SHA256SUMS.txt.minisig) { $files += 'SHA256SUMS.txt.minisig' }
           # @(...) keeps these arrays: an if returning one item gives a plain string, and splatting a
           # string passes its characters one by one (a beta's --prerelease became "-", "-", "p", …)

@@ -8,6 +8,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+### In the ninth beta (0.7.0-beta.9)
+- The installer is called `Verbaliox-Installer-vX.Y.Z.exe` (was `Verbaliox-Setup-…`).
+
 ### In the eighth beta (0.7.0-beta.8)
 - **First start with a cloud model** no longer loses the choices of the welcome window (models, Russian
   routing, language); the cloud consent is asked in Settings → Analysis right after.
@@ -31,7 +34,7 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   mentions the old folder stays as written.
 
 ### In the sixth beta (0.7.0-beta.6)
-- **An installer:** `Verbaliox-Setup-vX.Y.Z.exe` installs the program for your user (no administrator
+- **An installer:** `Verbaliox-Installer-vX.Y.Z.exe` installs the program for your user (no administrator
   rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, with a Start menu entry, an optional desktop icon and
   an uninstaller in «Installed apps» that asks before removing the recordings and models. The zip stays
   as the portable version.
@@ -91,6 +94,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.7.0
 
+### В девятой бете (0.7.0-beta.9)
+- Установщик называется `Verbaliox-Installer-vX.Y.Z.exe` (был `Verbaliox-Setup-…`).
+
 ### В восьмой бете (0.7.0-beta.8)
 - **Первый запуск с облачной моделью** больше не теряет выбор окна приветствия (модели, модель для русского,
   язык); согласие на облако спрашивается сразу после этого в «Настройки → Анализ».
@@ -115,7 +121,7 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   заметка, где упомянута старая папка, остаётся как была.
 
 ### В шестой бете (0.7.0-beta.6)
-- **Установщик:** `Verbaliox-Setup-vX.Y.Z.exe` ставит программу для вашего пользователя (без прав
+- **Установщик:** `Verbaliox-Installer-vX.Y.Z.exe` ставит программу для вашего пользователя (без прав
   администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, с ярлыком в «Пуске», значком на рабочем столе по
   желанию и удалением через «Установленные приложения», которое спрашивает, стирать ли записи и модели.
   Zip остаётся портативной версией.
