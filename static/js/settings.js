@@ -763,11 +763,12 @@ function wizardSizeText(mb) {
   return mb >= 1000 ? `${(mb / 1024).toFixed(1)} ${t('unitGB')}` : `${Math.round(mb)} ${t('unitMB')}`;
 }
 
-// The Russian model and the main one of a chosen set: GigaAM takes Russian, the other model the rest
-function wizardRoles(models) {
+// The Russian model and the main one of a chosen set: GigaAM takes Russian, the other model the rest.
+// pick: the main one the user chose when the set has several besides GigaAM (else the first of them)
+function wizardRoles(models, pick) {
   const ru = models.includes('gigaam-v3') ? 'gigaam-v3' : '';
   const others = models.filter(m => m !== 'gigaam-v3');
-  const main = others[0] || ru;
+  const main = (pick && others.includes(pick) ? pick : others[0]) || ru;
   return { main, ru: ru && main !== ru ? ru : '' };
 }
 
@@ -864,7 +865,7 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none' };
+  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '' };
   const item = id => catalog.find(i => i.id === id);
   const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
   const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
@@ -915,8 +916,13 @@ function openFirstRunWizard(data) {
     } else {
       const rows = plan();
       const total = rows.reduce((a, r) => a + (r.mb || 0), 0);
-      const roles = wizardRoles(models());
-      body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frSummaryQ'))}</div>
+      const roles = wizardRoles(models(), st.main);
+      const others = models().filter(m => m !== 'gigaam-v3');
+      // Several besides GigaAM: which one is the main model is asked, not guessed
+      const mainQ = others.length > 1 ? `<div class="text-[11.5px] text-apple-label leading-snug">${escapeHtml(t('frMainQ'))}</div>
+        <div class="space-y-2" role="radiogroup">${others.map(id => choice(`main:${id}`, id === roles.main, escapeHtml(formatModelName(id)),
+          `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</div>`)).join('')}</div>` : '';
+      body = `${mainQ}<div class="text-xs text-white font-medium">${escapeHtml(t('frSummaryQ'))}</div>
         <div class="rounded-xl bg-apple-sidebar border border-white/10 p-3 space-y-1.5">
           ${rows.length ? rows.map(r => `<div class="flex items-baseline justify-between gap-2 text-[11.5px]"><span class="text-white">${escapeHtml(r.name)}</span><span class="font-mono text-apple-tertiary">${escapeHtml(r.mb ? wizardSizeText(r.mb) : '')}</span></div>`).join('')
             : `<div class="text-[11.5px] text-apple-secondary">${escapeHtml(t('frNothingToDownload'))}</div>`}
@@ -952,7 +958,7 @@ function openFirstRunWizard(data) {
     if (!b) return;
     if (b.dataset.pick) {
       const [kind, value] = b.dataset.pick.split(':');
-      if (kind === 'preset') st.preset = value; else st.ai = value;
+      if (kind === 'preset') st.preset = value; else if (kind === 'main') st.main = value; else st.ai = value;
       draw();
       return;
     }
@@ -961,7 +967,7 @@ function openFirstRunWizard(data) {
     if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks);
+      await runFirstRunSetup(data, models(), st.ai, picks, st.main);
     }
   });
   document.body.appendChild(wrap);
@@ -969,8 +975,8 @@ function openFirstRunWizard(data) {
 
 // What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
 // the app downloads one at a time) and the analysis model, all in the background
-async function runFirstRunSetup(data, chosen, ai, picks) {
-  const roles = wizardRoles(chosen);
+async function runFirstRunSetup(data, chosen, ai, picks, mainPick) {
+  const roles = wizardRoles(chosen, mainPick);
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
     language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
