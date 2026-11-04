@@ -308,8 +308,9 @@ class SetupWindowTest(unittest.TestCase):
         from pathlib import Path
 
         root = Path(__file__).resolve().parent.parent
+        for f in root.glob("*.bat"):  # cmd needs CRLF for its labels (goto, call :label)
+            self.assertNotIn(b"\n", f.read_bytes().replace(b"\r\n", b""), f.name)
         bat = (root / "setup.bat").read_bytes()
-        self.assertNotIn(b"\n", bat.replace(b"\r\n", b""))  # cmd needs CRLF for its labels
         text = bat.decode("ascii")
         for step in ("uv", "venv", "packages"):
             self.assertIn(f"echo ##STEP {step}", text)
