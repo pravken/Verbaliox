@@ -107,7 +107,8 @@ ${t('modelsFolder')}: ${data.paths.models}`;
 
     const s = data.settings;
     document.getElementById('set-whisper-model').value = s.whisper_model || 'large-v3-turbo';
-    document.getElementById('upload-model').value = s.whisper_model || 'large-v3-turbo';
+    state.speechModelRu = s.speech_model_ru || '';
+    document.getElementById('upload-model').value = speechRoutingOn() ? 'auto' : (s.whisper_model || 'large-v3-turbo');
     document.getElementById('set-device').value = s.device || 'cuda';
     document.getElementById('set-compute-type').value = s.compute_type || 'float16';
     // with no choice saved yet, «automatic» is on when the values are the recommended ones
@@ -552,7 +553,8 @@ async function deleteOnnxModel(id) {
 function formatModelName(modelId) {
   const raw = String(modelId || '').trim();
   if (!raw) return 'AI';
-  if (raw === 'merged') return t('mergedVersion');  // one text from several models (app/transcript_merge.py)
+  if (raw === 'merged') return t('mergedVersion');
+  if (raw === 'auto') return t('modelAutoByLang');  // the Russian model or the main one (app/speech_route.py)  // one text from several models (app/transcript_merge.py)
   const lower = raw.toLowerCase();
   if (MODEL_DISPLAY_NAMES[lower]) return MODEL_DISPLAY_NAMES[lower];
   for (const [k, v] of Object.entries(MODEL_DISPLAY_NAMES)) {
@@ -703,7 +705,9 @@ function updateWhisperModelsUI(models) {
               <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
               <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
               <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+              ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
             </div>
+            ${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label mt-1">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
             <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
             ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}
           </div>
@@ -731,19 +735,40 @@ function updateWhisperModelsUI(models) {
   syncSidebarDownloadWidget();
 }
 
-// --- First run: a speech model (and an analysis model) chosen for this computer ---
+// --- First run: a ready set of models for how the app will be used, chosen for this computer ---
 function firstRunPicks(data, lang) {
   const hw = data.hardware || {};
-  const gpu = hw.cuda_available && Number(hw.vram_total_gb || 0) >= 4;
+  const gpu = !!(hw.cuda_available && Number(hw.vram_total_gb || 0) >= 4);
   const vram = Number(hw.vram_total_gb || 0);
-  const speech = [];
-  if (lang === 'ru') speech.push({ id: 'gigaam-v3', why: t('frWhyGigaam') });
-  // With a GPU Whisper is the more accurate one outside Russian (bench-report/gpu-report.md), Parakeet the fast one
-  if (gpu) speech.push({ id: 'large-v3-turbo', why: t('frWhyTurbo') });
-  speech.push({ id: 'parakeet-v3', why: t('frWhyParakeet') });
-  if (!gpu && lang !== 'ru') speech.push({ id: 'large-v3-turbo', why: t('frWhyTurboCpu') });
   const llm = vram >= 10 ? 'qwen3:8b' : 'qwen3.5:4b';  // bench-report/report.md
-  return { speech: speech.slice(0, 3), llm, gpu };
+  // Outside Russian: Whisper Turbo with a GPU (99 languages), Parakeet without one (fast on the CPU)
+  const other = gpu ? 'large-v3-turbo' : 'parakeet-v3';
+  const presets = [
+    { id: 'ru', models: ['gigaam-v3'], lang: 'ru' },
+    { id: 'ruen', models: ['gigaam-v3', other], lang: 'auto' },
+    { id: 'multi', models: [other], lang: 'auto' },
+    { id: 'custom', models: null, lang: 'auto' },
+  ];
+  return { presets, rec: lang === 'en' ? 'multi' : 'ruen', llm, gpu, speech: [{ id: other }] };
+}
+
+function wizardSizeMb(item) {
+  if (!item) return 0;
+  if (item.size_mb) return Number(item.size_mb);
+  const n = parseFloat(item.size || '0');
+  return /GB/i.test(item.size || '') ? n * 1024 : n;
+}
+
+function wizardSizeText(mb) {
+  return mb >= 1000 ? `${(mb / 1024).toFixed(1)} ${t('unitGB')}` : `${Math.round(mb)} ${t('unitMB')}`;
+}
+
+// The Russian model and the main one of a chosen set: GigaAM takes Russian, the other model the rest
+function wizardRoles(models) {
+  const ru = models.includes('gigaam-v3') ? 'gigaam-v3' : '';
+  const others = models.filter(m => m !== 'gigaam-v3');
+  const main = others[0] || ru;
+  return { main, ru: ru && main !== ru ? ru : '' };
 }
 
 // «Выбрать модель» where nothing can analyse yet: the local analysis models with what each is good at
@@ -833,53 +858,98 @@ function openFirstRunWizard(data) {
   wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
-  const st = { step: 0, lang: state.uiLang === 'en' ? 'en' : 'ru', speech: null, llm: true };
   const hw = data.hardware || {};
-  const ollama = data.ollama || {};
-  const card = (key, title, sub, on) => `<button data-pick="${escapeHtml(key)}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
-      <div class="text-xs font-semibold text-white">${title}</div><div class="text-[11.5px] text-apple-secondary mt-0.5 leading-snug">${sub}</div></button>`;
+  const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
+  const llmCatalog = ((data.ollama || {}).catalog) || [];
+  const picks = firstRunPicks(data, state.uiLang);
+  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none' };
+  const item = id => catalog.find(i => i.id === id);
+  const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
+  const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
+  const modelLine = id => `<div class="flex items-baseline gap-2 text-[11.5px]"><span class="text-white font-medium shrink-0">${escapeHtml(formatModelName(id))}</span>
+      <span class="text-apple-secondary flex-1 min-w-0">${escapeHtml(modelPurpose(id))}</span>
+      <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></div>`;
+  const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
+      <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
+  const llmItem = llmCatalog.find(m => m.id === picks.llm) || { size: '' };
+  const plan = () => {
+    const list = models().filter(id => !item(id)?.installed);
+    const rows = list.map(id => ({ name: formatModelName(id), mb: wizardSizeMb(item(id)) }));
+    if (!(data.ffmpeg || {}).available) rows.unshift({ name: 'FFmpeg', mb: ((data.ffmpeg || {}).download_info || {}).size_mb || 0 });
+    if (st.ai === 'local') rows.push({ name: formatModelName(picks.llm), mb: wizardSizeMb(llmItem) });
+    return rows;
+  };
   const draw = () => {
-    const picks = firstRunPicks(data, st.lang);
-    if (!st.speech || !picks.speech.some(p => p.id === st.speech)) st.speech = picks.speech[0].id;
     let body = '';
     if (st.step === 0) {
+      const cards = picks.presets.map(p => {
+        const on = st.preset === p.id;
+        const title = escapeHtml(t(`frPreset_${p.id}`)) + (p.id === picks.rec ? tag(t('frRecommended')) : '');
+        let inner = `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t(`frPreset_${p.id}_desc`))}</div>`;
+        if (p.models) inner += p.models.map(modelLine).join('');
+        return choice(`preset:${p.id}`, on, title, inner);
+      }).join('');
+      // own choice: the models with what each is for, ticked below the sets (no controls inside a button)
+      const own = st.preset !== 'custom' ? '' : `<div class="rounded-xl border border-white/10 p-3 space-y-1.5">${catalog.map(i => `<label class="flex items-baseline gap-2 text-[11.5px] cursor-pointer">
+            <input type="checkbox" class="tk-check" data-model="${escapeHtml(i.id)}" ${st.custom.has(i.id) ? 'checked' : ''}>
+            <span class="text-white font-medium shrink-0">${escapeHtml(formatModelName(i.id))}</span>
+            <span class="text-apple-secondary flex-1 min-w-0">${escapeHtml(modelPurpose(i.id))}</span>
+            <span class="font-mono text-apple-tertiary shrink-0">${i.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(i)))}</span></label>`).join('')}</div>`;
       body = `<p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('frIntro'))}</p>
         <div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</span></div>
-        <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frLangQ'))}</div>
-        <div class="grid grid-cols-3 gap-2">${[['ru', t('frLangRu')], ['en', t('frLangEn')], ['mix', t('frLangMix')]].map(([k, l]) =>
-          `<button data-lang="${k}" class="ui-btn h-9 ${st.lang === k ? 'ui-btn-primary' : 'ui-btn-subtle'}">${escapeHtml(l)}</button>`).join('')}</div>`;
+        <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frPresetQ'))}</div>
+        <div class="space-y-2" role="radiogroup">${cards}</div>${own}`;
     } else if (st.step === 1) {
-      body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frSpeechQ'))}</div>
-        <div class="space-y-2">${picks.speech.map((p, i) => card(p.id, escapeHtml(formatModelName(p.id)) + (i === 0 ? ` <span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/20 text-apple-green">${escapeHtml(t('frRecommended'))}</span>` : ''), escapeHtml(p.why), st.speech === p.id)).join('')}</div>`;
-    } else if (st.step === 2) {
+      const local = escapeHtml(t('frAiLocal')) + (picks.gpu ? tag(t('frRecommended')) : '');
       body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frLlmQ'))}</div>
-        <p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frLlmDesc'))}</p>
-        <div class="space-y-2">
-          ${card('llm-yes', escapeHtml(formatModelName(picks.llm)) + ` <span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/20 text-apple-green">${escapeHtml(t('frRecommended'))}</span>`, escapeHtml(ollama.installed ? t('frLlmLocal') : t('frLlmNoOllama')), st.llm)}
-          ${card('llm-no', escapeHtml(t('frLlmSkip')), escapeHtml(t('frLlmSkipDesc')), !st.llm)}
+        <p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiDesc'))}</p>
+        <div class="space-y-2" role="radiogroup">
+          ${choice('ai:none', st.ai === 'none', escapeHtml(t('frLlmSkip')) + (picks.gpu ? '' : tag(t('frRecommended'))), `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frLlmSkipDesc'))}</div>`)}
+          ${choice('ai:local', st.ai === 'local', local, `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml((picks.gpu ? t('frAiLocalDesc') : t('frAiLocalCpu')).replace('{model}', () => formatModelName(picks.llm)).replace('{size}', () => llmItem.size || ''))}</div>
+            ${(data.ollama || {}).installed ? '' : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frLlmNoOllama'))}</div>`}`)}
+          ${choice('ai:cloud', st.ai === 'cloud', escapeHtml(t('frAiCloud')), `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudDesc'))}</div>`)}
         </div>`;
+    } else {
+      const rows = plan();
+      const total = rows.reduce((a, r) => a + (r.mb || 0), 0);
+      const roles = wizardRoles(models());
+      body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frSummaryQ'))}</div>
+        <div class="rounded-xl bg-apple-sidebar border border-white/10 p-3 space-y-1.5">
+          ${rows.length ? rows.map(r => `<div class="flex items-baseline justify-between gap-2 text-[11.5px]"><span class="text-white">${escapeHtml(r.name)}</span><span class="font-mono text-apple-tertiary">${escapeHtml(r.mb ? wizardSizeText(r.mb) : '')}</span></div>`).join('')
+            : `<div class="text-[11.5px] text-apple-secondary">${escapeHtml(t('frNothingToDownload'))}</div>`}
+          ${rows.length ? `<div class="flex items-baseline justify-between gap-2 text-[11.5px] border-t border-white/10 pt-1.5"><span class="text-apple-secondary">${escapeHtml(t('frTotal'))}</span><span class="font-mono text-white">${escapeHtml(wizardSizeText(total))}</span></div>` : ''}
+        </div>
+        ${roles.ru ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frRouteNote').replace('{ru}', () => formatModelName(roles.ru)).replace('{main}', () => formatModelName(roles.main)))}</p>` : ''}
+        ${st.ai === 'cloud' ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudNext'))}</p>` : ''}
+        <p class="text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('frBackground'))}</p>`;
     }
-    wrap.innerHTML = `<div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
+    const canNext = st.step !== 0 || models().length > 0;
+    wrap.innerHTML = `<div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card flex flex-col" id="first-run-dialog">
       <div class="px-5 pt-5 pb-3 border-b apple-border flex items-center justify-between">
         <div class="text-sm font-semibold text-white">${escapeHtml(t('frTitle'))}</div>
         <div class="text-[11.5px] text-apple-tertiary font-mono">${st.step + 1} / 3</div>
       </div>
-      <div class="px-5 py-4 space-y-3">${body}</div>
+      <div class="px-5 py-4 space-y-3 overflow-y-auto">${body}</div>
       <div class="px-5 py-3 border-t apple-border flex items-center gap-2">
         <button data-a="later" class="ui-btn ui-btn-subtle mr-auto">${escapeHtml(t('frLater'))}</button>
         ${st.step > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
-        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < 2 ? t('frNext') : t('frStart'))}</button>
+        <button data-a="next" class="ui-btn ui-btn-primary" ${canNext ? '' : 'disabled'}>${escapeHtml(st.step < 2 ? t('frNext') : t('frStart'))}</button>
       </div></div>`;
+    wrap.querySelector('#first-run-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;  // the page is zoomed: vh would not fit
   };
   draw();
   wrap.addEventListener('click', async e => {
+    const box = e.target.closest('input[data-model]');
+    if (box) {
+      if (box.checked) st.custom.add(box.dataset.model); else st.custom.delete(box.dataset.model);
+      draw();
+      return;
+    }
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.lang) { st.lang = b.dataset.lang; draw(); return; }
     if (b.dataset.pick) {
-      if (b.dataset.pick === 'llm-yes') st.llm = true;
-      else if (b.dataset.pick === 'llm-no') st.llm = false;
-      else st.speech = b.dataset.pick;
+      const [kind, value] = b.dataset.pick.split(':');
+      if (kind === 'preset') st.preset = value; else st.ai = value;
       draw();
       return;
     }
@@ -888,16 +958,45 @@ function openFirstRunWizard(data) {
     if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      const picks = firstRunPicks(data, st.lang);
-      const onnx = (state.whisperCatalog || []).some(i => i.id === st.speech && i.engine === 'onnx');
-      await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: { whisper_model: st.speech, language: st.lang === 'mix' ? 'auto' : st.lang } }) });
-      if (onnx) startOnnxModelDownload(st.speech); else startWhisperModelDownload(st.speech);
-      if (st.llm) pullOllamaModel(picks.llm, true);
-      showToast(t('frDownloading'));
+      await runFirstRunSetup(data, models(), st.ai, picks);
     }
   });
   document.body.appendChild(wrap);
+}
+
+// What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
+// the app downloads one at a time) and the analysis model, all in the background
+async function runFirstRunSetup(data, chosen, ai, picks) {
+  const roles = wizardRoles(chosen);
+  const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
+  const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
+    language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
+  if (ai === 'cloud') settings.llm_provider = 'cloud';
+  if (ai === 'local') settings.llm_provider = 'ollama';
+  await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings }) }).catch(() => null);
+  state.speechModelRu = roles.ru;
+  document.getElementById('set-whisper-model').value = roles.main;
+  if (!(data.ffmpeg || {}).available && (data.ffmpeg || {}).can_download) fetch('/api/ffmpeg/install', { method: 'POST' }).catch(() => null);
+  const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
+  const todo = chosen.map(id => catalog.find(i => i.id === id)).filter(i => i && !i.installed);
+  todo.filter(i => i.engine === 'onnx').forEach(i => startOnnxModelDownload(i.id));
+  const whisperQueue = todo.filter(i => i.engine !== 'onnx').map(i => i.id);
+  const nextWhisper = () => {
+    const id = whisperQueue.shift();
+    if (!id) return;
+    startWhisperModelDownload(id, id !== roles.main);
+    // the next one when this download ends (the app downloads one Whisper model at a time)
+    const wait = setInterval(async () => {
+      const m = await fetch('/api/models/status').then(r => r.json()).catch(() => null);
+      if (m && !(m.setup_state || {}).active) { clearInterval(wait); nextWhisper(); }
+    }, 3000);
+  };
+  nextWhisper();
+  if (ai === 'local') pullOllamaModel(picks.llm, true);
+  showToast(t('frDownloading'));
+  await loadSystemInfo();
+  if (ai === 'cloud') openModal('settings', 'analysis');
 }
 
 async function selectActiveWhisperModel(modelId) {
@@ -966,9 +1065,12 @@ function startWhisperPollingLoop(modelId) {
   }, 800);
 }
 
-async function startWhisperModelDownload(modelId) {
-  document.getElementById('set-whisper-model').value = modelId;
-  document.getElementById('upload-model').value = modelId;
+// keepMain: downloaded as the Russian model (or for later), the main model stays as it is
+async function startWhisperModelDownload(modelId, keepMain = false) {
+  if (!keepMain) {
+    document.getElementById('set-whisper-model').value = modelId;
+    document.getElementById('upload-model').value = modelId;
+  }
   const pretty = formatModelName(modelId);
 
   state.whisperPullState = {
@@ -995,11 +1097,13 @@ async function startWhisperModelDownload(modelId) {
     })
   });
 
-  fetch('/api/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: { whisper_model: modelId } })
-  });
+  if (!keepMain) {
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { whisper_model: modelId } })
+    });
+  }
 
   startWhisperPollingLoop(modelId);
 }
@@ -1401,19 +1505,57 @@ function modelSizeLabel(item) {
   return item.size || (item.size_mb >= 1000 ? (item.size_mb / 1024).toFixed(1) + ' GB' : (item.size_mb || '') + ' MB');
 }
 
+// What each speech model is for, said where a model is chosen
+function modelPurpose(id) {
+  return { 'gigaam-v3': t('mpGigaam'), 'parakeet-v3': t('mpParakeet'), 'large-v3-turbo': t('mpTurbo'),
+    'large-v3': t('mpPro') }[id] || '';
+}
+
+// A model of its own for Russian speech, other than the main one (app/speech_route.py)
+function speechRoutingOn() {
+  const ru = state.speechModelRu || '';
+  return !!ru && ru !== (document.getElementById('set-whisper-model')?.value || '');
+}
+
 function fillRecognitionSelects(list, active) {
   if (!list.length) return;
   const installed = list.filter(i => i.installed);
+  const routing = speechRoutingOn();
   ['upload-model', 'reconfig-model'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const value = sel.value;
-    sel.innerHTML = list.map(i => `<option value="${escapeHtml(i.id)}">${escapeHtml(formatModelName(i.id))}${
+    const auto = routing ? `<option value="auto">${escapeHtml(t('modelAutoByLang'))} · ${escapeHtml(formatModelName(state.speechModelRu))} / ${escapeHtml(formatModelName(active))}</option>` : '';
+    sel.innerHTML = auto + list.map(i => `<option value="${escapeHtml(i.id)}">${escapeHtml(formatModelName(i.id))}${
       i.installed ? '' : `  ↓ ${escapeHtml(modelSizeLabel(i))}`}</option>`).join('');
-    sel.value = list.some(i => i.id === value) ? value
-      : list.some(i => i.id === active) ? active : (installed[0] || list[0]).id;
+    sel.value = (value === 'auto' && routing) || list.some(i => i.id === value) ? value
+      : routing ? 'auto' : list.some(i => i.id === active) ? active : (installed[0] || list[0]).id;
   });
   renderModelHints();
+  renderSpeechRouteSelect(list);
+}
+
+function renderSpeechRouteSelect(list) {
+  const sel = document.getElementById('set-speech-model-ru');
+  if (!sel) return;
+  const forRu = list.filter(i => !i.languages || i.languages.includes('ru'));
+  sel.innerHTML = `<option value="">${escapeHtml(t('routeSame'))}</option>` + forRu.map(i =>
+    `<option value="${escapeHtml(i.id)}">${escapeHtml(formatModelName(i.id))}${i.installed ? '' : `  ↓ ${escapeHtml(modelSizeLabel(i))}`}</option>`).join('');
+  sel.value = forRu.some(i => i.id === state.speechModelRu) ? state.speechModelRu : '';
+}
+
+async function setSpeechModelRu() {
+  const value = document.getElementById('set-speech-model-ru').value;
+  const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { speech_model_ru: value } }) }).catch(() => null);
+  if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : ''); return; }
+  state.speechModelRu = value;
+  const item = (state.whisperCatalog || []).find(i => i.id === value);
+  if (item && !item.installed) {
+    if (item.engine === 'onnx') startOnnxModelDownload(value); else startWhisperModelDownload(value, true);
+  }
+  await loadSystemInfo();
+  showToast(value ? t('routeSaved').replace('{name}', () => formatModelName(value)) : t('routeOff'));
 }
 
 // Under the model lists: "not downloaded: downloads before the processing (1.5 GB)"

@@ -430,6 +430,15 @@
             <!-- Populated dynamically -->
           </div>
 
+          <!-- Russian speech: a model of its own, the main one for the rest (app/speech_route.py) -->
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <label for="set-speech-model-ru" class="block text-xs font-medium text-white" data-i18n="routeTitle">Модель для русской речи</label>
+              <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="routeDesc">Записи на русском распознаёт эта модель, на других языках — основная. Если язык записи «Определить сам», он определяется по первой минуте.</p>
+            </div>
+            <select id="set-speech-model-ru" data-change="setSpeechModelRu" class="imp-select shrink-0 max-w-[15rem]"></select>
+          </div>
+
           <!-- Live Whisper & Diarizer Download Progress Window -->
           <div id="whisper-download-panel" class="hidden rounded-xl bg-apple-bg border border-apple-blue/40 p-3.5 space-y-2.5">
             <div class="flex items-center justify-between gap-2 text-xs">
