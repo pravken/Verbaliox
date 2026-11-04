@@ -484,7 +484,7 @@ def ensure_downloaded(model_id: str, on_progress: Callable[[int], None]) -> None
 def delete_model(model_id: str) -> bool:
     import shutil
 
-    release()
+    release(model_id)  # only this one: the other model may be giving live captions right now
     d = model_dir(model_id)
     if d.is_dir():
         shutil.rmtree(d, ignore_errors=True)

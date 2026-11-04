@@ -514,3 +514,10 @@ def has_sessions() -> bool:
     _drop_idle()
     with _sessions_lock:
         return bool(_sessions)
+
+
+def model_in_use(model_id: str) -> bool:
+    """A live session gives its captions with this GigaAM / Parakeet model now."""
+    _drop_idle()
+    with _sessions_lock:
+        return any(getattr(s, "onnx_model", None) == model_id for s in _sessions.values())

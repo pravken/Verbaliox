@@ -80,6 +80,13 @@ def api_onnx_delete(model_id: str) -> Dict[str, Any]:
 
     if not asr_onnx.is_onnx_model(model_id):
         raise HTTPException(status_code=404, detail="Неизвестная модель")
+    from app import live
+    from app.transcriber import running_job_kind
+
+    if running_job_kind() == "transcribe":
+        raise HTTPException(status_code=409, detail="Идёт распознавание — удалите модель после него")
+    if live.model_in_use(model_id):
+        raise HTTPException(status_code=409, detail="Идут живые субтитры — удалите модель после записи")
     return {"ok": asr_onnx.delete_model(model_id)}
 
 @router.get("/api/models/status")

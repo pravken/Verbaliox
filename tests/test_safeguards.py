@@ -467,3 +467,28 @@ class PartialTranscriptModelTest(unittest.TestCase):
         conn.close()
         init_db()
         self.assertEqual(get_meeting(m["id"])["transcript_model"], "")
+
+
+class OnnxDeleteTest(unittest.TestCase):
+    """Deleting one GigaAM / Parakeet model leaves the other loaded and waits for live captions."""
+
+    def test_only_the_deleted_model_is_released(self):
+        from app import asr_onnx
+
+        with mock.patch.dict(asr_onnx._loaded, {"gigaam-v3": object(), "parakeet-v3": object()}, clear=True):
+            asr_onnx.delete_model("gigaam-v3")
+            self.assertEqual(list(asr_onnx._loaded), ["parakeet-v3"])
+
+    def test_refused_while_live_captions_use_it(self):
+        from fastapi import HTTPException
+
+        from app import live
+        import app.main  # noqa: F401 - the routers import from it
+        from app.api.system import api_onnx_delete
+
+        with mock.patch.object(live, "model_in_use", return_value=True), \
+                mock.patch("app.asr_onnx.delete_model") as delete:
+            with self.assertRaises(HTTPException) as e:
+                api_onnx_delete("parakeet-v3")
+        self.assertEqual(e.exception.status_code, 409)
+        delete.assert_not_called()
