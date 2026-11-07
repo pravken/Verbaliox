@@ -317,6 +317,19 @@ class SetupWindowTest(unittest.TestCase):
             self.assertIn(f'"##STEP {step}"', (root / "build_exe.py").read_text(encoding="utf-8"))
         self.assertIn('if not defined QUIET pause', text)
 
+    def test_setup_bat_never_builds_on_another_python(self):
+        """A log from a PC with Python 2.7 on PATH: uv was not installed, `python -m venv` ran on 2.7 and
+        failed, and pip ran in a .venv that was never made. The pip way takes only Python 3.11, and every
+        way checks that the environment was made before installing into it."""
+        from pathlib import Path
+
+        text = (Path(__file__).resolve().parent.parent / "setup.bat").read_text(encoding="ascii")
+        self.assertNotIn("python -m venv", text)
+        self.assertIn("sys.version_info[:2] == (3, 11)", text)
+        self.assertIn("astral.sh/uv/install.ps1", text)  # when winget is missing or fails
+        self.assertEqual(text.count('if not exist ".venv\\Scripts\\python.exe" goto :venv_failed'), 2)
+        self.assertIn("goto :no_python", text)
+
     def test_ollama_window_is_closed_after_its_install(self):
         from app import ollama_client as oc
 
