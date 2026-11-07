@@ -34,7 +34,7 @@ if not defined UV (
 )
 if not defined UV (
     echo       winget did not give uv: the installer from astral.sh
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/install.ps1 | iex"
     call :find_uv
 )
 if defined UV echo       uv: !UV!
