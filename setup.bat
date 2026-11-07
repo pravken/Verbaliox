@@ -22,13 +22,27 @@ if "%SAC%"=="0x0" set "SAC=0"
 if "%SAC%"=="0x1" set "SAC=1"
 if "%SAC%"=="0x2" set "SAC=2"
 
+rem --- uv: winget first, then the official installer from astral.sh (winget is missing on some PCs
+rem --- or fails without a word). Without uv the environment is made with Python 3.11 and pip
 where uv >nul 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo ##STEP uv
-    echo [0/2] Installing uv package manager...
-    winget install --id=astral-sh.uv -e --accept-source-agreements --accept-package-agreements >nul 2>nul
-    set "PATH=%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+if not errorlevel 1 goto :have_uv
+echo ##STEP uv
+echo [0/2] Installing uv package manager...
+where winget >nul 2>nul
+if errorlevel 1 (
+    echo       winget is not available on this PC
+) else (
+    winget install --id=astral-sh.uv -e --accept-source-agreements --accept-package-agreements --disable-interactivity >nul 2>nul
+    if errorlevel 1 echo       winget could not install uv ^(code !ERRORLEVEL!^)
 )
+set "PATH=%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+where uv >nul 2>nul
+if not errorlevel 1 goto :have_uv
+echo       Installing uv with its installer from astral.sh...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/install.ps1 | iex"
+where uv >nul 2>nul
+if errorlevel 1 echo       uv could not be installed: the environment is made with Python 3.11 and pip
+:have_uv
 
 set "SIGNED_PY="
 if not "%SAC%"=="0" call :find_signed_python
@@ -38,7 +52,22 @@ if not "%SAC%"=="0" if not defined SIGNED_PY (
     winget install --id=Python.Python.3.11 -e --scope user --accept-source-agreements --accept-package-agreements >nul 2>nul
     call :find_signed_python
 )
-if not "%SAC%"=="0" call :sac_warning
+if not "%SAC%"=="0" call rem --- Python 3.11 for the pip way: python.org (as above), then "python" on PATH only if it is 3.11
+:find_python311
+set "PY311="
+if defined SIGNED_PY (
+    set "PY311=!SIGNED_PY!"
+    goto :eof
+)
+call :find_signed_python
+if defined SIGNED_PY (
+    set "PY311=!SIGNED_PY!"
+    goto :eof
+)
+for /f "delims=" %%p in ('python -c "import sys; sys.stdout.write(sys.executable if sys.version_info[:2] == (3, 11) else '')" 2^>nul') do set "PY311=%%p"
+goto :eof
+
+:sac_warning
 
 where uv >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
@@ -53,6 +82,7 @@ if %ERRORLEVEL% EQU 0 (
         rem Prefer a uv-managed Python: the Microsoft Store Python virtualizes AppData and hides files from other programs
         uv venv .venv --python 3.11 --python-preference only-managed || uv venv .venv --python 3.11
     )
+    if not exist ".venv\Scripts\python.exe" goto :venv_failed
     echo ##STEP packages
     echo [2/2] Installing dependencies via uv...
     rem requirements.txt is an exact lock with SHA-256 hashes (see requirements.in)
@@ -65,11 +95,21 @@ echo ##STEP venv
 echo [1/2] Creating Python virtual environment...
 if exist ".venv\Scripts\python.exe" (
     echo       .venv exists: updating its libraries
-) else if defined SIGNED_PY (
-    "!SIGNED_PY!" -m venv .venv
-) else (
-    py -3.11 -m venv .venv 2>nul || python -m venv .venv
+    goto :pip_packages
 )
+rem The packages are locked for Python 3.11: any other Python on PATH ^(an old 2.7, a newer 3.x^) is
+rem never used. Without one, Python 3.11 is installed from python.org with winget
+call :find_python311
+if not defined PY311 (
+    echo       Python 3.11 not found: installing it from python.org...
+    winget install --id=Python.Python.3.11 -e --scope user --accept-source-agreements --accept-package-agreements --disable-interactivity >nul 2>nul
+    call :find_python311
+)
+if not defined PY311 goto :no_python
+echo       Python: !PY311!
+"!PY311!" -m venv .venv
+if not exist ".venv\Scripts\python.exe" goto :venv_failed
+:pip_packages
 echo ##STEP packages
 echo [2/2] Installing dependencies via pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
@@ -93,9 +133,29 @@ echo ==============================================================
 echo   Installing the libraries failed (see the messages above).
 echo   Check the internet connection and run setup.bat again.
 echo ==============================================================
+goto :failed
+
+:venv_failed
+echo.
+echo ==============================================================
+echo   Creating the Python environment failed ^(see the messages above^).
+echo   Check the internet connection and run setup.bat again.
+echo ==============================================================
+goto :failed
+
+:no_python
+echo.
+echo ==============================================================
+echo   Python 3.11 was not found and could not be installed.
+echo   Install Python 3.11 from https://www.python.org/downloads/
+echo   or uv from https://docs.astral.sh/uv/ and run setup.bat again.
+echo ==============================================================
+goto :failed
+
+:failed
 rem An environment that was there before stays: its mark is still the old one, so the next start
 rem tries the update again
-if not defined UPDATE rmdir /s /q .venv
+if exist ".venv" if not defined UPDATE rmdir /s /q .venv
 if not defined QUIET pause
 exit /b 1
 
@@ -111,6 +171,21 @@ for %%p in ("%LOCALAPPDATA%\Programs\Python\Python311\python.exe" "%ProgramFiles
 for /f "delims=" %%p in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul') do (
     echo %%p | find /i "WindowsApps" >nul || set "SIGNED_PY=%%p"
 )
+goto :eof
+
+rem --- Python 3.11 for the pip way: python.org (as above), then "python" on PATH only if it is 3.11
+:find_python311
+set "PY311="
+if defined SIGNED_PY (
+    set "PY311=!SIGNED_PY!"
+    goto :eof
+)
+call :find_signed_python
+if defined SIGNED_PY (
+    set "PY311=!SIGNED_PY!"
+    goto :eof
+)
+for /f "delims=" %%p in ('python -c "import sys; sys.stdout.write(sys.executable if sys.version_info[:2] == (3, 11) else '')" 2^>nul') do set "PY311=%%p"
 goto :eof
 
 :sac_warning
