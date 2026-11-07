@@ -9,6 +9,11 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 ## 0.7.0 — English
 
 ### In the ninth beta (0.7.0-beta.9)
+- **First start on a PC where uv does not install through winget:** the setup finds uv where winget leaves
+  it, falls back to the uv installer of astral.sh, and without uv takes only Python 3.11 (installing it
+  from python.org when missing). An old Python 2.7 on the PC no longer breaks the setup with «No module
+  named venv»; a failed step says what is missing instead of a chain of «path not found». The dubbing
+  environment finds uv the same way.
 - The installer is called `Verbaliox-Installer-vX.Y.Z.exe` (was `Verbaliox-Setup-…`).
 
 ### In the eighth beta (0.7.0-beta.8)
@@ -95,6 +100,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 ## 0.7.0
 
 ### В девятой бете (0.7.0-beta.9)
+- **Первый запуск на ПК, где uv не ставится через winget:** установка находит uv там, куда его кладёт winget,
+  при неудаче ставит uv установщиком с astral.sh, а без uv берёт только Python 3.11 (и ставит его с
+  python.org, если его нет). Старый Python 2.7 на компьютере больше не ломает установку ошибкой «No module
+  named venv»; неудачный шаг говорит, чего не хватает, вместо цепочки «путь не найден». Окружение дубляжа
+  находит uv так же.
 - Установщик называется `Verbaliox-Installer-vX.Y.Z.exe` (был `Verbaliox-Setup-…`).
 
 ### В восьмой бете (0.7.0-beta.8)

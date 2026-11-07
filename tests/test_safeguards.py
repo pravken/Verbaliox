@@ -316,6 +316,18 @@ class SetupWindowTest(unittest.TestCase):
             self.assertIn(f"echo ##STEP {step}", text)
             self.assertIn(f'"##STEP {step}"', (root / "build_exe.py").read_text(encoding="utf-8"))
         self.assertIn('if not defined QUIET pause', text)
+        # uv found also where winget leaves it, installed by astral.sh when winget gives none; without uv
+        # only a Python 3.11 makes the environment (a Python 2.7 on PATH failed with "No module named venv")
+        self.assertIn(":find_uv", text)
+        self.assertIn(r"WinGet\Packages\astral-sh.uv*", text)
+        self.assertIn("astral.sh/uv/install.ps1", text)
+        self.assertIn("sys.version_info[:2] == (3, 11)", text)
+        self.assertNotIn("python -m venv", text)
+        self.assertIn("goto :venv_failed", text)
+        self.assertIn("--accept-package-agreements\r\n", text)  # winget's answer goes to the log, not to nul
+        dub = (root / "setup_dub.bat").read_text(encoding="ascii")
+        self.assertIn('"%UV%" pip install', dub)
+        self.assertNotIn("where uv >nul", dub)
 
     def test_ollama_window_is_closed_after_its_install(self):
         from app import ollama_client as oc
@@ -428,7 +440,7 @@ class RequirementsMarkTest(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         bat = (root / "setup.bat").read_text(encoding="utf-8")
         self.assertIn(REQUIREMENTS_MARK.name, bat)
-        self.assertIn("if not defined UPDATE rmdir /s /q .venv", bat)  # an update never removes .venv
+        self.assertIn("if not defined UPDATE if exist .venv rmdir /s /q .venv", bat)  # an update never removes .venv
         self.assertIn('"' + REQUIREMENTS_MARK.name + '"', build_exe.CS_SOURCE)
         self.assertIn("RequirementsChanged(baseDir)", build_exe.CS_SOURCE)
 
