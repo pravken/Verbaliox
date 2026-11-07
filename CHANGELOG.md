@@ -8,7 +8,18 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
-### In the ninth beta (0.7.0-beta.9)
+The name is now **Verbaliox**. Highlights of this version (the betas below list everything):
+- **An installer** (`Verbaliox-Installer-vX.Y.Z.exe`) next to the portable zip, and a setup window instead of
+  the console at the first start, with progress and a log.
+- **A simpler first start:** ready sets of models for Russian, Russian and English, or many languages; AI
+  analysis on this computer, in the cloud or none.
+- **A model per language:** Russian speech to GigaAM, other languages to the main model, with the language
+  heard from the first minute; model meters show accuracy, speed and load.
+- **Dubbing in the VoxCPM2 voice** instead of Chatterbox.
+- FFmpeg downloads by itself; two code reviews of the whole program fixed security, installer and
+  transcription issues.
+
+### Since the eighth beta
 - **First start on a PC where uv does not install through winget:** the setup finds uv where winget leaves
   it, falls back to the uv installer of astral.sh, and without uv takes only Python 3.11 (installing it
   from python.org when missing). An old Python 2.7 on the PC no longer breaks the setup with «No module
@@ -99,7 +110,17 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.7.0
 
-### В девятой бете (0.7.0-beta.9)
+Новое имя — **Verbaliox**. Главное в этой версии (всё по бетам — ниже):
+- **Установщик** (`Verbaliox-Installer-vX.Y.Z.exe`) рядом с портативным zip и окно установки вместо консоли
+  при первом запуске, с прогрессом и журналом.
+- **Простая первая настройка:** готовые наборы моделей для русского, русского с английским или многих
+  языков; ИИ-анализ на компьютере, в облаке или без него.
+- **Модель под язык:** русскую речь распознаёт GigaAM, другие языки — основная модель, язык определяется
+  по первой минуте; шкалы моделей показывают точность, скорость и нагрузку.
+- **Дубляж голосом VoxCPM2** вместо Chatterbox.
+- FFmpeg скачивается сам; два ревью всего кода исправили ошибки безопасности, установщика и распознавания.
+
+### После восьмой беты
 - **Первый запуск на ПК, где uv не ставится через winget:** установка находит uv там, куда его кладёт winget,
   при неудаче ставит uv установщиком с astral.sh, а без uv берёт только Python 3.11 (и ставит его с
   python.org, если его нет). Старый Python 2.7 на компьютере больше не ломает установку ошибкой «No module
