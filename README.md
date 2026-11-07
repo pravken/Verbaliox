@@ -62,7 +62,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 
 ### Getting started
 
-**Option A — installer.** Download `Verbaliox-Setup-vX.Y.Z.exe` from [Releases](https://github.com/pravken/Verbaliox/releases) and run it: it installs the program for your user (no administrator rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, adds it to the Start menu and to «Installed apps» (uninstalling asks whether to remove the recordings and models too), then starts it. Built with [Inno Setup](https://jrsoftware.org/isinfo.php) from [`installer/verbaliox.iss`](installer/verbaliox.iss).
+**Option A — installer.** Download `Verbaliox-Installer-vX.Y.Z.exe` from [Releases](https://github.com/pravken/Verbaliox/releases) and run it: it installs the program for your user (no administrator rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, adds it to the Start menu and to «Installed apps» (uninstalling asks whether to remove the recordings and models too), then starts it. Built with [Inno Setup](https://jrsoftware.org/isinfo.php) from [`installer/verbaliox.iss`](installer/verbaliox.iss).
 
 **Option A2 — portable archive.** Download `Verbaliox-vX.Y.Z.zip` from [Releases](https://github.com/pravken/Verbaliox/releases), check it against `SHA256SUMS.txt`, unpack it and run `Verbaliox.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
 
@@ -140,7 +140,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 
 | When | Where |
 | :--- | :--- |
-| First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); winget, if `uv` is missing, and for Ollama when it is ticked |
+| First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); winget and astral.sh, if `uv` is missing, and for Ollama when it is ticked |
 | You download a speech model (Whisper, GigaAM, Parakeet with the Silero VAD) or a speaker model | Hugging Face (`huggingface.co`); for GigaAM and Parakeet the first time also PyPI (`onnx-asr`, checked by its hash) |
 | App start with an NVIDIA video card, once (Settings → Recognition, "GigaAM and Parakeet on the video card"; on by default) | PyPI: the GPU build of ONNX Runtime (`onnxruntime-gpu`, about 300 MB, checked by its hash) |
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
@@ -189,7 +189,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Demucs `htdemucs` (optional dubbing) | MIT |
 | num2words (optional dubbing: numbers as words) | LGPL 2.1 |
 | Inter, JetBrains Mono fonts | SIL Open Font License |
-| Inno Setup (builds `Verbaliox-Setup.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
+| Inno Setup (builds `Verbaliox-Installer.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
 Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). If you download other models through Ollama, check their terms.
 
@@ -268,7 +268,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 
 ### Как начать
 
-**Вариант А — установщик.** Скачайте `Verbaliox-Setup-vX.Y.Z.exe` со страницы [Releases](https://github.com/pravken/Verbaliox/releases) и запустите: программа ставится для вашего пользователя (без прав администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, появляется в меню «Пуск» и в «Установленных приложениях» (при удалении спросит, стирать ли записи и модели) и сразу запускается. Собирается [Inno Setup](https://jrsoftware.org/isinfo.php) из [`installer/verbaliox.iss`](installer/verbaliox.iss).
+**Вариант А — установщик.** Скачайте `Verbaliox-Installer-vX.Y.Z.exe` со страницы [Releases](https://github.com/pravken/Verbaliox/releases) и запустите: программа ставится для вашего пользователя (без прав администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, появляется в меню «Пуск» и в «Установленных приложениях» (при удалении спросит, стирать ли записи и модели) и сразу запускается. Собирается [Inno Setup](https://jrsoftware.org/isinfo.php) из [`installer/verbaliox.iss`](installer/verbaliox.iss).
 
 **Вариант А2 — портативный архив.** Скачайте `Verbaliox-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/Verbaliox/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `Verbaliox.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
 
@@ -345,7 +345,7 @@ start.bat
 
 | Когда | Куда |
 | :--- | :--- |
-| Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget, если нет `uv`, и для Ollama, если она отмечена |
+| Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget и astral.sh, если нет `uv`, и для Ollama, если она отмечена |
 | Вы скачиваете модель распознавания (Whisper, GigaAM, Parakeet вместе с Silero VAD) или модель спикеров | Hugging Face (`huggingface.co`); для GigaAM и Parakeet в первый раз ещё PyPI (`onnx-asr`, проверяется по хешу) |
 | Запуск приложения с видеокартой NVIDIA, один раз («Настройки → Распознавание», «GigaAM и Parakeet на видеокарте»; включено по умолчанию) | PyPI: сборка ONNX Runtime для видеокарты (`onnxruntime-gpu`, около 300 МБ, проверяется по хешу) |
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
