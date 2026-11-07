@@ -49,6 +49,10 @@ def find_uv() -> Optional[str]:
               Path(os.environ.get("LOCALAPPDATA") or home) / "Microsoft" / "WinGet" / "Links" / "uv.exe"):
         if c.is_file():
             return str(c)
+    # winget's own package folder, when it could not make the shortcut in WinGet\Links (setup.bat :find_uv)
+    packages = Path(os.environ.get("LOCALAPPDATA") or home) / "Microsoft" / "WinGet" / "Packages"
+    for c in sorted(packages.glob("astral-sh.uv*/uv.exe")):
+        return str(c)
     return None
 
 

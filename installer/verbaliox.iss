@@ -1,4 +1,4 @@
-﻿; Verbaliox-Setup.exe: the program files and the launcher in one installer (Inno Setup 6).
+﻿; Verbaliox-Installer.exe: the program files and the launcher in one installer (Inno Setup 6).
 ; Built by the release workflow (.github/workflows/release.yml) from the same folder as the zip:
 ;   ISCC.exe /DAppVersion=0.7.0-beta.6 /DNumericVersion=0.7.0 /DSourceDir=<full path>\dist\Verbaliox-v0.7.0-beta.6 /DOutputDir=<full path> installer\verbaliox.iss
 ; Installed for the current user (no administrator rights), into %LOCALAPPDATA%\Programs\Verbaliox:
@@ -36,7 +36,7 @@ DefaultDirName={userpf}\Verbaliox
 DefaultGroupName=Verbaliox
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=Verbaliox-Setup-v{#AppVersion}
+OutputBaseFilename=Verbaliox-Installer-v{#AppVersion}
 SetupIconFile={#SourceDir}\assets\icon.ico
 UninstallDisplayIcon={app}\Verbaliox.exe
 UninstallDisplayName=Verbaliox
