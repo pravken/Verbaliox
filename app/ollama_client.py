@@ -210,10 +210,44 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
     return False
 
 
+def _user_env(name: str) -> str:
+    """A user environment variable as saved in the registry (a process started before it was set
+    does not see it in os.environ)."""
+    if sys.platform != "win32":
+        return ""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            return str(winreg.QueryValueEx(key, name)[0]).strip()
+    except OSError:
+        return ""
+
+
 def ollama_models_dir() -> str:
     """Where Ollama keeps its models (OLLAMA_MODELS, or .ollama\\models in the user's folder)."""
-    custom = os.environ.get("OLLAMA_MODELS", "").strip()
+    custom = os.environ.get("OLLAMA_MODELS", "").strip() or _user_env("OLLAMA_MODELS")
     return custom or str(Path.home() / ".ollama" / "models")
+
+
+def use_program_folder_for_ollama_models() -> None:
+    """Before the app installs Ollama: its models (gigabytes each) go next to the program, as the speech
+    models do, instead of the system disk. Only when nobody chose a folder (OLLAMA_MODELS) and Ollama
+    has no models in its default folder yet, which would be left behind."""
+    if sys.platform != "win32" or os.environ.get("OLLAMA_MODELS") or _user_env("OLLAMA_MODELS"):
+        return
+    if (Path.home() / ".ollama" / "models").exists():
+        return
+    from app.paths import MODELS_DIR
+
+    target = MODELS_DIR / "ollama"
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        os.environ["OLLAMA_MODELS"] = str(target)  # the server this app starts
+        subprocess.run(["setx", "OLLAMA_MODELS", str(target)], capture_output=True, timeout=30,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # Ollama started by itself
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def delete_ollama_model(name: str) -> None:
@@ -346,6 +380,7 @@ def _install_ollama_if_needed() -> bool:
         return True
 
     _append_log("Сервер Ollama не найден на ПК. Запускаю автоматическую установку Ollama через winget")
+    use_program_folder_for_ollama_models()
     _pull_state["progress"] = 5
 
     cmd = [

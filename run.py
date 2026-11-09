@@ -2,6 +2,7 @@ import argparse
 import ctypes
 import os
 import socket
+import shutil
 import sys
 import threading
 import time
@@ -929,6 +930,9 @@ def main() -> None:
         if envmove.needed(APP_DIR, DATA_DIR) and envmove.launch(APP_DIR, DATA_DIR):
             return
         envmove.cleanup(APP_DIR, DATA_DIR)
+        from app.paths import UV_CACHE_DIR
+
+        shutil.rmtree(UV_CACHE_DIR, ignore_errors=True)  # packages uv downloaded for an install that is over
         drop_former_launcher(APP_DIR)
         from app.pyenv import mark_requirements
 
