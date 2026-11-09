@@ -673,6 +673,9 @@ def _batch_size_for(device: str, hw: Dict[str, Any]) -> int:
     return 4
 
 
+AUTO_CHAPTERS_MIN_SEC = 600  # chapters are made by themselves for recordings this long
+
+
 def _detect_speech_language(wav_path: Path, main: str, device: str, compute_type: str) -> Optional[str]:
     """The language of the first minute, heard by the main model (app/speech_route.py): Whisper names
     it, GigaAM / Parakeet write text whose letters show it. None when it cannot tell (too little
@@ -1175,6 +1178,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         # 4. Automatic AI Summary via local Ollama (if enabled and Ollama has a model)
         auto_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true") and not skipped
+        total_len = max((float(x.get("end") or 0) for x in merged_segments), default=0.0)
         summaries = meeting.get("summaries") or {}
 
         if auto_summary and merged_segments:
@@ -1208,6 +1212,17 @@ def _process_meeting_job(meeting_id: int) -> None:
                         summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
                     summaries["protocol"] = summary_md
                     merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))
+                    # The topics above the timeline: worth it for a meeting long enough to have several
+                    if settings.get("auto_chapters", "true").lower() == "true" and total_len >= AUTO_CHAPTERS_MIN_SEC:
+                        try:
+                            update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
+                            chapters_md = generate_meeting_summary(
+                                segments=merged_segments, speakers=speakers_meta, template_key="chapters",
+                                answer_lang=detected_lang, local_only=local_only)
+                            summaries["chapters"] = chapters_md
+                            merge_summaries(meeting_id, {"chapters": chapters_md})
+                        except Exception as ch_err:
+                            print(f"[chapters] meeting {meeting_id}: {ch_err}", flush=True)
                     if settings.get("auto_commitments", "true").lower() == "true":
                         try:
                             from app import commitments

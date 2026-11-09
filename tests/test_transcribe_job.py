@@ -271,3 +271,42 @@ class LanguageChoiceTest(unittest.TestCase):
         german = [{"start": 0.0, "end": 2.0, "text": "Wir haben heute nicht viel Zeit und die Aufgabe ist eine andere", "words": []}]
         m = self._run(lambda *a, **k: german)
         self.assertEqual((m["language"], m["language_choice"]), ("de", "auto"))
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class AutoChaptersTest(unittest.TestCase):
+    """The topics above the timeline are made with the overview for a meeting of 10 minutes or more."""
+
+    _run = ProcessMeetingJobTest._run
+
+    def setUp(self):
+        ProcessMeetingJobTest.setUp(self)
+        update_settings({"auto_summary": "true", "auto_commitments": "false", "summary_grounding": "false"})
+        self.addCleanup(update_settings, {"auto_summary": "false", "auto_commitments": "true", "summary_grounding": "true"})
+        from app import llm
+
+        for p in (mock.patch.object(llm, "available", return_value=True),
+                  mock.patch.object(llm, "uses_cloud", return_value=False)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _templates(self, end):
+        made = []
+
+        def summary(**kw):
+            made.append(kw["template_key"])
+            return "- [00:00] Начало — вступление\n- [05:00] Итоги — решения" if kw["template_key"] == "chapters" else "## Итоги"
+
+        segs = [{"start": 0.0, "end": end, "text": "длинный разговор", "words": []}]
+        with mock.patch.object(transcriber, "generate_meeting_summary", side_effect=summary):
+            m = self._run(lambda *a, **k: segs)
+        return made, m
+
+    def test_long_meeting_gets_chapters(self):
+        made, m = self._templates(900.0)
+        self.assertEqual(made, ["protocol", "chapters"])
+        self.assertIn("[05:00] Итоги", m["summaries"]["chapters"])
+
+    def test_short_one_does_not(self):
+        made, _m = self._templates(120.0)
+        self.assertEqual(made, ["protocol"])
