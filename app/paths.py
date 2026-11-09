@@ -67,6 +67,12 @@ DATA_DIR = Path(
     _ENV_DATA_DIR or (LEGACY_DATA_DIR if PACKAGED_PYTHON else _default_data_dir())
 ).expanduser().resolve()
 MODELS_DIR = Path(os.environ.get("VERBALIOX_MODELS_DIR") or (APP_DIR / "models")).expanduser().resolve()
+# What uv downloads (its package cache, the Python it installs) stays next to the program, as setup.bat
+# sets it, not on the system disk; every uv the app starts inherits these
+UV_CACHE_DIR = APP_DIR / ".uv-cache"
+UV_PYTHON_DIR = APP_DIR / "python"
+os.environ.setdefault("UV_CACHE_DIR", str(UV_CACHE_DIR))
+os.environ.setdefault("UV_PYTHON_INSTALL_DIR", str(UV_PYTHON_DIR))
 
 
 def _log(msg: str) -> None:

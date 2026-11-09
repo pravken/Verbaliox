@@ -1,5 +1,9 @@
 @echo off
 cd /d "%~dp0"
+rem What uv downloads (its package cache, the Python it installs) stays in the program folder, not on
+rem the system disk: the Python is not in AppData either, where a company policy may block programs
+set "UV_CACHE_DIR=%~dp0.uv-cache"
+set "UV_PYTHON_INSTALL_DIR=%~dp0python"
 
 echo ==============================================================
 echo   Verbaliox - optional Translate ^& Dub environment (.venv-dub)
@@ -35,6 +39,8 @@ if defined UV (
 "%DUBPY%" -m pip install --no-deps --require-hashes -r requirements-dub-voxcpm.txt
 
 :done
+rem The packages are in the environment now: their downloads go (gigabytes)
+if exist ".uv-cache" rmdir /s /q ".uv-cache"
 echo.
 echo Done. Model weights (~5 GB) are downloaded on the first dubbing job into models\dub.
 goto :eof

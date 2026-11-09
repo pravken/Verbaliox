@@ -1676,10 +1676,45 @@ async function uploadFiles(fileList, opts = {}) {
   if (opts.processing) fd.append('processing', JSON.stringify(opts.processing));
   if (opts.title) fd.append('title', opts.title);
   if (opts.folderId != null) fd.append('folder_id', String(opts.folderId));
-  const res = await fetch('/api/meetings/upload', { method: 'POST', body: fd });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(serverText(data.detail) || `HTTP ${res.status}`);
-  return data.created || [];
+  // XMLHttpRequest, not fetch: it tells how much of the files went (opts.onProgress, 0…1)
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/meetings/upload');
+    if (opts.onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total) opts.onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data.created || []);
+      else reject(new Error(serverText(data.detail) || `HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error(t('uploadFailed')));
+    xhr.send(fd);
+  });
+}
+
+// Files go to the library in the background: the window that sent them is closed already, a notice
+// shows how much went; then the list shows them, the first one opened if the library is still in view
+async function uploadInBackground(files, opts, after) {
+  const name = files.length === 1 ? files[0].name : plural(files.length, t('impItemsForms'));
+  const note = progressToast(t('impUploading').replace('{name}', () => name).replace('{pct}', () => '0'));
+  let last = -1;
+  try {
+    const created = await uploadFiles(files, { ...opts, onProgress: (r) => {
+      const pct = Math.floor(r * 100);
+      if (pct === last) return;
+      last = pct;
+      // all sent: the app is writing the file and putting it in the queue
+      note.set(pct >= 100 ? t('impUploadSaving').replace('{name}', () => name)
+        : t('impUploading').replace('{name}', () => name).replace('{pct}', () => pct));
+    } });
+    note.done();
+    if (after) await after(created || []);
+    return created || [];
+  } catch (err) {
+    note.done();
+    showError(`${t('impUploadFailed').replace('{name}', () => name)}: ${humanError(err.message || err).short}`);
+    return [];
+  }
 }
 
 // Files chosen or dropped: into the open import window, into a new one (it asks the processing), or
@@ -1688,17 +1723,15 @@ async function handleFileSelect(fileList) {
   if (!fileList || fileList.length === 0) return;
   if (impIsOpen()) { impAddFiles(fileList); return; }
   if (askImportParams()) { openImportDialog({ files: fileList }); return; }
-  try {
-    const created = await uploadFiles(Array.from(fileList), { source: 'import' });
-    document.getElementById('file-input').value = '';
-    if (!created || !created.length) return;
+  if (!requireRecognitionModel()) return;
+  const files = Array.from(fileList);
+  document.getElementById('file-input').value = '';
+  return uploadInBackground(files, { source: 'import' }, async (created) => {
+    if (!created.length) return;
     switchAppView('library');
     await loadMeetingsList();
     await selectMeeting(created[0].id, true);
-    return created;
-  } catch (err) {
-    showError(String(err.message || err));
-  }
+  });
 }
 
 // --- Sidebar width: dragged on its right edge, kept per computer ---

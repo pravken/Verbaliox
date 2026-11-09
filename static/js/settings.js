@@ -455,7 +455,9 @@ function renderModelsPop() {
       ${m.need ? `<span class="mp-dl-need ${m.short ? 'mp-dl-short' : ''}" title="${escapeHtml(m.short ? t('mpNeedMore') : '')}">${escapeHtml(m.need)}</span>` : ''}
       ${m.downloading ? `<span class="mp-dl-btn mp-dl-busy">${escapeHtml(t('mpDownloading'))}${(() => { const d = modelDownloadsNow().find(x => x.id === m.id); return d && d.pct ? ` · ${d.pct}%` : ''; })()}</span>`
         : `<button data-click="${m.fn}" data-click-args='[${jsArg(m.id)}]' class="mp-dl-btn" title="${escapeHtml(t('tipDownloadModel'))}">↓ ${escapeHtml(m.size)}</button>`}</div>`).join('');
+  const anyLoaded = (vram.chips || []).some(c => c.loaded && c.kind !== 'dub');
   pop.innerHTML = `<div class="mp-head"><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
+      ${anyLoaded ? `<button data-click="unloadAllModelsNow" class="mp-unload" title="${escapeHtml(t('tipUnloadAll'))}" ${vram.busy ? 'disabled' : ''}>${escapeHtml(t('mpUnloadAll'))}</button>` : ''}
       <button data-click="closeModelsPop" class="mp-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button></div>
     ${vram.data?.gpu ? section('gpu', parts.gpu) : ''}${section('cpu', parts.cpu)}
     ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">

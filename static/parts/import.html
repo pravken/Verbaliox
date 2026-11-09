@@ -18,21 +18,22 @@
             <span data-i18n="dropFilesHere">Нажмите для выбора файлов или перетащите их сюда</span>
             <span class="imp-empty-sub">MP4, MKV, MOV, WEBM, MP3, WAV, M4A</span>
           </div>
-          <div id="imp-link-row" class="imp-inline hidden">
+          <!-- A link and a path on the disk are typed right here, not behind a button -->
+          <div id="imp-link-row" class="imp-inline">
+            <span class="imp-row-label" data-i18n="impLinkLabel">Ссылка</span>
             <input id="url-import-input" type="url" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "impAddLink"]' placeholder="https://…" class="imp-input" data-i18n-title="impLinkTitle" title="Ссылка на видео или подкаст" />
             <button data-click="impAddLink" class="imp-btn imp-btn-primary" data-i18n="addBtnText">Добавить</button>
           </div>
-          <div id="imp-path-row" class="imp-inline hidden">
+          <p id="imp-link-note" class="imp-hint imp-link-note" data-i18n="urlImportHint">Скачивается только звук. Используйте для записей, которые вы вправе скачивать.</p>
+          <div id="imp-path-row" class="imp-inline">
+            <span class="imp-row-label" data-i18n="impPath" data-i18n-title="impPathTitle" title="Файл или папка на диске добавляются без копирования">Путь на диске</span>
             <input id="local-path-input" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "impAddPath"]' data-i18n-placeholder="impPathPlaceholder" placeholder="Полный путь к файлу или папке" class="imp-input" data-i18n-title="tipLocalPathInput" title="Укажите полный путь к файлу или папке на диске" />
             <button data-click="impAddPath" class="imp-btn imp-btn-primary" data-i18n="addBtnText">Добавить</button>
           </div>
           <div class="imp-adders">
             <button data-click="clickElement" data-click-args='["file-input"]' class="imp-btn" data-i18n="impAddFiles">+ Файлы…</button>
-            <button data-click="impShowRow" data-click-args='["link"]' class="imp-btn" data-i18n="impPasteLink">Вставить ссылку</button>
-            <button data-click="impShowRow" data-click-args='["path"]' class="imp-btn" data-i18n-title="impPathTitle" title="Файл или папка на диске добавляются без копирования" data-i18n="impPath">Путь на диске</button>
             <span class="flex-1"></span>
           </div>
-          <p id="imp-link-note" class="imp-hint hidden" data-i18n="urlImportHint">Скачивается только звук. Используйте для записей, которые вы вправе скачивать.</p>
         </div>
 
         <section class="imp-sec">

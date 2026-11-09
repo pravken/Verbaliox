@@ -292,9 +292,11 @@
         <div id="studio-vram-chips" class="flex flex-wrap gap-1"></div>
         <button data-click="toggleStudioFocus" data-click-args='[false]' class="ui-btn ui-btn-subtle h-8 ml-auto shrink-0" data-i18n="studioFocusExitEsc">Свернуть (Esc)</button>
       </div>
-      <div id="studio-captions" class="flex-1 min-h-0 overflow-y-auto px-8 py-6">
+      <div id="studio-captions" class="flex-1 min-h-0 overflow-y-auto px-8 pb-6">
         <div id="studio-captions-inner" class="max-w-6xl mx-auto">
-          <div id="studio-cap-head" class="hidden grid grid-cols-2 gap-8 text-[11.5px] uppercase tracking-wider text-apple-tertiary sticky top-0 bg-apple-bg/95 py-1 mb-2 z-10">
+          <!-- Sticky over the captions: the top padding is its own (a padding of the scrolling box would leave
+               a gap above it), on a solid background with a fade, so no line shows through or above it -->
+          <div id="studio-cap-head" class="hidden grid grid-cols-2 gap-8 text-[11.5px] uppercase tracking-wider text-apple-tertiary sticky top-0 bg-apple-bg pb-2 mb-2 z-10 studio-cap-head">
             <div id="studio-cap-head-orig"></div><div id="studio-cap-head-tr"></div>
           </div>
           <div id="studio-cap-rows" class="cap-rows"></div>
