@@ -63,7 +63,9 @@ def _same_task(x: Dict[str, Any], y: Dict[str, Any]) -> bool:
     if a == b:
         return True
     near = x.get("at") is not None and y.get("at") is not None and abs(x["at"] - y["at"]) <= 5
-    return near and SequenceMatcher(None, a, b).ratio() >= 0.8
+    wa, wb = set(a.split()), set(b.split())
+    # at one moment, words reordered or one word changed: the sets of words mostly the same
+    return near and (len(wa & wb) / max(1, len(wa | wb)) >= 0.6 or SequenceMatcher(None, a, b).ratio() >= 0.8)
 
 
 def prune(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
