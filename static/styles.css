@@ -2395,3 +2395,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 }
 /* The notice of a file going to the library (core.js progressToast): the percent does not jump */
 .toast-progress .toast-text { font-variant-numeric: tabular-nums; }
+/* The column titles of the Studio captions (workspace.html #studio-cap-head) */
+.studio-cap-head { padding-top: 24px; }
+.studio-cap-head::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(rgb(20 20 22), rgba(20, 20, 22, 0)); pointer-events: none; }
+.studio-cap-head.hidden + .cap-rows { margin-top: 24px; }
