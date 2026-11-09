@@ -676,10 +676,10 @@ class TorchCudaArchTest(unittest.TestCase):
 
 
 class TaskPruneTest(unittest.TestCase):
-    """A long meeting does not turn into dozens of tasks; a renamed speaker's tasks follow the name."""
+    """Tasks are found with a second look at each one; a renamed speaker's tasks follow the name."""
 
-    def test_repeats_go_and_the_clearest_stay(self):
-        from app.commitments import MAX_TASKS, prune
+    def test_repeats_go_and_none_is_cut_by_count(self):
+        from app.commitments import prune
 
         items = [{"what": "Подготовить отчёт к пятнице", "who": "Иван", "due": "пятница"},
                  {"what": "подготовить отчёт к пятнице.", "who": "Иван", "due": ""},
@@ -690,12 +690,37 @@ class TaskPruneTest(unittest.TestCase):
         verbs = ["Отправить", "Подготовить", "Проверить", "Согласовать", "Обновить", "Созвониться о", "Написать про",
                  "Собрать", "Посчитать", "Найти"]
         topics = ["бюджет", "договор с поставщиком", "макет главной", "план релиза"]
-        many = [{"what": f"{verbs[i % 10]} {topics[i // 10]}", "who": "Иван" if i % 3 == 0 else "", "due": ""}
-                for i in range(40)]
-        kept = prune(many)
-        self.assertEqual(len(kept), MAX_TASKS)
-        self.assertEqual(sum(1 for x in kept if x["who"]), sum(1 for x in many if x["who"]))  # those with an assignee first
-        self.assertEqual(kept, sorted(kept, key=many.index))  # in the order of the recording
+        many = [{"what": f"{v} {tp}", "who": "Иван", "due": ""} for tp in topics for v in verbs]
+        self.assertEqual(len(prune(many)), 40)  # no limit: what is a task is decided by the second look
+        moment = [{"what": "Отправить отчёт Петру", "who": "Анна", "due": "", "at": 100.0},
+                  {"what": "Отправить Петру отчёт", "who": "Анна", "due": "", "at": 102.0},
+                  {"what": "Проверить отчёт Петру", "who": "Анна", "due": "", "at": 400.0}]
+        self.assertEqual(len(prune(moment)), 2)  # the same moment in other words: once
+
+    def test_second_look_keeps_only_what_it_confirms(self):
+        from app.commitments import verify
+
+        items = [{"who": "Иван", "what": "Отправить отчёт", "quote": "я отправлю отчёт завтра", "at": 60.0, "due": ""},
+                 {"who": "Анна", "what": "Работать над макетом", "quote": "я сейчас делаю макет", "at": 120.0, "due": ""},
+                 {"who": "", "what": "Обсудить бюджет", "quote": "надо бы обсудить бюджет", "at": None, "due": ""}]
+        m = {"segments": [{"start": 55.0, "speaker": "S1", "text": "я отправлю отчёт завтра"},
+                          {"start": 118.0, "speaker": "S2", "text": "я сейчас делаю макет"}],
+             "speakers": {"S1": {"name": "Иван"}, "S2": {"name": "Анна"}}}
+        asked = []
+
+        class Llm:
+            def chat(self, system, user):
+                asked.append(user)
+                return "1: да\n2: нет\n3: нет"
+
+        self.assertEqual([x["what"] for x in verify(items, m, Llm())], ["Отправить отчёт"])
+        self.assertIn("я отправлю отчёт завтра", asked[0])  # the lines around the moment go with it
+
+        class Mute:
+            def chat(self, system, user):
+                return "не знаю"
+
+        self.assertEqual(len(verify(items, m, Mute())), 3)  # no readable answer: the first pass stands
 
     def test_rename_moves_the_tasks(self):
         from app import commitments
