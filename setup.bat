@@ -1,6 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
+rem What uv downloads (its package cache, the Python it installs) stays in the program folder, not on
+rem the system disk: the Python is not in AppData either, where a company policy may block programs
+set "UV_CACHE_DIR=%~dp0.uv-cache"
+set "UV_PYTHON_INSTALL_DIR=%~dp0python"
 rem /quiet: started by the setup window of Verbaliox.exe, which shows the "##STEP" lines as its progress
 rem and the rest in its log; no pause at the end. An existing .venv is kept and its libraries are
 rem brought to requirements.txt (a newer version installed over an older one)
@@ -107,6 +111,8 @@ echo [2/2] Installing dependencies via pip...
 if errorlevel 1 goto :install_failed
 
 :done
+rem The packages are in the environment now: their downloads go (gigabytes)
+if exist ".uv-cache" rmdir /s /q ".uv-cache"
 rem The requirements this environment has (app/pyenv.py REQUIREMENTS_MARK): the launcher compares it
 ".venv\Scripts\python.exe" -c "import hashlib; open(r'.venv\verbaliox-requirements.sha256', 'w').write(hashlib.sha256(open('requirements.txt', 'rb').read()).hexdigest())"
 echo.

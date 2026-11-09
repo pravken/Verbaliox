@@ -331,6 +331,10 @@ class SetupWindowTest(unittest.TestCase):
         fallback = text.split("uv could not make a working environment")[1]
         self.assertIn('set "UV="', fallback[:fallback.index("if defined UV (")])
         self.assertIn("--accept-package-agreements\r\n", text)  # winget's answer goes to the log, not to nul
+        # uv's downloads and Python stay in the program folder, not on the system disk / in AppData
+        self.assertIn('set "UV_CACHE_DIR=%~dp0.uv-cache"', text)
+        self.assertIn('set "UV_PYTHON_INSTALL_DIR=%~dp0python"', text)
+        self.assertIn('rmdir /s /q ".uv-cache"', text)
         dub = (root / "setup_dub.bat").read_text(encoding="ascii")
         self.assertIn('"%UV%" pip install', dub)
         self.assertNotIn("where uv >nul", dub)
@@ -371,6 +375,22 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("installer\\verbaliox.iss", wf)
         self.assertIn("Verbaliox-Installer-*.exe", wf)
         self.assertIn('$setup.FullName -Algorithm SHA256', wf)  # in SHA256SUMS.txt, so signed
+
+    def test_installer_shows_the_folder_and_moves_the_program(self):
+        """The folder page says where Verbaliox is installed; another folder takes the environment, the
+        models and uv's Python along, and pyvenv.cfg and OLLAMA_MODELS follow."""
+        from pathlib import Path
+
+        iss = (Path(__file__).resolve().parent.parent / "installer" / "verbaliox.iss").read_text(encoding="utf-8-sig")
+        self.assertIn("DisableDirPage=no", iss)
+        self.assertIn("ru.AlreadyInstalled=", iss)
+        self.assertIn("en.AlreadyInstalled=", iss)
+        for name in (".venv", ".venv-dub", "models", "python"):
+            self.assertIn(f"MoveHeavy('{name}');", iss)
+        self.assertIn("FixVenv('.venv');", iss)
+        self.assertIn("FixOllamaModels();", iss)
+        for name in (".uv-cache", "python"):
+            self.assertIn(f'Name: "{{app}}\\{name}"', iss)
 
 
 class DisplaySanitizeTest(unittest.TestCase):
@@ -524,3 +544,86 @@ class UrlImportRestartTest(unittest.TestCase):
                 mock.patch.object(url_import.threading, "Thread") as thread:
             self.assertFalse(url_import.restart(77, "https://example.com/v"))
         thread.assert_not_called()
+
+
+class ProgramFolderDownloadsTest(unittest.TestCase):
+    """uv's cache and Python, and Ollama's models when the app installs Ollama, go next to the program."""
+
+    def test_uv_inherits_the_program_folder(self):
+        import os
+
+        from app import paths
+
+        self.assertEqual(os.environ.get("UV_CACHE_DIR"), str(paths.UV_CACHE_DIR))
+        self.assertEqual(os.environ.get("UV_PYTHON_INSTALL_DIR"), str(paths.UV_PYTHON_DIR))
+        self.assertEqual(paths.UV_PYTHON_DIR.parent, paths.APP_DIR)
+
+    def test_ollama_models_next_to_the_program_only_when_nothing_is_chosen(self):
+        import os
+        import tempfile
+        from pathlib import Path
+
+        from app import ollama_client as oc
+
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as models:
+            env = {k: v for k, v in os.environ.items() if k != "OLLAMA_MODELS"}
+            with mock.patch.object(oc.sys, "platform", "win32"), mock.patch.dict(oc.os.environ, env, clear=True), \
+                    mock.patch.object(oc, "_user_env", return_value=""), \
+                    mock.patch.object(oc.Path, "home", return_value=Path(home)), \
+                    mock.patch("app.paths.MODELS_DIR", Path(models)), \
+                    mock.patch.object(oc.subprocess, "run") as run:
+                oc.use_program_folder_for_ollama_models()
+                self.assertEqual(oc.os.environ["OLLAMA_MODELS"], str(Path(models) / "ollama"))
+                self.assertEqual(run.call_args[0][0][:2], ["setx", "OLLAMA_MODELS"])
+            # Models already in Ollama's own folder: nothing changes, they would be left behind
+            (Path(home) / ".ollama" / "models").mkdir(parents=True)
+            with mock.patch.object(oc.sys, "platform", "win32"), mock.patch.dict(oc.os.environ, env, clear=True), \
+                    mock.patch.object(oc, "_user_env", return_value=""), \
+                    mock.patch.object(oc.Path, "home", return_value=Path(home)), \
+                    mock.patch.object(oc.subprocess, "run") as run:
+                oc.use_program_folder_for_ollama_models()
+                self.assertNotIn("OLLAMA_MODELS", oc.os.environ)
+                run.assert_not_called()
+
+
+class OllamaForceUnloadTest(unittest.TestCase):
+    """Unloading waits until Ollama has really let the model go; one it keeps has its runner stopped."""
+
+    def _run(self, loaded_seq, local=True):
+        from app import vram
+
+        seq = iter(loaded_seq)
+        last = [loaded_seq[-1]]
+        clock = [1000.0]
+
+        def loaded():
+            try:
+                last[0] = next(seq)
+            except StopIteration:
+                pass
+            return [{"name": n} for n in last[0]]
+
+        with mock.patch.object(vram, "OLLAMA_UNLOAD_WAIT_SEC", 1.0), \
+                mock.patch.object(vram, "ollama_loaded", side_effect=loaded), \
+                mock.patch.object(vram, "_stop_ollama_runners") as stop, \
+                mock.patch.object(vram, "_ollama_base", return_value="http://127.0.0.1:11434"), \
+                mock.patch("app.ollama_client._ollama_address", return_value=("127.0.0.1" if local else "10.0.0.5", 11434)), \
+                mock.patch.object(vram.httpx, "Client"), \
+                mock.patch("time.time", side_effect=lambda: clock[0]), \
+                mock.patch("time.sleep", side_effect=lambda sec: clock.__setitem__(0, clock[0] + sec)):
+            left = vram.ollama_unload(["qwen3.5:4b"])
+        return left, stop
+
+    def test_gone_after_asking(self):
+        left, stop = self._run([["qwen3.5:4b"], []])
+        self.assertEqual(left, [])
+        stop.assert_not_called()
+
+    def test_kept_model_has_its_runner_stopped(self):
+        left, stop = self._run([["qwen3.5:4b"]] * 3 + [[]])
+        stop.assert_called_once()
+
+    def test_ollama_on_another_computer_is_never_stopped(self):
+        left, stop = self._run([["qwen3.5:4b"]], local=False)
+        self.assertEqual(left, ["qwen3.5:4b"])
+        stop.assert_not_called()

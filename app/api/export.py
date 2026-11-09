@@ -405,12 +405,13 @@ def api_cancel_pending_exports(meeting_id: int) -> Dict[str, Any]:
     return {"ok": True}
 
 @router.post("/api/vram/unload-all")
-def api_vram_unload_all() -> Dict[str, Any]:
-    """Frees every model the app holds now (the same as the idle timeout)."""
+def api_vram_unload_all(force: bool = True) -> Dict[str, Any]:
+    """Frees every model now: the app's and every model Ollama holds, waiting until they are gone
+    (force; the idle timeout releases only the app's own)."""
     from app import idle_unload
     from app.vram import vram_snapshot
 
     if idle_unload._busy():
         raise HTTPException(status_code=409, detail="Сейчас идёт обработка или запись")
-    res = idle_unload.unload_now()
+    res = idle_unload.unload_now(force=force)
     return {**vram_snapshot(), **res}

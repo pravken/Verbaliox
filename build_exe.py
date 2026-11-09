@@ -879,11 +879,34 @@ class SetupWindow
         });
     }
 
+    // Ollama's models (gigabytes each) go next to the program, as the speech models do, not to the
+    // system disk: only when nobody chose a folder (OLLAMA_MODELS) and Ollama has no models yet in its
+    // default folder (app/ollama_client.use_program_folder_for_ollama_models does the same)
+    void UseProgramFolderForOllamaModels()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OLLAMA_MODELS"))) return;
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OLLAMA_MODELS", EnvironmentVariableTarget.User))) return;
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (Directory.Exists(Path.Combine(Path.Combine(home, ".ollama"), "models"))) return;
+            string models = Environment.GetEnvironmentVariable("VERBALIOX_MODELS_DIR");
+            if (string.IsNullOrEmpty(models)) models = Path.Combine(baseDir, "models");
+            string target = Path.Combine(models, "ollama");
+            Directory.CreateDirectory(target);
+            Environment.SetEnvironmentVariable("OLLAMA_MODELS", target, EnvironmentVariableTarget.User);
+            Environment.SetEnvironmentVariable("OLLAMA_MODELS", target);  // the program started after this window
+            Log("Ollama models: " + target);
+        }
+        catch { }
+    }
+
     // Ollama installs silently; its own window, which its installer opens, is closed: the program
     // starts the Ollama server itself, hidden, when analysis needs it
     void InstallOllama()
     {
         SetState(ollama, 1, T("установка…", "installing…"));
+        UseProgramFolderForOllamaModels();
         current = RunHidden("winget", "install -e --id Ollama.Ollama --silent --accept-source-agreements --accept-package-agreements", Log, delegate(int code)
         {
             for (int i = 0; i < 20; i++)
