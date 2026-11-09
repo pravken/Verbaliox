@@ -339,8 +339,29 @@ class PyEnvTest(unittest.TestCase):
             uv.parent.mkdir(parents=True)
             uv.write_text("")
             with mock.patch.object(pyenv.shutil, "which", return_value=None), \
+                    mock.patch.object(pyenv, "_ok", return_value=True), \
                     mock.patch.dict(pyenv.os.environ, {"USERPROFILE": home, "LOCALAPPDATA": home}):
                 self.assertEqual(pyenv.find_uv(), str(uv))
+
+    def test_uv_that_does_not_start_is_skipped(self):
+        """A work PC: WinGet\\Links\\uv.exe is there, but a policy keeps it from starting ("The system cannot
+        execute the specified program"); the uv of the astral.sh installer is taken instead."""
+        from app import pyenv
+
+        with tempfile.TemporaryDirectory() as home:
+            links = Path(home) / "Microsoft" / "WinGet" / "Links" / "uv.exe"
+            local = Path(home) / ".local" / "bin" / "uv.exe"
+            for f in (links, local):
+                f.parent.mkdir(parents=True)
+                f.write_text("")
+            with mock.patch.object(pyenv.shutil, "which", return_value=str(links)), \
+                    mock.patch.object(pyenv, "_ok", side_effect=lambda cmd: cmd[0] == str(local)), \
+                    mock.patch.dict(pyenv.os.environ, {"USERPROFILE": home, "LOCALAPPDATA": home}):
+                self.assertEqual(pyenv.find_uv(), str(local))
+            with mock.patch.object(pyenv.shutil, "which", return_value=str(links)), \
+                    mock.patch.object(pyenv, "_ok", return_value=False), \
+                    mock.patch.dict(pyenv.os.environ, {"USERPROFILE": home, "LOCALAPPDATA": home}):
+                self.assertIsNone(pyenv.find_uv())
 
 
 class NativeDialogTest(unittest.TestCase):

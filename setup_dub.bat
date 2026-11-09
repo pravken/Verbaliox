@@ -39,14 +39,20 @@ echo.
 echo Done. Model weights (~5 GB) are downloaded on the first dubbing job into models\dub.
 goto :eof
 
-rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget
+rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget. A uv that
+rem --- does not start is skipped: on a work PC a policy may forbid programs in AppData ("The system
+rem --- cannot execute the specified program")
 :find_uv
 set "UV="
-for /f "delims=" %%u in ('where uv 2^>nul') do if not defined UV set "UV=%%u"
-for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do (
-    if not defined UV if exist "%%~p" set "UV=%%~p"
-)
-for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do (
-    if not defined UV if exist "%%~d\uv.exe" set "UV=%%~d\uv.exe"
-)
+for /f "delims=" %%u in ('where uv 2^>nul') do call :try_uv "%%u"
+for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do call :try_uv "%%~p"
+for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do call :try_uv "%%~d\uv.exe"
+goto :eof
+
+:try_uv
+if defined UV goto :eof
+if not exist "%~1" goto :eof
+"%~1" --version >nul 2>nul
+if not errorlevel 1 set "UV=%~1"
+if not defined UV echo       uv does not start here, skipped: %~1
 goto :eof

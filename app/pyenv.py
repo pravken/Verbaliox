@@ -40,19 +40,19 @@ def mark_requirements(app_dir: Path, only_if_missing: bool = False) -> None:
 
 
 def find_uv() -> Optional[str]:
-    """uv on PATH or where its installers put it (the app may start without the updated PATH)."""
-    found = shutil.which("uv")
-    if found:
-        return found
+    """uv that starts, on PATH or where its installers put it (the app may start without the updated PATH).
+    A uv.exe that does not start is skipped: on a work PC a policy may forbid programs in AppData
+    (setup.bat :find_uv)."""
     home = Path(os.environ.get("USERPROFILE") or Path.home())
-    for c in (home / ".local" / "bin" / "uv.exe", home / ".cargo" / "bin" / "uv.exe",
-              Path(os.environ.get("LOCALAPPDATA") or home) / "Microsoft" / "WinGet" / "Links" / "uv.exe"):
-        if c.is_file():
+    local = Path(os.environ.get("LOCALAPPDATA") or home)
+    candidates = [shutil.which("uv"),
+                  home / ".local" / "bin" / "uv.exe", home / ".cargo" / "bin" / "uv.exe",
+                  local / "Microsoft" / "WinGet" / "Links" / "uv.exe",
+                  # winget's own package folder, when it could not make the shortcut in WinGet\Links
+                  *sorted((local / "Microsoft" / "WinGet" / "Packages").glob("astral-sh.uv*/uv.exe"))]
+    for c in candidates:
+        if c and Path(c).is_file() and _ok([str(c), "--version"]):
             return str(c)
-    # winget's own package folder, when it could not make the shortcut in WinGet\Links (setup.bat :find_uv)
-    packages = Path(os.environ.get("LOCALAPPDATA") or home) / "Microsoft" / "WinGet" / "Packages"
-    for c in sorted(packages.glob("astral-sh.uv*/uv.exe")):
-        return str(c)
     return None
 
 
