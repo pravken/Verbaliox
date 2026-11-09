@@ -205,7 +205,14 @@ def _speaker_edit(meeting_id: int, run) -> Dict[str, Any]:
 def api_merge_speakers(meeting_id: int, payload: SpeakerMergePayload) -> Dict[str, Any]:
     from app.people import merge_speakers
 
-    return _speaker_edit(meeting_id, lambda: merge_speakers(meeting_id, payload.source, payload.target))
+    before = (get_meeting(meeting_id) or {}).get("speakers") or {}
+    names = [str((before.get(k) or {}).get("name") or "") for k in (payload.source, payload.target)]
+    m = _speaker_edit(meeting_id, lambda: merge_speakers(meeting_id, payload.source, payload.target))
+    if all(names):
+        from app import commitments
+
+        commitments.rename_person(meeting_id, names[0], names[1])  # the tasks of the merged one go with it
+    return m
 
 @router.post("/api/meetings/{meeting_id}/speakers/split")
 def api_split_speaker(meeting_id: int, payload: SpeakerSplitPayload) -> Dict[str, Any]:

@@ -20,15 +20,44 @@ from typing import Any, Dict, List, Optional
 from app.database import _db_lock, get_connection, get_meeting
 
 _SYSTEM = (
-    "Ты извлекаешь из расшифровки встречи обещания и поручения: кто взялся что-то сделать, для кого и к какому сроку. "
-    "Только то, что прямо сказано в тексте; не придумывай. Ответ — только строки JSON, по одному объекту на строку, "
-    'без пояснений: {"who": "кто сделает", "kind": "кто это", "to": "для кого (или пусто)", "what": "что сделать, коротко", '
-    '"due": "срок словами из текста или пусто", "time": "ММ:СС места в записи", '
+    "Ты извлекаешь из расшифровки встречи задачи: конкретные действия, которые кто-то взялся сделать или которые "
+    "ему поручили сделать после встречи. Задача — только если в тексте есть явное обязательство или поручение: "
+    "«сделаю», «подготовлю к пятнице», «Иван, отправь отчёт», «договорились, что Пётр займётся». "
+    "НЕ задачи: обсуждение и мнения, рассказ о том, что человек делает сейчас или уже сделал, идеи и предложения, "
+    "с которыми не согласились, общие планы без конкретного действия, вопросы, пересказ фактов. "
+    "Одна задача — одно действие; одно и то же не повторяй. На обычной встрече задач от 0 до 10; "
+    "если сомневаешься, задача ли это, — не включай. Не придумывай. Ответ — только строки JSON, по одному объекту "
+    'на строку, без пояснений: {"who": "кто сделает", "kind": "кто это", "to": "для кого (или пусто)", '
+    '"what": "что сделать, коротко", "due": "срок словами из текста или пусто", "time": "ММ:СС места в записи", '
     '"quote": "дословные слова из текста, где это сказано"}. '
     "kind — одно из: part (говорит в записи), ext (человек, которого только назвали), team (отдел или группа), "
     "org (другая компания), none (исполнитель не назван, тогда who пусто). "
-    "Имена — как в расшифровке. Если обещаний нет, ответь пустой строкой."
+    "Имена — как в расшифровке. Если задач нет, ответь пустой строкой."
 )
+# A small model still lists half of a long meeting: at most this many tasks a recording, the clearest
+# first (with an assignee and a due date), and near-repeats of one task once
+MAX_TASKS = 15
+
+
+def _same_task(a: str, b: str) -> bool:
+    from difflib import SequenceMatcher
+
+    norm = lambda t: re.sub(r"[^\w ]+", "", t.casefold()).strip()
+    return SequenceMatcher(None, norm(a), norm(b)).ratio() >= 0.9
+
+
+def prune(items: List[Dict[str, Any]], limit: int = MAX_TASKS) -> List[Dict[str, Any]]:
+    """Near-repeats dropped, then the clearest `limit` kept, in the order of the recording."""
+    out: List[Dict[str, Any]] = []
+    for x in items:
+        if not any(x["who"].casefold() == y["who"].casefold() and _same_task(x["what"], y["what"]) for y in out):
+            out.append(x)
+    if len(out) > limit:
+        ranked = sorted(out, key=lambda x: (-(bool(x["who"]) * 2 + bool(x["due"])), out.index(x)))
+        keep = {id(x) for x in ranked[:limit]}
+        out = [x for x in out if id(x) in keep]
+    return out
+
 
 # Who a task is on: someone who speaks in the recording, someone only named in it, a department or
 # a group, another company, nobody
@@ -227,7 +256,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         raise ValueError("Нет текста записи")
     llm = target(model_name, local_only=is_local_only(m))
     text = "\n".join(build_transcript_lines(m["segments"], m.get("speakers") or {}))[: max(8000, llm.max_chars - 3000)]
-    items = [x for x in parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + text)) if supported(x, m)]
+    items = prune([x for x in parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + text)) if supported(x, m)])
     _init()
     now = datetime.now().isoformat(timespec="seconds")
     day, speaking = _meeting_day(m), {n.casefold() for n in participants(m)}
@@ -561,6 +590,30 @@ def report_by_model(facts: Dict[str, Any], local_only: bool = False, model_name:
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     return {**facts, "lines": [{"text": p, "tone": ""} for p in paragraphs], "text": facts["title"] + "\n\n" + "\n\n".join(paragraphs),
             "model": llm.label, "cloud": llm.is_cloud}
+
+
+def rename_person(meeting_id: int, old: str, new: str) -> int:
+    """A speaker renamed (or merged into another) in a recording: its tasks follow, as assignee and
+    as the one they are for. Tasks are kept by name, so the old name would stay otherwise."""
+    old, new = (old or "").strip(), (new or "").strip()
+    if not old or not new or old == new:
+        return 0
+    _init()
+    with _db_lock:
+        conn = get_connection()
+        try:
+            # compared here: SQLite's NOCASE folds Latin letters only, not Cyrillic
+            n, key = 0, old.casefold()
+            for r in conn.execute("SELECT id, who, to_whom FROM commitments WHERE meeting_id = ?", (meeting_id,)).fetchall():
+                who = new if (r["who"] or "").strip().casefold() == key else r["who"]
+                to = new if (r["to_whom"] or "").strip().casefold() == key else r["to_whom"]
+                if (who, to) != (r["who"], r["to_whom"]):
+                    conn.execute("UPDATE commitments SET who = ?, to_whom = ? WHERE id = ?", (who, to, r["id"]))
+                    n += 1
+            conn.commit()
+        finally:
+            conn.close()
+    return n
 
 
 def set_status(commitment_id: int, status: str) -> None:

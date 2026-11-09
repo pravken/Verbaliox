@@ -679,6 +679,7 @@ def api_update_speaker(meeting_id: int, payload: SpeakerUpdatePayload) -> Dict[s
         raise HTTPException(status_code=400, detail="Цвет должен быть в формате #RRGGBB")
     name = payload.name.strip()[:120]
     learned: List[Any] = []  # the voice to teach its profile, after the change (it uses the database)
+    renamed: List[str] = []  # the former name, for the tasks of the recording
 
     def change(m: Dict[str, Any]) -> tuple:
         speakers = m.get("speakers") or {}
@@ -697,6 +698,7 @@ def api_update_speaker(meeting_id: int, payload: SpeakerUpdatePayload) -> Dict[s
             if payload.color:
                 spk["color"] = payload.color
             if name and name != old_name:
+                renamed.append(old_name)
                 learned.append(spk.get("embedding"))
                 spk.pop("voice_profile", None)
             if payload.dismiss_suggestion or (name and name != old_name):
@@ -707,6 +709,10 @@ def api_update_speaker(meeting_id: int, payload: SpeakerUpdatePayload) -> Dict[s
     m = edit_meeting(meeting_id, change)
     if m is None:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if renamed:
+        from app import commitments
+
+        commitments.rename_person(meeting_id, renamed[0], name)  # its tasks take the new name
     if learned:
         # Naming a voice teaches its profile: later recordings get the name automatically
         from app.voice_profiles import learn
