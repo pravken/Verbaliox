@@ -181,6 +181,7 @@ def init_db() -> None:
             "summary_templates": "[]",  # the user's own summary templates, JSON (summary_templates())
             "summary_grounding": "true",  # summaries checked against the transcript (app/grounding.py)
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
+            "auto_chapters": "true",  # the topics above the timeline, after the automatic summary (> 10 min)
             "delete_media_after": "false",  # the sound deleted once a recording is transcribed (privacy)
             "media_retention_days": "0",  # the sound of older recordings deleted; 0: kept
             "update_auto": "true",  # download updates by themselves, install on exit (app/updater.py)
