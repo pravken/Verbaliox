@@ -36,10 +36,27 @@ def _reply(obj) -> None:
     _stdout.flush()
 
 
+_dev = []
+
+
 def _device() -> str:
+    """The video card when PyTorch can run on it: a card the build has no kernels for (an RTX 50 for a
+    CUDA 12.6 build) fails with "no kernel image is available" at the first operation (app/hardware.py
+    torch_cuda_works does the same in the app)."""
+    if _dev:
+        return _dev[0]
     import torch
 
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    dev = "cpu"
+    if torch.cuda.is_available():
+        try:
+            x = torch.nn.functional.pad(torch.ones(1, 1, 4, device="cuda"), [1, 1], mode="reflect")
+            torch.cuda.synchronize()
+            dev = "cuda" if float(x.sum()) > 0 else "cpu"
+        except Exception as e:
+            print(f"[dub] PyTorch cannot use the video card ({str(e).splitlines()[0][:160]}): the processor", file=sys.stderr, flush=True)
+    _dev.append(dev)
+    return dev
 
 
 # --- Demucs: split voice from music/ambience (MIT) ---

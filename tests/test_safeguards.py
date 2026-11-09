@@ -627,3 +627,49 @@ class OllamaForceUnloadTest(unittest.TestCase):
         left, stop = self._run([["qwen3.5:4b"]], local=False)
         self.assertEqual(left, ["qwen3.5:4b"])
         stop.assert_not_called()
+
+
+class TorchCudaArchTest(unittest.TestCase):
+    """A card PyTorch has no kernels for ("no kernel image is available") runs the speaker model on the
+    processor, and a failure on the card is done again there."""
+
+    def test_arch_support(self):
+        from app.hardware import _arch_supported
+
+        cu126 = ["sm_50", "sm_60", "sm_61", "sm_70", "sm_75", "sm_80", "sm_86", "sm_90"]
+        self.assertTrue(_arch_supported((8, 6), cu126))   # RTX 30
+        self.assertTrue(_arch_supported((8, 9), cu126))   # RTX 40 runs the sm_86 binary (same major)
+        self.assertFalse(_arch_supported((12, 0), cu126))  # RTX 50: none for it, no PTX
+        self.assertTrue(_arch_supported((12, 0), cu126 + ["compute_90"]))  # PTX compiled for the card
+        self.assertFalse(_arch_supported((3, 5), cu126))  # a card older than the build
+
+    def test_card_failure_is_done_again_on_the_processor(self):
+        import numpy as np
+
+        from app import diarizer
+
+        devices = []
+
+        def get_encoder(device="cpu"):
+            devices.append(device)
+            diarizer._ecapa_device = "cuda:0" if device.startswith("cuda") else "cpu"
+            diarizer._ecapa_model = object()
+            return diarizer._ecapa_model
+
+        calls = []
+
+        def embed(encoder, chunks, progress=None):
+            calls.append(diarizer._ecapa_device)
+            if diarizer._ecapa_device != "cpu":
+                raise RuntimeError("CUDA error: no kernel image is available for execution on the device")
+            return [np.ones(4, dtype=np.float32) for _ in chunks]
+
+        segs = [{"start": 0.0, "end": 3.0, "text": "раз два три", "words": []},
+                {"start": 3.0, "end": 6.0, "text": "четыре пять", "words": []}]
+        with mock.patch.object(diarizer, "_get_ecapa_encoder", side_effect=get_encoder), \
+                mock.patch.object(diarizer, "_embed_slices", side_effect=embed), \
+                mock.patch.object(diarizer.sf, "read", return_value=(np.random.default_rng(0).uniform(-0.3, 0.3, 16000 * 6).astype(np.float32), 16000)):
+            speakers, merged = diarizer.diarize_and_merge_segments("x.wav", segs, device="cuda")
+        self.assertEqual(calls, ["cuda:0", "cpu"])
+        self.assertEqual(devices[-1], "cpu")
+        self.assertTrue(merged)
