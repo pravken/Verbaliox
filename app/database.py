@@ -120,6 +120,11 @@ def init_db() -> None:
             """
         )
 
+        dict_cols = {r["name"] for r in cur.execute("PRAGMA table_info(dictionary)").fetchall()}
+        if "variants" not in dict_cols:
+            # How a term may be recognized ("клод, klot" for Claude): replaced by it after recognition
+            cur.execute("ALTER TABLE dictionary ADD COLUMN variants TEXT DEFAULT ''")
+
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS settings (
@@ -181,6 +186,7 @@ def init_db() -> None:
             "summary_templates": "[]",  # the user's own summary templates, JSON (summary_templates())
             "summary_grounding": "true",  # summaries checked against the transcript (app/grounding.py)
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
+            "dictionary_fuzzy": "true",  # dictionary terms replace words that sound like them (app/vocab.py)
             "auto_chapters": "true",  # the topics above the timeline, after the automatic summary (> 10 min)
             "delete_media_after": "false",  # the sound deleted once a recording is transcribed (privacy)
             "media_retention_days": "0",  # the sound of older recordings deleted; 0: kept
@@ -557,8 +563,19 @@ def list_dictionary(active_only: bool = False) -> List[Dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
-def add_dictionary_term(term: str, category: str = "Термин") -> Dict[str, Any]:
-    term = term.strip()
+def _clean_variants(term: str, variants: str) -> str:
+    from app.vocab import split_variants
+
+    seen, out = {term.lower()}, []
+    for v in split_variants(variants):
+        if v.lower() not in seen:
+            seen.add(v.lower())
+            out.append(v)
+    return ", ".join(out)
+
+
+def add_dictionary_term(term: str, category: str = "Термин", variants: Optional[str] = None) -> Dict[str, Any]:
+    term = " ".join(term.split())
     if not term:
         raise ValueError("Пустое слово")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -566,11 +583,12 @@ def add_dictionary_term(term: str, category: str = "Термин") -> Dict[str, 
         conn = get_connection()
         conn.execute(
             """
-            INSERT INTO dictionary (term, category, active, created_at)
-            VALUES (?, ?, 1, ?)
-            ON CONFLICT(term) DO UPDATE SET category = excluded.category, active = 1
+            INSERT INTO dictionary (term, category, active, created_at, variants)
+            VALUES (?, ?, 1, ?, ?)
+            ON CONFLICT(term) DO UPDATE SET category = excluded.category, active = 1,
+                variants = CASE WHEN ? THEN excluded.variants ELSE dictionary.variants END
             """,
-            (term, category.strip() or "Термин", now),
+            (term, category.strip() or "Термин", now, _clean_variants(term, variants or ""), variants is not None),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM dictionary WHERE term = ?", (term,)).fetchone()
@@ -583,6 +601,17 @@ def toggle_dictionary_term(term_id: int, active: bool) -> None:
         conn = get_connection()
         conn.execute("UPDATE dictionary SET active = ? WHERE id = ?", (1 if active else 0, term_id))
         conn.commit()
+        conn.close()
+
+
+def set_dictionary_variants(term_id: int, variants: str) -> None:
+    with _db_lock:
+        conn = get_connection()
+        row = conn.execute("SELECT term FROM dictionary WHERE id = ?", (term_id,)).fetchone()
+        if row:
+            conn.execute("UPDATE dictionary SET variants = ? WHERE id = ?",
+                         (_clean_variants(row["term"], variants), term_id))
+            conn.commit()
         conn.close()
 
 
@@ -600,12 +629,6 @@ def clear_dictionary() -> None:
         conn.execute("DELETE FROM dictionary")
         conn.commit()
         conn.close()
-
-
-def get_dictionary_hotwords() -> str:
-    """Active vocabulary terms joined for faster-whisper's `hotwords` (applied to every 30s window)."""
-    terms = [item["term"] for item in list_dictionary(active_only=True)]
-    return ", ".join(terms)
 
 
 # Meetings helpers
