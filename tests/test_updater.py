@@ -339,8 +339,24 @@ class PyEnvTest(unittest.TestCase):
             uv.parent.mkdir(parents=True)
             uv.write_text("")
             with mock.patch.object(pyenv.shutil, "which", return_value=None), \
+                    mock.patch.object(pyenv, "_runs", return_value=True), \
                     mock.patch.dict(pyenv.os.environ, {"USERPROFILE": home, "LOCALAPPDATA": home}):
                 self.assertEqual(pyenv.find_uv(), str(uv))
+
+    def test_a_uv_that_does_not_run_is_skipped(self):
+        """The shortcut winget leaves may point nowhere, or a policy may block programs in AppData."""
+        from app import pyenv
+
+        with tempfile.TemporaryDirectory() as home:
+            broken = Path(home) / "Microsoft" / "WinGet" / "Links" / "uv.exe"
+            good = Path(home) / "Microsoft" / "WinGet" / "Packages" / "astral-sh.uv_x" / "uv.exe"
+            for f in (broken, good):
+                f.parent.mkdir(parents=True)
+                f.write_text("")
+            with mock.patch.object(pyenv.shutil, "which", return_value=None), \
+                    mock.patch.object(pyenv, "_runs", side_effect=lambda exe: exe == str(good)), \
+                    mock.patch.dict(pyenv.os.environ, {"USERPROFILE": home, "LOCALAPPDATA": home}):
+                self.assertEqual(pyenv.find_uv(), str(good))
 
 
 class NativeDialogTest(unittest.TestCase):

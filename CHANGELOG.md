@@ -6,6 +6,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.1 — English
+
+- **First start on a PC where uv is found but does not run** («The system cannot execute the specified
+  program»: a dead shortcut left by winget, or a company policy blocking programs in AppData): the setup
+  takes uv only if it runs and looks further, and when uv cannot make a working environment it makes it
+  on Python 3.11 of python.org with pip. The environment's Python is checked to run before the libraries
+  are installed. The dubbing setup and the in-app updater skip a uv that does not run too.
+
 ## 0.7.0 — English
 
 The name is now **Verbaliox**. Highlights of this version (the betas below list everything):
@@ -107,6 +115,14 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.1
+
+- **Первый запуск на ПК, где uv находится, но не запускается** («The system cannot execute the specified
+  program»: битый ярлык, оставленный winget, или политика компании, запрещающая программы из AppData):
+  установка берёт uv, только если он запускается, и ищет дальше, а если uv не может сделать рабочую
+  среду, делает её на Python 3.11 с python.org через pip. Перед установкой библиотек проверяется, что
+  Python среды запускается. Установка дубляжа и встроенное обновление тоже пропускают незапускающийся uv.
 
 ## 0.7.0
 
