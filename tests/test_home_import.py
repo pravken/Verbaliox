@@ -119,6 +119,20 @@ class HomeApiTest(unittest.TestCase):
         bad = c.post("/api/meetings/upload", files={"files": ("x.mp3", b"mp3", "audio/mpeg")}, data={"processing": "[1]"})
         self.assertEqual(bad.status_code, 400)
 
+    def test_calendar_range_gives_meetings_with_their_recording_and_other_recordings(self):
+        c = self._client()
+        rec = database.create_meeting(title="Созвон записан", filename="a.wav", media_path="a.wav", recorded_at="2026-10-24T10:05:00")
+        own = database.create_meeting(title="Сама по себе", filename="b.wav", media_path="b.wav", recorded_at="2026-10-26T09:00:00")
+        with mock.patch.object(calendar_ics, "events", return_value=calendar_ics.parse(ICS)):
+            r = c.get("/api/calendar/range", params={"start": "2026-10-19T00:00", "end": "2026-11-02T00:00"})
+        self.assertEqual(r.status_code, 200, r.text)
+        data = r.json()
+        call = next(e for e in data["events"] if e["title"] == "Созвон")
+        self.assertEqual(call["recording"]["id"], rec["id"])
+        self.assertEqual([x["id"] for x in data["recordings"]], [own["id"]])  # the recorded one is not repeated
+        too_long = c.get("/api/calendar/range", params={"start": "2026-01-01T00:00", "end": "2026-06-01T00:00"})
+        self.assertEqual(too_long.status_code, 400)
+
     def test_recent_gives_a_line_of_the_overview(self):
         c = self._client()
         m = database.create_meeting(title="С обзором", filename="o.wav", media_path="o.wav", recorded_at="2099-01-01T10:00:00")

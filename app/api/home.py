@@ -65,6 +65,46 @@ def _parse_local(value: str) -> datetime:
         raise HTTPException(status_code=400, detail="Нужна дата и время вида 2026-10-24T09:00")
 
 
+def _recorded_local(m: Dict[str, Any]) -> Any:
+    """When a recording was made, as local time without a zone (the calendar's), or None."""
+    at = str(m.get("recorded_at") or "")
+    try:
+        t = datetime.fromisoformat(at.replace("Z", "+00:00")) if at else None
+    except ValueError:
+        return None
+    if t and t.tzinfo:  # a time with its zone (an imported recording): the local time, as the day is
+        t = t.astimezone().replace(tzinfo=None)
+    return t
+
+
+@router.get("/api/calendar/range")
+def api_calendar_range(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
+    """The calendar's meetings and the recordings of a week or a month (start…end, local time): a
+    meeting carries the recording made during it, the other recordings come on their own."""
+    from app import calendar_ics
+    from app.database import get_all_settings
+
+    a, b = _parse_local(start), _parse_local(end)
+    if not a < b or (b - a).days > 45:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    if refresh:
+        calendar_ics.events(force=True)
+    items = calendar_ics.day(a, b)
+    made = sorted(((t, m) for m in list_meetings() if (t := _recorded_local(m)) and a <= t < b), key=lambda x: x[0])
+    used = set()
+    for it in items:
+        s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
+        hit = next((m for t, m in made if s.replace(second=0) <= t < e and m["id"] not in used), None)
+        it["recording"] = {"id": hit["id"], "title": hit.get("title") or "", "status": hit.get("status")} if hit else None
+        if hit:
+            used.add(hit["id"])
+    recordings = [{"id": m["id"], "title": m.get("title") or "", "at": t.isoformat(timespec="minutes"),
+                   "duration": m.get("duration") or 0, "status": m.get("status")}
+                  for t, m in made if m["id"] not in used]
+    return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
+            "recordings": recordings, **calendar_ics.status()}
+
+
 @router.get("/api/calendar/day")
 def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
     """The meetings of the working day (start…end, local time; past midnight for a night shift), each

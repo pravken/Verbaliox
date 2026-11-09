@@ -536,3 +536,167 @@ document.addEventListener('DOMContentLoaded', () => {
   // the clock line and the processing on the page follow by themselves
   setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);
 });
+
+
+// --- The calendar of a week or a month: the calendar's meetings and the recordings, side by side.
+// A meeting recorded carries its recording (a click opens it); a recording outside any meeting comes
+// on its own. Week or month is remembered on this computer ---
+const calView = { mode: 'week', anchor: null, data: null, loading: false };
+try { if (localStorage.getItem('verbaliox_cal_mode') === 'month') calView.mode = 'month'; } catch (e) {}
+
+function calDayStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function calAddDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function calMonday(d) { const x = calDayStart(d); return calAddDays(x, -((x.getDay() + 6) % 7)); }
+function calKey(d) { return `${d.getFullYear()}-${hmPad(d.getMonth() + 1)}-${hmPad(d.getDate())}`; }
+function calTime(d) { return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}`; }
+
+// The days shown: a week from Monday, or the weeks that hold the month (six at most)
+function calRange() {
+  const anchor = calView.anchor || new Date();
+  if (calView.mode === 'week') { const a = calMonday(anchor); return { a, b: calAddDays(a, 7), month: -1 }; }
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const a = calMonday(first);
+  const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  const b = calAddDays(calMonday(last), 7);
+  return { a, b, month: anchor.getMonth() };
+}
+
+function openCalendarView() {
+  calView.anchor = new Date();
+  document.getElementById('cal-view')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'cal-view';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.setAttribute('aria-label', t('calTitle'));
+  wrap.addEventListener('click', e => {
+    if (e.target === wrap) { closeCalendarView(); return; }
+    const b = e.target.closest('[data-cal]');
+    if (!b) return;
+    const act = b.dataset.cal;
+    if (act === 'close') closeCalendarView();
+    else if (act === 'prev' || act === 'next') {
+      const k = act === 'prev' ? -1 : 1;
+      const x = new Date(calView.anchor);
+      if (calView.mode === 'week') x.setDate(x.getDate() + 7 * k); else { x.setDate(1); x.setMonth(x.getMonth() + k); }
+      calView.anchor = x; calLoad();
+    } else if (act === 'today') { calView.anchor = new Date(); calLoad(); }
+    else if (act === 'week' || act === 'month') {
+      calView.mode = act;
+      try { localStorage.setItem('verbaliox_cal_mode', act); } catch (err) {}
+      calLoad();
+    } else if (act === 'day') { calView.mode = 'week'; calView.anchor = new Date(b.dataset.day); calLoad(); }
+    else if (act === 'rec') { closeCalendarView(); openMeeting(Number(b.dataset.id)); }
+  });
+  document.addEventListener('keydown', calKeydown, true);
+  document.body.appendChild(wrap);
+  calLoad();
+}
+
+function calKeydown(e) {
+  if (e.key === 'Escape' && document.getElementById('cal-view')) { e.stopPropagation(); closeCalendarView(); }
+}
+
+function closeCalendarView() {
+  document.getElementById('cal-view')?.remove();
+  document.removeEventListener('keydown', calKeydown, true);
+}
+
+async function calLoad() {
+  const { a, b } = calRange();
+  calView.loading = true;
+  renderCalendarView();
+  const data = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
+    .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  calView.loading = false;
+  calView.data = data;
+  renderCalendarView();
+}
+
+// What a day holds, by time: meetings (with their recording) and recordings of their own
+function calItems() {
+  const byDay = {};
+  const put = (d, item) => { (byDay[calKey(d)] = byDay[calKey(d)] || []).push(item); };
+  const data = calView.data || {};
+  for (const e of data.events || []) {
+    const s = new Date(e.start), en = new Date(e.end);
+    put(s, { kind: 'event', s, en, title: e.title || t('hmUntitled'), rec: e.recording, attendees: (e.attendees || []).length, location: e.location || '' });
+  }
+  for (const r of data.recordings || []) {
+    const s = new Date(r.at);
+    put(s, { kind: 'rec', s, title: r.title || t('hmUntitled'), id: r.id, duration: r.duration });
+  }
+  for (const k of Object.keys(byDay)) byDay[k].sort((x, y) => x.s - y.s);
+  return byDay;
+}
+
+function calItemHtml(it, compact) {
+  const time = calTime(it.s);
+  if (it.kind === 'rec' || it.rec) {
+    const id = it.kind === 'rec' ? it.id : it.rec.id;
+    const tip = it.kind === 'rec' ? t('calRecTip') : t('calMeetingRecTip').replace('{title}', () => it.title);
+    return `<button data-cal="rec" data-id="${Number(id) || 0}" class="cal-item ${it.kind === 'rec' ? 'cal-rec' : 'cal-ev cal-ev-rec'}" title="${escapeHtml(`${time} · ${it.title}\n${tip}`)}">
+      <i class="cal-dot"></i><span class="cal-time">${time}</span><span class="cal-name">${escapeHtml(it.title)}</span></button>`;
+  }
+  const tip = [`${time}–${calTime(it.en)} · ${it.title}`, it.location, it.attendees ? t('calPeople').replace('{n}', () => it.attendees) : ''].filter(Boolean).join('\n');
+  return `<div class="cal-item cal-ev${it.en < new Date() ? ' cal-past' : ''}" title="${escapeHtml(tip)}">
+    <i class="cal-dot"></i><span class="cal-time">${time}</span><span class="cal-name">${escapeHtml(it.title)}</span></div>`;
+}
+
+function renderCalendarView() {
+  const wrap = document.getElementById('cal-view');
+  if (!wrap) return;
+  const { a, b, month } = calRange();
+  const loc = hmLocale();
+  const today = calKey(new Date());
+  const items = calItems();
+  const label = calView.mode === 'week'
+    ? `${a.toLocaleDateString(loc, { day: 'numeric', month: 'short' })} – ${calAddDays(b, -1).toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' })}`
+    : new Date(calView.anchor).toLocaleDateString(loc, { month: 'long', year: 'numeric' });
+  const days = [];
+  for (let d = new Date(a); d < b; d = calAddDays(d, 1)) days.push(d);
+  const weekday = d => d.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
+  let body;
+  if (calView.mode === 'week') {
+    body = `<div class="cal-week">${days.map(d => {
+      const list = items[calKey(d)] || [];
+      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}">
+        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b></div>
+        <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
+    }).join('')}</div>`;
+  } else {
+    const heads = days.slice(0, 7).map(d => `<div class="cal-mhead">${escapeHtml(weekday(d))}</div>`).join('');
+    body = `<div class="cal-month">${heads}${days.map(d => {
+      const list = items[calKey(d)] || [];
+      const more = list.length - 3;
+      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}">
+        <button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>
+        ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
+        ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
+    }).join('')}</div>`;
+  }
+  const data = calView.data || {};
+  const note = !calView.loading && !data.configured ? `<p class="cal-note">${escapeHtml(t('calNoCalendar'))}</p>`
+    : data.error ? `<p class="cal-note">${escapeHtml(t('calError'))}: ${escapeHtml(serverText(data.error))}</p>` : '';
+  const seg = m => `<button data-cal="${m}" class="cal-seg${calView.mode === m ? ' cal-seg-on' : ''}" aria-pressed="${calView.mode === m}">${escapeHtml(t(m === 'week' ? 'calWeek' : 'calMonth'))}</button>`;
+  wrap.innerHTML = `<div class="cal-dialog modal-card">
+    <div class="cal-head">
+      <h2 class="cal-title">${escapeHtml(t('calTitle'))}</h2>
+      <div class="cal-segs" role="group">${seg('week')}${seg('month')}</div>
+      <div class="cal-navs">
+        <button data-cal="prev" class="cal-nav" aria-label="${escapeHtml(t('calPrev'))}" title="${escapeHtml(t('calPrev'))}">‹</button>
+        <button data-cal="today" class="cal-today-btn">${escapeHtml(t('calToday'))}</button>
+        <button data-cal="next" class="cal-nav" aria-label="${escapeHtml(t('calNext'))}" title="${escapeHtml(t('calNext'))}">›</button>
+        <span class="cal-label">${escapeHtml(label)}</span>
+      </div>
+      <button data-cal="close" class="mp-close cal-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button>
+    </div>
+    ${note}
+    <div class="cal-body${calView.loading ? ' cal-loading' : ''}">${body}</div>
+    <div class="cal-legend"><span><i class="cal-dot cal-lg-ev"></i>${escapeHtml(t('calLgMeeting'))}</span>
+      <span><i class="cal-dot cal-lg-evrec"></i>${escapeHtml(t('calLgMeetingRec'))}</span>
+      <span><i class="cal-dot cal-lg-rec"></i>${escapeHtml(t('calLgRec'))}</span></div>
+  </div>`;
+  wrap.querySelector('.cal-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+}
