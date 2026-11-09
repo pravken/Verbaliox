@@ -770,3 +770,40 @@ class TaskPartsTest(unittest.TestCase):
             commitments.extract(m["id"])
         self.assertGreater(len(asked), 1)
         self.assertIn("фраза 119", asked[-1])  # the last minutes too
+
+
+class OllamaAnswerLengthTest(unittest.TestCase):
+    """A small model caught in a loop stops at a set length instead of writing for many minutes."""
+
+    def test_num_predict_is_sent(self):
+        from app import ollama_client as oc
+        from app.database import init_db
+
+        init_db()
+
+        sent = {}
+
+        class Resp:
+            status_code = 200
+
+            def json(self):
+                return {"message": {"content": "ответ"}}
+
+        class Client:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def post(self, url, json=None):
+                sent.update(json)
+                return Resp()
+
+        with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"):
+            self.assertEqual(oc._ollama_chat("http://127.0.0.1:11434", "qwen2.5:1.5b", "s", "u"), "ответ")
+        self.assertEqual(sent["options"]["num_predict"], oc.LLM_MAX_ANSWER_TOKENS)
+        self.assertLess(oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_NUM_CTX)

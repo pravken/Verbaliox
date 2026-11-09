@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -611,6 +611,7 @@ def _chunk_lines(lines: List[str], max_chars: int) -> List[str]:
 SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
+LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
 
 _LANG_PHRASES: Dict[str, str] = {
     "ru": "на русском языке",
@@ -712,6 +713,9 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
             "top_p": 0.85,
             "repeat_penalty": 1.15,
             "num_ctx": LLM_NUM_CTX,
+            # An answer stops at this length: a small model caught in a loop (the same lines again and
+            # again) wrote until the whole context was full, for many minutes on a processor
+            "num_predict": LLM_MAX_ANSWER_TOKENS,
         },
     }
     keep_alive = idle_unload.ollama_keep_alive()
@@ -739,9 +743,11 @@ def generate_meeting_summary(
     local_only: bool = False,
     user_notes: str = "",
     template_prompt: str = "",
+    progress: Optional[Callable[[int, int], None]] = None,
 ) -> str:
     """template_prompt: the instruction of a template the user made (Settings → Analysis);
-    user_notes: what the user wrote during the meeting, taken into account by every summary."""
+    user_notes: what the user wrote during the meeting, taken into account by every summary;
+    progress(done, total): the parts of a long recording read so far (it is read part by part)."""
     from app.llm import target
 
     # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
@@ -789,6 +795,8 @@ def generate_meeting_summary(
         )
         notes: List[str] = []
         for idx, chunk in enumerate(chunks, start=1):
+            if progress:
+                progress(idx, len(chunks))
             notes.append(
                 llm.chat(
                     system_prompt,
