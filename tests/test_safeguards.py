@@ -731,3 +731,42 @@ class TaskPruneTest(unittest.TestCase):
         t = commitments.create("Сделать макет", who="Участник 2", meeting_id=m["id"])
         commitments.rename_person(m["id"], "участник 2", "Ольга")
         self.assertEqual(commitments.get_task(t["id"])["who"], "Ольга")
+
+
+class TaskPartsTest(unittest.TestCase):
+    """A long meeting is read for tasks part by part, to its end; a promise on a border is seen whole."""
+
+    def test_parts_cover_everything_and_overlap(self):
+        from app.commitments import PART_OVERLAP_LINES, transcript_parts
+
+        lines = [f"[{i // 60:02d}:{i % 60:02d}] Иван: реплика номер {i} " + "слово " * 20 for i in range(300)]
+        parts = transcript_parts(lines, 8000)
+        self.assertGreater(len(parts), 3)
+        self.assertTrue(all(len(p) <= 8000 + 200 for p in parts))
+        self.assertIn(lines[-1], parts[-1])  # the end of the meeting is read
+        for a, b in zip(parts, parts[1:]):
+            self.assertEqual(a.split("\n")[-PART_OVERLAP_LINES:], b.split("\n")[:PART_OVERLAP_LINES])
+        self.assertEqual(transcript_parts(lines[:3], 8000), ["\n".join(lines[:3])])
+
+    def test_every_part_is_asked(self):
+        from app import commitments
+        from app.database import create_meeting, init_db, save_meeting_results
+
+        init_db()
+        m = create_meeting(title="Длинная", filename="l.wav", media_path="")
+        segs = [{"id": i, "start": i * 30.0, "end": i * 30.0 + 25, "speaker": "S1", "text": f"фраза {i} " + "текст " * 30}
+                for i in range(120)]
+        save_meeting_results(m["id"], segments=segs, speakers={"S1": {"name": "Иван", "color": "#0A84FF"}})
+        asked = []
+
+        class Llm:
+            max_chars = 11000
+
+            def chat(self, system, user):
+                asked.append(user)
+                return ""
+
+        with mock.patch("app.llm.target", return_value=Llm()):
+            commitments.extract(m["id"])
+        self.assertGreater(len(asked), 1)
+        self.assertIn("фраза 119", asked[-1])  # the last minutes too

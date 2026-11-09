@@ -77,6 +77,26 @@ def prune(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+PART_OVERLAP_LINES = 4  # lines a part repeats from the end of the one before
+
+
+def transcript_parts(lines: List[str], max_chars: int) -> List[str]:
+    """The transcript in parts of at most max_chars, each starting with the last lines of the one before."""
+    parts: List[str] = []
+    current: List[str] = []
+    size = 0
+    for line in lines:
+        if current and size + len(line) + 1 > max_chars and len(current) > PART_OVERLAP_LINES:
+            parts.append("\n".join(current))
+            current = current[-PART_OVERLAP_LINES:]
+            size = sum(len(x) + 1 for x in current)
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        parts.append("\n".join(current))
+    return parts
+
+
 def _context(item: Dict[str, Any], lines: List[tuple]) -> str:
     """The transcript lines around a task's moment (the whole quote's line when it has no moment)."""
     if item.get("at") is None:
@@ -317,8 +337,13 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     if not m or not m.get("segments"):
         raise ValueError("Нет текста записи")
     llm = target(model_name, local_only=is_local_only(m))
-    text = "\n".join(build_transcript_lines(m["segments"], m.get("speakers") or {}))[: max(8000, llm.max_chars - 3000)]
-    items = prune([x for x in parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + text)) if supported(x, m)])
+    lines = build_transcript_lines(m["segments"], m.get("speakers") or {})
+    found: List[Dict[str, Any]] = []
+    # Part by part, so the end of a long meeting is read too (it was cut to what fits the model before);
+    # the parts overlap by a few lines, so a promise on a border is seen whole
+    for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
+        found += parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + part))
+    items = prune([x for x in found if supported(x, m)])
     items = verify(items, m, llm)  # a second look, task by task, with the lines around it
     _init()
     now = datetime.now().isoformat(timespec="seconds")
