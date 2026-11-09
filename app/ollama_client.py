@@ -732,6 +732,46 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
         return strip_think(str(msg.get("content") or data.get("response") or ""))
 
 
+MAX_NOTE_ROUNDS = 3
+
+
+def _join_notes(notes: List[str]) -> str:
+    return "\n\n".join(f"### Фрагмент {i}\n{n}" for i, n in enumerate(notes, start=1))
+
+
+def _fit_notes(llm, system_prompt: str, notes: List[str], budget: int, lang: str) -> str:
+    """The notes of all parts of a long recording, condensed until they fit one request. Sent as they
+    were, the notes of an hour and a half ran over the model's context, and Ollama silently dropped the
+    beginning: the overview then told only the last part of the meeting."""
+    for _ in range(MAX_NOTE_ROUNDS):
+        text = _join_notes(notes)
+        if len(text) <= budget:
+            return text
+        # Neighbouring notes condensed together, each group about half of what one request holds
+        groups: List[List[str]] = [[]]
+        size = 0
+        for n in notes:
+            if groups[-1] and size + len(n) > budget // 2:
+                groups.append([])
+                size = 0
+            groups[-1].append(n)
+            size += len(n)
+        part_budget = max(1500, budget // max(2, len(groups) + 1))
+        condensed = []
+        for g in groups:
+            condensed.append(llm.chat(
+                system_prompt,
+                "Ниже последовательные конспекты частей длинной записи:\n```text\n" + _join_notes(g) + "\n```\n\n"
+                f"Сожми их {lang} в один конспект не длиннее {part_budget} знаков: сохрани все решения, задачи, "
+                "сроки, имена и главные мысли с их таймкодами `[ЧЧ:ММ:СС]`/`[ММ:СС]`, по порядку записи. "
+                "Ничего не добавляй от себя.",
+            ))
+        notes = condensed
+    # Still too long after the rounds: every part keeps its beginning, so no part of the meeting is lost
+    each = max(500, budget // max(1, len(notes)) - 40)
+    return _join_notes([n[:each] for n in notes])
+
+
 def generate_meeting_summary(
     segments: List[Dict[str, Any]],
     speakers: Dict[str, Dict[str, Any]],
@@ -806,10 +846,14 @@ def generate_meeting_summary(
                     "Пиши только то, что есть в тексте фрагмента.",
                 )
             )
-        transcript_text = "\n\n".join(f"### Фрагмент {i}\n{n}" for i, n in enumerate(notes, start=1))
+        transcript_text = _fit_notes(llm, system_prompt, notes, single_pass_max, lang)
         source_label = (
             "Запись длинная, поэтому ниже приведены последовательные конспекты всех её фрагментов "
-            "(с таймкодами исходной записи)"
+            "(с таймкодами исходной записи, от начала до конца)"
+        )
+        instruction += (
+            "\n\nОхвати всю запись от начала до конца: каждый фрагмент должен попасть в ответ, "
+            "а не только последние."
         )
 
     user_message = (
