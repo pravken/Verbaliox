@@ -119,15 +119,27 @@ def pick_highlights(m: Dict[str, Any], model_name: Optional[str] = None, answer_
     lines = build_transcript_lines(m.get("segments") or [], m.get("speakers") or {})
     if not lines:
         raise ValueError("Нет текста записи")
+    from app.commitments import transcript_parts
+
     llm = target(model_name, local_only=is_local_only(m))
-    text = "\n".join(lines)[: max(8000, llm.max_chars - 3000)]
+    # A long recording is read part by part: cut to the model's size, it lost everything after
+    # the first twenty minutes
+    parts = transcript_parts(lines, max(8000, llm.max_chars - 3000))
+    per = "от 3 до 8" if len(parts) == 1 else f"от 1 до {max(2, 8 // len(parts) + 1)}"
     system = (
         "Ты выбираешь ключевые моменты записи встречи для короткой нарезки: решения, договорённости, задачи, "
-        "важные выводы и ответы. Выбери от 3 до 8 моментов, каждый 15–60 секунд, в хронологическом порядке. "
-        "Ответ — только строки вида «MM:SS-MM:SS | короткое название момента» без пояснений. "
+        f"важные выводы и ответы. Выбери {per} моментов, каждый 15–60 секунд, в хронологическом порядке. "
+        "Ответ — только строки вида «MM:SS-MM:SS | короткое название момента» без пояснений "
+        "(для записей длиннее часа — «Ч:ММ:СС-Ч:ММ:СС | ...»). "
         f"Названия пиши {_lang_phrase(answer_lang)}."
     )
-    moments = parse_moments(llm.chat(system, "Расшифровка с отметками времени:\n" + text), float(m.get("duration") or 0))
+    duration = float(m.get("duration") or 0)
+    moments = []
+    for part in parts:
+        moments += parse_moments(llm.chat(system, "Расшифровка с отметками времени:\n" + part), duration)
+    moments.sort(key=lambda x: x["start"])
+    # The overlap of the parts may give one moment twice
+    moments = [x for i, x in enumerate(moments) if not i or x["start"] >= moments[i - 1]["end"] - 1]
     if not moments:
         raise RuntimeError("Модель не нашла ключевых моментов")
     return moments

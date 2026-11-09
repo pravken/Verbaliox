@@ -37,3 +37,25 @@ class LongSummaryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LongHighlightsTest(unittest.TestCase):
+    def test_moments_come_from_the_whole_recording(self):
+        from app import media_cut
+
+        segs = [{"start": t, "end": t + 9, "speaker": "S1", "text": "говорим о планах на квартал и бюджете " * 3}
+                for t in range(0, 5400, 10)]
+
+        def chat(system, user):
+            first = re.search(r"\[(\d[\d:]*)\]", user).group(1)
+            h, mm, ss = ([0] + [int(x) for x in first.split(":")])[-3:]
+            a = h * 3600 + mm * 60 + ss + 30
+            return f"{a // 3600}:{a % 3600 // 60:02d}:{a % 60:02d}-{a // 3600}:{(a + 30) % 3600 // 60:02d}:{(a + 30) % 60:02d} | момент"
+
+        llm = mock.Mock(is_cloud=False, max_chars=20000)
+        llm.chat.side_effect = chat
+        with mock.patch("app.llm.target", return_value=llm), mock.patch("app.database.is_local_only", return_value=False):
+            moments = media_cut.pick_highlights({"segments": segs, "speakers": {}, "duration": 5400})
+        self.assertGreater(llm.chat.call_count, 1)
+        self.assertGreater(moments[-1]["start"], 3600)  # the last hour is not lost
+        self.assertEqual(moments, sorted(moments, key=lambda x: x["start"]))
