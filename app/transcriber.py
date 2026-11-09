@@ -1198,7 +1198,10 @@ def _process_meeting_job(meeting_id: int) -> None:
                     stage_text="Формирование обзора записи (" + ("облачная модель" if cloud else "Ollama") + ")...",
                 )
                 try:
+                    where = "облачная модель" if cloud else "Ollama"
                     summary_md = generate_meeting_summary(
+                        progress=lambda done, total: update_meeting_progress(
+                            meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
                         segments=merged_segments,
                         speakers=speakers_meta,
                         template_key="protocol",
