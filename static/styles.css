@@ -1301,7 +1301,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .imp-empty:hover { border-color: #0A84FF; }
 .imp-empty.hidden { display: none; }
 .imp-empty-sub { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8E8E93); }
-.imp-inline { display: flex; gap: 8px; padding: 4px 8px 0; }
+.imp-inline { display: flex; align-items: center; gap: 8px; padding: 4px 8px 0; }
+.imp-link-note { margin: 2px 8px 2px 112px; }
+.imp-row-label { flex: none; width: 96px; font-size: var(--fs-label); color: var(--hc-dim, #AEAEB2); }
 .imp-inline.hidden { display: none; }
 .imp-input { flex: 1; min-width: 0; height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); background: rgba(0, 0, 0, 0.25); color: #F5F5F7; font-size: var(--fs-ui); }
 .imp-input:focus { outline: none; border-color: #0A84FF; }

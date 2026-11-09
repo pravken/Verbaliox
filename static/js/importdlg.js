@@ -74,7 +74,6 @@ function onImportDialogOpen() {
   if (!spk.value) spk.value = '0';
   document.getElementById('imp-remember').checked = false;
   document.getElementById('imp-noask').checked = !askImportParams();
-  for (const id of ['imp-link-row', 'imp-path-row', 'imp-link-note']) document.getElementById(id).classList.add('hidden');
   renderModelHints();
   renderImport();
 }
@@ -133,10 +132,9 @@ function impDropFiles(e) {
   if (media.length) impAddFiles(media);
 }
 
+// The link and path fields are always shown: opened «with a link» or «with a path», the window puts the cursor there
 function impShowRow(kind) {
   const row = document.getElementById(kind === 'link' ? 'imp-link-row' : 'imp-path-row');
-  row.classList.remove('hidden');
-  if (kind === 'link') document.getElementById('imp-link-note').classList.remove('hidden');
   nextFrame(() => row.querySelector('input').focus());
 }
 
