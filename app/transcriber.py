@@ -14,13 +14,13 @@ register_cuda_dlls()
 # faster-whisper (CTranslate2) and the speaker model (PyTorch) are imported when a job needs them,
 # not when the app starts: the window opens in seconds even from a cold disk
 
+from app import vocab
 from app.audio_utils import extract_audio_16k_mono, format_timestamp, get_media_duration
 from app.database import (
     AUDIO_DIR,
     MODELS_DIR,
     edit_meeting,
     get_all_settings,
-    get_dictionary_hotwords,
     get_meeting,
     meeting_status,
     save_meeting_dub,
@@ -1071,7 +1071,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
             # `hotwords` is applied to every 30s window; `initial_prompt` would only affect the first
             # window because condition_on_previous_text is disabled.
-            hotwords = get_dictionary_hotwords()
+            hotwords = vocab.hotwords()
             batch_size = (
                 _batch_size_for(device, hw)
                 if settings.get("batched_inference", "true").lower() == "true"
@@ -1106,6 +1106,9 @@ def _process_meeting_job(meeting_id: int) -> None:
                 raw_segments = _collect_segments(meeting_id, segments_iter, total_dur)
 
             detected_lang = getattr(info, "language", None) or (language or "ru")
+
+        # The dictionary for every model: Whisper only took it as a hint, GigaAM and Parakeet not at all
+        raw_segments = vocab.fix_segments(raw_segments)
 
         # Free Whisper before diarization unless the next queued job can reuse it
         whisper_model = None
