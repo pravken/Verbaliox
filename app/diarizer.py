@@ -53,7 +53,10 @@ def _ensure_hf_compat() -> None:
 
 def _get_ecapa_encoder(device: str = "cpu"):
     global _ecapa_model, _ecapa_device
-    target_device = "cuda:0" if (device.startswith("cuda") and torch.cuda.is_available()) else "cpu"
+    from app.hardware import torch_cuda_works
+
+    # A card PyTorch has no kernels for (an RTX 50 for this CUDA 12.6 build): the processor
+    target_device = "cuda:0" if (device.startswith("cuda") and torch_cuda_works()) else "cpu"
 
     if _ecapa_model is not None and _ecapa_device == target_device:
         return _ecapa_model
@@ -419,7 +422,17 @@ def diarize_and_merge_segments(
         if progress_callback:
             progress_callback(74 + int(10 * done / max(1, total)), f"Анализ тембра голосов ({done}/{total})...")
 
-    embeddings_list = _embed_slices(encoder, chunks, _embed_progress) if chunks else []
+    try:
+        embeddings_list = _embed_slices(encoder, chunks, _embed_progress) if chunks else []
+    except Exception as e:  # torch.AcceleratorError and the like: the video card failed, the processor does it
+        if _ecapa_device == "cpu":
+            raise
+        print(f"[diarizer] the video card failed ({str(e).splitlines()[0][:160]}): again on the processor", flush=True)
+        unload_diarizer()
+        if progress_callback:
+            progress_callback(74, "Видеокарта не справилась — разделение участников на процессоре...")
+        encoder = _get_ecapa_encoder(device="cpu")
+        embeddings_list = _embed_slices(encoder, chunks, _embed_progress) if chunks else []
 
     # Free diarizer VRAM immediately after embedding extraction
     unload_diarizer()

@@ -110,6 +110,59 @@ def _gpu_probe():
     return value
 
 
+_torch_cuda: Dict[str, Any] = {"checked": False, "ok": False, "why": ""}
+
+
+def _arch_supported(cap: tuple, arch_list: list) -> bool:
+    """Whether the kernels of this PyTorch build run on a card of compute capability `cap`: a binary
+    for the same major version and a minor one not newer, or PTX of a version not newer (compiled for
+    the card when loaded)."""
+    major, minor = cap
+    for a in arch_list:
+        kind, _, num = a.partition("_")
+        if not num.isdigit() or len(num) < 2:
+            continue
+        a_major, a_minor = int(num[:-1]), int(num[-1])
+        if kind == "sm" and a_major == major and a_minor <= minor:
+            return True
+        if kind == "compute" and (a_major, a_minor) <= (major, minor):
+            return True
+    return False
+
+
+def torch_cuda_works() -> bool:
+    """PyTorch can run on this video card: CUDA is there, the build has kernels for the card's
+    architecture (a card newer than the build, an RTX 50 for a CUDA 12.6 build, or one older than it
+    supports fails with "no kernel image is available"), and a small operation runs. Checked once;
+    else the parts on PyTorch (the speaker model) run on the processor."""
+    if _torch_cuda["checked"]:
+        return _torch_cuda["ok"]
+    ok, why = False, ""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            cap = torch.cuda.get_device_capability(0)
+            arch = list(torch.cuda.get_arch_list() or [])
+            if arch and not _arch_supported(cap, arch):
+                why = f"sm_{cap[0]}{cap[1]} not in {' '.join(arch)}"
+            else:
+                x = torch.nn.functional.pad(torch.ones(1, 1, 4, device="cuda:0"), [1, 1], mode="reflect")
+                torch.cuda.synchronize()
+                ok = float(x.sum()) > 0
+    except Exception as e:  # torch.AcceleratorError: no kernel image, a broken driver...
+        why = str(e).splitlines()[0][:200]
+    if why:
+        print(f"[hardware] PyTorch cannot use the video card ({why}): its models run on the processor", flush=True)
+    _torch_cuda.update(checked=True, ok=ok, why=why)
+    return ok
+
+
+def torch_cuda_problem() -> str:
+    """Why PyTorch cannot use the video card ('' when it can or was not checked)."""
+    return _torch_cuda["why"]
+
+
 def get_hardware_info() -> Dict[str, Any]:
     """
     Detects available GPU/CPU resources and recommends optimal Whisper model and compute_type

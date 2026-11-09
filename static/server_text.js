@@ -36,6 +36,7 @@ const SERVER_TEXT_EN = {
   "В указанной папке не найдено поддерживаемых видео или аудио файлов": "No supported video or audio files were found in the folder",
   "Введите хотя бы одно слово или фразу": "Enter at least one word or phrase",
   "Видеокарта не справилась — распознавание на процессоре": "The video card failed — transcribing on the processor",
+  "Видеокарта не справилась — разделение участников на процессоре...": "The video card failed — telling the speakers apart on the processor...",
   "Встраивание субтитров отменено": "Subtitle burn-in cancelled",
   "Встраивание субтитров: подготовка...": "Burning subtitles: preparing...",
   "Встреча не найдена": "Recording not found",
