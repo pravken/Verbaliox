@@ -319,6 +319,11 @@ class SetupWindowTest(unittest.TestCase):
         # uv found also where winget leaves it, installed by astral.sh when winget gives none; without uv
         # only a Python 3.11 makes the environment (a Python 2.7 on PATH failed with "No module named venv")
         self.assertIn(":find_uv", text)
+        # a uv that does not start (a work PC forbids programs in AppData) is skipped, and when uv cannot
+        # make .venv the pip way of a Python 3.11 is tried
+        self.assertIn('"%~1" --version >nul 2>nul', text)
+        self.assertIn("goto :uv_venv_failed", text)
+        self.assertIn(":try_uv", (root / "setup_dub.bat").read_text(encoding="ascii"))
         self.assertIn(r"WinGet\Packages\astral-sh.uv*", text)
         self.assertIn("astral.sh/uv/install.ps1", text)
         self.assertIn("sys.version_info[:2] == (3, 11)", text)

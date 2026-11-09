@@ -61,7 +61,7 @@ if defined UV (
         rem Prefer a uv-managed Python: the Microsoft Store Python virtualizes AppData and hides files from other programs
         "!UV!" venv .venv --python 3.11 --python-preference only-managed || "!UV!" venv .venv --python 3.11
     )
-    if not exist ".venv\Scripts\python.exe" goto :venv_failed
+    if not exist ".venv\Scripts\python.exe" goto :uv_venv_failed
     echo ##STEP packages
     echo [2/2] Installing dependencies via uv...
     rem requirements.txt is an exact lock with SHA-256 hashes (see requirements.in)
@@ -69,6 +69,11 @@ if defined UV (
     if errorlevel 1 goto :install_failed
     goto :done
 )
+
+rem --- uv could not make .venv (its Python may be blocked on this PC): Python 3.11 and pip instead
+:uv_venv_failed
+echo       uv could not create .venv: trying Python 3.11 and pip
+if exist ".venv" rmdir /s /q .venv
 
 rem --- Without uv: pip of a Python 3.11 (the libraries are locked for 3.11). Any other "python" on PATH,
 rem --- a Python 2.7 say, is never taken; missing, Python 3.11 of python.org is installed
@@ -152,16 +157,22 @@ for /f "delims=" %%p in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul
 )
 goto :eof
 
-rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget
+rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget. A uv that
+rem --- does not start is skipped: on a work PC a policy may forbid programs in AppData ("The system
+rem --- cannot execute the specified program")
 :find_uv
 set "UV="
-for /f "delims=" %%u in ('where uv 2^>nul') do if not defined UV set "UV=%%u"
-for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do (
-    if not defined UV if exist "%%~p" set "UV=%%~p"
-)
-for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do (
-    if not defined UV if exist "%%~d\uv.exe" set "UV=%%~d\uv.exe"
-)
+for /f "delims=" %%u in ('where uv 2^>nul') do call :try_uv "%%u"
+for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do call :try_uv "%%~p"
+for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do call :try_uv "%%~d\uv.exe"
+goto :eof
+
+:try_uv
+if defined UV goto :eof
+if not exist "%~1" goto :eof
+"%~1" --version >nul 2>nul
+if not errorlevel 1 set "UV=%~1"
+if not defined UV echo       uv does not start here, skipped: %~1
 goto :eof
 
 rem --- A Python 3.11 (never 2.7 or another 3.x: the libraries are locked for 3.11), not the Store one
