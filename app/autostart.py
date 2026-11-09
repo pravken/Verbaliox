@@ -80,7 +80,7 @@ def sync() -> None:
         print(f"[autostart] not changed: {e}", file=sys.stderr)
 
 
-# The entry of Verbaliox-Setup.exe in "Installed apps" (installer/verbaliox.iss, AppId): the program
+# The entry of Verbaliox-Installer.exe in "Installed apps" (installer/verbaliox.iss, AppId): the program
 # updates itself afterwards, so the version shown there follows the running one
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2C1B8E-4E7A-4C3B-9A51-7D0E2B5C9F14}_is1"
 
