@@ -916,7 +916,10 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
   font-size: var(--fs-body); color: var(--hc-dim, #AEAEB2); white-space: nowrap; transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease;
 }
 .tb-tab:hover, .tb-subtab:hover, .tb-dots:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.06); }
-.tb-tab.tb-active { background: rgba(255, 255, 255, 0.12); color: #FFFFFF; font-weight: 600; }
+/* The open view and the open tab of a recording: blue, so what is open is plain at a glance */
+.tb-tab.tb-active, .tb-subtab.tb-active { background: #0A84FF; color: #FFFFFF; font-weight: 600; }
+.tb-tab.tb-active:hover, .tb-subtab.tb-active:hover { background: #2B95FF; color: #FFFFFF; }
+.tb-active .tb-ai { fill: #FFFFFF; }  /* the gradient of the AI mark would fade on the blue */
 .tb-group.hidden { display: none; }
 .tb-group {
   display: inline-flex; align-items: center; gap: 2px; height: 42px; padding: 0 4px; border-radius: 21px; min-width: 0;
@@ -926,11 +929,10 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
   display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 13px; border-radius: 17px;
   font-size: var(--fs-body); color: var(--hc-dim, #AEAEB2); white-space: nowrap; transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease;
 }
-.tb-subtab.tb-active { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 600; }
 .tb-dots { width: 34px; height: 34px; border-radius: 17px; color: var(--hc-dim, #AEAEB2); display: inline-flex; align-items: center; justify-content: center; }
 .tb-badge { padding: 0 6px; border-radius: 8px; background: rgba(255, 255, 255, 0.1); font-size: var(--fs-label); line-height: 1.35; color: #C7C7CC; font-weight: 500; }
 .tb-subtab .tb-badge { padding: 0 5px; border-radius: 7px; font-size: var(--fs-label); line-height: 1.35; }
-.tb-active .tb-badge { background: #F5F5F7; color: #141416; font-weight: 600; }  /* audit 2.7: opaque on the chosen tab */
+.tb-active .tb-badge { background: #FFFFFF; color: #0060C7; font-weight: 600; }  /* audit 2.7: opaque on the chosen tab */
 .tb-ai { width: 13px; height: 13px; flex: none; fill: url(#vs-ai-grad); }
 .tb-subtab .tb-ai { width: 12px; height: 12px; }
 .tb-pop {
