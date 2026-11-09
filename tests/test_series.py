@@ -82,6 +82,7 @@ class OnnxEnsurePackageTest(unittest.TestCase):
 
             with mock.patch.object(asr_onnx, "_run", side_effect=run) as ran, \
                  mock.patch("shutil.which", return_value="uv"), \
+                 mock.patch("app.pyenv._runs", return_value=True), \
                  mock.patch("importlib.import_module", side_effect=ImportError):
                 ensure()
             cmd = ran.call_args[0][0]

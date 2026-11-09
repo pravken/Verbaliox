@@ -42,11 +42,20 @@ goto :eof
 rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget
 :find_uv
 set "UV="
-for /f "delims=" %%u in ('where uv 2^>nul') do if not defined UV set "UV=%%u"
-for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do (
-    if not defined UV if exist "%%~p" set "UV=%%~p"
+for /f "delims=" %%u in ('where uv 2^>nul') do call :try_uv "%%u"
+for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do call :try_uv "%%~p"
+for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do call :try_uv "%%~d\uv.exe"
+goto :eof
+
+rem --- A uv is taken only if it runs: the shortcut winget leaves may point nowhere, or a policy may
+rem --- block programs in AppData ("The system cannot execute the specified program")
+:try_uv
+if defined UV goto :eof
+if not exist "%~1" goto :eof
+"%~1" --version >nul 2>nul
+if errorlevel 1 (
+    echo       uv at %~1 does not run: skipped
+    goto :eof
 )
-for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do (
-    if not defined UV if exist "%%~d\uv.exe" set "UV=%%~d\uv.exe"
-)
+set "UV=%~1"
 goto :eof
