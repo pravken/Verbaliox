@@ -193,6 +193,24 @@ class VerbalioxLauncher
     static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
     [STAThread]
+    // .venv\verbaliox-requirements.sha256 (app/pyenv.py) against requirements.txt; no mark: an environment
+    // from before the mark, which the program marks as current at its start
+    static bool RequirementsChanged(string baseDir)
+    {
+        try
+        {
+            string mark = Path.Combine(baseDir, ".venv", "verbaliox-requirements.sha256");
+            string req = Path.Combine(baseDir, "requirements.txt");
+            if (!File.Exists(mark) || !File.Exists(req)) return false;
+            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+            {
+                string now = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(req))).Replace("-", "").ToLowerInvariant();
+                return now != File.ReadAllText(mark).Trim().ToLowerInvariant();
+            }
+        }
+        catch { return false; }
+    }
+
     static void Main(string[] args)
     {
         try
@@ -208,34 +226,20 @@ class VerbalioxLauncher
         string runPy = Path.Combine(baseDir, "run.py");
         string setupBat = Path.Combine(baseDir, "setup.bat");
 
-        // First run on a new PC where .venv is not yet created:
-        if (!File.Exists(venvPython))
+        Application.EnableVisualStyles();
+        // First run on a new PC where .venv is not yet created: the setup window (SetupWindow below)
+        // lists what the program needs and installs it once the user confirms
+        // A newer version installed over this one (the installer, or an archive unpacked over the folder)
+        // brings a requirements.txt the environment was not made from: the same window updates it
+        if (File.Exists(venvPython) && File.Exists(setupBat) && RequirementsChanged(baseDir))
         {
-            if (File.Exists(setupBat))
+            if (!SetupWindow.Run(baseDir, setupBat, UiLanguage() != "en", true)) return;
+        }
+        else if (!File.Exists(venvPython))
+        {
+            if (File.Exists(setupBat) && !SetupWindow.Run(baseDir, setupBat, UiLanguage() != "en", false))
             {
-                DialogResult res = MessageBox.Show(
-                    "Добро пожаловать в Verbaliox!\n\n" +
-                    "При первом запуске необходимо установить локальное Python-окружение (займёт пару минут).\n\n" +
-                    "Запустить автоматическую установку сейчас?",
-                    "Verbaliox — Первый запуск",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Information
-                );
-                if (res != DialogResult.Yes)
-                {
-                    return;
-                }
-
-                ProcessStartInfo setupPsi = new ProcessStartInfo();
-                setupPsi.FileName = "cmd.exe";
-                setupPsi.Arguments = "/c \"\"" + setupBat + "\"\"";
-                setupPsi.WorkingDirectory = baseDir;
-                setupPsi.UseShellExecute = true;
-                Process setupProc = Process.Start(setupPsi);
-                if (setupProc != null)
-                {
-                    setupProc.WaitForExit();
-                }
+                return;
             }
 
             if (!File.Exists(venvPython))
@@ -353,22 +357,29 @@ class VerbalioxLauncher
     };
 
     // The app's UI language, saved by the app in its data folder (default Russian)
+    // The app's data folder: VERBALIOX_DATA_DIR, else %LOCALAPPDATA%\Verbaliox (app/paths.py)
+    internal static string DataDir()
+    {
+        string data = Environment.GetEnvironmentVariable("VERBALIOX_DATA_DIR");
+        if (string.IsNullOrEmpty(data))
+            data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox");
+        return data;
+    }
+
     static string UiLanguage()
     {
         try
         {
-            string data = Environment.GetEnvironmentVariable("VERBALIOX_DATA_DIR");
-            if (string.IsNullOrEmpty(data))
-                data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox");
-            string f = Path.Combine(data, "ui-lang.txt");
+            string f = Path.Combine(DataDir(), "ui-lang.txt");
             if (File.Exists(f)) return File.ReadAllText(f).Trim();
         }
         catch { }
-        return "ru";
+        // Before the first start of the app: the language of Windows
+        return System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ru" ? "ru" : "en";
     }
 
     // assets/icon.ico stores PNG images, which System.Drawing.Icon cannot read: take the biggest PNG
-    static System.Drawing.Image LoadLogo(string icoPath)
+    internal static System.Drawing.Image LoadLogo(string icoPath)
     {
         try
         {
@@ -463,6 +474,485 @@ class VerbalioxLauncher
         };
         timer.Start();
         Application.Run(splash);
+    }
+}
+// The first start: what the program needs, with what each part is for, confirmed by the user and
+// installed in this window (setup.bat runs hidden, its lines go to the log under "Details").
+// C# 5 (csc of .NET Framework 4): no string interpolation, no ?. operator.
+class SetupWindow
+{
+    static readonly System.Drawing.Color Bg = System.Drawing.Color.FromArgb(28, 28, 30);
+    static readonly System.Drawing.Color Card = System.Drawing.Color.FromArgb(44, 44, 46);
+    static readonly System.Drawing.Color Text2 = System.Drawing.Color.FromArgb(152, 152, 157);
+    static readonly System.Drawing.Color Blue = System.Drawing.Color.FromArgb(10, 132, 255);
+    static readonly System.Drawing.Color Green = System.Drawing.Color.FromArgb(48, 209, 88);
+    static readonly System.Drawing.Color Red = System.Drawing.Color.FromArgb(255, 69, 58);
+    static readonly System.Drawing.Color Amber = System.Drawing.Color.FromArgb(255, 159, 10);
+
+    class Row
+    {
+        public Panel Box; public Label Dot; public Label Title; public Label Right; public Label Purpose; public CheckBox Check;
+    }
+
+    bool ru;
+    string baseDir, setupBat, logPath;
+    Form form;
+    Row env, gpu, ffmpeg, ollama;
+    Label intro, detail, footer;
+    Panel track, runner;
+    TextBox log;
+    Button primary, secondary, details;
+    bool succeeded, running, failed, envDone, ollamaInstalled, update, ollamaTouched;
+    Process current;
+    DateTime started;
+    Timer anim;
+
+    string T(string r, string e) { return ru ? r : e; }
+
+    // update: .venv exists and gets the libraries of the new version (it is never removed then)
+    public static bool Run(string baseDir, string setupBat, bool ru, bool update)
+    {
+        SetupWindow w = new SetupWindow();
+        w.ru = ru; w.baseDir = baseDir; w.setupBat = setupBat; w.update = update;
+        w.Build();
+        Application.Run(w.form);
+        return w.succeeded;
+    }
+
+    Label NewLabel(string text, float size, bool bold, System.Drawing.Color color, int x, int y, int wdt, int h)
+    {
+        Label l = new Label();
+        l.Text = text; l.ForeColor = color; l.BackColor = System.Drawing.Color.Transparent;
+        l.Font = new System.Drawing.Font(bold ? "Segoe UI Semibold" : "Segoe UI", size);
+        l.SetBounds(x, y, wdt, h);
+        return l;
+    }
+
+    Row AddRow(int y, string title, string purpose, string right, bool optional)
+    {
+        Row r = new Row();
+        r.Box = new Panel();
+        r.Box.BackColor = Card;
+        r.Box.SetBounds(24, y, 552, 64);
+        int x = 16;
+        if (optional)
+        {
+            r.Check = new CheckBox();
+            r.Check.SetBounds(14, 12, 18, 18);
+            r.Check.BackColor = Card;
+            r.Box.Controls.Add(r.Check);
+            x = 40;
+        }
+        else
+        {
+            r.Dot = NewLabel("●", 10f, false, Text2, 14, 11, 18, 20);
+            r.Box.Controls.Add(r.Dot);
+            x = 36;
+        }
+        r.Title = NewLabel(title, 10f, true, System.Drawing.Color.White, x, 9, 250, 22);
+        r.Box.Controls.Add(r.Title);
+        r.Right = NewLabel(right, 9f, false, Text2, 290, 11, 248, 20);
+        r.Right.TextAlign = System.Drawing.ContentAlignment.TopRight;
+        r.Box.Controls.Add(r.Right);
+        r.Purpose = NewLabel(purpose, 9f, false, Text2, x, 31, 552 - x - 14, 30);
+        r.Box.Controls.Add(r.Purpose);
+        form.Controls.Add(r.Box);
+        return r;
+    }
+
+    static string ToolPath(string name)
+    {
+        string path = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (string dir in path.Split(';'))
+        {
+            try { string f = Path.Combine(dir.Trim(), name); if (dir.Trim().Length > 0 && File.Exists(f)) return f; }
+            catch { }
+        }
+        return null;
+    }
+
+    static string OllamaPath()
+    {
+        string own = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Ollama", "ollama.exe");
+        return File.Exists(own) ? own : ToolPath("ollama.exe");
+    }
+
+    // "NVIDIA GeForce RTX 3090, 566.36" from nvidia-smi, or null
+    static string NvidiaInfo()
+    {
+        try
+        {
+            ProcessStartInfo p = new ProcessStartInfo("nvidia-smi", "--query-gpu=name,driver_version --format=csv,noheader");
+            p.UseShellExecute = false; p.CreateNoWindow = true; p.RedirectStandardOutput = true;
+            Process proc = Process.Start(p);
+            string line = proc.StandardOutput.ReadLine();
+            proc.WaitForExit(5000);
+            return proc.ExitCode == 0 && !string.IsNullOrEmpty(line) ? line.Trim() : null;
+        }
+        catch { return null; }
+    }
+
+    static bool HasNvidiaCard()
+    {
+        try
+        {
+            ProcessStartInfo p = new ProcessStartInfo("powershell", "-NoProfile -Command \"(Get-CimInstance Win32_VideoController).Name\"");
+            p.UseShellExecute = false; p.CreateNoWindow = true; p.RedirectStandardOutput = true;
+            Process proc = Process.Start(p);
+            string all = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(5000);
+            return all.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+        catch { return false; }
+    }
+
+    // The video card row once nvidia-smi (name, driver) or the list of video adapters answered
+    void ShowGpu(string nv, bool card)
+    {
+        System.Drawing.Color gpuColor = Text2;
+        if (nv != null)
+        {
+            string[] parts = nv.Split(',');
+            string ver = parts.Length > 1 ? parts[1].Trim() : "";
+            double v; bool old = double.TryParse(ver, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) && v < 528.33;
+            gpuColor = old ? Amber : Green;
+            gpu.Title.Text = parts[0].Trim();
+            gpu.Purpose.Text = old ? T("Обновите драйвер с nvidia.com, иначе распознавание пойдёт на процессоре", "Update the driver from nvidia.com, or recognition runs on the CPU")
+                                   : T("Ускоряет распознавание в 2–10 раз. CUDA уже входит в среду программы", "Speeds recognition up 2–10 times. CUDA comes with the program environment");
+            gpu.Right.Text = old ? T("драйвер " + ver + " устарел", "driver " + ver + " is too old") : T("драйвер " + ver + " ✓", "driver " + ver + " ✓");
+        }
+        else if (card)
+        {
+            gpuColor = Amber;
+            gpu.Purpose.Text = T("Драйвер не найден: поставьте его с nvidia.com, чтобы распознавание шло на видеокарте", "No driver found: install it from nvidia.com to run recognition on the video card");
+            gpu.Right.Text = T("нужен драйвер", "driver needed");
+        }
+        else
+        {
+            gpu.Purpose.Text = T("Не найдена: программа работает на процессоре, GigaAM и Parakeet и так быстрые", "Not found: the program runs on the CPU, GigaAM and Parakeet are fast there too");
+            gpu.Right.Text = T("не обязательно", "optional");
+        }
+        gpu.Right.ForeColor = gpuColor; gpu.Dot.ForeColor = gpuColor;
+        // Local analysis is offered ticked with a working NVIDIA card (it is slow on the processor)
+        if (!ollamaInstalled && !ollamaTouched && !running && ollama.Check.Enabled) ollama.Check.Checked = nv != null && gpuColor == Green;
+        if (nv == null || gpuColor == Amber)
+        {
+            gpu.Right.Cursor = Cursors.Hand;
+            gpu.Right.Click += delegate { try { Process.Start("https://www.nvidia.com/drivers"); } catch { } };
+        }
+    }
+
+    // winget hands an installer to its own server process, outside the tree taskkill /T ends: the
+    // installers this setup started (the Python of python.org, Ollama) and that server stop on cancel too
+    void KillStrayInstallers()
+    {
+        foreach (Process p in Process.GetProcesses())
+        {
+            try
+            {
+                string n = p.ProcessName;
+                bool ours = n.StartsWith("python-3.11", StringComparison.OrdinalIgnoreCase)
+                    || n.Equals("OllamaSetup", StringComparison.OrdinalIgnoreCase)
+                    || n.Equals("WindowsPackageManagerServer", StringComparison.OrdinalIgnoreCase);
+                if (ours && p.StartTime >= started) { p.Kill(); p.WaitForExit(5000); }
+            }
+            catch { }
+        }
+    }
+
+    void Build()
+    {
+        form = new Form();
+        form.Text = T("Verbaliox — установка", "Verbaliox — setup");
+        form.FormBorderStyle = FormBorderStyle.FixedSingle;
+        form.MaximizeBox = false;
+        form.StartPosition = FormStartPosition.CenterScreen;
+        form.ClientSize = new System.Drawing.Size(600, 560);
+        form.BackColor = Bg;
+        form.ForeColor = System.Drawing.Color.White;
+        try { form.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+
+        PictureBox logo = new PictureBox();
+        logo.SizeMode = PictureBoxSizeMode.Zoom;
+        logo.SetBounds(24, 22, 48, 48);
+        logo.Image = VerbalioxLauncher.LoadLogo(Path.Combine(baseDir, "assets", "icon.ico"));
+        form.Controls.Add(logo);
+        form.Controls.Add(NewLabel(update ? T("Обновление Verbaliox", "Updating Verbaliox") : T("Добро пожаловать в Verbaliox", "Welcome to Verbaliox"),
+                                   14f, true, System.Drawing.Color.White, 84, 22, 480, 30));
+        intro = NewLabel(update
+                           ? T("Новой версии нужны обновлённые библиотеки среды программы. Записи, настройки и модели остаются на месте.",
+                               "The new version needs updated libraries of the program environment. Recordings, settings and models stay as they are.")
+                           : T("Для работы программе нужны компоненты ниже. Всё ставится в папку программы и в ваш профиль — права администратора не нужны.",
+                               "The program needs the parts below. Everything goes into the program folder and your profile — no administrator rights needed."),
+                         9.5f, false, Text2, 84, 52, 492, 40);
+        form.Controls.Add(intro);
+
+        env = AddRow(104, T("Среда программы", "Program environment"),
+            T("Python и библиотеки: распознавание речи, разделение по участникам, интерфейс", "Python and libraries: speech recognition, speakers, the interface"),
+            T("≈ 4 ГБ · обязательно", "≈ 4 GB · required"), false);
+
+        // nvidia-smi and PowerShell take seconds: the window shows first, the row fills in when they answer
+        gpu = AddRow(176, T("Видеокарта NVIDIA", "NVIDIA video card"),
+            T("Проверка видеокарты и драйвера…", "Checking the video card and its driver…"), T("проверка…", "checking…"), false);
+        form.Shown += delegate
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string nv = NvidiaInfo();
+                bool card = nv != null || HasNvidiaCard();
+                Ui(delegate { ShowGpu(nv, card); });
+            });
+        };
+
+        // The copy the program downloaded before (app/ffmpeg_manager.py), else one on PATH
+        string ff = File.Exists(Path.Combine(VerbalioxLauncher.DataDir(), "bin", "ffmpeg.exe"))
+            ? Path.Combine(VerbalioxLauncher.DataDir(), "bin", "ffmpeg.exe") : ToolPath("ffmpeg.exe");
+        ffmpeg = AddRow(248, "FFmpeg",
+            T("Запись, видео и аудио любых форматов, экспорт", "Recording, video and audio of any format, export"),
+            ff != null ? T("уже есть ✓", "found ✓") : T("≈ 100 МБ · скачается при запуске", "≈ 100 MB · downloads at start"), false);
+        if (ff != null) { ffmpeg.Right.ForeColor = Green; ffmpeg.Dot.ForeColor = Green; }
+
+        ollamaInstalled = OllamaPath() != null;
+        ollama = AddRow(320, "Ollama",
+            T("ИИ-анализ на компьютере: обзоры и задачи. Можно поставить позже", "AI analysis on this computer: summaries and tasks. Can be added later"),
+            ollamaInstalled ? T("уже есть ✓", "found ✓") : T("≈ 1 ГБ · по желанию", "≈ 1 GB · optional"), true);
+        ollama.Check.Checked = false;  // ticked once the video card is found (ShowGpu), unless the user chose
+        ollama.Check.Click += delegate { ollamaTouched = true; };
+        ollama.Check.Enabled = !ollamaInstalled;
+        if (ollamaInstalled) ollama.Right.ForeColor = Green;
+
+        form.Controls.Add(NewLabel(T("Модели распознавания вы выберете после запуска, в окне программы.", "You choose the speech models after the start, in the program window."),
+            9f, false, Text2, 24, 394, 552, 20));
+
+        detail = NewLabel("", 9f, false, Text2, 24, 420, 552, 20);
+        detail.AutoEllipsis = true;
+        form.Controls.Add(detail);
+        track = new Panel();
+        track.BackColor = Card;
+        track.SetBounds(24, 444, 552, 3);
+        track.Visible = false;
+        runner = new Panel();
+        runner.BackColor = Blue;
+        runner.SetBounds(0, 0, 120, 3);
+        track.Controls.Add(runner);
+        form.Controls.Add(track);
+
+        log = new TextBox();
+        log.Multiline = true; log.ReadOnly = true; log.ScrollBars = ScrollBars.Vertical;
+        log.BackColor = System.Drawing.Color.FromArgb(18, 18, 20); log.ForeColor = Text2;
+        log.BorderStyle = BorderStyle.None;
+        log.Font = new System.Drawing.Font("Consolas", 8.5f);
+        log.SetBounds(24, 104, 552, 300);
+        log.Visible = false;
+        form.Controls.Add(log);
+
+        DriveInfo drive = null;
+        try { drive = new DriveInfo(Path.GetPathRoot(baseDir)); } catch { }
+        string free = drive != null ? (drive.AvailableFreeSpace / (1024.0 * 1024 * 1024)).ToString("0.#") : "?";
+        footer = NewLabel(T("Свободно на диске: " + free + " ГБ", "Free on the disk: " + free + " GB"), 9f, false, Text2, 24, 520, 250, 20);
+        if (drive != null && drive.AvailableFreeSpace < 8L * 1024 * 1024 * 1024) footer.ForeColor = Amber;
+        form.Controls.Add(footer);
+
+        details = NewButton(T("Подробности", "Details"), 24, 474, 130, false);
+        details.Visible = false;
+        details.Click += delegate { log.Visible = !log.Visible; log.BringToFront(); };
+        secondary = NewButton(T("Отмена", "Cancel"), 330, 510, 110, false);
+        secondary.Click += delegate { if (running || failed) OpenLog(); else form.Close(); };
+        primary = NewButton(update ? T("Обновить", "Update") : T("Установить", "Install"), 450, 510, 126, true);
+        primary.Click += delegate { if (succeeded) form.Close(); else Start(); };
+        form.AcceptButton = primary;
+
+        anim = new Timer();
+        anim.Interval = 40;
+        anim.Tick += delegate
+        {
+            double t = (DateTime.Now - started).TotalSeconds;
+            runner.Left = (int)(((t * 0.6) % 1.0) * (track.Width + runner.Width)) - runner.Width;
+        };
+        form.FormClosing += delegate(object s, FormClosingEventArgs e)
+        {
+            if (!running) return;
+            if (MessageBox.Show(form, T("Прервать установку? Её можно будет начать заново.", "Stop the setup? It can be started again."),
+                    "Verbaliox", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) { e.Cancel = true; return; }
+            running = false;
+            // setup.bat and what it started (uv, pip, winget and the installers winget runs) stop with it; a half environment is removed at the next start
+            try
+            {
+                if (current != null && !current.HasExited)
+                {
+                    Process kill = Process.Start(new ProcessStartInfo("taskkill", "/T /F /PID " + current.Id) { UseShellExecute = false, CreateNoWindow = true });
+                    kill.WaitForExit(10000);
+                    current.WaitForExit(5000);
+                }
+                KillStrayInstallers();
+                // A half environment would look ready to the next start: it goes, so the setup runs again
+                string venv = Path.Combine(baseDir, ".venv");
+                if (!envDone && !update && Directory.Exists(venv)) Directory.Delete(venv, true);
+            }
+            catch { }
+        };
+    }
+
+    Button NewButton(string text, int x, int y, int wdt, bool main)
+    {
+        Button b = new Button();
+        b.Text = text;
+        b.FlatStyle = FlatStyle.Flat;
+        b.FlatAppearance.BorderSize = 0;
+        b.BackColor = main ? Blue : Card;
+        b.ForeColor = System.Drawing.Color.White;
+        b.Font = new System.Drawing.Font("Segoe UI Semibold", 9.5f);
+        b.SetBounds(x, y, wdt, 34);
+        b.Cursor = Cursors.Hand;
+        form.Controls.Add(b);
+        return b;
+    }
+
+    void SetState(Row r, int state, string right)
+    {
+        System.Drawing.Color c = state == 1 ? Blue : state == 2 ? Green : state == 3 ? Red : Text2;
+        if (r.Dot != null) r.Dot.ForeColor = c;
+        r.Right.ForeColor = c;
+        if (right != null) r.Right.Text = right;
+    }
+
+    void Log(string line)
+    {
+        if (line == null) return;
+        try { File.AppendAllText(logPath, line + Environment.NewLine); } catch { }
+        Ui(delegate
+        {
+            log.AppendText(line + Environment.NewLine);
+            if (!line.StartsWith("##") && line.Trim().Length > 0) detail.Text = line.Trim();
+        });
+    }
+
+    // From a process thread to the window (nothing once the window is closed)
+    void Ui(MethodInvoker action)
+    {
+        try { if (!form.IsDisposed) form.BeginInvoke(action); } catch { }
+    }
+
+    void OpenLog() { try { Process.Start("notepad.exe", "\"" + logPath + "\""); } catch { } }
+
+    void Start()
+    {
+        running = true;
+        failed = false;
+        intro.ForeColor = Text2;
+        string logs = Path.Combine(VerbalioxLauncher.DataDir(), "logs");
+        try { Directory.CreateDirectory(logs); } catch { }
+        logPath = Path.Combine(logs, "setup.log");
+        try { File.WriteAllText(logPath, "Verbaliox setup " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + Environment.NewLine); } catch { }
+        intro.Text = T("Идёт установка. Это займёт несколько минут — большая часть уходит на загрузку библиотек.",
+                       "Installing. It takes a few minutes — most of it is downloading the libraries.");
+        primary.Enabled = false;
+        primary.Text = update ? T("Обновление…", "Updating…") : T("Установка…", "Installing…");
+        secondary.Text = T("Журнал", "Log");
+        details.Visible = true;
+        ollama.Check.Enabled = false;
+        track.Visible = true;
+        started = DateTime.Now;
+        anim.Start();
+        SetState(env, 1, T("установка…", "installing…"));
+        current = RunHidden("cmd.exe", "/c \"\"" + setupBat + "\" /quiet\"", delegate(string line)
+        {
+            Log(line);
+            if (line == null) return;
+            string step = null;
+            if (line.StartsWith("##STEP uv")) step = T("менеджер пакетов…", "package manager…");
+            else if (line.StartsWith("##STEP python")) step = T("Python 3.11…", "Python 3.11…");
+            else if (line.StartsWith("##STEP venv")) step = T("создание среды…", "creating…");
+            else if (line.StartsWith("##STEP packages")) step = T("загрузка библиотек…", "downloading libraries…");
+            if (step != null) Ui(delegate { SetState(env, 1, step); });
+        }, delegate(int code)
+        {
+            bool ok = code == 0 && File.Exists(Path.Combine(baseDir, ".venv", "Scripts", "python.exe"));
+            Ui(delegate
+            {
+                if (!ok) { Fail(env, T("Не удалось установить среду программы. Проверьте интернет и нажмите «Повторить»; подробности — в журнале.",
+                                       "The program environment could not be installed. Check the internet and press Retry; the log has the details.")); return; }
+                envDone = true;
+                SetState(env, 2, T("готово ✓", "done ✓"));
+                if (ollama.Check.Checked && !ollamaInstalled) InstallOllama(); else Finish();
+            });
+        });
+    }
+
+    // Ollama installs silently; its own window, which its installer opens, is closed: the program
+    // starts the Ollama server itself, hidden, when analysis needs it
+    void InstallOllama()
+    {
+        SetState(ollama, 1, T("установка…", "installing…"));
+        current = RunHidden("winget", "install -e --id Ollama.Ollama --silent --accept-source-agreements --accept-package-agreements", Log, delegate(int code)
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                foreach (Process p in Process.GetProcessesByName("ollama app")) { try { p.Kill(); } catch { } }
+                System.Threading.Thread.Sleep(500);
+            }
+            bool ok = OllamaPath() != null;
+            Ui(delegate
+            {
+                if (ok) SetState(ollama, 2, T("готово ✓", "done ✓"));
+                else SetState(ollama, 3, T("не установлена — можно позже", "not installed — can be done later"));
+                Finish();  // analysis is optional: the program starts either way
+            });
+        });
+    }
+
+    void Finish()
+    {
+        running = false;
+        succeeded = true;
+        anim.Stop();
+        track.Visible = false;
+        detail.Text = "";
+        intro.Text = T("Всё готово. Дальше программа предложит выбрать модели распознавания.", "All set. Next the program offers the speech models to choose.");
+        primary.Enabled = true;
+        primary.Text = T("Запустить", "Start");
+        secondary.Visible = false;
+        primary.Focus();
+    }
+
+    void Fail(Row r, string message)
+    {
+        running = false;
+        failed = true;
+        anim.Stop();
+        track.Visible = false;
+        SetState(r, 3, T("ошибка", "failed"));
+        intro.Text = message;
+        intro.ForeColor = Red;
+        primary.Enabled = true;
+        primary.Text = T("Повторить", "Retry");
+        secondary.Text = T("Журнал", "Log");
+    }
+
+    // A program run without a window, its output line by line (null at the end), then its exit code
+    static Process RunHidden(string file, string args, Action<string> onLine, Action<int> onExit)
+    {
+        ProcessStartInfo psi = new ProcessStartInfo(file, args);
+        psi.UseShellExecute = false; psi.CreateNoWindow = true;
+        psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
+        Process p = new Process();
+        p.StartInfo = psi;
+        p.EnableRaisingEvents = true;
+        p.OutputDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) onLine(e.Data); };
+        p.ErrorDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) onLine(e.Data); };
+        p.Exited += delegate { p.WaitForExit(); onExit(p.ExitCode); };
+        try
+        {
+            p.Start();
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+        }
+        catch (Exception ex)
+        {
+            onLine(ex.Message);
+            onExit(-1);
+        }
+        return p;
     }
 }
 """

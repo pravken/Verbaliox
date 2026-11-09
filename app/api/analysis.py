@@ -583,9 +583,13 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
     if not segments:
         raise HTTPException(status_code=400, detail="Нет текста записи для анализа")
 
-    # Free any cached speech models from VRAM before invoking local LLM
-    unload_diarizer()
-    clear_vram()
+    # Free any cached speech models from VRAM before invoking local LLM, unless a transcription is
+    # using them right now (it would only load them again)
+    from app.transcriber import running_job_kind
+
+    if running_job_kind() != "transcribe":
+        unload_diarizer()
+        clear_vram()
 
     template_prompt = ""
     if payload.template.startswith("tpl:"):

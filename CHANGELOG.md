@@ -8,6 +8,80 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.7.0 — English
 
+The name is now **Verbaliox**. Highlights of this version (the betas below list everything):
+- **An installer** (`Verbaliox-Installer-vX.Y.Z.exe`) next to the portable zip, and a setup window instead of
+  the console at the first start, with progress and a log.
+- **A simpler first start:** ready sets of models for Russian, Russian and English, or many languages; AI
+  analysis on this computer, in the cloud or none.
+- **A model per language:** Russian speech to GigaAM, other languages to the main model, with the language
+  heard from the first minute; model meters show accuracy, speed and load.
+- **Dubbing in the VoxCPM2 voice** instead of Chatterbox.
+- FFmpeg downloads by itself; two code reviews of the whole program fixed security, installer and
+  transcription issues.
+
+### Since the eighth beta
+- **First start on a PC where uv does not install through winget:** the setup finds uv where winget leaves
+  it, falls back to the uv installer of astral.sh, and without uv takes only Python 3.11 (installing it
+  from python.org when missing). An old Python 2.7 on the PC no longer breaks the setup with «No module
+  named venv»; a failed step says what is missing instead of a chain of «path not found». The dubbing
+  environment finds uv the same way.
+- The installer is called `Verbaliox-Installer-vX.Y.Z.exe` (was `Verbaliox-Setup-…`).
+
+### In the eighth beta (0.7.0-beta.8)
+- **First start with a cloud model** no longer loses the choices of the welcome window (models, Russian
+  routing, language); the cloud consent is asked in Settings → Analysis right after.
+- **The speech language chosen for a recording stays chosen:** «several languages» or «auto» are no longer
+  replaced by the language heard, so «Transcribe again» and Retry use your choice. GigaAM / Parakeet tell
+  German, French, Spanish, Italian, Portuguese, Dutch, Polish and Ukrainian transcripts apart from English.
+- A fragment of a cancelled or failed transcription no longer appears as a transcript version «auto».
+- Deleting GigaAM or Parakeet no longer stops live captions running on the other one; it waits for live
+  captions and transcription like Whisper.
+- Live captions skip one window they could not recognize instead of restarting the recognizer.
+- A screen recording recovered after a crash keeps its picture.
+- A summary no longer unloads the speech models of a transcription running at the same time; a download by
+  link is not started twice.
+- The setup window opens at once (the video card is checked in the background) and its cancel also stops
+  the installers winget runs. Unused interface texts removed; more tests.
+
+### In the seventh beta (0.7.0-beta.7)
+- **First start:** a set with several models besides GigaAM (say Parakeet and Whisper Turbo) asks which
+  one is the main model for other languages and mixed speech, instead of taking the first.
+- Moving the data folder to the new name rewrites only stored file paths: a transcript or note that
+  mentions the old folder stays as written.
+
+### In the sixth beta (0.7.0-beta.6)
+- **An installer:** `Verbaliox-Installer-vX.Y.Z.exe` installs the program for your user (no administrator
+  rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, with a Start menu entry, an optional desktop icon and
+  an uninstaller in «Installed apps» that asks before removing the recordings and models. The zip stays
+  as the portable version.
+- **A new version over an older one:** when the installer or an unpacked zip brings other libraries, the
+  setup window updates the program environment at the next start. The recordings, settings and models stay.
+- «Installed apps» shows the version the program updated itself to; uninstalling also removes «Start with
+  Windows».
+- A Whisper model downloaded as the model for Russian no longer replaces the main model.
+- Language detection: a first minute of silence or music no longer decides, Serbian, Kazakh and other
+  Cyrillic languages stay with the main model, and the check no longer loads a second copy of the model.
+- Security: a backup restored from elsewhere can no longer put markup into the page through speaker
+  colours or segment numbers; the speech model settings take only models of the catalog.
+- Model meters show memory on the processor on a PC without a video card; the FFmpeg download error is
+  translated; batch files use Windows line endings.
+
+### In the fifth beta (0.7.0-beta.5)
+- **A simpler first start.** The welcome window offers ready sets: meetings in Russian, Russian and
+  English, many languages, or your own choice — each model says what it is for and how much it weighs.
+  AI analysis is a separate step: none (transcripts only), on this computer or a cloud model.
+- **A model per language.** Russian speech can go to its own model (GigaAM) and other languages to the
+  main one (Whisper Turbo or Parakeet); with the language left to detection, the first minute decides.
+  Settings → Speech models → «Model for Russian speech».
+- **FFmpeg downloads by itself** at the first start: recording, import and export work without a visit
+  to the settings.
+- **A setup window instead of the console** at the very first start: what the program needs and what each
+  part is for (the environment, the NVIDIA driver — CUDA comes with the environment, FFmpeg, Ollama if you
+  want local analysis), confirmed with «Install», with progress and a log. Ollama installs silently and its
+  own window no longer pops up.
+- **Model meters:** every speech and analysis model shows accuracy (per language), speed on this
+  computer and load in five dots, with the measured numbers in the tooltip.
+
 ### In the fourth beta (0.7.0-beta.4)
 - API keys are stored under the program's new name: keys saved before are read and saved again at the
   first start. Install this beta in place of the third one.
@@ -35,6 +109,79 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.7.0
+
+Новое имя — **Verbaliox**. Главное в этой версии (всё по бетам — ниже):
+- **Установщик** (`Verbaliox-Installer-vX.Y.Z.exe`) рядом с портативным zip и окно установки вместо консоли
+  при первом запуске, с прогрессом и журналом.
+- **Простая первая настройка:** готовые наборы моделей для русского, русского с английским или многих
+  языков; ИИ-анализ на компьютере, в облаке или без него.
+- **Модель под язык:** русскую речь распознаёт GigaAM, другие языки — основная модель, язык определяется
+  по первой минуте; шкалы моделей показывают точность, скорость и нагрузку.
+- **Дубляж голосом VoxCPM2** вместо Chatterbox.
+- FFmpeg скачивается сам; два ревью всего кода исправили ошибки безопасности, установщика и распознавания.
+
+### После восьмой беты
+- **Первый запуск на ПК, где uv не ставится через winget:** установка находит uv там, куда его кладёт winget,
+  при неудаче ставит uv установщиком с astral.sh, а без uv берёт только Python 3.11 (и ставит его с
+  python.org, если его нет). Старый Python 2.7 на компьютере больше не ломает установку ошибкой «No module
+  named venv»; неудачный шаг говорит, чего не хватает, вместо цепочки «путь не найден». Окружение дубляжа
+  находит uv так же.
+- Установщик называется `Verbaliox-Installer-vX.Y.Z.exe` (был `Verbaliox-Setup-…`).
+
+### В восьмой бете (0.7.0-beta.8)
+- **Первый запуск с облачной моделью** больше не теряет выбор окна приветствия (модели, модель для русского,
+  язык); согласие на облако спрашивается сразу после этого в «Настройки → Анализ».
+- **Язык речи, выбранный для записи, остаётся выбранным:** «несколько языков» и «авто» больше не заменяются
+  услышанным языком, поэтому «Распознать заново» и «Повторить» берут ваш выбор. GigaAM и Parakeet отличают
+  от английского немецкие, французские, испанские, итальянские, португальские, нидерландские, польские и
+  украинские расшифровки.
+- Обрывок отменённого или сбойного распознавания больше не появляется как версия расшифровки «авто».
+- Удаление GigaAM или Parakeet больше не останавливает живые субтитры на другой модели и, как у Whisper,
+  ждёт окончания субтитров и распознавания.
+- Живые субтитры пропускают одно нераспознанное окно, а не перезапускают распознавание.
+- Запись экрана, восстановленная после сбоя, остаётся видео.
+- Обзор больше не выгружает модели распознавания, пока идёт расшифровка; скачивание по ссылке не
+  запускается дважды.
+- Окно установки открывается сразу (видеокарта проверяется в фоне), а «Отмена» в нём останавливает и
+  установщики, запущенные через winget. Убраны неиспользуемые тексты интерфейса, добавлены тесты.
+
+### В седьмой бете (0.7.0-beta.7)
+- **Первый запуск:** если в наборе кроме GigaAM несколько моделей (например, Parakeet и Whisper Turbo),
+  мастер спрашивает, какая из них основная для других языков и смешанной речи, а не берёт первую.
+- При переносе папки данных на новое имя меняются только сохранённые пути к файлам: расшифровка или
+  заметка, где упомянута старая папка, остаётся как была.
+
+### В шестой бете (0.7.0-beta.6)
+- **Установщик:** `Verbaliox-Installer-vX.Y.Z.exe` ставит программу для вашего пользователя (без прав
+  администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, с ярлыком в «Пуске», значком на рабочем столе по
+  желанию и удалением через «Установленные приложения», которое спрашивает, стирать ли записи и модели.
+  Zip остаётся портативной версией.
+- **Новая версия поверх старой:** если установщик или распакованный zip приносит другие библиотеки, окно
+  установки при следующем запуске обновит среду программы. Записи, настройки и модели остаются.
+- «Установленные приложения» показывают версию, до которой программа обновилась сама; при удалении
+  убирается и «Запуск вместе с Windows».
+- Модель Whisper, скачанная как модель для русского, больше не заменяет основную.
+- Определение языка: первая минута тишины или музыки больше не решает, сербский, казахский и другие
+  кириллические языки остаются у основной модели, а проверка не загружает вторую копию модели.
+- Безопасность: резервная копия из чужих рук больше не может внести разметку в страницу через цвета
+  участников или номера фраз; в настройки моделей распознавания попадают только модели из каталога.
+- Шкалы моделей на ПК без видеокарты показывают оперативную память; ошибка загрузки FFmpeg переводится;
+  bat-файлы — с переводами строк Windows.
+
+### В пятой бете (0.7.0-beta.5)
+- **Простая первая настройка.** Окно приветствия предлагает готовые наборы: встречи на русском, русский
+  и английский, много языков или своя настройка — у каждой модели написано, для чего она и сколько весит.
+  ИИ-анализ — отдельный шаг: без него (только расшифровка), на этом компьютере или облачная модель.
+- **Модель под язык.** Русскую речь распознаёт своя модель (GigaAM), остальные языки — основная (Whisper
+  Turbo или Parakeet); если язык не указан, его определяет первая минута записи. «Настройки → Модели речи →
+  Модель для русской речи».
+- **FFmpeg скачивается сам** при первом запуске: запись, импорт и экспорт работают без похода в настройки.
+- **Окно установки вместо консоли** при самом первом запуске: что нужно программе и для чего каждая часть
+  (среда программы, драйвер NVIDIA — CUDA входит в среду, FFmpeg, Ollama — если нужен анализ на компьютере),
+  подтверждение кнопкой «Установить», прогресс и журнал. Ollama ставится тихо, её собственное окно больше не
+  выскакивает.
+- **Шкалы моделей:** у каждой модели распознавания и анализа — точность (по языкам), скорость на этом
+  компьютере и нагрузка в пяти делениях, с цифрами замеров в подсказке.
 
 ### В четвёртой бете (0.7.0-beta.4)
 - API-ключи хранятся под новым именем программы: сохранённые раньше читаются и пересохраняются при первом

@@ -280,3 +280,241 @@ class PinnedDownloadsTest(unittest.TestCase):
                 if "revision=" not in args and "*args" not in args and (f.name, args.strip()) not in known:
                     loose.append(f"{f.name}: {args.strip()[:80]}")
         self.assertEqual(loose, [])
+
+
+class FfmpegOnStartTest(unittest.TestCase):
+    """FFmpeg is fetched by itself at the start when there is none (Windows)."""
+
+    def test_downloads_only_when_missing_on_windows(self):
+        from app import ffmpeg_manager as fm
+
+        with mock.patch.object(fm.sys, "platform", "win32"), mock.patch.object(fm, "start_ffmpeg_download") as start, \
+                mock.patch.dict(fm.os.environ, {"VERBALIOX_NO_FFMPEG_AUTO": ""}):
+            with mock.patch.object(fm, "find_tool", return_value=None):
+                self.assertTrue(fm.ensure_on_start())
+            with mock.patch.object(fm, "find_tool", return_value="C:/bin/ffmpeg.exe"):
+                self.assertFalse(fm.ensure_on_start())
+        self.assertEqual(start.call_count, 1)
+        with mock.patch.object(fm.sys, "platform", "linux"), mock.patch.object(fm, "find_tool", return_value=None), \
+                mock.patch.object(fm, "start_ffmpeg_download") as start:
+            self.assertFalse(fm.ensure_on_start())
+            start.assert_not_called()
+
+
+class SetupWindowTest(unittest.TestCase):
+    """The setup window of the launcher (build_exe.py) reads the steps setup.bat writes."""
+
+    def test_setup_bat_speaks_to_the_window(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        for f in root.glob("*.bat"):  # cmd needs CRLF for its labels (goto, call :label)
+            self.assertNotIn(b"\n", f.read_bytes().replace(b"\r\n", b""), f.name)
+        bat = (root / "setup.bat").read_bytes()
+        text = bat.decode("ascii")
+        for step in ("uv", "venv", "packages"):
+            self.assertIn(f"echo ##STEP {step}", text)
+            self.assertIn(f'"##STEP {step}"', (root / "build_exe.py").read_text(encoding="utf-8"))
+        self.assertIn('if not defined QUIET pause', text)
+        # uv found also where winget leaves it, installed by astral.sh when winget gives none; without uv
+        # only a Python 3.11 makes the environment (a Python 2.7 on PATH failed with "No module named venv")
+        self.assertIn(":find_uv", text)
+        self.assertIn(r"WinGet\Packages\astral-sh.uv*", text)
+        self.assertIn("astral.sh/uv/install.ps1", text)
+        self.assertIn("sys.version_info[:2] == (3, 11)", text)
+        self.assertNotIn("python -m venv", text)
+        self.assertIn("goto :venv_failed", text)
+        self.assertIn("--accept-package-agreements\r\n", text)  # winget's answer goes to the log, not to nul
+        dub = (root / "setup_dub.bat").read_text(encoding="ascii")
+        self.assertIn('"%UV%" pip install', dub)
+        self.assertNotIn("where uv >nul", dub)
+
+    def test_ollama_window_is_closed_after_its_install(self):
+        from app import ollama_client as oc
+
+        with mock.patch.object(oc.sys, "platform", "win32"), mock.patch.object(oc.subprocess, "run") as run, \
+                mock.patch.object(oc.time, "sleep"):
+            oc._close_ollama_app(seconds=0.01)
+        self.assertTrue(run.called)
+        self.assertEqual(run.call_args[0][0], ["taskkill", "/F", "/IM", "ollama app.exe"])
+
+
+class InstallerTest(unittest.TestCase):
+    """installer/verbaliox.iss: per user, and its file goes out with the release and its checksums."""
+
+    def test_installer_is_per_user_and_released(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        iss = (root / "installer" / "verbaliox.iss").read_text(encoding="utf-8")
+        self.assertIn("PrivilegesRequired=lowest", iss)  # no administrator rights; the app updates itself
+        self.assertNotIn("PrivilegesRequiredOverridesAllowed", iss)  # and no switch to Program Files
+        self.assertTrue((root / "installer" / "verbaliox.iss").read_bytes().startswith(b"\xef\xbb\xbf"))  # Russian texts as UTF-8
+        from app.autostart import FORMER_VALUE_NAME, VALUE_NAME
+
+        for name in (VALUE_NAME, FORMER_VALUE_NAME):  # "Start with Windows" goes with the program
+            self.assertIn(f'ValueName: "{name}"; Flags: uninsdeletevalue', iss)
+        self.assertIn("AppMutex=Local\\Verbaliox.Desktop.Window", iss)
+        from app.autostart import UNINSTALL_KEY
+
+        app_id = UNINSTALL_KEY.rsplit("\\", 1)[1].removesuffix("_is1")
+        self.assertIn("AppId={" + app_id + "\n", iss)  # the program updates this entry's version
+        self.assertIn('"Local\\\\Verbaliox.Desktop.Window"', (root / "run.py").read_text(encoding="utf-8"))
+        self.assertIn("OutputBaseFilename=Verbaliox-Installer-v{#AppVersion}", iss)
+        wf = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn("installer\\verbaliox.iss", wf)
+        self.assertIn("Verbaliox-Installer-*.exe", wf)
+        self.assertIn('$setup.FullName -Algorithm SHA256', wf)  # in SHA256SUMS.txt, so signed
+
+
+class DisplaySanitizeTest(unittest.TestCase):
+    """Colours, times and ids from the database reach markup only as #rrggbb and numbers (a backup
+    restored from elsewhere could carry markup in them)."""
+
+    def test_hostile_values_are_neutralized(self):
+        from app.database import _sanitize_display
+
+        d = {"speakers": {"S1": {"name": "A", "color": '"><button data-click="fetch">'}, "S2": {"color": "#30D158"}},
+             "segments": [{"id": "1 onclick", "start": '"><b>', "end": "12.5", "text": "x"}]}
+        _sanitize_display(d)
+        self.assertEqual(d["speakers"]["S1"]["color"], "#0A84FF")
+        self.assertEqual(d["speakers"]["S2"]["color"], "#30D158")
+        self.assertEqual((d["segments"][0]["id"], d["segments"][0]["start"], d["segments"][0]["end"]), (0, 0.0, 12.5))
+
+
+class ModelSetupSelectTest(unittest.TestCase):
+    """A Whisper model downloaded as the Russian model (select=False) does not replace the main one."""
+
+    def _run(self, select):
+        from app import model_manager as mm
+
+        class _Now:
+            def __init__(self, target, daemon=None):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        with mock.patch.object(mm, "_download_hf_repo_with_progress"), \
+                mock.patch.object(mm, "update_settings") as upd, \
+                mock.patch.object(mm.threading, "Thread", _Now):
+            mm._setup_state["active"] = False
+            mm.start_models_setup(mm.WHISPER_CATALOG[0]["id"], install_diarizer=False, select=select)
+        return upd
+
+    def test_select_flag(self):
+        self.assertTrue(self._run(True).called)
+        self.assertFalse(self._run(False).called)
+
+
+class RequirementsMarkTest(unittest.TestCase):
+    """.venv records the requirements.txt it was installed from; the launcher updates it on a mismatch."""
+
+    def test_mark_written_and_kept(self):
+        import tempfile
+        from pathlib import Path
+
+        from app.pyenv import REQUIREMENTS_MARK, mark_requirements, requirements_hash
+
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d)
+            (app / "requirements.txt").write_text("a==1\n", encoding="utf-8")
+            mark_requirements(app)  # no .venv: nothing to mark
+            self.assertFalse((app / REQUIREMENTS_MARK).exists())
+            (app / ".venv").mkdir()
+            mark_requirements(app, only_if_missing=True)
+            first = (app / REQUIREMENTS_MARK).read_text(encoding="ascii")
+            self.assertEqual(first, requirements_hash(app))
+            (app / "requirements.txt").write_text("a==2\n", encoding="utf-8")
+            mark_requirements(app, only_if_missing=True)  # a mark from an older install stays as it is
+            self.assertEqual((app / REQUIREMENTS_MARK).read_text(encoding="ascii"), first)
+            mark_requirements(app)
+            self.assertNotEqual((app / REQUIREMENTS_MARK).read_text(encoding="ascii"), first)
+
+    def test_setup_and_launcher_use_the_same_mark(self):
+        from pathlib import Path
+
+        import build_exe
+        from app.pyenv import REQUIREMENTS_MARK
+
+        root = Path(__file__).resolve().parent.parent
+        bat = (root / "setup.bat").read_text(encoding="utf-8")
+        self.assertIn(REQUIREMENTS_MARK.name, bat)
+        self.assertIn("if not defined UPDATE if exist .venv rmdir /s /q .venv", bat)  # an update never removes .venv
+        self.assertIn('"' + REQUIREMENTS_MARK.name + '"', build_exe.CS_SOURCE)
+        self.assertIn("RequirementsChanged(baseDir)", build_exe.CS_SOURCE)
+
+
+class SpeechModelSettingTest(unittest.TestCase):
+    """The speech model settings take only models of the catalog (D3)."""
+
+    def test_only_catalog_models(self):
+        from app.settings_schema import clean as validate_setting
+
+        self.assertEqual(validate_setting("whisper_model", "large-v3-turbo"), "large-v3-turbo")
+        self.assertEqual(validate_setting("speech_model_ru", "gigaam-v3"), "gigaam-v3")
+        self.assertEqual(validate_setting("speech_model_ru", ""), "")
+        self.assertEqual(validate_setting("live_whisper_model", "auto"), "auto")
+        for key in ("whisper_model", "speech_model_ru", "live_whisper_model"):
+            with self.assertRaises(ValueError):
+                validate_setting(key, "someone/evil-repo")
+
+
+class PartialTranscriptModelTest(unittest.TestCase):
+    """A fragment a cancelled run left gets no model at the next start, so it never becomes a version."""
+
+    def test_fragment_of_a_cancelled_run(self):
+        from app.database import (create_meeting, get_connection, get_meeting, init_db, save_meeting_results,
+                                  update_meeting_fields, update_meeting_progress)
+
+        init_db()
+        m = create_meeting(title="x", filename="x.wav", media_path="")
+        update_meeting_fields(m["id"], model_name="auto")
+        save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "speaker": "S", "text": "обрывок"}],
+                             speakers={"S": {"name": "A", "color": "#0A84FF"}})
+        update_meeting_progress(m["id"], status="cancelled")
+        conn = get_connection()
+        conn.execute("UPDATE meetings SET transcript_model = 'auto' WHERE id = ?", (m["id"],))  # an older start
+        conn.commit()
+        conn.close()
+        init_db()
+        self.assertEqual(get_meeting(m["id"])["transcript_model"], "")
+
+
+class OnnxDeleteTest(unittest.TestCase):
+    """Deleting one GigaAM / Parakeet model leaves the other loaded and waits for live captions."""
+
+    def test_only_the_deleted_model_is_released(self):
+        from app import asr_onnx
+
+        with mock.patch.dict(asr_onnx._loaded, {"gigaam-v3": object(), "parakeet-v3": object()}, clear=True):
+            asr_onnx.delete_model("gigaam-v3")
+            self.assertEqual(list(asr_onnx._loaded), ["parakeet-v3"])
+
+    def test_refused_while_live_captions_use_it(self):
+        from fastapi import HTTPException
+
+        from app import live
+        import app.main  # noqa: F401 - the routers import from it
+        from app.api.system import api_onnx_delete
+
+        with mock.patch.object(live, "model_in_use", return_value=True), \
+                mock.patch("app.asr_onnx.delete_model") as delete:
+            with self.assertRaises(HTTPException) as e:
+                api_onnx_delete("parakeet-v3")
+        self.assertEqual(e.exception.status_code, 409)
+        delete.assert_not_called()
+
+
+class UrlImportRestartTest(unittest.TestCase):
+    """A download by link still running is not started a second time."""
+
+    def test_running_download_is_not_doubled(self):
+        import threading
+
+        from app import url_import
+
+        with mock.patch.dict(url_import._cancel, {77: threading.Event()}), \
+                mock.patch.object(url_import.threading, "Thread") as thread:
+            self.assertFalse(url_import.restart(77, "https://example.com/v"))
+        thread.assert_not_called()

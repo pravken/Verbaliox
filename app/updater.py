@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Loaded before the update replaces the program files
-from app.pyenv import ensure_pip, find_uv
+from app.pyenv import ensure_pip, find_uv, mark_requirements
 
 GITHUB_REPO = "pravken/Verbaliox"
 LATEST_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -548,6 +548,7 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                                          creationflags=_NO_WINDOW)
                 if res.returncode != 0:
                     raise RuntimeError("Не удалось установить библиотеки (подробности в logs\\update.log)")
+                mark_requirements(app_dir)
             if _dub_requirements_hash(app_dir) != old_dub_req:
                 _mark_dub_outdated(app_dir, old_dub_req)
         except Exception as e:

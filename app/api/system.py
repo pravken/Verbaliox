@@ -61,7 +61,7 @@ def api_ffmpeg_status() -> Dict[str, Any]:
 
 @router.post("/api/ffmpeg/install")
 def api_ffmpeg_install() -> Dict[str, Any]:
-    """Downloads the pinned FFmpeg build into the user data folder (only on explicit request)."""
+    """Downloads the pinned FFmpeg build into the user data folder (the button; the first start does it by itself)."""
     return start_ffmpeg_download()
 
 @router.post("/api/onnx-models/{model_id}/download")
@@ -80,6 +80,13 @@ def api_onnx_delete(model_id: str) -> Dict[str, Any]:
 
     if not asr_onnx.is_onnx_model(model_id):
         raise HTTPException(status_code=404, detail="Неизвестная модель")
+    from app import live
+    from app.transcriber import running_job_kind
+
+    if running_job_kind() == "transcribe":
+        raise HTTPException(status_code=409, detail="Идёт распознавание — удалите модель после него")
+    if live.model_in_use(model_id):
+        raise HTTPException(status_code=409, detail="Идут живые субтитры — удалите модель после записи")
     return {"ok": asr_onnx.delete_model(model_id)}
 
 @router.get("/api/models/status")
@@ -91,6 +98,8 @@ def api_models_status() -> Dict[str, Any]:
 class ModelsSetupPayload(BaseModel):
     whisper_model: str = "large-v3-turbo"
     install_diarizer: bool = True
+    # False: only download (the Russian model, or for later); the main model stays as it is
+    select: bool = True
 
 @router.post("/api/models/setup")
 def api_models_setup(payload: ModelsSetupPayload) -> Dict[str, Any]:
@@ -99,6 +108,7 @@ def api_models_setup(payload: ModelsSetupPayload) -> Dict[str, Any]:
     return start_models_setup(
         whisper_model_id=payload.whisper_model.strip(),
         install_diarizer=payload.install_diarizer,
+        select=payload.select,
     )
 
 @router.delete("/api/models/{model_id}")

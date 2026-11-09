@@ -402,12 +402,16 @@ class RecordingSalvageTest(unittest.TestCase):
         empty = rec / ".page_000000000000.webm.part"
         empty.write_bytes(b"")
         before = len(list_meetings())
-        with mock.patch.object(main, "enqueue_meeting_job"):
+        with mock.patch.object(main, "enqueue_meeting_job"), \
+                mock.patch("app.video_subtitles.probe_media", return_value={"has_video": True}):
             self.assertEqual(main.recover_orphan_recordings(), 1)
         self.assertFalse(part.exists() or empty.exists())
         after = list_meetings()
         self.assertEqual(len(after), before + 1)
         self.assertTrue(after[0]["filename"].endswith(".webm"))
+        from app.database import get_meeting
+
+        self.assertTrue(get_meeting(after[0]["id"])["is_video"])  # a recovered screen recording stays video
 
 
 class WhisperDeleteTest(unittest.TestCase):

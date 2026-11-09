@@ -1,5 +1,6 @@
 """
-Locates FFmpeg and, only when the user asks for it, downloads a pinned Windows build.
+Locates FFmpeg and downloads a pinned Windows build: by itself at the start when none is found
+(ensure_on_start), or when the user asks for it in Settings.
 
 Lookup order: the copy downloaded by Verbaliox (<data>/bin), then FFmpeg on PATH.
 The download is a fixed release of the "essentials" build by Gyan Doshi (the build linked from
@@ -8,6 +9,7 @@ is pinned below. Only ffmpeg.exe, ffprobe.exe and the license are extracted.
 """
 
 import hashlib
+import os
 import shutil
 import sys
 import threading
@@ -110,6 +112,17 @@ def _download_and_install() -> None:
         _set(active=False, error=str(e))
     finally:
         part.unlink(missing_ok=True)
+
+
+def ensure_on_start() -> bool:
+    """At the start of the app: FFmpeg is fetched by itself when there is none (Windows), so recording,
+    import and export work without a visit to the settings. Returns True when a download started."""
+    if sys.platform != "win32" or os.environ.get("VERBALIOX_NO_FFMPEG_AUTO") == "1":
+        return False  # the tests: nothing is downloaded into their data folder
+    if find_tool("ffmpeg") and find_tool("ffprobe"):
+        return False
+    start_ffmpeg_download()
+    return True
 
 
 def start_ffmpeg_download() -> Dict[str, Any]:

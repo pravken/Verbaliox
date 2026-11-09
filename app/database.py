@@ -1,6 +1,6 @@
 import json
-import re
 import os
+import re
 import sqlite3
 import threading
 import uuid
@@ -131,6 +131,7 @@ def init_db() -> None:
 
         default_settings = {
             "whisper_model": hw["recommended_whisper_model"],
+            "speech_model_ru": "",  # a model of its own for Russian speech (app/speech_route.py); "" = the main one
             "device": hw["recommended_device"],
             "compute_type": hw["recommended_compute_type"],
             "language": "auto",
@@ -265,8 +266,13 @@ def init_db() -> None:
             cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('meeting_flags_v1', '1')")
         moved = _move_segments_to_table(conn)
         # Transcripts made before the versions: by the model the recording names
+        # Only a completed one: the fragment a cancelled or failed run left is no version of any model, and
+        # "auto" names no model (each run stores the one it used)
         cur.execute("UPDATE meetings SET transcript_model = model_name, transcript_at = COALESCE(completed_at, '') "
-                    "WHERE COALESCE(transcript_model, '') = '' AND has_transcript = 1")
+                    "WHERE COALESCE(transcript_model, '') = '' AND has_transcript = 1 AND status = 'completed' "
+                    "AND COALESCE(model_name, '') NOT IN ('', 'auto')")
+        # What earlier versions of this line wrote for such fragments
+        cur.execute("UPDATE meetings SET transcript_model = '' WHERE transcript_model = 'auto'")
         if cur.execute("PRAGMA user_version").fetchone()[0] < _FTS_SCHEMA_VERSION:
             # First start with the index (or a newer index format): build it from stored transcripts
             cur.execute("DELETE FROM segments_fts")
@@ -313,6 +319,9 @@ _MEETING_EXTRA_COLUMNS = {
     "processing_json": "TEXT DEFAULT '{}'",  # what is done to the sound and text when transcribed (see effective_processing)
     "transcript_model": "TEXT DEFAULT ''",
     "transcript_at": "TEXT DEFAULT ''",
+    # The speech language the user chose ("auto", "mixed", "ru"...): language holds the one heard, which a
+    # transcription overwrites; a new run starts from this choice ('' before the first run: language is it)
+    "language_choice": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -1030,7 +1039,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 
 
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
-    allowed = {"title", "model_name", "language", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
+    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
                "transcript_verified", "audio_path",
                "local_only", "series_id"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
@@ -1579,6 +1588,38 @@ def set_meeting_processing(meeting_id: int, processing: Dict[str, Any]) -> None:
         conn.close()
 
 
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+DEFAULT_SPEAKER_COLOR = "#0A84FF"
+
+
+def _num(value: Any) -> float:
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return x if x == x and abs(x) != float("inf") else 0.0
+
+
+def _sanitize_display(d: Dict[str, Any]) -> None:
+    """What the page puts into markup as is: times and ids are numbers, colours are #rrggbb. A
+    database restored from someone else's backup cannot carry markup in them (the app itself only
+    ever writes such values)."""
+    speakers = d.get("speakers")
+    if isinstance(speakers, dict):
+        for info in speakers.values():
+            if isinstance(info, dict) and not _COLOR_RE.match(str(info.get("color") or "")):
+                info["color"] = DEFAULT_SPEAKER_COLOR
+    else:
+        d["speakers"] = {}
+    for seg in d.get("segments") or []:
+        seg["start"], seg["end"] = _num(seg.get("start")), _num(seg.get("end"))
+        if "id" in seg:
+            try:
+                seg["id"] = int(seg["id"])
+            except (TypeError, ValueError):
+                seg["id"] = 0
+
+
 def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[str, Any]:
     d["has_segments_backup"] = bool(d.pop("segments_backup_json", ""))
     d["pending_exports"] = _loads_list(d.pop("pending_exports_json", None))
@@ -1602,6 +1643,7 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
         else:
             d[target] = default_val
     d["dubs"] = [_dub_paths_from_storage(x) for x in d.get("dubs") or [] if isinstance(x, dict)]
+    _sanitize_display(d)
     # Translations are matched to the current segments here, so every response carries their state
     from app.translation import resolve_all
 

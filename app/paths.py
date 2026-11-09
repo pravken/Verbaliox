@@ -210,10 +210,20 @@ def migrate_legacy_data_dir(legacy: Optional[Path] = None, target: Optional[Path
     return True
 
 
+# The columns that store file paths (app/database.py). A new column with paths goes here too
+PATH_COLUMNS = {
+    "meetings": ("media_path", "audio_path", "dubs_json", "exports_json", "pending_exports_json", "obsidian_path"),
+    "settings": ("value",),
+    "pending_deletes": ("path",),
+}
+
+
 def _rewrite_moved_root(db_path: Path, old_root: Path, new_root: Path) -> int:
     """
     After the data folder was renamed: every stored path inside it (media, audio, dubs, exports,
-    settings, also inside JSON) points to the new folder. Only whole folder names are matched.
+    settings, also inside JSON) points to the new folder. Only whole folder names are matched, and only
+    in the columns that hold paths (PATH_COLUMNS): a transcript or a note that mentions the old folder
+    stays as written.
     """
     conn = sqlite3.connect(str(db_path))
     try:
@@ -224,15 +234,12 @@ def _rewrite_moved_root(db_path: Path, old_root: Path, new_root: Path) -> int:
                 pairs.append(((old + sep).replace("\\", "\\\\"), (new + sep).replace("\\", "\\\\")))  # in JSON
         pairs = list(dict.fromkeys(pairs))
         changed = 0
-        rows = conn.execute("SELECT name, COALESCE(sql, '') FROM sqlite_master WHERE type = 'table'").fetchall()
-        virtual = [name for name, sql in rows if sql.upper().startswith("CREATE VIRTUAL")]
-        # Full-text indexes and their shadow tables are left alone: they follow the triggers
-        tables = [name for name, _ in rows if name not in virtual and not name.startswith("sqlite_")
-                  and not any(name.startswith(v + "_") for v in virtual)]
-        for table in tables:
-            cols = [r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')
-                    if not r[2] or any(t in r[2].upper() for t in ("CHAR", "TEXT", "CLOB"))]
-            for col in cols:
+        existing = {name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        for table, cols in PATH_COLUMNS.items():
+            if table not in existing:
+                continue
+            have = {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+            for col in [c for c in cols if c in have]:
                 for old, new in pairs:
                     cur = conn.execute(f'UPDATE "{table}" SET "{col}" = REPLACE("{col}", ?, ?) '
                                        f'WHERE instr("{col}", ?) > 0', (old, new, old))
@@ -266,7 +273,17 @@ def migrate_renamed_data_dir(old: Optional[Path] = None, target: Optional[Path] 
         aside = target.with_name(f"{target.name}.before-rename-{datetime.now():%Y%m%d-%H%M%S}")
         target.rename(aside)
     target.parent.mkdir(parents=True, exist_ok=True)
-    old.rename(target)  # _log writes into DATA_DIR: nothing is logged before this line
+    try:
+        old.rename(target)  # _log writes into DATA_DIR: nothing is logged before this line
+    except OSError:
+        # Refused (a file of the old folder is open): the folder set aside goes back, so the next start
+        # does not set aside one more folder with the log written below
+        if aside:
+            try:
+                aside.rename(target)
+            except OSError:
+                pass
+        raise
     if aside:
         _log(f"{target} existed without recordings; kept it as {aside.name}")
     rewritten = _rewrite_moved_root(target / "meetings.db", old, target)
