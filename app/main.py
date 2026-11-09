@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
+from app import speech_route
 from app.paths import APP_DIR as BASE_DIR, MEDIA_EXTENSIONS, SESSION_TOKEN_FILE, UPLOADS_DIR, recordings_dir
 from app.settings_schema import as_int
 from app.database import (
@@ -187,6 +188,12 @@ async def lifespan(_app: FastAPI):
     except Exception:
         traceback.print_exc()
 
+    try:
+        from app import ffmpeg_manager
+
+        ffmpeg_manager.ensure_on_start()  # none yet (first start): fetched without a visit to the settings
+    except Exception:
+        traceback.print_exc()
     try:
         from app import secret_store
 
@@ -381,7 +388,7 @@ def _queue_file(title: str, dest: Path, has_video: Optional[bool]) -> Dict[str, 
     m = create_meeting(
         title=title[:300], filename=dest.name, media_path=str(dest),
         language=settings.get("language", "auto"),
-        model_name=settings.get("whisper_model", "large-v3-turbo"),
+        model_name=speech_route.default_choice(settings),
         num_speakers_hint=as_int(settings.get("num_speakers"), 0),
         source="recording", owns_media=True, title_is_default=True, has_video=has_video,
     )
@@ -450,6 +457,15 @@ def recover_orphan_recordings() -> int:
         if part.stat().st_size < 4096:
             part.unlink(missing_ok=True)
             continue
+        if has_video is None:
+            # The page records the microphone alone or with the screen: the file says which, so a
+            # recovered screen recording is not taken for audio (a recording's source says audio)
+            try:
+                from app.video_subtitles import probe_media
+
+                has_video = probe_media(part)["has_video"]
+            except Exception:
+                has_video = None
         try:
             _salvage_parts("Восстановленная запись", [(part, has_video)])
             n += 1

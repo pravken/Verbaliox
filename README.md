@@ -20,6 +20,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 ### Features
 
 - **Speech recognition** with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and Silero VAD. Models: `large-v3-turbo`, `large-v3`; GigaAM v3 and Parakeet TDT v3 on ONNX Runtime; recordings that mix languages are recognized phrase by phrase. Compute precision (`float16`, `int8_float16`, `int8`) is chosen from available VRAM, with fallback to CPU.
+- **A model per language:** Russian speech can have a model of its own (GigaAM), other languages the main one; with the language left to detection, the first minute decides.
 - **Several models, one text.** Each model's transcript of a recording is kept; the dropdown above the text switches between them. "Merge versions" makes one text from them: where the models agree, their word; the places they heard differently are chosen by the analysis model (only among the variants) and stay underlined, a click shows every model's variant.
 - **Speaker separation** by clustering SpeechBrain ECAPA-TDNN voice embeddings. Works without tokens. Accuracy drops with overlapping speech, very short replies, or similar voices, so check the result and fix speakers where needed.
 - **Optional audio cleanup** before recognition: FFmpeg filters for noise reduction, click removal and loudness leveling. A simple voice filter is also available in the player.
@@ -54,16 +55,18 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 ### Requirements
 
 - Windows 10/11 (64-bit)
-- [FFmpeg](https://ffmpeg.org): either in `PATH` (e.g. `winget install Gyan.FFmpeg`) or downloaded from **Settings → Download FFmpeg** (a pinned build, checked by SHA-256)
+- [FFmpeg](https://ffmpeg.org): either in `PATH` (e.g. `winget install Gyan.FFmpeg`) or, when there is none, downloaded by the app at its first start (a pinned build, checked by SHA-256; also **Settings → Download FFmpeg**)
 - An NVIDIA GPU with CUDA and a recent driver is recommended; a CPU works but is noticeably slower
 - An internet connection for the first start, which installs the Python environment
 - Disk space: about 7 GB for the Python environment (`.venv`, mostly PyTorch with CUDA), about 0.5–3 GB per Whisper model, plus Ollama models if you use summaries
 
 ### Getting started
 
-**Option A — release archive.** Download `Verbaliox-vX.Y.Z.zip` from [Releases](https://github.com/pravken/Verbaliox/releases), check it against `SHA256SUMS.txt`, unpack it and run `Verbaliox.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
+**Option A — installer.** Download `Verbaliox-Installer-vX.Y.Z.exe` from [Releases](https://github.com/pravken/Verbaliox/releases) and run it: it installs the program for your user (no administrator rights) into `%LOCALAPPDATA%\Programs\Verbaliox`, adds it to the Start menu and to «Installed apps» (uninstalling asks whether to remove the recordings and models too), then starts it. Built with [Inno Setup](https://jrsoftware.org/isinfo.php) from [`installer/verbaliox.iss`](installer/verbaliox.iss).
 
-Unpack the archive to a regular folder you can write to, such as `D:\Verbaliox`, not `Program Files`: the app creates `.venv` and `models` next to itself. The `.exe` alone is not enough, it is only the launcher for the program files in the archive. On the first start the launcher offers to install the Python environment (`setup.bat`). This downloads several gigabytes and usually takes 10–20 minutes, depending on your connection. Later starts take seconds, and new versions are installed from **Settings → General**.
+**Option A2 — portable archive.** Download `Verbaliox-vX.Y.Z.zip` from [Releases](https://github.com/pravken/Verbaliox/releases), check it against `SHA256SUMS.txt`, unpack it and run `Verbaliox.exe`. The launcher is built from [`build_exe.py`](build_exe.py) by the [release workflow](.github/workflows/release.yml).
+
+Unpack the archive to a regular folder you can write to, such as `D:\Verbaliox`, not `Program Files`: the app creates `.venv` and `models` next to itself. The `.exe` alone is not enough, it is only the launcher for the program files in the archive. On the first start the launcher opens a setup window: it lists what the program needs and what each part is for (the program environment, FFmpeg, the NVIDIA driver check, Ollama if you want local AI analysis) and installs it once you press **Install**, with progress and a log instead of a console. CUDA needs no separate install: it comes with the environment; only the NVIDIA driver is needed. This downloads several gigabytes and usually takes 10–20 minutes, depending on your connection. Later starts take seconds, and new versions are installed from **Settings → General**.
 
 `Verbaliox.exe` is not code-signed. On the first start Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway** (compare the file with `SHA256SUMS.txt` first). If Windows blocks the scripts of the unpacked folder, right-click the downloaded `.zip` → **Properties → Unblock** before unpacking. Keep the folder path short (under about 150 characters, e.g. `D:\Verbaliox`): some CUDA libraries and model files have long names, and Windows refuses paths over 260 characters unless long paths are turned on.
 
@@ -75,7 +78,7 @@ cd Verbaliox
 start.bat
 ```
 
-On first launch `setup.bat` creates a Python virtual environment (`.venv`) and installs the exact package versions from `requirements.txt` (a lock file with SHA-256 hashes, generated from `requirements.in`). The app then opens a setup screen where you choose which Whisper model to download. To build the launcher yourself, run `python build_exe.py`; it uses the C# compiler bundled with the .NET Framework.
+The setup window runs `setup.bat`, which creates a Python virtual environment (`.venv`) and installs the exact package versions from `requirements.txt` (a lock file with SHA-256 hashes, generated from `requirements.in`); it can also be run by hand. The app then opens a welcome screen with ready sets of speech models and the choice of AI analysis. To build the launcher yourself, run `python build_exe.py`; it uses the C# compiler bundled with the .NET Framework.
 
 In a folder cloned with git the app still reports new versions but never installs them itself: run `update.bat` (or `update.bat <branch>` to switch branches). It puts files changed in the folder aside with `git stash`, updates the branch and installs the packages when `requirements.txt` changed.
 
@@ -137,7 +140,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 
 | When | Where |
 | :--- | :--- |
-| First-time setup (`setup.bat`) | PyPI and download.pytorch.org (Python packages); winget, if `uv` is missing |
+| First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); winget and astral.sh, if `uv` is missing, and for Ollama when it is ticked |
 | You download a speech model (Whisper, GigaAM, Parakeet with the Silero VAD) or a speaker model | Hugging Face (`huggingface.co`); for GigaAM and Parakeet the first time also PyPI (`onnx-asr`, checked by its hash) |
 | App start with an NVIDIA video card, once (Settings → Recognition, "GigaAM and Parakeet on the video card"; on by default) | PyPI: the GPU build of ONNX Runtime (`onnxruntime-gpu`, about 300 MB, checked by its hash) |
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
@@ -146,7 +149,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
 | Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
-| You click **Download FFmpeg** in Settings | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
+| First start without FFmpeg in `PATH` (or **Download FFmpeg** in Settings) | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
 | App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer |
 | You click **Install** for an update | github.com: the release archive and `SHA256SUMS.txt`; PyPI and download.pytorch.org if the new version needs other Python packages. The checksum proves the archive arrived complete and unchanged. Once the author's release key is set up, `SHA256SUMS.txt` is also signed (`SHA256SUMS.txt.minisig`, minisign format) and the app installs only releases signed with it ([docs/release-signing.md](docs/release-signing.md)) |
 | Only if you turned on a cloud model in Settings → Analysis: an overview, a question, a title or an Obsidian note is made | The chosen service (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` or your Base URL): the transcript text of that recording, or the fragments found for a library question. Audio and video are never sent. The API key is stored encrypted with Windows DPAPI |
@@ -180,12 +183,13 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | PyTorch, torchaudio | BSD-3 |
 | SoundCard (system audio recording) | BSD-3 |
 | yt-dlp (installed when you first import by link) | Unlicense |
-| FFmpeg (optional download, Gyan.dev essentials build) | GPL v3 |
+| FFmpeg (downloaded at the first start when missing, Gyan.dev essentials build) | GPL v3 |
 | [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) TTS (optional dubbing) | Apache 2.0 |
 | Perth watermark `resemble-perth` (optional dubbing) | MIT |
 | Demucs `htdemucs` (optional dubbing) | MIT |
 | num2words (optional dubbing: numbers as words) | LGPL 2.1 |
 | Inter, JetBrains Mono fonts | SIL Open Font License |
+| Inno Setup (builds `Verbaliox-Installer.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
 Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). If you download other models through Ollama, check their terms.
 
@@ -222,6 +226,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 ### Возможности
 
 - **Распознавание речи**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) и Silero VAD. Модели `large-v3-turbo`, `large-v3`, а также GigaAM v3 и Parakeet TDT v3 на ONNX Runtime; записи на нескольких языках распознаются пофразово. Точность вычислений (`float16`, `int8_float16`, `int8`) подбирается под объём видеопамяти, при необходимости работа переходит на CPU.
+- **Модель под язык:** для русской речи можно выбрать отдельную модель (GigaAM), для остальных языков работает основная; если язык не указан, его определяет первая минута записи.
 - **Несколько моделей — один текст.** Расшифровка каждой модели хранится отдельно, список над текстом переключает между ними. «Свести версии» собирает из них один текст: где модели согласны — их слово, места, которые они услышали по-разному, выбирает модель анализа (только из вариантов). Такие места остаются подчёркнутыми, щелчок показывает вариант каждой модели.
 - **Разделение по спикерам**: кластеризация голосовых эмбеддингов SpeechBrain ECAPA-TDNN, без токенов. Точность снижается при перебиваниях, очень коротких репликах и похожих голосах, поэтому результат стоит проверять и при необходимости поправлять спикеров вручную.
 - **Очистка звука перед распознаванием** (по желанию): фильтры FFmpeg для шумоподавления, удаления щелчков и выравнивания громкости. В плеере также есть простой голосовой фильтр.
@@ -256,16 +261,18 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 ### Требования
 
 - Windows 10/11 (64-bit)
-- [FFmpeg](https://ffmpeg.org): в `PATH` (например, `winget install Gyan.FFmpeg`) или скачанный из **Настройки → Скачать FFmpeg** (закреплённая сборка с проверкой SHA-256)
+- [FFmpeg](https://ffmpeg.org): в `PATH` (например, `winget install Gyan.FFmpeg`) или, если его нет, скачивается программой при первом запуске (закреплённая сборка с проверкой SHA-256; также **Настройки → Скачать FFmpeg**)
 - Желательна видеокарта NVIDIA с CUDA и свежим драйвером; на процессоре работает, но заметно медленнее
 - Интернет при первом запуске: в это время устанавливается окружение Python
 - Место на диске: около 7 ГБ под окружение Python (`.venv`, в основном PyTorch с CUDA), примерно 0,5–3 ГБ на модель Whisper и ещё место под модели Ollama, если нужны саммари
 
 ### Как начать
 
-**Вариант А — архив релиза.** Скачайте `Verbaliox-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/Verbaliox/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `Verbaliox.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
+**Вариант А — установщик.** Скачайте `Verbaliox-Installer-vX.Y.Z.exe` со страницы [Releases](https://github.com/pravken/Verbaliox/releases) и запустите: программа ставится для вашего пользователя (без прав администратора) в `%LOCALAPPDATA%\Programs\Verbaliox`, появляется в меню «Пуск» и в «Установленных приложениях» (при удалении спросит, стирать ли записи и модели) и сразу запускается. Собирается [Inno Setup](https://jrsoftware.org/isinfo.php) из [`installer/verbaliox.iss`](installer/verbaliox.iss).
 
-Распакуйте архив в обычную папку с правом записи, например `D:\Verbaliox`, а не в `Program Files`: рядом с программой создаются `.venv` и `models`. Одного `.exe` недостаточно, это лишь лаунчер для файлов программы из архива. При первом запуске лаунчер предложит установить окружение Python (`setup.bat`). Скачивается несколько гигабайт, обычно это занимает 10–20 минут, в зависимости от скорости интернета. Следующие запуски занимают секунды, а новые версии устанавливаются из **Настройки → Общие**.
+**Вариант А2 — портативный архив.** Скачайте `Verbaliox-vX.Y.Z.zip` со страницы [Releases](https://github.com/pravken/Verbaliox/releases), сверьте его с `SHA256SUMS.txt`, распакуйте и запустите `Verbaliox.exe`. Лаунчер собирается из [`build_exe.py`](build_exe.py) в [workflow релиза](.github/workflows/release.yml).
+
+Распакуйте архив в обычную папку с правом записи, например `D:\Verbaliox`, а не в `Program Files`: рядом с программой создаются `.venv` и `models`. Одного `.exe` недостаточно, это лишь лаунчер для файлов программы из архива. При первом запуске лаунчер открывает окно установки: в нём перечислено, что нужно программе и для чего каждая часть (среда программы, FFmpeg, проверка драйвера NVIDIA, Ollama — если нужен ИИ-анализ на компьютере), и всё ставится по кнопке **Установить**, с прогрессом и журналом вместо консоли. CUDA отдельно ставить не нужно: она входит в среду программы, нужен только драйвер NVIDIA. Скачивается несколько гигабайт, обычно это занимает 10–20 минут, в зависимости от скорости интернета. Следующие запуски занимают секунды, а новые версии устанавливаются из **Настройки → Общие**.
 
 `Verbaliox.exe` не подписан цифровой подписью. При первом запуске SmartScreen может показать «Система Windows защитила ваш компьютер»: нажмите **Подробнее → Выполнить в любом случае** (перед этим сверьте файл с `SHA256SUMS.txt`). Если Windows блокирует скрипты распакованной папки, перед распаковкой откройте свойства скачанного `.zip` и отметьте **Разблокировать**. Путь к папке лучше держать коротким (не длиннее ~150 символов, например `D:\Verbaliox`): у некоторых библиотек CUDA и файлов моделей длинные имена, а Windows не принимает пути длиннее 260 символов, если не включены длинные пути.
 
@@ -277,7 +284,7 @@ cd Verbaliox
 start.bat
 ```
 
-При первом запуске `setup.bat` создаёт виртуальное окружение Python (`.venv`) и ставит точные версии пакетов из `requirements.txt` (lock-файл с хешами SHA-256, собирается из `requirements.in`). Затем открывается экран настройки, где вы выбираете модель Whisper для скачивания. Чтобы собрать лаунчер самостоятельно, выполните `python build_exe.py`; он использует компилятор C# из комплекта .NET Framework.
+Окно установки запускает `setup.bat`: он создаёт виртуальное окружение Python (`.venv`) и ставит точные версии пакетов из `requirements.txt` (lock-файл с хешами SHA-256, собирается из `requirements.in`); его можно запустить и вручную. Затем программа открывает приветствие с готовыми наборами моделей распознавания и выбором ИИ-анализа. Чтобы собрать лаунчер самостоятельно, выполните `python build_exe.py`; он использует компилятор C# из комплекта .NET Framework.
 
 В папке, склонированной через git, приложение сообщает о новых версиях, но само их не устанавливает: запустите `update.bat` (или `update.bat <ветка>`, чтобы перейти на другую ветку). Он откладывает изменённые в папке файлы через `git stash`, обновляет ветку и ставит пакеты, если изменился `requirements.txt`.
 
@@ -338,7 +345,7 @@ start.bat
 
 | Когда | Куда |
 | :--- | :--- |
-| Первичная установка (`setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget, если нет `uv` |
+| Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget и astral.sh, если нет `uv`, и для Ollama, если она отмечена |
 | Вы скачиваете модель распознавания (Whisper, GigaAM, Parakeet вместе с Silero VAD) или модель спикеров | Hugging Face (`huggingface.co`); для GigaAM и Parakeet в первый раз ещё PyPI (`onnx-asr`, проверяется по хешу) |
 | Запуск приложения с видеокартой NVIDIA, один раз («Настройки → Распознавание», «GigaAM и Parakeet на видеокарте»; включено по умолчанию) | PyPI: сборка ONNX Runtime для видеокарты (`onnxruntime-gpu`, около 300 МБ, проверяется по хешу) |
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
@@ -347,7 +354,7 @@ start.bat
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |
 | Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |
-| Вы нажимаете **Скачать FFmpeg** в настройках | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
+| Первый запуск без FFmpeg в `PATH` (или **Скачать FFmpeg** в настройках) | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
 | Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере |
 | Вы нажимаете **Установить** для обновления | github.com: архив релиза и `SHA256SUMS.txt`; PyPI и download.pytorch.org, если новой версии нужны другие пакеты Python. Контрольная сумма подтверждает, что архив дошёл целым и неизменным. Когда настроен ключ автора, `SHA256SUMS.txt` ещё и подписан (`SHA256SUMS.txt.minisig`, формат minisign), и программа ставит только релизы с этой подписью ([docs/release-signing.md](docs/release-signing.md)) |
 | Только если в «Настройки → Анализ» включена облачная модель: создаётся обзор, ответ на вопрос, название или заметка Obsidian | Выбранный сервис (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` или ваш Base URL): текст расшифровки этой записи, а для вопросов по медиатеке — найденные фрагменты. Аудио и видео не отправляются. API-ключ хранится зашифрованным (Windows DPAPI) |

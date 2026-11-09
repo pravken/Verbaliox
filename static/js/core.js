@@ -107,7 +107,12 @@ function pageArg(a, el, ev) {
 function runPageHandler(el, type, ev) {
   const name = el.getAttribute('data-' + type);
   const fn = /^[A-Za-z_$][\w$]*$/.test(name || '') ? window[name] : null;
-  if (typeof fn !== 'function') { console.error(`data-${type}: no page function "${name}"`); return; }
+  // Only a function of the page's own scripts: never one of the browser's (fetch, open, …), so markup
+  // that should not be there (a hostile backup, say) cannot call them with its own arguments
+  if (typeof fn !== 'function' || /\[native code\]\s*\}$/.test(Function.prototype.toString.call(fn))) {
+    console.error(`data-${type}: no page function "${name}"`);
+    return;
+  }
   let args = [];
   const raw = el.getAttribute(`data-${type}-args`);
   if (raw) {

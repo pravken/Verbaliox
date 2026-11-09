@@ -10,6 +10,7 @@ from fastapi import File, Form, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from app import __version__
+from app import speech_route
 from app.paths import UPLOADS_DIR
 from app.settings_schema import as_int
 from app.database import create_meeting, delete_meeting, edit_meeting, get_all_settings, get_meeting, is_local_only, list_meetings, update_meeting_fields, update_meeting_progress, update_settings
@@ -305,7 +306,7 @@ async def api_upload_meetings(
 ) -> Dict[str, Any]:
     chosen_processing = _processing_from_form(processing)
     settings = get_all_settings()
-    chosen_model = model_name.strip() or settings.get("whisper_model", "large-v3-turbo")
+    chosen_model = model_name.strip() or speech_route.default_choice(settings)
     chosen_lang = language.strip() or settings.get("language", "auto")
     chosen_speakers = num_speakers if num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
     is_recording = source == "recording"
@@ -400,7 +401,7 @@ def api_import_url(payload: UrlImportPayload) -> Dict[str, Any]:
 
     settings = get_all_settings()
     try:
-        m = url_import.start(payload.url.strip(), payload.model_name or settings.get("whisper_model") or "large-v3-turbo",
+        m = url_import.start(payload.url.strip(), payload.model_name or speech_route.default_choice(settings),
                              payload.language or "auto", int(payload.num_speakers or 0))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -427,7 +428,7 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Путь не найден на диске: {raw_path}")
 
     settings = get_all_settings()
-    chosen_model = payload.model_name.strip() or settings.get("whisper_model", "large-v3-turbo")
+    chosen_model = payload.model_name.strip() or speech_route.default_choice(settings)
     chosen_lang = payload.language.strip() or settings.get("language", "auto")
     chosen_speakers = payload.num_speakers if payload.num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
 
@@ -519,7 +520,8 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
 
     if not m.get("media_path") and url_import.valid_url(m.get("filename") or ""):
         # A download by link that did not finish: downloaded again
-        url_import.restart(meeting_id, m["filename"])
+        if not url_import.restart(meeting_id, m["filename"]):
+            raise HTTPException(status_code=409, detail="Скачивание по ссылке ещё идёт")
         return get_meeting(meeting_id)
     update_meeting_progress(
         meeting_id,
@@ -551,6 +553,7 @@ def api_reconfigure_meeting(meeting_id: int, payload: MeetingReconfigurePayload)
         meeting_id,
         model_name=payload.model_name.strip() or "large-v3-turbo",
         language=payload.language.strip() or "auto",
+        language_choice=payload.language.strip() or "auto",
         num_speakers_hint=max(0, int(payload.num_speakers_hint)),
     )
     if payload.processing is not None:

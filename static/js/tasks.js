@@ -295,7 +295,7 @@ function renderTasksList() {
     const all = TK.data.tasks.filter(x => TK.by === 'person' ? (x.who || '').toLocaleLowerCase() === g.key
       : TK.by === 'record' ? String(x.meeting_id) === g.key : g.items.includes(x));
     const done = all.filter(tkIsDone).length;
-    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' ? `<span class="tk-dot" style="background:${g.color}"></span>` : '';
+    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
     const kind = g.person && tkKindLabel(g.kind) ? `<span class="tk-kind" title="${escapeHtml(tkKindTitle(g.kind))}">${escapeHtml(tkKindLabel(g.kind))}</span>` : '';
     const me = g.person && g.key && tkIsMe(g.key) ? `<span class="tk-kind tk-kind-me">${escapeHtml(t('tkItsMe'))}</span>` : '';
     const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);

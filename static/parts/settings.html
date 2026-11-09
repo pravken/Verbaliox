@@ -2,6 +2,8 @@
      (mountSettingsPage in static/js/shell.js): sections on the left, a search, changes saved at once -->
   <div id="modal-settings" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "settings"]'>
     <div class="sx-shell modal-card w-full max-w-5xl" style="height: min(88vh, 820px);">
+      <!-- Back to the screen the settings were opened from (Esc does the same) -->
+      <button data-click="closeModal" data-click-args='["settings"]' data-i18n-title="tipCloseSettings" title="Закрыть настройки (Esc)" data-i18n-aria="tipCloseSettings" aria-label="Закрыть настройки (Esc)" class="sx-close"><span data-i18n="close">Закрыть</span><span aria-hidden="true">✕</span></button>
 
       <!-- Sections, the search and the note about saving -->
       <aside class="sx-nav">
@@ -416,7 +418,7 @@
           </div>
         <!-- Section 2: Whisper Speech Recognition Models -->
         <div class="settings-card">
-          <div class="flex items-center justify-between gap-2">
+          <div class="sx-card-head">
             <div>
               <h4 class="text-[13px] font-semibold text-white" data-i18n="whisperSectionTitle">Распознавание речи и участников</h4>
               <p class="text-[11.5px] text-apple-secondary" data-i18n="whisperSectionDesc">Выберите модель под вашу видеокарту или процессор</p>
@@ -428,6 +430,16 @@
 
           <div id="whisper-catalog-list" class="space-y-2">
             <!-- Populated dynamically -->
+          </div>
+          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="mmNote">Оценки — по замерам на начитанной речи (тест FLEURS, RTX 3090); на живых встречах ошибок больше у всех моделей, соотношение между ними то же.</p>
+
+          <!-- Russian speech: a model of its own, the main one for the rest (app/speech_route.py) -->
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <label for="set-speech-model-ru" class="block text-xs font-medium text-white" data-i18n="routeTitle">Модель для русской речи</label>
+              <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="routeDesc">Записи на русском распознаёт эта модель, на других языках — основная. Если язык записи «Определить сам», он определяется по первой минуте.</p>
+            </div>
+            <select id="set-speech-model-ru" data-change="setSpeechModelRu" class="imp-select shrink-0 max-w-[15rem]"></select>
           </div>
 
           <!-- Live Whisper & Diarizer Download Progress Window -->
@@ -522,7 +534,7 @@
 
         <!-- Section 3: Ollama Local AI Model Manager -->
         <div class="settings-card">
-          <div class="flex items-center justify-between gap-2">
+          <div class="sx-card-head">
             <div>
               <h4 class="text-[13px] font-semibold text-white" data-i18n="ollamaSectionTitle">Языковые модели для анализа (Ollama)</h4>
               <p class="text-[11.5px] text-apple-secondary" data-i18n="ollamaSectionDesc">Модели с открытыми весами работают локально; перед коммерческим использованием проверьте лицензию модели</p>
@@ -817,7 +829,7 @@
 
         <!-- Obsidian vault (app/obsidian.py) -->
         <div class="settings-card">
-          <div class="flex items-center justify-between gap-2">
+          <div class="sx-card-head">
             <div>
               <h4 class="text-[13px] font-semibold text-white" data-i18n="obsTitle">Obsidian</h4>
               <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="obsDesc">Заметка на каждую встречу в формате Markdown: свойства (дата, участники, длительность), «Кратко», обзор, задачи чек-листом и расшифровка с таймкодами.</p>
@@ -972,7 +984,7 @@
           </div>
         <!-- Section 4: Speech synthesis for the AI dub (optional .venv-dub environment) -->
         <div id="settings-dub-section" class="settings-card">
-          <div class="flex items-center justify-between gap-2">
+          <div class="sx-card-head">
             <div>
               <h4 class="text-[13px] font-semibold text-white" data-i18n="sdubTitle">Синтез речи (дубляж)</h4>
               <p class="text-[11.5px] text-apple-secondary" data-i18n="sdubDesc">VoxCPM2 (голос, Apache-2.0) и Demucs (фон, MIT) · отдельное окружение .venv-dub</p>

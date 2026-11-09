@@ -185,13 +185,14 @@ class RenamedDataDirTest(unittest.TestCase):
         (self.old / "uploads").mkdir(parents=True)
         (self.old / "uploads" / "call.mp4").write_bytes(b"v")
         conn = sqlite3.connect(self.old / "meetings.db")
-        conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, media_path TEXT, dubs_json TEXT, n INTEGER)")
+        conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, media_path TEXT, dubs_json TEXT, n INTEGER, user_notes TEXT)")
         conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
         conn.execute("CREATE VIRTUAL TABLE seg_fts USING fts5(text)")
         conn.execute("INSERT INTO seg_fts VALUES (?)", (str(self.old / "uploads"),))
         media = str(self.old / "uploads" / "call.mp4")
-        conn.execute("INSERT INTO meetings VALUES (1, ?, ?, 5)", (media, json.dumps([{"path": media}])))
-        conn.execute("INSERT INTO meetings VALUES (2, ?, '[]', 5)", (str(self.root / "VerbaScribe2" / "x.mp4"),))
+        self.note = f"files were in {self.old / 'uploads'} before"
+        conn.execute("INSERT INTO meetings VALUES (1, ?, ?, 5, ?)", (media, json.dumps([{"path": media}]), self.note))
+        conn.execute("INSERT INTO meetings VALUES (2, ?, '[]', 5, '')", (str(self.root / "VerbaScribe2" / "x.mp4"),))
         conn.execute("INSERT INTO settings VALUES ('recordings_dir', ?)", (str(self.old),))
         conn.commit()
         conn.close()
@@ -219,6 +220,9 @@ class RenamedDataDirTest(unittest.TestCase):
         self.assertEqual(meetings[1][1], str(self.root / "VerbaScribe2" / "x.mp4"))  # another folder stays
         self.assertEqual(setting, str(self.new))
         self.assertEqual(fts, str(self.old / "uploads"))  # the search index is not written to
+        conn = sqlite3.connect(self.new / "meetings.db")
+        self.assertEqual(conn.execute("SELECT user_notes FROM meetings WHERE id = 1").fetchone()[0], self.note)  # user text
+        conn.close()
         self.assertFalse(migrate_renamed_data_dir(self.old, self.new))  # the second start: nothing to do
 
     def test_an_empty_new_folder_is_kept_aside(self):
@@ -226,6 +230,24 @@ class RenamedDataDirTest(unittest.TestCase):
         self.assertTrue(migrate_renamed_data_dir(self.old, self.new))
         self.assertTrue((self.new / "uploads" / "call.mp4").is_file())
         self.assertEqual(len(list(self.root.glob("Verbaliox.before-rename-*"))), 1)
+
+    def test_a_refused_rename_puts_the_aside_folder_back(self):
+        from pathlib import Path
+        from unittest import mock
+
+        (self.new / "logs").mkdir(parents=True)
+        real = Path.rename
+
+        def refuse_old(p, dest):
+            if Path(p) == self.old.resolve():
+                raise PermissionError("in use")
+            return real(p, dest)
+
+        with mock.patch.object(Path, "rename", refuse_old):
+            with self.assertRaises(OSError):
+                migrate_renamed_data_dir(self.old, self.new)
+        self.assertTrue((self.new / "logs").is_dir())
+        self.assertEqual(list(self.root.glob("Verbaliox.before-rename-*")), [])
 
     def test_a_library_in_the_new_folder_is_never_overwritten(self):
         self.new.mkdir()
@@ -561,7 +583,8 @@ class TranscriptVersionsTest(unittest.TestCase):
         database.save_meeting_results(self.mid, segments=[{"id": 0, "start": 0, "end": 1, "text": "старая"}])
         with database._db_lock:
             conn = database.get_connection()
-            conn.execute("UPDATE meetings SET transcript_model = '', model_name = 'large-v3' WHERE id = ?", (self.mid,))
+            conn.execute("UPDATE meetings SET transcript_model = '', model_name = 'large-v3', status = 'completed' "
+                         "WHERE id = ?", (self.mid,))
             conn.commit()
             conn.close()
         database.init_db()
