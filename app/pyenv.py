@@ -40,20 +40,28 @@ def mark_requirements(app_dir: Path, only_if_missing: bool = False) -> None:
 
 
 def find_uv() -> Optional[str]:
-    """uv on PATH or where its installers put it (the app may start without the updated PATH)."""
-    found = shutil.which("uv")
-    if found:
-        return found
+    """A uv that runs: on PATH or where its installers put it (the app may start without the updated
+    PATH). The shortcut winget leaves may point nowhere, or a policy may block programs in AppData:
+    such a uv is skipped (setup.bat :try_uv)."""
     home = Path(os.environ.get("USERPROFILE") or Path.home())
-    for c in (home / ".local" / "bin" / "uv.exe", home / ".cargo" / "bin" / "uv.exe",
-              Path(os.environ.get("LOCALAPPDATA") or home) / "Microsoft" / "WinGet" / "Links" / "uv.exe"):
-        if c.is_file():
-            return str(c)
-    # winget's own package folder, when it could not make the shortcut in WinGet\Links (setup.bat :find_uv)
-    packages = Path(os.environ.get("LOCALAPPDATA") or home) / "Microsoft" / "WinGet" / "Packages"
-    for c in sorted(packages.glob("astral-sh.uv*/uv.exe")):
-        return str(c)
+    local = Path(os.environ.get("LOCALAPPDATA") or home)
+    on_path = shutil.which("uv")  # found by which: it exists
+    files = [home / ".local" / "bin" / "uv.exe", home / ".cargo" / "bin" / "uv.exe",
+             local / "Microsoft" / "WinGet" / "Links" / "uv.exe",
+             *sorted((local / "Microsoft" / "WinGet" / "Packages").glob("astral-sh.uv*/uv.exe"))]
+    candidates = ([on_path] if on_path else []) + [str(f) for f in files if f.is_file()]
+    for c in dict.fromkeys(candidates):
+        if _runs(c):
+            return c
     return None
+
+
+def _runs(exe: str) -> bool:
+    try:
+        return subprocess.run([exe, "--version"], capture_output=True, creationflags=_NO_WINDOW,
+                              timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def _ok(cmd) -> bool:

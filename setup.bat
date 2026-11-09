@@ -61,7 +61,16 @@ if defined UV (
         rem Prefer a uv-managed Python: the Microsoft Store Python virtualizes AppData and hides files from other programs
         "!UV!" venv .venv --python 3.11 --python-preference only-managed || "!UV!" venv .venv --python 3.11
     )
-    if not exist ".venv\Scripts\python.exe" goto :venv_failed
+    rem The Python of the environment must run: a policy that blocks programs in AppData blocks the
+    rem Python uv downloads there too. Then the pip way below makes it on Python 3.11 of python.org
+    call :venv_runs
+    if not defined VENV_OK (
+        echo       uv could not make a working environment: Python 3.11 and pip instead
+        if not defined UPDATE if exist .venv rmdir /s /q .venv
+        set "UV="
+    )
+)
+if defined UV (
     echo ##STEP packages
     echo [2/2] Installing dependencies via uv...
     rem requirements.txt is an exact lock with SHA-256 hashes (see requirements.in)
@@ -89,7 +98,8 @@ if exist ".venv\Scripts\python.exe" (
     echo       Python: !PY311!
     "!PY311!" -m venv .venv
 )
-if not exist ".venv\Scripts\python.exe" goto :venv_failed
+call :venv_runs
+if not defined VENV_OK goto :venv_failed
 echo ##STEP packages
 echo [2/2] Installing dependencies via pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
@@ -119,7 +129,9 @@ exit /b 1
 :venv_failed
 echo.
 echo ==============================================================
-echo   The Python environment .venv could not be created (see above).
+echo   The Python environment .venv could not be created or does not run
+echo   (see above). A company policy may block programs in AppData:
+echo   install Python 3.11 from python.org and run setup.bat again.
 echo ==============================================================
 if not defined QUIET pause
 exit /b 1
@@ -155,13 +167,34 @@ goto :eof
 rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget
 :find_uv
 set "UV="
-for /f "delims=" %%u in ('where uv 2^>nul') do if not defined UV set "UV=%%u"
-for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do (
-    if not defined UV if exist "%%~p" set "UV=%%~p"
+for /f "delims=" %%u in ('where uv 2^>nul') do call :try_uv "%%u"
+for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do call :try_uv "%%~p"
+for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do call :try_uv "%%~d\uv.exe"
+goto :eof
+
+rem --- A uv is taken only if it runs: the shortcut winget leaves may point nowhere, or a policy may
+rem --- block programs in AppData ("The system cannot execute the specified program")
+:try_uv
+if defined UV goto :eof
+if not exist "%~1" goto :eof
+"%~1" --version >nul 2>nul
+if errorlevel 1 (
+    echo       uv at %~1 does not run: skipped
+    goto :eof
 )
-for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do (
-    if not defined UV if exist "%%~d\uv.exe" set "UV=%%~d\uv.exe"
+set "UV=%~1"
+goto :eof
+
+rem --- The environment's Python runs (it exists and is not blocked)
+:venv_runs
+set "VENV_OK="
+if not exist ".venv\Scripts\python.exe" goto :eof
+".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
+if errorlevel 1 (
+    echo       The Python of .venv does not run
+    goto :eof
 )
+set "VENV_OK=1"
 goto :eof
 
 rem --- A Python 3.11 (never 2.7 or another 3.x: the libraries are locked for 3.11), not the Store one
