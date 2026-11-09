@@ -584,3 +584,46 @@ class ProgramFolderDownloadsTest(unittest.TestCase):
                 oc.use_program_folder_for_ollama_models()
                 self.assertNotIn("OLLAMA_MODELS", oc.os.environ)
                 run.assert_not_called()
+
+
+class OllamaForceUnloadTest(unittest.TestCase):
+    """Unloading waits until Ollama has really let the model go; one it keeps has its runner stopped."""
+
+    def _run(self, loaded_seq, local=True):
+        from app import vram
+
+        seq = iter(loaded_seq)
+        last = [loaded_seq[-1]]
+        clock = [1000.0]
+
+        def loaded():
+            try:
+                last[0] = next(seq)
+            except StopIteration:
+                pass
+            return [{"name": n} for n in last[0]]
+
+        with mock.patch.object(vram, "OLLAMA_UNLOAD_WAIT_SEC", 1.0), \
+                mock.patch.object(vram, "ollama_loaded", side_effect=loaded), \
+                mock.patch.object(vram, "_stop_ollama_runners") as stop, \
+                mock.patch.object(vram, "_ollama_base", return_value="http://127.0.0.1:11434"), \
+                mock.patch("app.ollama_client._ollama_address", return_value=("127.0.0.1" if local else "10.0.0.5", 11434)), \
+                mock.patch.object(vram.httpx, "Client"), \
+                mock.patch("time.time", side_effect=lambda: clock[0]), \
+                mock.patch("time.sleep", side_effect=lambda sec: clock.__setitem__(0, clock[0] + sec)):
+            left = vram.ollama_unload(["qwen3.5:4b"])
+        return left, stop
+
+    def test_gone_after_asking(self):
+        left, stop = self._run([["qwen3.5:4b"], []])
+        self.assertEqual(left, [])
+        stop.assert_not_called()
+
+    def test_kept_model_has_its_runner_stopped(self):
+        left, stop = self._run([["qwen3.5:4b"]] * 3 + [[]])
+        stop.assert_called_once()
+
+    def test_ollama_on_another_computer_is_never_stopped(self):
+        left, stop = self._run([["qwen3.5:4b"]], local=False)
+        self.assertEqual(left, ["qwen3.5:4b"])
+        stop.assert_not_called()

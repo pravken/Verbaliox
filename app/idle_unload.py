@@ -63,8 +63,10 @@ def _busy() -> bool:
     return live.has_sessions()
 
 
-def unload_now() -> Dict[str, Any]:
-    """Releases everything the app holds; returns what was released."""
+def unload_now(force: bool = False) -> Dict[str, Any]:
+    """Releases everything the app holds; returns what was released. force (the button): every model
+    Ollama has in memory too, also one loaded before this start or by another program, waiting until it
+    is really gone (app/vram.ollama_unload)."""
     from app import live, transcriber
     from app.diarizer import ecapa_loaded_on, unload_diarizer
 
@@ -86,15 +88,21 @@ def unload_now() -> Dict[str, Any]:
             worker._kill()
         released.append("live")
     try:
-        from app.vram import _ollama_base, ollama_loaded
+        from app.vram import _ollama_base, ollama_loaded, ollama_unload
 
         with _lock:
             ours = set(_ollama_used)
-        for m in ollama_loaded():
-            if m["name"] in ours:
+        names = [m["name"] for m in ollama_loaded() if force or m["name"] in ours]
+        if force:
+            left = ollama_unload(names)
+            released += [n for n in names if n not in left]
+            if left:
+                return {"released": released, "left": left}
+        else:
+            for name in names:
                 with httpx.Client(timeout=15.0) as client:
-                    client.post(f"{_ollama_base()}/api/generate", json={"model": m["name"], "keep_alive": 0})
-                released.append(m["name"])
+                    client.post(f"{_ollama_base()}/api/generate", json={"model": name, "keep_alive": 0})
+                released.append(name)
     except Exception:
         traceback.print_exc()
     return {"released": released}
