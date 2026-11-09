@@ -287,6 +287,8 @@ function impOnModel() {
 }
 
 // --- Start: each file with the chosen processing; the window stays open on an error ---
+// «Recognize»: the window closes at once. Links and paths are only a request each; files go to the
+// library in the background with their progress in a notice (a large video takes a while to copy)
 async function impSubmit() {
   const imp = state.imp;
   if (!imp.items.length || !requireRecognitionModel()) return;
@@ -300,9 +302,9 @@ async function impSubmit() {
   go.disabled = true;
   go.textContent = t('impSending');
   const created = [];
+  // Links and paths first, while the window is open: each is one quick request, and a wrong one is
+  // said here, where it can be fixed
   try {
-    const files = imp.items.filter(x => x.kind === 'file').map(x => x.file);
-    if (files.length) created.push(...await uploadFiles(files, { source: 'import', model, language, speakers, processing }));
     for (const x of imp.items.filter(i => i.kind !== 'file')) {
       const link = x.kind === 'link';
       const res = await fetch(link ? '/api/meetings/url' : '/api/meetings/local-path', {
@@ -320,6 +322,7 @@ async function impSubmit() {
     if (created.length) await loadMeetingsList();
     return;
   }
+  const files = imp.items.filter(x => x.kind === 'file').map(x => x.file);
   const remember = document.getElementById('imp-remember').checked;
   const noAsk = document.getElementById('imp-noask').checked;
   const values = {};
@@ -332,14 +335,24 @@ async function impSubmit() {
     });
   }
   if (noAsk === askImportParams()) values.ask_import_params = String(!noAsk);
-  if (Object.keys(values).length) await impSaveSettings(values);
   closeModal('import');
   state.imp = impFresh();
-  if (!created.length) return;
-  switchAppView('library');
-  await loadMeetingsList();
-  await selectMeeting(created[0].id, true);
-  showToast(t('impQueued').replace('{n}', () => plural(created.length, t('impItemsForms'))));
+  if (Object.keys(values).length) await impSaveSettings(values);
+  const view = state.appView;
+  const show = async (made) => {
+    if (!made.length) return;
+    // the library opens on the first one, unless the user went elsewhere meanwhile
+    if (state.appView === view || state.appView === 'library') {
+      switchAppView('library');
+      await loadMeetingsList();
+      await selectMeeting(made[0].id, true);
+    } else {
+      await loadMeetingsList();
+    }
+    showToast(t('impQueued').replace('{n}', () => plural(made.length, t('impItemsForms'))), null, 'success');
+  };
+  if (created.length) await show(created);
+  if (files.length) uploadInBackground(files, { source: 'import', model, language, speakers, processing }, show);
 }
 
 async function impSaveSettings(values) {

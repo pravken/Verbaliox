@@ -141,7 +141,7 @@ class StaticUiTest(unittest.TestCase):
         syntax = {"if", "for", "while", "switch", "catch", "function", "return", "async", "await", "of", "constructor",
                   "typeof", "super", "import"}
         # Parameters and object methods called by their short name
-        local = {"change", "commit", "endOf", "get", "jump", "onSeek", "preventDefault", "render", "resolve",
+        local = {"change", "commit", "endOf", "get", "jump", "onSeek", "preventDefault", "reject", "render", "resolve",
                  "restore", "startOf", "stopPropagation"}
         files = sorted((ROOT / "static" / "js").glob("*.js")) + [ROOT / "static" / "i18n.js", ROOT / "static" / "server_text.js"]
         defined, calls = set(), {}
