@@ -168,6 +168,23 @@ await step('first run wizard, cloud', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
+// The calendar of a week or a month opens from the home page and closes with Esc
+await step('calendar view', async () => {
+  await page.evaluate(() => switchAppView('home'));
+  await sleep(500);
+  await page.click('button[data-click="openCalendarView"]');
+  await sleep(600);
+  expect(await page.isVisible('#cal-view .cal-week, #cal-view .cal-month'), 'the calendar did not open');
+  await page.click('#cal-view button[data-cal="month"]');
+  await sleep(500);
+  expect(await page.isVisible('#cal-view .cal-month'), 'the month did not show');
+  await page.click('#cal-view button[data-cal="week"]');
+  await sleep(400);
+  await page.keyboard.press('Escape');
+  await sleep(200);
+  expect(!(await page.$('#cal-view')), 'Esc did not close the calendar');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
