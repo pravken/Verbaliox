@@ -673,3 +673,36 @@ class TorchCudaArchTest(unittest.TestCase):
         self.assertEqual(calls, ["cuda:0", "cpu"])
         self.assertEqual(devices[-1], "cpu")
         self.assertTrue(merged)
+
+
+class TaskPruneTest(unittest.TestCase):
+    """A long meeting does not turn into dozens of tasks; a renamed speaker's tasks follow the name."""
+
+    def test_repeats_go_and_the_clearest_stay(self):
+        from app.commitments import MAX_TASKS, prune
+
+        items = [{"what": "Подготовить отчёт к пятнице", "who": "Иван", "due": "пятница"},
+                 {"what": "подготовить отчёт к пятнице.", "who": "Иван", "due": ""},
+                 {"what": "Отправить отчёт Петру", "who": "Анна", "due": ""},
+                 {"what": "Отправить отчёт Марии", "who": "Анна", "due": ""}]
+        self.assertEqual([x["what"] for x in prune(items)],
+                         ["Подготовить отчёт к пятнице", "Отправить отчёт Петру", "Отправить отчёт Марии"])
+        verbs = ["Отправить", "Подготовить", "Проверить", "Согласовать", "Обновить", "Созвониться о", "Написать про",
+                 "Собрать", "Посчитать", "Найти"]
+        topics = ["бюджет", "договор с поставщиком", "макет главной", "план релиза"]
+        many = [{"what": f"{verbs[i % 10]} {topics[i // 10]}", "who": "Иван" if i % 3 == 0 else "", "due": ""}
+                for i in range(40)]
+        kept = prune(many)
+        self.assertEqual(len(kept), MAX_TASKS)
+        self.assertEqual(sum(1 for x in kept if x["who"]), sum(1 for x in many if x["who"]))  # those with an assignee first
+        self.assertEqual(kept, sorted(kept, key=many.index))  # in the order of the recording
+
+    def test_rename_moves_the_tasks(self):
+        from app import commitments
+        from app.database import create_meeting, init_db
+
+        init_db()
+        m = create_meeting(title="Задачи", filename="t.wav", media_path="")
+        t = commitments.create("Сделать макет", who="Участник 2", meeting_id=m["id"])
+        commitments.rename_person(m["id"], "участник 2", "Ольга")
+        self.assertEqual(commitments.get_task(t["id"])["who"], "Ольга")
