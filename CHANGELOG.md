@@ -6,6 +6,23 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.2 — English
+
+- **A calendar of the week or the month:** «Calendar» on the home page shows the calendar's meetings and
+  the recordings side by side; a recorded meeting opens its recording, a recording outside meetings is
+  shown on its own.
+- **«Unload all» really unloads:** every model goes out of memory, Ollama's too (also one loaded before the
+  app started), and the app waits until Ollama has let it go, stopping its runner if it keeps the model.
+  The button is in the Models window and in Settings.
+- **Import:** the window closes at once and files go to the library in the background, with their progress
+  in a notice; the link and the path on the disk are fields in sight, not behind buttons.
+- **Less on the system disk:** the setup keeps uv's downloads and the Python it installs in the program
+  folder (the download cache is removed after the install), and when the app installs Ollama its models
+  go to the program folder too.
+- **The installer always shows the folder:** it says where Verbaliox is installed; another folder moves the
+  program there with its environment and models, and asks whether to remove the old folder.
+- Studio: the column titles of the captions no longer let the lines show above and through them.
+
 ## 0.7.1 — English
 
 - **First start on a PC where uv is found but does not run** («The system cannot execute the specified
@@ -115,6 +132,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.2
+
+- **Календарь на неделю или месяц:** кнопка «Календарь» на главной показывает встречи календаря и записи
+  вместе; записанная встреча открывает свою запись, запись вне встреч видна отдельно.
+- **«Выгрузить всё» действительно выгружает:** из памяти уходят все модели, в том числе модели Ollama
+  (и загруженные до запуска программы), а программа ждёт, пока Ollama их отпустит, и останавливает её
+  процесс, если модель не уходит. Кнопка есть в окне «Модели» и в настройках.
+- **Импорт:** окно закрывается сразу, а файлы добавляются в медиатеку в фоне, с прогрессом в уведомлении;
+  поля для ссылки и пути на диске видны сразу, а не спрятаны за кнопками.
+- **Меньше на системном диске:** установка держит загрузки uv и его Python в папке программы (кэш
+  загрузок удаляется после установки), а модели Ollama, если её ставит программа, тоже лежат в папке
+  программы.
+- **Установщик всегда показывает папку:** пишет, где Verbaliox уже установлен; при выборе другой папки
+  программа переезжает туда вместе со средой и моделями, а установщик спрашивает, удалить ли старую папку.
+- Студия: заголовки колонок субтитров больше не пропускают строки над собой и сквозь себя.
 
 ## 0.7.1
 
