@@ -520,7 +520,7 @@ function showToast(msg, action, kind) {
   kind = TOAST_LIFE[kind] !== undefined ? kind : (action ? 'success' : 'status');
   const stack = document.getElementById('toast');
   if (kind === 'status' || kind === 'success') {
-    stack.querySelectorAll('.toast-status, .toast-success').forEach(old => { if (!old.classList.contains('is-leaving')) removeWithExit(old); });
+    stack.querySelectorAll('.toast-status:not(.toast-progress), .toast-success').forEach(old => { if (!old.classList.contains('is-leaving')) removeWithExit(old); });
   }
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
@@ -554,6 +554,20 @@ function showToast(msg, action, kind) {
   arm(life);
   return dismiss;
 }
+// A notice that stays while something runs in the background (a file sent to the library) and shows how
+// far it is: updated in place, not replaced by other notices; done() takes it away
+function progressToast(text) {
+  const stack = document.getElementById('toast');
+  const el = document.createElement('div');
+  el.className = 'toast toast-status toast-progress';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICONS.status}</span><span class="toast-text"></span>`;
+  const label = el.querySelector('.toast-text');
+  label.textContent = text;
+  stack.appendChild(el);
+  return { set: (s) => { label.textContent = s; }, done: () => removeWithExit(el) };
+}
+
 // Audit 6.1. A reversible removal happens at once and the notice offers «Отменить» for 7 s; the
 // server is told only then (or when the window closes), so undoing needs nothing from it.
 // hide() and restore() change the page; commit(keepalive) sends the removal and resolves true

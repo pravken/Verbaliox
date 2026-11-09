@@ -2393,3 +2393,5 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
   .cal-col { min-height: 0; }
   .cal-label { min-width: 0; }
 }
+/* The notice of a file going to the library (core.js progressToast): the percent does not jump */
+.toast-progress .toast-text { font-variant-numeric: tabular-nums; }
