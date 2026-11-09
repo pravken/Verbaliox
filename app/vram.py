@@ -111,6 +111,59 @@ def ollama_loaded() -> List[Dict[str, Any]]:
     ]
 
 
+# How long Ollama gets to let a model go by itself before its runner is stopped
+OLLAMA_UNLOAD_WAIT_SEC = 8.0
+
+
+def _stop_ollama_runners() -> None:
+    """The processes in which Ollama holds models (its "runner"; ollama_llama_server in older versions).
+    Its server stays and starts a new runner at the next request."""
+    import subprocess
+
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if sys.platform == "win32":
+        script = ("Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'ollama.exe' -and $_.CommandLine -match ' runner') "
+                  "-or $_.Name -eq 'ollama_llama_server.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
+        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=30, creationflags=flags)
+    else:
+        subprocess.run(["pkill", "-f", "ollama runner"], capture_output=True, timeout=30)
+        subprocess.run(["pkill", "-f", "ollama_llama_server"], capture_output=True, timeout=30)
+
+
+def ollama_unload(names: List[str], force: bool = True) -> List[str]:
+    """Asks Ollama to let the models go and waits until they are out of memory: Ollama does it a moment
+    later, or only after the answer it is writing. Still there after OLLAMA_UNLOAD_WAIT_SEC (force, Ollama
+    on this computer): its runner is stopped. Returns the models still loaded."""
+    import time
+
+    from app.ollama_client import _ollama_address
+
+    base = _ollama_base()
+    with httpx.Client(timeout=5.0) as client:
+        for name in names:
+            try:
+                client.post(f"{base}/api/generate", json={"model": name, "keep_alive": 0})
+            except httpx.HTTPError:
+                pass  # busy with an answer: the wait below covers it
+    left = list(names)
+    end = time.time() + OLLAMA_UNLOAD_WAIT_SEC
+    while left and time.time() < end:
+        time.sleep(0.5)
+        loaded = {m["name"] for m in ollama_loaded()}
+        left = [n for n in left if n in loaded]
+    if left and force and _ollama_address(base)[0] == "127.0.0.1":
+        try:
+            _stop_ollama_runners()
+        except Exception:
+            traceback.print_exc()
+        end = time.time() + 4.0
+        while left and time.time() < end:
+            time.sleep(0.5)
+            loaded = {m["name"] for m in ollama_loaded()}
+            left = [n for n in left if n in loaded]
+    return left
+
+
 def ollama_installed() -> List[str]:
     """Models downloaded into Ollama (whether loaded or not). Never starts Ollama."""
     from app.ollama_client import _is_ollama_port_open
@@ -256,8 +309,8 @@ def unload(kind: str, name: str = "") -> Dict[str, Any]:
     elif kind == "ollama":
         if not name:
             raise ValueError("Не указана модель Ollama")
-        with httpx.Client(timeout=30.0) as client:
-            client.post(f"{_ollama_base()}/api/generate", json={"model": name, "keep_alive": 0}).raise_for_status()
+        if ollama_unload([name]):
+            raise RuntimeError(f"Ollama не выгрузила модель {name}")
     elif kind == "live":
         from app import live
 

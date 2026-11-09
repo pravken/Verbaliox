@@ -1462,12 +1462,26 @@ async function openObsidianFolder() {
   } catch (e) {}
 }
 
+// Every model out of memory: the app's and every model Ollama holds, also one loaded before this start;
+// the server waits until Ollama has really let them go and stops its runner if it does not
 async function unloadAllModelsNow() {
-  const res = await fetch('/api/vram/unload-all', { method: 'POST' });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { showError(data.detail); return; }
-  renderVram(data);
-  showToast((data.released || []).length ? t('idleUnloadedNow') : t('idleNothingLoaded'));
+  if (vram.busy) return;
+  vram.busy = true;
+  if (vram.data) renderVram(vram.data);
+  showToast(t('idleUnloading'));
+  try {
+    const res = await fetch('/api/vram/unload-all', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showError(data.detail); return; }
+    renderVram(data);
+    if ((data.left || []).length) showError(t('idleUnloadLeft').replace('{names}', () => data.left.map(formatModelName).join(', ')));
+    else showToast((data.released || []).length ? t('idleUnloadedNow') : t('idleNothingLoaded'), null, 'success');
+  } catch (e) {
+    showError('');
+  } finally {
+    vram.busy = false;
+    scheduleVramRefresh(300);
+  }
 }
 
 function openExportDir() {

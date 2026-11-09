@@ -622,6 +622,9 @@ label.settings-toggle { display: flex; }
 .mp-title { flex: 1; font-size: var(--fs-body); font-weight: 600; }
 .mp-close { width: 24px; height: 24px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-body); line-height: 1; }
 .mp-close:hover { background: rgba(255, 255, 255, 0.12); color: #F5F5F7; }
+.mp-unload { height: 24px; padding: 0 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: #F5F5F7; font-size: var(--fs-label); font-weight: 500; white-space: nowrap; }
+.mp-unload:hover:not(:disabled) { background: rgba(255, 69, 58, 0.18); color: #FF6961; }
+.mp-unload:disabled { opacity: 0.5; cursor: default; }
 .mp-sec { border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.09)); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px; background: rgba(255, 255, 255, 0.02); }
 .mp-sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: var(--fs-label); line-height: 1.35; font-weight: 600; color: #D1D1D6; }
 .mp-group { display: flex; flex-direction: column; gap: 5px; }
