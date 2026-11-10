@@ -19,7 +19,7 @@ MAX_VALUE_CHARS = 256 * 1024  # summary templates: up to 30 prompts of 4000 char
 BOOLS = {
     "diarization_enabled", "auto_summary", "vad_filter", "audio_enhance", "clean_fillers", "batched_inference",
     "keep_model_loaded", "onnx_gpu", "onnx_gpu_vad", "voice_profiles", "update_check", "quiet_mode",
-    "call_auto_record", "semantic_search", "auto_title", "obsidian_auto", "summary_grounding", "auto_commitments",
+    "call_auto_record", "semantic_search", "auto_title", "obsidian_auto", "summary_grounding", "auto_commitments", "auto_chapters", "dictionary_fuzzy",
     "delete_media_after", "update_auto", "update_beta", "obsidian_summary", "obsidian_tasks", "obsidian_chapters",
     "obsidian_transcript", "obsidian_generate", "llm_cloud_consent", "watch_folder_recursive",
     "dub_keep_original_track", "dub_denoise", "dub_room_tone", "dub_keep_workdir", "dictation_translate_cloud", "dictation_save",

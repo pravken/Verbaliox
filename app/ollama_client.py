@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -611,6 +611,7 @@ def _chunk_lines(lines: List[str], max_chars: int) -> List[str]:
 SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
+LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
 
 _LANG_PHRASES: Dict[str, str] = {
     "ru": "на русском языке",
@@ -712,6 +713,9 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
             "top_p": 0.85,
             "repeat_penalty": 1.15,
             "num_ctx": LLM_NUM_CTX,
+            # An answer stops at this length: a small model caught in a loop (the same lines again and
+            # again) wrote until the whole context was full, for many minutes on a processor
+            "num_predict": LLM_MAX_ANSWER_TOKENS,
         },
     }
     keep_alive = idle_unload.ollama_keep_alive()
@@ -728,6 +732,46 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
         return strip_think(str(msg.get("content") or data.get("response") or ""))
 
 
+MAX_NOTE_ROUNDS = 3
+
+
+def _join_notes(notes: List[str]) -> str:
+    return "\n\n".join(f"### Фрагмент {i}\n{n}" for i, n in enumerate(notes, start=1))
+
+
+def _fit_notes(llm, system_prompt: str, notes: List[str], budget: int, lang: str) -> str:
+    """The notes of all parts of a long recording, condensed until they fit one request. Sent as they
+    were, the notes of an hour and a half ran over the model's context, and Ollama silently dropped the
+    beginning: the overview then told only the last part of the meeting."""
+    for _ in range(MAX_NOTE_ROUNDS):
+        text = _join_notes(notes)
+        if len(text) <= budget:
+            return text
+        # Neighbouring notes condensed together, each group about half of what one request holds
+        groups: List[List[str]] = [[]]
+        size = 0
+        for n in notes:
+            if groups[-1] and size + len(n) > budget // 2:
+                groups.append([])
+                size = 0
+            groups[-1].append(n)
+            size += len(n)
+        part_budget = max(1500, budget // max(2, len(groups) + 1))
+        condensed = []
+        for g in groups:
+            condensed.append(llm.chat(
+                system_prompt,
+                "Ниже последовательные конспекты частей длинной записи:\n```text\n" + _join_notes(g) + "\n```\n\n"
+                f"Сожми их {lang} в один конспект не длиннее {part_budget} знаков: сохрани все решения, задачи, "
+                "сроки, имена и главные мысли с их таймкодами `[ЧЧ:ММ:СС]`/`[ММ:СС]`, по порядку записи. "
+                "Ничего не добавляй от себя.",
+            ))
+        notes = condensed
+    # Still too long after the rounds: every part keeps its beginning, so no part of the meeting is lost
+    each = max(500, budget // max(1, len(notes)) - 40)
+    return _join_notes([n[:each] for n in notes])
+
+
 def generate_meeting_summary(
     segments: List[Dict[str, Any]],
     speakers: Dict[str, Dict[str, Any]],
@@ -739,9 +783,11 @@ def generate_meeting_summary(
     local_only: bool = False,
     user_notes: str = "",
     template_prompt: str = "",
+    progress: Optional[Callable[[int, int], None]] = None,
 ) -> str:
     """template_prompt: the instruction of a template the user made (Settings → Analysis);
-    user_notes: what the user wrote during the meeting, taken into account by every summary."""
+    user_notes: what the user wrote during the meeting, taken into account by every summary;
+    progress(done, total): the parts of a long recording read so far (it is read part by part)."""
     from app.llm import target
 
     # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
@@ -789,6 +835,8 @@ def generate_meeting_summary(
         )
         notes: List[str] = []
         for idx, chunk in enumerate(chunks, start=1):
+            if progress:
+                progress(idx, len(chunks))
             notes.append(
                 llm.chat(
                     system_prompt,
@@ -798,10 +846,14 @@ def generate_meeting_summary(
                     "Пиши только то, что есть в тексте фрагмента.",
                 )
             )
-        transcript_text = "\n\n".join(f"### Фрагмент {i}\n{n}" for i, n in enumerate(notes, start=1))
+        transcript_text = _fit_notes(llm, system_prompt, notes, single_pass_max, lang)
         source_label = (
             "Запись длинная, поэтому ниже приведены последовательные конспекты всех её фрагментов "
-            "(с таймкодами исходной записи)"
+            "(с таймкодами исходной записи, от начала до конца)"
+        )
+        instruction += (
+            "\n\nОхвати всю запись от начала до конца: каждый фрагмент должен попасть в ответ, "
+            "а не только последние."
         )
 
     user_message = (

@@ -627,3 +627,183 @@ class OllamaForceUnloadTest(unittest.TestCase):
         left, stop = self._run([["qwen3.5:4b"]], local=False)
         self.assertEqual(left, ["qwen3.5:4b"])
         stop.assert_not_called()
+
+
+class TorchCudaArchTest(unittest.TestCase):
+    """A card PyTorch has no kernels for ("no kernel image is available") runs the speaker model on the
+    processor, and a failure on the card is done again there."""
+
+    def test_arch_support(self):
+        from app.hardware import _arch_supported
+
+        cu126 = ["sm_50", "sm_60", "sm_61", "sm_70", "sm_75", "sm_80", "sm_86", "sm_90"]
+        self.assertTrue(_arch_supported((8, 6), cu126))   # RTX 30
+        self.assertTrue(_arch_supported((8, 9), cu126))   # RTX 40 runs the sm_86 binary (same major)
+        self.assertFalse(_arch_supported((12, 0), cu126))  # RTX 50: none for it, no PTX
+        self.assertTrue(_arch_supported((12, 0), cu126 + ["compute_90"]))  # PTX compiled for the card
+        self.assertFalse(_arch_supported((3, 5), cu126))  # a card older than the build
+
+    def test_card_failure_is_done_again_on_the_processor(self):
+        import numpy as np
+
+        from app import diarizer
+
+        devices = []
+
+        def get_encoder(device="cpu"):
+            devices.append(device)
+            diarizer._ecapa_device = "cuda:0" if device.startswith("cuda") else "cpu"
+            diarizer._ecapa_model = object()
+            return diarizer._ecapa_model
+
+        calls = []
+
+        def embed(encoder, chunks, progress=None):
+            calls.append(diarizer._ecapa_device)
+            if diarizer._ecapa_device != "cpu":
+                raise RuntimeError("CUDA error: no kernel image is available for execution on the device")
+            return [np.ones(4, dtype=np.float32) for _ in chunks]
+
+        segs = [{"start": 0.0, "end": 3.0, "text": "раз два три", "words": []},
+                {"start": 3.0, "end": 6.0, "text": "четыре пять", "words": []}]
+        with mock.patch.object(diarizer, "_get_ecapa_encoder", side_effect=get_encoder), \
+                mock.patch.object(diarizer, "_embed_slices", side_effect=embed), \
+                mock.patch.object(diarizer.sf, "read", return_value=(np.random.default_rng(0).uniform(-0.3, 0.3, 16000 * 6).astype(np.float32), 16000)):
+            speakers, merged = diarizer.diarize_and_merge_segments("x.wav", segs, device="cuda")
+        self.assertEqual(calls, ["cuda:0", "cpu"])
+        self.assertEqual(devices[-1], "cpu")
+        self.assertTrue(merged)
+
+
+class TaskPruneTest(unittest.TestCase):
+    """Tasks are found with a second look at each one; a renamed speaker's tasks follow the name."""
+
+    def test_repeats_go_and_none_is_cut_by_count(self):
+        from app.commitments import prune
+
+        items = [{"what": "Подготовить отчёт к пятнице", "who": "Иван", "due": "пятница"},
+                 {"what": "подготовить отчёт к пятнице.", "who": "Иван", "due": ""},
+                 {"what": "Отправить отчёт Петру", "who": "Анна", "due": ""},
+                 {"what": "Отправить отчёт Марии", "who": "Анна", "due": ""}]
+        self.assertEqual([x["what"] for x in prune(items)],
+                         ["Подготовить отчёт к пятнице", "Отправить отчёт Петру", "Отправить отчёт Марии"])
+        verbs = ["Отправить", "Подготовить", "Проверить", "Согласовать", "Обновить", "Созвониться о", "Написать про",
+                 "Собрать", "Посчитать", "Найти"]
+        topics = ["бюджет", "договор с поставщиком", "макет главной", "план релиза"]
+        many = [{"what": f"{v} {tp}", "who": "Иван", "due": ""} for tp in topics for v in verbs]
+        self.assertEqual(len(prune(many)), 40)  # no limit: what is a task is decided by the second look
+        moment = [{"what": "Отправить отчёт Петру", "who": "Анна", "due": "", "at": 100.0},
+                  {"what": "Отправить Петру отчёт", "who": "Анна", "due": "", "at": 102.0},
+                  {"what": "Проверить отчёт Петру", "who": "Анна", "due": "", "at": 400.0}]
+        self.assertEqual(len(prune(moment)), 2)  # the same moment in other words: once
+
+    def test_second_look_keeps_only_what_it_confirms(self):
+        from app.commitments import verify
+
+        items = [{"who": "Иван", "what": "Отправить отчёт", "quote": "я отправлю отчёт завтра", "at": 60.0, "due": ""},
+                 {"who": "Анна", "what": "Работать над макетом", "quote": "я сейчас делаю макет", "at": 120.0, "due": ""},
+                 {"who": "", "what": "Обсудить бюджет", "quote": "надо бы обсудить бюджет", "at": None, "due": ""}]
+        m = {"segments": [{"start": 55.0, "speaker": "S1", "text": "я отправлю отчёт завтра"},
+                          {"start": 118.0, "speaker": "S2", "text": "я сейчас делаю макет"}],
+             "speakers": {"S1": {"name": "Иван"}, "S2": {"name": "Анна"}}}
+        asked = []
+
+        class Llm:
+            def chat(self, system, user):
+                asked.append(user)
+                return "1: да\n2: нет\n3: нет"
+
+        self.assertEqual([x["what"] for x in verify(items, m, Llm())], ["Отправить отчёт"])
+        self.assertIn("я отправлю отчёт завтра", asked[0])  # the lines around the moment go with it
+
+        class Mute:
+            def chat(self, system, user):
+                return "не знаю"
+
+        self.assertEqual(len(verify(items, m, Mute())), 3)  # no readable answer: the first pass stands
+
+    def test_rename_moves_the_tasks(self):
+        from app import commitments
+        from app.database import create_meeting, init_db
+
+        init_db()
+        m = create_meeting(title="Задачи", filename="t.wav", media_path="")
+        t = commitments.create("Сделать макет", who="Участник 2", meeting_id=m["id"])
+        commitments.rename_person(m["id"], "участник 2", "Ольга")
+        self.assertEqual(commitments.get_task(t["id"])["who"], "Ольга")
+
+
+class TaskPartsTest(unittest.TestCase):
+    """A long meeting is read for tasks part by part, to its end; a promise on a border is seen whole."""
+
+    def test_parts_cover_everything_and_overlap(self):
+        from app.commitments import PART_OVERLAP_LINES, transcript_parts
+
+        lines = [f"[{i // 60:02d}:{i % 60:02d}] Иван: реплика номер {i} " + "слово " * 20 for i in range(300)]
+        parts = transcript_parts(lines, 8000)
+        self.assertGreater(len(parts), 3)
+        self.assertTrue(all(len(p) <= 8000 + 200 for p in parts))
+        self.assertIn(lines[-1], parts[-1])  # the end of the meeting is read
+        for a, b in zip(parts, parts[1:]):
+            self.assertEqual(a.split("\n")[-PART_OVERLAP_LINES:], b.split("\n")[:PART_OVERLAP_LINES])
+        self.assertEqual(transcript_parts(lines[:3], 8000), ["\n".join(lines[:3])])
+
+    def test_every_part_is_asked(self):
+        from app import commitments
+        from app.database import create_meeting, init_db, save_meeting_results
+
+        init_db()
+        m = create_meeting(title="Длинная", filename="l.wav", media_path="")
+        segs = [{"id": i, "start": i * 30.0, "end": i * 30.0 + 25, "speaker": "S1", "text": f"фраза {i} " + "текст " * 30}
+                for i in range(120)]
+        save_meeting_results(m["id"], segments=segs, speakers={"S1": {"name": "Иван", "color": "#0A84FF"}})
+        asked = []
+
+        class Llm:
+            max_chars = 11000
+
+            def chat(self, system, user):
+                asked.append(user)
+                return ""
+
+        with mock.patch("app.llm.target", return_value=Llm()):
+            commitments.extract(m["id"])
+        self.assertGreater(len(asked), 1)
+        self.assertIn("фраза 119", asked[-1])  # the last minutes too
+
+
+class OllamaAnswerLengthTest(unittest.TestCase):
+    """A small model caught in a loop stops at a set length instead of writing for many minutes."""
+
+    def test_num_predict_is_sent(self):
+        from app import ollama_client as oc
+        from app.database import init_db
+
+        init_db()
+
+        sent = {}
+
+        class Resp:
+            status_code = 200
+
+            def json(self):
+                return {"message": {"content": "ответ"}}
+
+        class Client:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def post(self, url, json=None):
+                sent.update(json)
+                return Resp()
+
+        with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"):
+            self.assertEqual(oc._ollama_chat("http://127.0.0.1:11434", "qwen2.5:1.5b", "s", "u"), "ответ")
+        self.assertEqual(sent["options"]["num_predict"], oc.LLM_MAX_ANSWER_TOKENS)
+        self.assertLess(oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_NUM_CTX)

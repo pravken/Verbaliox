@@ -20,15 +20,126 @@ from typing import Any, Dict, List, Optional
 from app.database import _db_lock, get_connection, get_meeting
 
 _SYSTEM = (
-    "Ты извлекаешь из расшифровки встречи обещания и поручения: кто взялся что-то сделать, для кого и к какому сроку. "
-    "Только то, что прямо сказано в тексте; не придумывай. Ответ — только строки JSON, по одному объекту на строку, "
-    'без пояснений: {"who": "кто сделает", "kind": "кто это", "to": "для кого (или пусто)", "what": "что сделать, коротко", '
-    '"due": "срок словами из текста или пусто", "time": "ММ:СС места в записи", '
+    "Ты извлекаешь из расшифровки встречи задачи: конкретные действия, которые кто-то взялся сделать или которые "
+    "ему поручили сделать после встречи. Задача — только если в тексте есть явное обязательство или поручение: "
+    "«сделаю», «подготовлю к пятнице», «Иван, отправь отчёт», «договорились, что Пётр займётся». "
+    "НЕ задачи: обсуждение и мнения, рассказ о том, что человек делает сейчас или уже сделал, идеи и предложения, "
+    "с которыми не согласились, общие планы без конкретного действия, вопросы, пересказ фактов. "
+    "Одна задача — одно действие; одно и то же не повторяй. "
+    "Если сомневаешься, задача ли это, — не включай. Не придумывай. Ответ — только строки JSON, по одному объекту "
+    'на строку, без пояснений: {"who": "кто сделает", "kind": "кто это", "to": "для кого (или пусто)", '
+    '"what": "что сделать, коротко", "due": "срок словами из текста или пусто", "time": "ММ:СС места в записи", '
     '"quote": "дословные слова из текста, где это сказано"}. '
     "kind — одно из: part (говорит в записи), ext (человек, которого только назвали), team (отдел или группа), "
     "org (другая компания), none (исполнитель не назван, тогда who пусто). "
-    "Имена — как в расшифровке. Если обещаний нет, ответь пустой строкой."
+    "Имена — как в расшифровке. Если задач нет, ответь пустой строкой."
 )
+# The second look at each task found (verify): the same model reads its words and the lines around them
+# and says whether someone really took it on or was given it
+_CHECK = (
+    "Тебе дан список возможных задач из расшифровки встречи, у каждой — номер, слова из записи и реплики рядом. "
+    "Для каждой реши: это задача, то есть кто-то явно взялся сделать конкретное действие или ему это поручили "
+    "(«сделаю», «подготовлю к пятнице», «Иван, отправь», «договорились, что Пётр займётся»)? "
+    "НЕ задача: обсуждение, мнение, рассказ о том, что человек делает сейчас или уже сделал, предложение, "
+    "с которым не согласились, вопрос, пересказ факта, общий план без конкретного действия. "
+    "Ответ — по строке на задачу, в виде «номер: да» или «номер: нет», без пояснений."
+)
+VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment go with it
+
+
+def _norm_what(t: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^\w ]+", " ", (t or "").casefold())).strip()
+
+
+def _same_task(x: Dict[str, Any], y: Dict[str, Any]) -> bool:
+    """The same task said twice: the same words (up to case and punctuation) for the same person, or the
+    same person at the same moment in similar words. Similar words alone are not enough: «отправить
+    договор» and «проверить договор» are two tasks."""
+    from difflib import SequenceMatcher
+
+    if (x.get("who") or "").casefold() != (y.get("who") or "").casefold():
+        return False
+    a, b = _norm_what(x.get("what")), _norm_what(y.get("what"))
+    if a == b:
+        return True
+    near = x.get("at") is not None and y.get("at") is not None and abs(x["at"] - y["at"]) <= 5
+    wa, wb = set(a.split()), set(b.split())
+    # at one moment, words reordered or one word changed: the sets of words mostly the same
+    return near and (len(wa & wb) / max(1, len(wa | wb)) >= 0.6 or SequenceMatcher(None, a, b).ratio() >= 0.8)
+
+
+def prune(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """A task said twice (the same words for the same person) is kept once, in the order of the recording."""
+    out: List[Dict[str, Any]] = []
+    for x in items:
+        if not any(_same_task(x, y) for y in out):
+            out.append(x)
+    return out
+
+
+PART_OVERLAP_LINES = 4  # lines a part repeats from the end of the one before
+
+
+def transcript_parts(lines: List[str], max_chars: int) -> List[str]:
+    """The transcript in parts of at most max_chars, each starting with the last lines of the one before."""
+    parts: List[str] = []
+    current: List[str] = []
+    size = 0
+    for line in lines:
+        if current and size + len(line) + 1 > max_chars and len(current) > PART_OVERLAP_LINES:
+            parts.append("\n".join(current))
+            current = current[-PART_OVERLAP_LINES:]
+            size = sum(len(x) + 1 for x in current)
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        parts.append("\n".join(current))
+    return parts
+
+
+def _context(item: Dict[str, Any], lines: List[tuple]) -> str:
+    """The transcript lines around a task's moment (the whole quote's line when it has no moment)."""
+    if item.get("at") is None:
+        return ""
+    near = [text for at, text in lines if abs(at - item["at"]) <= VERIFY_CONTEXT_SEC]
+    return "\n".join(near)[:1500]
+
+
+def verify(items: List[Dict[str, Any]], m: Dict[str, Any], llm: Any, batch: int = 12) -> List[Dict[str, Any]]:
+    """A second look by the model at each task found, with the lines around it: what is discussion, an
+    opinion or a report of work goes. An answer the model gives in no readable form keeps the batch as
+    it is (the first pass already found them)."""
+    if not items:
+        return items
+    from app.ollama_client import format_timestamp
+
+    speakers = m.get("speakers") or {}
+    lines = []
+    for seg in m.get("segments") or []:
+        name = (speakers.get(seg.get("speaker")) or {}).get("name") or seg.get("speaker") or ""
+        at = float(seg.get("start") or 0)
+        lines.append((at, f"[{format_timestamp(at)}] {name}: {(seg.get('text') or '').strip()}"))
+    kept: List[Dict[str, Any]] = []
+    for start in range(0, len(items), batch):
+        part = items[start:start + batch]
+        blocks = []
+        for i, x in enumerate(part, 1):
+            when = f" [{format_timestamp(x['at'])}]" if x.get("at") is not None else ""
+            blocks.append(f"{i}.{when} {x['who'] or 'кто-то'}: {x['what']}\nСлова: «{x['quote']}»"
+                          + (f"\nРядом:\n{_context(x, lines)}" if x.get("at") is not None else ""))
+        try:
+            answer = llm.chat(_CHECK, "\n\n".join(blocks))
+        except Exception:
+            kept.extend(part)
+            continue
+        verdict = {int(n): v.casefold().startswith(("да", "yes")) for n, v in
+                   re.findall(r"(?m)^\s*(\d+)\s*[:.)\-–—]\s*(да|нет|yes|no)", answer or "", flags=re.I)}
+        if not verdict:
+            kept.extend(part)
+            continue
+        kept.extend(x for i, x in enumerate(part, 1) if verdict.get(i, True))
+    return kept
+
 
 # Who a task is on: someone who speaks in the recording, someone only named in it, a department or
 # a group, another company, nobody
@@ -226,8 +337,14 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     if not m or not m.get("segments"):
         raise ValueError("Нет текста записи")
     llm = target(model_name, local_only=is_local_only(m))
-    text = "\n".join(build_transcript_lines(m["segments"], m.get("speakers") or {}))[: max(8000, llm.max_chars - 3000)]
-    items = [x for x in parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + text)) if supported(x, m)]
+    lines = build_transcript_lines(m["segments"], m.get("speakers") or {})
+    found: List[Dict[str, Any]] = []
+    # Part by part, so the end of a long meeting is read too (it was cut to what fits the model before);
+    # the parts overlap by a few lines, so a promise on a border is seen whole
+    for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
+        found += parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + part))
+    items = prune([x for x in found if supported(x, m)])
+    items = verify(items, m, llm)  # a second look, task by task, with the lines around it
     _init()
     now = datetime.now().isoformat(timespec="seconds")
     day, speaking = _meeting_day(m), {n.casefold() for n in participants(m)}
@@ -561,6 +678,30 @@ def report_by_model(facts: Dict[str, Any], local_only: bool = False, model_name:
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     return {**facts, "lines": [{"text": p, "tone": ""} for p in paragraphs], "text": facts["title"] + "\n\n" + "\n\n".join(paragraphs),
             "model": llm.label, "cloud": llm.is_cloud}
+
+
+def rename_person(meeting_id: int, old: str, new: str) -> int:
+    """A speaker renamed (or merged into another) in a recording: its tasks follow, as assignee and
+    as the one they are for. Tasks are kept by name, so the old name would stay otherwise."""
+    old, new = (old or "").strip(), (new or "").strip()
+    if not old or not new or old == new:
+        return 0
+    _init()
+    with _db_lock:
+        conn = get_connection()
+        try:
+            # compared here: SQLite's NOCASE folds Latin letters only, not Cyrillic
+            n, key = 0, old.casefold()
+            for r in conn.execute("SELECT id, who, to_whom FROM commitments WHERE meeting_id = ?", (meeting_id,)).fetchall():
+                who = new if (r["who"] or "").strip().casefold() == key else r["who"]
+                to = new if (r["to_whom"] or "").strip().casefold() == key else r["to_whom"]
+                if (who, to) != (r["who"], r["to_whom"]):
+                    conn.execute("UPDATE commitments SET who = ?, to_whom = ? WHERE id = ?", (who, to, r["id"]))
+                    n += 1
+            conn.commit()
+        finally:
+            conn.close()
+    return n
 
 
 def set_status(commitment_id: int, status: str) -> None:
