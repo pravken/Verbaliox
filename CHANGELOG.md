@@ -6,6 +6,29 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.3 — English
+
+- **The dictionary works with every speech model.** Before, only Whisper took it, as a hint; GigaAM and
+  Parakeet ignored it. Now after recognition (recordings, live captions, dictation) a dictionary word
+  replaces what was heard for it: its **variants** («may be recognized as»: `клод, klot` for Claude) and,
+  with the new switch on, words that **sound like it** in Latin or Cyrillic («klot», «клода» → «Claude»,
+  «в кубернетисе» → «в Kubernetes»). Live captions on Whisper get the dictionary as a hint too.
+- **The overview of a long meeting covers it from the beginning.** The notes of all parts of an
+  hour-and-a-half recording ran over the model's context and the beginning was silently dropped; they are
+  now condensed until they fit. The topics above the timeline are fixed the same way, and the highlights
+  and «Since last time» no longer read only the first part of a long meeting.
+- **Tasks:** far fewer of them from a long meeting: each one is checked a second time against what was
+  said, repeats are merged, and a long meeting is read part by part to its end. A renamed speaker's tasks
+  take the new name.
+- **Topics above the timeline** are made by themselves with the overview of a meeting of 10 minutes or more.
+- **«It's me»** on a second speaker of a recording offers to merge it into your card; a speaker with a
+  default name takes your name.
+- **An analysis model no longer thinks for many minutes:** an answer stops at 3072 tokens, and the overview
+  of a long recording says which part it reads.
+- **A video card PyTorch has no kernels for** («no kernel image is available»): the speaker model runs on
+  the processor instead of failing.
+- The open view and the open tab of a recording are blue in the top bar.
+
 ## 0.7.2 — English
 
 - **A calendar of the week or the month:** «Calendar» on the home page shows the calendar's meetings and
@@ -132,6 +155,30 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.3
+
+- **Словарь работает со всеми моделями распознавания.** Раньше его учитывал только Whisper, и то как
+  подсказку, а GigaAM и Parakeet не видели совсем. Теперь после распознавания (записи, живые субтитры,
+  диктовка) слово из словаря заменяет то, что вместо него услышали: его **варианты** («как может
+  распознаться»: `клод, klot` для Claude) и, если включён новый переключатель, **похожие по звучанию**
+  слова на латинице и кириллице («klot», «клода» → «Claude», «в кубернетисе» → «в Kubernetes»). Живые
+  субтитры на Whisper тоже получают словарь как подсказку.
+- **Обзор длинной встречи охватывает её с начала.** Конспекты всех частей полуторачасовой записи не
+  помещались в контекст модели, и начало молча отбрасывалось; теперь они сжимаются, пока не поместятся.
+  Так же исправлены темы над таймлайном, а ключевые моменты и «С прошлого раза» больше не читают только
+  начало длинной встречи.
+- **Задачи:** из длинной встречи их намного меньше: каждая проверяется второй раз по сказанному, повторы
+  объединяются, длинная встреча читается по частям до конца. Задачи переименованного участника получают
+  новое имя.
+- **Темы над таймлайном** создаются сами вместе с обзором встречи от 10 минут.
+- **«Это я»** на втором участнике записи предлагает объединить его с вашей карточкой; участник с
+  именем по умолчанию получает ваше имя.
+- **Модель анализа больше не думает десятки минут:** ответ ограничен 3072 токенами, а обзор длинной
+  записи показывает, какую часть он читает.
+- **Видеокарта, для которой у PyTorch нет ядер** («no kernel image is available»): модель участников
+  работает на процессоре, а не падает.
+- Открытый раздел и открытая вкладка записи в верхней панели — синие.
 
 ## 0.7.2
 
