@@ -743,17 +743,20 @@
         <div data-stab="dictionary" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavDictionary">Словарь</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescDictionary">Подсказки для распознавания: как правильно пишутся слова и названия.</p>
+            <p class="sx-section-desc" data-i18n="rdSasDescDictionary">Как правильно пишутся слова и названия: распознанный текст исправляется по словарю.</p>
           </div>
         <!-- The dictionary of names and terms (the same list as the window «Словарь») -->
         <div class="settings-card">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="rdSasDictTitle">Слова и названия</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="rdSasDictDesc">Имена, термины и названия, которые модель должна писать правильно. Подсказки применяются ко всем новым распознаваниям.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="rdSasDictDesc">Имена, термины и названия, которые нужно писать правильно. Whisper получает их как подсказку при распознавании; для всех моделей (и в субтитрах, и в диктовке) после распознавания слово заменяется по вариантам и по похожему звучанию. Уже расшифрованные записи не меняются.</p>
           </div>
           <div class="flex items-center gap-2">
             <input id="settings-dict-term" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]' data-input="checkSettingsDictTerm"
               data-i18n-placeholder="rdSasDictTermPh" placeholder="Слово или фраза" data-i18n-title="rdSasDictTermPh" title="Слово или фраза"
+              class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
+            <input id="settings-dict-variants" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
+              data-i18n-placeholder="dictVariantsPh" placeholder="Как может распознаться: клод, klot" data-i18n-title="dictVariantsTip" title="Через запятую — как модель может услышать это слово. Такие слова заменяются словом из словаря при любой модели"
               class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
             <input id="settings-dict-cat" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
               data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа" data-i18n-title="rdSasDictCatPh" title="Группа"
@@ -766,6 +769,11 @@
             <div id="settings-dict-count" class="text-[11.5px] text-apple-tertiary"></div>
             <button id="settings-dict-clear" data-click="clearDictionary" class="hidden ui-btn ui-btn-subtle h-7 px-3 text-[11.5px] hover:text-apple-red" data-i18n="cfDeleteWords">Удалить все слова</button>
           </div>
+          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
+            <span><span data-i18n="dictFuzzyToggle">Исправлять похожие по звучанию слова</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="dictFuzzyHint">После распознавания слово, которое звучит как слово из словаря, заменяется им: «klot» и «клод» станут «Claude», «в кубернетисе» — «в Kubernetes». Короткие слова (до 4 звуков) исправляются только по вариантам.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-dict-fuzzy" checked />
+          </label>
         </div>
         </div>
         <div data-stab="export" class="sx-section space-y-3 hidden">

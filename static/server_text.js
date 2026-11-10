@@ -36,6 +36,8 @@ const SERVER_TEXT_EN = {
   "В указанной папке не найдено поддерживаемых видео или аудио файлов": "No supported video or audio files were found in the folder",
   "Введите хотя бы одно слово или фразу": "Enter at least one word or phrase",
   "Видеокарта не справилась — распознавание на процессоре": "The video card failed — transcribing on the processor",
+  "Темы разговора для таймлайна...": "Topics of the talk for the timeline...",
+  "Видеокарта не справилась — разделение участников на процессоре...": "The video card failed — telling the speakers apart on the processor...",
   "Встраивание субтитров отменено": "Subtitle burn-in cancelled",
   "Встраивание субтитров: подготовка...": "Burning subtitles: preparing...",
   "Встреча не найдена": "Recording not found",
@@ -264,6 +266,7 @@ const SERVER_TEXT_EN = {
 
 // Messages with values in them: {} in the Russian text, {0} {1} … in the English one
 const SERVER_PATTERNS_EN = [
+  ["Формирование обзора записи ({}): часть {} из {}...", "Writing the overview ({0}): part {1} of {2}..."],
   ["Ollama не выгрузила модель {}", "Ollama did not unload the model {0}"],
   ["Для дубляжа записи длиной {} ч нужно около {} ГБ памяти, а в компьютере {} ГБ. Сделайте дубляж частей записи (Нарезка) или более короткой записи.", "Dubbing a {0} h recording needs about {1} GB of memory, and this computer has {2} GB. Dub parts of the recording (Cut) or a shorter recording."],
   ["В Ollama пока не скачана ни одна модель. Откройте «Настройки» и нажмите «Скачать» напротив {}.", "No model is downloaded in Ollama yet. Open Settings and press Download next to {0}."],

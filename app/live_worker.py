@@ -52,6 +52,7 @@ def main() -> None:
             segments, info = model.transcribe(
                 audio,
                 language=req.get("lang") or None,
+                hotwords=req.get("hotwords") or None,  # the dictionary, as for recordings
                 beam_size=1,
                 best_of=1,
                 temperature=0.0,

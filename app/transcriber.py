@@ -14,13 +14,13 @@ register_cuda_dlls()
 # faster-whisper (CTranslate2) and the speaker model (PyTorch) are imported when a job needs them,
 # not when the app starts: the window opens in seconds even from a cold disk
 
+from app import vocab
 from app.audio_utils import extract_audio_16k_mono, format_timestamp, get_media_duration
 from app.database import (
     AUDIO_DIR,
     MODELS_DIR,
     edit_meeting,
     get_all_settings,
-    get_dictionary_hotwords,
     get_meeting,
     meeting_status,
     save_meeting_dub,
@@ -673,6 +673,9 @@ def _batch_size_for(device: str, hw: Dict[str, Any]) -> int:
     return 4
 
 
+AUTO_CHAPTERS_MIN_SEC = 600  # chapters are made by themselves for recordings this long
+
+
 def _detect_speech_language(wav_path: Path, main: str, device: str, compute_type: str) -> Optional[str]:
     """The language of the first minute, heard by the main model (app/speech_route.py): Whisper names
     it, GigaAM / Parakeet write text whose letters show it. None when it cannot tell (too little
@@ -1068,7 +1071,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
             # `hotwords` is applied to every 30s window; `initial_prompt` would only affect the first
             # window because condition_on_previous_text is disabled.
-            hotwords = get_dictionary_hotwords()
+            hotwords = vocab.hotwords()
             batch_size = (
                 _batch_size_for(device, hw)
                 if settings.get("batched_inference", "true").lower() == "true"
@@ -1103,6 +1106,9 @@ def _process_meeting_job(meeting_id: int) -> None:
                 raw_segments = _collect_segments(meeting_id, segments_iter, total_dur)
 
             detected_lang = getattr(info, "language", None) or (language or "ru")
+
+        # The dictionary for every model: Whisper only took it as a hint, GigaAM and Parakeet not at all
+        raw_segments = vocab.fix_segments(raw_segments)
 
         # Free Whisper before diarization unless the next queued job can reuse it
         whisper_model = None
@@ -1175,6 +1181,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         # 4. Automatic AI Summary via local Ollama (if enabled and Ollama has a model)
         auto_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true") and not skipped
+        total_len = max((float(x.get("end") or 0) for x in merged_segments), default=0.0)
         summaries = meeting.get("summaries") or {}
 
         if auto_summary and merged_segments:
@@ -1194,7 +1201,10 @@ def _process_meeting_job(meeting_id: int) -> None:
                     stage_text="Формирование обзора записи (" + ("облачная модель" if cloud else "Ollama") + ")...",
                 )
                 try:
+                    where = "облачная модель" if cloud else "Ollama"
                     summary_md = generate_meeting_summary(
+                        progress=lambda done, total: update_meeting_progress(
+                            meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
                         segments=merged_segments,
                         speakers=speakers_meta,
                         template_key="protocol",
@@ -1208,6 +1218,17 @@ def _process_meeting_job(meeting_id: int) -> None:
                         summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
                     summaries["protocol"] = summary_md
                     merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))
+                    # The topics above the timeline: worth it for a meeting long enough to have several
+                    if settings.get("auto_chapters", "true").lower() == "true" and total_len >= AUTO_CHAPTERS_MIN_SEC:
+                        try:
+                            update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
+                            chapters_md = generate_meeting_summary(
+                                segments=merged_segments, speakers=speakers_meta, template_key="chapters",
+                                answer_lang=detected_lang, local_only=local_only)
+                            summaries["chapters"] = chapters_md
+                            merge_summaries(meeting_id, {"chapters": chapters_md})
+                        except Exception as ch_err:
+                            print(f"[chapters] meeting {meeting_id}: {ch_err}", flush=True)
                     if settings.get("auto_commitments", "true").lower() == "true":
                         try:
                             from app import commitments

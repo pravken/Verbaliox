@@ -143,7 +143,14 @@ def since_last_time(meeting_id: int, model_name: Optional[str] = None, answer_la
     if not prev:
         raise ValueError("В серии нет более ранней встречи")
     llm = target(model_name, local_only=is_local_only(m) or is_local_only(prev))
-    now_text = "\n".join(build_transcript_lines(m.get("segments") or [], m.get("speakers") or {}))[: max(8000, llm.max_chars - 9000)]
+    now_text = "\n".join(build_transcript_lines(m.get("segments") or [], m.get("speakers") or {}))
+    budget = max(8000, llm.max_chars - 9000)
+    if len(now_text) > budget:
+        # A long meeting cut to the budget lost its end, where tasks are usually settled: its
+        # overview and tasks cover all of it
+        outcomes = _outcomes(m)
+        now_text = (f"(запись длинная — ниже её обзор и задачи)\n{outcomes}" if outcomes and outcomes != now_text[:6000]
+                    else now_text[:budget])
     system = (
         "Ты сравниваешь две встречи одной серии. По материалам прошлой встречи найди её задачи, договорённости и открытые "
         "вопросы и проверь по расшифровке новой встречи, что с ними стало. Структура в Markdown: «## Выполнено», "

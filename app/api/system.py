@@ -8,7 +8,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app import events, paths
 from app.paths import DATA_DIR, MODELS_DIR, UPLOADS_DIR
-from app.database import add_dictionary_term, delete_dictionary_term, get_all_settings, list_dictionary, toggle_dictionary_term, update_settings
+from app import vocab
+from app.database import add_dictionary_term, delete_dictionary_term, get_all_settings, list_dictionary, set_dictionary_variants, toggle_dictionary_term, update_settings
 from app.ffmpeg_manager import ffmpeg_status, start_ffmpeg_download
 from app.hardware import get_hardware_info
 from app.ollama_client import get_ollama_status, start_model_pull
@@ -153,6 +154,8 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     updated = update_settings(values)
+    if "dictionary_fuzzy" in values:
+        vocab.invalidate()
     if "start_with_windows" in values:
         from app import autostart
 
@@ -186,6 +189,7 @@ def api_list_dictionary() -> List[Dict[str, Any]]:
 class DictionaryCreatePayload(BaseModel):
     term: str
     category: str = "Термин"
+    variants: Optional[str] = None  # "клод, klot": how the term may be recognized
 
 @router.post("/api/dictionary")
 def api_add_dictionary(payload: DictionaryCreatePayload) -> Dict[str, Any]:
@@ -201,17 +205,23 @@ def api_add_dictionary(payload: DictionaryCreatePayload) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail="Введите хотя бы одно слово или фразу")
         last_item = {}
         for t in raw_terms:
-            last_item = add_dictionary_term(t, payload.category)
+            last_item = add_dictionary_term(t, payload.category, payload.variants)
+        vocab.invalidate()
         return {"added": len(raw_terms), "last": last_item, "items": list_dictionary()}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 class DictionaryTogglePayload(BaseModel):
-    active: bool
+    active: Optional[bool] = None
+    variants: Optional[str] = None
 
 @router.patch("/api/dictionary/{term_id}")
 def api_toggle_dictionary(term_id: int, payload: DictionaryTogglePayload) -> Dict[str, Any]:
-    toggle_dictionary_term(term_id, payload.active)
+    if payload.active is not None:
+        toggle_dictionary_term(term_id, payload.active)
+    if payload.variants is not None:
+        set_dictionary_variants(term_id, payload.variants)
+    vocab.invalidate()
     return {"ok": True}
 
 @router.delete("/api/dictionary")
@@ -219,11 +229,13 @@ def api_clear_dictionary() -> Dict[str, Any]:
     from app.database import clear_dictionary
 
     clear_dictionary()
+    vocab.invalidate()
     return {"ok": True}
 
 @router.delete("/api/dictionary/{term_id}")
 def api_delete_dictionary(term_id: int) -> Dict[str, Any]:
     delete_dictionary_term(term_id)
+    vocab.invalidate()
     return {"ok": True}
 
 # --- Live progress (Server-Sent Events) ---

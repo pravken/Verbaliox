@@ -190,11 +190,24 @@ function spSetRole(id, value) {
   spMeta(id, { role: String(value || '').trim() });
 }
 
+// «Это я». One speaker of a recording is the user: a second one marked so is the user's voice split
+// in two by the speaker detection, so it is offered to be merged into the user's card. A speaker still
+// named «Участник N» takes the user's name when the app knows it (Settings «my_name»)
 async function spToggleMe(id) {
-  const s = ((state.activeMeeting && state.activeMeeting.speakers) || {})[id];
+  const speakers = (state.activeMeeting && state.activeMeeting.speakers) || {};
+  const s = speakers[id];
   if (!s) return;
-  if (!s.is_me && spIsDefault(s.name)) { showWarning(t('spMeNeedsName')); spFocusName(id); return; }
-  if (await spMeta(id, { is_me: !s.is_me }) && !s.is_me) showToast(t('spMeSet').replace('{name}', () => s.name));
+  if (!s.is_me) {
+    const me = Object.keys(speakers).find(k => k !== id && speakers[k].is_me);
+    if (me) { await spMerge(id, me); return; }
+    if (spIsDefault(s.name)) {
+      const known = String(((state.system && state.system.settings) || {}).my_name || '').split(',').map(x => x.trim()).filter(Boolean)[0];
+      if (!known) { showWarning(t('spMeNeedsName')); spFocusName(id); return; }
+      await updateSpeaker(id, known, null);  // not renameSpeaker: «Участник N» is no person to ask about
+    }
+  }
+  const now = ((state.activeMeeting && state.activeMeeting.speakers) || {})[id] || s;
+  if (await spMeta(id, { is_me: !s.is_me }) && !s.is_me) showToast(t('spMeSet').replace('{name}', () => now.name));
 }
 
 // ⋯ of a card: one person counted as two (merge), two counted as one (split), their lines in the text

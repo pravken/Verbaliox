@@ -198,7 +198,7 @@ def _language() -> Optional[str]:
 
 def recognize(audio: np.ndarray) -> "tuple[str, str]":
     """(text, the model that made it)."""
-    from app import asr_onnx, live
+    from app import asr_onnx, live, vocab
     from app.database import get_all_settings
     from app.hardware import get_hardware_info
 
@@ -207,9 +207,10 @@ def recognize(audio: np.ndarray) -> "tuple[str, str]":
     model = live.caption_onnx_model({**settings, "live_whisper_model": "auto"}, lang)
     if model:
         parts = asr_onnx.recognize_array(model, audio)
-        return " ".join(t for _, _, t in parts).strip(), model
+        return vocab.fix_text(" ".join(t for _, _, t in parts).strip(), vocab.current()), model
     segs, _lang, _prob = live._caption_worker().transcribe(audio, lang)
-    return " ".join(s.text.strip() for s in segs).strip(), live.caption_model(settings, get_hardware_info())
+    text = " ".join(s.text.strip() for s in segs).strip()
+    return vocab.fix_text(text, vocab.current()), live.caption_model(settings, get_hardware_info())
 
 
 def save_to_library(audio: np.ndarray, text: str, model: str, translated_to: str = "", translation: str = "") -> Optional[int]:

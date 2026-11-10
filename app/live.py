@@ -124,7 +124,10 @@ class _CaptionWorker:
                 try:
                     if self.proc is None or self.proc.poll() is not None:
                         self._start()
-                    self.proc.stdin.write((json.dumps({"lang": lang, "bytes": len(pcm)}) + "\n").encode())
+                    from app import vocab
+
+                    head = {"lang": lang, "bytes": len(pcm), "hotwords": vocab.hotwords()}
+                    self.proc.stdin.write((json.dumps(head, ensure_ascii=False) + "\n").encode())
                     self.proc.stdin.write(pcm)
                     self.proc.stdin.flush()
                     line = self._readline(WORKER_ANSWER_SEC)
@@ -295,7 +298,11 @@ class LiveSession:
         # One caption line per sentence (a phrase without pauses can hold several)
         from app.asr_onnx import _SENT_END, split_sentences_text
 
-        segs = [_Seg(a, b, t) for x in segs for a, b, t in split_sentences_text(x.start, x.end, x.text.strip())]
+        from app import vocab
+
+        rules = vocab.current()
+        segs = [_Seg(a, b, vocab.fix_text(t, rules)) for x in segs
+                for a, b, t in split_sentences_text(x.start, x.end, x.text.strip())]
         if self.speech_lang:
             self.lang = self.speech_lang
         elif language and prob > 0.5:

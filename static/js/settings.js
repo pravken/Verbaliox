@@ -140,6 +140,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-auto-title').checked = s.auto_title !== 'false';
     document.getElementById('set-summary-grounding').checked = s.summary_grounding !== 'false';
     document.getElementById('set-auto-commitments').checked = s.auto_commitments !== 'false';
+    document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
     loadWatchFolder();
     document.getElementById('set-semantic').checked = s.semantic_search === 'true';
@@ -2149,6 +2150,7 @@ function settingsFormValues() {
     auto_title: String(document.getElementById('set-auto-title').checked),
     summary_grounding: String(document.getElementById('set-summary-grounding').checked),
     auto_commitments: String(document.getElementById('set-auto-commitments').checked),
+    dictionary_fuzzy: String(document.getElementById('set-dict-fuzzy').checked),
     semantic_search: String(document.getElementById('set-semantic').checked),
     semantic_model: document.getElementById('set-semantic-model').value.trim() || 'bge-m3',
     idle_unload_minutes: document.getElementById('set-idle-unload').value,
@@ -2307,14 +2309,14 @@ async function loadDictionary() {
 
 // Audit 6.1: cleared at once; «Отменить» adds the same words back, switched off ones stay off
 async function clearDictionary() {
-  const words = (state.dictionary || []).map(d => ({ term: d.term, category: d.category, active: d.active }));
+  const words = (state.dictionary || []).map(d => ({ term: d.term, category: d.category, active: d.active, variants: d.variants || '' }));
   if (!words.length) return;
   const res = await fetch('/api/dictionary', { method: 'DELETE' }).catch(() => null);
   if (!res || !res.ok) { showError(); return; }
   await loadDictionary();
   showToast(t('dictClearedToast').replace('{n}', () => words.length), { label: t('rdSasUndo'), onClick: async () => {
     for (const w of words) {
-      await fetch('/api/dictionary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ term: w.term, category: w.category }) });
+      await fetch('/api/dictionary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ term: w.term, category: w.category, variants: w.variants }) });
     }
     await loadDictionary();
     const off = new Set(words.filter(w => !w.active).map(w => w.term));
@@ -2511,6 +2513,7 @@ const SETTINGS_RESET = {
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
+  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check']],
   export: [['set-file-name-template', 'file_name_template', 'value'], ['set-date-folders', 'date_folders', 'value']],
   privacy: [['set-delete-media-after', 'delete_media_after', 'check'], ['set-media-retention', 'media_retention_days', 'value']],
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
@@ -2519,7 +2522,7 @@ const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true',
-  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false',
+  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',
@@ -2758,8 +2761,10 @@ function renderSettingsDictionary() {
         <input type="checkbox" ${item.active ? 'checked' : ''} data-change="toggleDictItem" data-change-args='[${item.id}, {"$": "checked"}]'
           class="rounded bg-apple-bg border-white/20 text-apple-blue" />
         <span class="truncate ${item.active ? 'text-white' : 'text-apple-tertiary line-through'}">${escapeHtml(item.term)}</span>
+        ${item.variants ? `<span class="dict-variants text-apple-tertiary truncate" title="${escapeHtml(t('dictVariantsTip'))}">← ${escapeHtml(item.variants)}</span>` : ''}
         <span class="text-[11px] px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary shrink-0">${escapeHtml(item.category)}</span>
       </label>
+      <button data-click="editDictVariants" data-click-args='[${item.id}]' title="${escapeHtml(t('dictVariantsEdit'))}" aria-label="${escapeHtml(t('dictVariantsEdit'))}" class="text-[11px] text-apple-tertiary hover:text-white transition px-1 shrink-0 ml-auto">${escapeHtml(t('dictVariantsEditShort'))}</button>
       <button data-click="deleteSettingsDictItem" data-click-args='[${item.id}]' title="${escapeHtml(t('tipDeleteDictTerm'))}" class="text-apple-tertiary hover:text-apple-red transition p-1">${SVG_ICONS.closeX}</button>
     </div>`).join('');
 }
@@ -2780,15 +2785,31 @@ async function addSettingsDictItem() {
   const term = input.value.trim();
   if (!term || settingsDictHas(term)) { checkSettingsDictTerm(); return; }
   const category = document.getElementById('settings-dict-cat').value.trim() || t('rdSasDictCatDefault');
+  const varInput = document.getElementById('settings-dict-variants');
+  const variants = varInput.value.trim();
   await fetch('/api/dictionary', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ term, category }),
+    body: JSON.stringify({ term, category, variants }),
   });
   input.value = '';
+  varInput.value = '';
   input.focus();
   await loadDictionary();
   checkSettingsDictTerm();
+}
+
+// How a term may be recognized ("клод, klot" for Claude): replaced by the term after recognition
+async function editDictVariants(id) {
+  const item = (state.dictionary || []).find(d => d.id === id);
+  if (!item) return;
+  const v = await askText(t('dictVariantsAsk').replace('{term}', () => item.term), item.variants || '', { title: t('dictVariantsTitle') });
+  if (v === null) return;
+  const res = await fetch(`/api/dictionary/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variants: v }),
+  }).catch(() => null);
+  if (!res || !res.ok) { showError(); return; }
+  await loadDictionary();
 }
 
 // Deleted at once, with a way back
@@ -2802,7 +2823,7 @@ async function deleteSettingsDictItem(id) {
       await fetch('/api/dictionary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ term: item.term, category: item.category }),
+        body: JSON.stringify({ term: item.term, category: item.category, variants: item.variants || '' }),
       });
       await loadDictionary();
     },
