@@ -523,8 +523,9 @@ def record_mix_command(ffmpeg: str, page: Optional[Path], system: Optional[Path]
                        "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "[a]",
                        "-c:a", "aac", "-b:a", "160k", str(dest)]
     if page and not system:
-        # Video from MediaRecorder has no index: a copy into a new file makes it seekable
-        return base + ["-i", str(page), "-c", "copy", str(dest)] if has_video else None
+        # MediaRecorder writes no index and no duration, sound alone too: a copy into a new file makes
+        # it seekable with a known length (a second for an hour; a failed copy keeps the page's file)
+        return base + ["-i", str(page), "-c", "copy", str(dest)]
     if system and not page:
         return base + ["-i", str(system), "-c:a", "aac", "-b:a", "160k", str(dest)]
     if has_video:
