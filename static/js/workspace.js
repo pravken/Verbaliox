@@ -8,7 +8,8 @@ async function selectMeeting(id, reloadPlayer = true) {
   // A refresh of the recording open (new lines, a status change) while another one is being opened by
   // a click: skipped — it took the place of the click, whose answer was then dropped as older, and the
   // clicked row stayed «opening» over the old recording
-  if (state.pendingMeetingId != null && state.pendingMeetingId !== id && state.activeMeeting && state.activeMeeting.id === id) return;
+  // (a click passes reloadPlayer = true: a click back on the open recording is the user's last word)
+  if (!reloadPlayer && state.pendingMeetingId != null && state.pendingMeetingId !== id && state.activeMeeting && state.activeMeeting.id === id) return;
   // Only the last request wins: a slow answer for an earlier click must not replace the open recording
   const seq = ++_selectSeq;
   // Audit 3.2. The click answers at once: the row lights up and the title shows the recording,
@@ -1514,17 +1515,27 @@ const tx = { items: [], query: '', speakers: {}, observer: null };
 // It closes on «Отмена», Esc, a save, or when another recording is opened.
 function renderTranscript() {
   const area = state._closeEdit ? null : document.querySelector('textarea[id^="seg-edit-area-"]');
+  // an editor whose line a search hid in the last drawing: still open, drawn again when it is shown
+  const hidden = state._closeEdit ? null : state._editHidden;
   state._closeEdit = false;
-  const keep = area && state.activeMeeting && state._editFor === state.activeMeeting.id
-    ? { segId: Number(area.id.slice('seg-edit-area-'.length)), value: area.value, a: area.selectionStart, b: area.selectionEnd, focused: document.activeElement === area }
+  state._editHidden = null;
+  const m = state.activeMeeting;
+  const ed = state._editFor;
+  const segId = area ? Number(area.id.slice('seg-edit-area-'.length)) : hidden ? hidden.segId : null;
+  const seg = m && segId != null ? (m.segments || []).find(x => x.id === segId) : null;
+  // kept only over the same line of the same text: another version shown, or the line changed under it
+  // (a transcription, a merge), and the typing would be saved over a different line
+  const keep = segId != null && ed && m && ed.id === m.id && ed.model === (m.transcript_model || '') && seg && seg.text === ed.text
+    ? (area ? { segId, value: area.value, a: area.selectionStart, b: area.selectionEnd, focused: document.activeElement === area }
+      : { ...hidden, focused: false })
     : null;
   renderTranscriptNow();
   if (!keep) return;
-  openInlineSegmentEditor(keep.segId);
+  openInlineSegmentEditor(keep.segId, keep.focused);  // focus stays where it is (the search box being typed in)
   const again = document.getElementById(`seg-edit-area-${keep.segId}`);
-  if (!again) return;
+  if (!again) { state._editHidden = keep; return; }
   again.value = keep.value;
-  if (keep.focused) again.setSelectionRange(keep.a, keep.b); else again.blur();
+  if (keep.focused) again.setSelectionRange(keep.a, keep.b);
 }
 
 function closeSegmentEdit() {
@@ -1950,7 +1961,7 @@ function renderFillerButton() {
   rpRenderFillerButton();
 }
 
-function openInlineSegmentEditor(segId) {
+function openInlineSegmentEditor(segId, focus = true) {
   const m = state.activeMeeting;
   if (!m) return;
   const seg = (m.segments || []).find(s => s.id === segId);
@@ -1958,7 +1969,7 @@ function openInlineSegmentEditor(segId) {
 
   const textBox = document.getElementById(`seg-text-${segId}`);
   if (!textBox || document.getElementById(`seg-edit-area-${segId}`)) return;
-  state._editFor = m.id;
+  state._editFor = { id: m.id, model: m.transcript_model || '', text: seg.text };
   textBox.innerHTML = `
     <textarea id="seg-edit-area-${segId}" rows="2" data-keydown="segEditKey" data-keydown-args='[{"$": "event"}, ${Number(segId)}]'
       class="w-full bg-apple-sidebar border border-apple-blue rounded-lg p-2 text-[13px] text-white focus:outline-none mt-1">${escapeHtml(seg.text)}</textarea>
@@ -1969,7 +1980,8 @@ function openInlineSegmentEditor(segId) {
     </div>
   `;
   const area = document.getElementById(`seg-edit-area-${segId}`);
-  area.focus();
+  if (!focus) return;  // opened again by a redraw while typing elsewhere (the search): focus stays there
+  area.focus({ preventScroll: true });
   area.setSelectionRange(area.value.length, area.value.length);
 }
 
