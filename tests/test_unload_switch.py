@@ -118,7 +118,7 @@ class AfterWorkUnloadTest(unittest.TestCase):
 
         from app import ollama_client as oc
 
-        with mock.patch.object(oc, "AFTER_WORK_UNLOAD_SEC", 0.2), \
+        with mock.patch.object(oc, "AFTER_WORK_UNLOAD_SEC", 0.2), mock.patch.object(oc, "_speech_job_waits", return_value=True), \
                 mock.patch("app.vram.ollama_release_others", return_value=["qwen3.5:4b"]) as rel:
             oc._work_started()
             oc._work_done()          # an overview asks again at once: the timer is put off
@@ -128,6 +128,18 @@ class AfterWorkUnloadTest(unittest.TestCase):
             oc._work_done()
             time.sleep(0.4)
             rel.assert_called_once_with()
+
+    def test_without_a_transcription_waiting_the_model_stays_for_the_next_question(self):
+        import time
+
+        from app import ollama_client as oc
+
+        with mock.patch.object(oc, "AFTER_WORK_UNLOAD_SEC", 0.1), mock.patch.object(oc, "_speech_job_waits", return_value=False), \
+                mock.patch("app.vram.ollama_release_others", return_value=[]) as rel:
+            oc._work_started()
+            oc._work_done()
+            time.sleep(0.3)
+            rel.assert_not_called()  # the idle setting (keep_alive) decides when it goes
 
 
 class SpeakerMarksTest(unittest.TestCase):

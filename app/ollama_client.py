@@ -714,10 +714,26 @@ _work_lock = threading.Lock()
 _work = {"active": 0, "timer": None}
 
 
+def _speech_job_waits() -> bool:
+    """A transcription is queued or running: it needs the video memory the analysis model holds."""
+    try:
+        from app import transcriber
+
+        with transcriber._jobs_lock:
+            return any(q["kind"] == "transcribe" for q in transcriber._queue)
+    except Exception:
+        return False
+
+
 def _after_work_unload() -> None:
+    """After the analysis model's work: unloaded at once only when a transcription waits for the video
+    memory; otherwise it stays as long as Settings → «выгружать через N минут» says (keep_alive), so a
+    next question to the assistant does not wait seconds for it to load again."""
     with _work_lock:
         if _work["active"]:
             return
+    if not _speech_job_waits():
+        return
     try:
         from app.vram import ollama_release_others
 
