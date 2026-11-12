@@ -51,12 +51,40 @@ class TeamsCaptionsTest(unittest.TestCase):
     def test_the_line_being_said_is_rewritten_not_added(self):
         r = tc.Reader()
         r.started_at = time.time()
+        r._seeded = True  # the recording ran already: the lines on screen are its own
         e, m = "Echo", "Maksim Pravko"
         for shown in ([(e, "Затем прослушать его."), (m, "1345")], [(e, "Затем прослушать его."), (m, "123456")],
                       [(e, "Затем прослушать его."), (m, "13456789 10")], [(m, "13456789 10"), (e, "90")]):
             r._take(shown)
         self.assertEqual([(x["name"], x["text"]) for x in r.snapshot()["marks"]],
                          [(e, "Затем прослушать его."), (m, "13456789 10"), (e, "90")])
+
+    def test_lines_on_screen_before_the_recording_are_not_marks(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        before = [("Natalia Rudavina", "Это было до записи."), ("Vladislav Lisnevskiy", "И это тоже было раньше.")]
+        r._take([*before, ("Natalia Rudavina", "А это говорится сейчас")])
+        r._take([*before, ("Natalia Rudavina", "А это говорится сейчас, дальше"), ("Vladislav Lisnevskiy", "Новая реплика.")])
+        self.assertEqual([m["text"] for m in r.snapshot()["marks"]], ["А это говорится сейчас, дальше", "Новая реплика."])
+
+    def test_a_long_meeting_compares_recent_lines_only(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._seeded = True
+        for i in range(600):
+            r._take([("Echo", f"реплика номер {i} про совсем разные вещи {i * 7}")])
+        start = time.time()
+        r._take([("Echo", "ещё одна новая реплика про что-то другое")])
+        self.assertLess(time.time() - start, 0.1)
+        self.assertLessEqual(len(r._said["echo"]), tc.RECENT_LINES * 2)
+
+    def test_stop_forgets_the_lines_of_that_recording(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._seeded = True
+        r._take([("Echo", "Первая запись.")])
+        self.assertEqual(len(r.stop()["marks"]), 1)
+        self.assertEqual(r.snapshot()["marks"], [])  # a next recording that does not read gets nothing
 
     def test_ui_automation_loads_by_its_full_name_when_the_short_one_fails(self):
         import sys

@@ -27,6 +27,7 @@ POLL_SEC = 1.0
 CAPTION_LAG_SEC = 1.5          # a line shows up about this long after it was said
 TEAMS_PROCESSES = {"ms-teams", "teams", "msteams"}
 CAPTION_WORDS = ("caption", "субтитр")
+RECENT_LINES = 40              # a reading is compared with this many latest lines of its speaker only
 MAX_ELEMENTS = 25000            # elements of a window looked at when the panel is searched for
 FIND_EVERY_SEC = 5.0           # how often the panel is searched for again while it is not found
 NOT_A_PANEL = {"Button", "MenuItem", "CheckBox", "Hyperlink", "SplitButton", "RadioButton", "ToolTip", "Image"}
@@ -180,7 +181,8 @@ class Reader:
         self._said: Dict[str, List[List[Any]]] = {}  # the lines read, by speaker
         self._live: Optional[Tuple[str, List[Any]]] = None  # (speaker, entry) of the line being said
         self._known: set = set()
-        self._stop = threading.Event()
+        self._stop = threading.Event()  # replaced at each start: a reader thread late to stop keeps its own
+        self._seeded = False            # the lines on screen before the recording began are known, not marked
         self._thread: Optional[threading.Thread] = None
         self._described = False
         self._panel: Any = None
@@ -194,19 +196,25 @@ class Reader:
             self.started_at = started_at or time.time()
             self.marks, self.names, self.lines = [], [], 0
             self._said, self._known = {}, {n.lower() for n in (known_names or []) if n}
-            self._live = None
+            self._live, self._seeded = None, False
             self.state, self.error = "idle", ""
             self._panel, self._found_at = None, 0.0
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True, name="teams_captions")
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, args=(self._stop,), daemon=True, name="teams_captions")
         self._thread.start()
 
     def stop(self) -> Dict[str, Any]:
+        """Ends the reading; returns what this recording read, and forgets it: a next recording
+        that does not read the captions must not get these lines."""
         self._stop.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
         self._thread = None
-        return self.snapshot()
+        snap = self.snapshot()
+        with self._lock:
+            self.marks, self.names, self.lines, self._said, self._live = [], [], 0, {}, None
+            self.state = "idle"
+        return snap
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
@@ -224,22 +232,33 @@ class Reader:
         its text; the lines above it are said, each kept once in its latest wording."""
         now = time.time()
         with self._lock:
+            if not self._seeded and found:
+                # The panel as it was when the recording began: those lines were said before it, they
+                # are known (not marked at 0 s, where they named the first voice heard); the last one may
+                # be the line being said now and is taken as usual
+                self._seeded = True
+                for name, line in found[:-1]:
+                    self._said.setdefault(name.lower(), []).append([line.lower(), None])
+                found = found[-1:]
             closed = False  # the line being said before is now above the last one: it is finished
             for k, (name, line) in enumerate(found):
-                said = self._said.setdefault(name.lower(), [])  # [line lowered, index of its mark]
+                said = self._said.setdefault(name.lower(), [])  # [line lowered, index of its mark or None]
+                if len(said) > RECENT_LINES * 2:  # only the latest lines can still be on screen
+                    del said[:-RECENT_LINES]
                 low = line.lower()
                 live = self._live
                 if k == len(found) - 1 and live is not None and not closed and live[0] == name.lower() \
-                        and live[1] in said and not any(e is not live[1] and same_line(e[0], low) for e in said):
+                        and live[1] in said and not any(e is not live[1] and same_line(e[0], low) for e in said[-RECENT_LINES:]):
                     self._set_text(live[1], low, line)  # the same line, still being said
                     continue
-                matches = [e for e in said if same_line(e[0], low)]
+                matches = [e for e in said[-RECENT_LINES:] if same_line(e[0], low)]
                 if matches:
                     same = matches[0]  # the earliest: the line began then
                     for extra in matches[1:]:  # pieces of the same line read apart before: one line now
                         said.remove(extra)
-                        self.marks[extra[1]]["merged"] = True
-                        self.lines -= 1
+                        if extra[1] is not None:
+                            self.marks[extra[1]]["merged"] = True
+                            self.lines -= 1
                     if low != same[0] and (len(matches) > 1 or len(low) >= len(same[0]) * 0.8):
                         self._set_text(same, low, line)
                     if live is not None and same is live[1] and k < len(found) - 1:
@@ -259,9 +278,10 @@ class Reader:
 
     def _set_text(self, entry: List[Any], low: str, line: str) -> None:
         entry[0] = low
-        self.marks[entry[1]]["text"] = line[:200]
+        if entry[1] is not None:  # a line from before the recording has no mark
+            self.marks[entry[1]]["text"] = line[:200]
 
-    def _run(self) -> None:
+    def _run(self, stop: threading.Event) -> None:
         if sys.platform != "win32":
             self._set("unavailable", "только в Windows")
             return
@@ -280,7 +300,7 @@ class Reader:
                 return ""
 
         api = (AutomationElement, Condition, ControlType, TreeScope)
-        while not self._stop.is_set():
+        while not stop.is_set():
             try:
                 texts = self._read_panel(api) if self._panel is not None else None
                 if texts is None:  # not found yet, or Teams changed its window: searched again
@@ -304,7 +324,7 @@ class Reader:
                 traceback.print_exc()
                 self._panel = None
                 self._set("error", str(e)[:200])
-            self._stop.wait(POLL_SEC)
+            stop.wait(POLL_SEC)
 
     @staticmethod
     def _texts(el, api) -> List[str]:
