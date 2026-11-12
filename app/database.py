@@ -745,6 +745,11 @@ def update_meeting_progress(
     ):
         if value is not None:
             event[key] = value
+    from app import app_status
+
+    asr_now = app_status.asr_model(meeting_id)
+    if asr_now:
+        event["asr_now"] = asr_now  # the model recognizing it now
     events.publish(event)
 
 
@@ -1749,6 +1754,9 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
     d["processing"] = effective_processing(_loads_dict(d.pop("processing_json", None)))
     d["merged_models"] = _loads_list(d.pop("merged_models_json", None)) if d.get("transcript_model") == "merged" else []
     d["speaker_marks"] = _loads_list(d.pop("speaker_marks_json", None))
+    from app import app_status
+
+    d["asr_now"] = app_status.asr_model(d["id"])  # the model recognizing it right now, if any
     return d
 
 

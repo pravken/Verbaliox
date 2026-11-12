@@ -19,6 +19,22 @@ KIND_LABELS = {
 }
 
 
+# The speech model recognizing each recording right now (the routed model, each model of the precise
+# mode in turn): shown as «Идёт расшифровка: <model>», the recording's own choice may be «Авто»
+_asr_now: Dict[int, str] = {}
+
+
+def set_asr_model(meeting_id: int, model: str = "") -> None:
+    if model:
+        _asr_now[meeting_id] = model
+    else:
+        _asr_now.pop(meeting_id, None)
+
+
+def asr_model(meeting_id: int) -> str:
+    return _asr_now.get(meeting_id, "")
+
+
 _notices: List[Dict[str, Any]] = []  # Windows notifications the tray shows next (run.py)
 
 AUTO_SOURCES = {"call": "звонок", "calendar": "встреча по календарю"}

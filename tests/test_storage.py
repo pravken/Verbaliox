@@ -158,6 +158,18 @@ class EventBusTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_the_model_recognizing_a_recording_now_is_told(self):
+        from app import app_status
+
+        database.init_db()
+        m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav", model_name="auto")
+        app_status.set_asr_model(m["id"], "gigaam-v3")
+        try:
+            self.assertEqual(database.get_meeting(m["id"])["asr_now"], "gigaam-v3")
+        finally:
+            app_status.set_asr_model(m["id"])
+        self.assertEqual(database.get_meeting(m["id"])["asr_now"], "")
+
     def test_database_updates_publish_progress(self):
         async def scenario():
             database.init_db()
