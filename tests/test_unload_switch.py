@@ -53,6 +53,24 @@ class UnloadSwitchTest(unittest.TestCase):
                 mock.patch.object(live, "has_sessions", return_value=True):
             self.assertEqual(vram.ollama_release_others(), [])  # live captions translate meanwhile
 
+    def test_idle_speech_models_go_before_an_analysis_model(self):
+        from app import asr_onnx, live
+
+        worker = mock.MagicMock()
+        worker.proc.poll.return_value = None
+        with self._stage("summarizing"), mock.patch.object(live, "has_sessions", return_value=False), \
+                mock.patch.object(live, "_worker", worker), \
+                mock.patch.object(transcriber, "whisper_cache_key", return_value=("large-v3", "cuda", "float16")), \
+                mock.patch.object(transcriber, "release_whisper_model") as rel, \
+                mock.patch.object(asr_onnx, "loaded_models", return_value=[]), \
+                mock.patch("app.diarizer.ecapa_loaded_on", return_value=None):
+            self.assertEqual(vram.release_idle_speech_models(), ["whisper", "live"])
+        rel.assert_called_once()
+        worker._kill.assert_called_once()  # the captions' worker kept its Whisper after the recording
+        with self._stage("transcribing"), mock.patch.object(transcriber, "release_whisper_model") as rel:
+            self.assertEqual(vram.release_idle_speech_models(), [])  # in use: left alone
+        rel.assert_not_called()
+
     def test_stop_all_jobs_cancels_queued_and_running(self):
         with transcriber._jobs_lock:
             transcriber._active_jobs.update({901, 902})

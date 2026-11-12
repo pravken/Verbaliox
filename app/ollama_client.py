@@ -735,9 +735,12 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     payload.update(thinking_off(model))
     from app import cancel_scope
 
-    try:  # one analysis model in memory at a time: another one loaded before goes first
-        from app.vram import ollama_release_others
+    try:  # one model in memory at a time: the idle speech models and another analysis model go first
+        from app.vram import ollama_release_others, release_idle_speech_models
 
+        gone = release_idle_speech_models()
+        if gone:
+            print(f"[ollama] unloaded before {model}: {', '.join(gone)}", flush=True)
         ollama_release_others(keep=model)
     except Exception as e:
         print(f"[ollama] others not unloaded: {e}", flush=True)
