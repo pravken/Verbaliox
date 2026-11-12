@@ -414,7 +414,10 @@ async function hmAutoTick() {
   if (hmAutoRec && now > hmAutoRec.end + 60e3) {
     const rec = hmAutoRec;
     hmAutoRec = null;
-    if (isRecording()) await shellQuickRecord();
+    if (isRecording()) {
+      await shellQuickRecord();
+      autoRecordNotice(false, 'calendar', rec.title);
+    }
     home.started.add(rec.key);
     return;
   }
@@ -430,9 +433,10 @@ async function hmAutoTick() {
     // only near the start: a meeting half over is not recorded by surprise
     if (st === 'on' && now >= s - 15e3 && now < s + 5 * 60e3 && !isRecording() && !hmAutoRec) {
       home.started.add(e.key);
-      hmAutoRec = { key: e.key, end: en };
+      hmAutoRec = { key: e.key, end: en, title: e.title || '' };
       await shellQuickRecord();
       showToast(t('hmAutoStarted').replace('{title}', () => e.title || t('hmUntitled')));
+      if (isRecording()) autoRecordNotice(true, 'calendar', e.title || t('hmUntitled'));
     }
   }
 }

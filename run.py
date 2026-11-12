@@ -600,6 +600,10 @@ class TrayController:
             try:
                 st = snapshot()
                 self._status = st
+                from app.app_status import take_notices
+
+                for n in take_notices():  # a recording started or stopped by itself: never silent
+                    self.tray.notify(n["title"], n["text"])
                 self._check_hotkey_result(st)
                 self.tray.set_status(st["state"], st["text"])
                 running = {(q["id"], q["kind"]): q for q in st["queue"] if q.get("state") == "running"}
