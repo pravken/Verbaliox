@@ -281,8 +281,6 @@ def api_dub_save(meeting_id: int, lang: str, kind: str) -> Dict[str, Any]:
 
 @router.post("/api/meetings/{meeting_id}/dub/{lang}/reveal")
 def api_dub_reveal(meeting_id: int, lang: str) -> Dict[str, Any]:
-    import subprocess
-
     from app.paths import DATA_DIR
 
     d = _find_dub(meeting_id, lang)
@@ -290,7 +288,9 @@ def api_dub_reveal(meeting_id: int, lang: str) -> Dict[str, Any]:
     # A dub is made in the data folder (database._dub_paths_to_storage): a path elsewhere is not shown
     if not path.is_file() or DATA_DIR.resolve() not in path.parents:
         raise HTTPException(status_code=404, detail="Файл дубляжа не найден")
-    subprocess.Popen(["explorer.exe", f"/select,{path}"])
+    from app.paths import reveal_in_explorer
+
+    reveal_in_explorer(Path(path))
     return {"ok": True}
 
 # --- Translate text ---
@@ -539,14 +539,14 @@ def api_delete_copy(meeting_id: int, cid: str) -> List[Dict[str, Any]]:
 
 @router.post("/api/meetings/{meeting_id}/copies/{cid}/reveal")
 def api_reveal_copy(meeting_id: int, cid: str) -> Dict[str, Any]:
-    import subprocess
-
     from app.copies import find_copy
 
     c = find_copy(_meeting_or_404(meeting_id), cid)
     if not c or not c["exists"]:
         raise HTTPException(status_code=404, detail="Файл не найден")
-    subprocess.Popen(["explorer.exe", f"/select,{Path(c['path']).resolve()}"])
+    from app.paths import reveal_in_explorer
+
+    reveal_in_explorer(Path(c["path"]).resolve())
     return {"ok": True}
 
 @router.get("/api/meetings/{meeting_id}/copies/{cid}/file")

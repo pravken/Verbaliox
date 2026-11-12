@@ -81,17 +81,14 @@ class RevealPayload(BaseModel):
 @router.post("/api/reveal")
 def api_reveal_path(payload: RevealPayload) -> Dict[str, Any]:
     """Highlights a saved file (or opens a folder) in Windows Explorer."""
-    import subprocess
-
     try:
         p = Path(payload.path).resolve(strict=True)  # a full path without "..": Explorer is never handed a relative one
     except (OSError, RuntimeError, ValueError):
         raise HTTPException(status_code=404, detail="Файл не найден")
     try:
-        if p.is_dir():
-            subprocess.Popen(["explorer.exe", str(p)])
-        else:
-            subprocess.Popen(["explorer.exe", f"/select,{p}"])
+        from app.paths import reveal_in_explorer
+
+        reveal_in_explorer(p)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"ok": True}
