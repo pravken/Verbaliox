@@ -89,6 +89,22 @@ class ProcessMeetingJobTest(unittest.TestCase):
         self.assertEqual(m["status"], "cancelled")
         self.assertEqual([s["text"] for s in m["segments"]], ["прежняя правка"])
 
+    def test_a_first_transcription_cancelled_half_way_keeps_what_it_recognized(self):
+        from app.database import save_meeting_results
+
+        save_meeting_results(self.mid, segments=[], speakers={})  # nothing recognized before
+
+        def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
+            out.append(NEW[0])
+            with mock.patch.object(transcriber, "PARTIAL_EVERY_SEC", 0):
+                progress(0.5)
+            raise transcriber.JobCancelled()
+
+        m = self._run(transcribe)
+        self.assertEqual(m["status"], "cancelled")
+        self.assertTrue(m["segments"])
+        self.assertIn("часть, распознанная до отмены", m["stage_text"])
+
     def test_failure_keeps_the_previous_transcript_and_says_why(self):
         def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
             raise RuntimeError("model file damaged")
