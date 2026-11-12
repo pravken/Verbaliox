@@ -1651,8 +1651,8 @@ function transcriptSegmentHtml(seg, idx) {
       const cap = (wi, word) => (wi === lead ? String(word).replace(/^(\s*)(\p{Ll})/u, (_, sp, c) => sp + c.toUpperCase()) : word);
       bodyHtml = words.map((w, wi) => hidden.has(wi) ? '' : (w.alts && w.alts.length)
         // A place the models heard differently (a merged transcript): a click shows the variants
-        ? `<span class="word-token word-disputed cursor-pointer" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" title="${escapeHtml(disputeTitle(w))}" data-click="openWordAlts" data-click-args='[{"$": "event"}, ${Number(seg.id)}, ${wi}]'>${escapeHtml(cap(wi, w.word))}</span>`
-        : `<span class="word-token cursor-pointer" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" data-click="seekPlayer" data-click-args='[${Number(w.start) || 0}]'>${escapeHtml(cap(wi, w.word))}</span>`
+        ? `<span class="word-token word-disputed cursor-pointer" data-wi="${wi}" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" title="${escapeHtml(disputeTitle(w))}" data-click="openWordAlts" data-click-args='[{"$": "event"}, ${Number(seg.id)}, ${wi}]'>${escapeHtml(cap(wi, w.word))}</span>`
+        : `<span class="word-token cursor-pointer" data-wi="${wi}" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" data-click="seekPlayer" data-click-args='[${Number(w.start) || 0}]'>${escapeHtml(cap(wi, w.word))}</span>`
       ).join('');
     } else {
       const shown = quiet && !(words.length && !query) && typeof quiet.text === 'string' ? quiet.text : seg.text;
@@ -1827,7 +1827,9 @@ function updatePlaybackHighlight(cur, followPlayback) {
   if (segEl && !tx.query) {
     const words = tx.items[segIdx].words || [];
     const wi = findActiveItem(words, cur, 0.08, w => Number(w.start), w => Number(w.end));
-    if (wi >= 0) wordEl = segEl.querySelectorAll('.word-token')[wi] || null;
+    // by its number, not its place: with «Без запинок» the hidden fillers are not drawn and the place
+    // shifted the highlight onto the next words
+    if (wi >= 0) wordEl = segEl.querySelector(`.word-token[data-wi="${wi}"]`);
   }
   if (wordEl !== _playbackIndex.activeWord) {
     _playbackIndex.activeWord?.classList.remove('word-active');
