@@ -621,7 +621,24 @@ class OllamaForceUnloadTest(unittest.TestCase):
 
     def test_kept_model_has_its_runner_stopped(self):
         left, stop = self._run([["qwen3.5:4b"]] * 3 + [[]])
-        stop.assert_called_once()
+        stop.assert_called_once_with(["qwen3.5:4b"])  # this model's runner, not every one on the computer
+
+    def test_the_runners_are_found_by_the_models_weights(self):
+        from app import vram
+
+        show = mock.Mock()
+        show.json.return_value = {"modelfile": "FROM C:\\Users\\me\\.ollama\\models\\blobs\\sha256-2bada8a74506abcdef\nTEMPLATE x"}
+        client = mock.MagicMock()
+        client.__enter__.return_value.post.return_value = show
+        with mock.patch.object(vram.httpx, "Client", return_value=client), \
+                mock.patch.object(vram, "_ollama_base", return_value="http://127.0.0.1:11434"), \
+                mock.patch("subprocess.run") as run:
+            vram._stop_ollama_runners(["qwen3.5:4b"])
+        cmd = " ".join(run.call_args[0][0])
+        self.assertIn("sha256-2bada8a74506abcdef", cmd)
+        with mock.patch.object(vram, "_model_blobs", return_value=[]), mock.patch("subprocess.run") as run:
+            vram._stop_ollama_runners(["unknown"])
+        run.assert_not_called()  # not found: nothing is stopped
 
     def test_ollama_on_another_computer_is_never_stopped(self):
         left, stop = self._run([["qwen3.5:4b"]], local=False)
