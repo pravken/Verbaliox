@@ -1667,12 +1667,20 @@ async function startLiveRecording() {
     }
     if (_recCaptureId) {
       clearInterval(_recSysTimer);
+      let polling = false, warned = false;
       _recSysTimer = setInterval(async () => {
+        if (polling || !_recCaptureId) return;  // one request at a time
+        polling = true;
         try {
           const r = await fetch(`/api/record/${_recCaptureId}/level`);
-          if (r.ok) _recSysLevel = (await r.json()).level || 0;
-        } catch (e) {}
-      }, 200);
+          if (r.ok) {
+            const st = await r.json();
+            _recSysLevel = st.level || 0;
+            // the capture of the computer's sound ended (a headset unplugged): said at once, not after Stop
+            if (st.error && !warned) { warned = true; showError(t('recSysLost') + ' ' + serverText(st.error)); }
+          }
+        } catch (e) {} finally { polling = false; }
+      }, 250);
     }
     liveCap.lines = new Map();
     liveCap.partial = '';
