@@ -1393,6 +1393,11 @@ def list_meetings() -> List[Dict[str, Any]]:
                 d["speakers"] = json.loads(d.pop("speakers_json", "{}") or "{}")
             except Exception:
                 d["speakers"] = {}
+            # without the voice prints (192 numbers each): the list went to the page with all of them every
+            # 30 s and after every event, megabytes for a large library; one recording's reading has them
+            if isinstance(d["speakers"], dict):
+                d["speakers"] = {k: {f: v for f, v in sp.items() if f != "embedding"} if isinstance(sp, dict) else sp
+                                 for k, sp in d["speakers"].items()}
             d["is_video"] = is_video(d)
             d["exports"] = [p for p in _loads_list(d.pop("exports_json", None)) if isinstance(p, str)]
             # Measured once and kept: the list must not touch every file (a network drive is slow)
