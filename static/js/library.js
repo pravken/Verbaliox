@@ -918,13 +918,17 @@ function toggleDateCollapsed(key) {
   renderMeetingsSidebar();
 }
 
+// A day (or month) of the library reads as a divider, not as one more title: small capitals in a
+// quieter colour and a line to the edge; today stands out
 function dateRowHtml(id, label, count, depth, open) {
+  const today = label.startsWith(t('libToday'));
   return `
     <div data-click="toggleDateCollapsed" data-click-args='[{"$": "data", "k": "id"}]' data-id="${escapeHtml(id)}" tabindex="0" role="button"
-         class="flex items-center gap-1.5 pr-2 py-1 rounded-lg cursor-pointer text-apple-secondary hover:bg-white/5 transition"
+         class="lib-date-row${today ? ' lib-date-today' : ''} flex items-center gap-1.5 pr-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
          style="padding-left:${6 + depth * 14}px" title="${escapeHtml(label)}">
       <span class="shrink-0 text-apple-tertiary ${open ? 'rotate-90' : ''}">${ICON_CHEVRON}</span>
-      <span class="text-[11.5px] font-semibold truncate flex-1">${escapeHtml(label)}</span>
+      <span class="lib-date-label">${escapeHtml(label)}</span>
+      <span class="lib-date-line" aria-hidden="true"></span>
       ${!open && libHere().dates.has(id) ? `<span class="lib-here-dot" title="${escapeHtml(t('tipLibHere'))}"></span>` : ''}
       <span class="text-[11px] font-mono text-apple-tertiary">${count}</span>
     </div>`;
