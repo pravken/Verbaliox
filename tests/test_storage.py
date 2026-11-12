@@ -158,6 +158,15 @@ class EventBusTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_a_new_text_of_the_same_model_is_not_checked_yet(self):
+        database.init_db()
+        m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav")
+        database.save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "text": "a", "speaker": "S"}],
+                                      speakers={}, transcript_model="gigaam-v3")
+        database.update_meeting_fields(m["id"], transcript_verified=1)
+        database.stash_transcript_for(m["id"], "gigaam-v3")  # transcribed again with the same model
+        self.assertFalse(database.get_meeting(m["id"])["transcript_verified"])
+
     def test_versions_are_listed_without_reading_them_whole(self):
         database.init_db()
         m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav")

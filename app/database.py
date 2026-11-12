@@ -826,6 +826,10 @@ def stash_transcript_for(meeting_id: int, model: str) -> None:
             row = conn.execute("SELECT transcript_model FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
             if row and row["transcript_model"] and row["transcript_model"] != model and _stash_active(conn, meeting_id):
                 conn.execute("UPDATE meetings SET translations_json = '{}', transcript_verified = 0 WHERE id = ?", (meeting_id,))
+            else:
+                # the same model made it anew: «checked by a person» was said of the old text, not this one
+                # (its translations are matched to the lines by their text and stay where they still fit)
+                conn.execute("UPDATE meetings SET transcript_verified = 0 WHERE id = ?", (meeting_id,))
             conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model = ?", (meeting_id, model))
             conn.commit()
         finally:
