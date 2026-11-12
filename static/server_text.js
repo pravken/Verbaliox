@@ -337,6 +337,8 @@ const SERVER_PATTERNS_EN = [
   ["сведено из {} моделей, спорных мест {} (модель анализа недоступна: решено по точности моделей)", "merged from {0} models, {1} disputed places (no analysis model: decided by the models' accuracy)"],
   ["Сведено из {} версий ({}): спорных мест {}, из них выбрала модель анализа {}.{}", "Merged from {0} versions ({1}): {2} disputed places, {3} of them chosen by the analysis model.{4}"],
   ["Транскрибация{}: {} из {}", "Transcribing{0}: {1} of {2}"],
+  ["нет доступа к окнам Windows: {}", "no access to Windows windows: {0}"],
+  ["{} не загружен: {}", "{0} did not load: {1}"],
   [" — {} на видеокарте", " — {0} on the video card"],
   ["Перевод ({}) уже актуален", "Translation ({0}) is up to date"],
   ["{}: нужно true или false", "{0}: true or false is needed"],
