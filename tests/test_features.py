@@ -349,6 +349,14 @@ class WatchFolderTest(unittest.TestCase):
         self.assertEqual(wf.scan_once(added.append, now=110 + wf.STABLE_SEC), 1)
         self.assertEqual([p.name for p in added], ["new.m4a"])
         self.assertEqual(wf.scan_once(added.append, now=1000), 0)  # never twice
+        # a recording of the library itself lands there (the recordings folder is watched): not imported
+        own = d / "2026-11-12 Созвон.m4a"
+        own.write_bytes(b"x" * 10)
+        m = db.create_meeting(title="Созвон", filename=own.name, media_path=str(own))
+        self.assertEqual(wf.scan_once(added.append, now=2000), 0)
+        self.assertEqual(wf.scan_once(added.append, now=2000 + wf.STABLE_SEC), 0)
+        self.assertEqual([p.name for p in added], ["new.m4a"])
+        db.delete_meeting(m["id"])
         db.update_settings({"watch_folder": "", "watch_folder_baseline": ""})
 
 
