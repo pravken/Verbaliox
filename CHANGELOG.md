@@ -6,6 +6,28 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.6 — English
+
+- **Who speaks, from the meeting.** The studio has a «Participants» block: how many people are at the
+  meeting (the calendar's guests are offered) and «Speaking now» marks — a click on a name while that
+  person talks names their voice after transcription.
+- **Microsoft Teams captions (optional, Settings → Recording, off by default).** While recording, the
+  names above the Teams live captions are read the way Windows Narrator reads a window (nothing is
+  pressed or sent anywhere): the participants appear in the studio by themselves, voices get real names,
+  and the captions are kept as a transcript version of their own («Teams captions» chip). How to turn
+  the captions on in Teams — in the app and in docs/teams-captions.md.
+- **The recognition row shows the models as chips** with the state of each one's text (ready, none,
+  running, not downloaded) and «Merge all»; with the merged text shown, the chips of the models it was
+  made from light up. Whisper Pro is always among the precise mode's models; the first-run wizard can
+  switch the precise mode on, marked as recommended for the best quality.
+- **Memory:** before the analysis model answers, idle speech models (the captions' worker too) are
+  unloaded, and the analysis model leaves memory 20 s after its last answer.
+- **Speakers:** a count of one or two said for a recording is corrected when the voices clearly make
+  three or more.
+- **Live captions** no longer jump after the window comes back from being minimized.
+- **A stopped recording stays in the library** marked as being saved while its tracks are mixed (minutes
+  for a long meeting), instead of disappearing until it is ready.
+
 ## 0.7.5 — English
 
 - **One model in memory at a time.** The precise mode runs the speech models one after another, each
@@ -188,6 +210,27 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.6
+
+- **Кто говорит — со встречи.** В студии появился блок «Участники»: сколько людей на встрече (гости из
+  календаря подставляются) и отметки «Сейчас говорит» — щелчок по имени, пока человек говорит, подпишет
+  его голос после расшифровки.
+- **Субтитры Microsoft Teams (по желанию, «Настройки → Запись», по умолчанию выключено).** Во время записи
+  имена над живыми субтитрами Teams читаются так же, как их читает экранный диктор Windows (ничего не
+  нажимается и никуда не отправляется): участники сами появляются в студии, голоса получают настоящие
+  имена, а субтитры сохраняются отдельной версией текста (значок «Субтитры Teams»). Как включить субтитры
+  в Teams — в программе и в docs/teams-captions.md.
+- **Панель «Распознавание» показывает модели значками** с состоянием их текста (готов, нет, идёт, не
+  скачана) и кнопкой «Свести всё»; при показе сведённого текста подсвечиваются модели, из которых он
+  собран. Whisper Pro всегда входит в точный режим; мастер первого запуска умеет включить точный режим,
+  с пометкой «рекомендуется для наилучшего качества».
+- **Память:** перед ответом модели анализа выгружаются простаивающие модели распознавания (и модель
+  субтитров), а сама модель анализа уходит из памяти через 20 с после последнего ответа.
+- **Участники:** указанное число в одного-двух человек исправляется, если голосов явно три и больше.
+- **Живые субтитры** больше не прыгают, когда окно разворачивают после долгого сворачивания.
+- **Остановленная запись остаётся в медиатеке** с пометкой «сохраняется», пока сводятся дорожки (у
+  долгой встречи — пару минут), а не пропадает до готовности.
 
 ## 0.7.5
 
