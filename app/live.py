@@ -394,7 +394,8 @@ class LiveSession:
             "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (self.translator and ln["translation"] is None)],
             "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
             # The language each line went into (differs per line with translate_to="auto")
-            "targets": {ln["id"]: ln.get("target") for ln in self.lines if ln.get("target")},
+            # the recent lines, like the two above: every line of the recording was gone through each second
+            "targets": {ln["id"]: ln.get("target") for ln in self.lines[-200:] if ln.get("target")},
             "partial_target": self.translator.draft_target if self.translator else "",
             "partial": self.partial,
             "partial_translation": self.translator.draft_translation if self.translator else "",
