@@ -2469,6 +2469,10 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .tx-chip.is-shown { background: #0A84FF; border-color: #0A84FF; color: #FFFFFF; }
 .tx-chip.is-shown .tx-chip-mark { color: #FFFFFF; }
 .tx-chip.is-shown:hover:not(:disabled) { background: #2B95FF; }
+/* «Все модели» picked: the model of the text on screen is lit like the others it runs with, its ● stays */
+.tx-chips-precise .tx-chip.is-shown { background: rgba(10, 132, 255, 0.16); border-color: rgba(10, 132, 255, 0.55); }
+.tx-chips-precise .tx-chip.is-shown:not(.is-in-merge) { background: transparent; border-color: rgba(255, 255, 255, 0.14); color: #D1D1D6; }
+.tx-chips-precise .tx-chip.is-shown .tx-chip-mark { color: #0A84FF; }
 .tx-chip-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.25);
   border-top-color: #0A84FF; animation: tx-chip-spin 0.9s linear infinite; }
 @keyframes tx-chip-spin { to { transform: rotate(360deg); } }
