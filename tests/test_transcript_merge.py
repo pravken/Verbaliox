@@ -159,6 +159,16 @@ class MergeJobTest(unittest.TestCase):
         m = self.db.get_meeting(self.mid)
         self.assertEqual(sorted(v["model"] for v in m["transcript_versions"]), ["gigaam-v3", "large-v3"])
 
+    def test_the_names_given_on_screen_stay(self):
+        """The version shown (GigaAM) had its speaker renamed: the merged text keeps that name."""
+        m = self.db.get_meeting(self.mid)
+        sid = next(iter(m["speakers"]))
+        speakers = {**m["speakers"], sid: {**m["speakers"][sid], "name": "Анна"}}
+        self.db.save_meeting_results(self.mid, speakers=speakers, segments=m["segments"], language="ru",
+                                     transcript_model="gigaam-v3")
+        transcriber._merge_runner(self.mid)
+        self.assertEqual(self.db.get_meeting(self.mid)["speakers"][sid]["name"], "Анна")
+
     def test_a_disputed_word_can_take_the_other_variant(self):
         from fastapi.testclient import TestClient
 

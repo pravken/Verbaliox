@@ -472,9 +472,16 @@ def _merge_runner(meeting_id: int) -> str:
     except Exception as e:  # no analysis model: the disputed places go to the more accurate model
         print(f"[merge] no analysis model: {e}", flush=True)
         note = " Модель анализа недоступна: спорные места решены по точности моделей."
+    # The version on screen is the base: its phrases and speakers — with the names given there — are
+    # what the merged text keeps (the most accurate model's were taken, with the names before the renaming)
+    shown = meeting.get("transcript_model") or ""
     res = merge(versions, meeting.get("language") or "", chat,
                 progress=lambda pct, text: update_meeting_progress(meeting_id, progress=pct, stage_text=text),
-                check_cancel=lambda: _check_cancel(meeting_id))
+                check_cancel=lambda: _check_cancel(meeting_id),
+                base=shown if shown not in ("", MERGED, "teams") else None)
+    for sid, sp in (meeting.get("speakers") or {}).items():  # names given on screen (a merged text too)
+        if sid in res["speakers"] and isinstance(sp, dict) and sp.get("name"):
+            res["speakers"][sid] = {**res["speakers"][sid], "name": sp["name"], **({"color": sp["color"]} if sp.get("color") else {})}
     _check_cancel(meeting_id)
     stash_transcript_for(meeting_id, MERGED)
     save_segments_backup(meeting_id, [])
