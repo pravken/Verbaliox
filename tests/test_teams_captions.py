@@ -78,6 +78,18 @@ class TeamsCaptionsTest(unittest.TestCase):
         self.assertLess(time.time() - start, 0.1)
         self.assertLessEqual(len(r._said["echo"]), tc.RECENT_LINES * 2)
 
+    def test_a_short_answer_is_its_own_line(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._seeded = True
+        r._take([("Echo", "Давайте начнём с отчёта по продажам за март.")])
+        r._take([("Echo", "Давайте начнём с отчёта по продажам за март."), ("Max", "Да, конечно, пришлю сегодня вечером.")])
+        r._take([("Max", "Да, конечно, пришлю сегодня вечером."), ("Echo", "Хорошо."), ("Max", "Да")])
+        r._take([("Echo", "Хорошо."), ("Max", "Да"), ("Echo", "Тогда до завтра.")])
+        self.assertEqual([m["text"] for m in r.snapshot()["marks"]],
+                         ["Давайте начнём с отчёта по продажам за март.", "Да, конечно, пришлю сегодня вечером.",
+                          "Хорошо.", "Да", "Тогда до завтра."])
+
     def test_stop_forgets_the_lines_of_that_recording(self):
         r = tc.Reader()
         r.started_at = time.time()
