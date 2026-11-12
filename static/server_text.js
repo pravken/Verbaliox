@@ -346,6 +346,8 @@ const SERVER_PATTERNS_EN = [
   ["файл {} ГБ, больше {} ГБ", "the file is {0} GB, more than {1} GB"],
   ["Дождитесь окончания: {}", "Wait until it is done: {0}"],
   ["Перевода на язык {} нет", "There is no translation into {0}"],
+  ["{} на процессоре: видеокарта не загрузила модель{}", "{0} on the processor: the video card did not load the model{1}"],
+  ["{}, пакетами по {}", "{0}, in batches of {1}"],
   ["Распознавание речи — {}", "Transcribing — {0}"],
   ["Неизвестная модель {}", "Unknown model {0}"],
   ["Дубляж ({}) готов: {}", "Dub ({0}) ready: {1}"],
