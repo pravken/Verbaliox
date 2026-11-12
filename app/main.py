@@ -280,6 +280,23 @@ async def local_session_guard(request: Request, call_next):
     return await call_next(request)
 
 
+SLOW_REQUEST_SEC = 3.0
+
+
+@app.middleware("http")
+async def slow_request_log(request: Request, call_next):
+    """A request answered after SLOW_REQUEST_SEC goes to the log (the window seemed to hang): what it
+    was and how long it took, so a report of a freeze can be traced."""
+    import time as _time
+
+    t0 = _time.perf_counter()
+    response = await call_next(request)
+    took = _time.perf_counter() - t0
+    if took >= SLOW_REQUEST_SEC and request.url.path.startswith("/api/"):
+        print(f"[slow] {request.method} {request.url.path} {took:.1f} s", flush=True)
+    return response
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

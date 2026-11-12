@@ -6,6 +6,21 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.5 — English
+
+- **One model in memory at a time.** The precise mode runs the speech models one after another, each
+  unloaded before the next; the speech models go before the analysis model works and the analysis models
+  before a speech model loads. Ollama keeps one model at a time (live captions with translation aside).
+- **The precise mode is picked in the «Recognition» row** of a recording: «Precise: all models + merging»
+  next to the models. The row is always in sight in its frame instead of folding into a small mark.
+- **A disputed word says who picked its variant:** the analysis model by meaning, or the most accurate
+  model when the analysis model did not decide it.
+- **A recording started or stopped by itself (a call, a calendar meeting) shows a Windows notification**
+  with what is recorded and how to stop it.
+- **Speakers:** an invited person's name a speaker already has stays offered and merges the two speakers;
+  typing it offers the same. Merging people in «All people» says it is working.
+- **Library:** a compact list grouped by day by default; days read as dividers, today in blue.
+
 ## 0.7.4 — English
 
 - **Precise mode: several models + merging** (Settings → Recognition, and a switch per recording in the
@@ -173,6 +188,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.5
+
+- **В памяти одна модель за раз.** Точный режим запускает модели распознавания по очереди, выгружая
+  каждую перед следующей; модели распознавания выгружаются перед моделью анализа, а модели анализа —
+  перед распознаванием. Ollama держит одну модель (кроме живых субтитров с переводом).
+- **Точный режим выбирается в панели «Распознавание»** у записи: «Точный: все модели + сведение» рядом с
+  моделями. Панель всегда видна в своей рамке, а не сворачивается в маленький значок.
+- **Спорное слово показывает, кто выбрал вариант:** модель анализа по смыслу или самая точная модель,
+  если модель анализа это место не решила.
+- **Запись, начатая или остановленная сама (звонок, встреча из календаря), показывает уведомление
+  Windows** — что записывается и как остановить.
+- **Участники:** имя приглашённого, которое уже есть у участника, остаётся в подсказках и объединяет двух
+  участников; если вписать его вручную — то же предложение. Объединение во «Всех людях» показывает, что
+  идёт работа.
+- **Медиатека:** по умолчанию компактный список по дням; дни выглядят как разделители, «Сегодня» — голубым.
 
 ## 0.7.4
 

@@ -170,9 +170,10 @@ def api_meeting_people(meeting_id: int) -> Dict[str, Any]:
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     people = directory()
-    speaking = {str((s or {}).get("name") or "").strip().lower() for s in (m.get("speakers") or {}).values()}
+    # Every invited person, also one a speaker already took: one person split into two speakers is
+    # named the same and then merged (the page marks the names already in the recording)
     return {
-        "calendar": [n for n in calendar_attendees(m) if n.lower() not in speaking],
+        "calendar": calendar_attendees(m),
         "mentions": mentions(m, people),
         "names": [{"name": p["name"], "kind": p["kind"], "role": p["role"], "is_me": p["is_me"]} for p in people],
     }

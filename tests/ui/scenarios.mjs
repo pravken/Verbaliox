@@ -53,16 +53,15 @@ await step('import window', async () => {
   await sleep(250);
 });
 
-// Reading: a recording opens with its text; the recognition row is folded into the model mark (8.4)
+// Reading: a recording opens with its text; the recognition row stays in sight, framed apart (folded
+// into a mark it was not clear it could be opened), with the precise mode among its choices
 await step('read a recording', async () => {
   await page.evaluate(() => openMeeting(1));
   await sleep(1500);
   expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
-  expect(await page.isVisible('#tx-model-chip'), 'no model mark');
-  expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
-  await page.click('#tx-model-chip');
-  await sleep(200);
-  expect(await page.isVisible('#tx-model-bar'), 'the mark did not open the row');
+  expect(await page.isVisible('#tx-model-bar'), 'the recognition row is hidden');
+  expect(!(await page.isVisible('#tx-model-chip')), 'the row is folded into a mark');
+  expect(await page.locator('#tx-model-select option[value="precise"]').count() === 1, 'no precise mode in the list');
 });
 
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
