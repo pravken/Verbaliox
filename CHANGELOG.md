@@ -6,6 +6,19 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.7 — English
+
+- **«All models» in the recognition row:** picked, the models it will run light up and the status says
+  their order; «Transcribe precisely» then runs them and merges the versions. A model that already
+  transcribed the recording is not run again: its version is used as it is.
+- **The status says which model works now** (not «Auto: by language»), each model of the precise mode
+  in turn.
+- **Teams captions are found more reliably:** the panel with the lines, not the «Caption settings»
+  button, also in a large meeting window. «Check» in Settings → Recording shows what the app sees in
+  Teams right now, without a recording.
+- **«Never for this meeting and its repeats»** in the question before a calendar meeting; taken back on
+  the home page.
+
 ## 0.7.6 — English
 
 - **Who speaks, from the meeting.** The studio has a «Participants» block: how many people are at the
@@ -210,6 +223,19 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.7
+
+- **«Все модели» в панели «Распознавание»:** при выборе подсвечиваются модели, которые будут работать,
+  а в статусе — их порядок; «Распознать точно» запускает их и сводит версии. Модель, у которой уже
+  есть текст этой записи, повторно не запускается — её версия берётся как есть.
+- **Статус показывает, какая модель работает сейчас** (а не «Авто: по языку»), в точном режиме — каждую
+  по очереди.
+- **Субтитры Teams находятся надёжнее:** выбирается панель со строками, а не кнопка «Параметры
+  субтитров», и в большом окне встречи тоже. Кнопка «Проверить» в «Настройки → Запись» показывает, что
+  программа видит в Teams прямо сейчас, без записи.
+- **«Никогда для этой встречи и её повторов»** в вопросе перед встречей из календаря; вернуть можно на
+  главной.
 
 ## 0.7.6
 
