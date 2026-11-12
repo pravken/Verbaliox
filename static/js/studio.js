@@ -1719,8 +1719,13 @@ async function startLiveRecording() {
     const timeBuf = new Uint8Array(analyser.fftSize);
     _recWaveHistory = new Array(68).fill(0.04);
 
+    let meterAt = 0;
     function updateMeter() {
       if (!_recAudioCtx) return;
+      // ~20 times a second, enough for a level: every frame (60 a second) rewrote the meters for hours
+      const t0 = performance.now();
+      if (t0 - meterAt < 50) { _recAnimFrame = requestAnimationFrame(updateMeter); return; }
+      meterAt = t0;
       let { db, visualAmp } = computeRmsAndDb(analyser, timeBuf);
       if (_recCaptureId && _recSysLevel > 0.0001) {
         // The louder of the microphone (page) and the system audio (app)
@@ -1746,11 +1751,13 @@ async function startLiveRecording() {
         : (db > -42 ? 'h-full bg-apple-green transition-all duration-75' : 'h-full bg-apple-secondary transition-all duration-75');
       for (const id of ['record-level-bar', 'studio-level']) {
         const bar = document.getElementById(id);
-        bar.style.width = `${pct}%`;
-        bar.className = levelCls;
+        if (bar.style.width !== `${pct}%`) bar.style.width = `${pct}%`;
+        if (bar.className !== levelCls) bar.className = levelCls;
       }
-      document.getElementById('record-db-display').textContent = `${db} dB`;
-      document.getElementById('studio-db').textContent = `${db} dB`;
+      for (const id of ['record-db-display', 'studio-db']) {
+        const el = document.getElementById(id);
+        if (el.textContent !== `${db} dB`) el.textContent = `${db} dB`;
+      }
 
       // A plain on/off dot with a short hold, so speech pauses do not make it blink
       const now = performance.now();
