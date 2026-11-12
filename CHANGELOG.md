@@ -6,6 +6,16 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.9 — English
+
+- **Studio: live caption lines say who said them** — from the Teams captions (their words and time fit
+  the line) or the last «Speaking now» clicked; the name stands over a line when the speaker changes.
+- **Teams captions keep finished phrases:** Teams rewrites a line while it is said; each phrase is now
+  kept once, in its final wording, instead of every intermediate reading.
+- «Check» in Settings → Recording shows the last lines read while a recording is on.
+- Library: the bar of several selected recordings goes away with the selection (a click on one record,
+  ✕ or Esc).
+
 ## 0.7.8 — English
 
 - **Teams captions are read again:** the Windows component that reads windows (UI Automation) failed to
@@ -229,6 +239,15 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.9
+
+- **Студия: у строк живых субтитров видно, кто говорит** — по субтитрам Teams (совпадают слова и время)
+  или по последней отметке «Сейчас говорит»; имя стоит над строкой, когда говорящий сменился.
+- **Из субтитров Teams берутся готовые фразы:** Teams переписывает строку, пока её произносят; теперь
+  каждая фраза сохраняется один раз, в окончательном виде, а не все промежуточные варианты.
+- «Проверить» в «Настройки → Запись» во время записи показывает последние прочитанные строки.
+- Медиатека: панель нескольких выбранных записей исчезает вместе с выбором (щелчок по записи, ✕ или Esc).
 
 ## 0.7.8
 

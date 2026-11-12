@@ -177,7 +177,8 @@ def api_teams_status() -> Dict[str, Any]:
     from app import teams_captions
 
     st = teams_captions.status()
-    st.pop("marks", None)  # the page needs the state and the names, the marks go with the recording
+    marks = st.pop("marks", None) or []  # all of them go with the recording; the page gets the latest
+    st["recent"] = [{"at": m["at"], "name": m["name"], "text": (m.get("text") or "")[:200]} for m in marks[-40:]]
     return st
 
 class RecordFinishPayload(BaseModel):

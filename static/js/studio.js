@@ -1154,6 +1154,7 @@ async function startLiveCaptions(ctx, stream) {
     if (Date.now() - (liveCap.sentAt || 0) >= 1000) sendLiveAudio();
   };
   liveCap.timer = setInterval(sendLiveAudio, 1000);
+  liveCap.wall0 = Date.now();  // the session's times count from here: its lines are put on the clock
   syncStudioCaptions();
 }
 
@@ -1181,7 +1182,8 @@ async function sendLiveAudio() {
     const base = liveCap.idBase || 0;
     for (const ln of data.lines || []) {
       const key = base + ln.id;
-      liveCap.lines.set(key, { ...(liveCap.lines.get(key) || {}), ...ln, id: key, at: (Number(ln.start) || 0) + (liveCap.offset || 0) });
+      liveCap.lines.set(key, { ...(liveCap.lines.get(key) || {}), ...ln, id: key, at: (Number(ln.start) || 0) + (liveCap.offset || 0),
+        wall: (liveCap.wall0 || Date.now()) + (Number(ln.start) || 0) * 1000, wallEnd: (liveCap.wall0 || Date.now()) + (Number(ln.end) || 0) * 1000 });
       liveCap.lastId = Math.max(liveCap.lastId, ln.id);
     }
     for (const [id, tr] of Object.entries(data.translations || {})) {
@@ -1407,10 +1409,42 @@ function capResetTranslations() {
   }
 }
 
+// Who said a caption line: the Teams caption whose words and time fit it best (app/teams_captions.py),
+// else the last «Сейчас говорит» clicked before it ended. Settled once the line is 30 s old.
+function capWords(s) { return new Set(String(s || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []); }
+
+function capSpeaker(ln) {
+  if (ln.who !== undefined || !ln.wall || !_recStartTime) return ln.who || '';
+  const end = ln.wallEnd || ln.wall;
+  let best = '', bestScore = 0;
+  const words = capWords(ln.text);
+  for (const m of ((stPeople.teams && stPeople.teams.recent) || [])) {
+    const t0 = _recStartTime + m.at * 1000;  // when the caption began (its lag taken off)
+    if (t0 < ln.wall - 10e3 || t0 > end + 4e3) continue;
+    let common = 0;
+    for (const w of capWords(m.text)) if (words.has(w)) common++;
+    const score = common * 3 + 2 - Math.abs(t0 - ln.wall) / 5e3;
+    if (score > bestScore) { best = m.name; bestScore = score; }
+  }
+  if (!best) {
+    const before = stPeople.marks.filter(m => _recStartTime + m.at * 1000 <= end + 1e3);
+    const last = before[before.length - 1];
+    if (last && end - (_recStartTime + last.at * 1000) < 60e3) best = last.name;
+  }
+  if (Date.now() - end > 30e3) ln.who = best;  // the Teams captions of it have come by now
+  return best;
+}
+
+function capWhoColor(name) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `cap-who-c${h % 6}`;
+}
+
 function createCapRow(key) {
   const el = document.createElement('div');
   el.className = 'cap-row';
-  el.innerHTML = '<div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
+  el.innerHTML = '<span class="cap-who hidden"></span><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
     + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div>';
   document.getElementById('studio-cap-rows').appendChild(el);
   const row = { key, el, orig: new CapTyper(el.querySelector('.cap-orig')), tr: new CapTyper(el.querySelector('.cap-tr')) };
@@ -1466,6 +1500,7 @@ function capDrawLines(lines, fresh, target, view) {
       createCapRow(ln.id);
     }
   });
+  let prevWho = '';
   for (const ln of lines) {
     const row = capView.rows.get(ln.id);
     if (!row) continue;
@@ -1473,6 +1508,13 @@ function capDrawLines(lines, fresh, target, view) {
     row.el.classList.toggle('cap-same', !!ln.translation && ln.translation === ln.text);
     row.tr.set(ln.translation || '');
     setCapTags(row, ln.lang, ln.target || (target === 'auto' ? '' : target));
+    // who said it, above the line when the speaker changes
+    const who = capSpeaker(ln);
+    const showWho = who && who !== prevWho;
+    prevWho = who || prevWho;
+    const whoEl = row.el.querySelector('.cap-who');
+    if (whoEl.textContent !== who) { whoEl.textContent = who; whoEl.className = `cap-who ${who ? capWhoColor(who) : ''}`; }
+    whoEl.classList.toggle('hidden', !showWho);
   }
 
   if (liveCap.partial) {

@@ -14,6 +14,7 @@ first time a panel is found its structure goes to the log, so a version that rea
 fixed from it. Windows only; elsewhere (and without pythonnet) the reader says it is not available.
 """
 
+import os
 import re
 import sys
 import threading
@@ -97,6 +98,24 @@ def pairs(texts: List[str], known: Optional[set] = None) -> List[Tuple[str, str]
     return out
 
 
+def same_line(a: str, b: str) -> bool:
+    """Two readings of one caption line (lowered): it grew at its end, or Teams corrected its words as
+    it went («…связи азии запишите…» → «…связи, запишите…»): one starts or ends the same way as the
+    other, or most of it is the same."""
+    import difflib
+
+    if a == b or a.startswith(b) or b.startswith(a):
+        return True
+    short = min(len(a), len(b))
+    if short < 12:
+        return False
+    head = len(os.path.commonprefix([a, b]))
+    tail = len(os.path.commonprefix([a[::-1], b[::-1]]))
+    if head >= max(12, short * 0.5) or tail >= max(15, short * 0.5):
+        return True
+    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() >= 0.75
+
+
 def choose_panel(candidates: List[Tuple[str, List[str]]], known: Optional[set] = None) -> Optional[int]:
     """Which of the elements named like captions (its ControlType, its text elements) holds the lines:
     the one whose texts make the most name / line pairs, of those the smallest (the innermost), never
@@ -158,7 +177,8 @@ class Reader:
         self.lines = 0
         self.state = "idle"          # idle | reading | no_window | no_captions | unavailable | error
         self.error = ""
-        self._said: Dict[str, List[str]] = {}  # the lines read, by speaker
+        self._said: Dict[str, List[List[Any]]] = {}  # the lines read, by speaker
+        self._live: Optional[Tuple[str, List[Any]]] = None  # (speaker, entry) of the line being said
         self._known: set = set()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -174,6 +194,7 @@ class Reader:
             self.started_at = started_at or time.time()
             self.marks, self.names, self.lines = [], [], 0
             self._said, self._known = {}, {n.lower() for n in (known_names or []) if n}
+            self._live = None
             self.state, self.error = "idle", ""
             self._panel, self._found_at = None, 0.0
         self._stop.clear()
@@ -189,31 +210,56 @@ class Reader:
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
+            marks = [dict(m) for m in self.marks if not m.get("merged")]
             counts: Dict[str, int] = {}
-            for m in self.marks:
+            for m in marks:
                 counts[m["name"]] = counts.get(m["name"], 0) + 1
             return {"state": self.state, "error": self.error, "lines": self.lines,
-                    "names": list(self.names), "counts": counts, "marks": list(self.marks)}
+                    "names": list(self.names), "counts": counts, "marks": marks}
 
     # ---- reading
     def _take(self, found: List[Tuple[str, str]]) -> None:
+        """The pairs on screen now, in order. The last one is the line still being said: Teams rewrites
+        it until the next line comes («1345» → «123456» → «13456789 10»), so each reading of it replaces
+        its text; the lines above it are said, each kept once in its latest wording."""
         now = time.time()
         with self._lock:
-            for name, line in found:
-                said = self._said.setdefault(name.lower(), [])
+            closed = False  # the line being said before is now above the last one: it is finished
+            for k, (name, line) in enumerate(found):
+                said = self._said.setdefault(name.lower(), [])  # [line lowered, index of its mark]
                 low = line.lower()
-                # the line still being said grows at its end, and the older lines stay on screen
-                same = next((i for i, s in enumerate(said) if s == low or low.startswith(s) or s.startswith(low)), None)
-                if same is not None:
-                    if len(low) > len(said[same]):
-                        said[same] = low
+                live = self._live
+                if k == len(found) - 1 and live is not None and not closed and live[0] == name.lower() \
+                        and live[1] in said and not any(e is not live[1] and same_line(e[0], low) for e in said):
+                    self._set_text(live[1], low, line)  # the same line, still being said
                     continue
-                said.append(low)
+                matches = [e for e in said if same_line(e[0], low)]
+                if matches:
+                    same = matches[0]  # the earliest: the line began then
+                    for extra in matches[1:]:  # pieces of the same line read apart before: one line now
+                        said.remove(extra)
+                        self.marks[extra[1]]["merged"] = True
+                        self.lines -= 1
+                    if low != same[0] and (len(matches) > 1 or len(low) >= len(same[0]) * 0.8):
+                        self._set_text(same, low, line)
+                    if live is not None and same is live[1] and k < len(found) - 1:
+                        closed = True
+                    if k == len(found) - 1:
+                        self._live = (name.lower(), same)
+                    continue
+                entry = [low, len(self.marks)]
+                said.append(entry)
                 self.lines += 1
                 if name not in self.names:
                     self.names.append(name)
                 self.marks.append({"at": round(max(0.0, now - self.started_at - CAPTION_LAG_SEC), 2),
                                    "name": name, "text": line[:200]})
+                if k == len(found) - 1:
+                    self._live = (name.lower(), entry)
+
+    def _set_text(self, entry: List[Any], low: str, line: str) -> None:
+        entry[0] = low
+        self.marks[entry[1]]["text"] = line[:200]
 
     def _run(self) -> None:
         if sys.platform != "win32":
@@ -355,10 +401,10 @@ def status() -> Dict[str, Any]:
 def check(timeout: float = 25.0) -> Dict[str, Any]:
     """«Проверить» in the settings: what the reader sees in Teams right now, without a recording —
     the Teams windows, whether the caption panel is found, and the last lines in it."""
-    if _reader._thread and _reader._thread.is_alive():
+    if _reader._thread and _reader._thread.is_alive():  # a recording reads them now: what it read last
         st = _reader.snapshot()
-        st.pop("marks", None)
-        return {**st, "windows": None, "sample": []}
+        marks = st.pop("marks", None) or []
+        return {**st, "windows": None, "sample": [{"name": m["name"], "text": m.get("text", "")[:120]} for m in marks[-3:]]}
     out: Dict[str, Any] = {"state": "error", "error": "", "windows": 0, "sample": []}
 
     def run() -> None:
