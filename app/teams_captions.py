@@ -21,6 +21,7 @@ import time
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
+TEAMS = "teams"  # the transcript version made of the captions (the chip «Субтитры Teams»)
 POLL_SEC = 1.0
 CAPTION_LAG_SEC = 1.5          # a line shows up about this long after it was said
 TEAMS_PROCESSES = {"ms-teams", "teams", "msteams"}
@@ -58,6 +59,41 @@ def pairs(texts: List[str], known: Optional[set] = None) -> List[Tuple[str, str]
     return out
 
 
+def as_transcript(marks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The caption lines read during a recording as a transcript version of their own: each line a
+    phrase of its speaker (named as in Teams), its words spread over the time until the next line.
+    None when no line was read."""
+    from datetime import datetime
+
+    lines = sorted((m for m in marks or [] if (m.get("text") or "").strip()), key=lambda m: float(m.get("at") or 0))
+    if not lines:
+        return None
+    try:
+        from app.diarizer import SPEAKER_COLORS
+    except Exception:
+        SPEAKER_COLORS = ["#0A84FF"]
+    ids: Dict[str, str] = {}
+    speakers: Dict[str, Dict[str, Any]] = {}
+    segments: List[Dict[str, Any]] = []
+    for i, m in enumerate(lines):
+        name = str(m.get("name") or "").strip() or "Teams"
+        if name not in ids:
+            sid = f"SPEAKER_{len(ids):02d}"
+            ids[name] = sid
+            speakers[sid] = {"id": sid, "name": name, "color": SPEAKER_COLORS[(len(ids) - 1) % len(SPEAKER_COLORS)]}
+        text = " ".join(str(m["text"]).split())
+        words = text.split()
+        start = float(m.get("at") or 0)
+        nxt = float(lines[i + 1].get("at") or 0) if i + 1 < len(lines) else start + 0.4 * len(words)
+        end = max(start + 0.5, min(nxt, start + max(1.5, 0.45 * len(words))))
+        step = (end - start) / max(1, len(words))
+        segments.append({"id": i, "start": round(start, 2), "end": round(end, 2), "speaker": ids[name], "text": text,
+                         "words": [{"word": " " + w, "start": round(start + k * step, 2), "end": round(start + (k + 1) * step, 2),
+                                    "prob": 1.0} for k, w in enumerate(words)]})
+    return {"segments": segments, "speakers": speakers, "language": "",
+            "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+
 class Reader:
     def __init__(self) -> None:
         self.started_at = 0.0
@@ -93,8 +129,11 @@ class Reader:
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
+            counts: Dict[str, int] = {}
+            for m in self.marks:
+                counts[m["name"]] = counts.get(m["name"], 0) + 1
             return {"state": self.state, "error": self.error, "lines": self.lines,
-                    "names": list(self.names), "marks": list(self.marks)}
+                    "names": list(self.names), "counts": counts, "marks": list(self.marks)}
 
     # ---- reading
     def _take(self, found: List[Tuple[str, str]]) -> None:

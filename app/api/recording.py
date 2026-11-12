@@ -204,7 +204,8 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     # «Speaking now» read from the Teams captions during the recording join the ones clicked in the studio
     teams = await run_in_threadpool(teams_captions.stop)
     if teams.get("marks"):
-        payload.speaker_marks = [*payload.speaker_marks, *({"at": m["at"], "name": m["name"]} for m in teams["marks"])]
+        payload.speaker_marks = [*payload.speaker_marks,
+                                 *({"at": m["at"], "name": m["name"], "text": m.get("text", "")} for m in teams["marks"])]
         print(f"[teams] {len(teams['marks'])} caption line(s), {len(teams['names'])} name(s) read", flush=True)
 
     page: Optional[Path] = None
@@ -302,9 +303,14 @@ def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, h
     if payload.notes.strip():
         update_meeting_fields(m["id"], user_notes=payload.notes[:50000])
     if payload.speaker_marks:
-        from app.database import set_speaker_marks
+        from app.database import save_transcript_version, set_speaker_marks
+        from app.teams_captions import TEAMS, as_transcript
 
         set_speaker_marks(m["id"], payload.speaker_marks)
+        # The Teams captions are a transcript of their own: shown by their chip, a voice in the merging
+        teams_version = as_transcript([mk for mk in payload.speaker_marks if mk.get("text")])
+        if teams_version:
+            save_transcript_version(m["id"], TEAMS, teams_version)
     try:
         from datetime import datetime
 

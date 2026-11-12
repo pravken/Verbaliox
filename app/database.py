@@ -835,12 +835,13 @@ def set_speaker_marks(meeting_id: int, marks: List[Dict[str, Any]]) -> None:
         except (TypeError, ValueError, AttributeError):
             continue
         if name and 0 <= at < 24 * 3600:
-            clean.append({"at": round(at, 2), "name": name})
+            text = " ".join(str(mk.get("text") or "").split())[:200]  # a Teams caption line: matched by its words
+            clean.append({"at": round(at, 2), "name": name, **({"text": text} if text else {})})
     with _db_lock:
         conn = get_connection()
         try:
             conn.execute("UPDATE meetings SET speaker_marks_json = ? WHERE id = ?",
-                         (json.dumps(clean[:500], ensure_ascii=False), meeting_id))
+                         (json.dumps(clean[:3000], ensure_ascii=False), meeting_id))
             conn.commit()
         finally:
             conn.close()
@@ -1627,7 +1628,8 @@ def clear_results(meeting_id: int) -> bool:
             (meeting_id,))
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
         _speaker_seconds_cache.pop(meeting_id, None)
-        conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))
+        # the Teams captions stay: read during the recording, they cannot be made again
+        conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model != 'teams'", (meeting_id,))
         conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))

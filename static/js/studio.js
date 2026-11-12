@@ -767,7 +767,8 @@ function renderStudioPeople() {
   if (!box) return;
   stPeopleSync();
   const rec = isRecording();
-  const counts = {};
+  // the marks of each person: the clicks here and the caption lines read from Teams
+  const counts = { ...((stPeople.teams && stPeople.teams.counts) || {}) };
   stPeople.marks.forEach(m => { counts[m.name] = (counts[m.name] || 0) + 1; });
   const options = [`<option value="0">${escapeHtml(t('stPeopleAuto'))}</option>`,
     ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
@@ -809,6 +810,9 @@ async function stTeamsPoll() {
   if (!st) return;
   stPeople.teams = st;
   for (const n of st.names || []) if (!stPeople.names.includes(n)) stPeople.names.push(n);
+  // more people speak in the captions than counted: the count follows (unless chosen by hand)
+  const speaking = (st.names || []).length;
+  if (!stPeople.manual && speaking > stPeople.count && speaking >= 2) stPeople.count = Math.min(speaking, 10);
   renderStudioPeople();
 }
 
