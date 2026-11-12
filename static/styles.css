@@ -248,7 +248,7 @@ input[type="range"].volume-slider::-webkit-slider-thumb:hover {
 }
 /* Transcript tab: "Recognition" (the model of the text, a panel of its own) and "Text" (the tools
    for the text shown), each with its label, so the two kinds of buttons do not read as one group */
-.tx-section-panel { padding: 5px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
+.tx-section-panel { padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.045); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.12)); }
 .tx-section-label { font-size: var(--fs-label); line-height: 1.35; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8E8E93);
   flex-shrink: 0; min-width: 104px; }
 .tx-section-label-text { padding-left: 9px; }  /* in line with the label of the panel above */
