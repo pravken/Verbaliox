@@ -1188,7 +1188,10 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     if not done:
         return None
     _check_cancel(meeting_id)
-    update_meeting_progress(meeting_id, status="merging", progress=86, stage_text="Сведение версий: сопоставление слов...")
+    # «transcribing», not «merging»: this is still the transcription job, resumed after a restart like
+    # its other steps (a «merging» recording was taken for a manual merge and set completed, with no
+    # summary or title ever made)
+    update_meeting_progress(meeting_id, status="transcribing", progress=86, stage_text="Сведение версий: сопоставление слов...")
     chat = None
     try:
         chat = llm.target(None, local_only=is_local_only(get_meeting(meeting_id))).chat
