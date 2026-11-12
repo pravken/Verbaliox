@@ -159,3 +159,20 @@ class TeamsVersionTest(unittest.TestCase):
         save_transcript_version(m["id"], tc.TEAMS, tc.as_transcript([{"at": 0, "name": "Анна", "text": "раз два три"}]))
         clear_results(m["id"])
         self.assertEqual(list(all_transcripts(m["id"])), [tc.TEAMS])  # the model's text went, the captions stayed
+
+
+class TeamsVersionShownTest(unittest.TestCase):
+    def test_showing_the_captions_keeps_the_model_of_the_recording(self):
+        from app.database import (create_meeting, get_meeting, init_db, save_meeting_results,
+                                  save_transcript_version, switch_transcript_version, update_meeting_fields)
+
+        init_db()
+        m = create_meeting(title="Teams", filename="a.wav", media_path="a.wav")
+        update_meeting_fields(m["id"], model_name="gigaam-v3")
+        save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "speaker": "SPEAKER_00", "text": "раз"}],
+                             speakers={"SPEAKER_00": {"name": "Участник 1"}}, transcript_model="gigaam-v3")
+        save_transcript_version(m["id"], tc.TEAMS, tc.as_transcript([{"at": 0, "name": "Анна", "text": "раз два три"}]))
+        switch_transcript_version(m["id"], tc.TEAMS)
+        got = get_meeting(m["id"])
+        self.assertEqual(got["transcript_model"], tc.TEAMS)
+        self.assertEqual(got["model_name"], "gigaam-v3")  # the next Transcribe / precise run uses a real model

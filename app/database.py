@@ -946,8 +946,9 @@ def _show_version(conn: sqlite3.Connection, meeting_id: int, model: str, data: D
     """A stored version takes the place of the transcript shown (which the caller has filed or dropped)."""
     segments = [s for s in data.get("segments") or [] if isinstance(s, dict)]
     backup = data.get("segments_backup") or []
-    # A model's name stays the one the next Transcribe uses; the merged text is not made by one
-    next_model = ", model_name = ?" if model != "merged" else ""
+    # A model's name stays the one the next Transcribe uses; the merged text and the Teams captions are
+    # not made by one (Transcribe and the precise mode then failed on the model «teams»)
+    next_model = ", model_name = ?" if model not in ("merged", "teams") else ""
     conn.execute(
         "UPDATE meetings SET transcript_model = ?, transcript_at = ?, speakers_json = ?, segments_backup_json = ?, "
         f"translations_json = ?, language = ?, transcript_verified = ?{next_model} WHERE id = ?",
