@@ -132,6 +132,8 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-proc-loudnorm').checked = sound('proc_loudnorm');
     document.getElementById('set-proc-leveling').checked = s.proc_leveling !== 'false';
     document.getElementById('set-ask-import').checked = s.ask_import_params !== 'false';
+    document.getElementById('set-asr-ensemble').checked = s.asr_ensemble === 'true';
+    renderEnsembleModels(s);
     if (document.getElementById('set-clean-fillers')) {
       document.getElementById('set-clean-fillers').checked = s.clean_fillers !== 'false';
     }
@@ -628,6 +630,7 @@ function syncSidebarDownloadWidget() {
 }
 
 function updateWhisperModelsUI(models) {
+  setTimeout(() => renderEnsembleModels(), 0);  // the precise mode lists the downloaded models
   if (!models) return;
   const st = models.setup_state || {};
   state.whisperPullState = st;
@@ -2145,6 +2148,8 @@ function settingsFormValues() {
     audio_enhance: String(document.getElementById('set-proc-denoise').checked || document.getElementById('set-proc-loudnorm').checked),
     ask_import_params: String(document.getElementById('set-ask-import').checked),
     clean_fillers: String(document.getElementById('set-clean-fillers')?.checked !== false),
+    asr_ensemble: String(document.getElementById('set-asr-ensemble').checked),
+    asr_ensemble_models: [...document.querySelectorAll('#set-ensemble-models input:checked')].map(x => x.value).join(','),
     ollama_model: document.getElementById('set-ollama-model').value.trim(),
     auto_summary: String(document.getElementById('set-auto-summary').checked),
     auto_title: String(document.getElementById('set-auto-title').checked),
@@ -2294,6 +2299,26 @@ async function pullOllamaModel(modelArg, makeActive = true) {
 
   startOllamaPollingLoop(model);
 }
+
+// The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog,
+// the ones not downloaded shown but not offered
+function renderEnsembleModels(s = (state.system && state.system.settings) || {}) {
+  const box = document.getElementById('set-ensemble-models');
+  if (!box) return;
+  const picked = new Set(String(s.asr_ensemble_models || '').split(',').map(x => x.trim()).filter(Boolean));
+  const list = ((state.system && state.system.models && state.system.models.whisper_catalog) || []);
+  box.innerHTML = list.map(m => `<label class="flex items-center gap-1.5 text-xs ${m.installed ? 'text-apple-label cursor-pointer' : 'text-apple-tertiary'}">
+      <input type="checkbox" id="set-ens-${escapeHtml(m.id)}" value="${escapeHtml(m.id)}" ${picked.has(m.id) ? 'checked' : ''} ${m.installed ? '' : 'disabled'}
+        class="rounded bg-apple-sidebar border-white/20 text-apple-blue" />
+      <span>${escapeHtml(m.name || m.id)}</span>${m.installed ? '' : `<span class="text-[11px]">· ${escapeHtml(t('ensNotDownloaded'))}</span>`}</label>`).join('');
+  syncEnsembleBox();
+}
+
+function syncEnsembleBox() {
+  const on = document.getElementById('set-asr-ensemble')?.checked;
+  document.getElementById('set-ensemble-box')?.classList.toggle('hidden', !on);
+}
+document.addEventListener('change', (e) => { if (e.target?.id === 'set-asr-ensemble') syncEnsembleBox(); });
 
 // --- Dictionary ---
 // Audit 7.5: the dictionary has one place, Settings → Dictionary (the sidebar button opens it)
@@ -2504,7 +2529,7 @@ const SETTINGS_RESET = {
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
-    ['set-onnx-gpu', 'onnx_gpu', 'check']],
+    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
   analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
     ['set-semantic', 'semantic_search', 'check']],
@@ -2521,7 +2546,7 @@ const SETTINGS_RESET = {
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false',
-  diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true',
+  diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
   auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',

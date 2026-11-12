@@ -187,6 +187,8 @@ def init_db() -> None:
             "summary_grounding": "true",  # summaries checked against the transcript (app/grounding.py)
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
             "dictionary_fuzzy": "true",  # dictionary terms replace words that sound like them (app/vocab.py)
+            "asr_ensemble": "false",  # the precise mode for new recordings (several models + merging)
+            "asr_ensemble_models": "",  # its models, comma separated; "" = the most accurate installed ones
             "auto_chapters": "true",  # the topics above the timeline, after the automatic summary (> 10 min)
             "delete_media_after": "false",  # the sound deleted once a recording is transcribed (privacy)
             "media_retention_days": "0",  # the sound of older recordings deleted; 0: kept
@@ -810,6 +812,19 @@ def stash_transcript_for(meeting_id: int, model: str) -> None:
             if row and row["transcript_model"] and row["transcript_model"] != model and _stash_active(conn, meeting_id):
                 conn.execute("UPDATE meetings SET translations_json = '{}', transcript_verified = 0 WHERE id = ?", (meeting_id,))
             conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model = ?", (meeting_id, model))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def save_transcript_version(meeting_id: int, model: str, data: Dict[str, Any]) -> None:
+    """Files a transcript `model` made among the versions without showing it (the precise mode:
+    the other models of a recording, app/transcriber.py)."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            conn.execute("INSERT OR REPLACE INTO transcript_versions (meeting_id, model, data) VALUES (?, ?, ?)",
+                         (meeting_id, model, json.dumps(data, ensure_ascii=False)))
             conn.commit()
         finally:
             conn.close()
@@ -1576,7 +1591,7 @@ def clear_results(meeting_id: int) -> bool:
 # What is done to a recording when it is transcribed, chosen per recording above the text (the
 # "Recognition" row); what a recording has not chosen comes from the settings
 # (fillers are no longer taken out of the text: «Без запинок» is a view, so there is no switch for them)
-PROCESSING_KEYS = ("denoise", "loudnorm", "leveling", "vad", "diarization", "summary")
+PROCESSING_KEYS = ("denoise", "loudnorm", "leveling", "vad", "diarization", "summary", "ensemble")
 
 
 def effective_processing(stored: Optional[Dict[str, Any]], settings: Optional[Dict[str, str]] = None) -> Dict[str, bool]:
@@ -1591,6 +1606,8 @@ def effective_processing(stored: Optional[Dict[str, Any]], settings: Optional[Di
         "vad": on("vad_filter"),  # Whisper skips the silence
         "diarization": on("diarization_enabled"),
         "summary": on("auto_summary"),  # the analysis right after the transcript
+        # the precise mode: other models recognize the recording too, their versions are merged
+        "ensemble": (s.get("asr_ensemble") or "false").lower() == "true",
     }
     out.update({k: bool(v) for k, v in (stored or {}).items() if k in PROCESSING_KEYS})
     return out

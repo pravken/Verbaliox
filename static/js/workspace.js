@@ -235,7 +235,7 @@ async function mergeTranscripts() {
 const TX_PROC_GROUPS = [
   ['txProcSound', [['denoise', 'txProcDenoise', 'txProcDenoiseHint'], ['loudnorm', 'txProcLoudnorm', 'txProcLoudnormHint'],
     ['leveling', 'txProcLeveling', 'txProcLevelingHint'], ['vad', 'txProcVad', 'txProcVadHint']]],
-  ['txProcText', [['diarization', 'txProcDiarization', 'txProcDiarizationHint']]],
+  ['txProcText', [['diarization', 'txProcDiarization', 'txProcDiarizationHint'], ['ensemble', 'impEnsemble', 'impEnsembleHint']]],
 ];
 
 function txProc(m) {
