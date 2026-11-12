@@ -2444,3 +2444,24 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* First-run wizard: «recommended for the best quality» on a line of its own under the precise mode */
 .fr-ens-best { display: block; margin: 4px 0 0 -4px; }
+
+/* The recognition row: the models as chips with the state of their text (workspace.js renderTxModelChips) */
+.tx-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tx-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px;
+  color: #D1D1D6; border: 1px solid rgba(255, 255, 255, 0.14); background: transparent; white-space: nowrap; transition: background-color .15s, border-color .15s; }
+.tx-chip:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #FFFFFF; }
+.tx-chip:disabled { opacity: 0.45; cursor: default; }
+.tx-chip.is-busy:disabled { opacity: 1; }
+.tx-chip-mark { font-size: 11px; line-height: 1; width: 10px; text-align: center; }
+.tx-chip.is-done .tx-chip-mark { color: #30D158; }
+.tx-chip.is-none .tx-chip-mark, .tx-chip.is-missing .tx-chip-mark { color: #8E8E93; }
+.tx-chip.is-missing { border-style: dashed; color: #AEAEB2; }
+.tx-chip-size { font-size: 11px; color: #8E8E93; font-family: var(--font-mono); }
+.tx-chip.is-picked { border-color: #0A84FF; box-shadow: 0 0 0 1px #0A84FF inset; }
+.tx-chip.is-shown { background: #0A84FF; border-color: #0A84FF; color: #FFFFFF; }
+.tx-chip.is-shown .tx-chip-mark { color: #FFFFFF; }
+.tx-chip.is-shown:hover:not(:disabled) { background: #2B95FF; }
+.tx-chip-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #0A84FF; animation: tx-chip-spin 0.9s linear infinite; }
+@keyframes tx-chip-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tx-chip-spin { animation: none; border-top-color: #0A84FF; } }
