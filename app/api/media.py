@@ -590,11 +590,14 @@ def api_save_audio(meeting_id: int, payload: SaveAudioPayload) -> Dict[str, Any]
         out = out.with_name(out.name + f".{fmt}")
     if out.resolve() == media.resolve():
         raise HTTPException(status_code=400, detail="Нельзя сохранить результат поверх исходного файла")
-    cmd = [tool_cmd("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-i", str(media), "-vn", *AUDIO_CODECS[fmt], str(out)]
+    # written beside it and put in place when done: a file the user agreed to replace stays when it fails
+    part = out.with_name(out.stem + ".part" + out.suffix)
+    cmd = [tool_cmd("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-i", str(media), "-vn", *AUDIO_CODECS[fmt], str(part)]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    if res.returncode != 0 or not out.is_file():
-        out.unlink(missing_ok=True)
+    if res.returncode != 0 or not part.is_file():
+        part.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail="Не удалось сохранить звук")
+    part.replace(out)
     _remember_export(meeting_id, out)
     return {"ok": True, "path": str(out), "filename": out.name, "folder": str(out.parent)}
