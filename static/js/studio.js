@@ -755,6 +755,13 @@ function stPeopleSync() {
   if (!stPeople.manual) stPeople.count = invited.length > 1 ? Math.min(invited.length, 10) : 0;
 }
 
+function stTeamsLine() {
+  const st = stPeople.teams;
+  if (!isRecording() || !st) return t('teamsIdle');
+  if (st.state === 'reading') return t('teamsReading').replace('{n}', () => st.lines || 0).replace('{p}', () => (st.names || []).length);
+  return t(`teams_${st.state}`) || t('teamsIdle');
+}
+
 function renderStudioPeople() {
   const box = document.getElementById('studio-people');
   if (!box) return;
@@ -771,8 +778,48 @@ function renderStudioPeople() {
         ${rec ? '' : 'disabled'} data-click="stPeopleMark" data-click-args='[${i}]'
         title="${escapeHtml(rec ? t('tipStPersonMark') : t('tipStPersonIdle'))}">${escapeHtml(n)}${counts[n] ? `<span class="st-person-n">${counts[n]}</span>` : ''}</button>`).join('')}
       <button type="button" class="st-person st-person-add" data-click="stPeopleAdd">+ ${escapeHtml(t('stPeopleAdd'))}</button></div>
-    <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>`;
+    <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>
+    ${stTeamsOn() ? `<p class="st-people-teams">${escapeHtml(stTeamsLine())}
+      <button type="button" class="st-link" data-click="showTeamsHelp">${escapeHtml(t('teamsHelpLink'))}</button></p>` : ''}`;
   box.querySelector('select').value = String(stPeople.count);
+}
+
+// Who speaks, read from the Teams captions while recording (Settings → Recording, app/teams_captions.py):
+// its names join the participants, its marks go with the recording on the server
+let _stTeamsTimer = null;
+
+function stTeamsOn() {
+  return String(((state.system && state.system.settings) || {}).teams_captions) === 'true';
+}
+
+async function stTeamsStart() {
+  clearInterval(_stTeamsTimer);
+  stPeople.teams = null;
+  if (!stTeamsOn()) return;
+  await fetch('/api/teams/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ started_at: _recStartTime / 1000, names: stPeople.names }),
+  }).catch(() => null);
+  _stTeamsTimer = setInterval(stTeamsPoll, 4000);
+}
+
+async function stTeamsPoll() {
+  if (!isRecording()) { clearInterval(_stTeamsTimer); return; }
+  const st = await fetch('/api/teams/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!st) return;
+  stPeople.teams = st;
+  for (const n of st.names || []) if (!stPeople.names.includes(n)) stPeople.names.push(n);
+  renderStudioPeople();
+}
+
+function stTeamsStop() {
+  clearInterval(_stTeamsTimer);
+  if (stTeamsOn()) fetch('/api/teams/stop', { method: 'POST' }).catch(() => {});
+}
+
+// How to turn on the live captions in Teams (docs/teams-captions.md), in the app
+function showTeamsHelp() {
+  confirmDialog(t('teamsHelpTitle'), t('teamsHelpText'), t('gotIt'), false, { single: true });
 }
 
 function stPeopleSetCount(v) {
@@ -1602,6 +1649,7 @@ async function startLiveRecording() {
 
     _recStartTime = Date.now();
     stPeople.marks = [];  // «Сейчас говорит» of this recording
+    stTeamsStart();
     // Notes left from a recording that did not finish (the window was closed) are kept
     try {
       const draft = localStorage.getItem('verbaliox_studio_notes');
@@ -1728,6 +1776,7 @@ function _cleanupRecordingResources() {
 async function cancelLiveRecording() {
   if (!isRecording()) return;
   if (!await askConfirm(t('recCancelConfirm'), true, t('cfDiscardRecording'))) return;
+  stTeamsStop();
   if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
     _mediaRecorder.ondataavailable = null;
     _mediaRecorder.onstop = null;

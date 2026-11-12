@@ -140,6 +140,37 @@ def api_screen_cancel(screen_id: str) -> Dict[str, Any]:
         cap.path.unlink(missing_ok=True)
     return {"ok": True}
 
+class TeamsStartPayload(BaseModel):
+    started_at: float = 0           # when the recording began (unix seconds): the marks count from it
+    names: List[str] = []           # the people of the calendar meeting: known as names in the captions
+
+@router.post("/api/teams/start")
+def api_teams_start(payload: TeamsStartPayload) -> Dict[str, Any]:
+    """Reads who is speaking from the Teams captions while recording (setting teams_captions)."""
+    from app import teams_captions
+
+    if not teams_captions.enabled():
+        return {"state": "off"}
+    teams_captions.start(payload.started_at, payload.names[:50])
+    return teams_captions.status()
+
+@router.post("/api/teams/stop")
+def api_teams_stop() -> Dict[str, Any]:
+    """A recording cancelled: the reading of the captions ends, its marks go nowhere."""
+    from app import teams_captions
+
+    st = teams_captions.stop()
+    st.pop("marks", None)
+    return st
+
+@router.get("/api/teams/status")
+def api_teams_status() -> Dict[str, Any]:
+    from app import teams_captions
+
+    st = teams_captions.status()
+    st.pop("marks", None)  # the page needs the state and the names, the marks go with the recording
+    return st
+
 class RecordFinishPayload(BaseModel):
     title: str = "Запись"
     page_id: Optional[str] = None     # what the page recorded (microphone and/or video)
@@ -166,8 +197,15 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     (microphone, video) and queues the result for transcription."""
     from starlette.concurrency import run_in_threadpool
 
+    from app import teams_captions
     from app.ffmpeg_manager import tool_cmd
     from app.system_audio import finish_capture
+
+    # «Speaking now» read from the Teams captions during the recording join the ones clicked in the studio
+    teams = await run_in_threadpool(teams_captions.stop)
+    if teams.get("marks"):
+        payload.speaker_marks = [*payload.speaker_marks, *({"at": m["at"], "name": m["name"]} for m in teams["marks"])]
+        print(f"[teams] {len(teams['marks'])} caption line(s), {len(teams['names'])} name(s) read", flush=True)
 
     page: Optional[Path] = None
     if payload.page_id:

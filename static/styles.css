@@ -2484,3 +2484,5 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .st-person-add { border-style: dashed; color: #8CC4FF; background: transparent; }
 .st-person-add:disabled { opacity: 1; }
 .st-people-hint { font-size: 11px; line-height: 1.35; color: #8E8E93; }
+.st-people-teams { font-size: 11px; line-height: 1.35; color: #8CC4FF; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.st-people-teams .st-link { padding-top: 0; font-size: 11px; }
