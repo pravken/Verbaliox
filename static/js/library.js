@@ -1420,6 +1420,37 @@ function folderRowHtml(f, depth, collapsed) {
     </div>`;
 }
 
+// A recording that is running has a row at the top of the library: its time, and a click opens the
+// studio with its captions
+function libLiveRowHtml() {
+  const title = (document.getElementById('record-title-input')?.value || '').trim();
+  const timer = document.getElementById('studio-timer')?.textContent || '';
+  return `
+    <div data-click="openLiveStudio" tabindex="0" role="button" class="lib-live-row" title="${escapeHtml(t('libLiveTip'))}">
+      <span class="lib-live-dot" aria-hidden="true"></span>
+      <span class="flex-1 min-w-0">
+        <span class="lib-live-title">${escapeHtml(title || t('studioRecording'))}</span>
+        <span class="lib-live-sub">${escapeHtml(title ? t('studioRecording') + ' · ' + t('libLiveSub') : t('libLiveSub'))}</span>
+      </span>
+      <span id="lib-live-time" class="lib-live-time">${escapeHtml(timer)}</span>
+    </div>`;
+}
+
+function syncLibLiveRow() {
+  const rec = isRecording();
+  if (rec !== !!state._libLive) {
+    state._libLive = rec;
+    renderMeetingsSidebar();
+  }
+  const el = document.getElementById('lib-live-time');
+  if (el) el.textContent = document.getElementById('studio-timer').textContent;
+}
+
+function openLiveStudio() {
+  switchAppView('studio');
+  studioTab('text');
+}
+
 function renderMeetingsSidebar() {
   (state.libPendingHides || []).forEach(hide => hide());  // removals still waiting on «Отменить»
   const listEl = document.getElementById('meetings-list');
@@ -1468,15 +1499,16 @@ function renderMeetingsSidebar() {
   }
 
   const folders = state.folders || [];
+  const live = isRecording() ? libLiveRowHtml() : '';
   if (state.meetings.length === 0 && !folders.some(f => !f.system_key)) {
     listEl._keyed = false;
-    listEl.innerHTML = `<div class="px-3 py-8 text-center text-xs text-apple-tertiary">${t('noRecordings')}</div>`;
+    listEl.innerHTML = live + (live ? '' : `<div class="px-3 py-8 text-center text-xs text-apple-tertiary">${t('noRecordings')}</div>`);
     return;
   }
 
   if (filtering && !shownIds.size) {
     listEl._keyed = false;
-    listEl.innerHTML = filterEmpty();
+    listEl.innerHTML = live + filterEmpty();
     return;
   }
   const known = new Set(folders.map(f => f.id));
@@ -1490,7 +1522,7 @@ function renderMeetingsSidebar() {
   const prefs = libPrefs();
   for (const list of byFolder.values()) list.sort(libComparator(prefs));
   // Every row is a keyed part: a progress event then replaces only the row that changed
-  const parts = [];
+  const parts = live ? [['live', live]] : [];
   const datesCollapsed = collapsedDates();
   const dateIds = [];
   const items = (list, depth, groupKey, byDate = prefs.group !== 'none') => {

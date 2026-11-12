@@ -1117,6 +1117,7 @@ function langCode(code) {
 // Buttons, heading and locked inputs follow whether a recording is running
 function renderStudioState() {
   const rec = isRecording();
+  syncLibLiveRow();
   syncStudioAsk();
   const sourceName = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') };
   const p = recordPresets().find(x => x.id === state.recPresetId);
