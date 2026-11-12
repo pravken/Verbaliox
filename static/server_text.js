@@ -166,6 +166,8 @@ const SERVER_TEXT_EN = {
   "Обновление недоступно для установки": "The update cannot be installed",
   "Обработка отменена": "Processing cancelled",
   "Сведение дорожек записи...": "Mixing the recording's tracks...",
+  "Сведение дорожек записи": "Mixing a recording's tracks",
+  "Дорожки записи ещё сводятся — удалите её через минуту.": "The recording's tracks are still being mixed: delete it in a minute.",
   "Сетевые пути не открываются": "Network paths are not opened",
   "Обработка отменена: показана часть, распознанная до отмены": "Processing cancelled: the part recognized before it is shown",
   "Ожидание: видеопамять занята субтитрами идущей записи...": "Waiting: the video memory is used by the captions of a recording...",

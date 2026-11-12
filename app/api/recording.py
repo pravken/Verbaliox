@@ -100,6 +100,8 @@ async def api_record_page_chunk(page_id: str, request: Request) -> Dict[str, Any
 
     def append() -> Dict[str, Any]:  # off the event loop: a slow disk or a virus scan held every request
         with _page_lock:  # one chunk of a page at a time, in its order
+            if _page_recordings.get(page_id) is not part:  # finished or cancelled meanwhile: not written into the mix
+                raise HTTPException(status_code=404, detail="Запись не найдена")
             if seq is not None:
                 expected = _page_next_seq.get(page_id, 0)
                 if seq < expected:  # written already: its answer was lost and the page sent it again
@@ -240,9 +242,12 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
 
     page: Optional[Path] = None
     if payload.page_id:
-        with _page_lock:
-            page = _page_recordings.pop(payload.page_id, None)
-            _page_next_seq.pop(payload.page_id, None)
+        def take_page() -> Optional[Path]:  # the lock may wait for a chunk being written: not on the event loop
+            with _page_lock:
+                _page_next_seq.pop(payload.page_id, None)
+                return _page_recordings.pop(payload.page_id, None)
+
+        page = await run_in_threadpool(take_page)
         if page is not None and (not page.is_file() or page.stat().st_size == 0):
             page.unlink(missing_ok=True)
             page = None
@@ -329,10 +334,8 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
             return {"salvaged": _salvage_parts(payload.title.strip() or "Запись",
                                                [(screen, True), *[(p, p is page and payload.has_video) for p in (page, system) if p]],
                                                payload.notes)}
-        for p in (screen, page, system, mic, original_system):
-            if p:
-                p.unlink(missing_ok=True)
-        return {"dest": dest, "has_video": True}
+        # the parts go once the mixed file is registered (a crash in between kept nothing)
+        return {"dest": dest, "has_video": True, "cleanup": [p for p in (screen, page, system, mic, original_system) if p]}
 
     has_video = bool(payload.has_video and page)
     ext = ".webm" if page and (has_video or not system) else ".m4a"
@@ -357,12 +360,8 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
                 return {"salvaged": _salvage_parts(payload.title.strip() or "Запись",
                                                    [(p, has_video if p is page else False) for p in (page, system) if p],
                                                    payload.notes)}
-        if page:
-            page.unlink(missing_ok=True)
-    for p in (system, mic, original_system):
-        if p:
-            p.unlink(missing_ok=True)
-    return {"dest": dest, "has_video": has_video}
+    cleanup = [p for p in (page if cmd is not None else None, system, mic, original_system) if p]
+    return {"dest": dest, "has_video": has_video, "cleanup": cleanup}
 
 
 def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path],
@@ -374,21 +373,34 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
     from app.database import delete_meeting, set_recording_media, update_meeting_progress
     from app.naming import rename_recording_file
 
+    done: Optional[Dict[str, Any]] = None
     try:
         done = _mix_parts(payload, page, system, screen, system_skip, safe_stem)
-        if not get_meeting(meeting_id):  # deleted while it was mixed: its file goes too
-            if done and done.get("dest"):
-                Path(done["dest"]).unlink(missing_ok=True)
-            return
         if done is None or done.get("salvaged") is not None:  # kept part by part: they are the recordings now
             delete_meeting(meeting_id)
             return
         set_recording_media(meeting_id, str(done["dest"]), bool(done["has_video"]))
+        for p in done.get("cleanup") or []:  # registered: the parts can go
+            Path(p).unlink(missing_ok=True)
         rename_recording_file(meeting_id)  # "2026-10-20 Запись 14-05.m4a"; renamed again once titled
         update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
         enqueue_meeting_job(meeting_id)
     except Exception as e:
         traceback.print_exc()
+        if not (done and done.get("dest") and (get_meeting(meeting_id) or {}).get("media_path")):
+            # failed before the recording had its file: what was recorded is kept part by part, now
+            try:
+                if done and done.get("dest"):
+                    Path(done["dest"]).unlink(missing_ok=True)
+                left = [(p, (p is page and payload.has_video) or p is screen) for p in (screen, page, system)
+                        if p and Path(p).is_file()]
+                from app.main import _salvage_parts
+
+                _salvage_parts(payload.title.strip() or "Запись", left, payload.notes)
+                delete_meeting(meeting_id)
+                return
+            except Exception:
+                traceback.print_exc()
         update_meeting_progress(meeting_id, status="failed", progress=0, stage_text="",
                                 error_message=f"Не удалось свести дорожки записи: {e}"[:500])
     finally:

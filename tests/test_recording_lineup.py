@@ -223,3 +223,40 @@ class FinishInBackgroundTest(unittest.TestCase):
         self.assertTrue(Path(m["media_path"]).is_file())
         self.assertEqual(m["user_notes"], "заметка")
         enqueue.assert_called_once_with(mid)
+
+
+class FinishFailureTest(unittest.TestCase):
+    def test_a_mix_that_breaks_keeps_the_parts_as_recordings(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        try:
+            from app.api import recording
+        except ImportError:
+            self.skipTest("app dependencies not installed")
+        from app import app_status
+        from app.database import create_meeting, get_meeting, init_db
+
+        init_db()
+        page = Path(tempfile.mkdtemp()) / ".page_x.webm.part"
+        page.write_bytes(b"x" * 10000)
+        m = create_meeting(title="Сбой", filename="s", media_path="", source="recording")
+        app_status.mixing.add(m["id"])
+        payload = recording.RecordFinishPayload(title="Сбой", page_id="x", has_mic=True)
+        with mock.patch.object(recording, "_mix_parts", side_effect=OSError("диск переполнен")), \
+                mock.patch("app.main._salvage_parts") as salvage:
+            recording._mix_in_background(m["id"], payload, page, None, None, 0.0, "Сбой")
+        salvage.assert_called_once()
+        self.assertEqual(salvage.call_args[0][1][0][0], page)  # the page's part is kept
+        self.assertIsNone(get_meeting(m["id"]))  # the placeholder without a file goes
+        self.assertNotIn(m["id"], app_status.mixing)
+
+    def test_closing_the_app_while_mixing_is_warned_about(self):
+        from app import app_status
+
+        app_status.mixing.add(987654)
+        try:
+            self.assertIn("Сведение дорожек записи", app_status.background())
+        finally:
+            app_status.mixing.discard(987654)
