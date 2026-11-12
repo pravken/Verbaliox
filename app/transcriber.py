@@ -1409,6 +1409,11 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         clear_vram()
 
+        # The count of speakers said for the recording was corrected by the voices (app/diarizer.py)
+        speakers_note = ""
+        if diarization_enabled and num_speakers_hint in (1, 2) and len(speakers_meta) >= 4:
+            speakers_note = f"участников больше, чем указано: по голосам их {len(speakers_meta)}"
+
         # The precise mode: other models recognize the recording too, and the versions are merged
         ensemble_note = ""
         if processing.get("ensemble") and merged_segments and not _cancel_wanted(meeting_id):
@@ -1501,6 +1506,8 @@ def _process_meeting_job(meeting_id: int) -> None:
             _after_transcription(meeting_id, merged_segments, speakers_meta, detected_lang, settings)
         if ensemble_note:
             notes = [ensemble_note, *notes]
+        if speakers_note:
+            notes = [speakers_note, *notes]
         from app import semantic
 
         semantic.kick()  # indexed for search by meaning once the queue is free
