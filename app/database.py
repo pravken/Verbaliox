@@ -330,6 +330,8 @@ _MEETING_EXTRA_COLUMNS = {
     "transcript_model": "TEXT DEFAULT ''",
     "transcript_at": "TEXT DEFAULT ''",
     "merged_models_json": "TEXT DEFAULT '[]'",  # the models a merged transcript was made from (the chips light them)
+    # «Сейчас говорит» clicked in the studio while recording: [{at: seconds into the recording, name}]
+    "speaker_marks_json": "TEXT DEFAULT '[]'",
     # The speech language the user chose ("auto", "mixed", "ru"...): language holds the one heard, which a
     # transcription overwrites; a new run starts from this choice ('' before the first run: language is it)
     "language_choice": "TEXT DEFAULT ''",
@@ -818,6 +820,26 @@ def stash_transcript_for(meeting_id: int, model: str) -> None:
             if row and row["transcript_model"] and row["transcript_model"] != model and _stash_active(conn, meeting_id):
                 conn.execute("UPDATE meetings SET translations_json = '{}', transcript_verified = 0 WHERE id = ?", (meeting_id,))
             conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model = ?", (meeting_id, model))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def set_speaker_marks(meeting_id: int, marks: List[Dict[str, Any]]) -> None:
+    """Who spoke when, as marked in the studio (app/transcriber.apply_speaker_marks names the voices)."""
+    clean = []
+    for mk in marks or []:
+        try:
+            at, name = float(mk.get("at")), " ".join(str(mk.get("name") or "").split())[:80]
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if name and 0 <= at < 24 * 3600:
+            clean.append({"at": round(at, 2), "name": name})
+    with _db_lock:
+        conn = get_connection()
+        try:
+            conn.execute("UPDATE meetings SET speaker_marks_json = ? WHERE id = ?",
+                         (json.dumps(clean[:500], ensure_ascii=False), meeting_id))
             conn.commit()
         finally:
             conn.close()
@@ -1722,6 +1744,7 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
     d["transcript_versions"] = transcript_versions(conn, d["id"])
     d["processing"] = effective_processing(_loads_dict(d.pop("processing_json", None)))
     d["merged_models"] = _loads_list(d.pop("merged_models_json", None)) if d.get("transcript_model") == "merged" else []
+    d["speaker_marks"] = _loads_list(d.pop("speaker_marks_json", None))
     return d
 
 

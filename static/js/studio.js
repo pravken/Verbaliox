@@ -706,7 +706,7 @@ function renderUpcomingMeetings() {
   // the card «Встреча» of the studio: the meetings of the calendar, one click takes the title
   const show = _upcoming.length && !isRecording();
   box.classList.toggle('hidden', !show);
-  if (!show) return;
+  if (!show) { renderStudioPeople(); return; }
   const now = new Date();
   const today = now.toDateString();
   const loc = state.uiLang === 'en' ? 'en-GB' : 'ru-RU';
@@ -729,6 +729,71 @@ function renderUpcomingMeetings() {
     </div>`;
   }).join('');
   box.innerHTML = `<div class="st-sub-title mt-1">${escapeHtml(t('upcomingTitle'))}</div>${rows}`;
+  renderStudioPeople();
+}
+
+// --- Who is at the meeting: the people of the calendar meeting (the one picked by its title, or the
+// one going on), how many (for splitting by voices) and «Сейчас говорит» while recording: a click on
+// a name marks the moment, and after transcription the voice heard then gets the name ---
+const stPeople = { names: [], marks: [], count: 0, manual: false, eventKey: '' };
+
+function stPeopleEvent() {
+  const title = (document.getElementById('record-title-input')?.value || '').trim();
+  const now = new Date();
+  return _upcoming.find(e => title && e.title === title)
+    || _upcoming.find(e => new Date(e.start) - 10 * 60e3 <= now && now < new Date(e.end)) || null;
+}
+
+function stPeopleSync() {
+  const ev = stPeopleEvent();
+  const key = ev ? `${ev.title}|${ev.start}` : '';
+  if (key === stPeople.eventKey) return;
+  stPeople.eventKey = key;
+  const invited = ((ev && ev.attendees) || []).map(a => String(a).replace(/<[^>]*>/g, '').trim()).filter(Boolean);
+  const own = stPeople.names.filter(n => !invited.includes(n) && stPeople.marks.some(m => m.name === n));
+  stPeople.names = [...new Set([...invited, ...own])].slice(0, 20);
+  if (!stPeople.manual) stPeople.count = invited.length > 1 ? Math.min(invited.length, 10) : 0;
+}
+
+function renderStudioPeople() {
+  const box = document.getElementById('studio-people');
+  if (!box) return;
+  stPeopleSync();
+  const rec = isRecording();
+  const counts = {};
+  stPeople.marks.forEach(m => { counts[m.name] = (counts[m.name] || 0) + 1; });
+  const options = [`<option value="0">${escapeHtml(t('stPeopleAuto'))}</option>`,
+    ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
+  box.innerHTML = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
+      <label class="st-people-count">${escapeHtml(t('stPeopleCount'))}
+        <select data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
+    <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="st-person${counts[n] ? ' is-marked' : ''}"
+        ${rec ? '' : 'disabled'} data-click="stPeopleMark" data-click-args='[${i}]'
+        title="${escapeHtml(rec ? t('tipStPersonMark') : t('tipStPersonIdle'))}">${escapeHtml(n)}${counts[n] ? `<span class="st-person-n">${counts[n]}</span>` : ''}</button>`).join('')}
+      <button type="button" class="st-person st-person-add" data-click="stPeopleAdd">+ ${escapeHtml(t('stPeopleAdd'))}</button></div>
+    <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>`;
+  box.querySelector('select').value = String(stPeople.count);
+}
+
+function stPeopleSetCount(v) {
+  stPeople.count = Number(v) || 0;
+  stPeople.manual = true;
+}
+
+async function stPeopleAdd() {
+  const name = (await askText(t('stPeopleAddAsk'), '', { title: t('stPeopleTitle') }) || '').trim();
+  if (!name) return;
+  if (!stPeople.names.includes(name)) stPeople.names.push(name);
+  renderStudioPeople();
+}
+
+function stPeopleMark(i) {
+  const name = stPeople.names[i];
+  if (!name || !isRecording() || !_recStartTime) return;
+  const at = Math.max(0, (Date.now() - _recStartTime) / 1000);
+  stPeople.marks.push({ at, name });
+  renderStudioPeople();
+  showToast(t('stPeopleMarked').replace('{name}', () => name).replace('{time}', () => formatTime(Math.floor(at))));
 }
 
 function upcomingUseTitle(i) {
@@ -1138,6 +1203,7 @@ function langCode(code) {
 function renderStudioState() {
   const rec = isRecording();
   syncLibLiveRow();
+  renderStudioPeople();
   syncStudioAsk();
   const sourceName = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') };
   const p = recordPresets().find(x => x.id === state.recPresetId);
@@ -1535,6 +1601,7 @@ async function startLiveRecording() {
     updateMeter();
 
     _recStartTime = Date.now();
+    stPeople.marks = [];  // «Сейчас говорит» of this recording
     // Notes left from a recording that did not finish (the window was closed) are kept
     try {
       const draft = localStorage.getItem('verbaliox_studio_notes');
@@ -1717,6 +1784,7 @@ async function stopAndTranscribeRecording(opts) {
       title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
       has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
       notes: takeStudioNotes(), started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
+      speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
     }),
   });
   const data = await res.json().catch(() => ({}));

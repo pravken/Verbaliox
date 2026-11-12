@@ -968,6 +968,38 @@ def _release_analysis_models() -> None:
         print(f"[transcriber] Ollama models not unloaded: {e}", flush=True)
 
 
+def apply_speaker_marks(speakers: Dict[str, Dict[str, Any]], segments: List[Dict[str, Any]],
+                        marks: List[Dict[str, Any]]) -> int:
+    """«Сейчас говорит» marked in the studio: the voice heard at those moments gets the name. Each
+    mark votes for the speaker of the phrase going on then (or the nearest one within 3 s); each
+    name goes to one voice and each voice takes one name, the strongest votes first. Returns how
+    many voices were named."""
+    votes: Dict[Tuple[str, str], int] = {}
+    for mk in marks or []:
+        at, name = float(mk.get("at") or 0), str(mk.get("name") or "").strip()
+        if not name:
+            continue
+        best, gap = None, 3.0
+        for seg in segments:
+            a, b = float(seg.get("start") or 0), float(seg.get("end") or 0)
+            d = 0.0 if a <= at <= b else min(abs(at - a), abs(at - b))
+            if d < gap or (d == 0.0 and best is None):
+                best, gap = seg.get("speaker"), d
+                if d == 0.0:
+                    break
+        if best in speakers:
+            votes[(name, best)] = votes.get((name, best), 0) + 1
+    named, used_names, used_spk = 0, set(), set()
+    for (name, spk), _n in sorted(votes.items(), key=lambda kv: -kv[1]):
+        if name.lower() in used_names or spk in used_spk:
+            continue
+        speakers[spk]["name"] = name
+        used_names.add(name.lower())
+        used_spk.add(spk)
+        named += 1
+    return named
+
+
 # --- The precise mode: other models recognize the recording too, and the versions are merged ---
 ENSEMBLE_CANDIDATES = ("gigaam-v3", "large-v3", "parakeet-v3", "large-v3-turbo")
 ENSEMBLE_MAX_MODELS = 3  # with the main one: each model is one more pass over the whole recording
@@ -1384,6 +1416,10 @@ def _process_meeting_job(meeting_id: int) -> None:
                 print(f"[voice profiles] recognised {named} speaker(s) in meeting {meeting_id}")
         except Exception:
             traceback.print_exc()
+        # «Сейчас говорит» marked in the studio while recording: those names win over a remembered voice
+        marks_named = 0
+        if meeting.get("speaker_marks") and diarization_enabled:
+            marks_named = apply_speaker_marks(speakers_meta, merged_segments, meeting["speaker_marks"])
 
         _check_cancel(meeting_id)
         # The transcript of another model stays among the versions (the dropdown above the text)
@@ -1508,6 +1544,8 @@ def _process_meeting_job(meeting_id: int) -> None:
             notes = [ensemble_note, *notes]
         if speakers_note:
             notes = [speakers_note, *notes]
+        if marks_named:
+            notes = [f"имена по отметкам «Сейчас говорит»: {marks_named}", *notes]
         from app import semantic
 
         semantic.kick()  # indexed for search by meaning once the queue is free
