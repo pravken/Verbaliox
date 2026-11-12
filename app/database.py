@@ -1307,6 +1307,19 @@ def meeting_status(meeting_id: int) -> str:
     return str(row["status"] or "") if row else ""
 
 
+def set_recording_media(meeting_id: int, media_path: str, has_video: bool) -> None:
+    """A stopped recording gets the file its tracks were mixed into (app/api/recording.py): it owns it."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            conn.execute("UPDATE meetings SET media_path = ?, filename = ?, has_video = ?, owns_media = 1 WHERE id = ?",
+                         (media_path, Path(media_path).name, 1 if has_video else 0, meeting_id))
+            conn.commit()
+        finally:
+            conn.close()
+    events.publish({"type": "list"})
+
+
 def meeting_files(meeting_id: int) -> Optional[Dict[str, Any]]:
     """The files of a recording and what the player needs of them (no transcript is read): the media
     and thumbnail requests asked for the whole recording at every seek."""

@@ -174,3 +174,52 @@ class PageChunksTest(unittest.TestCase):
             self.assertEqual(send(1, b"bbb").json()["size"], 6)
         finally:
             client.post(f"/api/record/page/{pid}/cancel")
+
+
+class FinishInBackgroundTest(unittest.TestCase):
+    """Stop returns at once with the recording «mixing»; it gets its file and is queued when mixed."""
+
+    def test_the_recording_is_there_at_once_and_queued_when_mixed(self):
+        import shutil
+        import subprocess
+        import tempfile
+        import time
+        from pathlib import Path
+        from unittest import mock
+
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg is not installed")
+        try:
+            from fastapi.testclient import TestClient
+
+            from app import main
+            from app.api import recording
+        except ImportError:
+            self.skipTest("app dependencies not installed")
+        from app.database import delete_meeting, get_meeting, init_db
+
+        init_db()
+        tmp = Path(tempfile.mkdtemp())
+        sample = tmp / "s.webm"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=300:duration=2", "-c:a", "libopus",
+                        str(sample)], check=True)
+        client = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        client.get(f"/?token={main.SESSION_TOKEN}")
+        pid = client.post("/api/record/page/start").json()["page_id"]
+        client.post(f"/api/record/page/{pid}/chunk", content=sample.read_bytes(), headers={"X-Chunk-Seq": "0"})
+        with mock.patch.object(recording, "enqueue_meeting_job") as enqueue, \
+                mock.patch("app.ffmpeg_manager.tool_cmd", return_value="ffmpeg"):
+            r = client.post("/api/record/finish", json={"title": "Фоновое сведение", "page_id": pid, "has_mic": True,
+                                                        "notes": "заметка"})
+            self.assertEqual(r.status_code, 200, r.text)
+            mid = r.json()["created"][0]["id"]
+            self.addCleanup(delete_meeting, mid, True)
+            for _ in range(100):
+                m = get_meeting(mid)
+                if m["status"] != "mixing":
+                    break
+                time.sleep(0.05)
+        self.assertEqual(m["status"], "queued")
+        self.assertTrue(Path(m["media_path"]).is_file())
+        self.assertEqual(m["user_notes"], "заметка")
+        enqueue.assert_called_once_with(mid)

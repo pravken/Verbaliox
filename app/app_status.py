@@ -19,6 +19,9 @@ KIND_LABELS = {
 }
 
 
+# Stopped recordings whose tracks are being mixed (app/api/recording.py): no job may take them meanwhile
+mixing: set = set()
+
 # The speech model recognizing each recording right now (the routed model, each model of the precise
 # mode in turn): shown as «Идёт расшифровка: <model>», the recording's own choice may be «Авто»
 _asr_now: Dict[int, str] = {}
