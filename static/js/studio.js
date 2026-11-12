@@ -990,6 +990,10 @@ async function startLiveCaptions(ctx, stream) {
     const pcm = downsampleTo16k(e.data, ctx.sampleRate);
     liveCap.pcm.push(pcm);
     liveCap.pcmLen += pcm.length;
+    // Sent from here too: with the window minimized the page's timers fire about once a minute, the
+    // audio then reached the server in minute-long lumps and the captions came in batches. The audio
+    // thread keeps its pace in the background
+    if (Date.now() - (liveCap.sentAt || 0) >= 1000) sendLiveAudio();
   };
   liveCap.timer = setInterval(sendLiveAudio, 1000);
   syncStudioCaptions();
@@ -1005,6 +1009,7 @@ async function sendLiveAudio() {
   liveCap.pcm = [];
   liveCap.pcmLen = 0;
   liveCap.inFlight = true;
+  liveCap.sentAt = Date.now();
   const session = liveCap.session;
   try {
     const res = await fetch(`/api/live/${session}/audio?since=${liveCap.lastId}`, {
