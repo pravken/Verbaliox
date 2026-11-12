@@ -329,6 +329,7 @@ _MEETING_EXTRA_COLUMNS = {
     "processing_json": "TEXT DEFAULT '{}'",  # what is done to the sound and text when transcribed (see effective_processing)
     "transcript_model": "TEXT DEFAULT ''",
     "transcript_at": "TEXT DEFAULT ''",
+    "merged_models_json": "TEXT DEFAULT '[]'",  # the models a merged transcript was made from (the chips light them)
     # The speech language the user chose ("auto", "mixed", "ru"...): language holds the one heard, which a
     # transcription overwrites; a new run starts from this choice ('' before the first run: language is it)
     "language_choice": "TEXT DEFAULT ''",
@@ -785,7 +786,8 @@ def save_meeting_results(
         conn.close()
 
 
-_VERSION_COLUMNS = "transcript_model, transcript_at, speakers_json, segments_backup_json, translations_json, language, transcript_verified"
+_VERSION_COLUMNS = ("transcript_model, transcript_at, speakers_json, segments_backup_json, translations_json, language, "
+                    "transcript_verified, merged_models_json")
 
 
 def _stash_active(conn: sqlite3.Connection, meeting_id: int) -> Optional[str]:
@@ -798,6 +800,8 @@ def _stash_active(conn: sqlite3.Connection, meeting_id: int) -> Optional[str]:
     data = {"segments": segments, "speakers": _loads_dict(row["speakers_json"]),
             "segments_backup": _loads_list(row["segments_backup_json"]), "translations": _loads_dict(row["translations_json"]),
             "language": row["language"] or "", "verified": bool(row["transcript_verified"]), "at": row["transcript_at"] or ""}
+    if row["transcript_model"] == "merged":
+        data["merged_models"] = _loads_list(row["merged_models_json"])
     conn.execute("INSERT OR REPLACE INTO transcript_versions (meeting_id, model, data) VALUES (?, ?, ?)",
                  (meeting_id, row["transcript_model"], json.dumps(data, ensure_ascii=False)))
     return row["transcript_model"]
@@ -814,6 +818,17 @@ def stash_transcript_for(meeting_id: int, model: str) -> None:
             if row and row["transcript_model"] and row["transcript_model"] != model and _stash_active(conn, meeting_id):
                 conn.execute("UPDATE meetings SET translations_json = '{}', transcript_verified = 0 WHERE id = ?", (meeting_id,))
             conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model = ?", (meeting_id, model))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def set_merged_models(meeting_id: int, models: List[str]) -> None:
+    """The models the merged transcript shown was made from (app/transcriber.py, both merges)."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            conn.execute("UPDATE meetings SET merged_models_json = ? WHERE id = ?", (json.dumps(list(models)), meeting_id))
             conn.commit()
         finally:
             conn.close()
@@ -900,6 +915,8 @@ def _show_version(conn: sqlite3.Connection, meeting_id: int, model: str, data: D
         (model, data.get("at") or "", json.dumps(data.get("speakers") or {}, ensure_ascii=False),
          json.dumps(backup, ensure_ascii=False) if backup else "", json.dumps(data.get("translations") or {}, ensure_ascii=False),
          data.get("language") or "", 1 if data.get("verified") else 0, *([model] if next_model else []), meeting_id))
+    conn.execute("UPDATE meetings SET merged_models_json = ? WHERE id = ?",
+                 (json.dumps(data.get("merged_models") or [], ensure_ascii=False), meeting_id))
     _write_segments(conn, meeting_id, segments)
     _reindex_segments(conn, meeting_id, segments)
     conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model = ?", (meeting_id, model))
@@ -1704,6 +1721,7 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
     d["translations"] = resolve_all(d["segments"], _loads_dict(d.pop("translations_json", None)))
     d["transcript_versions"] = transcript_versions(conn, d["id"])
     d["processing"] = effective_processing(_loads_dict(d.pop("processing_json", None)))
+    d["merged_models"] = _loads_list(d.pop("merged_models_json", None)) if d.get("transcript_model") == "merged" else []
     return d
 
 

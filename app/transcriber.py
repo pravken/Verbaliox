@@ -473,6 +473,9 @@ def _merge_runner(meeting_id: int) -> str:
     save_segments_backup(meeting_id, [])
     save_meeting_results(meeting_id, speakers=res["speakers"], segments=res["segments"],
                          language=versions[res["base"]].get("language") or meeting.get("language"), transcript_model=MERGED)
+    from app.database import set_merged_models
+
+    set_merged_models(meeting_id, res["models"])
     names = ", ".join(format_whisper_model_name(m) for m in res["models"])
     return (f"Сведено из {len(res['models'])} версий ({names}): спорных мест {res['disputed']}, "
             f"из них выбрала модель анализа {res['by_llm']}.{note}")
@@ -1112,6 +1115,9 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     stash_transcript_for(meeting_id, MERGED)
     save_meeting_results(meeting_id, speakers=res["speakers"], segments=res["segments"], language=detected_lang,
                          transcript_model=MERGED)
+    from app.database import set_merged_models
+
+    set_merged_models(meeting_id, res["models"])
     res["chat"] = chat is not None
     return res
 

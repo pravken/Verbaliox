@@ -2458,6 +2458,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .tx-chip.is-missing { border-style: dashed; color: #AEAEB2; }
 .tx-chip-size { font-size: 11px; color: #8E8E93; font-family: var(--font-mono); }
 .tx-chip.is-picked { border-color: #0A84FF; box-shadow: 0 0 0 1px #0A84FF inset; }
+/* a model the merged text shown was made from */
+.tx-chip.is-in-merge { background: rgba(10, 132, 255, 0.16); border-color: rgba(10, 132, 255, 0.55); color: #FFFFFF; }
 .tx-chip.is-shown { background: #0A84FF; border-color: #0A84FF; color: #FFFFFF; }
 .tx-chip.is-shown .tx-chip-mark { color: #FFFFFF; }
 .tx-chip.is-shown:hover:not(:disabled) { background: #2B95FF; }
