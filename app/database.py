@@ -27,6 +27,9 @@ _db_lock = threading.RLock()
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=10)
     conn.row_factory = sqlite3.Row
+    # WAL (set in init_db): a commit is written to the log, synced at checkpoints — safe against a crash
+    # of the app, and every recognized phrase's progress no longer waits for the disk
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
