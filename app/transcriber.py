@@ -942,6 +942,15 @@ def _release_speech_models() -> None:
         asr_onnx.release()
     except Exception:
         traceback.print_exc()
+    try:  # the worker of live captions keeps its Whisper after a recording: not while captions run
+        from app import live
+
+        worker = live._worker
+        if worker is not None and worker.proc is not None and worker.proc.poll() is None and not live.has_sessions():
+            with worker.lock:
+                worker._kill()
+    except Exception:
+        traceback.print_exc()
     clear_vram()
 
 

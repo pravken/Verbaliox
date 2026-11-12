@@ -333,6 +333,37 @@ def job_stage() -> Optional[str]:
     return (m or {}).get("status") or "transcribing"
 
 
+def release_idle_speech_models() -> List[str]:
+    """Before an analysis model answers: every speech model nothing uses now leaves the memory —
+    Whisper, GigaAM / Parakeet, the speaker model and the idle worker of live captions (it kept its
+    Whisper loaded after a recording). Not while a job recognizes or captions run. Returns what went."""
+    from app import asr_onnx, live, transcriber
+    from app.diarizer import ecapa_loaded_on, unload_diarizer
+
+    if job_stage() in _ASR_STAGES or job_stage() == "diarizing" or live.has_sessions():
+        return []
+    gone: List[str] = []
+    if transcriber.whisper_cache_key():
+        transcriber.release_whisper_model()
+        gone.append("whisper")
+    if asr_onnx.loaded_models():
+        asr_onnx.release()
+        gone.append("onnx")
+    if ecapa_loaded_on():
+        unload_diarizer()
+        gone.append("speakers")
+    worker = live._worker
+    if worker is not None and worker.proc is not None and worker.proc.poll() is None:
+        with worker.lock:
+            worker._kill()
+        gone.append("live")
+    if gone:
+        from app.hardware import clear_vram
+
+        clear_vram()
+    return gone
+
+
 def stop_work() -> None:
     """The switch: the jobs are cancelled, the captions of a recording end, and Ollama lets its models
     go (an overview being written breaks off), so nothing loads a model again right after."""
