@@ -67,6 +67,12 @@ class TeamsCaptionsTest(unittest.TestCase):
         r._take([*before, ("Natalia Rudavina", "А это говорится сейчас, дальше"), ("Vladislav Lisnevskiy", "Новая реплика.")])
         self.assertEqual([m["text"] for m in r.snapshot()["marks"]], ["А это говорится сейчас, дальше", "Новая реплика."])
 
+    def test_captions_switched_on_during_the_recording_are_all_its_own(self):
+        r = tc.Reader()
+        r.started_at = time.time() - 180  # the panel is first found 3 minutes in
+        r._take([("Natalia Rudavina", "Сказано уже во время записи."), ("Echo", "И это тоже.")])
+        self.assertEqual(len(r.snapshot()["marks"]), 2)
+
     def test_a_long_meeting_compares_recent_lines_only(self):
         r = tc.Reader()
         r.started_at = time.time()
