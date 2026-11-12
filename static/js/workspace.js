@@ -173,6 +173,7 @@ function renderTxModelChips(m, list, done, shown, pick, busy) {
   let inMerge = new Set();
   // «Все модели» picked: the models it will run light up, before «Расшифровать» is pressed
   const precise = pick === TX_PRECISE && !busy;
+  box.classList.toggle('tx-chips-precise', precise);
   if (precise && state.txPreciseModels && state.txPreciseModels.id === m.id) inMerge = new Set(state.txPreciseModels.models);
   else if (shown === 'merged' && (pick === 'merged' || !pick)) {
     inMerge = new Set(m.merged_models || []);
