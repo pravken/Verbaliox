@@ -187,6 +187,7 @@ def init_db() -> None:
             "summary_grounding": "true",  # summaries checked against the transcript (app/grounding.py)
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
             "dictionary_fuzzy": "true",  # dictionary terms replace words that sound like them (app/vocab.py)
+            "rec_echo_cancel": "true",  # the speakers' echo taken out of the microphone on save (app/echo_cancel.py)
             "asr_ensemble": "false",  # the precise mode for new recordings (several models + merging)
             "asr_ensemble_models": "",  # its models, comma separated; "" = the most accurate installed ones
             "auto_chapters": "true",  # the topics above the timeline, after the automatic summary (> 10 min)

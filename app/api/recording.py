@@ -190,9 +190,18 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     system_skip = 0.0
     if cap and page and payload.page_started_at > 0 and cap.started_at > 0:
         system_skip = min(30.0, max(0.0, payload.page_started_at - cap.started_at))
+    # The speakers' echo taken out of the microphone (app/echo_cancel.py): the mix then uses the
+    # cleaned microphone instead of the page's sound
+    mic: Optional[Path] = None
+    if page and system and payload.has_mic and (get_all_settings().get("rec_echo_cancel") or "true").lower() == "true":
+        from app.echo_cancel import clean_microphone
+
+        cleaned = page.with_name(page.name + ".mic.wav")
+        if await run_in_threadpool(clean_microphone, tool_cmd("ffmpeg"), page, system, system_skip, cleaned):
+            mic = cleaned
     safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
     if screen:
-        audio = [p for p in (page if payload.has_mic else None, system) if p]
+        audio = [p for p in ((mic or page) if payload.has_mic else None, system) if p]
         dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}.mp4"
         res = await run_in_threadpool(_run_ffmpeg, screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest,
                                                                        system_skip if len(audio) == 2 else 0.0))
@@ -202,7 +211,7 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
             return _salvage_parts(payload.title.strip() or "Запись",
                                   [(screen, True), *[(p, p is page and payload.has_video) for p in (page, system) if p]],
                                   payload.notes)
-        for p in (screen, page, system):
+        for p in (screen, page, system, mic):
             if p:
                 p.unlink(missing_ok=True)
         return _queue_recording(payload, dest, safe_stem, has_video=True)
@@ -210,7 +219,7 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     has_video = bool(payload.has_video and page)
     ext = ".webm" if page and (has_video or not system) else ".m4a"
     dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}{ext}"
-    cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest, system_skip)
+    cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest, system_skip, mic=mic)
     if cmd is None:
         await run_in_threadpool(shutil.move, str(page), str(dest))  # the recordings folder may be on another drive
     else:
@@ -222,12 +231,15 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
             else:
                 print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
                 dest.unlink(missing_ok=True)
+                if mic:
+                    mic.unlink(missing_ok=True)  # the page's own part is kept instead
                 return _salvage_parts(payload.title.strip() or "Запись",
                                       [(p, has_video if p is page else False) for p in (page, system) if p], payload.notes)
         if page:
             page.unlink(missing_ok=True)
-    if system:
-        system.unlink(missing_ok=True)
+    for p in (system, mic):
+        if p:
+            p.unlink(missing_ok=True)
     return _queue_recording(payload, dest, safe_stem, has_video=has_video)
 
 def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, has_video: bool) -> Dict[str, Any]:

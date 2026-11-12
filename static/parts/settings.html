@@ -259,6 +259,11 @@
             </select>
             <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="liveModelHint">Авто: для русской речи — GigaAM, для других европейских языков и автоопределения — Parakeet (если скачаны; работают на процессоре и не занимают видеокарту). Иначе Whisper Turbo (или основная модель, если Turbo не скачана)</p>
           </div>
+          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
+            <span><span data-i18n="echoToggle">Убирать эхо колонок из микрофона</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="echoHint">Когда записываются и микрофон, и звук компьютера: голоса собеседников, которые микрофон услышал из колонок, вычитаются при сохранении записи. В наушниках эха нет — запись не меняется. Сохранение длится дольше: около минуты на час записи.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-echo-cancel" checked />
+          </label>
 
         </div>
 
