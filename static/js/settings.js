@@ -877,7 +877,7 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '' };
+  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '', ensemble: false };
   const item = id => catalog.find(i => i.id === id);
   const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
   const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
@@ -942,6 +942,10 @@ function openFirstRunWizard(data) {
         </div>
         ${roles.ru ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frRouteNote').replace('{ru}', () => formatModelName(roles.ru)).replace('{main}', () => formatModelName(roles.main)))}</p>` : ''}
         ${st.ai === 'cloud' ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudNext'))}</p>` : ''}
+        ${models().length >= 2 ? `<label class="vs-row cursor-pointer text-xs text-apple-label rounded-xl border border-white/10 p-3">
+            <span><span class="text-white font-medium">${escapeHtml(t('ensToggle'))}</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5">${escapeHtml(t('frEnsHint'))}</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
         <p class="text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('frBackground'))}</p>`;
     }
     const canNext = st.step !== 0 || models().length > 0;
@@ -960,6 +964,8 @@ function openFirstRunWizard(data) {
   };
   draw();
   wrap.addEventListener('click', async e => {
+    const ens = e.target.closest('input[data-ens]');
+    if (ens) { st.ensemble = ens.checked; return; }
     const box = e.target.closest('input[data-model]');
     if (box) {
       if (box.checked) st.custom.add(box.dataset.model); else st.custom.delete(box.dataset.model);
@@ -979,7 +985,7 @@ function openFirstRunWizard(data) {
     if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks, st.main);
+      await runFirstRunSetup(data, models(), st.ai, picks, st.main, st.ensemble && models().length >= 2);
     }
   });
   document.body.appendChild(wrap);
@@ -987,11 +993,12 @@ function openFirstRunWizard(data) {
 
 // What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
 // the app downloads one at a time) and the analysis model, all in the background
-async function runFirstRunSetup(data, chosen, ai, picks, mainPick) {
+async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false) {
   const roles = wizardRoles(chosen, mainPick);
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
     language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
+  if (ensemble === true) settings.asr_ensemble = 'true';  // the precise mode for every new recording
   // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
   // here, the server would refuse the whole request and every choice of the wizard would be lost
   if (ai === 'local') settings.llm_provider = 'ollama';
