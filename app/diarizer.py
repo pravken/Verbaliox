@@ -231,7 +231,7 @@ def _embed_slices(
     return out  # type: ignore[return-value]
 
 
-OVERRIDE_MIN_SPEAKERS = 4   # a count of 1 or 2 said is corrected only to four voices or more
+OVERRIDE_MIN_SPEAKERS = 3   # a count of 1 or 2 said is corrected only to three voices or more
 OVERRIDE_MIN_SCORE = 0.30   # and only when the groups are clearly apart (silhouette of the voices)
 
 
@@ -249,7 +249,7 @@ def _determine_clusters(
     n_samples = len(embeddings)
     if n_samples == 0:
         return np.array([], dtype=int)
-    # One or two speakers said for the recording, but the voices clearly make four or more: the count
+    # One or two speakers said for the recording, but the voices clearly make three or more: the count
     # is corrected (a wrong hint put a whole meeting into one or two speakers)
     if num_speakers_hint in (1, 2) and n_samples >= 8:
         auto = _determine_clusters(embeddings, durations, 0, max_speakers)

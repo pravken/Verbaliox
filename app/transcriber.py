@@ -1411,7 +1411,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         # The count of speakers said for the recording was corrected by the voices (app/diarizer.py)
         speakers_note = ""
-        if diarization_enabled and num_speakers_hint in (1, 2) and len(speakers_meta) >= 4:
+        if diarization_enabled and num_speakers_hint in (1, 2) and len(speakers_meta) >= 3:
             speakers_note = f"участников больше, чем указано: по голосам их {len(speakers_meta)}"
 
         # The precise mode: other models recognize the recording too, and the versions are merged
