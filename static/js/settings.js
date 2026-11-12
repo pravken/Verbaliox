@@ -566,6 +566,7 @@ function formatModelName(modelId) {
   const raw = String(modelId || '').trim();
   if (!raw) return 'AI';
   if (raw === 'merged') return t('mergedVersion');
+  if (raw === 'teams') return t('teamsVersion');  // the Teams captions read while recording
   if (raw === 'auto') return t('modelAutoByLang');  // the Russian model or the main one (app/speech_route.py)  // one text from several models (app/transcript_merge.py)
   const lower = raw.toLowerCase();
   if (MODEL_DISPLAY_NAMES[lower]) return MODEL_DISPLAY_NAMES[lower];

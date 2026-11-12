@@ -1,5 +1,6 @@
 from __future__ import annotations  # type hints name WhisperModel, which is imported only when used
 
+import re
 import threading
 import time
 import traceback
@@ -968,6 +969,29 @@ def _release_analysis_models() -> None:
         print(f"[transcriber] Ollama models not unloaded: {e}", flush=True)
 
 
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _phrase_by_words(segments: List[Dict[str, Any]], at: float, text: str, window: float = 15.0) -> Optional[str]:
+    """The speaker of the phrase within `window` s of `at` that shares most words with `text` (half of
+    them at least), or None."""
+    words = {w for w in _WORD_RE.findall(text.lower()) if len(w) > 2}
+    if len(words) < 2:
+        return None
+    best, score = None, 0.5
+    for seg in segments:
+        a, b = float(seg.get("start") or 0), float(seg.get("end") or 0)
+        if b < at - window or a > at + window:
+            continue
+        seg_words = {w for w in _WORD_RE.findall(str(seg.get("text") or "").lower()) if len(w) > 2}
+        if not seg_words:
+            continue
+        share = len(words & seg_words) / len(words)
+        if share > score:
+            best, score = seg.get("speaker"), share
+    return best
+
+
 def apply_speaker_marks(speakers: Dict[str, Dict[str, Any]], segments: List[Dict[str, Any]],
                         marks: List[Dict[str, Any]]) -> int:
     """«Сейчас говорит» marked in the studio: the voice heard at those moments gets the name. Each
@@ -978,6 +1002,13 @@ def apply_speaker_marks(speakers: Dict[str, Dict[str, Any]], segments: List[Dict
     for mk in marks or []:
         at, name = float(mk.get("at") or 0), str(mk.get("name") or "").strip()
         if not name:
+            continue
+        # A caption line of Teams: the phrase near it with the same words (captions lag behind and the
+        # moment can fall on the next speaker's phrase)
+        by_text = _phrase_by_words(segments, at, mk.get("text") or "")
+        if by_text is not None:
+            if by_text in speakers:
+                votes[(name, by_text)] = votes.get((name, by_text), 0) + 2  # a match of words weighs more
             continue
         best, gap = None, 3.0
         for seg in segments:
@@ -1139,7 +1170,8 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
         chat = llm.target(None, local_only=is_local_only(get_meeting(meeting_id))).chat
     except Exception as e:  # no analysis model: the disputed places go to the more accurate model
         print(f"[ensemble] no analysis model: {e}", flush=True)
-    versions = {m: v for m, v in all_transcripts(meeting_id).items() if m in [main_model, *done]}
+    # the Teams captions of the recording (app/teams_captions.py) are one more voice, a light one
+    versions = {m: v for m, v in all_transcripts(meeting_id).items() if m in [main_model, *done, "teams"]}
     res = merge(versions, detected_lang or "", chat, base=main_model,
                 progress=lambda pct, text: update_meeting_progress(meeting_id, progress=86 + 3 * pct // 100, stage_text=text),
                 check_cancel=lambda: _check_cancel(meeting_id))

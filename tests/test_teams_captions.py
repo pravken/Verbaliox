@@ -38,3 +38,29 @@ class TeamsCaptionsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TeamsVersionTest(unittest.TestCase):
+    def test_the_captions_become_a_version_of_their_own(self):
+        marks = [{"at": 10.0, "name": "Natalia Rudavina", "text": "Да, но это опять же каким-то куском?"},
+                 {"at": 14.0, "name": "Vladislav Lisnevskiy", "text": "А так окей."},
+                 {"at": 3.0, "name": "Борис"}]  # a mark clicked by hand: no text, not a line
+        v = tc.as_transcript(marks)
+        self.assertEqual([s["text"] for s in v["segments"]], ["Да, но это опять же каким-то куском?", "А так окей."])
+        self.assertEqual([v["speakers"][s["speaker"]]["name"] for s in v["segments"]], ["Natalia Rudavina", "Vladislav Lisnevskiy"])
+        first = v["segments"][0]
+        self.assertLessEqual(first["end"], 14.0)  # it ends where the next line starts
+        self.assertEqual(len(first["words"]), 7)
+        self.assertIsNone(tc.as_transcript([{"at": 1, "name": "Борис"}]))
+
+    def test_a_clear_keeps_the_captions(self):
+        from app.database import (all_transcripts, clear_results, create_meeting, init_db,
+                                  save_meeting_results, save_transcript_version)
+
+        init_db()
+        m = create_meeting(title="Teams", filename="a.wav", media_path="a.wav")
+        save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "speaker": "SPEAKER_00", "text": "раз"}],
+                             speakers={"SPEAKER_00": {"name": "Участник 1"}}, transcript_model="gigaam-v3")
+        save_transcript_version(m["id"], tc.TEAMS, tc.as_transcript([{"at": 0, "name": "Анна", "text": "раз два три"}]))
+        clear_results(m["id"])
+        self.assertEqual(list(all_transcripts(m["id"])), [tc.TEAMS])  # the model's text went, the captions stayed

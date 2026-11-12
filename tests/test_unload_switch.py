@@ -144,3 +144,17 @@ class SpeakerMarksTest(unittest.TestCase):
         self.assertEqual(speakers["SPEAKER_01"]["name"], "Наталья")
         self.assertEqual(speakers["SPEAKER_00"]["name"], "Владислав")
         self.assertEqual(speakers["SPEAKER_02"]["name"], "Участник 3")  # one name per voice
+
+
+class TeamsMarksByWordsTest(unittest.TestCase):
+    """A Teams caption line names the voice of the phrase with its words, even when it lags behind."""
+
+    def test_the_words_win_over_the_moment(self):
+        speakers = {"SPEAKER_00": {"name": "Участник 1"}, "SPEAKER_01": {"name": "Участник 2"}}
+        segments = [{"start": 0, "end": 6, "speaker": "SPEAKER_00", "text": "Мы можем сейчас контур сделать? Да вот примерный контур."},
+                    {"start": 6, "end": 12, "speaker": "SPEAKER_01", "text": "Горящей земли, а потом будем отрезать кусочками."}]
+        # the caption of the first phrase came late: its moment falls on the second one
+        marks = [{"at": 8.0, "name": "Vladislav Lisnevskiy", "text": "Мы можем сейчас контур сделать? Да вот вот примерный контур вот."}]
+        self.assertEqual(transcriber.apply_speaker_marks(speakers, segments, marks), 1)
+        self.assertEqual(speakers["SPEAKER_00"]["name"], "Vladislav Lisnevskiy")
+        self.assertEqual(speakers["SPEAKER_01"]["name"], "Участник 2")

@@ -116,12 +116,13 @@ function renderTxModelBar() {
   const busy = !DONE_STATUSES.includes(m.status);
   sel.disabled = busy;
   renderTxModelChips(m, list, done, shown, pick, busy);
-  document.getElementById('tx-proc-btn').classList.toggle('hidden', pick === 'merged');  // not made by a model
+  const notModel = pick === 'merged' || pick === 'teams';  // not made by a model: nothing to transcribe with
+  document.getElementById('tx-proc-btn').classList.toggle('hidden', notModel);
   if (busy) hideTxProcMenu();
   const btn = document.getElementById('tx-transcribe-btn');
   btn.disabled = busy || !!m.media_removed;  // without the sound there is nothing to transcribe
   btn.classList.toggle('opacity-40', btn.disabled);
-  btn.classList.toggle('hidden', pick === 'merged');  // the merged text is not made by a model
+  btn.classList.toggle('hidden', notModel);
   const again = !!pick && pick === shown;
   document.getElementById('tx-transcribe-label').textContent = t(pick === TX_PRECISE ? 'txPreciseRun' : again ? 'txTranscribeAgain' : 'txTranscribe');
   // The next step while the picked model has no text yet: the call to action stands out in blue
@@ -176,7 +177,8 @@ function renderTxModelChips(m, list, done, shown, pick, busy) {
     const fits = i.id === 'merged' || txModelFits(i, m) || done.has(i.id);
     const state = working === i.id ? 'busy' : i.id === shown ? 'shown' : done.has(i.id) ? 'done' : !i.installed ? 'missing' : 'none';
     const mark = { busy: '<span class="tx-chip-spin" aria-hidden="true"></span>', shown: '●', done: '✓', missing: '↓', none: '○' }[state];
-    const tip = t(`txChip_${state}`).replace('{size}', () => i.size || '') + (fits ? '' : ` · ${t('txModelOtherLang')}`)
+    const tip = (i.id === 'teams' && state === 'done' ? t('txChipTeams') : t(`txChip_${state}`).replace('{size}', () => i.size || ''))
+      + (fits ? '' : ` · ${t('txModelOtherLang')}`)
       + (inMerge.has(i.id) ? ` · ${t('txChipInMerge')}` : '');
     const merged = inMerge.has(i.id);
     return `<button type="button" role="radio" aria-checked="${pick === i.id}" class="tx-chip is-${state}${pick === i.id ? ' is-picked' : ''}${merged ? ' is-in-merge' : ''}"
