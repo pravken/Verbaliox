@@ -838,6 +838,26 @@ def _start_transcription(
 PARTIAL_EVERY_SEC = 20.0
 
 
+_partial_shown: set = set()  # recordings whose text on screen is a part saved by the job running
+
+
+def _index_partial(meeting_id: int) -> bool:
+    """A first transcription cancelled or failed half way leaves the text recognized so far on screen
+    (_PartialTranscript): it is indexed, so it is found by the search like any text. True if there was one."""
+    if meeting_id not in _partial_shown:
+        return False
+    _partial_shown.discard(meeting_id)
+    try:
+        m = get_meeting(meeting_id) or {}
+        if m.get("transcript_model") or not m.get("segments"):
+            return False
+        save_meeting_results(meeting_id, segments=m["segments"], speakers=m.get("speakers") or {})
+        return True
+    except Exception:
+        traceback.print_exc()
+        return False
+
+
 class _PartialTranscript:
     """Shows the text while it is recognized: every PARTIAL_EVERY_SEC the phrases so far are saved
     (one speaker until diarization runs) and the page is told to reload them."""
@@ -861,6 +881,7 @@ class _PartialTranscript:
         partial = [{**seg, "id": i, "speaker": "SPEAKER_00"} for i, seg in enumerate(raw_segments)]
         save_meeting_results(self.meeting_id, segments=partial, reindex=False,
                              speakers={"SPEAKER_00": {"name": "Участник 1", "color": "#0A84FF"}})
+        _partial_shown.add(self.meeting_id)
         events.publish({"type": "segments", "id": self.meeting_id})
 
 
@@ -1748,16 +1769,18 @@ def _process_meeting_job(meeting_id: int) -> None:
             unload_diarizer()
         except Exception:
             pass
+        partial = _index_partial(meeting_id)
         update_meeting_progress(
             meeting_id,
             status="cancelled",
-            stage_text="Обработка отменена",
+            stage_text="Обработка отменена" + (": показана часть, распознанная до отмены" if partial else ""),
             error_message="",
         )
     except Exception as e:
         whisper_model = None
         release_whisper_model()
         tb = traceback.format_exc()
+        _index_partial(meeting_id)
         update_meeting_progress(
             meeting_id,
             status="failed",
