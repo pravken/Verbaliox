@@ -244,12 +244,19 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     # The speakers' echo taken out of the microphone (app/echo_cancel.py): the mix then uses the
     # cleaned microphone instead of the page's sound
     mic: Optional[Path] = None
+    original_system: Optional[Path] = None
     if page and system and payload.has_mic and (get_all_settings().get("rec_echo_cancel") or "true").lower() == "true":
         from app.echo_cancel import clean_microphone
 
         cleaned = page.with_name(page.name + ".mic.wav")
-        if await run_in_threadpool(clean_microphone, tool_cmd("ffmpeg"), page, system, system_skip, cleaned):
+        lined_up = page.with_name(page.name + ".sys.wav")
+        if await run_in_threadpool(clean_microphone, tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up):
             mic = cleaned
+            if lined_up.is_file():
+                # the system sound where the microphone heard it: mixed instead, nothing more to skip
+                original_system, system, system_skip = system, lined_up, 0.0
+    print(f"[record] tracks: page={'yes' if page else 'no'} system={'yes' if system else 'no'} "
+          f"skip={system_skip:.2f}s echo={'removed' if mic else 'no'}", flush=True)
     safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
     if screen:
         audio = [p for p in ((mic or page) if payload.has_mic else None, system) if p]
@@ -259,10 +266,13 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
         if res.returncode != 0 or not dest.is_file():
             print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
             dest.unlink(missing_ok=True)
+            if original_system:  # the parts kept are the ones recorded
+                system.unlink(missing_ok=True)
+                system = original_system
             return _salvage_parts(payload.title.strip() or "Запись",
                                   [(screen, True), *[(p, p is page and payload.has_video) for p in (page, system) if p]],
                                   payload.notes)
-        for p in (screen, page, system, mic):
+        for p in (screen, page, system, mic, original_system):
             if p:
                 p.unlink(missing_ok=True)
         return _queue_recording(payload, dest, safe_stem, has_video=True)
@@ -284,11 +294,14 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
                 dest.unlink(missing_ok=True)
                 if mic:
                     mic.unlink(missing_ok=True)  # the page's own part is kept instead
+                if original_system:
+                    system.unlink(missing_ok=True)
+                    system = original_system
                 return _salvage_parts(payload.title.strip() or "Запись",
                                       [(p, has_video if p is page else False) for p in (page, system) if p], payload.notes)
         if page:
             page.unlink(missing_ok=True)
-    for p in (system, mic):
+    for p in (system, mic, original_system):
         if p:
             p.unlink(missing_ok=True)
     return _queue_recording(payload, dest, safe_stem, has_video=has_video)

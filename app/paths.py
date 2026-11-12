@@ -387,3 +387,19 @@ def dir_size(path: Path) -> int:
             seen.add(key)
             total += st.st_size
     return total
+
+
+def explorer_command(path: Path, select: bool = True) -> str:
+    """The Explorer command that shows a file selected in its folder (or opens a folder). Given as one
+    command line: handed «/select,<path>» as one argument, a path with spaces got quotes around the
+    whole of it, Explorer did not understand them and opened «Documents» instead."""
+    p = str(path).replace('"', "")
+    return f'explorer.exe /select,"{p}"' if select else f'explorer.exe "{p}"'
+
+
+def reveal_in_explorer(path: Path) -> None:
+    """Windows Explorer with the file selected in its folder, or the folder itself opened."""
+    import subprocess
+
+    path = Path(path)
+    subprocess.Popen(explorer_command(path, select=not path.is_dir()))
