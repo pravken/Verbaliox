@@ -97,6 +97,9 @@ def background() -> List[str]:
     check("Резервная копия", lambda: backup.busy > 0)
     check("Диктовка", lambda: dictation._state.get("active"))
     check("Скачивание по ссылке", _downloading)
+    # a stopped recording whose tracks are being mixed: closing the app now loses the mix, its title
+    # and notes (its parts come back only as separate recordings)
+    check("Сведение дорожек записи", lambda: bool(mixing))
     return out
 
 
