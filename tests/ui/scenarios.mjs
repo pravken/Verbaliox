@@ -132,8 +132,11 @@ await step('first run wizard', async () => {
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
-  // Two speech models in the set: the precise mode is offered on the last step
+  // Two speech models in the set: the precise mode is offered on the last step, and with it Whisper Pro
+  // joins the models to download
   await page.click('#first-run-wizard label:has(input[data-ens])');
+  await sleep(200);
+  expect((await page.textContent('#first-run-dialog')).includes('Whisper Pro'), 'Whisper Pro not among the downloads');
   await page.click('#first-run-wizard button[data-a="next"]');
   await sleep(600);
   await page.unrouteAll({ behavior: 'ignoreErrors' });

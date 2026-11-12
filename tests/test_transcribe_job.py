@@ -372,6 +372,21 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertEqual(m["transcript_model"], "gigaam-v3")
         self.assertIn("нет других установленных моделей", m["stage_text"])
 
+    def test_whisper_pro_is_always_among_the_models(self):
+        from app import asr_onnx
+
+        installed = {"gigaam-v3", "parakeet-v3", "large-v3", "large-v3-turbo"}
+        settings = {"asr_ensemble_models": ""}
+        with mock.patch.object(asr_onnx, "is_installed", side_effect=lambda m: m in installed), \
+                mock.patch("app.model_manager.is_whisper_model_installed", side_effect=lambda m: m in installed):
+            got = transcriber.ensemble_models(settings, "parakeet-v3", "ru", False)
+            self.assertEqual(got[0], "large-v3")
+            self.assertEqual(len(got), transcriber.ENSEMBLE_MAX_MODELS - 1)
+            # English: GigaAM does not know it, Whisper Pro still leads
+            self.assertEqual(transcriber.ensemble_models(settings, "gigaam-v3", "en", False)[0], "large-v3")
+            installed.discard("large-v3")
+            self.assertNotIn("large-v3", transcriber.ensemble_models(settings, "parakeet-v3", "ru", False))
+
     def test_off_for_this_recording(self):
         from app.database import set_meeting_processing
 

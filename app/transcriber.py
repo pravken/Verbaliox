@@ -959,6 +959,7 @@ def _release_analysis_models() -> None:
 # --- The precise mode: other models recognize the recording too, and the versions are merged ---
 ENSEMBLE_CANDIDATES = ("gigaam-v3", "large-v3", "parakeet-v3", "large-v3-turbo")
 ENSEMBLE_MAX_MODELS = 3  # with the main one: each model is one more pass over the whole recording
+ENSEMBLE_ALWAYS = "large-v3"  # Whisper Pro
 
 
 def ensemble_models(settings: Dict[str, str], main_model: str, lang: Optional[str], mixed: bool) -> List[str]:
@@ -982,7 +983,14 @@ def ensemble_models(settings: Dict[str, str], main_model: str, lang: Optional[st
         elif m not in whisper_ids or not is_whisper_model_installed(m):
             continue
         out.append(m)
-    return out if chosen else ranked(out, lang or "")[: ENSEMBLE_MAX_MODELS - 1]
+    if chosen:
+        return out
+    order = ranked(out, lang or "")
+    # Whisper Pro is always among them when it is downloaded: the most robust for noisy calls and
+    # accents, it is the variant the others are weighed against
+    if ENSEMBLE_ALWAYS in order:
+        order = [ENSEMBLE_ALWAYS] + [m for m in order if m != ENSEMBLE_ALWAYS]
+    return order[: ENSEMBLE_MAX_MODELS - 1]
 
 
 def _speakers_by_time(segments: List[Dict[str, Any]], base: List[Dict[str, Any]]) -> None:
