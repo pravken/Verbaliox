@@ -34,6 +34,25 @@ class LongSummaryTest(unittest.TestCase):
         self.assertIn("[00:00] начало части", final)  # the beginning of the meeting is there
         self.assertIn("от начала до конца", final)
 
+    def test_the_parts_are_read_once_for_the_overview_and_the_chapters(self):
+        segs = [{"start": t, "end": t + 9, "speaker": "S1", "text": "обсуждаем настройку рендера " * 6}
+                for t in range(0, 5400, 10)]
+        asked = []
+
+        def chat(system, user):
+            asked.append(user[:20])
+            return "- [00:00] конспект" if user.startswith("Это фрагмент") else "ответ"
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000, label="qwen3:8b")
+        llm.chat.side_effect = chat
+        notes = {}
+        with mock.patch("app.llm.target", return_value=llm):
+            ollama_client.generate_meeting_summary(segs, {}, "protocol", part_notes=notes)
+            parts = sum(a.startswith("Это фрагмент") for a in asked)
+            ollama_client.generate_meeting_summary(segs, {}, "chapters", part_notes=notes)
+        self.assertGreater(parts, 1)
+        self.assertEqual(sum(a.startswith("Это фрагмент") for a in asked), parts)  # none asked again
+
 
 if __name__ == "__main__":
     unittest.main()

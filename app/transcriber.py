@@ -1645,6 +1645,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                 )
                 try:
                     where = "облачная модель" if cloud else "Ollama"
+                    part_notes: Dict[str, Any] = {}  # the parts of a long recording, read once for both
                     summary_md = generate_meeting_summary(
                         progress=lambda done, total: update_meeting_progress(
                             meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
@@ -1654,6 +1655,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                         user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
                         answer_lang=detected_lang,
                         local_only=local_only,
+                        part_notes=part_notes,
                     )
                     from app.grounding import ground_summary
 
@@ -1667,7 +1669,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                             update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
                             chapters_md = generate_meeting_summary(
                                 segments=merged_segments, speakers=speakers_meta, template_key="chapters",
-                                answer_lang=detected_lang, local_only=local_only)
+                                answer_lang=detected_lang, local_only=local_only, part_notes=part_notes)
                             summaries["chapters"] = chapters_md
                             merge_summaries(meeting_id, {"chapters": chapters_md})
                         except Exception as ch_err:

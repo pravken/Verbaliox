@@ -858,10 +858,13 @@ def generate_meeting_summary(
     user_notes: str = "",
     template_prompt: str = "",
     progress: Optional[Callable[[int, int], None]] = None,
+    part_notes: Optional[Dict[str, Any]] = None,
 ) -> str:
     """template_prompt: the instruction of a template the user made (Settings → Analysis);
     user_notes: what the user wrote during the meeting, taken into account by every summary;
-    progress(done, total): the parts of a long recording read so far (it is read part by part)."""
+    progress(done, total): the parts of a long recording read so far (it is read part by part);
+    part_notes: a dict kept by the caller across calls on the same transcript — the notes of the parts
+    of a long recording are made once (the overview and the chapters asked for the very same ones)."""
     from app.llm import target
 
     # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
@@ -908,6 +911,11 @@ def generate_meeting_summary(
             else ""
         )
         notes: List[str] = []
+        reuse = part_notes is not None and not focus
+        if reuse and part_notes.get("chunks") == len(chunks) and part_notes.get("model") == llm.label \
+                and len(part_notes.get("notes") or []) == len(chunks):
+            notes = list(part_notes["notes"])
+            chunks = []  # read already, by the overview before
         for idx, chunk in enumerate(chunks, start=1):
             if progress:
                 progress(idx, len(chunks))
@@ -920,6 +928,8 @@ def generate_meeting_summary(
                     "Пиши только то, что есть в тексте фрагмента.",
                 )
             )
+        if reuse and chunks:
+            part_notes.update(chunks=len(chunks), model=llm.label, notes=list(notes))
         transcript_text = _fit_notes(llm, system_prompt, notes, single_pass_max, lang)
         source_label = (
             "Запись длинная, поэтому ниже приведены последовательные конспекты всех её фрагментов "
