@@ -424,6 +424,24 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertEqual(m["transcript_model"], "merged")
         self.assertEqual(all_transcripts(self.mid)["gigaam-v3"]["segments"][0]["text"], text)  # the corrected text kept
 
+    def test_the_main_text_is_made_again_when_its_settings_changed(self):
+        """GigaAM's text exists, but the number of people was changed since: it is recognized again."""
+        from app.database import update_meeting_fields
+
+        text = "попроси Claude сделать обзор"
+        save_meeting_results(self.mid, segments=[{"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_00",
+                                                  "text": text, "words": _words(text)}],
+                             speakers={"SPEAKER_00": {"name": "Анна"}}, transcript_model="gigaam-v3")
+        update_meeting_fields(self.mid, transcript_made_with='{"speakers": 5}', num_speakers_hint=2)
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        self._run(transcribe)
+        self.assertIn("gigaam-v3", ran)
+
     def test_a_cancel_in_the_other_models_keeps_the_finished_transcript(self):
         def transcribe(model, *a, **k):
             if model == "parakeet-v3":

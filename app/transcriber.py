@@ -1,5 +1,6 @@
 from __future__ import annotations  # type hints name WhisperModel, which is imported only when used
 
+import json
 import re
 import threading
 import time
@@ -479,7 +480,10 @@ def _merge_runner(meeting_id: int) -> str:
                 progress=lambda pct, text: update_meeting_progress(meeting_id, progress=pct, stage_text=text),
                 check_cancel=lambda: _check_cancel(meeting_id),
                 base=shown if shown not in ("", MERGED, "teams") else None)
-    for sid, sp in (meeting.get("speakers") or {}).items():  # names given on screen (a merged text too)
+    # names given on screen, only when the result is split by the same voices (the version shown is its
+    # base): another model's split numbers other people alike, SPEAKER_00 there is not SPEAKER_00 here
+    same_split = res["base"] == shown
+    for sid, sp in ((meeting.get("speakers") or {}).items() if same_split else []):
         if sid in res["speakers"] and isinstance(sp, dict) and sp.get("name"):
             res["speakers"][sid] = {**res["speakers"][sid], "name": sp["name"], **({"color": sp["color"]} if sp.get("color") else {})}
     _check_cancel(meeting_id)
@@ -1422,10 +1426,16 @@ def _process_meeting_job(meeting_id: int) -> None:
         # corrections made in it. A language chosen since then that differs from the one heard: done anew
         shown = meeting.get("segments") or []
         heard = (meeting.get("language") or "").strip()
-        reuse_main = bool(processing.get("ensemble") and shown and meeting.get("transcript_model") == model_name
-                          and (lang_setting in ("auto", "mixed", "", None) or lang_setting == heard))
         diarization_enabled = processing.get("diarization", True)
         num_speakers_hint = int(meeting.get("num_speakers_hint") or settings.get("num_speakers") or 0)
+        made_with_now = json.dumps({**_made_with(language, lang_setting == "mixed", processing),
+                                    "diarization": bool(diarization_enabled), "speakers": num_speakers_hint}, sort_keys=True)
+        before = meeting.get("transcript_made_with") or ""
+        reuse_main = bool(processing.get("ensemble") and shown and meeting.get("transcript_model") == model_name
+                          # made the same way (the number of people, the processing, the language);
+                          # a text from before this was kept: by the language alone
+                          and (before == made_with_now if before
+                               else lang_setting in ("auto", "mixed", "", None) or lang_setting == heard))
         marks_named = 0
         mixed = lang_setting == "mixed"
         if reuse_main:
@@ -1630,6 +1640,9 @@ def _process_meeting_job(meeting_id: int) -> None:
                 language=detected_lang,
                 transcript_model=model_name,
             )
+            from app.database import update_meeting_fields as _fields
+
+            _fields(meeting_id, transcript_made_with=made_with_now)
 
             clear_vram()
 
