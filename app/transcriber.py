@@ -183,13 +183,14 @@ def _drop_work_audio(meeting_id: int, wav_path: Path) -> None:
 
 
 def drop_old_work_audio() -> int:
-    """_drop_work_audio for finished recordings that still have their WAV; returns how many."""
+    """_drop_work_audio for recordings no job works on that still have their WAV; returns how many.
+    Cancelled and failed ones too: their WAV stayed for good (a retry extracts the sound again)."""
     from app.database import _db_lock, get_connection
 
     with _db_lock:
         conn = get_connection()
-        rows = conn.execute("SELECT id, audio_path FROM meetings WHERE status = 'completed' AND owns_media = 1 "
-                            "AND COALESCE(audio_path, '') != ''").fetchall()
+        rows = conn.execute("SELECT id, audio_path FROM meetings WHERE status IN ('completed', 'cancelled', 'failed') "
+                            "AND owns_media = 1 AND COALESCE(audio_path, '') != ''").fetchall()
         conn.close()
     n = 0
     for r in rows:
