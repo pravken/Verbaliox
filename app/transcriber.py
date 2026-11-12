@@ -72,15 +72,16 @@ _running_thread: Optional[int] = None
 def request_cancel(meeting_id: int) -> bool:
     """Marks a queued/running job for cancellation. It stops at the next checkpoint; a request to the
     analysis model or FFmpeg it waits on is broken off at once."""
+    from app import cancel_scope
+
     with _jobs_lock:
         if meeting_id not in _active_jobs:
             return False
         _cancel_requested.add(meeting_id)
-        thread = _running_thread if _running_id == meeting_id else None
-    if thread is not None:
-        from app import cancel_scope
-
-        cancel_scope.abort(thread)
+        # under the lock: let go of it first, the job could end and the next one start on the same
+        # worker thread, whose requests the abort then broke off («Обработка отменена» on another recording)
+        if _running_id == meeting_id and _running_thread is not None:
+            cancel_scope.abort(_running_thread)
     return True
 
 
