@@ -1144,8 +1144,17 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     from app.transcript_merge import MERGED, merge
 
     done: List[str] = []
+    ready = all_transcripts(meeting_id)
     for k, model in enumerate(extra):
         _check_cancel(meeting_id)
+        if (ready.get(model) or {}).get("segments"):
+            # this model already transcribed the recording: its version is used as it is (its phrases
+            # take the speakers of this run), not recognized again
+            segs = ready[model]["segments"]
+            _speakers_by_time(segs, segments)
+            save_transcript_version(meeting_id, model, {**ready[model], "segments": segs, "speakers": speakers})
+            done.append(model)
+            continue
         _release_speech_models()  # one model in memory at a time: the one before goes first
         name = format_whisper_model_name(model)
         from app import app_status
