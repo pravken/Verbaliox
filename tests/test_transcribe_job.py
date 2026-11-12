@@ -358,6 +358,13 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertEqual([w.get("by") for w in disputed], ["llm"])  # the hint says who picked it
         self.assertEqual(m["segments"][0]["speaker"], "SPEAKER_00")  # the speakers of the main model's version
         self.assertTrue({"gigaam-v3", "parakeet-v3", "merged"} <= set(all_transcripts(self.mid)))
+        self.assertEqual(sorted(m["merged_models"]), ["gigaam-v3", "parakeet-v3"])  # the chips light these
+        from app.database import switch_transcript_version
+
+        switch_transcript_version(self.mid, "gigaam-v3")
+        self.assertEqual(get_meeting(self.mid)["merged_models"], [])
+        switch_transcript_version(self.mid, "merged")  # back: the list came with the version
+        self.assertEqual(sorted(get_meeting(self.mid)["merged_models"]), ["gigaam-v3", "parakeet-v3"])
         self.assertEqual(len(self.asked), 1)
         self.release.assert_any_call()  # the models went out of memory before the next one (all of them)
         self.assertIn("клода", self.asked[0])

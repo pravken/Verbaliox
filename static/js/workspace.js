@@ -164,13 +164,22 @@ function renderTxModelChips(m, list, done, shown, pick, busy) {
   const box = document.getElementById('tx-model-chips');
   if (!box) return;
   const working = busy ? (m.status === 'merging' ? 'merged' : m.model_name) : '';
+  // The merged text shown: the chips of the models it was made from light up (a merge of an older
+  // version did not keep them: the variants of its disputed words name them)
+  let inMerge = new Set();
+  if (shown === 'merged' && (pick === 'merged' || !pick)) {
+    inMerge = new Set(m.merged_models || []);
+    if (!inMerge.size) for (const seg of m.segments || []) for (const w of seg.words || []) for (const a of w.alts || []) (a.models || []).forEach(x => inMerge.add(x));
+  }
   const items = [...list.filter(i => i.id !== 'merged'), ...(done.has('merged') || working === 'merged' ? [{ id: 'merged', installed: true }] : [])];
   box.innerHTML = items.map(i => {
     const fits = i.id === 'merged' || txModelFits(i, m) || done.has(i.id);
     const state = working === i.id ? 'busy' : i.id === shown ? 'shown' : done.has(i.id) ? 'done' : !i.installed ? 'missing' : 'none';
     const mark = { busy: '<span class="tx-chip-spin" aria-hidden="true"></span>', shown: '●', done: '✓', missing: '↓', none: '○' }[state];
-    const tip = t(`txChip_${state}`).replace('{size}', () => i.size || '') + (fits ? '' : ` · ${t('txModelOtherLang')}`);
-    return `<button type="button" role="radio" aria-checked="${pick === i.id}" class="tx-chip is-${state}${pick === i.id ? ' is-picked' : ''}"
+    const tip = t(`txChip_${state}`).replace('{size}', () => i.size || '') + (fits ? '' : ` · ${t('txModelOtherLang')}`)
+      + (inMerge.has(i.id) ? ` · ${t('txChipInMerge')}` : '');
+    const merged = inMerge.has(i.id);
+    return `<button type="button" role="radio" aria-checked="${pick === i.id}" class="tx-chip is-${state}${pick === i.id ? ' is-picked' : ''}${merged ? ' is-in-merge' : ''}"
       ${busy || !fits ? 'disabled' : ''} title="${escapeHtml(tip)}" data-click="pickTxChip" data-click-args='[${jsArg(i.id)}]'>
       <span class="tx-chip-mark">${mark}</span><span>${escapeHtml(formatModelName(i.id))}</span>${state === 'missing' && i.size ? `<span class="tx-chip-size">${escapeHtml(i.size)}</span>` : ''}</button>`;
   }).join('');
