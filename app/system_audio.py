@@ -98,8 +98,12 @@ class SystemCapture:
             self._ready.set()
 
     def take_live(self, count: int) -> np.ndarray:
-        """Up to `count` samples (16 kHz mono) captured since the last call, for live captions."""
+        """Up to `count` samples (16 kHz mono) captured since the last call, for live captions. What
+        piled up beyond half a second (captions switched on during the recording: up to 30 s) is
+        dropped, so the system sound joins the microphone's chunk it was heard with, not late."""
         with self._live_lock:
+            if self._live.size - count > 8000:  # behind by more than the jitter of the chunks: the newest
+                self._live = self._live[self._live.size - count:]
             out, self._live = self._live[:count], self._live[count:]
         return out
 

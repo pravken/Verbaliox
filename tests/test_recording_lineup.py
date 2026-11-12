@@ -129,3 +129,21 @@ class EchoCancelTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveSystemSoundTest(unittest.TestCase):
+    def test_captions_get_the_system_sound_of_now_not_a_backlog(self):
+        import threading
+
+        import numpy as np
+
+        from app.system_audio import SystemCapture
+
+        cap = SystemCapture.__new__(SystemCapture)
+        cap._live_lock = threading.Lock()
+        cap._live = np.arange(16000 * 30, dtype=np.float32)  # captions switched on after 30 s of recording
+        got = cap.take_live(1600)
+        self.assertEqual(got[-1], 16000 * 30 - 1)  # the newest samples
+        self.assertEqual(cap._live.size, 0)
+        cap._live = np.arange(3000, dtype=np.float32)  # a little ahead (jitter): kept in order
+        self.assertEqual(cap.take_live(1600)[0], 0)
