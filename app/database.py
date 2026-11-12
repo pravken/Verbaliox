@@ -29,8 +29,22 @@ def get_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # WAL (set in init_db): a commit is written to the log, synced at checkpoints — safe against a crash
     # of the app, and every recognized phrase's progress no longer waits for the disk
-    conn.execute("PRAGMA synchronous=NORMAL")
+    # (only with WAL really on: a data folder where it cannot be has the rollback journal, which needs FULL)
+    if _wal_on or _check_wal(conn):
+        conn.execute("PRAGMA synchronous=NORMAL")
     return conn
+
+
+_wal_on = False  # remembered once true (init_db turns WAL on after the first connections of a new database)
+
+
+def _check_wal(conn: sqlite3.Connection) -> bool:
+    global _wal_on
+    try:
+        _wal_on = str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower() == "wal"
+    except sqlite3.Error:
+        _wal_on = False
+    return _wal_on
 
 
 def init_db() -> None:
@@ -340,6 +354,9 @@ _MEETING_EXTRA_COLUMNS = {
     # The speech language the user chose ("auto", "mixed", "ru"...): language holds the one heard, which a
     # transcription overwrites; a new run starts from this choice ('' before the first run: language is it)
     "language_choice": "TEXT DEFAULT ''",
+    # How the transcript shown was made (language, sound processing, speakers): a precise run reuses it
+    # only when nothing of that changed since ('' — made before this was kept, or a version switched in)
+    "transcript_made_with": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -964,7 +981,7 @@ def _show_version(conn: sqlite3.Connection, meeting_id: int, model: str, data: D
     next_model = ", model_name = ?" if model not in ("merged", "teams") else ""
     conn.execute(
         "UPDATE meetings SET transcript_model = ?, transcript_at = ?, speakers_json = ?, segments_backup_json = ?, "
-        f"translations_json = ?, language = ?, transcript_verified = ?{next_model} WHERE id = ?",
+        f"translations_json = ?, language = ?, transcript_verified = ?, transcript_made_with = ''{next_model} WHERE id = ?",
         (model, data.get("at") or "", json.dumps(data.get("speakers") or {}, ensure_ascii=False),
          json.dumps(backup, ensure_ascii=False) if backup else "", json.dumps(data.get("translations") or {}, ensure_ascii=False),
          data.get("language") or "", 1 if data.get("verified") else 0, *([model] if next_model else []), meeting_id))
@@ -1151,7 +1168,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
     allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
-               "transcript_verified", "audio_path",
+               "transcript_verified", "audio_path", "transcript_made_with",
                "local_only", "series_id"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
     if not items:
