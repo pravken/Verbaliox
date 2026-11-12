@@ -147,3 +147,30 @@ class LiveSystemSoundTest(unittest.TestCase):
         self.assertEqual(cap._live.size, 0)
         cap._live = np.arange(3000, dtype=np.float32)  # a little ahead (jitter): kept in order
         self.assertEqual(cap.take_live(1600)[0], 0)
+
+
+class PageChunksTest(unittest.TestCase):
+    """The page's chunks are numbered: one sent again is written once, none out of its place."""
+
+    def test_a_chunk_sent_twice_is_written_once(self):
+        try:
+            from fastapi.testclient import TestClient
+
+            from app import main
+        except ImportError:
+            self.skipTest("app dependencies not installed")
+        from app.database import init_db
+
+        init_db()
+        client = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        client.get(f"/?token={main.SESSION_TOKEN}")
+        pid = client.post("/api/record/page/start").json()["page_id"]
+        try:
+            send = lambda seq, data: client.post(f"/api/record/page/{pid}/chunk", content=data,  # noqa: E731
+                                                 headers={"X-Chunk-Seq": str(seq), "Content-Type": "application/octet-stream"})
+            self.assertEqual(send(0, b"aaa").json()["size"], 3)
+            self.assertTrue(send(0, b"aaa").json().get("duplicate"))  # its answer was lost: sent again
+            self.assertEqual(send(2, b"ccc").status_code, 409)       # 1 is missing: not written out of place
+            self.assertEqual(send(1, b"bbb").json()["size"], 6)
+        finally:
+            client.post(f"/api/record/page/{pid}/cancel")

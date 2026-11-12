@@ -1834,17 +1834,30 @@ function recorderFormat(video, audio) {
   return { mimeType, options: video ? { videoBitsPerSecond: 2_500_000, audioBitsPerSecond: 128_000 } : { audioBitsPerSecond: 128_000 } };
 }
 
+// Each chunk carries its number: the server writes them in order and takes one sent again (its answer
+// lost) only once. A chunk that does not get through is tried again for about two minutes (the server
+// busy finishing another recording), and the studio says so at once, not after Stop.
 function sendRecordingChunk(page, blob) {
   if (!page) return;
+  const seq = page.nextSeq = (page.nextSeq ?? -1) + 1;
   page.upload = page.upload.then(async () => {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    if (page.failed) return;  // a hole already: the chunks after it would not play
+    for (let attempt = 0; attempt < 12; attempt++) {
       try {
-        const r = await fetch(`/api/record/page/${page.id}/chunk`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob });
-        if (r.ok) return;
+        const r = await fetch(`/api/record/page/${page.id}/chunk`, {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Chunk-Seq': String(seq) }, body: blob,
+        });
+        if (r.ok) {
+          if (page.retrying) { page.retrying = false; showToast(t('recChunkBack')); }
+          return;
+        }
+        if (r.status === 404) break;  // the recording is gone on the server (cancelled): nothing to retry
       } catch (e) {}
-      await new Promise(res => setTimeout(res, 500 * (attempt + 1)));
+      if (attempt === 1 && !page.retrying) { page.retrying = true; showWarning(t('recChunkRetrying')); }
+      await new Promise(res => setTimeout(res, Math.min(15000, 1000 * 2 ** attempt)));
     }
     page.failed = t('recChunkFailed');
+    showError(page.failed);
   });
 }
 
@@ -1978,7 +1991,8 @@ async function stopAndTranscribeRecording(opts) {
 async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
   _cleanupRecordingResources();
 
-  if (page) await page.upload;  // every chunk is on the server
+  // every chunk is on the server (waited for, but not for ever: a request that hangs)
+  if (page) await Promise.race([page.upload, new Promise(res => setTimeout(res, 180000))]);
   if (page && page.failed) showToast(page.failed);
   const res = await fetch('/api/record/finish', {
     method: 'POST',
