@@ -533,6 +533,27 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     enqueue_meeting_job(meeting_id)
     return get_meeting(meeting_id)
 
+@router.get("/api/meetings/{meeting_id}/precise-models")
+def api_precise_models(meeting_id: int) -> Dict[str, Any]:
+    """The models «Все модели» (the precise mode) would run for this recording, the first one leading:
+    shown lit in the recognition row before «Расшифровать» is pressed."""
+    from app.transcriber import ensemble_models
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    settings = get_all_settings()
+    choice = (m.get("language_choice") or m.get("language") or "auto").strip() or "auto"
+    heard = (m.get("language") or "").strip()  # the language found by an earlier transcription
+    main = m.get("model_name") or ""
+    if not main or main == "merged":
+        main = speech_route.default_choice(settings)
+    if main == speech_route.AUTO:
+        main, _ = speech_route.resolve(settings, choice, lambda: heard if heard and heard != "auto" else None)
+    lang = choice if choice not in ("auto", "mixed") else (heard if heard not in ("", "auto", "mixed") else None)
+    extra = ensemble_models(settings, main, lang, choice == "mixed")
+    return {"models": [main, *extra]}
+
 class MeetingReconfigurePayload(BaseModel):
     model_name: str
     language: str = "auto"
