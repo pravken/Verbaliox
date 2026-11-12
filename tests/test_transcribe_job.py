@@ -388,6 +388,54 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertNotIn("parakeet-v3", ran)  # its version was used as it was
         self.assertEqual(m["segments"][0]["text"], text)
 
+    def test_the_text_of_the_main_model_is_taken_as_it_is(self):
+        """«Все модели» on a recording GigaAM transcribed and the user corrected: GigaAM is not run again
+        and the corrections are what goes into the merge."""
+        from app.database import all_transcripts
+
+        text = "попроси Claude сделать обзор"
+        save_meeting_results(self.mid, segments=[{"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_00",
+                                                  "text": text, "words": _words(text)}],
+                             speakers={"SPEAKER_00": {"name": "Анна", "color": "#0A84FF"}}, transcript_model="gigaam-v3")
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        m = self._run(transcribe)
+        self.assertEqual(ran, ["parakeet-v3"])
+        self.assertEqual(m["transcript_model"], "merged")
+        self.assertEqual(all_transcripts(self.mid)["gigaam-v3"]["segments"][0]["text"], text)  # the corrected text kept
+
+    def test_a_cancel_in_the_other_models_keeps_the_finished_transcript(self):
+        def transcribe(model, *a, **k):
+            if model == "parakeet-v3":
+                raise transcriber.JobCancelled()
+            return self._transcribe(model, *a, **k)
+
+        m = self._run(transcribe)
+        self.assertEqual(m["status"], "completed")
+        self.assertEqual(m["transcript_model"], "gigaam-v3")
+        self.assertIn("точный режим отменён", m["stage_text"])
+
+    def test_a_version_made_another_way_is_made_again(self):
+        from app.database import save_transcript_version
+
+        old = "совсем другой язык"
+        save_transcript_version(self.mid, "parakeet-v3", {
+            "segments": [{"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_00", "text": old, "words": _words(old)}],
+            "speakers": {}, "language": "en", "made_with": {"language": "en", "denoise": True, "loudnorm": True, "vad": True},
+            "at": "2026-11-01 10:00:00"})
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        self._run(transcribe)
+        self.assertIn("parakeet-v3", ran)  # recognized again: the old version was made for English
+
     def test_without_another_model_the_main_one_stays(self):
         from app import asr_onnx
 

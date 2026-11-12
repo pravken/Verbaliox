@@ -1129,6 +1129,13 @@ def _recognize_with(meeting_id: int, model: str, wav_path: Path, total_dur: floa
         return _collect_segments(meeting_id, it, total_dur, report=report)
 
 
+def _made_with(language: Optional[str], mixed: bool, processing: Dict[str, Any]) -> Dict[str, Any]:
+    """What a model's version was recognized with: a version made with another language or other
+    sound processing is not reused by a later precise run."""
+    return {"language": "mixed" if mixed else (language or "auto"), "denoise": bool(processing.get("denoise", True)),
+            "loudnorm": bool(processing.get("loudnorm", True)), "vad": bool(processing.get("vad", True))}
+
+
 def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: Path, total_dur: float,
                   language: Optional[str], detected_lang: str, mixed: bool, processing: Dict[str, Any],
                   settings: Dict[str, str], device: str, compute_type: str, hw: Dict[str, Any],
@@ -1145,9 +1152,19 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
 
     done: List[str] = []
     ready = all_transcripts(meeting_id)
+    made_with = _made_with(language, mixed, processing)
+
+    def reusable(version: Dict[str, Any]) -> bool:
+        if not version.get("segments"):
+            return False
+        if version.get("made_with") is not None:
+            return version["made_with"] == made_with
+        # made before versions said how: only one in the language heard now
+        return not detected_lang or (version.get("language") or "") in ("", detected_lang)
+
     for k, model in enumerate(extra):
         _check_cancel(meeting_id)
-        if (ready.get(model) or {}).get("segments"):
+        if reusable(ready.get(model) or {}):
             # this model already transcribed the recording: its version is used as it is (its phrases
             # take the speakers of this run), not recognized again
             segs = ready[model]["segments"]
@@ -1182,6 +1199,7 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
         for i, seg in enumerate(segs):
             seg["id"] = i
         save_transcript_version(meeting_id, model, {"segments": segs, "speakers": speakers, "language": detected_lang,
+                                                    "made_with": made_with,
                                                     "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
         done.append(model)
     _release_speech_models()  # the analysis model resolves the disputed places next
@@ -1316,200 +1334,219 @@ def _process_meeting_job(meeting_id: int) -> None:
         from app import app_status
 
         app_status.set_asr_model(meeting_id, model_name)
-        onnx_engine = asr_onnx.is_onnx_model(model_name)
-        if onnx_engine:
-            # GigaAM / Parakeet on ONNX Runtime (app/asr_onnx.py): on the GPU when its build is installed
-            # and there is room (app/onnx_gpu.py), else on the CPU
-            if mixed and len(asr_onnx.ONNX_MODELS[model_name]["languages"]) == 1:
-                raise RuntimeError(f"{asr_onnx.ONNX_MODELS[model_name]['name']} понимает только один язык. Для записей на "
-                                   "нескольких языках выберите Parakeet или Whisper.")
-            if not asr_onnx.supports_language(model_name, language):
-                raise RuntimeError(f"{asr_onnx.ONNX_MODELS[model_name]['name']} не распознаёт язык «{language}». "
-                                   "Выберите Whisper или другую модель для этой записи.")
-            from app import onnx_gpu
-
-            onnx_name = asr_onnx.ONNX_MODELS[model_name]["name"]
-            if not asr_onnx.is_installed(model_name):  # picked before it was downloaded: its files first
-                update_meeting_progress(meeting_id, progress=12, stage_text=f"Скачивание модели {onnx_name}...")
-                try:
-                    asr_onnx.ensure_downloaded(model_name, lambda pct: update_meeting_progress(
-                        meeting_id, stage_text=f"Скачивание модели {onnx_name}: {pct}%"))
-                except Exception as e:
-                    raise RuntimeError(f"Не удалось скачать модель {onnx_name}: {e}")
-                _check_cancel(meeting_id)
-            use_gpu = onnx_gpu.gpu_for_job(model_name)
-            update_meeting_progress(meeting_id, status="transcribing", progress=15,
-                                    stage_text=f"Распознавание речи — {asr_onnx.ONNX_MODELS[model_name]['name']}"
-                                    + (" на видеокарте" if use_gpu else ""))
-            total_dur = max(1.0, float(duration or 1.0))
-
-            where = {"gpu": " на видеокарте" if use_gpu else ""}
-
-            def _onnx_progress(ratio: float) -> None:
-                update_meeting_progress(meeting_id, progress=16 + int(49 * ratio),
-                                        stage_text=f"Транскрибация — {onnx_name}{where['gpu']}: {format_timestamp(ratio * total_dur)} из {format_timestamp(total_dur)}")
-
-            partial = _PartialTranscript(meeting_id)
-            onnx_done: List[Dict[str, Any]] = []
-
-            def _onnx_progress_and_partial(ratio: float) -> None:
-                _onnx_progress(ratio)
-                partial.push(onnx_done)
-
-            try:
-                raw_segments = asr_onnx.transcribe(model_name, wav_path, total_dur, _onnx_progress_and_partial,
-                                                   lambda: _check_cancel(meeting_id), out=onnx_done, gpu=use_gpu,
-                                                   leveling=processing.get("leveling", True))
-            except JobCancelled:
-                raise
-            except Exception:
-                if not use_gpu:
-                    raise
-                traceback.print_exc()  # CUDA out of memory, a missing DLL: the CPU does the same work
-                asr_onnx.release(model_name, gpu=True)
-                onnx_done.clear()
-                where["gpu"] = " на процессоре"
-                update_meeting_progress(meeting_id, stage_text="Видеокарта не справилась — распознавание на процессоре")
-                raw_segments = asr_onnx.transcribe(model_name, wav_path, total_dur, _onnx_progress_and_partial,
-                                                   lambda: _check_cancel(meeting_id), out=onnx_done,
-                                                   leveling=processing.get("leveling", True))
-            text_all = " ".join(s["text"] for s in raw_segments)
-            detected_lang = language or asr_onnx.guess_language(text_all)
-            whisper_model = None
-            reused = False
-        else:
-            from app.model_manager import ensure_whisper_model, is_whisper_model_installed
-
-            if not is_whisper_model_installed(model_name):  # picked before it was downloaded: the model first
-                update_meeting_progress(meeting_id, progress=12, stage_text=f"Скачивание модели {pretty_whisper}...")
-                shown = {"mb": -100.0}
-
-                def _download_progress(mb: float, total: float) -> None:
-                    _check_cancel(meeting_id)  # a cancel stops the download too
-                    if mb - shown["mb"] >= 20 or mb >= total:
-                        shown["mb"] = mb
-                        update_meeting_progress(meeting_id, stage_text=f"Скачивание модели {pretty_whisper}: {mb:.0f} из {total:.0f} МБ")
-
-                try:
-                    ensure_whisper_model(model_name, _download_progress, lambda: _check_cancel(meeting_id))
-                except JobCancelled:
-                    raise
-                except Exception as e:
-                    raise RuntimeError(f"Не удалось скачать модель {pretty_whisper}: {e}")
-            if device == "cuda" and _whisper_cache["key"] != (model_name, device, compute_type):
-                _wait_for_vram_after_live(meeting_id, model_name)
-            whisper_model, reused = _get_whisper_model(model_name, device, compute_type)
-
-            # `hotwords` is applied to every 30s window; `initial_prompt` would only affect the first
-            # window because condition_on_previous_text is disabled.
-            hotwords = vocab.hotwords()
-            batch_size = (
-                _batch_size_for(device, hw)
-                if settings.get("batched_inference", "true").lower() == "true"
-                else 0
-            )
-            update_meeting_progress(
-                meeting_id,
-                status="transcribing",
-                progress=15,
-                stage_text=f"Распознавание речи — {pretty_whisper}"
-                + (f", пакетами по {batch_size}" if batch_size else "")
-                + (" (модель уже загружена)" if reused else ""),
-            )
-            total_dur = max(1.0, float(duration or 1.0))
-            decode = dict(duration=total_dur, language=language, hotwords=hotwords, vad_enabled=vad_enabled, multilingual=mixed)
-
-            try:
-                segments_iter, info = _start_transcription(whisper_model, wav_path, batch_size=batch_size, **decode)
-                raw_segments = _collect_segments(meeting_id, segments_iter, total_dur)
-            except JobCancelled:
-                raise
-            except Exception as batch_err:
-                if not batch_size:
-                    raise
-                # e.g. out of GPU memory with a large batch: redo the file the classic way
-                print(f"[transcriber] Batched decoding failed ({batch_err}); retrying sequentially", flush=True)
-                clear_vram()
-                update_meeting_progress(
-                    meeting_id, progress=16, stage_text=f"Распознавание речи — {pretty_whisper} (обычный режим)"
-                )
-                segments_iter, info = _start_transcription(whisper_model, wav_path, batch_size=0, **decode)
-                raw_segments = _collect_segments(meeting_id, segments_iter, total_dur)
-
-            detected_lang = getattr(info, "language", None) or (language or "ru")
-
-        # The dictionary for every model: Whisper only took it as a hint, GigaAM and Parakeet not at all
-        raw_segments = vocab.fix_segments(raw_segments)
-
-        # Free Whisper before diarization unless the next queued job can reuse it
-        whisper_model = None
-        if not _should_keep_whisper(meeting_id, device, settings):
-            release_whisper_model()
-        clear_vram()
-        _check_cancel(meeting_id)
-
-        # 3. Speaker Diarization (token-free ECAPA-TDNN clustering)
+        # The precise mode on a recording this model already transcribed («Все модели» to add the
+        # others): its text is used as it is — recognizing it again took minutes and replaced the
+        # corrections made in it. A language chosen since then that differs from the one heard: done anew
+        shown = meeting.get("segments") or []
+        heard = (meeting.get("language") or "").strip()
+        reuse_main = bool(processing.get("ensemble") and shown and meeting.get("transcript_model") == model_name
+                          and (lang_setting in ("auto", "mixed", "", None) or lang_setting == heard))
         diarization_enabled = processing.get("diarization", True)
         num_speakers_hint = int(meeting.get("num_speakers_hint") or settings.get("num_speakers") or 0)
-
-        update_meeting_progress(
-            meeting_id,
-            status="diarizing",
-            progress=68,
-            stage_text="Разделение участников встречи по голосам...",
-        )
-
-        def _diar_cb(pct: int, msg: str) -> None:
-            _check_cancel(meeting_id)  # called per batch of voices: a cancel stops the splitting at once
-            update_meeting_progress(meeting_id, progress=pct, stage_text=msg)
-
-        from app.diarizer import diarize_and_merge_segments
-
-        speakers_meta, merged_segments = diarize_and_merge_segments(
-            wav_path=wav_path,
-            raw_segments=raw_segments,
-            device=device,
-            num_speakers_hint=num_speakers_hint,
-            diarization_enabled=diarization_enabled,
-            progress_callback=_diar_cb,
-        )
-        # Speakers whose voice was named in earlier recordings get that name again
-        try:
-            from app.voice_profiles import apply_to_speakers
-
-            named = apply_to_speakers(speakers_meta)
-            if named:
-                print(f"[voice profiles] recognised {named} speaker(s) in meeting {meeting_id}")
-        except Exception:
-            traceback.print_exc()
-        # «Сейчас говорит» marked in the studio while recording: those names win over a remembered voice
         marks_named = 0
-        if meeting.get("speaker_marks") and diarization_enabled:
-            marks_named = apply_speaker_marks(speakers_meta, merged_segments, meeting["speaker_marks"])
+        mixed = lang_setting == "mixed"
+        if reuse_main:
+            merged_segments = [dict(x) for x in shown]
+            speakers_meta = dict(meeting.get("speakers") or {})
+            detected_lang = heard or (language or "ru")
+            whisper_model = None
+            update_meeting_progress(meeting_id, status="transcribing", progress=66,
+                                    stage_text=f"Точный режим: расшифровка {pretty_whisper} уже есть — берётся она")
+        else:
+            onnx_engine = asr_onnx.is_onnx_model(model_name)
+            if onnx_engine:
+                # GigaAM / Parakeet on ONNX Runtime (app/asr_onnx.py): on the GPU when its build is installed
+                # and there is room (app/onnx_gpu.py), else on the CPU
+                if mixed and len(asr_onnx.ONNX_MODELS[model_name]["languages"]) == 1:
+                    raise RuntimeError(f"{asr_onnx.ONNX_MODELS[model_name]['name']} понимает только один язык. Для записей на "
+                                       "нескольких языках выберите Parakeet или Whisper.")
+                if not asr_onnx.supports_language(model_name, language):
+                    raise RuntimeError(f"{asr_onnx.ONNX_MODELS[model_name]['name']} не распознаёт язык «{language}». "
+                                       "Выберите Whisper или другую модель для этой записи.")
+                from app import onnx_gpu
 
-        _check_cancel(meeting_id)
-        # The transcript of another model stays among the versions (the dropdown above the text)
-        stash_transcript_for(meeting_id, model_name)
-        save_segments_backup(meeting_id, [])  # a backup of the previous run does not belong to this one
-        # Fillers stay in the text: «Без запинок» hides them only when the text is shown
-        # (text_utils.filler_view); the setting clean_fillers turns that view on by default
+                onnx_name = asr_onnx.ONNX_MODELS[model_name]["name"]
+                if not asr_onnx.is_installed(model_name):  # picked before it was downloaded: its files first
+                    update_meeting_progress(meeting_id, progress=12, stage_text=f"Скачивание модели {onnx_name}...")
+                    try:
+                        asr_onnx.ensure_downloaded(model_name, lambda pct: update_meeting_progress(
+                            meeting_id, stage_text=f"Скачивание модели {onnx_name}: {pct}%"))
+                    except Exception as e:
+                        raise RuntimeError(f"Не удалось скачать модель {onnx_name}: {e}")
+                    _check_cancel(meeting_id)
+                use_gpu = onnx_gpu.gpu_for_job(model_name)
+                update_meeting_progress(meeting_id, status="transcribing", progress=15,
+                                        stage_text=f"Распознавание речи — {asr_onnx.ONNX_MODELS[model_name]['name']}"
+                                        + (" на видеокарте" if use_gpu else ""))
+                total_dur = max(1.0, float(duration or 1.0))
 
-        if mixed:
-            # Each phrase keeps its own language: shown in the transcript, used by translation
-            for seg in merged_segments:
-                seg["lang"] = asr_onnx.guess_language(seg.get("text") or "")
-            langs = [seg["lang"] for seg in merged_segments]
-            detected_lang = max(set(langs), key=langs.count) if langs else detected_lang
+                where = {"gpu": " на видеокарте" if use_gpu else ""}
 
-        save_meeting_results(
-            meeting_id,
-            speakers=speakers_meta,
-            segments=merged_segments,
-            language=detected_lang,
-            transcript_model=model_name,
-        )
+                def _onnx_progress(ratio: float) -> None:
+                    update_meeting_progress(meeting_id, progress=16 + int(49 * ratio),
+                                            stage_text=f"Транскрибация — {onnx_name}{where['gpu']}: {format_timestamp(ratio * total_dur)} из {format_timestamp(total_dur)}")
 
-        clear_vram()
+                partial = _PartialTranscript(meeting_id)
+                onnx_done: List[Dict[str, Any]] = []
+
+                def _onnx_progress_and_partial(ratio: float) -> None:
+                    _onnx_progress(ratio)
+                    partial.push(onnx_done)
+
+                try:
+                    raw_segments = asr_onnx.transcribe(model_name, wav_path, total_dur, _onnx_progress_and_partial,
+                                                       lambda: _check_cancel(meeting_id), out=onnx_done, gpu=use_gpu,
+                                                       leveling=processing.get("leveling", True))
+                except JobCancelled:
+                    raise
+                except Exception:
+                    if not use_gpu:
+                        raise
+                    traceback.print_exc()  # CUDA out of memory, a missing DLL: the CPU does the same work
+                    asr_onnx.release(model_name, gpu=True)
+                    onnx_done.clear()
+                    where["gpu"] = " на процессоре"
+                    update_meeting_progress(meeting_id, stage_text="Видеокарта не справилась — распознавание на процессоре")
+                    raw_segments = asr_onnx.transcribe(model_name, wav_path, total_dur, _onnx_progress_and_partial,
+                                                       lambda: _check_cancel(meeting_id), out=onnx_done,
+                                                       leveling=processing.get("leveling", True))
+                text_all = " ".join(s["text"] for s in raw_segments)
+                detected_lang = language or asr_onnx.guess_language(text_all)
+                whisper_model = None
+                reused = False
+            else:
+                from app.model_manager import ensure_whisper_model, is_whisper_model_installed
+
+                if not is_whisper_model_installed(model_name):  # picked before it was downloaded: the model first
+                    update_meeting_progress(meeting_id, progress=12, stage_text=f"Скачивание модели {pretty_whisper}...")
+                    shown = {"mb": -100.0}
+
+                    def _download_progress(mb: float, total: float) -> None:
+                        _check_cancel(meeting_id)  # a cancel stops the download too
+                        if mb - shown["mb"] >= 20 or mb >= total:
+                            shown["mb"] = mb
+                            update_meeting_progress(meeting_id, stage_text=f"Скачивание модели {pretty_whisper}: {mb:.0f} из {total:.0f} МБ")
+
+                    try:
+                        ensure_whisper_model(model_name, _download_progress, lambda: _check_cancel(meeting_id))
+                    except JobCancelled:
+                        raise
+                    except Exception as e:
+                        raise RuntimeError(f"Не удалось скачать модель {pretty_whisper}: {e}")
+                if device == "cuda" and _whisper_cache["key"] != (model_name, device, compute_type):
+                    _wait_for_vram_after_live(meeting_id, model_name)
+                whisper_model, reused = _get_whisper_model(model_name, device, compute_type)
+
+                # `hotwords` is applied to every 30s window; `initial_prompt` would only affect the first
+                # window because condition_on_previous_text is disabled.
+                hotwords = vocab.hotwords()
+                batch_size = (
+                    _batch_size_for(device, hw)
+                    if settings.get("batched_inference", "true").lower() == "true"
+                    else 0
+                )
+                update_meeting_progress(
+                    meeting_id,
+                    status="transcribing",
+                    progress=15,
+                    stage_text=f"Распознавание речи — {pretty_whisper}"
+                    + (f", пакетами по {batch_size}" if batch_size else "")
+                    + (" (модель уже загружена)" if reused else ""),
+                )
+                total_dur = max(1.0, float(duration or 1.0))
+                decode = dict(duration=total_dur, language=language, hotwords=hotwords, vad_enabled=vad_enabled, multilingual=mixed)
+
+                try:
+                    segments_iter, info = _start_transcription(whisper_model, wav_path, batch_size=batch_size, **decode)
+                    raw_segments = _collect_segments(meeting_id, segments_iter, total_dur)
+                except JobCancelled:
+                    raise
+                except Exception as batch_err:
+                    if not batch_size:
+                        raise
+                    # e.g. out of GPU memory with a large batch: redo the file the classic way
+                    print(f"[transcriber] Batched decoding failed ({batch_err}); retrying sequentially", flush=True)
+                    clear_vram()
+                    update_meeting_progress(
+                        meeting_id, progress=16, stage_text=f"Распознавание речи — {pretty_whisper} (обычный режим)"
+                    )
+                    segments_iter, info = _start_transcription(whisper_model, wav_path, batch_size=0, **decode)
+                    raw_segments = _collect_segments(meeting_id, segments_iter, total_dur)
+
+                detected_lang = getattr(info, "language", None) or (language or "ru")
+
+            # The dictionary for every model: Whisper only took it as a hint, GigaAM and Parakeet not at all
+            raw_segments = vocab.fix_segments(raw_segments)
+
+            # Free Whisper before diarization unless the next queued job can reuse it
+            whisper_model = None
+            if not _should_keep_whisper(meeting_id, device, settings):
+                release_whisper_model()
+            clear_vram()
+            _check_cancel(meeting_id)
+
+            # 3. Speaker Diarization (token-free ECAPA-TDNN clustering)
+            diarization_enabled = processing.get("diarization", True)
+            num_speakers_hint = int(meeting.get("num_speakers_hint") or settings.get("num_speakers") or 0)
+
+            update_meeting_progress(
+                meeting_id,
+                status="diarizing",
+                progress=68,
+                stage_text="Разделение участников встречи по голосам...",
+            )
+
+            def _diar_cb(pct: int, msg: str) -> None:
+                _check_cancel(meeting_id)  # called per batch of voices: a cancel stops the splitting at once
+                update_meeting_progress(meeting_id, progress=pct, stage_text=msg)
+
+            from app.diarizer import diarize_and_merge_segments
+
+            speakers_meta, merged_segments = diarize_and_merge_segments(
+                wav_path=wav_path,
+                raw_segments=raw_segments,
+                device=device,
+                num_speakers_hint=num_speakers_hint,
+                diarization_enabled=diarization_enabled,
+                progress_callback=_diar_cb,
+            )
+            # Speakers whose voice was named in earlier recordings get that name again
+            try:
+                from app.voice_profiles import apply_to_speakers
+
+                named = apply_to_speakers(speakers_meta)
+                if named:
+                    print(f"[voice profiles] recognised {named} speaker(s) in meeting {meeting_id}")
+            except Exception:
+                traceback.print_exc()
+            # «Сейчас говорит» marked in the studio while recording: those names win over a remembered voice
+            marks_named = 0
+            if meeting.get("speaker_marks") and diarization_enabled:
+                marks_named = apply_speaker_marks(speakers_meta, merged_segments, meeting["speaker_marks"])
+
+            _check_cancel(meeting_id)
+            # The transcript of another model stays among the versions (the dropdown above the text)
+            stash_transcript_for(meeting_id, model_name)
+            save_segments_backup(meeting_id, [])  # a backup of the previous run does not belong to this one
+            # Fillers stay in the text: «Без запинок» hides them only when the text is shown
+            # (text_utils.filler_view); the setting clean_fillers turns that view on by default
+
+            if mixed:
+                # Each phrase keeps its own language: shown in the transcript, used by translation
+                for seg in merged_segments:
+                    seg["lang"] = asr_onnx.guess_language(seg.get("text") or "")
+                langs = [seg["lang"] for seg in merged_segments]
+                detected_lang = max(set(langs), key=langs.count) if langs else detected_lang
+
+            save_meeting_results(
+                meeting_id,
+                speakers=speakers_meta,
+                segments=merged_segments,
+                language=detected_lang,
+                transcript_model=model_name,
+            )
+
+            clear_vram()
 
         # The count of speakers said for the recording was corrected by the voices (app/diarizer.py)
         speakers_note = ""
@@ -1523,15 +1560,21 @@ def _process_meeting_job(meeting_id: int) -> None:
             if not extra:
                 ensemble_note = "точный режим: нет других установленных моделей для этого языка"
             else:
-                res = _run_ensemble(meeting_id, model_name, extra, wav_path, max(1.0, float(duration or 1.0)), language,
-                                    detected_lang, mixed, processing, settings, device, compute_type, hw,
-                                    merged_segments, speakers_meta)
+                try:
+                    res = _run_ensemble(meeting_id, model_name, extra, wav_path, max(1.0, float(duration or 1.0)),
+                                        language, detected_lang, mixed, processing, settings, device, compute_type, hw,
+                                        merged_segments, speakers_meta)
+                except JobCancelled:
+                    # the main transcript is saved and complete: it stays, like a cancel after it (below)
+                    _release_speech_models()
+                    res = None
+                    ensemble_note = "точный режим отменён: оставлена расшифровка основной модели"
                 if res:
                     merged_segments, speakers_meta = res["segments"], res["speakers"]
                     ensemble_note = (f"сведено из {len(res['models'])} моделей, спорных мест {res['disputed']}"
                                      + (f", по смыслу выбрано {res['by_llm']}" if res["chat"] else
                                         " (модель анализа недоступна: решено по точности моделей)"))
-                else:
+                elif not ensemble_note:
                     ensemble_note = "точный режим: другие модели не справились, оставлена расшифровка основной"
 
         # Cancelled once the transcript is saved: it is complete and stays; the steps after it (the
