@@ -29,7 +29,8 @@ TEAMS_PROCESSES = {"ms-teams", "teams", "msteams"}
 CAPTION_WORDS = ("caption", "субтитр")
 RECENT_LINES = 40              # a reading is compared with this many latest lines of its speaker only
 MAX_ELEMENTS = 25000            # elements of a window looked at when the panel is searched for
-FIND_EVERY_SEC = 5.0           # how often the panel is searched for again while it is not found
+FIND_EVERY_SEC = 5.0           # how often the panel is searched for again while it is not found…
+FIND_EVERY_MAX_SEC = 30.0      # …growing up to this while it stays missing (captions off in Teams)
 NOT_A_PANEL = {"Button", "MenuItem", "CheckBox", "Hyperlink", "SplitButton", "RadioButton", "ToolTip", "Image"}
 _NAME_RE = re.compile(r"^[^\W\d_][\w'’.\-]*(?: [^\W\d_][\w'’.\-]*){0,3}$")
 
@@ -190,6 +191,7 @@ class Reader:
         self._described = False
         self._panel: Any = None
         self._found_at = 0.0
+        self._find_every = FIND_EVERY_SEC
         self._last_logged = ""
         self._lock = threading.Lock()
 
@@ -201,7 +203,7 @@ class Reader:
             self._said, self._known = {}, {n.lower() for n in (known_names or []) if n}
             self._live, self._seeded = None, False
             self.state, self.error = "idle", ""
-            self._panel, self._found_at = None, 0.0
+            self._panel, self._found_at, self._find_every = None, 0.0, FIND_EVERY_SEC
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, args=(self._stop,), daemon=True, name="teams_captions")
         self._thread.start()
@@ -308,18 +310,23 @@ class Reader:
                 texts = self._read_panel(api) if self._panel is not None else None
                 if texts is None:  # not found yet, or Teams changed its window: searched again
                     self._panel = None
-                    if time.time() - self._found_at >= FIND_EVERY_SEC:
+                    # each search walks the whole Teams window (calls into another process): while the
+                    # panel stays missing it is looked for less and less often
+                    if time.time() - self._found_at >= self._find_every:
                         self._found_at = time.time()
                         wins = [w for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)
                                 if process_name(w.Current.ProcessId) in TEAMS_PROCESSES]
                         if not wins:
                             self._set("no_window")
+                            self._find_every = min(FIND_EVERY_MAX_SEC, self._find_every * 2)
                         else:
                             found = self._find_panel(wins, api, self._known)
                             if found is None:
                                 self._set("no_captions", f"окон Teams: {len(wins)}")
+                                self._find_every = min(FIND_EVERY_MAX_SEC, self._find_every * 2)
                             else:
                                 self._panel, texts = found
+                                self._find_every = FIND_EVERY_SEC
                 if texts is not None:
                     self._take(pairs(texts, self._known))
                     self._set("reading")
