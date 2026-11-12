@@ -890,8 +890,14 @@ function openFirstRunWizard(data) {
   const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
       <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
   const llmItem = llmCatalog.find(m => m.id === picks.llm) || { size: '' };
+  // The precise mode always has Whisper Pro among its models: downloaded with the set when it is on
+  const ENS_MODEL = 'large-v3';
+  const downloads = () => {
+    const ids = models();
+    return st.ensemble && models().length >= 2 && !ids.includes(ENS_MODEL) && item(ENS_MODEL) ? [...ids, ENS_MODEL] : ids;
+  };
   const plan = () => {
-    const list = models().filter(id => !item(id)?.installed);
+    const list = downloads().filter(id => !item(id)?.installed);
     const rows = list.map(id => ({ name: formatModelName(id), mb: wizardSizeMb(item(id)) }));
     if (!(data.ffmpeg || {}).available) rows.unshift({ name: 'FFmpeg', mb: ((data.ffmpeg || {}).download_info || {}).size_mb || 0 });
     if (st.ai === 'local') rows.push({ name: formatModelName(picks.llm), mb: wizardSizeMb(llmItem) });
@@ -966,7 +972,7 @@ function openFirstRunWizard(data) {
   draw();
   wrap.addEventListener('click', async e => {
     const ens = e.target.closest('input[data-ens]');
-    if (ens) { st.ensemble = ens.checked; return; }
+    if (ens) { st.ensemble = ens.checked; draw(); return; }  // Whisper Pro joins the list to download
     const box = e.target.closest('input[data-model]');
     if (box) {
       if (box.checked) st.custom.add(box.dataset.model); else st.custom.delete(box.dataset.model);
@@ -986,7 +992,7 @@ function openFirstRunWizard(data) {
     if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks, st.main, st.ensemble && models().length >= 2);
+      await runFirstRunSetup(data, models(), st.ai, picks, st.main, st.ensemble && models().length >= 2, downloads());
     }
   });
   document.body.appendChild(wrap);
@@ -994,7 +1000,7 @@ function openFirstRunWizard(data) {
 
 // What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
 // the app downloads one at a time) and the analysis model, all in the background
-async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false) {
+async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false, toDownload = null) {
   const roles = wizardRoles(chosen, mainPick);
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
@@ -1013,7 +1019,8 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
   document.getElementById('set-whisper-model').value = roles.main;
   if (!(data.ffmpeg || {}).available && (data.ffmpeg || {}).can_download) fetch('/api/ffmpeg/install', { method: 'POST' }).catch(() => null);
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
-  const todo = chosen.map(id => catalog.find(i => i.id === id)).filter(i => i && !i.installed);
+  // what the wizard downloads: the chosen models, and Whisper Pro for the precise mode
+  const todo = (Array.isArray(toDownload) ? toDownload : chosen).map(id => catalog.find(i => i.id === id)).filter(i => i && !i.installed);
   todo.filter(i => i.engine === 'onnx').forEach(i => startOnnxModelDownload(i.id));
   const whisperQueue = todo.filter(i => i.engine !== 'onnx').map(i => i.id);
   const nextWhisper = () => {
