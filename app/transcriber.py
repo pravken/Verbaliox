@@ -114,6 +114,9 @@ def _queue_finish(meeting_id: int) -> None:
     from app import idle_unload
 
     idle_unload.touch()
+    from app import app_status
+
+    app_status.set_asr_model(meeting_id)
     with _jobs_lock:
         _queue[:] = [q for q in _queue if q["id"] != meeting_id]
         if _running_id == meeting_id:
@@ -626,6 +629,15 @@ def running_job_kind() -> Optional[str]:
         return "other" if _preloading else None
 
 
+def _asr_label(meeting_id: int) -> str:
+    """« — Whisper Turbo»: the model recognizing the recording now, for the stage text."""
+    from app import app_status
+    from app.model_manager import format_whisper_model_name
+
+    model = app_status.asr_model(meeting_id)
+    return f" — {format_whisper_model_name(model)}" if model else ""
+
+
 def running_meeting_id() -> Optional[int]:
     with _jobs_lock:
         return _running_id
@@ -875,7 +887,7 @@ def _collect_segments(meeting_id: int, segments_iter, total_dur: float,
             meeting_id,
             progress=pct,
             stage_text=(
-                f"Транскрибация: {format_timestamp(seg.end)} из {format_timestamp(total_dur)} "
+                f"Транскрибация{_asr_label(meeting_id)}: {format_timestamp(seg.end)} из {format_timestamp(total_dur)} "
                 f"({int(ratio * 100)}%)"
             ),
         )
@@ -1136,6 +1148,9 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
         _check_cancel(meeting_id)
         _release_speech_models()  # one model in memory at a time: the one before goes first
         name = format_whisper_model_name(model)
+        from app import app_status
+
+        app_status.set_asr_model(meeting_id, model)
         lo, hi = 70 + 15 * k // len(extra), 70 + 15 * (k + 1) // len(extra)
 
         def report(ratio: float, name=name, lo=lo, hi=hi, k=k) -> None:
@@ -1282,6 +1297,9 @@ def _process_meeting_job(meeting_id: int) -> None:
         from app.model_manager import WHISPER_REPLACED
 
         model_name = {**WHISPER_REPLACED, **asr_onnx.REPLACED}.get(model_name, model_name)
+        from app import app_status
+
+        app_status.set_asr_model(meeting_id, model_name)
         onnx_engine = asr_onnx.is_onnx_model(model_name)
         if onnx_engine:
             # GigaAM / Parakeet on ONNX Runtime (app/asr_onnx.py): on the GPU when its build is installed
@@ -1313,7 +1331,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
             def _onnx_progress(ratio: float) -> None:
                 update_meeting_progress(meeting_id, progress=16 + int(49 * ratio),
-                                        stage_text=f"Транскрибация{where['gpu']}: {format_timestamp(ratio * total_dur)} из {format_timestamp(total_dur)}")
+                                        stage_text=f"Транскрибация — {onnx_name}{where['gpu']}: {format_timestamp(ratio * total_dur)} из {format_timestamp(total_dur)}")
 
             partial = _PartialTranscript(meeting_id)
             onnx_done: List[Dict[str, Any]] = []
