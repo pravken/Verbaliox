@@ -64,13 +64,22 @@ def is_transcribing(meeting_id: int) -> bool:
         return any(q["id"] == meeting_id and q["kind"] == "transcribe" for q in _queue)
 
 
+_running_thread: Optional[int] = None
+
+
 def request_cancel(meeting_id: int) -> bool:
-    """Marks a queued/running job for cancellation. It stops at the next checkpoint."""
+    """Marks a queued/running job for cancellation. It stops at the next checkpoint; a request to the
+    analysis model or FFmpeg it waits on is broken off at once."""
     with _jobs_lock:
         if meeting_id not in _active_jobs:
             return False
         _cancel_requested.add(meeting_id)
-        return True
+        thread = _running_thread if _running_id == meeting_id else None
+    if thread is not None:
+        from app import cancel_scope
+
+        cancel_scope.abort(thread)
+    return True
 
 
 def _publish_queue_changed() -> None:
@@ -85,12 +94,14 @@ def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> None:
 
 
 def _queue_start(meeting_id: int) -> None:
-    global _running_id
-    from app import idle_unload
+    global _running_id, _running_thread
+    from app import cancel_scope, idle_unload
 
     idle_unload.touch()
+    cancel_scope.reset(threading.get_ident())
     with _jobs_lock:
         _running_id = meeting_id
+        _running_thread = threading.get_ident()
         for q in _queue:
             if q["id"] == meeting_id:
                 q["started_at"] = time.time()
@@ -623,6 +634,11 @@ def stop_all_jobs(wait_sec: float = 0.0) -> int:
     with _jobs_lock:
         ids = list(_active_jobs)
         _cancel_requested.update(ids)
+        thread = _running_thread if _running_id is not None else None
+    if thread is not None:
+        from app import cancel_scope
+
+        cancel_scope.abort(thread)
     deadline = time.time() + wait_sec
     while wait_sec and time.time() < deadline:
         with _jobs_lock:
@@ -1102,7 +1118,8 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         wav_path = AUDIO_DIR / f"meeting_{meeting_id}.wav"
         _check_cancel(meeting_id)  # cancelled while waiting: do not spend minutes extracting audio
-        extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm)
+        extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm,
+                               check_cancel=lambda: _check_cancel(meeting_id))
         duration = get_media_duration(wav_path) or get_media_duration(media_path)
 
         update_meeting_progress(
@@ -1298,6 +1315,7 @@ def _process_meeting_job(meeting_id: int) -> None:
         )
 
         def _diar_cb(pct: int, msg: str) -> None:
+            _check_cancel(meeting_id)  # called per batch of voices: a cancel stops the splitting at once
             update_meeting_progress(meeting_id, progress=pct, stage_text=msg)
 
         from app.diarizer import diarize_and_merge_segments
@@ -1424,8 +1442,9 @@ def _process_meeting_job(meeting_id: int) -> None:
                         except Exception as c_err:
                             print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
                 except Exception as sum_err:
-                    summaries["error"] = str(sum_err)
-                    merge_summaries(meeting_id, {"error": str(sum_err)})
+                    if not _cancel_wanted(meeting_id):  # a cancel broke the request off: not an error
+                        summaries["error"] = str(sum_err)
+                        merge_summaries(meeting_id, {"error": str(sum_err)})
 
         clear_vram()
 
@@ -1456,6 +1475,12 @@ def _process_meeting_job(meeting_id: int) -> None:
     except JobCancelled:
         whisper_model = None
         release_whisper_model()
+        try:  # a cancel inside the splitting by voices left its model loaded
+            from app.diarizer import unload_diarizer
+
+            unload_diarizer()
+        except Exception:
+            pass
         update_meeting_progress(
             meeting_id,
             status="cancelled",

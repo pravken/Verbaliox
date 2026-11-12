@@ -425,7 +425,7 @@ def diarize_and_merge_segments(
     try:
         embeddings_list = _embed_slices(encoder, chunks, _embed_progress) if chunks else []
     except Exception as e:  # torch.AcceleratorError and the like: the video card failed, the processor does it
-        if _ecapa_device == "cpu":
+        if _ecapa_device == "cpu" or type(e).__name__ == "JobCancelled":
             raise
         print(f"[diarizer] the video card failed ({str(e).splitlines()[0][:160]}): again on the processor", flush=True)
         unload_diarizer()
