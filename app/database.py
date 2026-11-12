@@ -388,6 +388,7 @@ def _write_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[Di
     """Stores the transcript of a recording; call inside the caller's transaction. `before`: the
     stored rows as they were read in this transaction (_segment_rows); with the same number of lines
     only the lines that changed are written (an edit of one line writes one row)."""
+    _speaker_seconds_cache.pop(meeting_id, None)
     rows = _segment_rows(segments)
     if before is not None and len(before) == len(segments):
         old = before
@@ -1219,13 +1220,20 @@ def meeting_status(meeting_id: int) -> str:
     return str(row["status"] or "") if row else ""
 
 
+# speaker_seconds of a recording until its lines change (_write_segments): «Все люди» and the speakers
+# across the library read it for every recording, and a scan of all lines held the database for long
+_speaker_seconds_cache: Dict[int, Dict[str, float]] = {}
+
+
 def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
     """How long each speaker talks in each recording: {meeting_id: {speaker_id: seconds}}, read from
     the lines without loading whole transcripts."""
-    ids = [int(i) for i in meeting_ids]
+    asked = [int(i) for i in meeting_ids]
+    cached = {i: dict(_speaker_seconds_cache[i]) for i in asked if i in _speaker_seconds_cache}
+    ids = [i for i in asked if i not in cached]
     out: Dict[int, Dict[str, float]] = {i: {} for i in ids}
     if not ids:
-        return out
+        return cached
     with _db_lock:
         conn = get_connection()
         try:
@@ -1243,7 +1251,9 @@ def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
                     out[mid][spk] = out[mid].get(spk, 0.0) + max(0.0, float(seg.get("end") or 0) - float(seg.get("start") or 0))
         finally:
             conn.close()
-    return out
+        for mid, talk in out.items():
+            _speaker_seconds_cache[mid] = dict(talk)
+    return {**out, **cached}
 
 
 def get_meeting(meeting_id: int) -> Optional[Dict[str, Any]]:
@@ -1540,6 +1550,7 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
         conn = get_connection()
         conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
+        _speaker_seconds_cache.pop(meeting_id, None)
         conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
@@ -1575,6 +1586,7 @@ def clear_results(meeting_id: int) -> bool:
             "stage_text = '', error_message = '', transcript_verified = 0, transcript_model = '', transcript_at = '' WHERE id = ?",
             (meeting_id,))
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
+        _speaker_seconds_cache.pop(meeting_id, None)
         conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))

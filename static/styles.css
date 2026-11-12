@@ -1523,7 +1523,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   border-radius: 19px; font-weight: 700; font-size: var(--fs-sub); letter-spacing: -0.011em; cursor: pointer; overflow: hidden; }
 .sp-color { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .sp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.sp-line { display: flex; align-items: center; gap: 8px; }
+.sp-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sp-line .sp-name { flex: 1 1 auto; width: 0; min-width: 0; }  /* a narrow card: the name gives way, «Это я» stays in sight */
+.sp-line .sp-me { flex-shrink: 0; }
 .sp-name, .sp-role { max-width: 100%; height: 28px; padding: 0 8px; margin-left: -8px; border-radius: 7px; border: 1px solid transparent;
   background: transparent; color: #F5F5F7; font-size: var(--fs-sub); letter-spacing: -0.011em; font-weight: 600; outline: none; width: 280px; }
 .sp-role { height: 24px; font-size: var(--fs-ui); font-weight: 400; color: var(--hc-dim, #AEAEB2); }
@@ -1547,6 +1549,8 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   color: #C7C7CC; font-size: var(--fs-caption); line-height: 1.35; }
 .sp-chip:hover { border-color: #0A84FF; color: #F5F5F7; }
 .sp-chip-other { background: transparent; border-style: dashed; color: #8CC4FF; }
+.sp-chip-used { color: #C7C7CC; }
+.sp-chip-note { font-size: 11px; color: #8E8E93; }
 .sp-mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 .sp-mrow { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.06)); text-align: left; color: #E5E5EA; }
