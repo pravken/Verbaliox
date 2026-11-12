@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from app.ffmpeg_manager import find_tool, tool_cmd
 
@@ -20,12 +20,34 @@ STUDIO_VOICE_FILTER = f"{VOICE_DENOISE_FILTER},{VOICE_LEVEL_FILTER}"
 NOISE_REDUCTION_FILTER = "highpass=f=70,afftdn=nf=-25:tn=1,adeclick"
 
 
+def _run_ffmpeg(cmd: List[str], creation_flags: int, check_cancel: Optional[Callable[[], None]]) -> subprocess.CompletedProcess:
+    """FFmpeg that a cancel stops at once: check_cancel raising kills the process (a long recording's
+    cleanup takes minutes)."""
+    if check_cancel is None:
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                              errors="replace", creationflags=creation_flags)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                            errors="replace", creationflags=creation_flags)
+    while True:
+        try:
+            _out, err = proc.communicate(timeout=0.25)
+            return subprocess.CompletedProcess(cmd, proc.returncode, "", err or "")
+        except subprocess.TimeoutExpired:
+            try:
+                check_cancel()
+            except BaseException:
+                proc.kill()
+                proc.communicate()
+                raise
+
+
 def extract_audio_16k_mono(
     input_media_path: str | Path,
     output_wav_path: str | Path,
     enhance_audio: bool = True,
     denoise: Optional[bool] = None,
     loudnorm: Optional[bool] = None,
+    check_cancel: Optional[Callable[[], None]] = None,
 ) -> Path:
     """
     Uses FFmpeg to convert any video/audio file into 16kHz 16-bit mono PCM WAV
@@ -63,15 +85,7 @@ def extract_audio_16k_mono(
             "1",
             str(out_path),
         ]
-        proc = subprocess.run(
-            enhanced_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            creationflags=creation_flags,
-        )
+        proc = _run_ffmpeg(enhanced_cmd, creation_flags, check_cancel)
         if proc.returncode == 0 and out_path.exists() and out_path.stat().st_size > 100:
             return out_path
 
@@ -91,15 +105,7 @@ def extract_audio_16k_mono(
         str(out_path),
     ]
 
-    proc = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        creationflags=creation_flags,
-    )
+    proc = _run_ffmpeg(cmd, creation_flags, check_cancel)
 
     if proc.returncode != 0 or not out_path.exists():
         raise RuntimeError(f"Ошибка извлечения звука через FFmpeg:\n{proc.stderr[-600:]}")
