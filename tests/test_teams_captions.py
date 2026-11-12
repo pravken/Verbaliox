@@ -35,6 +35,19 @@ class TeamsCaptionsTest(unittest.TestCase):
         self.assertEqual(snap["names"], ["Natalia Rudavina", "Vladislav Lisnevskiy"])
         self.assertTrue(all(97 <= m["at"] <= 99 for m in snap["marks"]))  # the caption lag taken off
 
+    def test_a_line_teams_corrects_as_it_goes_stays_one_line(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._take([("Echo", "Азии запишите небольшое Сообщение после сигнала.")])
+        r._take([("Echo", "Азии запишите небольшое Сообщение после сигнала."), ("Echo", "Чтобы проверить качество связи за")])
+        r._take([("Echo", "Чтобы проверить качество связи, запишите небольшое Сообщение после сигнала."),
+                 ("Echo", "Затем прослушать его.")])
+        snap = r.snapshot()
+        self.assertEqual([m["text"] for m in snap["marks"]],
+                         ["Чтобы проверить качество связи, запишите небольшое Сообщение после сигнала.", "Затем прослушать его."])
+        self.assertEqual(snap["lines"], 2)
+        self.assertFalse(tc.same_line("затем прослушать его.", "чтобы проверить качество связи"))
+
     def test_ui_automation_loads_by_its_full_name_when_the_short_one_fails(self):
         import sys
         import types
