@@ -32,6 +32,42 @@ NOT_A_PANEL = {"Button", "MenuItem", "CheckBox", "Hyperlink", "SplitButton", "Ra
 _NAME_RE = re.compile(r"^[^\W\d_][\w'’.\-]*(?: [^\W\d_][\w'’.\-]*){0,3}$")
 
 
+UIA_ASSEMBLIES = ("UIAutomationTypes", "UIAutomationClient")
+_UIA_STRONG = ", Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35"
+
+
+def uia_paths(name: str) -> List[str]:
+    """Where Windows keeps the UI Automation assembly of .NET Framework 4 (it ships with every Windows
+    10/11): the global assembly cache, then the WPF folder of the framework."""
+    import os
+
+    win = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or r"C:\Windows"
+    net = os.path.join(win, "Microsoft.NET")
+    return [os.path.join(net, "assembly", "GAC_MSIL", name, "v4.0_4.0.0.0__31bf3856ad364e35", f"{name}.dll"),
+            os.path.join(net, "Framework64", "v4.0.30319", "WPF", f"{name}.dll"),
+            os.path.join(net, "Framework", "v4.0.30319", "WPF", f"{name}.dll")]
+
+
+def load_uia() -> None:
+    """Loads UI Automation through pythonnet. Its version 3 does not find an assembly of the global
+    cache by its short name («Could not load file or assembly 'UIAutomationClient'»): the full name is
+    tried next, then the file itself. Raises when none of them loads."""
+    import os
+
+    import clr
+
+    for name in UIA_ASSEMBLIES:
+        errors = []
+        for ref in (name, name + _UIA_STRONG, *[p for p in uia_paths(name) if os.path.isfile(p)]):
+            try:
+                clr.AddReference(ref)
+                break
+            except Exception as e:
+                errors.append(f"{ref}: {e}".splitlines()[0][:160])
+        else:
+            raise RuntimeError(f"{name} не загружен: " + " | ".join(errors))
+
+
 def looks_like_name(text: str, known: Optional[set] = None) -> bool:
     """A caption author: one of the known names, or 1–4 capitalised words without sentence punctuation."""
     t = " ".join(str(text or "").split())
@@ -184,10 +220,7 @@ class Reader:
             self._set("unavailable", "только в Windows")
             return
         try:
-            import clr  # pythonnet: the Windows component screen readers use
-
-            clr.AddReference("UIAutomationClient")
-            clr.AddReference("UIAutomationTypes")
+            load_uia()  # the Windows component screen readers use
             from System.Diagnostics import Process
             from System.Windows.Automation import AutomationElement, Condition, ControlType, TreeScope
         except Exception as e:
@@ -333,10 +366,7 @@ def check(timeout: float = 25.0) -> Dict[str, Any]:
             out.update(state="unavailable", error="только в Windows")
             return
         try:
-            import clr
-
-            clr.AddReference("UIAutomationClient")
-            clr.AddReference("UIAutomationTypes")
+            load_uia()
             from System.Diagnostics import Process
             from System.Windows.Automation import AutomationElement, Condition, ControlType, TreeScope
         except Exception as e:
