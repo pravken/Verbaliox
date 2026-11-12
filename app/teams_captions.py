@@ -178,6 +178,7 @@ class Reader:
         self.state = "idle"          # idle | reading | no_window | no_captions | unavailable | error
         self.error = ""
         self._said: Dict[str, List[List[Any]]] = {}  # the lines read, by speaker
+        self._live: Optional[Tuple[str, List[Any]]] = None  # (speaker, entry) of the line being said
         self._known: set = set()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -193,6 +194,7 @@ class Reader:
             self.started_at = started_at or time.time()
             self.marks, self.names, self.lines = [], [], 0
             self._said, self._known = {}, {n.lower() for n in (known_names or []) if n}
+            self._live = None
             self.state, self.error = "idle", ""
             self._panel, self._found_at = None, 0.0
         self._stop.clear()
@@ -217,13 +219,20 @@ class Reader:
 
     # ---- reading
     def _take(self, found: List[Tuple[str, str]]) -> None:
+        """The pairs on screen now, in order. The last one is the line still being said: Teams rewrites
+        it until the next line comes («1345» → «123456» → «13456789 10»), so each reading of it replaces
+        its text; the lines above it are said, each kept once in its latest wording."""
         now = time.time()
         with self._lock:
-            for name, line in found:
+            closed = False  # the line being said before is now above the last one: it is finished
+            for k, (name, line) in enumerate(found):
                 said = self._said.setdefault(name.lower(), [])  # [line lowered, index of its mark]
                 low = line.lower()
-                # the line still being said grows at its end, Teams corrects its words as it goes, and the
-                # older lines stay on screen: all of them are the same line, kept in its latest wording
+                live = self._live
+                if k == len(found) - 1 and live is not None and not closed and live[0] == name.lower() \
+                        and live[1] in said and not any(e is not live[1] and same_line(e[0], low) for e in said):
+                    self._set_text(live[1], low, line)  # the same line, still being said
+                    continue
                 matches = [e for e in said if same_line(e[0], low)]
                 if matches:
                     same = matches[0]  # the earliest: the line began then
@@ -232,15 +241,25 @@ class Reader:
                         self.marks[extra[1]]["merged"] = True
                         self.lines -= 1
                     if low != same[0] and (len(matches) > 1 or len(low) >= len(same[0]) * 0.8):
-                        same[0] = low
-                        self.marks[same[1]]["text"] = line[:200]
+                        self._set_text(same, low, line)
+                    if live is not None and same is live[1] and k < len(found) - 1:
+                        closed = True
+                    if k == len(found) - 1:
+                        self._live = (name.lower(), same)
                     continue
-                said.append([low, len(self.marks)])
+                entry = [low, len(self.marks)]
+                said.append(entry)
                 self.lines += 1
                 if name not in self.names:
                     self.names.append(name)
                 self.marks.append({"at": round(max(0.0, now - self.started_at - CAPTION_LAG_SEC), 2),
                                    "name": name, "text": line[:200]})
+                if k == len(found) - 1:
+                    self._live = (name.lower(), entry)
+
+    def _set_text(self, entry: List[Any], low: str, line: str) -> None:
+        entry[0] = low
+        self.marks[entry[1]]["text"] = line[:200]
 
     def _run(self) -> None:
         if sys.platform != "win32":

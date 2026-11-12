@@ -48,6 +48,16 @@ class TeamsCaptionsTest(unittest.TestCase):
         self.assertEqual(snap["lines"], 2)
         self.assertFalse(tc.same_line("затем прослушать его.", "чтобы проверить качество связи"))
 
+    def test_the_line_being_said_is_rewritten_not_added(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        e, m = "Echo", "Maksim Pravko"
+        for shown in ([(e, "Затем прослушать его."), (m, "1345")], [(e, "Затем прослушать его."), (m, "123456")],
+                      [(e, "Затем прослушать его."), (m, "13456789 10")], [(m, "13456789 10"), (e, "90")]):
+            r._take(shown)
+        self.assertEqual([(x["name"], x["text"]) for x in r.snapshot()["marks"]],
+                         [(e, "Затем прослушать его."), (m, "13456789 10"), (e, "90")])
+
     def test_ui_automation_loads_by_its_full_name_when_the_short_one_fails(self):
         import sys
         import types
