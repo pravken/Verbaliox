@@ -1042,7 +1042,8 @@ function rpRenderInfo() {
     + flag(t('txProcLoudnorm'), proc.loudnorm !== false, t('rdPlyrOn'), t('rdPlyrOff'))
     + flag(t('rdPlyrInfoLeveling'), proc.leveling !== false, t('rdPlyrOn'), t('rdPlyrOff'))
     + flag(t('rdPlyrInfoVad'), proc.vad !== false, t('rdPlyrOn'), t('rdPlyrOff'))
-    + flag(t('txProcDiarization'), proc.diarization !== false, t('rdPlyrOn'), t('rdPlyrOff')),
+    + flag(t('txProcDiarization'), proc.diarization !== false, t('rdPlyrOn'), t('rdPlyrOff'))
+    + flag(t('impEnsemble'), proc.ensemble === true, t('rdPlyrOn'), t('rdPlyrOff')),
     btn(t('rdPlyrChange'), 'rpInfoToRecognition'), t('rdPlyrInfoSoundNote'));
   const p = rpPlayer();
   const dubTrack = state.audioTrack && state.audioTrack !== 'orig';
