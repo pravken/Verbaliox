@@ -105,9 +105,12 @@ def same_line(a: str, b: str) -> bool:
     other, or most of it is the same."""
     import difflib
 
-    if a == b or a.startswith(b) or b.startswith(a):
+    if a == b:
         return True
-    short = min(len(a), len(b))
+    short, long_ = sorted((len(a), len(b)))
+    # a reading that grew: only a real start of the line counts («да» begins every «да, …» said before)
+    if (a.startswith(b) or b.startswith(a)) and (short >= 12 or short >= 0.5 * long_):
+        return True
     if short < 12:
         return False
     head = len(os.path.commonprefix([a, b]))
