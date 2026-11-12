@@ -706,7 +706,7 @@ function renderUpcomingMeetings() {
   // the card «Встреча» of the studio: the meetings of the calendar, one click takes the title
   const show = _upcoming.length && !isRecording();
   box.classList.toggle('hidden', !show);
-  if (!show) return;
+  if (!show) { renderStudioPeople(); return; }
   const now = new Date();
   const today = now.toDateString();
   const loc = state.uiLang === 'en' ? 'en-GB' : 'ru-RU';
@@ -729,6 +729,127 @@ function renderUpcomingMeetings() {
     </div>`;
   }).join('');
   box.innerHTML = `<div class="st-sub-title mt-1">${escapeHtml(t('upcomingTitle'))}</div>${rows}`;
+  renderStudioPeople();
+}
+
+// --- Who is at the meeting: the people of the calendar meeting (the one picked by its title, or the
+// one going on), how many (for splitting by voices) and «Сейчас говорит» while recording: a click on
+// a name marks the moment, and after transcription the voice heard then gets the name ---
+const stPeople = { names: [], marks: [], count: 0, manual: false, eventKey: '' };
+
+function stPeopleEvent() {
+  const title = (document.getElementById('record-title-input')?.value || '').trim();
+  const now = new Date();
+  return _upcoming.find(e => title && e.title === title)
+    || _upcoming.find(e => new Date(e.start) - 10 * 60e3 <= now && now < new Date(e.end)) || null;
+}
+
+function stPeopleSync() {
+  const ev = stPeopleEvent();
+  const key = ev ? `${ev.title}|${ev.start}` : '';
+  if (key === stPeople.eventKey) return;
+  stPeople.eventKey = key;
+  const invited = ((ev && ev.attendees) || []).map(a => String(a).replace(/<[^>]*>/g, '').trim()).filter(Boolean);
+  const own = stPeople.names.filter(n => !invited.includes(n) && stPeople.marks.some(m => m.name === n));
+  stPeople.names = [...new Set([...invited, ...own])].slice(0, 20);
+  if (!stPeople.manual) stPeople.count = invited.length > 1 ? Math.min(invited.length, 10) : 0;
+}
+
+function stTeamsLine() {
+  const st = stPeople.teams;
+  if (!isRecording() || !st) return t('teamsIdle');
+  if (st.state === 'reading') return t('teamsReading').replace('{n}', () => st.lines || 0).replace('{p}', () => (st.names || []).length);
+  return t(`teams_${st.state}`) || t('teamsIdle');
+}
+
+function renderStudioPeople() {
+  const box = document.getElementById('studio-people');
+  if (!box) return;
+  stPeopleSync();
+  const rec = isRecording();
+  // the marks of each person: the clicks here and the caption lines read from Teams
+  const counts = { ...((stPeople.teams && stPeople.teams.counts) || {}) };
+  stPeople.marks.forEach(m => { counts[m.name] = (counts[m.name] || 0) + 1; });
+  const options = [`<option value="0">${escapeHtml(t('stPeopleAuto'))}</option>`,
+    ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
+  const html = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
+      <label class="st-people-count">${escapeHtml(t('stPeopleCount'))}
+        <select data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
+    <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="st-person${counts[n] ? ' is-marked' : ''}"
+        ${rec ? '' : 'disabled'} data-click="stPeopleMark" data-click-args='[${i}]'
+        title="${escapeHtml(rec ? t('tipStPersonMark') : t('tipStPersonIdle'))}">${escapeHtml(n)}${counts[n] ? `<span class="st-person-n">${counts[n]}</span>` : ''}</button>`).join('')}
+      <button type="button" class="st-person st-person-add" data-click="stPeopleAdd">+ ${escapeHtml(t('stPeopleAdd'))}</button></div>
+    <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>
+    ${stTeamsOn() ? `<p class="st-people-teams">${escapeHtml(stTeamsLine())}
+      <button type="button" class="st-link" data-click="showTeamsHelp">${escapeHtml(t('teamsHelpLink'))}</button></p>` : ''}`;
+  // Drawn again only when something changed: the captions call this every second, and a list being
+  // opened (how many) closed under the pointer
+  if (box._html === html) return;
+  box._html = html;
+  box.innerHTML = html;
+  box.querySelector('select').value = String(stPeople.count);
+}
+
+// Who speaks, read from the Teams captions while recording (Settings → Recording, app/teams_captions.py):
+// its names join the participants, its marks go with the recording on the server
+let _stTeamsTimer = null;
+
+function stTeamsOn() {
+  return String(((state.system && state.system.settings) || {}).teams_captions) === 'true';
+}
+
+async function stTeamsStart() {
+  clearInterval(_stTeamsTimer);
+  stPeople.teams = null;
+  if (!stTeamsOn()) return;
+  await fetch('/api/teams/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ started_at: _recStartTime / 1000, names: stPeople.names }),
+  }).catch(() => null);
+  _stTeamsTimer = setInterval(stTeamsPoll, 4000);
+}
+
+async function stTeamsPoll() {
+  if (!isRecording()) { clearInterval(_stTeamsTimer); return; }
+  const st = await fetch('/api/teams/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!st) return;
+  stPeople.teams = st;
+  for (const n of st.names || []) if (!stPeople.names.includes(n)) stPeople.names.push(n);
+  // more people speak in the captions than counted: the count follows (unless chosen by hand)
+  const speaking = (st.names || []).length;
+  if (!stPeople.manual && speaking > stPeople.count && speaking >= 2) stPeople.count = Math.min(speaking, 10);
+  renderStudioPeople();
+}
+
+function stTeamsStop() {
+  clearInterval(_stTeamsTimer);
+  if (stTeamsOn()) fetch('/api/teams/stop', { method: 'POST' }).catch(() => {});
+}
+
+// How to turn on the live captions in Teams (docs/teams-captions.md), in the app
+function showTeamsHelp() {
+  confirmDialog(t('teamsHelpTitle'), t('teamsHelpText'), t('gotIt'), false, { single: true });
+}
+
+function stPeopleSetCount(v) {
+  stPeople.count = Number(v) || 0;
+  stPeople.manual = true;
+}
+
+async function stPeopleAdd() {
+  const name = (await askText(t('stPeopleAddAsk'), '', { title: t('stPeopleTitle') }) || '').trim();
+  if (!name) return;
+  if (!stPeople.names.includes(name)) stPeople.names.push(name);
+  renderStudioPeople();
+}
+
+function stPeopleMark(i) {
+  const name = stPeople.names[i];
+  if (!name || !isRecording() || !_recStartTime) return;
+  const at = Math.max(0, (Date.now() - _recStartTime) / 1000);
+  stPeople.marks.push({ at, name });
+  renderStudioPeople();
+  showToast(t('stPeopleMarked').replace('{name}', () => name).replace('{time}', () => formatTime(Math.floor(at))));
 }
 
 function upcomingUseTitle(i) {
@@ -1138,6 +1259,7 @@ function langCode(code) {
 function renderStudioState() {
   const rec = isRecording();
   syncLibLiveRow();
+  renderStudioPeople();
   syncStudioAsk();
   const sourceName = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') };
   const p = recordPresets().find(x => x.id === state.recPresetId);
@@ -1236,7 +1358,7 @@ class CapTyper {
     if (text === this.target) return;
     this.target = text;
     this.el.textContent = text;
-    if (text) {
+    if (text && !capView.instant) {  // catching up after the window was hidden: no fade for each line
       this.el.classList.remove('cap-in');
       void this.el.offsetWidth;  // restarts the fade
       this.el.classList.add('cap-in');
@@ -1284,7 +1406,18 @@ function setCapTags(row, lang, target) {
   if (tt.textContent !== langCode(target)) tt.textContent = langCode(target);
 }
 
+// With the window minimized the lines are only kept: drawn and faded in while hidden, they all
+// played out at once when it came back and the captions jumped. Back in sight, they are drawn once,
+// without the fade, at the bottom.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !capView.dirty) return;
+  capView.dirty = false;
+  capView.instant = true;
+  try { syncStudioCaptions(); } finally { capView.instant = false; }
+});
+
 function syncStudioCaptions() {
+  if (document.hidden) { capView.dirty = true; return; }
   syncStudioAsk();
   const target = document.getElementById('live-translate-select').value;
   const view = target ? studio.view : 'orig';
@@ -1294,6 +1427,14 @@ function syncStudioCaptions() {
 
   const lines = [...liveCap.lines.values()].sort((a, b) => a.id - b.id);
   const fresh = lines.filter(ln => !capView.rows.has(ln.id));
+  // Many lines at once (the window came back and the page did not say it was hidden): drawn without
+  // the fade too
+  const wasInstant = capView.instant;
+  if (fresh.length > 3) capView.instant = true;
+  try { capDrawLines(lines, fresh, target, view); } finally { capView.instant = wasInstant; }
+}
+
+function capDrawLines(lines, fresh, target, view) {
   fresh.forEach((ln, i) => {
     const draftRow = i === 0 && capView.draftKey ? capView.rows.get(capView.draftKey) : null;
     if (draftRow) {
@@ -1535,6 +1676,8 @@ async function startLiveRecording() {
     updateMeter();
 
     _recStartTime = Date.now();
+    stPeople.marks = [];  // «Сейчас говорит» of this recording
+    stTeamsStart();
     // Notes left from a recording that did not finish (the window was closed) are kept
     try {
       const draft = localStorage.getItem('verbaliox_studio_notes');
@@ -1661,6 +1804,7 @@ function _cleanupRecordingResources() {
 async function cancelLiveRecording() {
   if (!isRecording()) return;
   if (!await askConfirm(t('recCancelConfirm'), true, t('cfDiscardRecording'))) return;
+  stTeamsStop();
   if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
     _mediaRecorder.ondataavailable = null;
     _mediaRecorder.onstop = null;
@@ -1706,6 +1850,16 @@ async function stopAndTranscribeRecording(opts) {
   _recScreenId = null;
   const rawTitle = (document.getElementById('record-title-input').value || t('recordDefaultTitle')).trim();
   const startedAt = _recStartTime ? _recStartTime / 1000 : 0;
+  state.recSaving = { title: rawTitle };
+  try {
+    return await _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt });
+  } finally {
+    state.recSaving = null;
+    syncLibLiveRow();
+  }
+}
+
+async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
   _cleanupRecordingResources();
 
   if (page) await page.upload;  // every chunk is on the server
@@ -1717,6 +1871,7 @@ async function stopAndTranscribeRecording(opts) {
       title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
       has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
       notes: takeStudioNotes(), started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
+      speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
     }),
   });
   const data = await res.json().catch(() => ({}));

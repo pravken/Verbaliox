@@ -328,6 +328,8 @@ const SERVER_PATTERNS_EN = [
   ["Не удалось изменить автозапуск Windows: {}", "Could not change starting with Windows: {0}"],
   ["Сведение версий: спорные места {}–{} из {}", "Merging the versions: disputed places {0}–{1} of {2}"],
   ["Точный режим: распознавание {} ({} из {}): {} из {}", "Precise mode: transcribing with {0} ({1} of {2}): {3} of {4}"],
+  ["участников больше, чем указано: по голосам их {}", "more speakers than said: the voices make {0}"],
+  ["имена по отметкам «Сейчас говорит»: {}", "names from the «Speaking now» marks: {0}"],
   ["сведено из {} моделей, спорных мест {}, по смыслу выбрано {}", "merged from {0} models, {1} disputed places, {2} chosen by meaning"],
   ["сведено из {} моделей, спорных мест {} (модель анализа недоступна: решено по точности моделей)", "merged from {0} models, {1} disputed places (no analysis model: decided by the models' accuracy)"],
   ["Сведено из {} версий ({}): спорных мест {}, из них выбрала модель анализа {}.{}", "Merged from {0} versions ({1}): {2} disputed places, {3} of them chosen by the analysis model.{4}"],

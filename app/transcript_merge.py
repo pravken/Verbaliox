@@ -40,6 +40,8 @@ def ranked(models: List[str], lang: str) -> List[str]:
 
 
 def _weight(model: str, lang: str) -> float:
+    if model == "teams":  # the Teams captions: their times are approximate, their words a helper
+        return 0.4
     order = _RANK.get((lang or "")[:2], _RANK[""])
     return 1.0 - 0.1 * order.index(model) if model in order else 0.5
 

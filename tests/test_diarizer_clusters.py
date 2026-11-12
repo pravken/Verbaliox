@@ -37,6 +37,30 @@ class DetermineClustersTest(unittest.TestCase):
         self.assertEqual(labels[:4], [0, 0, 0, 0])
         self.assertEqual(labels[4:], [1, 1, 1, 1])
 
+    def _voices(self, k, n=5, spread=0.25):
+        bases = [self.rng.normal(size=192) for _ in range(k)]
+        embs = np.vstack([_voice(self.rng, b, n, spread) for b in bases]).astype(np.float32)
+        durs = np.full(len(embs), 5.0, dtype=np.float32)
+        return embs, durs
+
+    def test_a_count_of_one_or_two_said_is_corrected_to_clearly_more_voices(self):
+        embs, durs = self._voices(5)
+        for said in (1, 2):
+            self.assertEqual(len(set(_determine_clusters(embs, durs, num_speakers_hint=said).tolist())), 5)
+
+    def test_three_clear_voices_correct_a_count_of_two(self):
+        embs, durs = self._voices(3)
+        self.assertEqual(len(set(_determine_clusters(embs, durs, num_speakers_hint=2).tolist())), 3)
+
+    def test_a_count_said_stays_when_the_voices_do_not_clearly_make_three(self):
+        embs, durs = self._voices(2)
+        self.assertEqual(set(_determine_clusters(embs, durs, num_speakers_hint=1).tolist()), {0})
+        # three "voices" that are one voice said a little differently: the count said stays
+        common = self.rng.normal(size=192)
+        embs = np.vstack([_voice(self.rng, common + self.rng.normal(0, 0.15, size=192), 5, 0.25) for _ in range(3)]).astype(np.float32)
+        durs = np.full(len(embs), 5.0, dtype=np.float32)
+        self.assertLessEqual(len(set(_determine_clusters(embs, durs, num_speakers_hint=2).tolist())), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -706,6 +706,47 @@ SUMMARY_TEMPLATES: Dict[str, str] = {
 }
 
 
+# The analysis model leaves the memory once its work is done: AFTER_WORK_UNLOAD_SEC after the last
+# answer with no new question (an overview of a long recording asks several in a row) Ollama lets go
+# of every model it holds. Not while live captions run (their translation model works on).
+AFTER_WORK_UNLOAD_SEC = 20.0
+_work_lock = threading.Lock()
+_work = {"active": 0, "timer": None}
+
+
+def _after_work_unload() -> None:
+    with _work_lock:
+        if _work["active"]:
+            return
+    try:
+        from app.vram import ollama_release_others
+
+        gone = ollama_release_others()
+        if gone:
+            print(f"[ollama] unloaded after the work: {', '.join(gone)}", flush=True)
+    except Exception as e:
+        print(f"[ollama] not unloaded after the work: {e}", flush=True)
+
+
+def _work_started() -> None:
+    with _work_lock:
+        _work["active"] += 1
+        if _work["timer"]:
+            _work["timer"].cancel()
+            _work["timer"] = None
+
+
+def _work_done() -> None:
+    with _work_lock:
+        _work["active"] = max(0, _work["active"] - 1)
+        if _work["active"]:
+            return
+        timer = threading.Timer(AFTER_WORK_UNLOAD_SEC, _after_work_unload)
+        timer.daemon = True
+        _work["timer"] = timer
+    timer.start()
+
+
 def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     from app import idle_unload
 
@@ -735,9 +776,12 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     payload.update(thinking_off(model))
     from app import cancel_scope
 
-    try:  # one analysis model in memory at a time: another one loaded before goes first
-        from app.vram import ollama_release_others
+    try:  # one model in memory at a time: the idle speech models and another analysis model go first
+        from app.vram import ollama_release_others, release_idle_speech_models
 
+        gone = release_idle_speech_models()
+        if gone:
+            print(f"[ollama] unloaded before {model}: {', '.join(gone)}", flush=True)
         ollama_release_others(keep=model)
     except Exception as e:
         print(f"[ollama] others not unloaded: {e}", flush=True)
@@ -755,7 +799,11 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
 
         ollama_unload([model])
 
-    return cancel_scope.call(request, on_abort=stop_answer)
+    _work_started()
+    try:
+        return cancel_scope.call(request, on_abort=stop_answer)
+    finally:
+        _work_done()
 
 
 MAX_NOTE_ROUNDS = 3
