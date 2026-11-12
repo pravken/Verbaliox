@@ -86,13 +86,19 @@ def api_record_page_start() -> Dict[str, Any]:
 
 @router.post("/api/record/page/{page_id}/chunk")
 async def api_record_page_chunk(page_id: str, request: Request) -> Dict[str, Any]:
+    from starlette.concurrency import run_in_threadpool
+
     part = _page_part(page_id)
     data = await request.body()
     if len(data) > 64 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Слишком большой фрагмент записи")
-    with part.open("ab") as f:
-        f.write(data)
-    return {"ok": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
+
+    def append() -> Dict[str, Any]:  # off the event loop: a slow disk or a virus scan held every request
+        with part.open("ab") as f:
+            f.write(data)
+        return {"ok": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
+
+    return await run_in_threadpool(append)
 
 @router.post("/api/record/page/{page_id}/cancel")
 def api_record_page_cancel(page_id: str) -> Dict[str, Any]:
@@ -225,7 +231,8 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
         if page is not None and (not page.is_file() or page.stat().st_size == 0):
             page.unlink(missing_ok=True)
             page = None
-    cap = finish_capture(payload.capture_id) if payload.capture_id else None
+    # its thread is joined (up to 5 s): not on the event loop, which serves every other request
+    cap = await run_in_threadpool(finish_capture, payload.capture_id) if payload.capture_id else None
     system = cap.path if cap and cap.path.is_file() else None
     screen: Optional[Path] = None
     if payload.screen_id:
@@ -266,6 +273,8 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
         if res.returncode != 0 or not dest.is_file():
             print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
             dest.unlink(missing_ok=True)
+            if mic:
+                mic.unlink(missing_ok=True)  # the cleaned microphone was made for the mix: the page's part is kept
             if original_system:  # the parts kept are the ones recorded
                 system.unlink(missing_ok=True)
                 system = original_system

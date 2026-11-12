@@ -50,10 +50,17 @@ class SystemCapture:
 
     def start(self) -> None:
         self._thread.start()
-        if not self._ready.wait(5):
-            raise RuntimeError("захват системного звука не начался")
-        if self.error:
-            raise RuntimeError(self.error)
+        if not self._ready.wait(5) or self.error:
+            # Not started in time (or failed): the thread is told to stop and its file goes — a device
+            # that came up later recorded into a file nothing could stop or finish
+            error = self.error or "захват системного звука не начался"
+            self._stop.set()
+            self._thread.join(timeout=2)
+            try:
+                self.path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise RuntimeError(error)
 
     def _run(self) -> None:
         import soundcard as sc
