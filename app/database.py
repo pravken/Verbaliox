@@ -211,6 +211,7 @@ def init_db() -> None:
             "work_day_fit": "true",  # ...stretched for a meeting that runs a little past its edges
             "meet_auto_all": "false",  # record every calendar meeting by itself (static/js/home.js)
             "meet_ask_inperson": "true",  # ...but ask first for a meeting without a link to a call
+            "meet_never": "[]",  # calendar meetings never recorded or asked about: [{id: series, title}], JSON
             "meet_overrides": "{}",  # per meeting of the calendar: "rec" (record it) or "skip", JSON
         }
 

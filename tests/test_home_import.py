@@ -71,6 +71,11 @@ class ProcessingTest(unittest.TestCase):
         for bad in ('{"a": "maybe"}', "[1]", "not json"):
             with self.assertRaises(ValueError):
                 settings_schema.clean("meet_overrides", bad)
+        never = '[{"id": "abc@outlook", "title": "Конец рабочего дня"}]'
+        self.assertEqual(json.loads(settings_schema.clean("meet_never", never))[0]["title"], "Конец рабочего дня")
+        for bad in ('{"a": 1}', '[1]', '[{"id": 5}]', "not json"):
+            with self.assertRaises(ValueError):
+                settings_schema.clean("meet_never", bad)
 
 
 class CalendarDayTest(unittest.TestCase):
