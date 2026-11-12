@@ -485,11 +485,22 @@ def recover_orphan_recordings() -> int:
 
 
 def record_mix_command(ffmpeg: str, page: Optional[Path], system: Optional[Path], has_video: bool,
-                       has_mic: bool, dest: Path, system_skip: float = 0.0) -> Optional[List[str]]:
+                       has_mic: bool, dest: Path, system_skip: float = 0.0,
+                       mic: Optional[Path] = None) -> Optional[List[str]]:
     """The FFmpeg command that turns the parts of a recording into one file, or None when the page
     recording can be used as it is. system_skip: how much earlier the system audio began than the
-    page's recording (its start is left out, so both tracks line up)."""
+    page's recording (its start is left out, so both tracks line up). mic: the page's microphone
+    without the speakers' echo (app/echo_cancel.py), used instead of the page's sound."""
     base = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
+    if mic and system and page:
+        sys_in = [*_skip_args(system_skip), "-i", str(system)]
+        if has_video:  # the picture of the page, the sound of the cleaned microphone and the system
+            return base + ["-i", str(page), *sys_in, "-i", str(mic), "-filter_complex",
+                           "[2:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "0:v", "-map", "[a]",
+                           "-c:v", "copy", "-c:a", "libopus", "-b:a", "128k", str(dest)]
+        return base + ["-i", str(mic), *sys_in, "-filter_complex",
+                       "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "[a]",
+                       "-c:a", "aac", "-b:a", "160k", str(dest)]
     if page and not system:
         # Video from MediaRecorder has no index: a copy into a new file makes it seekable
         return base + ["-i", str(page), "-c", "copy", str(dest)] if has_video else None
