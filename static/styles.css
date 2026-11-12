@@ -689,6 +689,12 @@ label.settings-toggle { display: flex; }
 .cap-view-tr .lang-tag, .cap-view-side .lang-tag { display: none; }
 .cap-view-under .cap-same .cap-t { display: none; }
 .cap-view-side .cap-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; }
+.cap-view-side .cap-who { grid-column: 1 / -1; margin-bottom: -1.6rem; }
+/* who said the line (Teams captions, «Сейчас говорит»): over it when the speaker changes */
+.cap-who { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em; margin-bottom: 2px; }
+.cap-who.hidden { display: none; }
+.cap-who-c0 { color: #64D2FF; } .cap-who-c1 { color: #30D158; } .cap-who-c2 { color: #FF9F0A; }
+.cap-who-c3 { color: #BF5AF2; } .cap-who-c4 { color: #FF6482; } .cap-who-c5 { color: #FFD60A; }
 .cap-view-side .cap-t { font-size: var(--cap-size, 26px); margin-top: 0; }
 .cap-view-side .cap-same .cap-tr { display: none; }
 .cap-view-side .cap-same .cap-t::after { content: '—'; color: var(--hc-dim, #8A8A90); }
