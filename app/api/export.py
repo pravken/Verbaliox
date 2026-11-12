@@ -168,7 +168,9 @@ def api_meeting_thumb(meeting_id: int) -> Response:
     """A small frame of the video (made once with FFmpeg and kept in <data>/thumbs)."""
     from app.ffmpeg_manager import tool_cmd
 
-    m = get_meeting(meeting_id)
+    from app.database import meeting_files
+
+    m = meeting_files(meeting_id)
     if not m or not m.get("is_video"):
         raise HTTPException(status_code=404, detail="Нет видео")
     media = Path(m.get("media_path") or "")

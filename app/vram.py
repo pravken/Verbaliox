@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from app.database import get_all_settings, get_meeting
+from app.database import get_all_settings
 
 
 def _ollama_base() -> str:
@@ -329,8 +329,10 @@ def job_stage() -> Optional[str]:
     if transcriber.running_job_kind() != "transcribe":
         return None
     mid = transcriber.running_meeting_id()
-    m = get_meeting(mid) if mid is not None else None
-    return (m or {}).get("status") or "transcribing"
+    # the status alone: the whole recording was read for it every 5 s and before every LLM request
+    from app.database import meeting_status
+
+    return (meeting_status(mid) if mid is not None else "") or "transcribing"
 
 
 def release_idle_speech_models() -> List[str]:
