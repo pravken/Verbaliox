@@ -902,7 +902,10 @@ def generate_meeting_summary(
 
     source_label = "Вот точная расшифровка аудио/видеозаписи"
     single_pass_max = SINGLE_PASS_MAX_CHARS if not llm.is_cloud else llm.max_chars
-    if len(transcript_text) > single_pass_max:
+    # the user's notes go in the same request: the transcript gets the room they leave (a recording
+    # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
+    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]))
+    if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
         chunks = _chunk_lines(lines, CHUNK_MAX_CHARS if not llm.is_cloud else llm.max_chars // 2)
         focus = (
@@ -930,7 +933,7 @@ def generate_meeting_summary(
             )
         if reuse and chunks:
             part_notes.update(chunks=len(chunks), model=llm.label, notes=list(notes))
-        transcript_text = _fit_notes(llm, system_prompt, notes, single_pass_max, lang)
+        transcript_text = _fit_notes(llm, system_prompt, notes, whole_max, lang)
         source_label = (
             "Запись длинная, поэтому ниже приведены последовательные конспекты всех её фрагментов "
             "(с таймкодами исходной записи, от начала до конца)"
