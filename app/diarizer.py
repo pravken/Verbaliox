@@ -231,6 +231,10 @@ def _embed_slices(
     return out  # type: ignore[return-value]
 
 
+OVERRIDE_MIN_SPEAKERS = 4   # a count of 1 or 2 said is corrected only to four voices or more
+OVERRIDE_MIN_SCORE = 0.30   # and only when the groups are clearly apart (silhouette of the voices)
+
+
 def _determine_clusters(
     embeddings: np.ndarray,
     durations: np.ndarray,
@@ -245,6 +249,24 @@ def _determine_clusters(
     n_samples = len(embeddings)
     if n_samples == 0:
         return np.array([], dtype=int)
+    # One or two speakers said for the recording, but the voices clearly make four or more: the count
+    # is corrected (a wrong hint put a whole meeting into one or two speakers)
+    if num_speakers_hint in (1, 2) and n_samples >= 8:
+        auto = _determine_clusters(embeddings, durations, 0, max_speakers)
+        found = len(set(auto.tolist()))
+        if found >= OVERRIDE_MIN_SPEAKERS:
+            mask = durations >= 1.4
+            try:
+                score = float(silhouette_score(embeddings[mask], auto[mask], metric="cosine")) \
+                    if len(set(auto[mask].tolist())) >= 2 else 0.0
+            except Exception:
+                score = 0.0
+            if score >= OVERRIDE_MIN_SCORE:
+                print(f"[diarizer] the recording said {num_speakers_hint} speaker(s), the voices make {found} "
+                      f"(silhouette {score:.2f}): {found} are kept", flush=True)
+                return auto
+            print(f"[diarizer] {found} voices found against {num_speakers_hint} said, not sure enough "
+                  f"(silhouette {score:.2f}): the count said is kept", flush=True)
     if n_samples == 1 or num_speakers_hint == 1:
         print(f"[diarizer] one speaker: {'one phrase' if n_samples == 1 else 'the recording says one speaker'}", flush=True)
         return np.zeros(n_samples, dtype=int)
