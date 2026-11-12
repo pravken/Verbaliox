@@ -246,6 +246,7 @@ def _determine_clusters(
     if n_samples == 0:
         return np.array([], dtype=int)
     if n_samples == 1 or num_speakers_hint == 1:
+        print(f"[diarizer] one speaker: {'one phrase' if n_samples == 1 else 'the recording says one speaker'}", flush=True)
         return np.zeros(n_samples, dtype=int)
 
     # Filter reliable anchor segments (duration >= 2.2s) to determine speaker clusters
@@ -267,6 +268,8 @@ def _determine_clusters(
             p90_dist = float(np.percentile(upper_tri, 90))
             # Same speaker across varying intonation/emotion in ECAPA-TDNN typically stays < 0.48
             if p90_dist < 0.48:
+                print(f"[diarizer] one speaker: the voices are alike (p90 distance {p90_dist:.3f} < 0.48, "
+                      f"{len(anchor_embs)} anchor phrases)", flush=True)
                 return np.zeros(n_samples, dtype=int)
 
     # Determine optimal number of speakers K
@@ -307,6 +310,7 @@ def _determine_clusters(
                 continue
 
     if best_k <= 1:
+        print(f"[diarizer] one speaker: no split scored above the threshold ({len(anchor_embs)} anchor phrases)", flush=True)
         return np.zeros(n_samples, dtype=int)
 
     # Fit on anchor segments and compute duration-weighted speaker centroids
@@ -343,6 +347,7 @@ def _determine_clusters(
                 merged_centroids.append(cand)
         centroids = np.vstack(merged_centroids)
         if len(centroids) <= 1:
+            print(f"[diarizer] one speaker: {best_k} groups found, all close enough to be one voice", flush=True)
             return np.zeros(n_samples, dtype=int)
     else:
         centroids = np.vstack(centroids_list)
@@ -380,6 +385,7 @@ def diarize_and_merge_segments(
         return {}, []
 
     if not diarization_enabled:
+        print("[diarizer] one speaker: splitting by voices is off for this recording", flush=True)
         speakers = {
             "SPEAKER_00": {
                 "id": "SPEAKER_00",
