@@ -293,6 +293,11 @@ def merge(versions: Dict[str, Dict[str, Any]], lang: str, chat: Optional[Callabl
                 w = {"word": " " + t.surface, "start": round(t.start, 2), "end": round(t.end, 2), "prob": 1.0}
                 if p.disputed and k == 0:
                     w["alts"] = [{"text": p.text(o), "models": opt["models"]} for o, opt in p.options.items()]
+                    # Who picked the variant shown (the hint above the word says it): the analysis model
+                    # by the words around it, or the rule of the most accurate model
+                    w["by"] = "llm" if p.by_llm else "rank"
+                    if not p.by_llm:
+                        w["by_model"] = next((m for m in models if m in p.options[p.choice]["models"]), "")
                     if len(toks) > 1:
                         w["span"] = len(toks)
                 words.append(w)

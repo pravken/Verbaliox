@@ -354,6 +354,8 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertEqual(m["status"], "completed")
         self.assertEqual(m["transcript_model"], "merged")
         self.assertEqual(m["segments"][0]["text"], "попроси Claude сделать обзор")  # the analysis model's pick
+        disputed = [w for w in m["segments"][0]["words"] if w.get("alts")]
+        self.assertEqual([w.get("by") for w in disputed], ["llm"])  # the hint says who picked it
         self.assertEqual(m["segments"][0]["speaker"], "SPEAKER_00")  # the speakers of the main model's version
         self.assertTrue({"gigaam-v3", "parakeet-v3", "merged"} <= set(all_transcripts(self.mid)))
         self.assertEqual(len(self.asked), 1)

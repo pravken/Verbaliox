@@ -171,7 +171,12 @@ async function pickTxModel(sel) {
 }
 
 function disputeTitle(w) {
-  return [t('tipDisputed'), ...w.alts.map(a => `${a.text ? '«' + a.text + '»' : t('altNothing')} — ${a.models.map(formatModelName).join(', ')}`)].join('\n');
+  // Who picked the variant shown: the analysis model by meaning, or the most accurate model (made by
+  // a merge of this version; an older one does not say)
+  const by = w.by === 'llm' ? t('altByLlm')
+    : w.by === 'rank' ? t('altByRank').replace('{model}', () => formatModelName(w.by_model || '')) : '';
+  return [t('tipDisputed'), ...w.alts.map(a => `${a.text ? '«' + a.text + '»' : t('altNothing')} — ${a.models.map(formatModelName).join(', ')}`),
+    ...(by ? [by] : [])].join('\n');
 }
 
 function openWordAlts(e, segId, wi) {
