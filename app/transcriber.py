@@ -1019,14 +1019,28 @@ def _release_speech_models() -> None:
 
 
 def _release_analysis_models() -> None:
-    """The analysis models Ollama holds go before a speech model loads (not while live captions run)."""
+    """The analysis models Ollama holds go before a speech model loads (not while live captions run),
+    and so does the Whisper the caption worker keeps for two minutes after a recording: with them still
+    in the video memory GigaAM / Parakeet went to the processor for the whole recording."""
     try:
-        from app.vram import ollama_release_others
+        from app.vram import ollama_loaded, ollama_release_others
 
-        if ollama_release_others():
-            time.sleep(1.0)  # Ollama frees the memory a moment after it is asked
+        asked = set(ollama_release_others())
+        # Ollama frees the memory a while after it is asked: waited for (a second was often too short)
+        deadline = time.time() + 6.0
+        while asked and time.time() < deadline and asked & {m["name"] for m in ollama_loaded()}:
+            time.sleep(0.3)
     except Exception as e:
         print(f"[transcriber] Ollama models not unloaded: {e}", flush=True)
+    try:
+        from app import live
+
+        worker = live._worker
+        if worker is not None and worker.proc is not None and worker.proc.poll() is None and not live.has_sessions():
+            with worker.lock:
+                worker._kill()
+    except Exception:
+        traceback.print_exc()
 
 
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
