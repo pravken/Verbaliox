@@ -75,7 +75,8 @@ function renderSpeakersPanel(opts = {}) {
   const talk = spTalk(m);
   const total = Object.values(talk).reduce((a, r) => a + r.seconds, 0) || 1;
   const names = new Set(keys.map(k => String(speakers[k].name || '').trim().toLowerCase()));
-  const guests = ((ctx && ctx.calendar) || []).filter(n => !names.has(n.toLowerCase())).slice(0, 8);
+  // A name a speaker already has stays offered (one person split into two speakers): it merges them
+  const guests = ((ctx && ctx.calendar) || []).slice(0, 10);
   const list = document.getElementById('sp-names');
   if (list && ctx) list.innerHTML = (ctx.names || []).map(p => `<option value="${escapeHtml(p.name)}"></option>`).join('');
   if (opts.background && spTyping(box)) {
@@ -108,7 +109,9 @@ function renderSpeakersPanel(opts = {}) {
     }
     if (spIsDefault(s.name) && guests.length) {
       hints.push(`<div class="sp-guests"><span class="sp-note">${escapeHtml(t('spInvited'))}</span>
-          ${guests.map(g => `<button class="sp-chip" ${pageCall('click', 'spRename', [id, g])}>${escapeHtml(g)}</button>`).join('')}
+          ${guests.map(g => names.has(g.toLowerCase())
+            ? `<button class="sp-chip sp-chip-used" title="${escapeHtml(t('spNameUsedTip'))}" ${pageCall('click', 'spRename', [id, g])}>${escapeHtml(g)} <span aria-hidden="true">·</span> <span class="sp-chip-note">${escapeHtml(t('spNameUsed'))}</span></button>`
+            : `<button class="sp-chip" ${pageCall('click', 'spRename', [id, g])}>${escapeHtml(g)}</button>`).join('')}
           <button class="sp-chip sp-chip-other" ${pageCall('click', 'spFocusName', [id])}>${escapeHtml(t('spOtherName'))}</button></div>`);
     }
     return `<div class="sp-card" data-spk="${escapeHtml(id)}">
@@ -159,6 +162,13 @@ async function spRename(id, value) {
   const s = m && (m.speakers || {})[id];
   const name = String(value || '').trim();
   if (!s || !name || name === s.name) return;
+  // The name of another speaker of this recording: most likely one person split into two
+  const other = Object.keys(m.speakers || {}).find(k => k !== id && String(m.speakers[k].name || '').trim().toLowerCase() === name.toLowerCase());
+  if (other) {
+    const merge = await confirmDialog(t('spSameNameTitle').replace('{name}', () => name), t('spSameNameText').replace('{name}', () => name),
+      t('spMergeBtn'), false, { cancel: t('spSameNameKeep') });
+    if (merge) { await spMerge(id, other, true); return; }
+  }
   await renameSpeaker(id, name);
   loadSpeakersContext(true).then(() => { if (state.activeMeeting === m) renderSpeakersPanel({ background: true }); });
 }
@@ -230,11 +240,11 @@ function openSpeakerCardMenu(id, el) {
   setTimeout(() => openTextMenuAt(items, r.right, r.bottom + 6, { right: true }), 0);
 }
 
-async function spMerge(source, target) {
+async function spMerge(source, target, asked = false) {
   const m = state.activeMeeting;
   const sp = (m && m.speakers) || {};
   if (!sp[source] || !sp[target]) return;
-  const ok = await confirmDialog(t('spMergeTitle').replace('{a}', () => sp[source].name).replace('{b}', () => sp[target].name),
+  const ok = asked === true || await confirmDialog(t('spMergeTitle').replace('{a}', () => sp[source].name).replace('{b}', () => sp[target].name),
     t('spMergeText').replace('{b}', () => sp[target].name), t('spMergeBtn'), false);
   if (!ok) return;
   const res = await fetch(`/api/meetings/${m.id}/speakers/merge`, {
@@ -519,11 +529,19 @@ async function dirMerge() {
   const ok = await confirmDialog(t('spDirMergeTitle').replace('{name}', () => keep),
     t('spDirMergeText').replace('{names}', () => rest.join(', ')).replace('{name}', () => keep), t('spMergeBtn'), false);
   if (!ok) return;
-  const res = await fetch('/api/people/merge', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names: dir.picked }),
-  });
-  const data = await readJson(res);
-  if (!res.ok) { showError(serverText(data.detail)); return; }
+  // The button says the merge is on its way (with a large library it takes a moment)
+  const btn = document.querySelector('#sp-dir-dlg [data-a="merge"]');
+  if (btn) { btn.disabled = true; btn.textContent = t('spDirMerging'); }
+  let res, data;
+  try {
+    res = await fetch('/api/people/merge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names: dir.picked }),
+    });
+    data = await readJson(res);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+  if (!res.ok) { showError(serverText(data.detail)); drawDirectory(); return; }
   dir.picked = [];
   await loadDirectory();
   spCtx.data = null;

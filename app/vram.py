@@ -91,6 +91,29 @@ def gpu_memory() -> Optional[Dict[str, float]]:
     return {"total_gb": round(total / gb, 1), "free_gb": round(free / gb, 1), "used_gb": round((total - free) / gb, 1)}
 
 
+def _same_model(a: str, b: str) -> bool:
+    norm = lambda n: n if ":" in n else f"{n}:latest"  # noqa: E731
+    return norm(a) == norm(b)
+
+
+def ollama_release_others(keep: Optional[str] = None) -> List[str]:
+    """One heavy model at a time: Ollama lets go of every model but `keep` (none: all of them). Asked,
+    not waited for; skipped while live captions run (their translation model works next to others).
+    Returns the names it asked to unload."""
+    from app import live
+
+    if live.has_sessions():
+        return []
+    names = [m["name"] for m in ollama_loaded() if not (keep and _same_model(m["name"], keep))]
+    for name in names:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                client.post(f"{_ollama_base()}/api/generate", json={"model": name, "keep_alive": 0})
+        except Exception as e:
+            print(f"[vram] Ollama did not unload {name}: {e}", flush=True)
+    return names
+
+
 def ollama_loaded() -> List[Dict[str, Any]]:
     """Models Ollama keeps in memory. Never starts Ollama."""
     from app.ollama_client import _is_ollama_port_open

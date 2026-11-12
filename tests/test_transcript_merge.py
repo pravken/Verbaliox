@@ -74,6 +74,9 @@ class MergeTest(unittest.TestCase):
         res = tm.merge({"large-v3": version("купи хлеб и малако"), "gigaam-v3": version("купи хлеб и молоко")}, "ru")
         self.assertEqual(texts(res), ["купи хлеб и молоко"])
         self.assertIn("alts", res["segments"][0]["words"][-1])
+        # the hint over the word says it was picked by accuracy, and whose variant it is
+        self.assertEqual(res["segments"][0]["words"][-1]["by"], "rank")
+        self.assertEqual(res["segments"][0]["words"][-1]["by_model"], "gigaam-v3")
 
     def test_an_answer_out_of_range_keeps_the_accurate_variant(self):
         res = tm.merge({"gigaam-v3": version("купи хлеб и молоко"), "large-v3": version("купи хлеб и малако")}, "ru",

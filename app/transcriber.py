@@ -553,7 +553,6 @@ def _load_whisper_with_fallback(model_name: str, device: str, compute_type: str)
 # reloaded every time. It is released when the queue becomes empty, before an LLM summary on
 # GPUs without enough free memory, and after any error.
 _KEEP_MIN_FREE_VRAM_GB = 3.0  # leave room for the speaker model while Whisper stays loaded
-_SUMMARY_MIN_FREE_VRAM_GB = 8.0  # below this, free Whisper before Ollama loads its model
 _whisper_cache: Dict[str, Any] = {"key": None, "model": None}
 
 
@@ -933,6 +932,30 @@ def _after_transcription(
     return notes
 
 
+def _release_speech_models() -> None:
+    """Whisper and GigaAM / Parakeet out of memory: the next model (another one, or the analysis
+    model) loads into a free computer instead of next to them."""
+    from app import asr_onnx
+
+    release_whisper_model()
+    try:
+        asr_onnx.release()
+    except Exception:
+        traceback.print_exc()
+    clear_vram()
+
+
+def _release_analysis_models() -> None:
+    """The analysis models Ollama holds go before a speech model loads (not while live captions run)."""
+    try:
+        from app.vram import ollama_release_others
+
+        if ollama_release_others():
+            time.sleep(1.0)  # Ollama frees the memory a moment after it is asked
+    except Exception as e:
+        print(f"[transcriber] Ollama models not unloaded: {e}", flush=True)
+
+
 # --- The precise mode: other models recognize the recording too, and the versions are merged ---
 ENSEMBLE_CANDIDATES = ("gigaam-v3", "large-v3", "parakeet-v3", "large-v3-turbo")
 ENSEMBLE_MAX_MODELS = 3  # with the main one: each model is one more pass over the whole recording
@@ -1028,6 +1051,7 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     done: List[str] = []
     for k, model in enumerate(extra):
         _check_cancel(meeting_id)
+        _release_speech_models()  # one model in memory at a time: the one before goes first
         name = format_whisper_model_name(model)
         lo, hi = 70 + 15 * k // len(extra), 70 + 15 * (k + 1) // len(extra)
 
@@ -1053,8 +1077,7 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
         save_transcript_version(meeting_id, model, {"segments": segs, "speakers": speakers, "language": detected_lang,
                                                     "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
         done.append(model)
-    release_whisper_model()
-    clear_vram()
+    _release_speech_models()  # the analysis model resolves the disputed places next
     if not done:
         return None
     _check_cancel(meeting_id)
@@ -1121,6 +1144,7 @@ def _process_meeting_job(meeting_id: int) -> None:
         extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm,
                                check_cancel=lambda: _check_cancel(meeting_id))
         duration = get_media_duration(wav_path) or get_media_duration(media_path)
+        _release_analysis_models()  # the speech model gets the memory an analysis model held
 
         update_meeting_progress(
             meeting_id,
@@ -1397,8 +1421,8 @@ def _process_meeting_job(meeting_id: int) -> None:
             local_only = is_local_only(get_meeting(meeting_id))
             if llm.available(settings, local_only=local_only):
                 cloud = llm.uses_cloud(settings) and not local_only
-                if not cloud and device == "cuda" and _free_vram_gb() < _SUMMARY_MIN_FREE_VRAM_GB:
-                    release_whisper_model()
+                if not cloud:  # the analysis model loads alone: the speech models go first
+                    _release_speech_models()
                 update_meeting_progress(
                     meeting_id,
                     status="summarizing",

@@ -248,7 +248,7 @@ input[type="range"].volume-slider::-webkit-slider-thumb:hover {
 }
 /* Transcript tab: "Recognition" (the model of the text, a panel of its own) and "Text" (the tools
    for the text shown), each with its label, so the two kinds of buttons do not read as one group */
-.tx-section-panel { padding: 5px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
+.tx-section-panel { padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.045); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.12)); }
 .tx-section-label { font-size: var(--fs-label); line-height: 1.35; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8E8E93);
   flex-shrink: 0; min-width: 104px; }
 .tx-section-label-text { padding-left: 9px; }  /* in line with the label of the panel above */
@@ -1523,7 +1523,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   border-radius: 19px; font-weight: 700; font-size: var(--fs-sub); letter-spacing: -0.011em; cursor: pointer; overflow: hidden; }
 .sp-color { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .sp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.sp-line { display: flex; align-items: center; gap: 8px; }
+.sp-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sp-line .sp-name { flex: 1 1 auto; width: 0; min-width: 0; }  /* a narrow card: the name gives way, «Это я» stays in sight */
+.sp-line .sp-me { flex-shrink: 0; }
 .sp-name, .sp-role { max-width: 100%; height: 28px; padding: 0 8px; margin-left: -8px; border-radius: 7px; border: 1px solid transparent;
   background: transparent; color: #F5F5F7; font-size: var(--fs-sub); letter-spacing: -0.011em; font-weight: 600; outline: none; width: 280px; }
 .sp-role { height: 24px; font-size: var(--fs-ui); font-weight: 400; color: var(--hc-dim, #AEAEB2); }
@@ -1547,6 +1549,8 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   color: #C7C7CC; font-size: var(--fs-caption); line-height: 1.35; }
 .sp-chip:hover { border-color: #0A84FF; color: #F5F5F7; }
 .sp-chip-other { background: transparent; border-style: dashed; color: #8CC4FF; }
+.sp-chip-used { color: #C7C7CC; }
+.sp-chip-note { font-size: 11px; color: #8E8E93; }
 .sp-mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 .sp-mrow { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.06)); text-align: left; color: #E5E5EA; }
@@ -2430,3 +2434,10 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lib-live-title { display: block; font-size: 12.5px; font-weight: 600; color: #FFFFFF; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-live-sub { display: block; font-size: 11px; color: #FFB3AD; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-live-time { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: #FFFFFF; flex-shrink: 0; }
+
+/* Library: a day (or month) is a divider between the recordings, not one more title */
+.lib-date-row { margin-top: 8px; padding-top: 3px; padding-bottom: 3px; }
+.lib-date-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #8E8E93; }
+.lib-date-today .lib-date-label { color: #8CC4FF; }
+.lib-date-line { flex: 1 1 auto; min-width: 12px; height: 1px; background: rgba(255, 255, 255, 0.09); }

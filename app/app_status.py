@@ -19,6 +19,40 @@ KIND_LABELS = {
 }
 
 
+_notices: List[Dict[str, Any]] = []  # Windows notifications the tray shows next (run.py)
+
+AUTO_SOURCES = {"call": "звонок", "calendar": "встреча по календарю"}
+
+
+def auto_recording_notice(started: bool, source: str, name: str = "") -> Dict[str, str]:
+    """The short notification of a recording the app started or stopped by itself: one was going
+    on without a word otherwise. Shown even in quiet mode: a recording is never silent."""
+    what = (name or "").strip()[:80]
+    if started:
+        title = "● Идёт запись"
+        text = " · ".join(x for x in (what, AUTO_SOURCES.get(source, "")) if x) or "Запись началась сама"
+        try:
+            from app.database import get_all_settings
+
+            hotkey = (get_all_settings().get("record_hotkey") or "").strip()
+        except Exception:
+            hotkey = ""
+        text += f"\nОстановить: {hotkey} или в окне Verbaliox" if hotkey else "\nОстановить — в окне Verbaliox"
+    else:
+        title = "Запись сохранена"
+        text = (f"{what} · " if what else "") + "отправлена на расшифровку"
+    notice = {"title": title, "text": text}
+    _notices.append(notice)
+    del _notices[:-5]
+    return notice
+
+
+def take_notices() -> List[Dict[str, Any]]:
+    out = list(_notices)
+    _notices.clear()
+    return out
+
+
 def set_recording(active: bool) -> None:
     _ui.update(recording=bool(active), since=time.time() if active else 0.0)
 

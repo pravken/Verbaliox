@@ -72,6 +72,8 @@ async function selectMeeting(id, reloadPlayer = true) {
 // --- The model of the transcript (the row above the transcript tools). Each model's transcript is
 // kept (app/database.py transcript_versions): picking a model that made one shows it, another one
 // offers Transcribe; the status says which model the text below comes from ---
+const TX_PRECISE = 'precise';  // not a model: the precise mode for this recording (app/transcriber.py ensemble)
+
 function txModelChoices(m) {
   const done = new Set([m.transcript_model, ...(m.transcript_versions || []).map(v => v.model)].filter(Boolean));
   const list = (state.whisperCatalog || []).map(i => ({ id: i.id, installed: i.installed, size: modelSizeLabel(i), languages: i.languages }));
@@ -93,10 +95,10 @@ function renderTxModelBar() {
   if (state.txModelFor !== m.id) { state.txModelFor = m.id; state.txModelPick = null; state.txBarOpen = false; }
   const { list, done } = txModelChoices(m);
   const shown = (m.segments || []).length ? (m.transcript_model || '') : '';
-  // Audit 8.4: when a text is shown and nothing is running, the row folds into the model's mark
-  const folded = !!shown && DONE_STATUSES.includes(m.status) && !state.txBarOpen;
+  // The row stays in sight, framed apart: folded into a mark it was not clear it could be opened
+  const folded = false;
   bar.classList.toggle('hidden', folded);
-  chip.classList.toggle('hidden', !shown || !DONE_STATUSES.includes(m.status));
+  chip.classList.add('hidden');
   chip.setAttribute('aria-expanded', String(!folded));
   chip.innerHTML = `<span class="tx-model-chip-dot" aria-hidden="true"></span><span>${escapeHtml(formatModelName(shown))}</span><span aria-hidden="true">${folded ? '▾' : '▴'}</span>`;
   const pick = state.txModelPick || shown || m.model_name || (list[0] && list[0].id) || '';
@@ -107,7 +109,9 @@ function renderTxModelBar() {
     const fits = !i.languages || !lang || i.languages.includes(lang) || done.has(i.id);
     return `<option value="${escapeHtml(i.id)}" ${fits ? '' : 'disabled'}>${escapeHtml(formatModelName(i.id))}${done.has(i.id) ? '  ✓' : ''}${
       i.installed ? '' : `  ↓ ${escapeHtml(i.size)}`}${fits ? '' : ` (${escapeHtml(t('txModelOtherLang'))})`}</option>`;
-  }).join('');
+  }).join('')
+    // The precise mode: the downloaded models one after another, their versions merged into one
+    + `<option value="${TX_PRECISE}">${escapeHtml(t('txPrecise'))}</option>`;
   sel.value = pick;
   const busy = !DONE_STATUSES.includes(m.status);
   sel.disabled = busy;
@@ -118,7 +122,7 @@ function renderTxModelBar() {
   btn.classList.toggle('opacity-40', btn.disabled);
   btn.classList.toggle('hidden', pick === 'merged');  // the merged text is not made by a model
   const again = !!pick && pick === shown;
-  document.getElementById('tx-transcribe-label').textContent = t(again ? 'txTranscribeAgain' : 'txTranscribe');
+  document.getElementById('tx-transcribe-label').textContent = t(pick === TX_PRECISE ? 'txPreciseRun' : again ? 'txTranscribeAgain' : 'txTranscribe');
   // The next step while the picked model has no text yet: the call to action stands out in blue
   btn.classList.toggle('ui-btn-primary', !again);
   btn.classList.toggle('ui-btn-subtle', again);
@@ -139,6 +143,7 @@ function renderTxModelBar() {
   else if (pick === 'merged' && shown === 'merged') [text, cls] = [`✓ ${t('txMergedDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}${
     disputes ? ' · ' + t('txDisputes').replace('{n}', () => disputes) : ''}`, 'text-apple-green'];
   else if (pick && pick === shown) [text, cls] = [`✓ ${t('txModelDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}`, 'text-apple-green'];
+  else if (pick === TX_PRECISE) [text, cls] = [t('txPreciseHint'), 'text-apple-secondary'];
   else if (!shown) [text, cls] = [t('txModelNone'), 'text-apple-secondary'];
   else [text, cls] = [t('txModelNotYet').replace('{model}', () => formatModelName(shown)), 'text-apple-amber'];
   status.textContent = text;
@@ -166,7 +171,12 @@ async function pickTxModel(sel) {
 }
 
 function disputeTitle(w) {
-  return [t('tipDisputed'), ...w.alts.map(a => `${a.text ? '«' + a.text + '»' : t('altNothing')} — ${a.models.map(formatModelName).join(', ')}`)].join('\n');
+  // Who picked the variant shown: the analysis model by meaning, or the most accurate model (made by
+  // a merge of this version; an older one does not say)
+  const by = w.by === 'llm' ? t('altByLlm')
+    : w.by === 'rank' ? t('altByRank').replace('{model}', () => formatModelName(w.by_model || '')) : '';
+  return [t('tipDisputed'), ...w.alts.map(a => `${a.text ? '«' + a.text + '»' : t('altNothing')} — ${a.models.map(formatModelName).join(', ')}`),
+    ...(by ? [by] : [])].join('\n');
 }
 
 function openWordAlts(e, segId, wi) {
@@ -235,7 +245,7 @@ async function mergeTranscripts() {
 const TX_PROC_GROUPS = [
   ['txProcSound', [['denoise', 'txProcDenoise', 'txProcDenoiseHint'], ['loudnorm', 'txProcLoudnorm', 'txProcLoudnormHint'],
     ['leveling', 'txProcLeveling', 'txProcLevelingHint'], ['vad', 'txProcVad', 'txProcVadHint']]],
-  ['txProcText', [['diarization', 'txProcDiarization', 'txProcDiarizationHint'], ['ensemble', 'impEnsemble', 'impEnsembleHint']]],
+  ['txProcText', [['diarization', 'txProcDiarization', 'txProcDiarizationHint']]],
 ];
 
 function txProc(m) {
@@ -296,23 +306,27 @@ function setTxProcValue(key, value) {
 async function transcribeWithPickedModel() {
   const m = state.activeMeeting;
   if (!m) return;
-  const model = document.getElementById('tx-model-select').value;
+  let model = document.getElementById('tx-model-select').value;
   if (!model) return;
-  if (model === m.transcript_model && (m.segments || []).length
+  const precise = model === TX_PRECISE;
+  // The precise mode starts from the recording's own model (its speakers come from that one)
+  if (precise) model = m.model_name && m.model_name !== 'merged' ? m.model_name : ((state.system && state.system.settings) || {}).whisper_model || 'large-v3-turbo';
+  if (!precise && model === m.transcript_model && (m.segments || []).length
       && !(await confirmDialog(t('txTranscribeAgainTitle'), t('txTranscribeAgainText').replace('{model}', () => formatModelName(model)),
         t('txTranscribeAgain'), false))) return;
   hideTxProcMenu();
   const p = txProc(m);
   const res = await fetch(`/api/meetings/${m.id}/reconfigure`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model_name: model, language: p.language || 'auto', num_speakers_hint: p.speakers, processing: p.values }),
+    body: JSON.stringify({ model_name: model, language: p.language || 'auto', num_speakers_hint: p.speakers,
+      processing: { ...p.values, ensemble: precise } }),  // the list above picks the precise mode
   });
   const data = await readJson(res);
   if (!res.ok) { showToast(errorText(data, res)); return; }
   state.txModelPick = null;
   await loadMeetingsList();
   await selectMeeting(m.id, false);
-  showToast(t('txTranscribeStarted').replace('{model}', () => formatModelName(model)));
+  showToast(precise ? t('txPreciseStarted') : t('txTranscribeStarted').replace('{model}', () => formatModelName(model)));
 }
 
 function updateProcessingBanner(m) {
