@@ -192,13 +192,17 @@ def run_cut(ffmpeg: str, media: Path, intervals: List[Interval], has_video: bool
     if not intervals:
         raise ValueError("Нечего оставить: в записи не найдено речи")
     total = max(0.1, kept_seconds(intervals))
+    # written beside it and put in place when done: a file of that name the user agreed to replace is
+    # not lost when FFmpeg fails or the cut is cancelled half way
+    part = out.with_name(out.stem + ".part" + out.suffix)
     with tempfile.TemporaryDirectory() as tmp:
-        cmd = cut_command(ffmpeg, media, intervals, has_video, out, Path(tmp) / "cut.txt", afilter)
+        cmd = cut_command(ffmpeg, media, intervals, has_video, part, Path(tmp) / "cut.txt", afilter)
         from app.shutdown import track
 
         with track(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                     encoding="utf-8", errors="replace", creationflags=_NO_WINDOW)) as proc:
-            _follow(proc, total, out, on_progress, check_cancel)
+            _follow(proc, total, part, on_progress, check_cancel)
+    part.replace(out)
     return out
 
 
