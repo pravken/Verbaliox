@@ -472,6 +472,10 @@ def recover_orphan_recordings() -> int:
     found: List[Tuple[Path, Optional[bool]]] = []
     try:
         rec = _recordings_dir()
+        # what finishing a recording made for its mix (the cleaned microphone, the lined-up system sound):
+        # left by a crash during the mix, the recorded parts themselves are recovered below
+        for left in [*rec.glob(".page_*.part.mic.wav"), *rec.glob(".page_*.part.sys.wav")]:
+            left.unlink(missing_ok=True)
         found += [(p, None) for p in rec.glob(".page_*.webm.part")]
         found += [(p, True) for p in rec.glob(".screen_*.mkv.part")]
         found += [(p, False) for p in UPLOADS_DIR.glob("system_*.wav") if p.stat().st_size > 4096]
