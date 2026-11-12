@@ -134,6 +134,8 @@ def clean(key: str, value: Any) -> str:
         return _folder(text_s, key) if text_s else ""
     if key == "meet_overrides":
         return _meet_overrides(text_s)
+    if key == "meet_never":
+        return _meet_never(text_s)
     return text
 
 
@@ -149,6 +151,22 @@ def _meet_overrides(text: str) -> str:
             any(not isinstance(k, str) or len(k) > 300 or v not in ("rec", "skip") for k, v in data.items()):
         raise ValueError("meet_overrides: нужен объект JSON")
     return json.dumps(data, ensure_ascii=False)
+
+
+def _meet_never(text: str) -> str:
+    """[{id, title}]: the calendar meetings (a whole series, or one meeting) never recorded nor asked
+    about — «Никогда» before a meeting. id: the event's id in the calendar (or its title)."""
+    import json
+
+    try:
+        data = json.loads(text or "[]")
+    except ValueError:
+        raise ValueError("meet_never: нужен список JSON")
+    if not isinstance(data, list) or len(data) > 300 or any(
+            not isinstance(x, dict) or not isinstance(x.get("id", ""), str) or not isinstance(x.get("title", ""), str)
+            or len(x.get("id", "")) > 300 or len(x.get("title", "")) > 300 for x in data):
+        raise ValueError("meet_never: нужен список JSON")
+    return json.dumps([{"id": x.get("id", ""), "title": x.get("title", "")} for x in data], ensure_ascii=False)
 
 
 def as_int(value: Any, default: int = 0) -> int:

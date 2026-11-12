@@ -35,6 +35,17 @@ class TeamsCaptionsTest(unittest.TestCase):
         self.assertEqual(snap["names"], ["Natalia Rudavina", "Vladislav Lisnevskiy"])
         self.assertTrue(all(97 <= m["at"] <= 99 for m in snap["marks"]))  # the caption lag taken off
 
+    def test_the_panel_is_the_element_with_the_lines_not_a_captions_button(self):
+        whole_window = ["Чат", "Участники", *self.PANEL, "Поднять руку"]
+        candidates = [
+            ("Button", ["Параметры субтитров"]),           # «Caption settings» comes after the panel
+            ("Group", whole_window),                      # an outer region holds the lines too
+            ("Group", self.PANEL),                        # the panel itself
+            ("Text", ["Субтитры включены"]),             # a notice, no lines
+        ]
+        self.assertEqual(tc.choose_panel(candidates), 2)
+        self.assertIsNone(tc.choose_panel([("Button", self.PANEL), ("Text", ["Субтитры"])]))
+
 
 if __name__ == "__main__":
     unittest.main()
