@@ -807,3 +807,17 @@ class OllamaAnswerLengthTest(unittest.TestCase):
             self.assertEqual(oc._ollama_chat("http://127.0.0.1:11434", "qwen2.5:1.5b", "s", "u"), "ответ")
         self.assertEqual(sent["options"]["num_predict"], oc.LLM_MAX_ANSWER_TOKENS)
         self.assertLess(oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_NUM_CTX)
+
+
+class EditsDuringMergeTest(unittest.TestCase):
+    def test_a_merge_of_versions_holds_the_edits_like_a_transcription(self):
+        from app import transcriber
+
+        with transcriber._jobs_lock:
+            transcriber._queue.append({"id": 424242, "kind": "merge", "lang": None, "queued_at": 0, "started_at": None})
+        try:
+            self.assertTrue(transcriber.is_transcribing(424242))
+        finally:
+            with transcriber._jobs_lock:
+                transcriber._queue[:] = [q for q in transcriber._queue if q["id"] != 424242]
+        self.assertFalse(transcriber.is_transcribing(424242))
