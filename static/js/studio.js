@@ -536,6 +536,13 @@ async function startAppScreenCapture(target) {
   _recScreenId = data.screen_id;
 }
 
+// A recording the app started or stopped by itself gets a Windows notification (the tray shows it)
+function autoRecordNotice(started, source, name) {
+  fetch('/api/ui/auto-record', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ started, source, name: name || '' }),
+  }).catch(() => {});
+}
+
 // --- Calls recorded by themselves (app/call_watch.py): a watched app took or let go of the microphone ---
 state.callRecording = null;
 
@@ -553,10 +560,12 @@ async function handleCallEvent(ev) {
     // The recording starts asynchronously: wait for it before deciding it did not start
     for (let i = 0; i < 40 && !isRecording(); i++) await new Promise(r => setTimeout(r, 250));
     if (!isRecording()) state.callRecording = null;
+    else autoRecordNotice(true, 'call', ev.name || ev.app);
   } else if (ev.state === 'ended' && state.callRecording) {
     state.callRecording = null;
     if (!isRecording()) return;
     showToast(t('callRecordEnded').replace('{app}', () => ev.name || ev.app));
+    autoRecordNotice(false, 'call', ev.name || ev.app);
     stopAndTranscribeRecording();
   }
 }

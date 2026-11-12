@@ -67,3 +67,26 @@ class UnloadSwitchTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutoRecordNoticeTest(unittest.TestCase):
+    """A recording the app starts or stops by itself gets a short Windows notification (run.py shows it)."""
+
+    def test_start_and_stop_are_announced(self):
+        from app import app_status
+        from app.database import init_db, update_settings
+
+        init_db()
+        update_settings({"record_hotkey": "Ctrl+Alt+R"})
+        app_status.take_notices()
+        app_status.auto_recording_notice(True, "call", "Microsoft Teams")
+        app_status.auto_recording_notice(False, "calendar", "Планёрка")
+        a, b = app_status.take_notices()
+        self.assertEqual(a["title"], "● Идёт запись")
+        self.assertIn("Microsoft Teams · звонок", a["text"])
+        self.assertIn("Ctrl+Alt+R", a["text"])
+        self.assertEqual(b["title"], "Запись сохранена")
+        self.assertIn("Планёрка", b["text"])
+        self.assertEqual(app_status.take_notices(), [])  # shown once
+        self.assertLessEqual(len(a["title"]), 63)
+        self.assertLessEqual(len(a["text"]), 255)

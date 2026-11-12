@@ -290,6 +290,18 @@ def api_ui_lang(payload: UiLangPayload) -> Dict[str, Any]:
 class UiStatePayload(BaseModel):
     recording: bool = False
 
+class AutoRecordNoticePayload(BaseModel):
+    started: bool
+    source: str = "call"   # "call" (app/call_watch.py) or "calendar"
+    name: str = ""         # the app of the call or the title of the meeting
+
+@router.post("/api/ui/auto-record")
+def api_auto_record_notice(payload: AutoRecordNoticePayload) -> Dict[str, Any]:
+    """The page started or stopped a recording by itself: a Windows notification says so."""
+    from app.app_status import auto_recording_notice
+
+    return auto_recording_notice(payload.started, payload.source, payload.name)
+
 @router.post("/api/ui/state")
 def api_ui_state(payload: UiStatePayload) -> Dict[str, Any]:
     from app.app_status import set_recording, snapshot
