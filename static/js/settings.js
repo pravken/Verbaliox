@@ -134,6 +134,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-ask-import').checked = s.ask_import_params !== 'false';
     document.getElementById('set-asr-ensemble').checked = s.asr_ensemble === 'true';
     document.getElementById('set-echo-cancel').checked = s.rec_echo_cancel !== 'false';
+    document.getElementById('set-teams-captions').checked = s.teams_captions === 'true';
     renderEnsembleModels(s);
     if (document.getElementById('set-clean-fillers')) {
       document.getElementById('set-clean-fillers').checked = s.clean_fillers !== 'false';
@@ -565,6 +566,7 @@ function formatModelName(modelId) {
   const raw = String(modelId || '').trim();
   if (!raw) return 'AI';
   if (raw === 'merged') return t('mergedVersion');
+  if (raw === 'teams') return t('teamsVersion');  // the Teams captions read while recording
   if (raw === 'auto') return t('modelAutoByLang');  // the Russian model or the main one (app/speech_route.py)  // one text from several models (app/transcript_merge.py)
   const lower = raw.toLowerCase();
   if (MODEL_DISPLAY_NAMES[lower]) return MODEL_DISPLAY_NAMES[lower];
@@ -877,7 +879,7 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '' };
+  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '', ensemble: false };
   const item = id => catalog.find(i => i.id === id);
   const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
   const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
@@ -890,8 +892,14 @@ function openFirstRunWizard(data) {
   const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
       <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
   const llmItem = llmCatalog.find(m => m.id === picks.llm) || { size: '' };
+  // The precise mode always has Whisper Pro among its models: downloaded with the set when it is on
+  const ENS_MODEL = 'large-v3';
+  const downloads = () => {
+    const ids = models();
+    return st.ensemble && models().length >= 2 && !ids.includes(ENS_MODEL) && item(ENS_MODEL) ? [...ids, ENS_MODEL] : ids;
+  };
   const plan = () => {
-    const list = models().filter(id => !item(id)?.installed);
+    const list = downloads().filter(id => !item(id)?.installed);
     const rows = list.map(id => ({ name: formatModelName(id), mb: wizardSizeMb(item(id)) }));
     if (!(data.ffmpeg || {}).available) rows.unshift({ name: 'FFmpeg', mb: ((data.ffmpeg || {}).download_info || {}).size_mb || 0 });
     if (st.ai === 'local') rows.push({ name: formatModelName(picks.llm), mb: wizardSizeMb(llmItem) });
@@ -942,6 +950,11 @@ function openFirstRunWizard(data) {
         </div>
         ${roles.ru ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frRouteNote').replace('{ru}', () => formatModelName(roles.ru)).replace('{main}', () => formatModelName(roles.main)))}</p>` : ''}
         ${st.ai === 'cloud' ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudNext'))}</p>` : ''}
+        ${models().length >= 2 ? `<label class="vs-row cursor-pointer text-xs text-apple-label rounded-xl border border-white/10 p-3">
+            <span><span class="text-white font-medium">${escapeHtml(t('ensToggle'))}</span>
+              <span class="fr-ens-best">${tag(t('frEnsBest'))}</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5">${escapeHtml(t('frEnsHint'))}</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
         <p class="text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('frBackground'))}</p>`;
     }
     const canNext = st.step !== 0 || models().length > 0;
@@ -960,6 +973,8 @@ function openFirstRunWizard(data) {
   };
   draw();
   wrap.addEventListener('click', async e => {
+    const ens = e.target.closest('input[data-ens]');
+    if (ens) { st.ensemble = ens.checked; draw(); return; }  // Whisper Pro joins the list to download
     const box = e.target.closest('input[data-model]');
     if (box) {
       if (box.checked) st.custom.add(box.dataset.model); else st.custom.delete(box.dataset.model);
@@ -979,7 +994,7 @@ function openFirstRunWizard(data) {
     if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks, st.main);
+      await runFirstRunSetup(data, models(), st.ai, picks, st.main, st.ensemble && models().length >= 2, downloads());
     }
   });
   document.body.appendChild(wrap);
@@ -987,11 +1002,12 @@ function openFirstRunWizard(data) {
 
 // What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
 // the app downloads one at a time) and the analysis model, all in the background
-async function runFirstRunSetup(data, chosen, ai, picks, mainPick) {
+async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false, toDownload = null) {
   const roles = wizardRoles(chosen, mainPick);
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
     language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
+  if (ensemble === true) settings.asr_ensemble = 'true';  // the precise mode for every new recording
   // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
   // here, the server would refuse the whole request and every choice of the wizard would be lost
   if (ai === 'local') settings.llm_provider = 'ollama';
@@ -1005,7 +1021,8 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick) {
   document.getElementById('set-whisper-model').value = roles.main;
   if (!(data.ffmpeg || {}).available && (data.ffmpeg || {}).can_download) fetch('/api/ffmpeg/install', { method: 'POST' }).catch(() => null);
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
-  const todo = chosen.map(id => catalog.find(i => i.id === id)).filter(i => i && !i.installed);
+  // what the wizard downloads: the chosen models, and Whisper Pro for the precise mode
+  const todo = (Array.isArray(toDownload) ? toDownload : chosen).map(id => catalog.find(i => i.id === id)).filter(i => i && !i.installed);
   todo.filter(i => i.engine === 'onnx').forEach(i => startOnnxModelDownload(i.id));
   const whisperQueue = todo.filter(i => i.engine !== 'onnx').map(i => i.id);
   const nextWhisper = () => {
@@ -2156,6 +2173,7 @@ function settingsFormValues() {
     clean_fillers: String(document.getElementById('set-clean-fillers')?.checked !== false),
     asr_ensemble: String(document.getElementById('set-asr-ensemble').checked),
     rec_echo_cancel: String(document.getElementById('set-echo-cancel').checked),
+    teams_captions: String(document.getElementById('set-teams-captions').checked),
     asr_ensemble_models: [...document.querySelectorAll('#set-ensemble-models input:checked')].map(x => x.value).join(','),
     ollama_model: document.getElementById('set-ollama-model').value.trim(),
     auto_summary: String(document.getElementById('set-auto-summary').checked),
@@ -2532,7 +2550,7 @@ const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
-    ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check']],
+    ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check']],
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
@@ -2552,7 +2570,7 @@ const SETTINGS_RESET = {
 };
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
-  record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true',
+  record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
   auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them

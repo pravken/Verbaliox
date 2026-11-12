@@ -132,10 +132,16 @@ await step('first run wizard', async () => {
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
+  // Two speech models in the set: the precise mode is offered on the last step, and with it Whisper Pro
+  // joins the models to download
+  await page.click('#first-run-wizard label:has(input[data-ens])');
+  await sleep(200);
+  expect((await page.textContent('#first-run-dialog')).includes('Whisper Pro'), 'Whisper Pro not among the downloads');
   await page.click('#first-run-wizard button[data-a="next"]');
   await sleep(600);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   const first = sent[0] || {};
+  expect(first.asr_ensemble === 'true', `precise mode not saved: ${JSON.stringify(first)}`);
   expect(!(await page.$('#first-run-wizard')), 'the wizard stayed open');
   expect(first.speech_model_ru === 'gigaam-v3', `Russian model not set: ${JSON.stringify(first)}`);
   expect(['parakeet-v3', 'large-v3-turbo'].includes(first.whisper_model), `main model not set: ${JSON.stringify(first)}`);

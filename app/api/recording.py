@@ -140,6 +140,37 @@ def api_screen_cancel(screen_id: str) -> Dict[str, Any]:
         cap.path.unlink(missing_ok=True)
     return {"ok": True}
 
+class TeamsStartPayload(BaseModel):
+    started_at: float = 0           # when the recording began (unix seconds): the marks count from it
+    names: List[str] = []           # the people of the calendar meeting: known as names in the captions
+
+@router.post("/api/teams/start")
+def api_teams_start(payload: TeamsStartPayload) -> Dict[str, Any]:
+    """Reads who is speaking from the Teams captions while recording (setting teams_captions)."""
+    from app import teams_captions
+
+    if not teams_captions.enabled():
+        return {"state": "off"}
+    teams_captions.start(payload.started_at, payload.names[:50])
+    return teams_captions.status()
+
+@router.post("/api/teams/stop")
+def api_teams_stop() -> Dict[str, Any]:
+    """A recording cancelled: the reading of the captions ends, its marks go nowhere."""
+    from app import teams_captions
+
+    st = teams_captions.stop()
+    st.pop("marks", None)
+    return st
+
+@router.get("/api/teams/status")
+def api_teams_status() -> Dict[str, Any]:
+    from app import teams_captions
+
+    st = teams_captions.status()
+    st.pop("marks", None)  # the page needs the state and the names, the marks go with the recording
+    return st
+
 class RecordFinishPayload(BaseModel):
     title: str = "Запись"
     page_id: Optional[str] = None     # what the page recorded (microphone and/or video)
@@ -150,6 +181,8 @@ class RecordFinishPayload(BaseModel):
     notes: str = ""                   # what the user wrote in the studio during the recording
     started_at: float = 0             # when the recording began (unix seconds): the calendar meeting
     page_started_at: float = 0        # when the page's recorder began (unix seconds): lines up the system audio
+    speakers_hint: int = 0            # how many people, chosen in the studio (0: found by the voices)
+    speaker_marks: List[Dict[str, Any]] = []  # «Сейчас говорит»: [{at: seconds into the recording, name}]
 
 def _run_ffmpeg(cmd: List[str]) -> subprocess.CompletedProcess:
     try:
@@ -164,8 +197,16 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     (microphone, video) and queues the result for transcription."""
     from starlette.concurrency import run_in_threadpool
 
+    from app import teams_captions
     from app.ffmpeg_manager import tool_cmd
     from app.system_audio import finish_capture
+
+    # «Speaking now» read from the Teams captions during the recording join the ones clicked in the studio
+    teams = await run_in_threadpool(teams_captions.stop)
+    if teams.get("marks"):
+        payload.speaker_marks = [*payload.speaker_marks,
+                                 *({"at": m["at"], "name": m["name"], "text": m.get("text", "")} for m in teams["marks"])]
+        print(f"[teams] {len(teams['marks'])} caption line(s), {len(teams['names'])} name(s) read", flush=True)
 
     page: Optional[Path] = None
     if payload.page_id:
@@ -250,7 +291,7 @@ def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, h
         media_path=str(dest),
         language=settings.get("language", "auto"),
         model_name=speech_route.default_choice(settings),
-        num_speakers_hint=as_int(settings.get("num_speakers"), 0),
+        num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
         source="recording",
         owns_media=True,
         title_is_default=True,
@@ -261,6 +302,15 @@ def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, h
 
     if payload.notes.strip():
         update_meeting_fields(m["id"], user_notes=payload.notes[:50000])
+    if payload.speaker_marks:
+        from app.database import save_transcript_version, set_speaker_marks
+        from app.teams_captions import TEAMS, as_transcript
+
+        set_speaker_marks(m["id"], payload.speaker_marks)
+        # The Teams captions are a transcript of their own: shown by their chip, a voice in the merging
+        teams_version = as_transcript([mk for mk in payload.speaker_marks if mk.get("text")])
+        if teams_version:
+            save_transcript_version(m["id"], TEAMS, teams_version)
     try:
         from datetime import datetime
 

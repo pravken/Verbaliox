@@ -2431,6 +2431,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lib-live-dot { width: 9px; height: 9px; border-radius: 9999px; background: #FF453A; flex-shrink: 0; animation: lib-live-pulse 1.4s ease-in-out infinite; }
 @keyframes lib-live-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .lib-live-dot { animation: none; } }
+.lib-live-row.is-saving .lib-live-dot { background: #FF9F0A; }
+.lib-live-row.is-saving .lib-live-sub { color: #FFD60A; }
 .lib-live-title { display: block; font-size: 12.5px; font-weight: 600; color: #FFFFFF; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-live-sub { display: block; font-size: 11px; color: #FFB3AD; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-live-time { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: #FFFFFF; flex-shrink: 0; }
@@ -2441,3 +2443,48 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
   letter-spacing: 0.06em; text-transform: uppercase; color: #8E8E93; }
 .lib-date-today .lib-date-label { color: #8CC4FF; }
 .lib-date-line { flex: 1 1 auto; min-width: 12px; height: 1px; background: rgba(255, 255, 255, 0.09); }
+
+/* First-run wizard: «recommended for the best quality» on a line of its own under the precise mode */
+.fr-ens-best { display: block; margin: 4px 0 0 -4px; }
+
+/* The recognition row: the models as chips with the state of their text (workspace.js renderTxModelChips) */
+.tx-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tx-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px;
+  color: #D1D1D6; border: 1px solid rgba(255, 255, 255, 0.14); background: transparent; white-space: nowrap; transition: background-color .15s, border-color .15s; }
+.tx-chip:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #FFFFFF; }
+.tx-chip:disabled { opacity: 0.45; cursor: default; }
+.tx-chip.is-busy:disabled { opacity: 1; }
+.tx-chip-mark { font-size: 11px; line-height: 1; width: 10px; text-align: center; }
+.tx-chip.is-done .tx-chip-mark { color: #30D158; }
+.tx-chip.is-none .tx-chip-mark, .tx-chip.is-missing .tx-chip-mark { color: #8E8E93; }
+.tx-chip.is-missing { border-style: dashed; color: #AEAEB2; }
+.tx-chip-size { font-size: 11px; color: #8E8E93; font-family: var(--font-mono); }
+.tx-chip.is-picked { border-color: #0A84FF; box-shadow: 0 0 0 1px #0A84FF inset; }
+/* a model the merged text shown was made from */
+.tx-chip.is-in-merge { background: rgba(10, 132, 255, 0.16); border-color: rgba(10, 132, 255, 0.55); color: #FFFFFF; }
+.tx-chip.is-shown { background: #0A84FF; border-color: #0A84FF; color: #FFFFFF; }
+.tx-chip.is-shown .tx-chip-mark { color: #FFFFFF; }
+.tx-chip.is-shown:hover:not(:disabled) { background: #2B95FF; }
+.tx-chip-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #0A84FF; animation: tx-chip-spin 0.9s linear infinite; }
+@keyframes tx-chip-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tx-chip-spin { animation: none; border-top-color: #0A84FF; } }
+
+/* Studio: who is at the meeting, how many, and «Сейчас говорит» while recording */
+.st-people { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.st-people-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.st-people-count { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #8E8E93; }
+.st-people-count select { height: 24px; padding: 0 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.12); font-size: 12px; }
+.st-people-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-person { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px;
+  color: #E5E5EA; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); }
+.st-person:hover:not(:disabled) { border-color: #0A84FF; background: rgba(10, 132, 255, 0.14); color: #FFFFFF; }
+.st-person:disabled { opacity: 0.6; cursor: default; }
+.st-person.is-marked { border-color: rgba(48, 209, 88, 0.6); }
+.st-person-n { font-size: 10.5px; font-family: var(--font-mono); color: #30D158; }
+.st-person-add { border-style: dashed; color: #8CC4FF; background: transparent; }
+.st-person-add:disabled { opacity: 1; }
+.st-people-hint { font-size: 11px; line-height: 1.35; color: #8E8E93; }
+.st-people-teams { font-size: 11px; line-height: 1.35; color: #8CC4FF; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.st-people-teams .st-link { padding-top: 0; font-size: 11px; }
