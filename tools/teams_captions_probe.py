@@ -28,10 +28,10 @@ from pathlib import Path
 if sys.platform != "win32":
     sys.exit("Скрипт работает только в Windows")
 
-import clr  # pythonnet: даёт доступ к компоненту Windows для экранных дикторов  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app.teams_captions import load_uia  # noqa: E402  pythonnet: компонент Windows для экранных дикторов
 
-clr.AddReference("UIAutomationClient")
-clr.AddReference("UIAutomationTypes")
+load_uia()
 from System.Diagnostics import Process  # noqa: E402
 from System.Windows.Automation import (  # noqa: E402
     AutomationElement, Condition, ControlType, TreeScope, WindowPattern,

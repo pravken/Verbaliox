@@ -35,6 +35,27 @@ class TeamsCaptionsTest(unittest.TestCase):
         self.assertEqual(snap["names"], ["Natalia Rudavina", "Vladislav Lisnevskiy"])
         self.assertTrue(all(97 <= m["at"] <= 99 for m in snap["marks"]))  # the caption lag taken off
 
+    def test_ui_automation_loads_by_its_full_name_when_the_short_one_fails(self):
+        import sys
+        import types
+        from unittest import mock
+
+        tried = []
+
+        def add_reference(ref):
+            tried.append(ref)
+            if "PublicKeyToken" not in ref:  # pythonnet 3 does not find the global cache by short name
+                raise IOError(f"Could not load file or assembly '{ref}'")
+
+        fake = types.SimpleNamespace(AddReference=add_reference)
+        with mock.patch.dict(sys.modules, {"clr": fake}):
+            tc.load_uia()
+        self.assertEqual([r.split(",")[0] for r in tried], ["UIAutomationTypes"] * 2 + ["UIAutomationClient"] * 2)
+        tried.clear()
+        with mock.patch.dict(sys.modules, {"clr": types.SimpleNamespace(AddReference=lambda r: (_ for _ in ()).throw(IOError("no")))}):
+            with self.assertRaises(RuntimeError):
+                tc.load_uia()
+
     def test_the_panel_is_the_element_with_the_lines_not_a_captions_button(self):
         whole_window = ["Чат", "Участники", *self.PANEL, "Поднять руку"]
         candidates = [
