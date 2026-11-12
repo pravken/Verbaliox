@@ -108,3 +108,23 @@ class AutoRecordNoticeTest(unittest.TestCase):
         self.assertEqual(app_status.take_notices(), [])  # shown once
         self.assertLessEqual(len(a["title"]), 63)
         self.assertLessEqual(len(a["text"]), 255)
+
+
+class AfterWorkUnloadTest(unittest.TestCase):
+    """The analysis model leaves the memory once its work is done (app/ollama_client.py)."""
+
+    def test_unloaded_after_the_last_answer_not_between_answers(self):
+        import time
+
+        from app import ollama_client as oc
+
+        with mock.patch.object(oc, "AFTER_WORK_UNLOAD_SEC", 0.2), \
+                mock.patch("app.vram.ollama_release_others", return_value=["qwen3.5:4b"]) as rel:
+            oc._work_started()
+            oc._work_done()          # an overview asks again at once: the timer is put off
+            oc._work_started()
+            time.sleep(0.35)
+            rel.assert_not_called()  # an answer is being written
+            oc._work_done()
+            time.sleep(0.4)
+            rel.assert_called_once_with()
