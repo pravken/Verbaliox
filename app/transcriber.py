@@ -564,15 +564,15 @@ _whisper_cache: Dict[str, Any] = {"key": None, "model": None}
 
 
 def _free_vram_gb() -> float:
+    """Free memory of the video card for all programs (NVML first, app/vram.py): torch alone on Windows
+    misses the caption worker's and Ollama's memory, and the waits below were made for exactly those."""
     try:
-        import torch
+        from app.vram import gpu_memory
 
-        if torch.cuda.is_available():
-            free, _total = torch.cuda.mem_get_info(0)
-            return free / (1024**3)
+        mem = gpu_memory()
+        return float(mem["free_gb"]) if mem else 0.0
     except Exception:
-        pass
-    return 0.0
+        return 0.0
 
 
 # About how much VRAM a job needs for Whisper plus the speaker model, in GB
