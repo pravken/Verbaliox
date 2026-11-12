@@ -436,6 +436,17 @@ class EnsembleJobTest(unittest.TestCase):
         self._run(transcribe)
         self.assertIn("parakeet-v3", ran)  # recognized again: the old version was made for English
 
+    def test_the_live_captions_keep_their_copy_of_the_model(self):
+        """A recording with GigaAM captions goes on while this job runs: only the video card's copies go."""
+        from app import live
+
+        gpu_release = mock.patch.object(self.asr, "release_gpu").start()
+        with mock.patch.object(live, "has_sessions", return_value=True):
+            self._run(self._transcribe)
+        self.assertNotIn(mock.call(), self.release.call_args_list)  # not every copy
+        self.assertNotIn(mock.call("parakeet-v3"), self.release.call_args_list)
+        gpu_release.assert_called()
+
     def test_without_another_model_the_main_one_stays(self):
         from app import asr_onnx
 
