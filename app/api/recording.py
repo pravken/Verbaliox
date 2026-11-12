@@ -63,6 +63,9 @@ def api_record_cancel(capture_id: str) -> Dict[str, Any]:
 # The page sends its MediaRecorder output every second, so a long recording with video never has to
 # fit into the window's memory, and what was recorded survives if the window is closed.
 _page_recordings: Dict[str, Path] = {}
+# The number of the next chunk each page recording expects: a chunk sent again (its answer was lost,
+# the page retried) is not written twice, and none is written out of its place
+_page_next_seq: Dict[str, int] = {}
 
 _page_lock = threading.Lock()
 
@@ -92,10 +95,21 @@ async def api_record_page_chunk(page_id: str, request: Request) -> Dict[str, Any
     data = await request.body()
     if len(data) > 64 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Слишком большой фрагмент записи")
+    raw_seq = request.headers.get("x-chunk-seq")
+    seq = int(raw_seq) if raw_seq and raw_seq.isdigit() else None
 
     def append() -> Dict[str, Any]:  # off the event loop: a slow disk or a virus scan held every request
-        with part.open("ab") as f:
-            f.write(data)
+        with _page_lock:  # one chunk of a page at a time, in its order
+            if seq is not None:
+                expected = _page_next_seq.get(page_id, 0)
+                if seq < expected:  # written already: its answer was lost and the page sent it again
+                    return {"ok": True, "duplicate": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
+                if seq > expected:
+                    raise HTTPException(status_code=409, detail=f"Ожидается фрагмент {expected}")
+            with part.open("ab") as f:
+                f.write(data)
+            if seq is not None:
+                _page_next_seq[page_id] = seq + 1
         return {"ok": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
 
     return await run_in_threadpool(append)
@@ -104,6 +118,7 @@ async def api_record_page_chunk(page_id: str, request: Request) -> Dict[str, Any
 def api_record_page_cancel(page_id: str) -> Dict[str, Any]:
     with _page_lock:
         part = _page_recordings.pop(page_id, None)
+        _page_next_seq.pop(page_id, None)
     if part:
         part.unlink(missing_ok=True)
     return {"ok": True}
@@ -228,6 +243,7 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     if payload.page_id:
         with _page_lock:
             page = _page_recordings.pop(payload.page_id, None)
+            _page_next_seq.pop(payload.page_id, None)
         if page is not None and (not page.is_file() or page.stat().st_size == 0):
             page.unlink(missing_ok=True)
             page = None
