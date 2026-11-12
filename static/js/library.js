@@ -1222,6 +1222,7 @@ function libRowClick(e, id) {
     document.getSelection()?.removeAllRanges();
   } else {
     state.multi.clear();
+    renderLibSelectionBar();  // a plain click leaves the selection: its bar goes too
     _libAnchor = id;
     openMeeting(id, true);
     return;
@@ -1232,10 +1233,10 @@ function libRowClick(e, id) {
 }
 
 function clearLibSelection() {
-  if (!state.multi.size) return;
+  const had = state.multi.size > 0;
   state.multi.clear();
-  renderMeetingsSidebar();
-  renderLibSelectionBar();
+  if (had) renderMeetingsSidebar();
+  renderLibSelectionBar();  // also a bar left from a selection cleared elsewhere
 }
 
 // A bar over the list while several recordings are selected
@@ -1328,7 +1329,7 @@ document.addEventListener('mousedown', e => { _libHadClick = !!e.target.closest?
 document.addEventListener('focusin', e => { if (e.target.closest?.('#meetings-list')) _libHadClick = true; });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && state.multi.size && !document.querySelector('.modal-backdrop:not(.hidden)')) clearLibSelection();
+  if (e.key === 'Escape' && (state.multi.size || document.getElementById('lib-selection-bar')) && !document.querySelector('.modal-backdrop:not(.hidden)')) clearLibSelection();
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable;
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA' && !typing && _libHadClick
       && !document.querySelector('.modal-backdrop:not(.hidden)')) {
@@ -1347,6 +1348,7 @@ document.addEventListener('keydown', e => {
     const next = ids[Math.max(0, Math.min(ids.length - 1, cur + (e.key === 'ArrowDown' ? 1 : -1)))];
     if (next !== undefined && (!state.activeMeeting || next !== state.activeMeeting.id)) {
       state.multi.clear();
+      renderLibSelectionBar();
       openMeeting(next, true);
       document.querySelector(`#meetings-list [data-mid="${next}"]`)?.scrollIntoView({ block: 'nearest' });
     }
