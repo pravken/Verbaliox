@@ -6,6 +6,24 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.4 — English
+
+- **Precise mode: several models + merging** (Settings → Recognition, and a switch per recording in the
+  import window). Every new recording is recognized by the other downloaded models too and the versions
+  are merged: where the models heard different words, the analysis model picks the variant that fits the
+  words around it, a portion of places at a time. Each model's version stays in the list above the text.
+- **Recordings through speakers no longer sound doubled.** The system audio started before the
+  microphone and lost its pauses, so voices came twice, one late; the tracks now line up. And the
+  speakers' echo heard by the microphone is taken out when the recording is saved (Settings → Recording,
+  on; with headphones nothing changes).
+- **Cancel and «Unload» are a switch.** Cancel stops at once, even in the middle of an overview; a model
+  not in use is unloaded at once, one in use after a stop you confirm.
+- **Studio:** live captions keep up after the window was minimized; switching captions off and on keeps
+  the lines, and «Questions» see the whole recording; the recording bar fits any width and scale.
+- **Library:** a running recording has a row at the top with its time; a click opens the studio with the
+  captions.
+- Analysis names speakers as the transcript labels them, not «User» or a made-up name.
+
 ## 0.7.3 — English
 
 - **The dictionary works with every speech model.** Before, only Whisper took it, as a hint; GigaAM and
@@ -155,6 +173,25 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.4
+
+- **Точный режим: несколько моделей + сведение** («Настройки → Распознавание» и переключатель у записи
+  в окне импорта). Каждая новая запись распознаётся ещё и другими скачанными моделями, а версии сводятся
+  в одну: где модели услышали разное, модель анализа выбирает вариант по смыслу соседних слов, порциями.
+  Версия каждой модели остаётся в списке над текстом.
+- **Запись через колонки больше не двоится.** Системный звук начинался раньше микрофона и терял паузы,
+  поэтому голоса звучали дважды, второй раз с опозданием; теперь дорожки совпадают. А эхо колонок,
+  которое слышит микрофон, вычитается при сохранении записи («Настройки → Запись», включено; в
+  наушниках ничего не меняется).
+- **Отмена и «Выгрузить» работают как рубильник.** Отмена срабатывает сразу, даже посреди обзора;
+  свободная модель выгружается сразу, занятая — после остановки, которую вы подтверждаете.
+- **Студия:** живые субтитры не отстают после сворачивания окна; при выключении и включении субтитров
+  строки остаются, а «Вопросы» видят всю запись; плашка записи помещается при любой ширине и масштабе.
+- **Медиатека:** идущая запись видна строкой сверху со временем; по клику открывается студия с
+  субтитрами.
+- Анализ называет участников так, как они подписаны в расшифровке, а не «Пользователь» или выдуманным
+  именем.
 
 ## 0.7.3
 
