@@ -6,6 +6,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.8 — English
+
+- **Teams captions are read again:** the Windows component that reads windows (UI Automation) failed to
+  load («Could not load file or assembly 'UIAutomationClient'»); it now loads by its full name or its
+  file. «Check» in Settings → Recording shows whether the captions are seen.
+
 ## 0.7.7 — English
 
 - **«All models» in the recognition row:** picked, the models it will run light up and the status says
@@ -223,6 +229,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.8
+
+- **Субтитры Teams снова читаются:** компонент Windows для чтения окон (UI Automation) не загружался
+  («Could not load file or assembly 'UIAutomationClient'»); теперь он загружается по полному имени или из
+  своего файла. Кнопка «Проверить» в «Настройки → Запись» показывает, видны ли субтитры.
 
 ## 0.7.7
 
