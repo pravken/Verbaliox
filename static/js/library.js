@@ -1428,6 +1428,18 @@ function folderRowHtml(f, depth, collapsed) {
 // A recording that is running has a row at the top of the library: its time, and a click opens the
 // studio with its captions
 function libLiveRowHtml() {
+  // After «Стоп» the tracks are mixed and the echo is taken out (minutes for a long meeting): the row
+  // stays, saying so, until the recording is in the list
+  if (!isRecording() && state.recSaving) {
+    return `
+    <div data-click="openLiveStudio" tabindex="0" role="button" class="lib-live-row is-saving" title="${escapeHtml(t('libSavingTip'))}">
+      <span class="lib-live-dot" aria-hidden="true"></span>
+      <span class="flex-1 min-w-0">
+        <span class="lib-live-title">${escapeHtml(state.recSaving.title || t('studioRecording'))}</span>
+        <span class="lib-live-sub">${escapeHtml(t('libSavingSub'))}</span>
+      </span>
+    </div>`;
+  }
   const title = (document.getElementById('record-title-input')?.value || '').trim();
   const timer = document.getElementById('studio-timer')?.textContent || '';
   return `
@@ -1442,8 +1454,8 @@ function libLiveRowHtml() {
 }
 
 function syncLibLiveRow() {
-  const rec = isRecording();
-  if (rec !== !!state._libLive) {
+  const rec = isRecording() ? 'rec' : state.recSaving ? 'saving' : '';
+  if (rec !== (state._libLive || '')) {
     state._libLive = rec;
     renderMeetingsSidebar();
   }
@@ -1504,7 +1516,7 @@ function renderMeetingsSidebar() {
   }
 
   const folders = state.folders || [];
-  const live = isRecording() ? libLiveRowHtml() : '';
+  const live = isRecording() || state.recSaving ? libLiveRowHtml() : '';
   if (state.meetings.length === 0 && !folders.some(f => !f.system_key)) {
     listEl._keyed = false;
     listEl.innerHTML = live + (live ? '' : `<div class="px-3 py-8 text-center text-xs text-apple-tertiary">${t('noRecordings')}</div>`);

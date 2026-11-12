@@ -1850,6 +1850,16 @@ async function stopAndTranscribeRecording(opts) {
   _recScreenId = null;
   const rawTitle = (document.getElementById('record-title-input').value || t('recordDefaultTitle')).trim();
   const startedAt = _recStartTime ? _recStartTime / 1000 : 0;
+  state.recSaving = { title: rawTitle };
+  try {
+    return await _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt });
+  } finally {
+    state.recSaving = null;
+    syncLibLiveRow();
+  }
+}
+
+async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
   _cleanupRecordingResources();
 
   if (page) await page.upload;  // every chunk is on the server
