@@ -111,6 +111,24 @@ def ready_files(files: List[Path], seen: Set[str], now: float) -> List[Path]:
     return out[:MAX_FILES_PER_POLL]
 
 
+def _library_files() -> Set[str]:
+    """The files the library has already: a studio recording landing in a watched folder (the
+    recordings folder or one above it) was imported a second time and transcribed twice."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            rows = conn.execute("SELECT media_path FROM meetings WHERE COALESCE(media_path, '') != ''").fetchall()
+        finally:
+            conn.close()
+    out: Set[str] = set()
+    for r in rows:
+        try:
+            out.add(_key(Path(r["media_path"])))
+        except (OSError, ValueError):
+            continue
+    return out
+
+
 def scan_once(add: Callable[[Path], None], now: Optional[float] = None) -> int:
     from app.main import SUPPORTED_EXTENSIONS
 
@@ -133,6 +151,10 @@ def scan_once(add: Callable[[Path], None], now: Optional[float] = None) -> int:
         update_settings({"watch_folder_baseline": folder})
         return 0
     ready = ready_files(files, seen, now if now is not None else time.time())
+    owned = _library_files() if ready else set()
+    for p in [p for p in ready if _key(p) in owned]:
+        _mark_seen([_key(p)])  # a recording of the library itself (the recordings folder is watched)
+    ready = [p for p in ready if _key(p) not in owned]
     for p in ready:
         _mark_seen([_key(p)])  # before adding: a failure later in the batch must not import it twice
         add(p)
