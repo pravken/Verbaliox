@@ -1569,8 +1569,18 @@ function capDrawLines(lines, fresh, target, view) {
   status.className = `text-[11.5px] ${liveCap.error ? 'text-apple-amber' : 'text-apple-tertiary'}`;
 }
 
+// Stop pressed while a recording is still starting (the screen picker, the microphone, the server): the
+// start finished after it and recorded on. It is noted, and the start stops at its next step instead
+let _recStarting = false;
+let _recStopWanted = false;
+function recStartGoesOn() {
+  if (_recStopWanted) throw Object.assign(new Error('stopped while starting'), { startAborted: true });
+}
+
 async function startLiveRecording() {
-  if (isRecording()) return;
+  if (isRecording() || _recStarting) return;
+  _recStarting = true;
+  _recStopWanted = false;
   try {
     const sourceMode = document.getElementById('record-source-select').value || 'mic';
     const micId = document.getElementById('record-mic-select').value || '';
@@ -1623,7 +1633,9 @@ async function startLiveRecording() {
       return;
     }
     _recDiskWarned = false;
+    recStartGoesOn();
     if (appTarget) await startAppScreenCapture(appTarget);
+    recStartGoesOn();
 
     // System audio: recorded by the app (no prompt); the browser's screen share is only a fallback
     _recCaptureId = null;
@@ -1640,7 +1652,10 @@ async function startLiveRecording() {
         console.warn(e);
       }
     }
+    recStartGoesOn();
     const { ctx, mixedStream, acquiredStreams, sources } = await buildCaptureStream(sourceMode, micId, !!_recCaptureId);
+    _recStreams = acquiredStreams;  // known at once: a stop now releases the microphone too
+    recStartGoesOn();
     _recAudioCtx = ctx;
     _recSources = sources;
     recSourcesStart(!!sources.mic, !!(sources.sys || _recCaptureId));
@@ -1657,6 +1672,10 @@ async function startLiveRecording() {
       const res = await fetch('/api/record/page/start', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
+      if (_recStopWanted) {  // the part just made on the server goes too
+        fetch(`/api/record/page/${data.page_id}/cancel`, { method: 'POST' }).catch(() => {});
+        recStartGoesOn();
+      }
       _recPage = { id: data.page_id, upload: Promise.resolve(), failed: '', hasVideo: !!_recVideoStream, hasMic: pageAudio };
       _mediaRecorder = new MediaRecorder(new MediaStream(tracks), mimeType ? { mimeType, ...options } : options);
       _mediaRecorder.ondataavailable = (e) => {
@@ -1789,7 +1808,10 @@ async function startLiveRecording() {
       _recCaptureId = null;
     }
     _cleanupRecordingResources();
-    showMediaError(err);
+    if (!err || !err.startAborted) showMediaError(err);
+  } finally {
+    _recStarting = false;
+    _recStopWanted = false;
   }
 }
 
@@ -1918,6 +1940,7 @@ async function cancelLiveRecording() {
 async function stopAndTranscribeRecording(opts) {
   const quiet = !!(opts && opts.quiet);
   state.callRecording = null;
+  if (_recStarting) { _recStopWanted = true; return undefined; }  // the start stops itself (recStartGoesOn)
   if (!_mediaRecorder && !_recCaptureId && !_recScreenId) return undefined;
   document.getElementById('record-status-hint').textContent = t('recStatusSaving');
 
