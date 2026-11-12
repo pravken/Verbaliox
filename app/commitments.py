@@ -357,8 +357,11 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
             "SELECT who, what, quote, at FROM commitments WHERE meeting_id = ? AND status = 'done'", (meeting_id,)).fetchall()]
         done_quotes = {(r["quote"] or "").strip().casefold() for r in done_rows} - {""}
 
+        done_what = {_norm_what(r["what"]) for r in done_rows}
+
         def was_done(x: Dict[str, Any]) -> bool:
-            return ((x.get("quote") or "").strip().casefold() in done_quotes
+            return (_norm_what(x.get("what")) in done_what  # the same words, whoever the model named
+                    or (x.get("quote") or "").strip().casefold() in done_quotes
                     or any(_same_task(x, r) for r in done_rows))
         # What the user added or changed by hand stays as they left it; a task they reworded is still
         # the one the model finds again by its words in the recording (the quote) or its moment
