@@ -149,6 +149,7 @@ class RecordFinishPayload(BaseModel):
     has_mic: bool = False             # the page recording has an audio track
     notes: str = ""                   # what the user wrote in the studio during the recording
     started_at: float = 0             # when the recording began (unix seconds): the calendar meeting
+    page_started_at: float = 0        # when the page's recorder began (unix seconds): lines up the system audio
 
 def _run_ffmpeg(cmd: List[str]) -> subprocess.CompletedProcess:
     try:
@@ -185,11 +186,16 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     if not page and not system and not screen:
         raise HTTPException(status_code=404, detail="Запись пуста: звук не был получен")
 
+    # The system audio begins before the page's recorder (the microphone is asked for meanwhile)
+    system_skip = 0.0
+    if cap and page and payload.page_started_at > 0 and cap.started_at > 0:
+        system_skip = min(30.0, max(0.0, payload.page_started_at - cap.started_at))
     safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
     if screen:
         audio = [p for p in (page if payload.has_mic else None, system) if p]
         dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}.mp4"
-        res = await run_in_threadpool(_run_ffmpeg, screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest))
+        res = await run_in_threadpool(_run_ffmpeg, screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest,
+                                                                       system_skip if len(audio) == 2 else 0.0))
         if res.returncode != 0 or not dest.is_file():
             print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
             dest.unlink(missing_ok=True)
@@ -204,7 +210,7 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     has_video = bool(payload.has_video and page)
     ext = ".webm" if page and (has_video or not system) else ".m4a"
     dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}{ext}"
-    cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest)
+    cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest, system_skip)
     if cmd is None:
         await run_in_threadpool(shutil.move, str(page), str(dest))  # the recordings folder may be on another drive
     else:
