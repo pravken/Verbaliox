@@ -47,7 +47,7 @@ async function loadMeetingsList() {
 // The server pushes progress over Server-Sent Events (/api/events). Polling stays as a safety
 // net: every 30 s while the stream is connected, at the old 2 s / 8 s cadence when it is not.
 const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false };
-const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration'];
+const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now'];
 
 function startLiveUpdates() {
   if (!window.EventSource) return;
@@ -230,6 +230,7 @@ function handleLiveEvent(ev) {
     active.progress = m.progress;
     active.stage_text = m.stage_text;
     updateProcessingBanner(active);
+    if (active.asr_now !== m.asr_now) { active.asr_now = m.asr_now; renderTxModelBar(); }
   }
 }
 

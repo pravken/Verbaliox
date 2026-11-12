@@ -211,6 +211,7 @@ def init_db() -> None:
             "work_day_fit": "true",  # ...stretched for a meeting that runs a little past its edges
             "meet_auto_all": "false",  # record every calendar meeting by itself (static/js/home.js)
             "meet_ask_inperson": "true",  # ...but ask first for a meeting without a link to a call
+            "meet_never": "[]",  # calendar meetings never recorded or asked about: [{id: series, title}], JSON
             "meet_overrides": "{}",  # per meeting of the calendar: "rec" (record it) or "skip", JSON
         }
 
@@ -744,6 +745,11 @@ def update_meeting_progress(
     ):
         if value is not None:
             event[key] = value
+    from app import app_status
+
+    asr_now = app_status.asr_model(meeting_id)
+    if asr_now:
+        event["asr_now"] = asr_now  # the model recognizing it now
     events.publish(event)
 
 
@@ -1748,6 +1754,9 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
     d["processing"] = effective_processing(_loads_dict(d.pop("processing_json", None)))
     d["merged_models"] = _loads_list(d.pop("merged_models_json", None)) if d.get("transcript_model") == "merged" else []
     d["speaker_marks"] = _loads_list(d.pop("speaker_marks_json", None))
+    from app import app_status
+
+    d["asr_now"] = app_status.asr_model(d["id"])  # the model recognizing it right now, if any
     return d
 
 

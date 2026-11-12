@@ -13,6 +13,14 @@ const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, calConfigured: 
 function hmSettings() { return (state.system && state.system.settings) || {}; }
 function hmNum(key, def) { const n = Number(hmSettings()[key]); return Number.isFinite(n) && hmSettings()[key] !== '' && hmSettings()[key] != null ? n : def; }
 function hmOn(key, def) { const v = hmSettings()[key]; return v == null || v === '' ? def : String(v) === 'true'; }
+// «Никогда»: a series (or one meeting) of the calendar never recorded nor asked about. The series is
+// the event's id in the calendar (the key without its start), or its title when the id changes
+function hmNeverList() { try { const v = JSON.parse(hmSettings().meet_never || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function hmSeries(e) { return String(e.key || '').replace(/\|[^|]*$/, ''); }
+function hmIsNever(e) {
+  const id = hmSeries(e), title = (e.title || '').trim().toLowerCase();
+  return hmNeverList().some(x => (x.id && x.id === id) || (title && (x.title || '').trim().toLowerCase() === title));
+}
 function hmOverrides() { try { return JSON.parse(hmSettings().meet_overrides || '{}') || {}; } catch (e) { return {}; } }
 function hmLocale() { return state.uiLang === 'en' ? 'en-GB' : 'ru-RU'; }
 function hmPad(n) { return String(n).padStart(2, '0'); }
@@ -160,6 +168,7 @@ function hmMeetingState(ev) {
   const all = hmOn('meet_auto_all', false), askIn = hmOn('meet_ask_inperson', true);
   const ov = hmOverrides()[ev.key];
   if (ov === 'rec') return 'on';
+  if (hmIsNever(ev)) return 'never';
   if (ov === 'skip') return all ? 'skipped' : 'off';
   if (!all) return 'off';
   return askIn && !ev.online ? 'ask' : 'on';
@@ -224,7 +233,7 @@ function renderHomeMeetings() {
       // half-way through: not started by itself any more (hmAutoTick), but one click records the rest
       action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t('hmRecordNow'))}</button>`;
     } else {
-      const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff' }[st];
+      const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever' }[st];
       action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t(label))}</button>`;
     }
     html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}" style="top: ${top(s)}px; height: ${hpx}px">
@@ -255,6 +264,7 @@ async function hmToggleMeeting(key) {
   if (!ev) return;
   const ov = hmOverrides();
   const st = hmMeetingState(ev);
+  if (st === 'never') { await hmSetNever(ev, false); return; }  // «Никогда» taken back: as the others again
   // asking → recorded → left out → recorded …; without "all": recorded ↔ not
   if (st === 'on') { if (hmOn('meet_auto_all', false)) ov[key] = 'skip'; else delete ov[key]; }
   else ov[key] = 'rec';
@@ -449,6 +459,29 @@ function hmShowAsk(e) {
   document.getElementById('hm-ask').classList.remove('hidden');
   const api = window.pywebview && window.pywebview.api;
   if (document.hidden && api && api.show_window) api.show_window().catch(() => {});
+}
+
+// «Никогда» before a meeting: neither this one nor the next of its series is recorded or asked about;
+// the home page shows it as «Никогда», a click there takes it back
+async function hmSetNever(e, on) {
+  const id = hmSeries(e), title = (e.title || '').trim();
+  const low = title.toLowerCase();
+  const rest = hmNeverList().filter(x => !((x.id && x.id === id) || (low && (x.title || '').trim().toLowerCase() === low)));
+  const list = on ? [...rest, { id, title }].slice(-300) : rest;
+  const ov = hmOverrides();
+  delete ov[e.key];
+  if (!await hmSave({ meet_never: JSON.stringify(list), meet_overrides: JSON.stringify(hmPruneOverrides(ov)) })) return false;
+  if (state.appView === 'home') renderHomeNow();
+  return true;
+}
+
+async function hmAskNever() {
+  document.getElementById('hm-ask').classList.add('hidden');
+  const e = hmAskEvent;
+  hmAskEvent = null;
+  if (!e || !await hmSetNever(e, true)) return;
+  showToast(t('hmNeverToast').replace('{title}', () => e.title || t('hmUntitled')),
+    { label: t('hmUndo'), onClick: () => hmSetNever(e, false) });
 }
 
 async function hmAskAnswer(yes) {

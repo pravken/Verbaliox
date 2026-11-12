@@ -370,6 +370,24 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertIn("клода", self.asked[0])
         self.assertNotIn("обзор сделать", self.asked[0])  # only the disputed place and the words around it
 
+    def test_a_model_that_already_transcribed_it_is_not_run_again(self):
+        from app.database import save_transcript_version
+
+        text = "попроси Claude сделать обзор"
+        save_transcript_version(self.mid, "parakeet-v3", {"segments": [
+            {"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_05", "text": text, "words": _words(text)}],
+            "speakers": {}, "language": "ru", "at": "2026-11-01 10:00:00"})
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        m = self._run(transcribe)
+        self.assertEqual(m["transcript_model"], "merged")
+        self.assertNotIn("parakeet-v3", ran)  # its version was used as it was
+        self.assertEqual(m["segments"][0]["text"], text)
+
     def test_without_another_model_the_main_one_stays(self):
         from app import asr_onnx
 

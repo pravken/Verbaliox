@@ -142,11 +142,14 @@ function renderTxModelBar() {
   const disputes = (m.segments || []).reduce((n, s) => n + (s.words || []).filter(w => w.alts && w.alts.length).length, 0);
   const status = document.getElementById('tx-model-status');
   let text, cls;
-  if (busy) [text, cls] = [m.status === 'merging' ? t('txMergingBusy') : t('txModelBusy').replace('{model}', () => formatModelName(m.model_name)), 'text-apple-secondary'];
+  if (busy) [text, cls] = [m.status === 'merging' ? t('txMergingBusy') : t('txModelBusy').replace('{model}', () => formatModelName(m.asr_now || m.model_name)), 'text-apple-secondary'];
   else if (pick === 'merged' && shown === 'merged') [text, cls] = [`✓ ${t('txMergedDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}${
     disputes ? ' · ' + t('txDisputes').replace('{n}', () => disputes) : ''}`, 'text-apple-green'];
   else if (pick && pick === shown) [text, cls] = [`✓ ${t('txModelDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}`, 'text-apple-green'];
-  else if (pick === TX_PRECISE) [text, cls] = [t('txPreciseHint'), 'text-apple-secondary'];
+  else if (pick === TX_PRECISE) {
+    const run = state.txPreciseModels && state.txPreciseModels.id === m.id ? state.txPreciseModels.models : [];
+    [text, cls] = [run.length ? t('txAllModelsHint').replace('{models}', () => run.map(formatModelName).join(' → ')) : t('txPreciseHint'), 'text-apple-secondary'];
+  }
   else if (!shown) [text, cls] = [t('txModelNone'), 'text-apple-secondary'];
   else [text, cls] = [t('txModelNotYet').replace('{model}', () => formatModelName(shown)), 'text-apple-amber'];
   status.textContent = text;
@@ -164,11 +167,15 @@ function txModelFits(i, m) {
 function renderTxModelChips(m, list, done, shown, pick, busy) {
   const box = document.getElementById('tx-model-chips');
   if (!box) return;
-  const working = busy ? (m.status === 'merging' ? 'merged' : m.model_name) : '';
+  const working = busy ? (m.status === 'merging' ? 'merged' : m.asr_now || m.model_name) : '';
   // The merged text shown: the chips of the models it was made from light up (a merge of an older
   // version did not keep them: the variants of its disputed words name them)
   let inMerge = new Set();
-  if (shown === 'merged' && (pick === 'merged' || !pick)) {
+  // «Все модели» picked: the models it will run light up, before «Расшифровать» is pressed
+  const precise = pick === TX_PRECISE && !busy;
+  box.classList.toggle('tx-chips-precise', precise);
+  if (precise && state.txPreciseModels && state.txPreciseModels.id === m.id) inMerge = new Set(state.txPreciseModels.models);
+  else if (shown === 'merged' && (pick === 'merged' || !pick)) {
     inMerge = new Set(m.merged_models || []);
     if (!inMerge.size) for (const seg of m.segments || []) for (const w of seg.words || []) for (const a of w.alts || []) (a.models || []).forEach(x => inMerge.add(x));
   }
@@ -184,7 +191,12 @@ function renderTxModelChips(m, list, done, shown, pick, busy) {
     return `<button type="button" role="radio" aria-checked="${pick === i.id}" class="tx-chip is-${state}${pick === i.id ? ' is-picked' : ''}${merged ? ' is-in-merge' : ''}"
       ${busy || !fits ? 'disabled' : ''} title="${escapeHtml(tip)}" data-click="pickTxChip" data-click-args='[${jsArg(i.id)}]'>
       <span class="tx-chip-mark">${mark}</span><span>${escapeHtml(formatModelName(i.id))}</span>${state === 'missing' && i.size ? `<span class="tx-chip-size">${escapeHtml(i.size)}</span>` : ''}</button>`;
-  }).join('');
+  }).join('')
+    // «Все модели»: the precise mode as a choice of its own, next to the models (only with two that can run)
+    + (list.filter(i => i.id !== 'merged' && i.id !== 'teams' && i.installed && txModelFits(i, m)).length >= 2 && !m.media_removed
+      ? `<button type="button" role="radio" aria-checked="${pick === TX_PRECISE}" class="tx-chip tx-chip-all${pick === TX_PRECISE ? ' is-picked' : ''}"
+        ${busy ? 'disabled' : ''} title="${escapeHtml(t('tipTxAllModels'))}" data-click="pickTxChip" data-click-args='[${jsArg(TX_PRECISE)}]'>
+        <span class="tx-chip-mark" aria-hidden="true">⧉</span><span>${escapeHtml(t('txAllModels'))}</span></button>` : '');
 }
 
 function pickTxChip(id) {
@@ -214,6 +226,15 @@ async function pickTxModel(sel) {
   if (!m) return;
   const id = sel.value;
   state.txModelPick = id;
+  if (id === TX_PRECISE) {
+    renderTxModelBar();
+    const data = await fetch(`/api/meetings/${m.id}/precise-models`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    if (data && state.txModelPick === TX_PRECISE && state.activeMeeting && state.activeMeeting.id === m.id) {
+      state.txPreciseModels = { id: m.id, models: data.models || [] };
+    }
+    renderTxModelBar();
+    return;
+  }
   if (id !== m.transcript_model && (m.transcript_versions || []).some(v => v.model === id)) {
     const res = await fetch(`/api/meetings/${m.id}/transcript-version`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: id }),
