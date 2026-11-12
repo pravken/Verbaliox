@@ -949,14 +949,37 @@ def _after_transcription(
     return notes
 
 
+def _live_captions_on() -> bool:
+    try:
+        from app import live
+
+        return live.has_sessions()
+    except Exception:
+        return False
+
+
+def _release_onnx(model: Optional[str] = None) -> None:
+    """GigaAM / Parakeet out of memory, but not the copy the live captions of a recording going on
+    use (the processor's): it reloaded for seconds each time, captions stalled, 2-3 times a job."""
+    from app import asr_onnx
+
+    if _live_captions_on():
+        if model:
+            asr_onnx.release(model, gpu=True)
+        else:
+            asr_onnx.release_gpu()
+    elif model:
+        asr_onnx.release(model)
+    else:
+        asr_onnx.release()
+
+
 def _release_speech_models() -> None:
     """Whisper and GigaAM / Parakeet out of memory: the next model (another one, or the analysis
     model) loads into a free computer instead of next to them."""
-    from app import asr_onnx
-
     release_whisper_model()
     try:
-        asr_onnx.release()
+        _release_onnx()
     except Exception:
         traceback.print_exc()
     try:  # the worker of live captions keeps its Whisper after a recording: not while captions run
@@ -1111,7 +1134,7 @@ def _recognize_with(meeting_id: int, model: str, wav_path: Path, total_dur: floa
             traceback.print_exc()
             asr_onnx.release(model, gpu=True)
             segs = asr_onnx.transcribe(*args, leveling=processing.get("leveling", True))
-        asr_onnx.release(model)  # the next model or the analysis model needs the memory
+        _release_onnx(model)  # the next model or the analysis model needs the memory
         return segs
     whisper, _ = _get_whisper_model(model, device, compute_type)
     batch = _batch_size_for(device, hw) if settings.get("batched_inference", "true").lower() == "true" else 0

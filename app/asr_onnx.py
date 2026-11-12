@@ -326,7 +326,9 @@ def preload_async(model_id: str) -> str:
 
 
 def loaded_models() -> List[str]:
-    return list(dict.fromkeys(k.split("@")[0] for k in _loaded))
+    with _lock:  # a load or release in another thread changed the dict while it was read
+        keys = list(_loaded)
+    return list(dict.fromkeys(k.split("@")[0] for k in keys))
 
 
 # Frequent short words of the Latin-script languages Parakeet hears most: enough to tell them apart in a
