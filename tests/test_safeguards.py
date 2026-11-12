@@ -821,3 +821,37 @@ class EditsDuringMergeTest(unittest.TestCase):
             with transcriber._jobs_lock:
                 transcriber._queue[:] = [q for q in transcriber._queue if q["id"] != 424242]
         self.assertFalse(transcriber.is_transcribing(424242))
+
+
+class TranslateKeepAliveTest(unittest.TestCase):
+    def test_translation_keeps_the_model_as_long_as_the_settings_say(self):
+        from app import llm_translate, ollama_client
+
+        sent = {}
+
+        class Answer:
+            status_code = 200
+
+            def json(self):
+                return {"message": {"content": "1. hi"}}
+
+        class Client:
+            def __init__(self, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def post(self, url, json):
+                sent.update(json)
+                return Answer()
+
+        with mock.patch.object(llm_translate.httpx, "Client", Client), mock.patch.object(llm_translate, "raise_for_ollama"), \
+                mock.patch("app.idle_unload.ollama_keep_alive", return_value="10m"), \
+                mock.patch.object(ollama_client, "_work_done") as done:
+            self.assertEqual(llm_translate.ollama_chat("http://127.0.0.1:11434", "qwen3:8b", "s", "u"), "1. hi")
+        self.assertEqual(sent["keep_alive"], "10m")  # not a fixed 5 min
+        done.assert_called_once()  # counted as work: the model leaves after it like after an overview
