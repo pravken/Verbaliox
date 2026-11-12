@@ -389,7 +389,7 @@ async function transcribeWithPickedModel() {
   if (!model) return;
   const precise = model === TX_PRECISE;
   // The precise mode starts from the recording's own model (its speakers come from that one)
-  if (precise) model = m.model_name && m.model_name !== 'merged' ? m.model_name : ((state.system && state.system.settings) || {}).whisper_model || 'large-v3-turbo';
+  if (precise) model = m.model_name && !['merged', 'teams'].includes(m.model_name) ? m.model_name : ((state.system && state.system.settings) || {}).whisper_model || 'large-v3-turbo';
   if (!precise && model === m.transcript_model && (m.segments || []).length
       && !(await confirmDialog(t('txTranscribeAgainTitle'), t('txTranscribeAgainText').replace('{model}', () => formatModelName(model)),
         t('txTranscribeAgain'), false))) return;

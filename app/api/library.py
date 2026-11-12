@@ -546,7 +546,7 @@ def api_precise_models(meeting_id: int) -> Dict[str, Any]:
     choice = (m.get("language_choice") or m.get("language") or "auto").strip() or "auto"
     heard = (m.get("language") or "").strip()  # the language found by an earlier transcription
     main = m.get("model_name") or ""
-    if not main or main == "merged":
+    if not main or main in ("merged", "teams"):
         main = speech_route.default_choice(settings)
     if main == speech_route.AUTO:
         main, _ = speech_route.resolve(settings, choice, lambda: heard if heard and heard != "auto" else None)

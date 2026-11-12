@@ -1272,6 +1272,10 @@ def _process_meeting_job(meeting_id: int) -> None:
         from app.model_manager import format_whisper_model_name
 
         model_name = meeting.get("model_name") or settings.get("whisper_model") or "large-v3-turbo"
+        if model_name in ("merged", "teams"):  # not models (a recording that showed one could get its name as its model)
+            from app import speech_route
+
+            model_name = speech_route.default_choice(settings)
         device = settings.get("device") or hw["recommended_device"]
         compute_type = settings.get("compute_type") or hw["recommended_compute_type"]
         # The language chosen for the recording: kept apart from the one heard (stored in language below),
