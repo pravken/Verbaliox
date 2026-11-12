@@ -195,8 +195,14 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
     exe = find_ollama_executable()
     if exe:
         try:
+            # One model in memory at a time and one answer at a time, unless the user set otherwise:
+            # two models side by side took the computer's memory and slowed everything down
+            env = {**os.environ}
+            env.setdefault("OLLAMA_MAX_LOADED_MODELS", "1")
+            env.setdefault("OLLAMA_NUM_PARALLEL", "1")
             subprocess.Popen(
                 [exe, "serve"],
+                env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
@@ -728,6 +734,13 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
 
     payload.update(thinking_off(model))
     from app import cancel_scope
+
+    try:  # one analysis model in memory at a time: another one loaded before goes first
+        from app.vram import ollama_release_others
+
+        ollama_release_others(keep=model)
+    except Exception as e:
+        print(f"[ollama] others not unloaded: {e}", flush=True)
 
     def request() -> str:
         with httpx.Client(timeout=600.0) as client:
