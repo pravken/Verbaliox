@@ -71,6 +71,8 @@ const SERVER_TEXT_EN = {
   "Запись сейчас обрабатывается": "The recording is being processed now",
   "Запись уже обрабатывается": "The recording is already being processed",
   "Запись уже обрабатывается. Дождитесь окончания или отмените обработку.": "The recording is already being processed. Wait until it is done or cancel the processing.",
+  "Teams не ответил вовремя": "Teams did not answer in time",
+  "только в Windows": "Windows only",
   "Запись экрана средствами приложения доступна только в Windows": "Screen recording by the app works on Windows only",
   "Идут живые субтитры — удалите модель после записи": "Live captions are running — delete the model after the recording",
   "Идёт распознавание — удалите модель после него": "Transcription is running — delete the model after it",
