@@ -5,6 +5,10 @@
 let _selectSeq = 0;
 
 async function selectMeeting(id, reloadPlayer = true) {
+  // A refresh of the recording open (new lines, a status change) while another one is being opened by
+  // a click: skipped — it took the place of the click, whose answer was then dropped as older, and the
+  // clicked row stayed «opening» over the old recording
+  if (state.pendingMeetingId != null && state.pendingMeetingId !== id && state.activeMeeting && state.activeMeeting.id === id) return;
   // Only the last request wins: a slow answer for an earlier click must not replace the open recording
   const seq = ++_selectSeq;
   // Audit 3.2. The click answers at once: the row lights up and the title shows the recording,
