@@ -830,10 +830,11 @@ function libPrefs() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem('verbaliox_library_view') || '{}') || {}; } catch (e) {}
   return _libPrefsCache = {
-    view: LIB_VIEWS.includes(p.view) ? p.view : 'details',
+    // By default a compact list grouped by day: dates, titles and many recordings at a glance
+    view: LIB_VIEWS.includes(p.view) ? p.view : 'compact',
     sort: LIB_SORTS.includes(p.sort) ? p.sort : 'recorded',
     dir: p.dir === 'asc' ? 'asc' : 'desc',
-    group: LIB_GROUPS.includes(p.group) ? p.group : 'none',
+    group: LIB_GROUPS.includes(p.group) ? p.group : 'day',
     names: p.names === 'file' ? 'file' : 'title',
     badges: p.badges === 'all' ? 'all' : 'smart',
   };
