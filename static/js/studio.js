@@ -1444,6 +1444,7 @@ async function startLiveRecording() {
       _mediaRecorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) sendRecordingChunk(_recPage, e.data);
       };
+      _mediaRecorder.onstart = () => { if (_recPage) _recPage.startedAt = Date.now() / 1000; };  // lines up the system audio
       _mediaRecorder.start(1000);
     }
     if (_recCaptureId) {
@@ -1699,7 +1700,7 @@ async function stopAndTranscribeRecording(opts) {
     body: JSON.stringify({
       title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
       has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
-      notes: takeStudioNotes(), started_at: startedAt,
+      notes: takeStudioNotes(), started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
     }),
   });
   const data = await res.json().catch(() => ({}));

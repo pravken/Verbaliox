@@ -360,12 +360,20 @@ def _file_time(path: Path) -> str:
         return ""
 
 
-def screen_mix_command(ffmpeg: str, screen: Path, audio: List[Path], dest: Path) -> List[str]:
+def _skip_args(seconds: float) -> List[str]:
+    """Input seeking: the first `seconds` of a source are left out (the system audio began before the
+    page's recording; mixed as they were, voices heard in both came twice, one late)."""
+    return ["-ss", f"{seconds:.3f}"] if seconds >= 0.02 else []
+
+
+def screen_mix_command(ffmpeg: str, screen: Path, audio: List[Path], dest: Path,
+                       system_skip: float = 0.0) -> List[str]:
     """The picture recorded by the app with the sound of the page (microphone) and/or the system:
-    the video is copied as recorded, the sound sources are mixed into one AAC track."""
+    the video is copied as recorded, the sound sources are mixed into one AAC track. system_skip:
+    how much earlier the system audio (the last of `audio` when there are two) began than the page."""
     cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", str(screen)]
-    for a in audio:
-        cmd += ["-i", str(a)]
+    for i, a in enumerate(audio):
+        cmd += [*(_skip_args(system_skip) if len(audio) == 2 and i == 1 else []), "-i", str(a)]
     if not audio:
         maps = ["-map", "0:v"]
     elif len(audio) == 1:
@@ -477,9 +485,10 @@ def recover_orphan_recordings() -> int:
 
 
 def record_mix_command(ffmpeg: str, page: Optional[Path], system: Optional[Path], has_video: bool,
-                       has_mic: bool, dest: Path) -> Optional[List[str]]:
+                       has_mic: bool, dest: Path, system_skip: float = 0.0) -> Optional[List[str]]:
     """The FFmpeg command that turns the parts of a recording into one file, or None when the page
-    recording can be used as it is."""
+    recording can be used as it is. system_skip: how much earlier the system audio began than the
+    page's recording (its start is left out, so both tracks line up)."""
     base = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
     if page and not system:
         # Video from MediaRecorder has no index: a copy into a new file makes it seekable
@@ -490,9 +499,10 @@ def record_mix_command(ffmpeg: str, page: Optional[Path], system: Optional[Path]
         # The picture is copied as recorded; the sound is the system audio, mixed with the microphone
         audio = (["-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "0:v", "-map", "[a]"]
                  if has_mic else ["-map", "0:v", "-map", "1:a"])
-        return base + ["-i", str(page), "-i", str(system), *audio, "-c:v", "copy", "-c:a", "libopus", "-b:a", "128k", str(dest)]
+        return base + ["-i", str(page), *_skip_args(system_skip), "-i", str(system), *audio,
+                       "-c:v", "copy", "-c:a", "libopus", "-b:a", "128k", str(dest)]
     # normalize=0: each source keeps its level instead of both being halved
-    return base + ["-i", str(page), "-i", str(system), "-filter_complex",
+    return base + ["-i", str(page), *_skip_args(system_skip), "-i", str(system), "-filter_complex",
                    "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "[a]",
                    "-c:a", "aac", "-b:a", "160k", str(dest)]
 

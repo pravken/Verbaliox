@@ -24,6 +24,17 @@ _captures: Dict[str, "SystemCapture"] = {}
 _lock = threading.Lock()
 
 
+GAP_SEC = 0.5  # the loopback this far behind the clock: the silence it did not deliver is written
+
+
+def silence_to_add(elapsed_sec: float, written: int, block: int) -> int:
+    """Samples of silence that belong before a block just received. Windows gives a loopback nothing
+    while nothing plays; without them every pause was cut out of the system track, which then ran
+    ahead of the microphone and the same voices came twice in the mix."""
+    behind = int(elapsed_sec * SR) - written - block
+    return behind if behind > GAP_SEC * SR else 0
+
+
 class SystemCapture:
     def __init__(self, path: Path):
         self.id = uuid.uuid4().hex
@@ -55,11 +66,19 @@ class SystemCapture:
                     loopback.recorder(samplerate=SR, channels=2, blocksize=BLOCK) as rec:
                 self.started_at = time.time()
                 self._ready.set()
+                written = 0
                 while not self._stop.is_set():
                     block = rec.record(numframes=BLOCK)
                     if block.ndim == 1:
                         block = np.stack([block, block], axis=1)
+                    gap = silence_to_add(time.time() - self.started_at, written, len(block))
+                    if gap:
+                        out.write(np.zeros((gap, 2), dtype=np.float32))
+                        written += gap
+                        with self._live_lock:
+                            self._live = np.concatenate([self._live, np.zeros(gap // 3, dtype=np.float32)])[-16000 * 30:]
                     out.write(block)
+                    written += len(block)
                     mono = block.mean(axis=1).astype(np.float32)
                     self.level = float(np.sqrt(np.mean(mono ** 2))) if mono.size else 0.0
                     with self._live_lock:
