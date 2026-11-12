@@ -542,12 +542,16 @@ def _load_whisper_with_fallback(model_name: str, device: str, compute_type: str)
         try:
             from faster_whisper import WhisperModel
 
-            return WhisperModel(
+            model = WhisperModel(
                 model_or_path,
                 device=dev,
                 compute_type=ctype,
                 download_root=str(whisper_cache),
             )
+            if (dev, ctype) != (device, compute_type):
+                print(f"[transcriber] Whisper {model_name} loaded as {dev}/{ctype} instead of {device}/{compute_type}", flush=True)
+            _whisper_cache["loaded_as"] = (dev, ctype)
+            return model
         except Exception as e:
             last_err = e
             continue
@@ -617,8 +621,19 @@ def release_whisper_model() -> None:
 
 
 def whisper_cache_key() -> Optional[Tuple[str, str, str]]:
-    """(model, device, compute_type) of the Whisper model kept in memory, or None."""
-    return _whisper_cache["key"] if _whisper_cache["model"] is not None else None
+    """(model, device, compute_type) of the Whisper model kept in memory, as it was really loaded (a
+    load on the video card that failed falls back to the processor), or None."""
+    if _whisper_cache["model"] is None or not _whisper_cache["key"]:
+        return None
+    dev, ctype = _whisper_cache.get("loaded_as") or _whisper_cache["key"][1:]
+    return (_whisper_cache["key"][0], dev, ctype)
+
+
+def _whisper_device(requested: str) -> str:
+    """Where the Whisper model in memory really runs: a processor fallback must not get the video
+    card's batches (16 windows at once on the CPU: much slower, gigabytes of memory)."""
+    key = whisper_cache_key()
+    return key[1] if key else requested
 
 
 def running_job_kind() -> Optional[str]:
@@ -1137,7 +1152,7 @@ def _recognize_with(meeting_id: int, model: str, wav_path: Path, total_dur: floa
         _release_onnx(model)  # the next model or the analysis model needs the memory
         return segs
     whisper, _ = _get_whisper_model(model, device, compute_type)
-    batch = _batch_size_for(device, hw) if settings.get("batched_inference", "true").lower() == "true" else 0
+    batch = _batch_size_for(_whisper_device(device), hw) if settings.get("batched_inference", "true").lower() == "true" else 0
     decode = dict(duration=total_dur, language=language, hotwords=vocab.hotwords(),
                   vad_enabled=processing.get("vad", True), multilingual=mixed)
     try:
@@ -1464,8 +1479,9 @@ def _process_meeting_job(meeting_id: int) -> None:
                 # `hotwords` is applied to every 30s window; `initial_prompt` would only affect the first
                 # window because condition_on_previous_text is disabled.
                 hotwords = vocab.hotwords()
+                runs_on = _whisper_device(device)
                 batch_size = (
-                    _batch_size_for(device, hw)
+                    _batch_size_for(runs_on, hw)
                     if settings.get("batched_inference", "true").lower() == "true"
                     else 0
                 )
@@ -1474,6 +1490,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                     status="transcribing",
                     progress=15,
                     stage_text=f"Распознавание речи — {pretty_whisper}"
+                    + (" на процессоре: видеокарта не загрузила модель" if device == "cuda" and runs_on != "cuda" else "")
                     + (f", пакетами по {batch_size}" if batch_size else "")
                     + (" (модель уже загружена)" if reused else ""),
                 )

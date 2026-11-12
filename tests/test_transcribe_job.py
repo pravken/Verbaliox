@@ -478,3 +478,28 @@ class EnsembleJobTest(unittest.TestCase):
         m = self._run(self._transcribe)
         self.assertEqual(m["transcript_model"], "gigaam-v3")
         self.assertEqual(self.asked, [])
+
+
+class WhisperFallbackTest(unittest.TestCase):
+    def test_a_processor_fallback_is_known_as_one(self):
+        if transcriber is None:
+            self.skipTest("app dependencies not installed")
+        calls = []
+
+        class FakeWhisper:
+            def __init__(self, path, device, compute_type, download_root):
+                calls.append((device, compute_type))
+                if device == "cuda":
+                    raise RuntimeError("cudnn missing")
+
+        fake = mock.Mock(WhisperModel=FakeWhisper)
+        with mock.patch.dict("sys.modules", {"faster_whisper": fake}), \
+                mock.patch.object(transcriber, "register_cuda_dlls"), \
+                mock.patch("app.model_manager.get_whisper_model_path", return_value="x"):
+            transcriber.release_whisper_model()
+            transcriber._get_whisper_model("large-v3-turbo", "cuda", "float16")
+            try:
+                self.assertEqual(transcriber.whisper_cache_key(), ("large-v3-turbo", "cpu", "int8"))
+                self.assertEqual(transcriber._whisper_device("cuda"), "cpu")  # no GPU batches on the processor
+            finally:
+                transcriber.release_whisper_model()
