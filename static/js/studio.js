@@ -1763,6 +1763,23 @@ async function startLiveRecording() {
     syncStudioCaptions();
     document.getElementById('record-status-hint').textContent = t('recStatusRecording');
   } catch (err) {
+    // A start that failed half way (the microphone refused, a device unplugged): what was already
+    // started on the server stops too — the app's system audio would record on, and the studio would
+    // stay «recording» with nothing to stop
+    stTeamsStop();
+    if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+      _mediaRecorder.ondataavailable = null;
+      try { _mediaRecorder.stop(); } catch (e) {}
+    }
+    if (_recPage) {
+      const page = _recPage;
+      page.upload.then(() => fetch(`/api/record/page/${page.id}/cancel`, { method: 'POST' })).catch(() => {});
+      _recPage = null;
+    }
+    if (_recCaptureId) {
+      fetch(`/api/record/${_recCaptureId}/cancel`, { method: 'POST' }).catch(() => {});
+      _recCaptureId = null;
+    }
     _cleanupRecordingResources();
     showMediaError(err);
   }
