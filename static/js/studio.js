@@ -950,7 +950,10 @@ function downsampleTo16k(input, rate) {
 }
 
 async function startLiveCaptions(ctx, stream) {
-  liveCap.lines = new Map();
+  // Captions switched off and on again in the same recording keep the lines shown so far: the new
+  // server session numbers its lines from 1, they go after the old ones (a new recording clears
+  // liveCap.lines before it starts the captions)
+  liveCap.idBase = Math.max(0, ...liveCap.lines.keys());
   liveCap.partial = '';
   liveCap.partialTranslation = '';
   liveCap.lastId = 0;
@@ -958,7 +961,6 @@ async function startLiveCaptions(ctx, stream) {
   liveCap.pcmLen = 0;
   liveCap.error = '';
   liveCap.starting = true;
-  capReset();
   syncStudioCaptions();
   try {
     const res = await fetch('/api/live/start', {
@@ -1020,16 +1022,18 @@ async function sendLiveAudio() {
     const data = await res.json().catch(() => ({}));
     if (session !== liveCap.session) return;
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
+    const base = liveCap.idBase || 0;
     for (const ln of data.lines || []) {
-      liveCap.lines.set(ln.id, { ...(liveCap.lines.get(ln.id) || {}), ...ln });
+      const key = base + ln.id;
+      liveCap.lines.set(key, { ...(liveCap.lines.get(key) || {}), ...ln, id: key });
       liveCap.lastId = Math.max(liveCap.lastId, ln.id);
     }
     for (const [id, tr] of Object.entries(data.translations || {})) {
-      const ln = liveCap.lines.get(Number(id));
+      const ln = liveCap.lines.get(base + Number(id));
       if (ln) ln.translation = tr;
     }
     for (const [id, tg] of Object.entries(data.targets || {})) {
-      const ln = liveCap.lines.get(Number(id));
+      const ln = liveCap.lines.get(base + Number(id));
       if (ln) ln.target = tg;
     }
     liveCap.partialTarget = data.partial_target || '';
