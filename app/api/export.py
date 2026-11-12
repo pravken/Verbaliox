@@ -405,13 +405,16 @@ def api_cancel_pending_exports(meeting_id: int) -> Dict[str, Any]:
     return {"ok": True}
 
 @router.post("/api/vram/unload-all")
-def api_vram_unload_all(force: bool = True) -> Dict[str, Any]:
+def api_vram_unload_all(force: bool = True, stop: bool = False) -> Dict[str, Any]:
     """Frees every model now: the app's and every model Ollama holds, waiting until they are gone
-    (force; the idle timeout releases only the app's own)."""
+    (force; the idle timeout releases only the app's own). stop: a switch — the processing of
+    recordings and the captions are stopped first (the page asks before)."""
     from app import idle_unload
-    from app.vram import vram_snapshot
+    from app.vram import stop_work, vram_snapshot
 
-    if idle_unload._busy():
-        raise HTTPException(status_code=409, detail="Сейчас идёт обработка или запись")
+    if stop:
+        stop_work()
+    elif idle_unload._busy():
+        raise HTTPException(status_code=409, detail="Сейчас идёт обработка записи или субтитры")
     res = idle_unload.unload_now(force=force)
     return {**vram_snapshot(), **res}

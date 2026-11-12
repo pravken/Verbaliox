@@ -612,6 +612,26 @@ def running_job_kind() -> Optional[str]:
         return "other" if _preloading else None
 
 
+def running_meeting_id() -> Optional[int]:
+    with _jobs_lock:
+        return _running_id
+
+
+def stop_all_jobs(wait_sec: float = 0.0) -> int:
+    """«Unload all» as a switch: every queued and running job is cancelled (it stops at its next
+    checkpoint); waits up to wait_sec for the running one to end. Returns how many were asked."""
+    with _jobs_lock:
+        ids = list(_active_jobs)
+        _cancel_requested.update(ids)
+    deadline = time.time() + wait_sec
+    while wait_sec and time.time() < deadline:
+        with _jobs_lock:
+            if _running_id is None and not _preloading:
+                break
+        time.sleep(0.2)
+    return len(ids)
+
+
 _preloading = False
 
 

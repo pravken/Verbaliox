@@ -490,14 +490,19 @@ async function vramChipClick(index) {
   if (!c || vram.busy) return;
   if (c.kind === 'dub') { showWarning(t('tipVramDub')); return; }
   const action = c.loaded ? 'unload' : 'preload';
-  if (action === 'unload' && !c.can_unload) return;
+  // A model in use: a switch — asked, then the work using it stops and the model goes
+  let stop = false;
+  if (action === 'unload' && !c.can_unload) {
+    if (!c.in_use || !(await askConfirm(t('unloadModelStopAsk').replace('{name}', () => vramChipLabel(c)), true, t('unloadStopOk')))) return;
+    stop = true;
+  }
   if (action === 'preload' && !c.can_preload) return;
   vram.busy = true;
   renderVram(vram.data);
   showToast(t(action === 'unload' ? 'vramUnloading' : 'vramPreloading').replace('{name}', () => vramChipLabel(c)));
   try {
     const res = await fetch(`/api/vram/${action}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: c.kind, name: c.name || '' }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: c.kind, name: c.name || '', stop }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) showError(data.detail);
