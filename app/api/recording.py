@@ -163,6 +163,15 @@ def api_teams_stop() -> Dict[str, Any]:
     st.pop("marks", None)
     return st
 
+@router.post("/api/teams/check")
+async def api_teams_check() -> Dict[str, Any]:
+    """«Проверить» in Settings → Recording: what is seen in Teams right now (no recording needed)."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app import teams_captions
+
+    return await run_in_threadpool(teams_captions.check)
+
 @router.get("/api/teams/status")
 def api_teams_status() -> Dict[str, Any]:
     from app import teams_captions

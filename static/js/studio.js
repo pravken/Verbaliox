@@ -826,6 +826,25 @@ function stTeamsStop() {
   if (stTeamsOn()) fetch('/api/teams/stop', { method: 'POST' }).catch(() => {});
 }
 
+// «Проверить» in Settings → Recording: what is seen in Teams right now, without a recording
+async function teamsCheck() {
+  const btn = document.getElementById('teams-check-btn');
+  if (btn) { btn.disabled = true; btn.textContent = t('teamsChecking'); }
+  try {
+    const res = await fetch('/api/teams/check', { method: 'POST' });
+    const st = await res.json().catch(() => ({}));
+    if (!res.ok) { showError(st.detail); return; }
+    let text = t(`teamsCheck_${st.state}`) || t('teamsCheck_error');
+    if (st.state === 'reading' && st.sample && st.sample.length) {
+      text += '\n\n' + st.sample.map(l => `${l.name}: ${l.text}`).join('\n');
+    }
+    if (st.error) text += `\n\n${serverText(st.error)}`;
+    confirmDialog(t('teamsCheckTitle'), text, t('gotIt'), false, { single: true });
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('teamsCheck'); }
+  }
+}
+
 // How to turn on the live captions in Teams (docs/teams-captions.md), in the app
 function showTeamsHelp() {
   confirmDialog(t('teamsHelpTitle'), t('teamsHelpText'), t('gotIt'), false, { single: true });

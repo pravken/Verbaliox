@@ -270,7 +270,10 @@
             <input type="checkbox" role="switch" class="vs-switch" id="set-teams-captions" />
           </label>
           <!-- outside the label: a click on the link does not flip the switch -->
-          <button type="button" class="vs-link text-apple-blue hover:underline text-[11.5px] -mt-1" data-click="showTeamsHelp" data-i18n="teamsHelpLink">Как включить субтитры в Teams</button>
+          <div class="flex flex-wrap gap-x-4 -mt-1">
+            <button type="button" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="showTeamsHelp" data-i18n="teamsHelpLink">Как включить субтитры в Teams</button>
+            <button type="button" id="teams-check-btn" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="teamsCheck" data-i18n="teamsCheck" data-i18n-title="tipTeamsCheck" title="Во время встречи с включёнными субтитрами: видит ли программа их сейчас">Проверить</button>
+          </div>
 
         </div>
 

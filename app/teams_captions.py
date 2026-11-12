@@ -26,7 +26,9 @@ POLL_SEC = 1.0
 CAPTION_LAG_SEC = 1.5          # a line shows up about this long after it was said
 TEAMS_PROCESSES = {"ms-teams", "teams", "msteams"}
 CAPTION_WORDS = ("caption", "субтитр")
-MAX_ELEMENTS = 4000
+MAX_ELEMENTS = 25000            # elements of a window looked at when the panel is searched for
+FIND_EVERY_SEC = 5.0           # how often the panel is searched for again while it is not found
+NOT_A_PANEL = {"Button", "MenuItem", "CheckBox", "Hyperlink", "SplitButton", "RadioButton", "ToolTip", "Image"}
 _NAME_RE = re.compile(r"^[^\W\d_][\w'’.\-]*(?: [^\W\d_][\w'’.\-]*){0,3}$")
 
 
@@ -57,6 +59,24 @@ def pairs(texts: List[str], known: Optional[set] = None) -> List[Tuple[str, str]
         if name:
             out.append((name, t))
     return out
+
+
+def choose_panel(candidates: List[Tuple[str, List[str]]], known: Optional[set] = None) -> Optional[int]:
+    """Which of the elements named like captions (its ControlType, its text elements) holds the lines:
+    the one whose texts make the most name / line pairs, of those the smallest (the innermost), never
+    a button such as «Caption settings». None when none of them holds a caption line."""
+    holding = [i for i, (kind, texts) in enumerate(candidates) if kind not in NOT_A_PANEL and pairs(texts, known)]
+
+    def inside(inner: List[str], outer: List[str]) -> bool:
+        n = len(inner)
+        return n < len(outer) and any(outer[k:k + n] == inner for k in range(len(outer) - n + 1))
+
+    # an outer region (the call's stage, the whole window) holds the panel's lines and more: left out
+    inner = [i for i in holding
+             if not any(j != i and inside(candidates[j][1], candidates[i][1]) for j in holding)]
+    if not inner:
+        return None
+    return max(inner, key=lambda i: (len(pairs(candidates[i][1], known)), -len(candidates[i][1])))
 
 
 def as_transcript(marks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -107,6 +127,9 @@ class Reader:
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._described = False
+        self._panel: Any = None
+        self._found_at = 0.0
+        self._last_logged = ""
         self._lock = threading.Lock()
 
     def start(self, started_at: float, known_names: Optional[List[str]] = None) -> None:
@@ -116,6 +139,7 @@ class Reader:
             self.marks, self.names, self.lines = [], [], 0
             self._said, self._known = {}, {n.lower() for n in (known_names or []) if n}
             self.state, self.error = "idle", ""
+            self._panel, self._found_at = None, 0.0
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name="teams_captions")
         self._thread.start()
@@ -176,53 +200,95 @@ class Reader:
             except Exception:
                 return ""
 
+        api = (AutomationElement, Condition, ControlType, TreeScope)
         while not self._stop.is_set():
             try:
-                wins = [w for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)
-                        if process_name(w.Current.ProcessId) in TEAMS_PROCESSES]
-                if not wins:
-                    self._set("no_window")
-                else:
-                    texts, panel_found = [], False
-                    for w in wins:
-                        for panel in self._panels(w, Condition, TreeScope):
-                            panel_found = True
-                            items = []
-                            for el in panel.FindAll(TreeScope.Descendants, Condition.TrueCondition):
-                                try:
-                                    c = el.Current
-                                    if c.ControlType == ControlType.Text and c.Name.strip():
-                                        items.append(c.Name.strip())
-                                except Exception:
-                                    continue
-                            if not self._described:
-                                self._describe(panel, items)
-                            texts.extend(items)
-                    if panel_found:
-                        self._take(pairs(texts, self._known))
-                        self._set("reading")
-                    else:
-                        self._set("no_captions")
+                texts = self._read_panel(api) if self._panel is not None else None
+                if texts is None:  # not found yet, or Teams changed its window: searched again
+                    self._panel = None
+                    if time.time() - self._found_at >= FIND_EVERY_SEC:
+                        self._found_at = time.time()
+                        wins = [w for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)
+                                if process_name(w.Current.ProcessId) in TEAMS_PROCESSES]
+                        if not wins:
+                            self._set("no_window")
+                        else:
+                            found = self._find_panel(wins, api, self._known)
+                            if found is None:
+                                self._set("no_captions", f"окон Teams: {len(wins)}")
+                            else:
+                                self._panel, texts = found
+                if texts is not None:
+                    self._take(pairs(texts, self._known))
+                    self._set("reading")
             except Exception as e:
                 traceback.print_exc()
+                self._panel = None
                 self._set("error", str(e)[:200])
             self._stop.wait(POLL_SEC)
 
-    def _panels(self, window, Condition, TreeScope) -> List[Any]:
-        found, walked = [], 0
-        for el in window.FindAll(TreeScope.Descendants, Condition.TrueCondition):
-            walked += 1
-            if walked > MAX_ELEMENTS:
-                break
+    @staticmethod
+    def _texts(el, api) -> List[str]:
+        AutomationElement, Condition, ControlType, TreeScope = api
+        out = []
+        for t in el.FindAll(TreeScope.Descendants, Condition.TrueCondition):
             try:
-                c = el.Current
-                label = f"{c.Name} {c.AutomationId}".lower()
+                c = t.Current
+                if c.ControlType == ControlType.Text and c.Name.strip():
+                    out.append(c.Name.strip())
             except Exception:
                 continue
-            if any(w in label for w in CAPTION_WORDS):
-                found.append(el)
-        # the innermost panel holds the lines; an outer one (the window's region) holds them too
-        return found[-1:] if found else []
+        return out
+
+    def _read_panel(self, api) -> Optional[List[str]]:
+        """The text of the panel found earlier, or None when it is gone (closed, the window changed)."""
+        try:
+            _ = self._panel.Current.Name  # raises once the element is no longer in the window
+            return self._texts(self._panel, api)
+        except Exception:
+            return None
+
+    def _find_panel(self, windows, api, known) -> Optional[Tuple[Any, List[str]]]:
+        """(the caption panel, its text elements) in the Teams windows, or None. Every element whose name
+        or id speaks of captions is a candidate; the one holding name / line pairs wins (choose_panel)."""
+        AutomationElement, Condition, ControlType, TreeScope = api
+        candidates: List[Tuple[Any, str, List[str]]] = []
+        for w in windows:
+            walked = 0
+            for el in w.FindAll(TreeScope.Descendants, Condition.TrueCondition):
+                walked += 1
+                if walked > MAX_ELEMENTS or len(candidates) >= 12:
+                    break
+                try:
+                    c = el.Current
+                    label = f"{c.Name} {c.AutomationId}".lower()
+                    kind = c.ControlType.ProgrammaticName.replace("ControlType.", "")
+                except Exception:
+                    continue
+                if any(word in label for word in CAPTION_WORDS) and kind not in NOT_A_PANEL:
+                    candidates.append((el, kind, self._texts(el, api)))
+        i = choose_panel([(k, t) for _, k, t in candidates], known)
+        if i is None:
+            self._log_once("[teams] no captions panel; candidates: "
+                           + ("; ".join(f"{k} {self._label(el)} texts={len(t)}" for el, k, t in candidates[:8]) or "none"))
+            return None
+        el, _, texts = candidates[i]
+        if not self._described:
+            self._describe(el, texts)
+        return el, texts
+
+    @staticmethod
+    def _label(el) -> str:
+        try:
+            c = el.Current
+            return f"name={c.Name[:60]!r} id={c.AutomationId[:60]!r}"
+        except Exception:
+            return "?"
+
+    def _log_once(self, text: str) -> None:
+        if self._last_logged != text:
+            self._last_logged = text
+            print(text[:1500], flush=True)
 
     def _describe(self, panel, items: List[str]) -> None:
         self._described = True
@@ -251,6 +317,61 @@ def stop() -> Dict[str, Any]:
 
 def status() -> Dict[str, Any]:
     return _reader.snapshot()
+
+
+def check(timeout: float = 25.0) -> Dict[str, Any]:
+    """«Проверить» in the settings: what the reader sees in Teams right now, without a recording —
+    the Teams windows, whether the caption panel is found, and the last lines in it."""
+    if _reader._thread and _reader._thread.is_alive():
+        st = _reader.snapshot()
+        st.pop("marks", None)
+        return {**st, "windows": None, "sample": []}
+    out: Dict[str, Any] = {"state": "error", "error": "", "windows": 0, "sample": []}
+
+    def run() -> None:
+        if sys.platform != "win32":
+            out.update(state="unavailable", error="только в Windows")
+            return
+        try:
+            import clr
+
+            clr.AddReference("UIAutomationClient")
+            clr.AddReference("UIAutomationTypes")
+            from System.Diagnostics import Process
+            from System.Windows.Automation import AutomationElement, Condition, ControlType, TreeScope
+        except Exception as e:
+            out.update(state="unavailable", error=f"нет доступа к окнам Windows: {e}"[:200])
+            return
+
+        def process_name(pid: int) -> str:
+            try:
+                return Process.GetProcessById(pid).ProcessName.lower()
+            except Exception:
+                return ""
+        try:
+            wins = [w for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)
+                    if process_name(w.Current.ProcessId) in TEAMS_PROCESSES]
+            out["windows"] = len(wins)
+            if not wins:
+                out["state"] = "no_window"
+                return
+            found = Reader()._find_panel(wins, (AutomationElement, Condition, ControlType, TreeScope), set())
+            if found is None:
+                out["state"] = "no_captions"
+                return
+            out["state"] = "reading"
+            out["sample"] = [{"name": n, "text": t[:120]} for n, t in pairs(found[1])[-3:]]
+        except Exception as e:
+            traceback.print_exc()
+            out.update(state="error", error=str(e)[:200])
+
+    th = threading.Thread(target=run, daemon=True, name="teams_check")
+    th.start()
+    th.join(timeout)
+    if th.is_alive():
+        out.update(state="error", error="Teams не ответил вовремя")
+    print(f"[teams] check: {out['state']} windows={out['windows']} lines={len(out['sample'])} {out['error']}", flush=True)
+    return out
 
 
 def enabled() -> bool:
