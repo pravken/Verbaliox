@@ -150,6 +150,8 @@ class RecordFinishPayload(BaseModel):
     notes: str = ""                   # what the user wrote in the studio during the recording
     started_at: float = 0             # when the recording began (unix seconds): the calendar meeting
     page_started_at: float = 0        # when the page's recorder began (unix seconds): lines up the system audio
+    speakers_hint: int = 0            # how many people, chosen in the studio (0: found by the voices)
+    speaker_marks: List[Dict[str, Any]] = []  # «Сейчас говорит»: [{at: seconds into the recording, name}]
 
 def _run_ffmpeg(cmd: List[str]) -> subprocess.CompletedProcess:
     try:
@@ -250,7 +252,7 @@ def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, h
         media_path=str(dest),
         language=settings.get("language", "auto"),
         model_name=speech_route.default_choice(settings),
-        num_speakers_hint=as_int(settings.get("num_speakers"), 0),
+        num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
         source="recording",
         owns_media=True,
         title_is_default=True,
@@ -261,6 +263,10 @@ def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, h
 
     if payload.notes.strip():
         update_meeting_fields(m["id"], user_notes=payload.notes[:50000])
+    if payload.speaker_marks:
+        from app.database import set_speaker_marks
+
+        set_speaker_marks(m["id"], payload.speaker_marks)
     try:
         from datetime import datetime
 

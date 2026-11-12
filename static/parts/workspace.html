@@ -138,6 +138,8 @@
           placeholder="Созвон / Голосовая заметка" data-i18n-placeholder="phRecordTitle"
           class="w-full h-8 bg-apple-card border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
         <div id="studio-upcoming" class="hidden"></div>
+        <!-- Who is at the meeting: how many (for splitting by voices) and «Сейчас говорит» while recording -->
+        <div id="studio-people" class="st-people"></div>
       <div class="text-[11.5px] text-apple-tertiary leading-snug space-y-1">
         <p id="record-save-hint" class="break-words"></p>
         <button data-click="openModal" data-click-args='["settings", "record"]' class="vs-link text-apple-blue hover:underline" data-i18n="recordChangeFolder">Изменить папку для записей…</button>

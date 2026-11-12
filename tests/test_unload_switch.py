@@ -128,3 +128,19 @@ class AfterWorkUnloadTest(unittest.TestCase):
             oc._work_done()
             time.sleep(0.4)
             rel.assert_called_once_with()
+
+
+class SpeakerMarksTest(unittest.TestCase):
+    """«Сейчас говорит» marked in the studio names the voices (app/transcriber.apply_speaker_marks)."""
+
+    def test_the_voice_heard_at_the_marks_gets_the_name(self):
+        speakers = {f"SPEAKER_0{i}": {"name": f"Участник {i + 1}"} for i in range(3)}
+        segments = [{"start": 0, "end": 10, "speaker": "SPEAKER_00"}, {"start": 10, "end": 20, "speaker": "SPEAKER_01"},
+                    {"start": 20, "end": 30, "speaker": "SPEAKER_02"}, {"start": 30, "end": 40, "speaker": "SPEAKER_01"}]
+        marks = [{"at": 12, "name": "Наталья"}, {"at": 35, "name": "Наталья"}, {"at": 3, "name": "Владислав"},
+                 {"at": 22, "name": "Наталья"},   # a slip: outvoted by the other two
+                 {"at": 41.5, "name": "Борис"}]   # just after the last phrase: its speaker, already Наталья's
+        self.assertEqual(transcriber.apply_speaker_marks(speakers, segments, marks), 2)
+        self.assertEqual(speakers["SPEAKER_01"]["name"], "Наталья")
+        self.assertEqual(speakers["SPEAKER_00"]["name"], "Владислав")
+        self.assertEqual(speakers["SPEAKER_02"]["name"], "Участник 3")  # one name per voice

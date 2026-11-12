@@ -2467,3 +2467,20 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
   border-top-color: #0A84FF; animation: tx-chip-spin 0.9s linear infinite; }
 @keyframes tx-chip-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .tx-chip-spin { animation: none; border-top-color: #0A84FF; } }
+
+/* Studio: who is at the meeting, how many, and «Сейчас говорит» while recording */
+.st-people { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.st-people-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.st-people-count { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #8E8E93; }
+.st-people-count select { height: 24px; padding: 0 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.12); font-size: 12px; }
+.st-people-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-person { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px;
+  color: #E5E5EA; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); }
+.st-person:hover:not(:disabled) { border-color: #0A84FF; background: rgba(10, 132, 255, 0.14); color: #FFFFFF; }
+.st-person:disabled { opacity: 0.6; cursor: default; }
+.st-person.is-marked { border-color: rgba(48, 209, 88, 0.6); }
+.st-person-n { font-size: 10.5px; font-family: var(--font-mono); color: #30D158; }
+.st-person-add { border-style: dashed; color: #8CC4FF; background: transparent; }
+.st-person-add:disabled { opacity: 1; }
+.st-people-hint { font-size: 11px; line-height: 1.35; color: #8E8E93; }
