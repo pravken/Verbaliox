@@ -62,6 +62,48 @@ class EchoCancelTest(unittest.TestCase):
         self.assertGreater(np.corrcoef(out[near_only], near[near_only])[0, 1], 0.98)
         self.assertLess(abs(db(out[near_only]) - db(near[near_only])), 1.0)
 
+    def test_echo_goes_after_the_system_sound_jumps(self):
+        """The system track jumped against the microphone half way (Windows lost a piece of it): the echo
+        is followed past the jump, not left in the second half."""
+        import numpy as np
+
+        from app import echo_cancel as ec
+
+        sr, n = ec.SR, 90 * ec.SR
+        far = self._voice(n, sr, 1, [(0, 40), (50, 88)])
+        near = self._voice(n, sr, 2, [(40, 50)])
+        rng = np.random.default_rng(3)
+        h = (rng.standard_normal(1200) * np.exp(-np.arange(1200) / 300)).astype(np.float32)
+        h *= 0.35 / np.sqrt(np.sum(h ** 2))
+        room = np.convolve(far, h)[:n]
+        echo = np.zeros(n, np.float32)
+        cut = 45 * sr
+        d1, d2 = int(0.15 * sr), int(0.55 * sr)
+        echo[d1:cut] = room[:cut - d1]
+        echo[cut:] = room[cut - d2:n - d2]  # from 45 s the echo comes 0.4 s later
+        out = ec.cancel(near + echo, far)
+        self.assertIsNotNone(out)
+        db = lambda a: 10 * np.log10(np.mean(a ** 2) + 1e-12)  # noqa: E731
+        late = slice(60 * sr, 85 * sr)
+        self.assertLess(db(out[late]) - db(echo[late]), -15)
+
+    def test_the_system_sound_is_put_where_the_microphone_heard_it(self):
+        """The tracks began 0.8 s apart (as the page and the app told it): the mix gets the system
+        sound moved there, so whatever echo is left does not sound like a second voice."""
+        import numpy as np
+
+        from app import echo_cancel as ec
+
+        sr, n = ec.SR, 40 * ec.SR
+        far = self._voice(n, sr, 1, [(0, 30)])
+        d = int(0.8 * sr)
+        echo = np.concatenate([np.zeros(d, np.float32), 0.3 * far[:-d]])
+        done = ec.cancel_and_align(echo, far)
+        self.assertIsNotNone(done)
+        _, in_room = done
+        part = slice(5 * sr, 25 * sr)
+        self.assertGreater(np.corrcoef(in_room[part], echo[part])[0, 1], 0.95)
+
     def test_nothing_is_done_without_an_echo(self):
         from app import echo_cancel as ec
 

@@ -652,20 +652,20 @@ def api_cancel_meeting(meeting_id: int) -> Dict[str, Any]:
 
 @router.post("/api/meetings/{meeting_id}/reveal")
 def api_reveal_meeting_file(meeting_id: int) -> Dict[str, Any]:
-    import subprocess
-
     m = get_meeting(meeting_id)
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
 
-    media_path = Path(m.get("media_path", ""))
-    audio_path = Path(m.get("audio_path", ""))
-    target = media_path if media_path.exists() else audio_path
-    if not target or not target.exists():
+    # an empty path is the current folder: only a file that exists is shown
+    found = [Path(x) for x in (m.get("media_path"), m.get("audio_path")) if x and Path(x).is_file()]
+    if not found:
         raise HTTPException(status_code=404, detail="Файл не найден на диске")
+    target = found[0]
 
     try:
-        subprocess.Popen(["explorer.exe", f"/select,{target.resolve()}"])
+        from app.paths import reveal_in_explorer
+
+        reveal_in_explorer(target.resolve())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"ok": True}

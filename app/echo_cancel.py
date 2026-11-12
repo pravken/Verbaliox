@@ -6,8 +6,9 @@ the system audio (clean) and once from the microphone (later and duller), and th
 someone talks over them. The system audio is recorded apart (app/system_audio.py), so it is known what
 the speakers played: the echo is predicted from it and taken out of the microphone before the mix.
 
-1. Where the echo is: the delay of the system audio in the microphone, measured over the recording
-   (GCC-PHAT on windows where the speakers play); its drift between the two sound cards is followed.
+1. Where the echo is: the delay of the system audio in the microphone, measured all through the
+   recording (GCC-PHAT on windows where the speakers play); its slow drift between the two sound cards
+   and its jumps (a piece of the system sound lost) are followed.
    No clear echo (headphones): nothing is done.
 2. An adaptive filter learns how the room changes the sound on its way from the speakers to the
    microphone (partitioned-block frequency-domain NLMS) and subtracts its prediction. It learns only
@@ -29,8 +30,9 @@ SR = 24000            # speech up to 12 kHz: the mix sounds as before
 BLOCK = 256           # samples per step of the filter
 FILTER_SEC = 0.12     # the room's echo tail the filter covers, after the measured delay
 MARGIN_SEC = 0.012    # the filter starts a little before the measured delay
-MAX_DELAY_SEC = 1.0   # an echo later than this is not looked for
+MAX_DELAY_SEC = 2.0   # an echo later than this is not looked for (the two tracks can start ~1 s apart)
 MIN_ECHO_SCORE = 0.02  # GCC-PHAT peak of a clear echo; without one it stays near 0.006
+MAX_WINDOWS = 1500    # windows the delay is measured on, spread over the recording (~1 s of work each 100)
 MU = 0.35             # step of the filter
 GAIN_FLOOR = 0.16     # the residual suppression lowers a bin by 16 dB at most
 
@@ -46,19 +48,27 @@ def _gcc_phat(mic: np.ndarray, ref: np.ndarray, max_lag: int) -> Tuple[int, floa
     return i - max_lag, float(np.abs(cc[i]))
 
 
-def find_echo(mic: np.ndarray, ref: np.ndarray, sr: int = SR, window_sec: float = 4.0) -> Optional[Tuple[float, float]]:
-    """(delay at the start in samples, drift in samples per sample) of the echo, or None when the
-    microphone does not hear the speakers. Measured on windows where the speakers play."""
+def find_echo(mic: np.ndarray, ref: np.ndarray, sr: int = SR, window_sec: float = 4.0) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """The delay of the echo along the recording: (times, lags) in samples, measured on the windows
+    where the speakers play, all through the recording (not only its first minutes). The delay drifts
+    slowly between two sound cards and can jump when Windows loses a piece of the system sound: each
+    window keeps its own measure, a measure unlike its neighbours' is left out. None when the
+    microphone does not hear the speakers (headphones)."""
     win = int(window_sec * sr)
     n = min(len(mic), len(ref))
     if n < win:
         return None
     max_lag = int(MAX_DELAY_SEC * sr)
     level = np.sqrt(np.mean(ref[: n // win * win].reshape(-1, win) ** 2, axis=1))
-    loud = np.argsort(level)[::-1]
-    loud = [int(k) for k in loud[: max(4, len(loud) // 3)] if level[k] > 1e-3]
+    playing = level[level > 1e-3]
+    if not len(playing):
+        return None
+    floor = max(1e-3, 0.3 * float(np.median(playing)))  # the speakers play there, not a quiet tail
+    loud = [int(k) for k in np.nonzero(level > floor)[0]]
+    if len(loud) > MAX_WINDOWS:  # spread over the whole recording
+        loud = [loud[int(i)] for i in np.linspace(0, len(loud) - 1, MAX_WINDOWS)]
     points = []
-    for k in sorted(loud)[:60]:
+    for k in loud:
         lag, score = _gcc_phat(mic[k * win:(k + 1) * win], ref[k * win:(k + 1) * win], max_lag)
         if score >= MIN_ECHO_SCORE:
             points.append((k * win + win / 2, lag))
@@ -66,20 +76,43 @@ def find_echo(mic: np.ndarray, ref: np.ndarray, sr: int = SR, window_sec: float 
         return None
     t = np.array([p[0] for p in points])
     lag = np.array([p[1] for p in points], dtype=float)
-    keep = np.abs(lag - np.median(lag)) <= 0.02 * sr  # windows that found something else are left out
+    # a window that found something else: far from the median of its neighbours (a jump is followed:
+    # after it the neighbours agree with the new delay)
+    keep = np.ones(len(lag), bool)
+    for i in range(len(lag)):
+        near = lag[max(0, i - 3): i + 4]
+        keep[i] = abs(lag[i] - np.median(near)) <= 0.02 * sr
     t, lag = t[keep], lag[keep]
     if len(t) < 2:
         return None
-    drift = float(np.polyfit(t, lag, 1)[0]) if np.ptp(t) > 30 * sr else 0.0
-    drift = float(np.clip(drift, -2e-4, 2e-4))  # two sound cards differ by tens of ppm, not more
-    return float(np.median(lag - drift * t)), drift
+    return t, lag
 
 
-def _align(ref: np.ndarray, n: int, delay: float, drift: float, margin: int) -> np.ndarray:
-    """ref moved so its echo falls at `margin` samples into the filter, following the drift."""
-    t = np.arange(n, dtype=np.float64)
-    src = t - (delay + drift * t) + margin
-    return np.interp(src, np.arange(len(ref), dtype=np.float64), ref, left=0.0, right=0.0).astype(np.float32)
+def _delay_at(times: np.ndarray, lags: np.ndarray, at: np.ndarray) -> np.ndarray:
+    """The delay at each sample: the measure of the nearest window (a jump stays a jump), and between
+    two close measures a straight line (a slow drift stays smooth)."""
+    i = np.clip(np.searchsorted(times, at), 1, len(times) - 1)
+    t0, t1 = times[i - 1], times[i]
+    l0, l1 = lags[i - 1], lags[i]
+    w = np.clip((at - t0) / np.maximum(t1 - t0, 1.0), 0.0, 1.0)
+    smooth = l0 + (l1 - l0) * w
+    step = np.where(at - t0 < t1 - at, l0, l1)
+    out = np.where(np.abs(l1 - l0) <= 0.005 * SR, smooth, step)
+    out = np.where(at <= times[0], lags[0], out)
+    return np.where(at >= times[-1], lags[-1], out)
+
+
+def _align(ref: np.ndarray, n: int, times: np.ndarray, lags: np.ndarray, margin: int) -> np.ndarray:
+    """ref moved so its echo falls at `margin` samples into the filter, following the delay along the
+    recording; done in pieces so an hour-long recording does not need gigabytes at once."""
+    out = np.zeros(n, dtype=np.float32)
+    grid = np.arange(len(ref), dtype=np.float64)
+    step = 4_000_000
+    for a in range(0, n, step):
+        t = np.arange(a, min(n, a + step), dtype=np.float64)
+        src = t - _delay_at(times, lags, t) + margin
+        out[a:a + len(t)] = np.interp(src, grid, ref, left=0.0, right=0.0)
+    return out
 
 
 def _adaptive(mic: np.ndarray, ref: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -153,16 +186,30 @@ def _suppress(sig: np.ndarray, echo: np.ndarray) -> np.ndarray:
     return out[pad:pad + len(sig)]
 
 
-def cancel(mic: np.ndarray, ref: np.ndarray, sr: int = SR) -> Optional[np.ndarray]:
-    """The microphone without the echo of the speakers, or None when it does not hear them."""
+def cancel_and_align(mic: np.ndarray, ref: np.ndarray, sr: int = SR) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """(the microphone without the echo of the speakers, the system sound moved to where the
+    microphone heard it), or None when the microphone does not hear the speakers. The second is what
+    the mix uses: the time the page and the app say their tracks began can be off by most of a second,
+    and then whatever echo is left sounds like a second voice; where the microphone heard the speakers
+    is measured in the sound itself."""
     found = find_echo(mic, ref, sr)
     if not found:
         return None
-    delay, drift = found
+    times, lags = found
+    jumps = int(np.sum(np.abs(np.diff(lags)) > 0.005 * sr))
+    print(f"[echo] delay {lags[0] / sr:.3f}..{lags[-1] / sr:.3f} s over {len(lags)} windows, jumps: {jumps}", flush=True)
     margin = int(MARGIN_SEC * sr)
-    aligned = _align(ref, len(mic), delay, drift, margin)
+    aligned = _align(ref, len(mic), times, lags, margin)
     cleaned, echo = _adaptive(mic.astype(np.float32), aligned)
-    return np.clip(_suppress(cleaned, echo), -1.0, 1.0)
+    del aligned
+    in_room = _align(ref, len(mic), times, lags, 0)
+    return np.clip(_suppress(cleaned, echo), -1.0, 1.0), in_room
+
+
+def cancel(mic: np.ndarray, ref: np.ndarray, sr: int = SR) -> Optional[np.ndarray]:
+    """The microphone without the echo of the speakers, or None when it does not hear them."""
+    done = cancel_and_align(mic, ref, sr)
+    return done[0] if done else None
 
 
 def _decode(ffmpeg: str, path: Path, skip: float = 0.0) -> np.ndarray:
@@ -174,20 +221,28 @@ def _decode(ffmpeg: str, path: Path, skip: float = 0.0) -> np.ndarray:
     return np.frombuffer(res.stdout, dtype=np.float32)
 
 
-def clean_microphone(ffmpeg: str, page: Path, system: Path, system_skip: float, out: Path) -> bool:
-    """Writes the page's microphone without the speakers' echo to `out` (WAV). False when there is no
-    echo to remove (headphones) or it could not be done: the recording is then mixed as it was."""
+def clean_microphone(ffmpeg: str, page: Path, system: Path, system_skip: float, out: Path,
+                     system_out: Optional[Path] = None) -> bool:
+    """Writes the page's microphone without the speakers' echo to `out` (WAV) and, given system_out,
+    the system sound lined up with it by the echo (WAV, for the mix). False when there is no echo to
+    remove (headphones) or it could not be done: the recording is then mixed as it was."""
     import soundfile as sf
 
     try:
         mic = _decode(ffmpeg, page)
         ref = _decode(ffmpeg, system, system_skip)
-        cleaned = cancel(mic, ref)
-        if cleaned is None:
+        done = cancel_and_align(mic, ref)
+        if done is None:
+            print("[echo] the microphone does not hear the speakers: nothing to remove", flush=True)
             return False
+        cleaned, in_room = done
         sf.write(str(out), cleaned, SR, subtype="PCM_16")
+        if system_out is not None:
+            sf.write(str(system_out), np.clip(in_room, -1.0, 1.0), SR, subtype="PCM_16")
         return True
     except Exception as e:  # the recording is saved anyway, with the echo
         print(f"[echo] not removed: {e}", flush=True)
         out.unlink(missing_ok=True)
+        if system_out is not None:
+            system_out.unlink(missing_ok=True)
         return False

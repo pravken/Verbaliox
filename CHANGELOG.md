@@ -6,6 +6,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.7.10 — English
+
+- **Recordings through speakers no longer sound like two people at once:** the system sound is put in
+  the mix where the microphone heard it (measured in the sound, not by when the tracks said they
+  began), and the speakers' echo is followed through the whole recording, jumps included.
+- **«Show in folder» selects the file** instead of opening Documents (a space in the path confused
+  Explorer).
+
 ## 0.7.9 — English
 
 - **Studio: live caption lines say who said them** — from the Teams captions (their words and time fit
@@ -239,6 +247,14 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.7.10
+
+- **Запись через колонки больше не звучит как два человека одновременно:** звук компьютера ставится в
+  сведение туда, где его услышал микрофон (это измеряется по самому звуку, а не по отметкам начала
+  дорожек), а эхо колонок отслеживается по всей записи, со скачками.
+- **«Показать в папке» выделяет файл**, а не открывает «Документы» (Проводник путался из-за пробела в
+  пути).
 
 ## 0.7.9
 
