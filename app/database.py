@@ -493,6 +493,11 @@ def _loads_list(raw: Optional[str]) -> List[Dict[str, Any]]:
         return []
 
 
+# How many times the text of each recording was written in this run: the meaning index (app/semantic.py)
+# compares it before and after its embedding, which takes seconds, to know whether it embedded old text
+text_edits: Dict[int, int] = {}
+
+
 def _reindex_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[Dict[str, Any]],
                       before: Optional[List[str]] = None) -> None:
     """Replaces the search index rows of one recording. Call inside the caller's transaction.
@@ -502,6 +507,7 @@ def _reindex_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[
     # after the last edit, embedding only the chunks whose text changed
     conn.execute("UPDATE semantic_meta SET stale = 1, updated_at = datetime('now', 'localtime') WHERE meeting_id = ?",
                  (meeting_id,))
+    text_edits[meeting_id] = text_edits.get(meeting_id, 0) + 1
 
     def seg_id(seg: Dict[str, Any]) -> int:
         return int(seg.get("id", 0) or 0)
