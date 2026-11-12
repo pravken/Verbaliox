@@ -22,7 +22,9 @@ router = APIRouter()
 # --- Media Streaming for Interactive Player ---
 @router.get("/api/meetings/{meeting_id}/media")
 def api_stream_media(meeting_id: int) -> FileResponse:
-    m = get_meeting(meeting_id)
+    from app.database import meeting_files
+
+    m = meeting_files(meeting_id)  # every seek of the player asks again: no transcript is read
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
 

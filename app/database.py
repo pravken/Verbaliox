@@ -879,6 +879,15 @@ def save_transcript_version(meeting_id: int, model: str, data: Dict[str, Any]) -
 
 def transcript_versions(conn: sqlite3.Connection, meeting_id: int) -> List[Dict[str, Any]]:
     """The models a recording has a stored transcript of (besides the one shown), with its date."""
+    # read by SQLite itself: each version is the whole transcript with its words (MB for a long
+    # recording), and every look at a recording asked for this list
+    try:
+        rows = conn.execute("SELECT model, json_extract(data, '$.at') AS at, json_array_length(data, '$.segments') AS n "
+                            "FROM transcript_versions WHERE meeting_id = ? AND json_valid(data) ORDER BY model",
+                            (meeting_id,)).fetchall()
+        return [{"model": r["model"], "at": r["at"] or "", "lines": int(r["n"] or 0)} for r in rows]
+    except sqlite3.OperationalError:  # an SQLite without JSON functions
+        pass
     out = []
     for r in conn.execute("SELECT model, data FROM transcript_versions WHERE meeting_id = ? ORDER BY model", (meeting_id,)):
         try:
@@ -1265,6 +1274,23 @@ def meeting_status(meeting_id: int) -> str:
         row = conn.execute("SELECT status FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
         conn.close()
     return str(row["status"] or "") if row else ""
+
+
+def meeting_files(meeting_id: int) -> Optional[Dict[str, Any]]:
+    """The files of a recording and what the player needs of them (no transcript is read): the media
+    and thumbnail requests asked for the whole recording at every seek."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT media_path, audio_path, duration, has_video, source FROM meetings WHERE id = ?",
+                               (meeting_id,)).fetchone()
+        finally:
+            conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["is_video"] = is_video(d)
+    return d
 
 
 # speaker_seconds of a recording until its lines change (_write_segments): «Все люди» and the speakers

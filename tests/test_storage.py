@@ -158,6 +158,19 @@ class EventBusTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_versions_are_listed_without_reading_them_whole(self):
+        database.init_db()
+        m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav")
+        database.save_transcript_version(m["id"], "large-v3", {"segments": [{"id": 0, "start": 0, "end": 1, "text": "a"},
+                                                                         {"id": 1, "start": 1, "end": 2, "text": "b"}],
+                                                            "speakers": {}, "at": "2026-11-12 10:00:00"})
+        got = database.get_meeting(m["id"])["transcript_versions"]
+        self.assertEqual(got, [{"model": "large-v3", "at": "2026-11-12 10:00:00", "lines": 2}])
+        files = database.meeting_files(m["id"])
+        self.assertEqual(files["media_path"], "t.wav")
+        self.assertFalse(files["is_video"])
+        self.assertIsNone(database.meeting_files(999999))
+
     def test_the_model_recognizing_a_recording_now_is_told(self):
         from app import app_status
 
