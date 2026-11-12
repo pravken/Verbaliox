@@ -212,15 +212,27 @@ def _ask_llm(places: List[_Place], idx: List[int], chat: Callable[[str, str], st
     return decided
 
 
+def _ask_in_parts(places: List[_Place], idx: List[int], chat: Callable[[str, str], str], depth: int = 0) -> int:
+    """A portion the model could not answer (an answer cut short or not JSON) is asked again in halves:
+    a small model loses its way in a long list sooner than in a short one."""
+    got = _ask_llm(places, idx, chat)
+    if got == 0 and len(idx) > 4 and depth < 2:
+        half = len(idx) // 2
+        return _ask_in_parts(places, idx[:half], chat, depth + 1) + _ask_in_parts(places, idx[half:], chat, depth + 1)
+    return got
+
+
 def merge(versions: Dict[str, Dict[str, Any]], lang: str, chat: Optional[Callable[[str, str], str]] = None,
           progress: Optional[Callable[[int, str], None]] = None,
-          check_cancel: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
+          check_cancel: Optional[Callable[[], None]] = None, base: Optional[str] = None) -> Dict[str, Any]:
     """versions: model -> {"segments", "speakers", ...} (two or more). Returns {"segments", "speakers",
-    "base", "models", "disputed", "by_llm"}."""
+    "base", "models", "disputed", "by_llm"}. base: the version whose phrases and speakers the result
+    keeps (the one split by voices); by default the most accurate model's."""
     models = ranked([m for m in versions if m != MERGED and versions[m].get("segments")], lang)
     if len(models) < 2:
         raise ValueError("Для сведения нужны расшифровки хотя бы двух моделей")
-    base_model, others = models[0], models[1:]
+    base_model = base if base in models else models[0]
+    others = [m for m in models if m != base_model]
     base_segments = [s for s in versions[base_model]["segments"] if isinstance(s, dict)]
     weights = {m: _weight(m, lang) for m in models}
     total = sum(weights.values())
@@ -264,7 +276,7 @@ def merge(versions: Dict[str, Dict[str, Any]], lang: str, chat: Optional[Callabl
             if progress:
                 progress(10 + int(85 * b / len(disputed)), f"Сведение версий: спорные места {b + 1}–{min(len(disputed), b + _LLM_BATCH)} из {len(disputed)}")
             try:
-                by_llm += _ask_llm(places, disputed[b:b + _LLM_BATCH], chat)
+                by_llm += _ask_in_parts(places, disputed[b:b + _LLM_BATCH], chat)
             except Exception as e:  # the model stopped answering: the rest is decided by accuracy
                 print(f"[merge] analysis model failed: {e}", flush=True)
                 break

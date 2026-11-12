@@ -644,7 +644,10 @@ SYSTEM_GROUNDING_PROMPT = (
     "Описывай ровно то, о чём реально говорят спикеры.\n"
     "4. Не повторяй одну и ту же фразу несколько раз. Пиши грамотно {lang} в формате Markdown без эмодзи.\n"
     "5. Не оформляй цитаты и ответы блоками кода (```): цитируй обычным текстом или через «>». "
-    "Таймкоды пиши в квадратных скобках: [ММ:СС] или диапазоном [ММ:СС–ММ:СС]."
+    "Таймкоды пиши в квадратных скобках: [ММ:СС] или диапазоном [ММ:СС–ММ:СС].\n"
+    "6. Называй участников ровно так, как они подписаны перед репликами в расшифровке (например, «Участник 2»). "
+    "Не заменяй их на «Пользователь», «Спикер», «Собеседник» и не придумывай им имена; имя из самого разговора "
+    "используй, только если в тексте явно сказано, что это он."
 )
 
 SUMMARY_TEMPLATES: Dict[str, str] = {
@@ -724,12 +727,22 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     from app.llm_text import strip_think, thinking_off
 
     payload.update(thinking_off(model))
-    with httpx.Client(timeout=600.0) as client:
-        resp = client.post(f"{base_url}/api/chat", json=payload)
-        raise_for_ollama(resp)
-        data = resp.json()
-        msg = data.get("message") or {}
-        return strip_think(str(msg.get("content") or data.get("response") or ""))
+    from app import cancel_scope
+
+    def request() -> str:
+        with httpx.Client(timeout=600.0) as client:
+            resp = client.post(f"{base_url}/api/chat", json=payload)
+            raise_for_ollama(resp)
+            data = resp.json()
+            msg = data.get("message") or {}
+            return strip_think(str(msg.get("content") or data.get("response") or ""))
+
+    def stop_answer() -> None:  # a cancelled job: Ollama stops writing (the model is unloaded)
+        from app.vram import ollama_unload
+
+        ollama_unload([model])
+
+    return cancel_scope.call(request, on_abort=stop_answer)
 
 
 MAX_NOTE_ROUNDS = 3

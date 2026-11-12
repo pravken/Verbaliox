@@ -34,3 +34,6 @@ bench-report/data/
 
 # The release signing key (tools/release_key.py) is kept offline, never in the repository
 *-release*.key
+
+# The Teams captions probe writes the text of a meeting next to itself (tools/teams_captions_probe.py)
+tools/teams_probe_*.txt

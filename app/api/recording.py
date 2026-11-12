@@ -149,6 +149,7 @@ class RecordFinishPayload(BaseModel):
     has_mic: bool = False             # the page recording has an audio track
     notes: str = ""                   # what the user wrote in the studio during the recording
     started_at: float = 0             # when the recording began (unix seconds): the calendar meeting
+    page_started_at: float = 0        # when the page's recorder began (unix seconds): lines up the system audio
 
 def _run_ffmpeg(cmd: List[str]) -> subprocess.CompletedProcess:
     try:
@@ -185,18 +186,32 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     if not page and not system and not screen:
         raise HTTPException(status_code=404, detail="Запись пуста: звук не был получен")
 
+    # The system audio begins before the page's recorder (the microphone is asked for meanwhile)
+    system_skip = 0.0
+    if cap and page and payload.page_started_at > 0 and cap.started_at > 0:
+        system_skip = min(30.0, max(0.0, payload.page_started_at - cap.started_at))
+    # The speakers' echo taken out of the microphone (app/echo_cancel.py): the mix then uses the
+    # cleaned microphone instead of the page's sound
+    mic: Optional[Path] = None
+    if page and system and payload.has_mic and (get_all_settings().get("rec_echo_cancel") or "true").lower() == "true":
+        from app.echo_cancel import clean_microphone
+
+        cleaned = page.with_name(page.name + ".mic.wav")
+        if await run_in_threadpool(clean_microphone, tool_cmd("ffmpeg"), page, system, system_skip, cleaned):
+            mic = cleaned
     safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
     if screen:
-        audio = [p for p in (page if payload.has_mic else None, system) if p]
+        audio = [p for p in ((mic or page) if payload.has_mic else None, system) if p]
         dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}.mp4"
-        res = await run_in_threadpool(_run_ffmpeg, screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest))
+        res = await run_in_threadpool(_run_ffmpeg, screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest,
+                                                                       system_skip if len(audio) == 2 else 0.0))
         if res.returncode != 0 or not dest.is_file():
             print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
             dest.unlink(missing_ok=True)
             return _salvage_parts(payload.title.strip() or "Запись",
                                   [(screen, True), *[(p, p is page and payload.has_video) for p in (page, system) if p]],
                                   payload.notes)
-        for p in (screen, page, system):
+        for p in (screen, page, system, mic):
             if p:
                 p.unlink(missing_ok=True)
         return _queue_recording(payload, dest, safe_stem, has_video=True)
@@ -204,7 +219,7 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     has_video = bool(payload.has_video and page)
     ext = ".webm" if page and (has_video or not system) else ".m4a"
     dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}{ext}"
-    cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest)
+    cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest, system_skip, mic=mic)
     if cmd is None:
         await run_in_threadpool(shutil.move, str(page), str(dest))  # the recordings folder may be on another drive
     else:
@@ -216,12 +231,15 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
             else:
                 print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
                 dest.unlink(missing_ok=True)
+                if mic:
+                    mic.unlink(missing_ok=True)  # the page's own part is kept instead
                 return _salvage_parts(payload.title.strip() or "Запись",
                                       [(p, has_video if p is page else False) for p in (page, system) if p], payload.notes)
         if page:
             page.unlink(missing_ok=True)
-    if system:
-        system.unlink(missing_ok=True)
+    for p in (system, mic):
+        if p:
+            p.unlink(missing_ok=True)
     return _queue_recording(payload, dest, safe_stem, has_video=has_video)
 
 def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, has_video: bool) -> Dict[str, Any]:
@@ -324,9 +342,17 @@ class LiveConfigPayload(BaseModel):
     caption_model: Optional[str] = None    # "auto" or a model id; None keeps the current one
     translate_model: Optional[str] = None  # "" for auto (by speed) or an Ollama model; None keeps it
 
+class LiveEarlierLine(BaseModel):
+    at: float = 0
+    text: str = ""
+
 class LiveAskPayload(BaseModel):
     question: str
     lang: str = "ru"
+    # Captions switched off and on again: the lines of the sessions before (the page keeps them) and
+    # where the current session begins in the recording
+    earlier: List[LiveEarlierLine] = []
+    offset: float = 0
 
 @router.post("/api/live/{session_id}/ask")
 def api_live_ask(session_id: str, payload: LiveAskPayload) -> Dict[str, Any]:
@@ -342,7 +368,9 @@ def api_live_ask(session_id: str, payload: LiveAskPayload) -> Dict[str, Any]:
     question = payload.question.strip()[:500]
     if not question:
         raise HTTPException(status_code=400, detail="Пустой вопрос")
-    lines = [f"[{format_timestamp(ln['start'])}] {ln['text']}" for ln in s.lines if (ln.get("text") or "").strip()]
+    offset = max(0.0, float(payload.offset or 0))
+    lines = [f"[{format_timestamp(max(0.0, e.at))}] {e.text.strip()[:500]}" for e in payload.earlier[-3000:] if e.text.strip()]
+    lines += [f"[{format_timestamp(ln['start'] + offset)}] {ln['text']}" for ln in s.lines if (ln.get("text") or "").strip()]
     if s.partial:
         lines.append(f"[сейчас] {s.partial}")
     if not lines:

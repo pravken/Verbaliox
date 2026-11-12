@@ -5,7 +5,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from app.hardware import clear_vram, get_hardware_info, register_cuda_dlls
 
@@ -64,13 +64,22 @@ def is_transcribing(meeting_id: int) -> bool:
         return any(q["id"] == meeting_id and q["kind"] == "transcribe" for q in _queue)
 
 
+_running_thread: Optional[int] = None
+
+
 def request_cancel(meeting_id: int) -> bool:
-    """Marks a queued/running job for cancellation. It stops at the next checkpoint."""
+    """Marks a queued/running job for cancellation. It stops at the next checkpoint; a request to the
+    analysis model or FFmpeg it waits on is broken off at once."""
     with _jobs_lock:
         if meeting_id not in _active_jobs:
             return False
         _cancel_requested.add(meeting_id)
-        return True
+        thread = _running_thread if _running_id == meeting_id else None
+    if thread is not None:
+        from app import cancel_scope
+
+        cancel_scope.abort(thread)
+    return True
 
 
 def _publish_queue_changed() -> None:
@@ -85,12 +94,14 @@ def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> None:
 
 
 def _queue_start(meeting_id: int) -> None:
-    global _running_id
-    from app import idle_unload
+    global _running_id, _running_thread
+    from app import cancel_scope, idle_unload
 
     idle_unload.touch()
+    cancel_scope.reset(threading.get_ident())
     with _jobs_lock:
         _running_id = meeting_id
+        _running_thread = threading.get_ident()
         for q in _queue:
             if q["id"] == meeting_id:
                 q["started_at"] = time.time()
@@ -612,6 +623,31 @@ def running_job_kind() -> Optional[str]:
         return "other" if _preloading else None
 
 
+def running_meeting_id() -> Optional[int]:
+    with _jobs_lock:
+        return _running_id
+
+
+def stop_all_jobs(wait_sec: float = 0.0) -> int:
+    """«Unload all» as a switch: every queued and running job is cancelled (it stops at its next
+    checkpoint); waits up to wait_sec for the running one to end. Returns how many were asked."""
+    with _jobs_lock:
+        ids = list(_active_jobs)
+        _cancel_requested.update(ids)
+        thread = _running_thread if _running_id is not None else None
+    if thread is not None:
+        from app import cancel_scope
+
+        cancel_scope.abort(thread)
+    deadline = time.time() + wait_sec
+    while wait_sec and time.time() < deadline:
+        with _jobs_lock:
+            if _running_id is None and not _preloading:
+                break
+        time.sleep(0.2)
+    return len(ids)
+
+
 _preloading = False
 
 
@@ -788,9 +824,12 @@ class _PartialTranscript:
         events.publish({"type": "segments", "id": self.meeting_id})
 
 
-def _collect_segments(meeting_id: int, segments_iter, total_dur: float) -> List[Dict[str, Any]]:
+def _collect_segments(meeting_id: int, segments_iter, total_dur: float,
+                      report: Optional[Callable[[float], None]] = None) -> List[Dict[str, Any]]:
+    """report(ratio): progress of another model's pass (the precise mode) instead of the job's own
+    progress and the text shown while it is recognized."""
     raw_segments: List[Dict[str, Any]] = []
-    partial = _PartialTranscript(meeting_id)
+    partial = None if report else _PartialTranscript(meeting_id)
     for seg in segments_iter:
         _check_cancel(meeting_id)
         text = (seg.text or "").strip()
@@ -822,9 +861,12 @@ def _collect_segments(meeting_id: int, segments_iter, total_dur: float) -> List[
             }
         )
 
+        ratio = min(1.0, float(seg.end) / total_dur)
+        if report:
+            report(ratio)
+            continue
         partial.push(raw_segments)
         # Update progress between 16% and 65%
-        ratio = min(1.0, float(seg.end) / total_dur)
         pct = 16 + int(49 * ratio)
         update_meeting_progress(
             meeting_id,
@@ -891,6 +933,149 @@ def _after_transcription(
     return notes
 
 
+# --- The precise mode: other models recognize the recording too, and the versions are merged ---
+ENSEMBLE_CANDIDATES = ("gigaam-v3", "large-v3", "parakeet-v3", "large-v3-turbo")
+ENSEMBLE_MAX_MODELS = 3  # with the main one: each model is one more pass over the whole recording
+
+
+def ensemble_models(settings: Dict[str, str], main_model: str, lang: Optional[str], mixed: bool) -> List[str]:
+    """The other models of the precise mode for a recording: installed and knowing its language. The
+    ones chosen in the settings, else the most accurate installed ones (transcript_merge.ranked)."""
+    from app import asr_onnx
+    from app.model_manager import WHISPER_CATALOG, is_whisper_model_installed
+    from app.transcript_merge import ranked
+
+    chosen = [m.strip() for m in (settings.get("asr_ensemble_models") or "").split(",") if m.strip()]
+    whisper_ids = {m["id"] for m in WHISPER_CATALOG}
+    out: List[str] = []
+    for m in chosen or ENSEMBLE_CANDIDATES:
+        if m == main_model or m in out:
+            continue
+        if asr_onnx.is_onnx_model(m):
+            if not asr_onnx.is_installed(m) or not asr_onnx.supports_language(m, lang):
+                continue
+            if mixed and len(asr_onnx.ONNX_MODELS[m]["languages"]) == 1:
+                continue
+        elif m not in whisper_ids or not is_whisper_model_installed(m):
+            continue
+        out.append(m)
+    return out if chosen else ranked(out, lang or "")[: ENSEMBLE_MAX_MODELS - 1]
+
+
+def _speakers_by_time(segments: List[Dict[str, Any]], base: List[Dict[str, Any]]) -> None:
+    """Another model's phrases get the speaker of the phrase split by voices they overlap most."""
+    for seg in segments:
+        best, speaker = 0.0, (base[0].get("speaker") if base else "SPEAKER_00")
+        for b in base:
+            ov = min(seg["end"], float(b.get("end") or 0)) - max(seg["start"], float(b.get("start") or 0))
+            if ov > best:
+                best, speaker = ov, b.get("speaker")
+        seg["speaker"] = speaker or "SPEAKER_00"
+
+
+def _recognize_with(meeting_id: int, model: str, wav_path: Path, total_dur: float, language: Optional[str],
+                    mixed: bool, processing: Dict[str, Any], settings: Dict[str, str], device: str,
+                    compute_type: str, hw: Dict[str, Any], report: Callable[[float], None]) -> List[Dict[str, Any]]:
+    """One more pass of another model over the recording: phrases with their words, no speakers."""
+    from app import asr_onnx, onnx_gpu
+
+    if asr_onnx.is_onnx_model(model):
+        use_gpu = onnx_gpu.gpu_for_job(model)
+        args = (model, wav_path, total_dur, report, lambda: _check_cancel(meeting_id))
+        try:
+            segs = asr_onnx.transcribe(*args, gpu=use_gpu, leveling=processing.get("leveling", True))
+        except JobCancelled:
+            raise
+        except Exception:
+            if not use_gpu:
+                raise
+            traceback.print_exc()
+            asr_onnx.release(model, gpu=True)
+            segs = asr_onnx.transcribe(*args, leveling=processing.get("leveling", True))
+        asr_onnx.release(model)  # the next model or the analysis model needs the memory
+        return segs
+    whisper, _ = _get_whisper_model(model, device, compute_type)
+    batch = _batch_size_for(device, hw) if settings.get("batched_inference", "true").lower() == "true" else 0
+    decode = dict(duration=total_dur, language=language, hotwords=vocab.hotwords(),
+                  vad_enabled=processing.get("vad", True), multilingual=mixed)
+    try:
+        it, _info = _start_transcription(whisper, wav_path, batch_size=batch, **decode)
+        return _collect_segments(meeting_id, it, total_dur, report=report)
+    except JobCancelled:
+        raise
+    except Exception:
+        if not batch:
+            raise
+        clear_vram()
+        it, _info = _start_transcription(whisper, wav_path, batch_size=0, **decode)
+        return _collect_segments(meeting_id, it, total_dur, report=report)
+
+
+def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: Path, total_dur: float,
+                  language: Optional[str], detected_lang: str, mixed: bool, processing: Dict[str, Any],
+                  settings: Dict[str, str], device: str, compute_type: str, hw: Dict[str, Any],
+                  segments: List[Dict[str, Any]], speakers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The other models recognize the recording, each version is kept, and all are merged into one
+    (app/transcript_merge.py): where the models differ the analysis model picks the variant by the
+    words around it, a portion of places at a time. Returns the merge result, None if it was not made."""
+    from datetime import datetime
+
+    from app import llm
+    from app.database import all_transcripts, is_local_only, save_transcript_version
+    from app.model_manager import format_whisper_model_name
+    from app.transcript_merge import MERGED, merge
+
+    done: List[str] = []
+    for k, model in enumerate(extra):
+        _check_cancel(meeting_id)
+        name = format_whisper_model_name(model)
+        lo, hi = 70 + 15 * k // len(extra), 70 + 15 * (k + 1) // len(extra)
+
+        def report(ratio: float, name=name, lo=lo, hi=hi, k=k) -> None:
+            update_meeting_progress(meeting_id, status="transcribing", progress=lo + int((hi - lo) * min(1.0, ratio)),
+                                    stage_text=f"Точный режим: распознавание {name} ({k + 1} из {len(extra)}): "
+                                               f"{format_timestamp(ratio * total_dur)} из {format_timestamp(total_dur)}")
+
+        report(0.0)
+        try:
+            segs = _recognize_with(meeting_id, model, wav_path, total_dur, language, mixed, processing, settings,
+                                   device, compute_type, hw, report)
+        except JobCancelled:
+            raise
+        except Exception as e:  # one model failing leaves the others
+            print(f"[ensemble] {model} failed on meeting {meeting_id}: {e}", flush=True)
+            traceback.print_exc()
+            continue
+        segs = vocab.fix_segments([s for s in segs if (s.get("text") or "").strip()])
+        _speakers_by_time(segs, segments)
+        for i, seg in enumerate(segs):
+            seg["id"] = i
+        save_transcript_version(meeting_id, model, {"segments": segs, "speakers": speakers, "language": detected_lang,
+                                                    "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        done.append(model)
+    release_whisper_model()
+    clear_vram()
+    if not done:
+        return None
+    _check_cancel(meeting_id)
+    update_meeting_progress(meeting_id, status="merging", progress=86, stage_text="Сведение версий: сопоставление слов...")
+    chat = None
+    try:
+        chat = llm.target(None, local_only=is_local_only(get_meeting(meeting_id))).chat
+    except Exception as e:  # no analysis model: the disputed places go to the more accurate model
+        print(f"[ensemble] no analysis model: {e}", flush=True)
+    versions = {m: v for m, v in all_transcripts(meeting_id).items() if m in [main_model, *done]}
+    res = merge(versions, detected_lang or "", chat, base=main_model,
+                progress=lambda pct, text: update_meeting_progress(meeting_id, progress=86 + 3 * pct // 100, stage_text=text),
+                check_cancel=lambda: _check_cancel(meeting_id))
+    _check_cancel(meeting_id)
+    stash_transcript_for(meeting_id, MERGED)
+    save_meeting_results(meeting_id, speakers=res["speakers"], segments=res["segments"], language=detected_lang,
+                         transcript_model=MERGED)
+    res["chat"] = chat is not None
+    return res
+
+
 def _process_meeting_job(meeting_id: int) -> None:
     meeting = get_meeting(meeting_id)
     if not meeting:
@@ -933,7 +1118,8 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         wav_path = AUDIO_DIR / f"meeting_{meeting_id}.wav"
         _check_cancel(meeting_id)  # cancelled while waiting: do not spend minutes extracting audio
-        extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm)
+        extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm,
+                               check_cancel=lambda: _check_cancel(meeting_id))
         duration = get_media_duration(wav_path) or get_media_duration(media_path)
 
         update_meeting_progress(
@@ -1129,6 +1315,7 @@ def _process_meeting_job(meeting_id: int) -> None:
         )
 
         def _diar_cb(pct: int, msg: str) -> None:
+            _check_cancel(meeting_id)  # called per batch of voices: a cancel stops the splitting at once
             update_meeting_progress(meeting_id, progress=pct, stage_text=msg)
 
         from app.diarizer import diarize_and_merge_segments
@@ -1174,6 +1361,24 @@ def _process_meeting_job(meeting_id: int) -> None:
         )
 
         clear_vram()
+
+        # The precise mode: other models recognize the recording too, and the versions are merged
+        ensemble_note = ""
+        if processing.get("ensemble") and merged_segments and not _cancel_wanted(meeting_id):
+            extra = ensemble_models(settings, model_name, detected_lang or language, mixed)
+            if not extra:
+                ensemble_note = "точный режим: нет других установленных моделей для этого языка"
+            else:
+                res = _run_ensemble(meeting_id, model_name, extra, wav_path, max(1.0, float(duration or 1.0)), language,
+                                    detected_lang, mixed, processing, settings, device, compute_type, hw,
+                                    merged_segments, speakers_meta)
+                if res:
+                    merged_segments, speakers_meta = res["segments"], res["speakers"]
+                    ensemble_note = (f"сведено из {len(res['models'])} моделей, спорных мест {res['disputed']}"
+                                     + (f", по смыслу выбрано {res['by_llm']}" if res["chat"] else
+                                        " (модель анализа недоступна: решено по точности моделей)"))
+                else:
+                    ensemble_note = "точный режим: другие модели не справились, оставлена расшифровка основной"
 
         # Cancelled once the transcript is saved: it is complete and stays; the steps after it (the
         # overview, the title, the note) are skipped instead of running for minutes
@@ -1237,8 +1442,9 @@ def _process_meeting_job(meeting_id: int) -> None:
                         except Exception as c_err:
                             print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
                 except Exception as sum_err:
-                    summaries["error"] = str(sum_err)
-                    merge_summaries(meeting_id, {"error": str(sum_err)})
+                    if not _cancel_wanted(meeting_id):  # a cancel broke the request off: not an error
+                        summaries["error"] = str(sum_err)
+                        merge_summaries(meeting_id, {"error": str(sum_err)})
 
         clear_vram()
 
@@ -1246,6 +1452,8 @@ def _process_meeting_job(meeting_id: int) -> None:
         skipped = skipped or _cancel_wanted(meeting_id)
         notes = ["обзор и название пропущены (отмена)"] if skipped else \
             _after_transcription(meeting_id, merged_segments, speakers_meta, detected_lang, settings)
+        if ensemble_note:
+            notes = [ensemble_note, *notes]
         from app import semantic
 
         semantic.kick()  # indexed for search by meaning once the queue is free
@@ -1267,6 +1475,12 @@ def _process_meeting_job(meeting_id: int) -> None:
     except JobCancelled:
         whisper_model = None
         release_whisper_model()
+        try:  # a cancel inside the splitting by voices left its model loaded
+            from app.diarizer import unload_diarizer
+
+            unload_diarizer()
+        except Exception:
+            pass
         update_meeting_progress(
             meeting_id,
             status="cancelled",

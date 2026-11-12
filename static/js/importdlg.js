@@ -11,7 +11,8 @@ const IMP_SOUND = [
   ['leveling', 'impLeveling', 'impLevelingHint', 'onnx'],
   ['vad', 'impVad', 'impVadHint', 'whisper'],
 ];
-const IMP_AFTER = [['diarization', 'impDiarization', 'impDiarizationHint'], ['summary', 'impSummary', 'impSummaryHint']];
+const IMP_AFTER = [['diarization', 'impDiarization', 'impDiarizationHint'], ['summary', 'impSummary', 'impSummaryHint'],
+  ['ensemble', 'impEnsemble', 'impEnsembleHint']];
 
 function impSettings() { return (state.system && state.system.settings) || {}; }
 
@@ -27,6 +28,7 @@ function impDefaults() {
   return {
     denoise: sound('proc_denoise'), loudnorm: sound('proc_loudnorm'), leveling: impOn('proc_leveling', s),
     vad: impOn('vad_filter', s), diarization: impOn('diarization_enabled', s), summary: impOn('auto_summary', s),
+    ensemble: String(s.asr_ensemble) === 'true',  // off unless chosen (Settings → Recognition)
   };
 }
 
@@ -332,6 +334,7 @@ async function impSubmit() {
       proc_denoise: String(imp.proc.denoise), proc_loudnorm: String(imp.proc.loudnorm), proc_leveling: String(imp.proc.leveling),
       audio_enhance: String(imp.proc.denoise || imp.proc.loudnorm), vad_filter: String(imp.proc.vad),
       diarization_enabled: String(imp.proc.diarization), auto_summary: String(imp.proc.summary),
+      asr_ensemble: String(!!imp.proc.ensemble),
     });
   }
   if (noAsk === askImportParams()) values.ask_import_params = String(!noAsk);

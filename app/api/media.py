@@ -146,13 +146,14 @@ def api_vram() -> Dict[str, Any]:
 class VramActionPayload(BaseModel):
     kind: str
     name: str = ""
+    stop: bool = False  # unload: the model is in use, the work using it is stopped first
 
 @router.post("/api/vram/unload")
 def api_vram_unload(payload: VramActionPayload) -> Dict[str, Any]:
     from app.vram import unload
 
     try:
-        return unload(payload.kind, payload.name)
+        return unload(payload.kind, payload.name, stop=payload.stop)
     except (RuntimeError, ValueError, httpx.HTTPError) as e:
         raise HTTPException(status_code=409, detail=str(e))
 
