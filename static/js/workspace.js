@@ -1505,7 +1505,30 @@ const TX_CHUNK = 40;
 const TX_EAGER_LIMIT = 150;
 const tx = { items: [], query: '', speakers: {}, observer: null };
 
+// A line being edited stays open, with what was typed, when the transcript is drawn again for another
+// reason (a status change of the recording, new lines, a speaker renamed): it was wiped with the typing.
+// It closes on «Отмена», Esc, a save, or when another recording is opened.
 function renderTranscript() {
+  const area = state._closeEdit ? null : document.querySelector('textarea[id^="seg-edit-area-"]');
+  state._closeEdit = false;
+  const keep = area && state.activeMeeting && state._editFor === state.activeMeeting.id
+    ? { segId: Number(area.id.slice('seg-edit-area-'.length)), value: area.value, a: area.selectionStart, b: area.selectionEnd, focused: document.activeElement === area }
+    : null;
+  renderTranscriptNow();
+  if (!keep) return;
+  openInlineSegmentEditor(keep.segId);
+  const again = document.getElementById(`seg-edit-area-${keep.segId}`);
+  if (!again) return;
+  again.value = keep.value;
+  if (keep.focused) again.setSelectionRange(keep.a, keep.b); else again.blur();
+}
+
+function closeSegmentEdit() {
+  state._closeEdit = true;
+  renderTranscript();
+}
+
+function renderTranscriptNow() {
   const container = document.getElementById('transcript-inner');
   const m = state.activeMeeting;
   if (!m) return;
@@ -1929,12 +1952,13 @@ function openInlineSegmentEditor(segId) {
 
   const textBox = document.getElementById(`seg-text-${segId}`);
   if (!textBox || document.getElementById(`seg-edit-area-${segId}`)) return;
+  state._editFor = m.id;
   textBox.innerHTML = `
     <textarea id="seg-edit-area-${segId}" rows="2" data-keydown="segEditKey" data-keydown-args='[{"$": "event"}, ${Number(segId)}]'
       class="w-full bg-apple-sidebar border border-apple-blue rounded-lg p-2 text-[13px] text-white focus:outline-none mt-1">${escapeHtml(seg.text)}</textarea>
     <div class="flex items-center justify-end gap-2 mt-1.5">
       <span class="mr-auto text-[11.5px] text-apple-secondary">${escapeHtml(t('segEditHint'))}</span>
-      <button data-click="renderTranscript" title="${escapeHtml(t('tipCancelBtn'))}" class="ui-btn ui-btn-subtle">${t('cancel')}</button>
+      <button data-click="closeSegmentEdit" title="${escapeHtml(t('tipCancelBtn'))}" class="ui-btn ui-btn-subtle">${t('cancel')}</button>
       <button data-click="saveSegmentEdit" data-click-args='[${segId}]' title="${escapeHtml(t('tipSaveSettingsBtn'))}" class="ui-btn ui-btn-primary">${t('save')}</button>
     </div>
   `;
@@ -1945,22 +1969,24 @@ function openInlineSegmentEditor(segId) {
 
 function segEditKey(e, segId) {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveSegmentEdit(segId); }
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); renderTranscript(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSegmentEdit(); }
 }
 
 async function saveSegmentEdit(segId) {
   const m = state.activeMeeting;
   const oldText = ((m && m.segments) || []).find(s => s.id === segId)?.text || '';
   const newText = document.getElementById(`seg-edit-area-${segId}`).value.trim();
-  const res = await fetch(`/api/meetings/${state.activeMeeting.id}/segments/${segId}`, {
+  const res = await fetch(`/api/meetings/${m.id}/segments/${segId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: newText })
   });
   const data = await readJson(res);
   if (!res.ok) { showToast(errorText(data, res)); return; }  // the edit box stays open with the text
+  // another recording opened meanwhile: the answer is not put in its place
+  if (!state.activeMeeting || state.activeMeeting.id !== m.id) return;
   state.activeMeeting = data;
-  renderTranscript();
+  closeSegmentEdit();
   if (newText !== oldText.trim()) showToast(t('segSaved'), { label: t('spUndo'), onClick: () => restoreSegmentText(m.id, segId, oldText) });
 }
 
@@ -1974,12 +2000,14 @@ async function restoreSegmentText(meetingId, segId, text) {
 }
 
 async function changeSegmentSpeaker(segId, newSpeaker) {
-  const res = await fetch(`/api/meetings/${state.activeMeeting.id}/segments/${segId}`, {
+  const id = state.activeMeeting.id;
+  const res = await fetch(`/api/meetings/${id}/segments/${segId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ speaker: newSpeaker })
   });
   const data = await readJson(res);
+  if (!state.activeMeeting || state.activeMeeting.id !== id) return;  // another recording is open now
   if (!res.ok) { showToast(errorText(data, res)); renderTranscript(); return; }
   state.activeMeeting = data;
   renderSpeakerPillsBar();
