@@ -310,3 +310,69 @@ class AutoChaptersTest(unittest.TestCase):
     def test_short_one_does_not(self):
         made, _m = self._templates(120.0)
         self.assertEqual(made, ["protocol"])
+
+
+def _words(text, start=0.0):
+    out, t = [], start
+    for w in text.split():
+        out.append({"word": " " + w, "start": t, "end": t + 0.4, "prob": 0.9})
+        t += 0.5
+    return out
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class EnsembleJobTest(unittest.TestCase):
+    """The precise mode: another model recognizes the recording too and the versions are merged."""
+
+    _run = ProcessMeetingJobTest._run
+
+    def setUp(self):
+        ProcessMeetingJobTest.setUp(self)
+        update_settings({"asr_ensemble": "true", "asr_ensemble_models": "parakeet-v3"})
+        self.addCleanup(update_settings, {"asr_ensemble": "false", "asr_ensemble_models": ""})
+        from app import llm
+
+        self.asked = []
+
+        def chat(system, user):
+            self.asked.append(user)
+            return '{"choices": [2]}'
+
+        target = mock.Mock(chat=chat)
+        p = mock.patch.object(llm, "target", return_value=target)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _transcribe(self, model, wav, dur, progress, cancel, out=None, gpu=False, leveling=True):
+        text = "попроси клода сделать обзор" if model == "gigaam-v3" else "попроси Claude сделать обзор"
+        return [{"start": 0.0, "end": 2.0, "text": text, "words": _words(text)}]
+
+    def test_versions_are_kept_and_merged(self):
+        from app.database import all_transcripts
+
+        m = self._run(self._transcribe)
+        self.assertEqual(m["status"], "completed")
+        self.assertEqual(m["transcript_model"], "merged")
+        self.assertEqual(m["segments"][0]["text"], "попроси Claude сделать обзор")  # the analysis model's pick
+        self.assertEqual(m["segments"][0]["speaker"], "SPEAKER_00")  # the speakers of the main model's version
+        self.assertTrue({"gigaam-v3", "parakeet-v3", "merged"} <= set(all_transcripts(self.mid)))
+        self.assertEqual(len(self.asked), 1)
+        self.assertIn("клода", self.asked[0])
+        self.assertNotIn("обзор сделать", self.asked[0])  # only the disputed place and the words around it
+
+    def test_without_another_model_the_main_one_stays(self):
+        from app import asr_onnx
+
+        with mock.patch.object(asr_onnx, "is_installed", side_effect=lambda m: m == "gigaam-v3"):
+            m = self._run(self._transcribe)
+        self.assertEqual(m["status"], "completed")
+        self.assertEqual(m["transcript_model"], "gigaam-v3")
+        self.assertIn("нет других установленных моделей", m["stage_text"])
+
+    def test_off_for_this_recording(self):
+        from app.database import set_meeting_processing
+
+        set_meeting_processing(self.mid, {"ensemble": False})
+        m = self._run(self._transcribe)
+        self.assertEqual(m["transcript_model"], "gigaam-v3")
+        self.assertEqual(self.asked, [])

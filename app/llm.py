@@ -242,10 +242,15 @@ def _cloud_target(settings: Dict[str, str]) -> Target:
 
 def _post(url: str, headers: Dict[str, str], payload: Dict[str, Any], provider: str) -> Dict[str, Any]:
     last: Optional[Exception] = None
+    from app import cancel_scope
+
+    def request() -> httpx.Response:
+        with httpx.Client(timeout=TIMEOUT_SEC) as client:
+            return client.post(url, headers=headers, json=payload)
+
     for attempt in range(RETRIES + 1):
         try:
-            with httpx.Client(timeout=TIMEOUT_SEC) as client:
-                resp = client.post(url, headers=headers, json=payload)
+            resp = cancel_scope.call(request)  # a cancelled job does not wait for the answer
         except httpx.HTTPError as e:
             last = LlmError(f"{PROVIDERS[provider]['name']}: нет соединения ({type(e).__name__}). Проверьте интернет и прокси.")
             time.sleep(2 * (attempt + 1))

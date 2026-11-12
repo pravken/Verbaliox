@@ -1464,24 +1464,31 @@ async function openObsidianFolder() {
 
 // Every model out of memory: the app's and every model Ollama holds, also one loaded before this start;
 // the server waits until Ollama has really let them go and stops its runner if it does not
-async function unloadAllModelsNow() {
+// A switch: while a recording is processed or captions run, it asks and then stops them first
+async function unloadAllModelsNow(stop = false) {
+  stop = stop === true;  // a click passes its event: only an explicit true stops the work
   if (vram.busy) return;
   vram.busy = true;
   if (vram.data) renderVram(vram.data);
   showToast(t('idleUnloading'));
+  let again = false;
   try {
-    const res = await fetch('/api/vram/unload-all', { method: 'POST' });
+    const res = await fetch(`/api/vram/unload-all${stop ? '?stop=true' : ''}`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { showError(data.detail); return; }
-    renderVram(data);
-    if ((data.left || []).length) showError(t('idleUnloadLeft').replace('{names}', () => data.left.map(formatModelName).join(', ')));
-    else showToast((data.released || []).length ? t('idleUnloadedNow') : t('idleNothingLoaded'), null, 'success');
+    if (res.status === 409 && !stop) again = true;  // asked below, once the button is free again
+    else if (!res.ok) showError(data.detail);
+    else {
+      renderVram(data);
+      if ((data.left || []).length) showError(t('idleUnloadLeft').replace('{names}', () => data.left.map(formatModelName).join(', ')));
+      else showToast((data.released || []).length ? t('idleUnloadedNow') : t('idleNothingLoaded'), null, 'success');
+    }
   } catch (e) {
     showError('');
   } finally {
     vram.busy = false;
     scheduleVramRefresh(300);
   }
+  if (again && await askConfirm(t('unloadStopAsk'), true, t('unloadStopOk'))) unloadAllModelsNow(true);
 }
 
 function openExportDir() {

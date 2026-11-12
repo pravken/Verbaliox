@@ -409,6 +409,13 @@ class LiveAskTest(unittest.TestCase):
             self.assertEqual(r.status_code, 200, r.text)
             self.assertEqual(r.json()["answer"], "На пятницу [01:05]")
             self.assertIn("[01:05] Переносим релиз на пятницу", sent[0])
+            # Captions switched off and on: the page gives the lines before, the session's own are shifted
+            r = c.post(f"/api/live/{s.id}/ask", json={"question": "Что было?", "offset": 600,
+                                                      "earlier": [{"at": 30, "text": "Начало встречи"}]})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertIn("[00:30] Начало встречи", sent[1])
+            self.assertIn("[11:05] Переносим релиз на пятницу", sent[1])
+            self.assertLess(sent[1].index("Начало встречи"), sent[1].index("Переносим"))
             self.assertEqual(c.post("/api/live/nope/ask", json={"question": "x"}).status_code, 404)
         live.stop_session(s.id)
 

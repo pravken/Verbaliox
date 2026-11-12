@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from app.database import get_all_settings
+from app.database import get_all_settings, get_meeting
 
 
 def _ollama_base() -> str:
@@ -191,6 +191,8 @@ def vram_snapshot() -> Dict[str, Any]:
 
     settings = get_all_settings()
     busy = transcriber.running_job_kind()
+    stage = job_stage()
+    asr_busy = stage in _ASR_STAGES
     on_gpu = (settings.get("device") or "cuda") == "cuda"
     chips: List[Dict[str, Any]] = []
 
@@ -209,14 +211,14 @@ def vram_snapshot() -> Dict[str, Any]:
             "loaded": loaded, "loading": not loaded and loading_whisper == mid,
             "device": key[1] if loaded else None,
             # The transcription that uses it must finish first; loading goes through the job queue
-            "can_unload": loaded and busy != "transcribe",
+            "can_unload": loaded and not asr_busy, "in_use": loaded and asr_busy,
             "can_preload": not loaded and on_gpu and busy is None and not transcriber._preloading,
         })
 
     ecapa = ecapa_loaded_on()
     if ecapa and ecapa.startswith("cuda"):
         chips.append({"kind": "speakers", "name": "ECAPA", "loaded": True,
-                      "can_unload": busy != "transcribe", "can_preload": False})
+                      "can_unload": stage != "diarizing", "in_use": stage == "diarizing", "can_preload": False})
 
     # Live captions run their own Whisper in a worker process (app/live.py)
     try:
@@ -228,7 +230,7 @@ def vram_snapshot() -> Dict[str, Any]:
                 active = bool(live._sessions)
             cap = worker.model_name or wanted_whisper
             chips.append({"kind": "live", "name": cap, "label": format_whisper_model_name(cap),
-                          "loaded": True, "can_unload": not active, "can_preload": False})
+                          "loaded": True, "can_unload": not active, "in_use": active, "can_preload": False})
     except Exception:
         pass
 
@@ -241,11 +243,11 @@ def vram_snapshot() -> Dict[str, Any]:
             live_onnx = {s.onnx_model for s in live._sessions.values() if s.onnx_model}
         for mid in asr_onnx.ONNX_MODELS:
             if mid in loaded or asr_onnx.is_installed(mid):
-                in_use = mid in live_onnx or (busy == "transcribe" and wanted_whisper == mid)
+                in_use = mid in loaded and (mid in live_onnx or asr_busy)
                 chips.append({"kind": "onnx", "name": mid, "label": asr_onnx.ONNX_MODELS[mid]["name"],
                               "default": mid == wanted_whisper, "loaded": mid in loaded,
                               "live": mid in live_onnx, "device": "cuda" if asr_onnx.on_gpu(mid) else "cpu",
-                              "can_unload": mid in loaded and not in_use, "can_preload": mid not in loaded})
+                              "can_unload": mid in loaded and not in_use, "in_use": in_use, "can_preload": mid not in loaded})
     except Exception:
         traceback.print_exc()
 
@@ -260,7 +262,7 @@ def vram_snapshot() -> Dict[str, Any]:
             "kind": "ollama", "name": name, "label": format_llm_model_name(name), "default": name == wanted_llm,
             "loaded": bool(m), "size_gb": m["size_vram_gb"] if m else None,
             "loading": not m and loading_llm == name,
-            "can_unload": bool(m) and busy not in ("dub", "translate", "summary"),
+            "can_unload": bool(m),  # a job asking it meanwhile gets an error and goes on (the switch)
             "can_preload": not m and not _ollama_loading.is_set(),
         })
 
@@ -292,16 +294,52 @@ def vram_snapshot() -> Dict[str, Any]:
     return {"gpu": gpu, "chips": chips, "busy": busy, "system": sysinfo.snapshot(), "idle": idle_unload.status()}
 
 
-def unload(kind: str, name: str = "") -> Dict[str, Any]:
+# What the running job does now (the status of its recording): a speech model is in use only while
+# the job recognizes, the speaker model only while it splits by voices. While the overview is written
+# (minutes on Ollama) they are free, and the buttons unload them.
+_ASR_STAGES = ("extracting_audio", "transcribing")  # extracting: Whisper may hear the language first
+
+
+def job_stage() -> Optional[str]:
     from app import transcriber
 
-    busy = transcriber.running_job_kind()
+    if transcriber.running_job_kind() != "transcribe":
+        return None
+    mid = transcriber.running_meeting_id()
+    m = get_meeting(mid) if mid is not None else None
+    return (m or {}).get("status") or "transcribing"
+
+
+def stop_work() -> None:
+    """The switch: the jobs are cancelled, the captions of a recording end, and Ollama lets its models
+    go (an overview being written breaks off), so nothing loads a model again right after."""
+    from app import live, transcriber
+
+    transcriber.stop_all_jobs()
+    with live._sessions_lock:
+        ids = list(live._sessions)
+    for sid in ids:
+        live.stop_session(sid)
+    try:
+        ollama_unload([m["name"] for m in ollama_loaded()])
+    except Exception:
+        traceback.print_exc()
+    transcriber.stop_all_jobs(wait_sec=30.0)
+
+
+def unload(kind: str, name: str = "", stop: bool = False) -> Dict[str, Any]:
+    """stop: the model is in use and the user chose to stop the work that uses it."""
+    if stop:
+        stop_work()
+    stage = job_stage()
     if kind == "whisper":
-        if busy == "transcribe":
+        if stage in _ASR_STAGES:
             raise RuntimeError("Whisper сейчас распознаёт запись")
+        from app import transcriber
+
         transcriber.release_whisper_model()
     elif kind == "speakers":
-        if busy == "transcribe":
+        if stage == "diarizing":
             raise RuntimeError("Модель распознавания участников сейчас используется")
         from app.diarizer import unload_diarizer
 
@@ -326,7 +364,7 @@ def unload(kind: str, name: str = "") -> Dict[str, Any]:
         with live._sessions_lock:
             if any(s.onnx_model == name for s in live._sessions.values()):
                 raise RuntimeError("Модель сейчас пишет субтитры")
-        if busy == "transcribe" and (get_all_settings().get("whisper_model") or "") == name:
+        if stage in _ASR_STAGES:
             raise RuntimeError("Модель сейчас распознаёт запись")
         asr_onnx.release(name)
     elif kind == "dub":

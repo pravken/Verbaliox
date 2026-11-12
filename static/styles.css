@@ -2067,11 +2067,26 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .st-meet-people { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8E8E93); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-link { font-size: var(--fs-label); line-height: 1.35; color: #8CC4FF; padding-top: 8px; white-space: nowrap; }
 .st-link:hover { text-decoration: underline; }
+/* The recording bar follows the width of the studio, not of the window: with a large interface scale or
+   the side panels open the buttons used to run over each other and past the edge */
+#studio-stage { container-type: inline-size; }
 .st-rec {
-  margin: 16px 20px 0; padding: 0 18px; height: 72px; display: flex; align-items: center; gap: 14px; border-radius: 16px;
+  margin: 16px 20px 0; padding: 10px 18px; min-height: 72px; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px 14px; border-radius: 16px;
   border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); background: rgba(255, 255, 255, 0.035); flex-shrink: 0;
 }
 .st-rec #studio-timer { font-size: 30px; line-height: 1.15; }
+@container (max-width: 860px) {
+  .st-rec #studio-focus-label { display: none; }
+  .st-rec #studio-timer { font-size: 24px; }
+}
+.st-rec-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 100%; }
+@container (max-width: 640px) {
+  .st-rec .st-level { display: none; }
+}
+@container (max-width: 520px) {
+  .st-rec .st-stop-label { display: none; }  /* the square and the button's title say it */
+}
 .st-rec-info { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 6px 26px 0; font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8E8E93); flex-shrink: 0; }
 .st-tabs {
   display: flex; align-items: center; gap: 4px; margin: 6px 20px 0; padding: 4px; border-radius: 12px; flex-shrink: 0;
@@ -2404,3 +2419,14 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* Settings → Dictionary: how a term may be recognized, after the term */
 .dict-variants { font-size: 11px; min-width: 0; }
+
+/* Library: the recording that is running, at the top; a click opens the studio with its captions */
+.lib-live-row { display: flex; align-items: center; gap: 9px; margin: 2px 0 6px; padding: 7px 10px; border-radius: 10px; cursor: pointer;
+  background: rgba(255, 69, 58, 0.10); border: 1px solid rgba(255, 69, 58, 0.30); transition: background-color .15s; }
+.lib-live-row:hover { background: rgba(255, 69, 58, 0.18); }
+.lib-live-dot { width: 9px; height: 9px; border-radius: 9999px; background: #FF453A; flex-shrink: 0; animation: lib-live-pulse 1.4s ease-in-out infinite; }
+@keyframes lib-live-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .lib-live-dot { animation: none; } }
+.lib-live-title { display: block; font-size: 12.5px; font-weight: 600; color: #FFFFFF; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-live-sub { display: block; font-size: 11px; color: #FFB3AD; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-live-time { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: #FFFFFF; flex-shrink: 0; }

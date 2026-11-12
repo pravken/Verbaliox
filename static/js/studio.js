@@ -574,7 +574,12 @@ async function studioAsk() {
   try {
     const res = await fetch(`/api/live/${liveCap.session}/ask`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, lang: state.uiLang === 'en' ? 'en' : 'ru' }),
+      // Lines of the sessions before a restart of the captions: the server has only the current one
+      body: JSON.stringify({
+        question: q, lang: state.uiLang === 'en' ? 'en' : 'ru', offset: liveCap.offset || 0,
+        earlier: [...liveCap.lines.values()].filter(ln => ln.id <= (liveCap.idBase || 0) && ln.text)
+          .sort((a, b) => a.id - b.id).slice(-3000).map(ln => ({ at: ln.at || 0, text: ln.text })),
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
@@ -950,7 +955,12 @@ function downsampleTo16k(input, rate) {
 }
 
 async function startLiveCaptions(ctx, stream) {
-  liveCap.lines = new Map();
+  // Captions switched off and on again in the same recording keep the lines shown so far: the new
+  // server session numbers its lines from 1, they go after the old ones (a new recording clears
+  // liveCap.lines before it starts the captions)
+  liveCap.idBase = Math.max(0, ...liveCap.lines.keys());
+  // Where this session begins in the recording: the times of a session after a restart count from it
+  liveCap.offset = liveCap.idBase && _recStartTime ? Math.max(0, (Date.now() - _recStartTime) / 1000) : 0;
   liveCap.partial = '';
   liveCap.partialTranslation = '';
   liveCap.lastId = 0;
@@ -958,7 +968,6 @@ async function startLiveCaptions(ctx, stream) {
   liveCap.pcmLen = 0;
   liveCap.error = '';
   liveCap.starting = true;
-  capReset();
   syncStudioCaptions();
   try {
     const res = await fetch('/api/live/start', {
@@ -990,6 +999,10 @@ async function startLiveCaptions(ctx, stream) {
     const pcm = downsampleTo16k(e.data, ctx.sampleRate);
     liveCap.pcm.push(pcm);
     liveCap.pcmLen += pcm.length;
+    // Sent from here too: with the window minimized the page's timers fire about once a minute, the
+    // audio then reached the server in minute-long lumps and the captions came in batches. The audio
+    // thread keeps its pace in the background
+    if (Date.now() - (liveCap.sentAt || 0) >= 1000) sendLiveAudio();
   };
   liveCap.timer = setInterval(sendLiveAudio, 1000);
   syncStudioCaptions();
@@ -1005,6 +1018,7 @@ async function sendLiveAudio() {
   liveCap.pcm = [];
   liveCap.pcmLen = 0;
   liveCap.inFlight = true;
+  liveCap.sentAt = Date.now();
   const session = liveCap.session;
   try {
     const res = await fetch(`/api/live/${session}/audio?since=${liveCap.lastId}`, {
@@ -1015,16 +1029,18 @@ async function sendLiveAudio() {
     const data = await res.json().catch(() => ({}));
     if (session !== liveCap.session) return;
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
+    const base = liveCap.idBase || 0;
     for (const ln of data.lines || []) {
-      liveCap.lines.set(ln.id, { ...(liveCap.lines.get(ln.id) || {}), ...ln });
+      const key = base + ln.id;
+      liveCap.lines.set(key, { ...(liveCap.lines.get(key) || {}), ...ln, id: key, at: (Number(ln.start) || 0) + (liveCap.offset || 0) });
       liveCap.lastId = Math.max(liveCap.lastId, ln.id);
     }
     for (const [id, tr] of Object.entries(data.translations || {})) {
-      const ln = liveCap.lines.get(Number(id));
+      const ln = liveCap.lines.get(base + Number(id));
       if (ln) ln.translation = tr;
     }
     for (const [id, tg] of Object.entries(data.targets || {})) {
-      const ln = liveCap.lines.get(Number(id));
+      const ln = liveCap.lines.get(base + Number(id));
       if (ln) ln.target = tg;
     }
     liveCap.partialTarget = data.partial_target || '';
@@ -1112,6 +1128,7 @@ function langCode(code) {
 // Buttons, heading and locked inputs follow whether a recording is running
 function renderStudioState() {
   const rec = isRecording();
+  syncLibLiveRow();
   syncStudioAsk();
   const sourceName = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') };
   const p = recordPresets().find(x => x.id === state.recPresetId);
@@ -1434,6 +1451,7 @@ async function startLiveRecording() {
       _mediaRecorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) sendRecordingChunk(_recPage, e.data);
       };
+      _mediaRecorder.onstart = () => { if (_recPage) _recPage.startedAt = Date.now() / 1000; };  // lines up the system audio
       _mediaRecorder.start(1000);
     }
     if (_recCaptureId) {
@@ -1689,7 +1707,7 @@ async function stopAndTranscribeRecording(opts) {
     body: JSON.stringify({
       title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
       has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
-      notes: takeStudioNotes(), started_at: startedAt,
+      notes: takeStudioNotes(), started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
     }),
   });
   const data = await res.json().catch(() => ({}));
