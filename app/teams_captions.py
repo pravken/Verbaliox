@@ -27,6 +27,7 @@ POLL_SEC = 1.0
 CAPTION_LAG_SEC = 1.5          # a line shows up about this long after it was said
 TEAMS_PROCESSES = {"ms-teams", "teams", "msteams"}
 CAPTION_WORDS = ("caption", "субтитр")
+SEED_WITHIN_SEC = 20.0         # lines on screen when the panel is first read this soon were said before
 RECENT_LINES = 40              # a reading is compared with this many latest lines of its speaker only
 MAX_ELEMENTS = 25000            # elements of a window looked at when the panel is searched for
 FIND_EVERY_SEC = 5.0           # how often the panel is searched for again while it is not found…
@@ -240,11 +241,13 @@ class Reader:
             if not self._seeded and found:
                 # The panel as it was when the recording began: those lines were said before it, they
                 # are known (not marked at 0 s, where they named the first voice heard); the last one may
-                # be the line being said now and is taken as usual
+                # be the line being said now and is taken as usual. Only when the panel is read at the
+                # start: found later (captions switched on during the recording), its lines were said in it
                 self._seeded = True
-                for name, line in found[:-1]:
-                    self._said.setdefault(name.lower(), []).append([line.lower(), None])
-                found = found[-1:]
+                if now - self.started_at < SEED_WITHIN_SEC:
+                    for name, line in found[:-1]:
+                        self._said.setdefault(name.lower(), []).append([line.lower(), None])
+                    found = found[-1:]
             closed = False  # the line being said before is now above the last one: it is finished
             for k, (name, line) in enumerate(found):
                 said = self._said.setdefault(name.lower(), [])  # [line lowered, index of its mark or None]
