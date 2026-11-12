@@ -2441,3 +2441,6 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
   letter-spacing: 0.06em; text-transform: uppercase; color: #8E8E93; }
 .lib-date-today .lib-date-label { color: #8CC4FF; }
 .lib-date-line { flex: 1 1 auto; min-width: 12px; height: 1px; background: rgba(255, 255, 255, 0.09); }
+
+/* First-run wizard: «recommended for the best quality» on a line of its own under the precise mode */
+.fr-ens-best { display: block; margin: 4px 0 0 -4px; }

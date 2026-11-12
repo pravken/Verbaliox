@@ -944,6 +944,7 @@ function openFirstRunWizard(data) {
         ${st.ai === 'cloud' ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudNext'))}</p>` : ''}
         ${models().length >= 2 ? `<label class="vs-row cursor-pointer text-xs text-apple-label rounded-xl border border-white/10 p-3">
             <span><span class="text-white font-medium">${escapeHtml(t('ensToggle'))}</span>
+              <span class="fr-ens-best">${tag(t('frEnsBest'))}</span>
               <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5">${escapeHtml(t('frEnsHint'))}</span></span>
             <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
         <p class="text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('frBackground'))}</p>`;
