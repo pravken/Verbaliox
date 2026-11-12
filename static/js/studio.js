@@ -772,7 +772,7 @@ function renderStudioPeople() {
   stPeople.marks.forEach(m => { counts[m.name] = (counts[m.name] || 0) + 1; });
   const options = [`<option value="0">${escapeHtml(t('stPeopleAuto'))}</option>`,
     ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
-  box.innerHTML = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
+  const html = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
       <label class="st-people-count">${escapeHtml(t('stPeopleCount'))}
         <select data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
     <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="st-person${counts[n] ? ' is-marked' : ''}"
@@ -782,6 +782,11 @@ function renderStudioPeople() {
     <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>
     ${stTeamsOn() ? `<p class="st-people-teams">${escapeHtml(stTeamsLine())}
       <button type="button" class="st-link" data-click="showTeamsHelp">${escapeHtml(t('teamsHelpLink'))}</button></p>` : ''}`;
+  // Drawn again only when something changed: the captions call this every second, and a list being
+  // opened (how many) closed under the pointer
+  if (box._html === html) return;
+  box._html = html;
+  box.innerHTML = html;
   box.querySelector('select').value = String(stPeople.count);
 }
 
@@ -1353,7 +1358,7 @@ class CapTyper {
     if (text === this.target) return;
     this.target = text;
     this.el.textContent = text;
-    if (text) {
+    if (text && !capView.instant) {  // catching up after the window was hidden: no fade for each line
       this.el.classList.remove('cap-in');
       void this.el.offsetWidth;  // restarts the fade
       this.el.classList.add('cap-in');
@@ -1401,7 +1406,18 @@ function setCapTags(row, lang, target) {
   if (tt.textContent !== langCode(target)) tt.textContent = langCode(target);
 }
 
+// With the window minimized the lines are only kept: drawn and faded in while hidden, they all
+// played out at once when it came back and the captions jumped. Back in sight, they are drawn once,
+// without the fade, at the bottom.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !capView.dirty) return;
+  capView.dirty = false;
+  capView.instant = true;
+  try { syncStudioCaptions(); } finally { capView.instant = false; }
+});
+
 function syncStudioCaptions() {
+  if (document.hidden) { capView.dirty = true; return; }
   syncStudioAsk();
   const target = document.getElementById('live-translate-select').value;
   const view = target ? studio.view : 'orig';
@@ -1411,6 +1427,14 @@ function syncStudioCaptions() {
 
   const lines = [...liveCap.lines.values()].sort((a, b) => a.id - b.id);
   const fresh = lines.filter(ln => !capView.rows.has(ln.id));
+  // Many lines at once (the window came back and the page did not say it was hidden): drawn without
+  // the fade too
+  const wasInstant = capView.instant;
+  if (fresh.length > 3) capView.instant = true;
+  try { capDrawLines(lines, fresh, target, view); } finally { capView.instant = wasInstant; }
+}
+
+function capDrawLines(lines, fresh, target, view) {
   fresh.forEach((ln, i) => {
     const draftRow = i === 0 && capView.draftKey ? capView.rows.get(capView.draftKey) : null;
     if (draftRow) {
