@@ -357,6 +357,7 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertEqual(m["segments"][0]["speaker"], "SPEAKER_00")  # the speakers of the main model's version
         self.assertTrue({"gigaam-v3", "parakeet-v3", "merged"} <= set(all_transcripts(self.mid)))
         self.assertEqual(len(self.asked), 1)
+        self.release.assert_any_call()  # the models went out of memory before the next one (all of them)
         self.assertIn("клода", self.asked[0])
         self.assertNotIn("обзор сделать", self.asked[0])  # only the disputed place and the words around it
 
