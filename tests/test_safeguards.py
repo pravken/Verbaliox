@@ -851,7 +851,7 @@ class TranslateKeepAliveTest(unittest.TestCase):
 
         with mock.patch.object(llm_translate.httpx, "Client", Client), mock.patch.object(llm_translate, "raise_for_ollama"), \
                 mock.patch("app.idle_unload.ollama_keep_alive", return_value="10m"), \
-                mock.patch.object(ollama_client, "_work_done") as done:
+                mock.patch.object(ollama_client, "_work_started"), mock.patch.object(ollama_client, "_work_done") as done:
             self.assertEqual(llm_translate.ollama_chat("http://127.0.0.1:11434", "qwen3:8b", "s", "u"), "1. hi")
         self.assertEqual(sent["keep_alive"], "10m")  # not a fixed 5 min
         done.assert_called_once()  # counted as work: the model leaves after it like after an overview
