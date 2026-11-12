@@ -330,9 +330,17 @@ class LiveConfigPayload(BaseModel):
     caption_model: Optional[str] = None    # "auto" or a model id; None keeps the current one
     translate_model: Optional[str] = None  # "" for auto (by speed) or an Ollama model; None keeps it
 
+class LiveEarlierLine(BaseModel):
+    at: float = 0
+    text: str = ""
+
 class LiveAskPayload(BaseModel):
     question: str
     lang: str = "ru"
+    # Captions switched off and on again: the lines of the sessions before (the page keeps them) and
+    # where the current session begins in the recording
+    earlier: List[LiveEarlierLine] = []
+    offset: float = 0
 
 @router.post("/api/live/{session_id}/ask")
 def api_live_ask(session_id: str, payload: LiveAskPayload) -> Dict[str, Any]:
@@ -348,7 +356,9 @@ def api_live_ask(session_id: str, payload: LiveAskPayload) -> Dict[str, Any]:
     question = payload.question.strip()[:500]
     if not question:
         raise HTTPException(status_code=400, detail="Пустой вопрос")
-    lines = [f"[{format_timestamp(ln['start'])}] {ln['text']}" for ln in s.lines if (ln.get("text") or "").strip()]
+    offset = max(0.0, float(payload.offset or 0))
+    lines = [f"[{format_timestamp(max(0.0, e.at))}] {e.text.strip()[:500]}" for e in payload.earlier[-3000:] if e.text.strip()]
+    lines += [f"[{format_timestamp(ln['start'] + offset)}] {ln['text']}" for ln in s.lines if (ln.get("text") or "").strip()]
     if s.partial:
         lines.append(f"[сейчас] {s.partial}")
     if not lines:

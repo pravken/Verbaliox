@@ -574,7 +574,12 @@ async function studioAsk() {
   try {
     const res = await fetch(`/api/live/${liveCap.session}/ask`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, lang: state.uiLang === 'en' ? 'en' : 'ru' }),
+      // Lines of the sessions before a restart of the captions: the server has only the current one
+      body: JSON.stringify({
+        question: q, lang: state.uiLang === 'en' ? 'en' : 'ru', offset: liveCap.offset || 0,
+        earlier: [...liveCap.lines.values()].filter(ln => ln.id <= (liveCap.idBase || 0) && ln.text)
+          .sort((a, b) => a.id - b.id).slice(-3000).map(ln => ({ at: ln.at || 0, text: ln.text })),
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
@@ -954,6 +959,8 @@ async function startLiveCaptions(ctx, stream) {
   // server session numbers its lines from 1, they go after the old ones (a new recording clears
   // liveCap.lines before it starts the captions)
   liveCap.idBase = Math.max(0, ...liveCap.lines.keys());
+  // Where this session begins in the recording: the times of a session after a restart count from it
+  liveCap.offset = liveCap.idBase && _recStartTime ? Math.max(0, (Date.now() - _recStartTime) / 1000) : 0;
   liveCap.partial = '';
   liveCap.partialTranslation = '';
   liveCap.lastId = 0;
@@ -1025,7 +1032,7 @@ async function sendLiveAudio() {
     const base = liveCap.idBase || 0;
     for (const ln of data.lines || []) {
       const key = base + ln.id;
-      liveCap.lines.set(key, { ...(liveCap.lines.get(key) || {}), ...ln, id: key });
+      liveCap.lines.set(key, { ...(liveCap.lines.get(key) || {}), ...ln, id: key, at: (Number(ln.start) || 0) + (liveCap.offset || 0) });
       liveCap.lastId = Math.max(liveCap.lastId, ln.id);
     }
     for (const [id, tr] of Object.entries(data.translations || {})) {
