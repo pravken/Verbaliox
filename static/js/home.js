@@ -566,6 +566,26 @@ async function openLastRecording() {
   else switchAppView('home');
 }
 
+// A click on a Windows notification (run.py App.open_target): the place it was about. "meeting:ID:KIND"
+// opens the recording (a finished transcription on its text), "studio" the recording running, "last"
+// the newest recording, "settings:TAB" that part of the settings
+async function openFromNotice(target) {
+  const [kind, a, b] = String(target || '').split(':');
+  if (kind === 'meeting' && Number(a)) {
+    if (!(state.meetings || []).length) await loadMeetingsList().catch(() => {});
+    if (!(state.meetings || []).some(m => m.id === Number(a))) { openLastRecording(); return; }  // deleted since
+    await openMeeting(Number(a));
+    if (b === 'transcribe' || b === 'translate') openRecordTab('transcript');
+  } else if (kind === 'studio') {
+    switchAppView('studio');
+    studioTab('text');
+  } else if (kind === 'last') {
+    openLastRecording();
+  } else if (kind === 'settings') {
+    openModal('settings', a || undefined);
+  }
+}
+
 registerView('home', { show: renderHome, refresh: (changed) => { if (changed) home.recentAt = 0; renderHome(); } });
 
 document.addEventListener('DOMContentLoaded', () => {

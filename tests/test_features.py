@@ -70,7 +70,9 @@ class HotkeyTest(unittest.TestCase):
         import run
 
         notes = []
-        tc = SimpleNamespace(_hotkey_spec="Ctrl+Alt+R", _notify=lambda title, text, warning=False: notes.append((title, warning)))
+        where = []  # what a click on each notice opens
+        tc = SimpleNamespace(_hotkey_spec="Ctrl+Alt+R",
+                             _notify=lambda title, text, warning=False, target="": (notes.append((title, warning)), where.append(target)))
         check = lambda st: run.TrayController._check_hotkey_result(tc, st)
         tc._hotkey_wait = (False, time.time())
         check({"recording": False})
@@ -81,6 +83,10 @@ class HotkeyTest(unittest.TestCase):
         check({"recording": False})
         self.assertEqual(notes[-1], ("Запись не началась", True))
         self.assertIsNone(tc._hotkey_wait)
+        self.assertEqual(where, ["studio", "studio"])
+        tc._hotkey_wait = (True, time.time())
+        check({"recording": False})
+        self.assertEqual((notes[-1][0], where[-1]), ("Запись остановлена", "last"))  # the recording saved
 
 
 class CallWatchTest(unittest.TestCase):

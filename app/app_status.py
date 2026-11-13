@@ -60,7 +60,8 @@ def auto_recording_notice(started: bool, source: str, name: str = "") -> Dict[st
     else:
         title = "Запись сохранена"
         text = (f"{what} · " if what else "") + "отправлена на расшифровку"
-    notice = {"title": title, "text": text}
+    # a click on it opens the studio with the recording running, or the recording saved
+    notice = {"title": title, "text": text, "target": "studio" if started else "last"}
     _notices.append(notice)
     del _notices[:-5]
     return notice
