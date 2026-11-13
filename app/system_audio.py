@@ -13,7 +13,7 @@ import time
 import traceback
 import uuid
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -24,15 +24,33 @@ _captures: Dict[str, "SystemCapture"] = {}
 _lock = threading.Lock()
 
 
-GAP_SEC = 0.5  # the loopback this far behind the clock: the silence it did not deliver is written
+GAP_SEC = 0.5     # the loopback gave nothing this long (nothing played): the pause is written as silence
+LOST_MIN_SEC = 0.03  # Windows said data was lost: a gap of this much is filled already
+AHEAD_MAX_SEC = 0.3  # the track never runs further ahead of the clock than this
+
+
+def place_block(elapsed_sec: float, written: int, block: int, waited_sec: float, lost: bool) -> Tuple[int, int]:
+    """(samples of silence to put before a block just received, samples to drop from its start), so
+    the system track keeps to the clock the microphone keeps to.
+
+    Silence goes in only where sound really is missing: Windows gave the loopback nothing for a while
+    (nothing played: the call to read it waited), or Windows said data was lost («data discontinuity»,
+    the app was too busy to read it in time). A block that only came late (the app was busy, the
+    data waited in Windows' buffer) gets no silence: written for it, the track ran 2 s ahead in 7 s,
+    and the same voice came twice in the mix. Lost data left without silence made the track run ahead
+    in small steps, and the echo's delay jumped all through a meeting. A track ahead of the clock
+    anyway drops what is too much."""
+    behind = int(elapsed_sec * SR) - written - block
+    if behind > 0 and ((lost and behind > LOST_MIN_SEC * SR) or (waited_sec > GAP_SEC and behind > GAP_SEC * SR)):
+        return behind, 0
+    if behind < -AHEAD_MAX_SEC * SR:
+        return 0, min(block, -behind - int(0.1 * SR))
+    return 0, 0
 
 
 def silence_to_add(elapsed_sec: float, written: int, block: int) -> int:
-    """Samples of silence that belong before a block just received. Windows gives a loopback nothing
-    while nothing plays; without them every pause was cut out of the system track, which then ran
-    ahead of the microphone and the same voices came twice in the mix."""
-    behind = int(elapsed_sec * SR) - written - block
-    return behind if behind > GAP_SEC * SR else 0
+    """The silence before a block that waited (nothing played) — place_block with a long wait."""
+    return place_block(elapsed_sec, written, block, elapsed_sec, False)[0]
 
 
 class SystemCapture:
@@ -45,6 +63,8 @@ class SystemCapture:
         self.written = 0          # samples in the file
         self.padded = 0           # of them, silence put for pauses the loopback did not deliver
         self.gaps = 0
+        self.lost = 0             # blocks Windows said it lost data before
+        self.dropped = 0          # samples left out: the track was ahead of the clock
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._live = np.zeros(0, dtype=np.float32)  # 16 kHz mono, not yet taken by live captions
@@ -77,11 +97,25 @@ class SystemCapture:
                 self.started_at = time.time()
                 self._ready.set()
                 written = 0
+                import warnings
+
                 while not self._stop.is_set():
-                    block = rec.record(numframes=BLOCK)
+                    asked = time.time()
+                    # Windows marks data it dropped (the app did not read in time): soundcard warns of it;
+                    # caught here (it is a gap to fill) and not written to the log thousands of times
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        block = rec.record(numframes=BLOCK)
+                    lost = any("discontinuity" in str(w.message) for w in caught)
+                    if lost:
+                        self.lost += 1
                     if block.ndim == 1:
                         block = np.stack([block, block], axis=1)
-                    gap = silence_to_add(time.time() - self.started_at, written, len(block))
+                    now = time.time()
+                    gap, drop = place_block(now - self.started_at, written, len(block), now - asked, lost)
+                    if drop:
+                        block = block[drop:]
+                        self.dropped += drop
                     if gap:
                         out.write(np.zeros((gap, 2), dtype=np.float32))
                         written += gap
@@ -129,7 +163,8 @@ class SystemCapture:
         if self.started_at:
             # what lines the tracks up later: the file against the clock, and the silence put in it
             print(f"[system audio] {self.written / SR:.1f} s written over {time.time() - self.started_at:.1f} s, "
-                  f"{self.padded / SR:.1f} s of it silence for {self.gaps} pause(s)", flush=True)
+                  f"{self.padded / SR:.1f} s of it silence for {self.gaps} pause(s); Windows lost data {self.lost} time(s), "
+                  f"{self.dropped / SR:.2f} s left out (ahead of the clock)", flush=True)
 
 
 def start_capture(path: Path) -> SystemCapture:

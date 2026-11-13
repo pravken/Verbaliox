@@ -26,6 +26,21 @@ class RecordingLineUpTest(unittest.TestCase):
         self.assertEqual(silence_to_add(1.0, SR - BLOCK, BLOCK), 0)  # in step with the clock
         self.assertEqual(silence_to_add(10.0, SR, BLOCK), 9 * SR - BLOCK)  # 9 s of nothing before this block
 
+    def test_silence_only_where_sound_is_missing(self):
+        from app.system_audio import BLOCK, SR, place_block
+
+        # a block that came 2 s late (the app was busy, the data waited in Windows): no silence — with
+        # it the track ran 2 s ahead in 7 s and every voice came twice
+        self.assertEqual(place_block(3.0, SR - BLOCK, BLOCK, 0.01, False), (0, 0))
+        # nothing played for 2 s (the read waited): the pause is silence
+        self.assertEqual(place_block(3.0, SR - BLOCK, BLOCK, 2.05, False), (2 * SR, 0))
+        # Windows lost 0.2 s (too busy to read): filled, though under the pause threshold
+        self.assertEqual(place_block(1.2, SR - BLOCK, BLOCK, 0.1, True), (int(0.2 * SR), 0))
+        # ahead of the clock (a late block after silence was put): what is too much is left out
+        pad, drop = place_block(1.0, 2 * SR, BLOCK, 0.1, False)
+        self.assertEqual(pad, 0)
+        self.assertGreater(drop, 0)
+
 
 class EchoCancelTest(unittest.TestCase):
     """The speakers' echo is taken out of the microphone (app/echo_cancel.py), the user's voice stays."""
