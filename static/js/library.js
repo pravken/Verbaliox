@@ -28,7 +28,8 @@ async function loadMeetingsList() {
     if (updated && updated.status !== state.activeMeeting.status) {
       // Segments and speakers only change when a processing stage finishes
       const finished = updated.status === 'completed';
-      await selectMeeting(updated.id, false);
+      // a recording opened while its tracks were mixed had no file: its player is loaded now it has one
+      await selectMeeting(updated.id, state.activeMeeting.status === 'mixing');
       if (finished) buildPlayerWaveformEnvelope(state.activeMeeting);
     } else if (updated && (updated.progress !== state.activeMeeting.progress || updated.stage_text !== state.activeMeeting.stage_text)) {
       state.activeMeeting.progress = updated.progress;
@@ -223,7 +224,7 @@ function handleLiveEvent(ev) {
   if (!active || active.id !== ev.id) return;
   if (ev.status && ev.status !== active.status) {
     // Segments and speakers only change when a processing stage finishes
-    selectMeeting(ev.id, false).then(() => {
+    selectMeeting(ev.id, active.status === 'mixing').then(() => {
       if (ev.status === 'completed') buildPlayerWaveformEnvelope(state.activeMeeting);
     });
   } else {

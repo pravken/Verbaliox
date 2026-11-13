@@ -417,7 +417,8 @@ function updateProcessingBanner(m) {
   const isBusy = !DONE_STATUSES.includes(m.status);
   const banner = document.getElementById('workspace-processing-banner');
   banner.classList.toggle('hidden', !isBusy && !['failed', 'cancelled', 'cleared'].includes(m.status));
-  document.getElementById('workspace-cancel-btn').classList.toggle('hidden', !isBusy);
+  // the mix of a stopped recording is not a job that can be cancelled
+  document.getElementById('workspace-cancel-btn').classList.toggle('hidden', !isBusy || m.status === 'mixing');
   document.getElementById('workspace-retry-btn').classList.toggle('hidden', isBusy);
   const bar = document.getElementById('workspace-progress-bar');
   const q = (state.queue || []).find(x => x.id === m.id);
@@ -1636,6 +1637,14 @@ function renderTranscriptChunk(el) {
     .map((seg, j) => transcriptSegmentHtml(seg, start + j)).join('');
   el.style.height = '';
   el.dataset.rendered = '1';
+  // a line being edited that this part holds (a long transcript draws its parts as they scroll in)
+  const ed = state._editHidden;
+  if (ed && tx.items.slice(start, start + TX_CHUNK).some(seg => seg.id === ed.segId)) {
+    state._editHidden = null;
+    openInlineSegmentEditor(ed.segId, false);
+    const area = document.getElementById(`seg-edit-area-${ed.segId}`);
+    if (area) area.value = ed.value;
+  }
 }
 
 function transcriptSegmentHtml(seg, idx) {
