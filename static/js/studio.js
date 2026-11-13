@@ -1543,10 +1543,12 @@ function capDrawLines(lines, fresh, target, view) {
     anyWho = anyWho || !!who;
     const whoEl = row.el.querySelector('.cap-who');
     const avEl = row.el.querySelector('.cap-av');
-    if (whoEl.textContent !== who) {
+    const face = who ? personPhotoUrl(who) : '';  // the person's own photo (people.js), else the initials
+    if (whoEl.textContent !== who || avEl.dataset.face !== face) {
       whoEl.textContent = who;
       whoEl.className = `cap-who ${who ? capWhoColor(who) : ''}`;
-      avEl.textContent = who ? capInitials(who) : '';
+      avEl.innerHTML = face ? `<img class="sp-photo" src="${escapeHtml(face)}" alt="">` : escapeHtml(who ? capInitials(who) : '');
+      avEl.dataset.face = face;
       avEl.className = `cap-av ${who ? capWhoColor(who) : ''}`;
       avEl.title = who;
     }

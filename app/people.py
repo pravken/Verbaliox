@@ -13,14 +13,18 @@ Only the hand-made part is stored (table people_directory: added entries, varian
 the rest is read from the library each time, so it never goes stale.
 """
 
+import base64
+import hashlib
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.database import _db_lock, get_all_settings, get_connection, update_settings
 
 KINDS = ("person", "dept")
+PHOTO_MAX_BYTES = 600_000  # the page sends a 256 px square (a few tens of KB)
 MAX_NAME = 120
 # The calendar's participants of a recording, as app/calendar_ics.apply_to_recording writes them
 _CAL_HEAD_RE = re.compile(r"^(?:Участники по календарю|Participants \(calendar\))\s*:\s*(.+)$", re.M)
@@ -254,6 +258,8 @@ def update(name: str, role: Optional[str] = None, kind: Optional[str] = None, is
             conn.commit()
         finally:
             conn.close()
+    if target.lower() != name.lower():
+        _move_photo(name, target)
     if is_me is not None:
         _set_me(target, is_me)
     elif target.lower() != name.lower() and name.lower() in my_names():  # the user renamed themselves
@@ -297,6 +303,8 @@ def merge(names: List[str]) -> Dict[str, Any]:
             conn.commit()
         finally:
             conn.close()
+    for low in others:
+        _move_photo(low, keep)
     return next(e for e in directory() if e["name"].lower() == keep.lower())
 
 
@@ -439,3 +447,86 @@ def set_speaker_meta(meeting_id: int, speaker_id: str, role: Optional[str] = Non
     if m is not None and named and not is_default_name(named[0]):
         update(named[0], is_me=True)
     return m
+
+
+# --- A person's own photo (given in «Участники» / «Все люди»): one per name of the directory, shown
+# instead of the initials on the speaker cards, in the directory and on the studio's captions. Kept
+# in the data folder under a hash of the name, so a rename or a merge moves it with the person.
+def _photo_dir() -> Path:
+    from app.paths import DATA_DIR
+
+    return Path(DATA_DIR) / "people_photos"
+
+
+def photo_path(name: str) -> Path:
+    key = hashlib.sha1(canonical(name).lower().encode("utf-8")).hexdigest()[:20]
+    return _photo_dir() / f"{key}.img"
+
+
+def photo_kind(data: bytes) -> str:
+    """image/jpeg or image/png by the file's first bytes; "" for anything else."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return ""
+
+
+def set_photo(name: str, data_b64: str) -> None:
+    name = _clean(name)
+    if not name:
+        raise ValueError("Укажите имя")
+    try:
+        data = base64.b64decode(str(data_b64 or "").split(",")[-1], validate=True)
+    except (ValueError, TypeError):
+        raise ValueError("Нужна картинка JPEG или PNG")
+    if not photo_kind(data):
+        raise ValueError("Нужна картинка JPEG или PNG")
+    if len(data) > PHOTO_MAX_BYTES:
+        raise ValueError("Картинка слишком большая")
+    init_table()
+    with _db_lock:  # the person is in the directory from now on (a rename then moves the photo)
+        conn = get_connection()
+        try:
+            _ensure(conn, canonical(name))
+            conn.commit()
+        finally:
+            conn.close()
+    path = photo_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
+def remove_photo(name: str) -> bool:
+    path = photo_path(name)
+    if path.is_file():
+        path.unlink()
+        return True
+    return False
+
+
+def photos() -> Dict[str, int]:
+    """Every name with a photo, its variants too (lower case) → a version for the page's cache."""
+    if not _photo_dir().is_dir():
+        return {}
+    out: Dict[str, int] = {}
+    for e in directory():
+        path = photo_path(e["name"])
+        if path.is_file():
+            v = int(path.stat().st_mtime)
+            for n in [e["name"], *e["aliases"]]:
+                out[n.lower()] = v
+    return out
+
+
+def _move_photo(old: str, new: str) -> None:
+    """A rename or a merge: the photo goes with the person (one already there stays)."""
+    src = _photo_dir() / f"{hashlib.sha1(old.lower().encode('utf-8')).hexdigest()[:20]}.img"
+    dst = _photo_dir() / f"{hashlib.sha1(new.lower().encode('utf-8')).hexdigest()[:20]}.img"
+    if src.is_file() and src != dst:
+        if dst.is_file():
+            src.unlink()
+        else:
+            src.replace(dst)

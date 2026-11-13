@@ -160,6 +160,47 @@ def api_people_merge(payload: PeopleMergePayload) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+class PersonPhotoPayload(BaseModel):
+    name: str
+    data: str  # base64 of a JPEG or PNG (the page makes a 256 px square)
+
+@router.get("/api/people/photos")
+def api_people_photos() -> Dict[str, int]:
+    """Names (lower case, variants too) with a photo → its version, for the page's cache."""
+    from app.people import photos
+
+    return photos()
+
+@router.get("/api/people/photo")
+def api_people_photo(name: str):
+    from fastapi.responses import Response
+
+    from app.people import photo_kind, photo_path
+
+    path = photo_path(name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Фото не найдено")
+    data = path.read_bytes()
+    return Response(content=data, media_type=photo_kind(data) or "application/octet-stream",
+                    headers={"Cache-Control": "private, max-age=31536000"})  # the page adds ?v= when it changes
+
+@router.put("/api/people/photo")
+def api_people_set_photo(payload: PersonPhotoPayload) -> Dict[str, int]:
+    from app.people import photos, set_photo
+
+    try:
+        set_photo(payload.name, payload.data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return photos()
+
+@router.delete("/api/people/photo")
+def api_people_remove_photo(name: str) -> Dict[str, int]:
+    from app.people import photos, remove_photo
+
+    remove_photo(name)
+    return photos()
+
 @router.get("/api/meetings/{meeting_id}/people")
 def api_meeting_people(meeting_id: int) -> Dict[str, Any]:
     """For the speakers of a recording: the calendar's invited people, who is mentioned in the text,
