@@ -1459,6 +1459,11 @@ function capSpeaker(ln) {
   return best;
 }
 
+function capInitials(name) {
+  const words = String(name || '').replace(/[()[\]{}"«»]/g, ' ').split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w));
+  return ((words[0] || '?')[0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase();
+}
+
 function capWhoColor(name) {
   let h = 0;
   for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -1468,7 +1473,7 @@ function capWhoColor(name) {
 function createCapRow(key) {
   const el = document.createElement('div');
   el.className = 'cap-row';
-  el.innerHTML = '<span class="cap-who hidden"></span><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
+  el.innerHTML = '<span class="cap-av hidden" aria-hidden="true"></span><span class="cap-who hidden"></span><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
     + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div>';
   document.getElementById('studio-cap-rows').appendChild(el);
   const row = { key, el, orig: new CapTyper(el.querySelector('.cap-orig')), tr: new CapTyper(el.querySelector('.cap-tr')) };
@@ -1524,7 +1529,7 @@ function capDrawLines(lines, fresh, target, view) {
       createCapRow(ln.id);
     }
   });
-  let prevWho = '';
+  let anyWho = false;
   for (const ln of lines) {
     const row = capView.rows.get(ln.id);
     if (!row) continue;
@@ -1532,14 +1537,24 @@ function capDrawLines(lines, fresh, target, view) {
     row.el.classList.toggle('cap-same', !!ln.translation && ln.translation === ln.text);
     row.tr.set(ln.translation || '');
     setCapTags(row, ln.lang, ln.target || (target === 'auto' ? '' : target));
-    // who said it, above the line when the speaker changes
+    // who said it, on every line as in Teams: a round mark with the initials and the name above the
+    // text, both in the speaker's colour (a long talk reads at a glance)
     const who = capSpeaker(ln);
-    const showWho = who && who !== prevWho;
-    prevWho = who || prevWho;
+    anyWho = anyWho || !!who;
     const whoEl = row.el.querySelector('.cap-who');
-    if (whoEl.textContent !== who) { whoEl.textContent = who; whoEl.className = `cap-who ${who ? capWhoColor(who) : ''}`; }
-    whoEl.classList.toggle('hidden', !showWho);
+    const avEl = row.el.querySelector('.cap-av');
+    if (whoEl.textContent !== who) {
+      whoEl.textContent = who;
+      whoEl.className = `cap-who ${who ? capWhoColor(who) : ''}`;
+      avEl.textContent = who ? capInitials(who) : '';
+      avEl.className = `cap-av ${who ? capWhoColor(who) : ''}`;
+      avEl.title = who;
+    }
+    whoEl.classList.toggle('hidden', !who);
+    avEl.classList.toggle('hidden', !who);
   }
+  // the lines make room for the marks once someone is named (the text of all lines starts at one place)
+  document.getElementById('studio-cap-rows').classList.toggle('cap-has-who', anyWho);
 
   if (liveCap.partial) {
     let row = capView.draftKey ? capView.rows.get(capView.draftKey) : null;
