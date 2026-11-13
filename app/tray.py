@@ -29,6 +29,7 @@ WM_USER = 0x0400
 WM_APP_TRAY = WM_USER + 20
 WM_APP_UPDATE = WM_USER + 21
 WM_APP_HOTKEY = WM_USER + 22
+NIN_BALLOONUSERCLICK = WM_USER + 5  # the notification was clicked (sent to the icon's callback)
 WM_HOTKEY = 0x0312
 HOTKEY_ID = 1
 DICTATION_HOTKEY_ID = 2
@@ -202,20 +203,24 @@ def _icon_with_dot(size: int, pixels: bytearray, dot: Optional[Tuple[int, int, i
 class Tray:
     """
     menu_items: callable returning [(label, command_or_None, flags)]; label None = separator.
-    on_command(command) is called on the tray thread; on_open() on a left click.
+    on_command(command) is called on the tray thread; on_open() on a left click; on_notice(target) on a
+    click of the last notification (the place it is about: run.py App.open_target).
     """
 
     def __init__(self, ico_path: Path, menu_items: Callable[[], List[Tuple[Optional[str], Optional[str], int]]],
-                 on_command: Callable[[str], None], on_open: Callable[[], None]):
+                 on_command: Callable[[str], None], on_open: Callable[[], None],
+                 on_notice: Optional[Callable[[str], None]] = None):
         self.ico_path = ico_path
         self.menu_items = menu_items
         self.on_command = on_command
         self.on_open = on_open
+        self.on_notice = on_notice
+        self._notice_target = ""  # where a click on the notification shown leads
         self.hwnd = None
         self.icons: Dict[str, int] = {}
         self.state = "idle"
         self.tip = "Verbaliox"
-        self._pending: Optional[Tuple[str, str, int]] = None
+        self._pending: Optional[Tuple[str, str, int, str]] = None
         self._ready = threading.Event()
         self._lock = threading.Lock()
         self._wndproc = WNDPROC(self._proc)  # kept alive for the lifetime of the window
@@ -234,9 +239,11 @@ class Tray:
         if changed and self.hwnd:
             user32.PostMessageW(self.hwnd, WM_APP_UPDATE, 0, 0)
 
-    def notify(self, title: str, text: str, warning: bool = False) -> None:
+    def notify(self, title: str, text: str, warning: bool = False, target: str = "") -> None:
+        """target: the place a click on the notification opens ("meeting:12:transcribe", "studio",
+        "last", "settings:hotkeys"); empty opens the window as it is."""
         with self._lock:
-            self._pending = (title, text, NIIF_WARNING if warning else NIIF_INFO)
+            self._pending = (title, text, NIIF_WARNING if warning else NIIF_INFO, target)
         if self.hwnd:
             user32.PostMessageW(self.hwnd, WM_APP_UPDATE, 1, 0)
 
@@ -359,6 +366,12 @@ class Tray:
                     self.on_open()
                 except Exception as e:
                     print(f"[tray] open error: {e}", file=sys.stderr)
+            elif event == NIN_BALLOONUSERCLICK:
+                # A click on the notification: the window opens where it is about, not just the tray
+                try:
+                    (self.on_notice or (lambda _t: self.on_open()))(self._notice_target)
+                except Exception as e:
+                    print(f"[tray] notification click error: {e}", file=sys.stderr)
             elif event in (WM_RBUTTONUP, WM_CONTEXTMENU):
                 self._show_menu()
             return 0
@@ -380,6 +393,7 @@ class Tray:
                     nid.szInfoTitle = pending[0][:63]
                     nid.szInfo = pending[1][:255]
                     nid.dwInfoFlags = pending[2]
+                    self._notice_target = pending[3]
                     shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(nid))
             else:
                 shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(self._nid(NIF_ICON | NIF_TIP)))
