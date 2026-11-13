@@ -6,6 +6,19 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.5 — English
+
+- **The recording follows the Teams meeting.** Going into another meeting saves the recording and
+  starts a new one named after that meeting; when the meeting is over (its window gone for 30 s) the
+  recording stops. Teams keeps the microphone from one meeting to the next, so the first recording
+  went on through the second. A window counts as a meeting only with the button that leaves the call
+  (switching chats in the main window does not restart anything). The switch is in the studio, under
+  «Automatically».
+- **The participants' names in the analysis.** Overviews, chapters, templates, questions to a
+  recording and the task search get the list of who was in the meeting (named speakers, studio marks,
+  Teams captions, calendar invitees, as written in «All people», with their role) and write the names
+  that way; a name still misspelt by a letter or two is put right, its case ending kept.
+
 ## 0.8.4 — English
 
 - **Voices no longer come twice in a recording through speakers.** The system sound and the microphone
@@ -326,6 +339,18 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.5
+
+- **Запись следит за встречей в Teams.** Перешли в другую встречу — запись сохраняется и начинается
+  новая, названная по этой встрече; встреча закончилась (её окна нет 30 секунд) — запись
+  останавливается. Teams не отпускает микрофон между встречами, и первая запись шла через вторую.
+  Встречей считается только окно с кнопкой выхода из звонка: переключение чатов в главном окне ничего не
+  перезапускает. Переключатель — в студии, в блоке «Автоматически».
+- **Имена участников в анализе.** Сводка, главы, шаблоны, вопросы к записи и поиск задач получают
+  список тех, кто был на встрече (названные говорящие, пометки в студии, субтитры Teams, приглашённые из
+  календаря — в написании из «Все люди», с должностью), и пишут имена так же; имя, всё же написанное с
+  ошибкой в одну-две буквы, исправляется с сохранением падежа.
 
 ## 0.8.4
 
