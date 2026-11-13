@@ -61,6 +61,57 @@ class DetermineClustersTest(unittest.TestCase):
         durs = np.full(len(embs), 5.0, dtype=np.float32)
         self.assertLessEqual(len(set(_determine_clusters(embs, durs, num_speakers_hint=2).tolist())), 2)
 
+    def _meeting(self, sizes, outliers=4, spread=0.9):
+        """A call: every voice through the same codec (a shared part), uneven talk, and a few phrases
+        that are no one's voice (a laugh, a noise)."""
+        common = self.rng.normal(size=192)
+        embs, truth, durs = [], [], []
+        for i, n in enumerate(sizes):
+            embs.append(_voice(self.rng, common + self.rng.normal(size=192) * 0.9, n, spread))
+            truth += [i] * n
+            durs += list(self.rng.uniform(0.8, 8.0, size=n))
+        for _ in range(outliers):
+            embs.append(_voice(self.rng, common, 1, 1.6))
+            truth.append(-1)
+            durs.append(3.0)
+        return np.vstack(embs).astype(np.float32), np.array(durs, dtype=np.float32), np.array(truth)
+
+    def _agrees(self, labels, truth):
+        from sklearn.metrics import adjusted_rand_score
+
+        mask = truth >= 0
+        return adjusted_rand_score(truth[mask], labels[mask])
+
+    def test_six_said_with_stray_phrases_gives_six_speakers_not_one(self):
+        # Stray phrases took five of the six groups and the whole meeting went to one speaker
+        embs, durs, truth = self._meeting([120, 60, 40, 25, 15, 10])
+        labels = _determine_clusters(embs, durs, num_speakers_hint=6)
+        self.assertEqual(len(set(labels.tolist())), 6)
+        self.assertGreater(self._agrees(labels, truth), 0.95)
+
+    def test_auto_finds_several_voices_of_one_call(self):
+        embs, durs, truth = self._meeting([50] * 6)
+        labels = _determine_clusters(embs, durs)
+        self.assertEqual(len(set(labels.tolist())), 6)
+        self.assertGreater(self._agrees(labels, truth), 0.95)
+
+    def test_a_count_said_is_the_most_there_are(self):
+        # Ten invited, two spoke: the two are not cut into more speakers
+        embs, durs, truth = self._meeting([100, 50])
+        labels = _determine_clusters(embs, durs, num_speakers_hint=10)
+        self.assertEqual(len(set(labels.tolist())), 2)
+
+    def test_one_voice_of_a_call_stays_one_speaker(self):
+        embs, durs, _ = self._meeting([200], outliers=6, spread=1.1)
+        self.assertEqual(set(_determine_clusters(embs, durs).tolist()), {0})
+
+    def test_a_short_recording_still_splits_into_the_count_said(self):
+        a = _voice(self.rng, self.voice_a, 1, 0.1)
+        b = _voice(self.rng, self.voice_b, 2, 0.1)
+        embs = np.vstack([a, b]).astype(np.float32)
+        durs = np.array([5.0, 5.0, 5.0], dtype=np.float32)
+        self.assertEqual(len(set(_determine_clusters(embs, durs, num_speakers_hint=2).tolist())), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

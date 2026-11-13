@@ -238,6 +238,28 @@ OVERRIDE_MIN_SPEAKERS = 3   # a count of 1 or 2 said is corrected only to three 
 OVERRIDE_MIN_SCORE = 0.30   # and only when the groups are clearly apart (silhouette of the voices)
 
 
+SAME_VOICE_CENTROIDS = 0.32  # centroids closer than this (cosine distance) are one voice in Auto mode
+
+
+def _group_voices(embs: np.ndarray, durs: np.ndarray, k: int, min_dur: float, rounds: int = 6) -> Optional[np.ndarray]:
+    """Average-linkage grouping into k voices. A group too small to be a person (one phrase, or less
+    speech than min_dur) is set aside (-1) and the rest grouped again. None: no k real groups."""
+    active = np.ones(len(embs), dtype=bool)
+    for _ in range(rounds):
+        if int(active.sum()) <= k:
+            return None
+        idx = np.flatnonzero(active)
+        lab = AgglomerativeClustering(n_clusters=k, metric="cosine", linkage="average").fit_predict(embs[active])
+        small = [c for c in range(k) if int(np.sum(lab == c)) < 2 or float(np.sum(durs[idx[lab == c]])) < min_dur]
+        if not small:
+            labels = np.full(len(embs), -1)
+            labels[idx] = lab
+            return labels
+        for c in small:
+            active[idx[lab == c]] = False
+    return None
+
+
 def _determine_clusters(
     embeddings: np.ndarray,
     durations: np.ndarray,
@@ -297,58 +319,50 @@ def _determine_clusters(
                       f"{len(anchor_embs)} anchor phrases)", flush=True)
                 return np.zeros(n_samples, dtype=int)
 
-    # Determine optimal number of speakers K
+    # Groups too small to be a person (a laugh, a noise, a stray phrase) are set aside and the rest
+    # grouped again: with average linkage such phrases became groups of their own, and with a count
+    # said (6 from the calendar) five of the six went to them and the whole meeting to one speaker
+    total_anchor_dur = float(np.sum(anchor_durs))
+    min_cluster_dur = min(
+        MAX_MIN_SPEAKER_SECONDS,
+        max(MIN_SPEAKER_SECONDS, MIN_SPEAKER_SHARE * total_anchor_dur),
+    )
+    # A count said is the most there are, not the exact number: it comes from the calendar's
+    # invitees or the names in Teams captions, and not everyone invited speaks. The split of 2..count
+    # whose voices stand apart best is taken; forced to the count, one person became two or three
+    anchor_labels: Optional[np.ndarray] = None
     if num_speakers_hint > 1:
-        best_k = min(num_speakers_hint, len(anchor_embs))
+        max_k, best_score = min(num_speakers_hint, len(anchor_embs) - 1), -1.0  # more than one: said so
     else:
-        max_k = min(max_speakers, len(anchor_embs) - 1)
-        if max_k < 2:
-            return np.zeros(n_samples, dtype=int)
+        max_k, best_score = min(max_speakers, len(anchor_embs) - 1), 0.25  # Auto: a split must score
+    for k in range(2, max_k + 1):
+        labels = _group_voices(anchor_embs, anchor_durs, k, min_cluster_dur)
+        if labels is None:
+            continue
+        kept = labels >= 0
+        try:
+            score = float(silhouette_score(dist_matrix[np.ix_(kept, kept)], labels[kept], metric="precomputed"))
+        except Exception:
+            continue
+        if score > best_score:
+            best_score, anchor_labels = score, labels
+    if anchor_labels is None and num_speakers_hint > 1 and len(anchor_embs) >= 2:
+        # Too few phrases for groups of two or more (a short recording): one group per voice as said
+        k = min(num_speakers_hint, len(anchor_embs))
+        anchor_labels = AgglomerativeClustering(n_clusters=k, metric="cosine", linkage="average").fit_predict(anchor_embs)
 
-        best_k = 1
-        best_score = 0.25  # Minimum silhouette threshold to split into >=2 speakers in Auto mode
-        # A separate speaker must be backed by several anchor segments and enough speech: a single
-        # emotional or noisy phrase can sit far from the rest of the same voice in ECAPA space.
-        total_anchor_dur = float(np.sum(anchor_durs))
-        min_cluster_dur = min(
-            MAX_MIN_SPEAKER_SECONDS,
-            max(MIN_SPEAKER_SECONDS, MIN_SPEAKER_SHARE * total_anchor_dur),
-        )
-        for k in range(2, max_k + 1):
-            try:
-                clustering = AgglomerativeClustering(
-                    n_clusters=k,
-                    metric="cosine",
-                    linkage="average",
-                )
-                labels = clustering.fit_predict(anchor_embs)
-                # Ensure tiny noise clusters don't create phantom speakers in Auto mode
-                counts = np.bincount(labels)
-                cluster_durs = [float(np.sum(anchor_durs[labels == c_idx])) for c_idx in range(k)]
-                if np.min(counts) < 2 or min(cluster_durs) < min_cluster_dur:
-                    continue
-                score = float(silhouette_score(dist_matrix, labels, metric="precomputed"))
-                if score > best_score:
-                    best_score = score
-                    best_k = k
-            except Exception:
-                continue
-
-    if best_k <= 1:
+    if anchor_labels is None:
         print(f"[diarizer] one speaker: no split scored above the threshold ({len(anchor_embs)} anchor phrases)", flush=True)
         return np.zeros(n_samples, dtype=int)
+    groups = sorted(set(anchor_labels[anchor_labels >= 0].tolist()))
+    print(f"[diarizer] {len(groups)} voice group(s) from {len(anchor_embs)} anchor phrases"
+          f" ({int(np.sum(anchor_labels < 0))} set aside as too short to be a person)"
+          f"{f', {num_speakers_hint} said' if num_speakers_hint > 1 else ''}", flush=True)
 
-    # Fit on anchor segments and compute duration-weighted speaker centroids
-    clustering = AgglomerativeClustering(
-        n_clusters=best_k,
-        metric="cosine",
-        linkage="average",
-    )
-    anchor_labels = clustering.fit_predict(anchor_embs)
-
+    # Duration-weighted speaker centroids
     centroids_list: List[np.ndarray] = []
     cluster_weights: List[float] = []
-    for k in range(best_k):
+    for k in groups:
         mask_k = anchor_labels == k
         k_embs = anchor_embs[mask_k]
         k_weights = np.clip(anchor_durs[mask_k], 0.5, 10.0)[:, None]
@@ -357,7 +371,9 @@ def _determine_clusters(
         centroids_list.append((c / (norm if norm > 1e-8 else 1.0)).astype(np.float32))
         cluster_weights.append(float(np.sum(anchor_durs[mask_k])))
 
-    # In Auto mode, merge any two centroids whose cosine distance is < 0.46 (same voice with pitch shift)
+    # In Auto mode, merge two centroids this close (one voice with a pitch shift). It was 0.46: in a
+    # call every voice comes through the same codec and different people's centroids are often
+    # 0.35-0.5 apart, so a meeting of several became one or two speakers
     if num_speakers_hint <= 0 and len(centroids_list) > 1:
         keep_indices = list(range(len(centroids_list)))
         keep_indices.sort(key=lambda idx: cluster_weights[idx], reverse=True)
@@ -368,11 +384,11 @@ def _determine_clusters(
                 merged_centroids.append(cand)
                 continue
             dists_to_existing = [float(1.0 - np.dot(cand, existing)) for existing in merged_centroids]
-            if min(dists_to_existing) >= 0.46:
+            if min(dists_to_existing) >= SAME_VOICE_CENTROIDS:
                 merged_centroids.append(cand)
         centroids = np.vstack(merged_centroids)
         if len(centroids) <= 1:
-            print(f"[diarizer] one speaker: {best_k} groups found, all close enough to be one voice", flush=True)
+            print(f"[diarizer] one speaker: {len(groups)} groups found, all close enough to be one voice", flush=True)
             return np.zeros(n_samples, dtype=int)
     else:
         centroids = np.vstack(centroids_list)
