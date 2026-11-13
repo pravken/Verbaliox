@@ -95,6 +95,30 @@ def pick_open(initial_dir: str = "", file_filter: str = "", title: str = "Отк
             pass
 
 
+def pick_open_many(initial_dir: str = "", file_filter: str = "", title: str = "Открыть") -> str:
+    """Several files: their paths, one per line."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except Exception:
+        pass
+    try:
+        parts = [p.strip() for p in (file_filter or "").split("|") if p.strip()]
+        filetypes = [(parts[i], parts[i + 1]) for i in range(0, len(parts) - 1, 2)] or [("All files", "*.*")]
+        res = filedialog.askopenfilenames(parent=root, title=title or "Открыть", initialdir=initial_dir or None,
+                                          filetypes=filetypes)
+        return "\n".join(str(p) for p in (res or ()))
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 def pick_folder(initial_dir: str = "", title: str = "Выбор папки") -> str:
     import tkinter as tk
     from tkinter import filedialog
@@ -128,7 +152,7 @@ def main() -> None:
             pass
 
     parser = argparse.ArgumentParser(description="Verbaliox Native File Dialog")
-    parser.add_argument("--mode", choices=["save", "folder", "open"], required=True)
+    parser.add_argument("--mode", choices=["save", "folder", "open", "open-many"], required=True)
     parser.add_argument("--dir", default="")
     parser.add_argument("--filename", default="")
     parser.add_argument("--filter", default="")
@@ -146,6 +170,8 @@ def main() -> None:
         )
     elif args.mode == "open":
         result = pick_open(initial_dir=args.dir, file_filter=args.filter, title=args.title)
+    elif args.mode == "open-many":
+        result = pick_open_many(initial_dir=args.dir, file_filter=args.filter, title=args.title)
     else:
         result = pick_folder(initial_dir=args.dir, title=args.title)
 

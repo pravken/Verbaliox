@@ -14,7 +14,7 @@
         <div class="imp-files" data-dragover="preventEvent" data-dragover-args='[{"$": "event"}]' data-drop="impDropFiles" data-drop-args='[{"$": "event"}]'>
           <input id="file-input" type="file" multiple accept="video/*,audio/*,.mkv,.webm,.mov,.mp4,.mp3,.wav,.m4a,.ogg,.flac" class="hidden" data-change="handleFileSelect" data-change-args='[{"$": "files"}]' data-i18n-title="impPickFiles" title="Выбрать файлы" />
           <div id="imp-list" class="flex flex-col gap-0.5"></div>
-          <div id="imp-empty" class="imp-empty" data-click="clickElement" data-click-args='["file-input"]'>
+          <div id="imp-empty" class="imp-empty" data-click="impPickFiles">
             <span data-i18n="dropFilesHere">Нажмите для выбора файлов или перетащите их сюда</span>
             <span class="imp-empty-sub">MP4, MKV, MOV, WEBM, MP3, WAV, M4A</span>
           </div>
@@ -31,7 +31,7 @@
             <button data-click="impAddPath" class="imp-btn imp-btn-primary" data-i18n="addBtnText">Добавить</button>
           </div>
           <div class="imp-adders">
-            <button data-click="clickElement" data-click-args='["file-input"]' class="imp-btn" data-i18n="impAddFiles">+ Файлы…</button>
+            <button data-click="impPickFiles" class="imp-btn" data-i18n="impAddFiles">+ Файлы…</button>
             <span class="flex-1"></span>
           </div>
         </div>

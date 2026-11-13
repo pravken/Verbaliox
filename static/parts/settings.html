@@ -304,7 +304,7 @@
         <div class="settings-card">
           <div>
             <h4 class="text-[13px] font-semibold text-white" data-i18n="recDirTitle">Папка для записей</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="recDirDesc">Сюда сохраняются записи, сделанные в студии. Импортированные файлы копируются в папку данных программы, а файлы, добавленные по пути, остаются на своём месте.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="recDirDesc">Сюда сохраняются записи, сделанные в студии.</p>
           </div>
           <div class="flex items-center gap-2">
             <div id="set-recordings-dir" class="flex-1 min-w-0 h-8 leading-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono truncate"></div>
@@ -313,6 +313,11 @@
             <button data-click="resetRecordingsDir" id="recdir-reset-btn" class="hidden ui-btn ui-btn-subtle h-8 px-2.5 text-[11.5px] shrink-0" data-i18n-title="tipRecDirReset" title="Вернуть папку по умолчанию" data-i18n="recDirReset">Сбросить</button>
           </div>
           <p id="set-imports-dir" class="text-[11.5px] text-apple-tertiary break-all"></p>
+          <label class="vs-row cursor-pointer text-xs text-apple-label">
+            <span class="flex-1 min-w-0"><span class="block text-[13px] text-white" data-i18n="importCopyTitle">Копировать импортированные файлы в папку программы</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="importCopyHint">Выключено: файл остаётся там, где лежит, а запись ссылается на него (не переносите и не удаляйте его). Включено: программа хранит свою копию.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-import-copy" />
+          </label>
         </div>
         </div>
         <div data-stab="recognition" class="sx-section space-y-3 hidden">
