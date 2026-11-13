@@ -172,6 +172,10 @@ class PageChunksTest(unittest.TestCase):
             self.assertTrue(send(0, b"aaa").json().get("duplicate"))  # its answer was lost: sent again
             self.assertEqual(send(2, b"ccc").status_code, 409)       # 1 is missing: not written out of place
             self.assertEqual(send(1, b"bbb").json()["size"], 6)
+            # the page gave up on chunk 2: the next ones say so and are written past the gap
+            r = client.post(f"/api/record/page/{pid}/chunk", content=b"eee",
+                            headers={"X-Chunk-Seq": "4", "X-Chunk-After-Gap": "1", "Content-Type": "application/octet-stream"})
+            self.assertEqual(r.json()["size"], 9)
         finally:
             client.post(f"/api/record/page/{pid}/cancel")
 
