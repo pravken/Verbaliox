@@ -317,8 +317,7 @@ class Reader:
                     # panel stays missing it is looked for less and less often
                     if time.time() - self._found_at >= self._find_every:
                         self._found_at = time.time()
-                        wins = [w for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)
-                                if process_name(w.Current.ProcessId) in TEAMS_PROCESSES]
+                        wins = _teams_windows(AutomationElement, Condition, TreeScope, process_name)
                         if not wins:
                             self._set("no_window")
                             self._find_every = min(FIND_EVERY_MAX_SEC, self._find_every * 2)
@@ -416,6 +415,19 @@ class Reader:
             self.state, self.error = state, error
 
 
+def _teams_windows(AutomationElement, Condition, TreeScope, process_name) -> List[Any]:
+    """The top-level windows of Teams. A window closing while they are listed is skipped: its
+    ElementNotAvailableException ended the whole search before (seen in a user's log)."""
+    out = []
+    for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition):
+        try:
+            if process_name(w.Current.ProcessId) in TEAMS_PROCESSES:
+                out.append(w)
+        except Exception:
+            continue
+    return out
+
+
 _reader = Reader()
 
 
@@ -458,8 +470,7 @@ def check(timeout: float = 25.0) -> Dict[str, Any]:
             except Exception:
                 return ""
         try:
-            wins = [w for w in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)
-                    if process_name(w.Current.ProcessId) in TEAMS_PROCESSES]
+            wins = _teams_windows(AutomationElement, Condition, TreeScope, process_name)
             out["windows"] = len(wins)
             if not wins:
                 out["state"] = "no_window"
