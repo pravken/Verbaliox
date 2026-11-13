@@ -1436,6 +1436,7 @@ async function fillCallSettings(s) {
   callBlock.classList.toggle('hidden', !st.supported);
   callBlock.closest('.settings-card')?.classList.toggle('hidden', !st.supported);  // no empty «Звонки» card
   document.getElementById('set-call-record').checked = s.call_auto_record === 'true';
+  document.getElementById('set-import-copy').checked = s.import_copy === 'true';
   const chosen = new Set((s.call_apps || 'zoom,teams,telegram').split(','));
   document.getElementById('call-apps').innerHTML = Object.entries(CALL_APP_NAMES).map(([id, name]) =>
     `<label class="flex items-center gap-1.5 text-[11.5px] text-apple-label cursor-pointer"><input type="checkbox" data-call-app="${id}" ${chosen.has(id) ? 'checked' : ''} class="rounded bg-apple-sidebar border-white/20 text-apple-blue" />${escapeHtml(name)}</label>`).join('');
@@ -1474,6 +1475,7 @@ function callSettingsPayload() {
   if (!box || !box.children.length) return {};
   return {
     call_auto_record: String(document.getElementById('set-call-record').checked),
+    import_copy: String(document.getElementById('set-import-copy').checked),
     call_apps: [...box.querySelectorAll('input[data-call-app]:checked')].map(i => i.dataset.callApp).join(','),
     call_preset: document.getElementById('set-call-preset').value || 'call',
   };
@@ -2550,7 +2552,8 @@ const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
-    ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check']],
+    ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'],
+    ['set-import-copy', 'import_copy', 'check']],
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
@@ -2570,7 +2573,7 @@ const SETTINGS_RESET = {
 };
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
-  record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false',
+  record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', import_copy: 'false',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
   auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
