@@ -60,6 +60,10 @@ def _busy() -> bool:
 
     if transcriber.running_job_kind():
         return True
+    from app.ollama_client import analysis_running
+
+    if analysis_running():  # an overview or an answer asked on the page is being written
+        return True
     return live.has_sessions()
 
 

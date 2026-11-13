@@ -300,13 +300,17 @@ def vram_snapshot() -> Dict[str, Any]:
     wanted_llm = settings.get("ollama_model") or ""
     names = list(dict.fromkeys(list(loaded_ollama) + installed)) or ([wanted_llm] if wanted_llm else [])
     loading_llm = _ollama_loading_name[0] if _ollama_loading.is_set() else None
+    from app.ollama_client import analysis_running
+
+    writing = set(analysis_running())
     for name in names:
         m = loaded_ollama.get(name)
+        busy = bool(m) and name in writing  # an overview or an answer is being written with it
         chips.append({
             "kind": "ollama", "name": name, "label": format_llm_model_name(name), "default": name == wanted_llm,
             "loaded": bool(m), "size_gb": m["size_vram_gb"] if m else None,
             "loading": not m and loading_llm == name,
-            "can_unload": bool(m),  # a job asking it meanwhile gets an error and goes on (the switch)
+            "can_unload": bool(m) and not busy, "in_use": busy,
             "can_preload": not m and not _ollama_loading.is_set(),
         })
 
@@ -391,8 +395,10 @@ def stop_work() -> None:
     """The switch: the jobs are cancelled, the captions of a recording end, and Ollama lets its models
     go (an overview being written breaks off), so nothing loads a model again right after."""
     from app import live, transcriber
+    from app.ollama_client import stop_analysis
 
     transcriber.stop_all_jobs()
+    stop_analysis()  # an overview or an answer asked on the page: not a job, stopped too
     with live._sessions_lock:
         ids = list(live._sessions)
     for sid in ids:
@@ -424,6 +430,11 @@ def unload(kind: str, name: str = "", stop: bool = False) -> Dict[str, Any]:
     elif kind == "ollama":
         if not name:
             raise ValueError("Не указана модель Ollama")
+        from app.ollama_client import analysis_running
+
+        if name in analysis_running():
+            # unloaded now, the next part of the overview would load it again at once
+            raise RuntimeError("Модель анализа сейчас пишет ответ")
         if ollama_unload([name]):
             raise RuntimeError(f"Ollama не выгрузила модель {name}")
     elif kind == "live":

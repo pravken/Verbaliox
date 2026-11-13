@@ -695,6 +695,12 @@ label.settings-toggle { display: flex; }
 .cap-who.hidden { display: none; }
 .cap-who-c0 { color: #64D2FF; } .cap-who-c1 { color: #30D158; } .cap-who-c2 { color: #FF9F0A; }
 .cap-who-c3 { color: #BF5AF2; } .cap-who-c4 { color: #FF6482; } .cap-who-c5 { color: #FFD60A; }
+/* Who spoke, on every line as in Teams: a round mark with the initials left of the line (studio.js) */
+.cap-rows.cap-has-who .cap-row { position: relative; padding-left: 48px; }
+.cap-av { position: absolute; left: 0; top: 2px; width: 34px; height: 34px; border-radius: 9999px; display: flex;
+  align-items: center; justify-content: center; font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  background: color-mix(in srgb, currentColor 20%, transparent); border: 1px solid color-mix(in srgb, currentColor 45%, transparent); }
+.cap-av.hidden { display: none; }
 .cap-view-side .cap-t { font-size: var(--cap-size, 26px); margin-top: 0; }
 .cap-view-side .cap-same .cap-tr { display: none; }
 .cap-view-side .cap-same .cap-t::after { content: '—'; color: var(--hc-dim, #8A8A90); }
@@ -2516,3 +2522,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
   background: #0071E3; color: #FFFFFF; font-size: 12.5px; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,.35); z-index: 5; }
 .cap-jump.hidden { display: none; }
 .cap-jump:hover { filter: brightness(1.08); }
+
+/* A person's own photo instead of the initials (people.js spFaceHtml): fills the round mark */
+.sp-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; pointer-events: none; }
+.sp-mav { position: relative; overflow: hidden; }
+.cap-av { overflow: hidden; }

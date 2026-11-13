@@ -137,7 +137,8 @@ class StaticUiTest(unittest.TestCase):
         declared there, a browser function, or a local callback listed here."""
         browser = {"setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame",
                    "cancelAnimationFrame", "getComputedStyle", "parseInt", "parseFloat", "isNaN", "isFinite",
-                   "encodeURIComponent", "decodeURIComponent", "fetch", "alert", "structuredClone", "queueMicrotask"}
+                   "encodeURIComponent", "decodeURIComponent", "fetch", "alert", "structuredClone", "queueMicrotask",
+                   "createImageBitmap"}
         syntax = {"if", "for", "while", "switch", "catch", "function", "return", "async", "await", "of", "constructor",
                   "typeof", "super", "import"}
         # Parameters and object methods called by their short name
