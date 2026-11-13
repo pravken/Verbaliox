@@ -1390,9 +1390,24 @@ class CapTyper {
 }
 
 function capFollowBottom() {
-  if (!capView.stick) return;
   const box = document.getElementById('studio-captions');
-  box.scrollTop = box.scrollHeight;
+  if (capView.stick) box.scrollTop = box.scrollHeight;
+  else document.getElementById('studio-cap-jump')?.classList.remove('hidden');  // new lines below
+}
+
+// Scrolled up to read: the new lines no longer pull the text down (it jumped to the end at every
+// line); back at the bottom, or «К новым», it follows again
+document.getElementById('studio-captions')?.addEventListener('scroll', e => {
+  const box = e.currentTarget;
+  capView.stick = box.scrollHeight - box.scrollTop - box.clientHeight < 48;
+  if (capView.stick) document.getElementById('studio-cap-jump')?.classList.add('hidden');
+}, { passive: true });
+
+function capJumpToNew() {
+  capView.stick = true;
+  const box = document.getElementById('studio-captions');
+  box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+  document.getElementById('studio-cap-jump').classList.add('hidden');
 }
 
 function capReset() {
@@ -1400,6 +1415,7 @@ function capReset() {
   capView.draftKey = null;
   document.getElementById('studio-cap-rows').innerHTML = '';
   capView.stick = true;
+  document.getElementById('studio-cap-jump')?.classList.add('hidden');
 }
 
 function capResetTranslations() {
