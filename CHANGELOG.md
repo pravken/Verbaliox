@@ -6,6 +6,16 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.3 — English
+
+- **«Separate by voice» in the transcript bar**, next to the models, as well as on the participants tab.
+- **The AI mark** on the buttons that run a model: Transcribe, Merge all, Separate by voice. «No fillers»
+  works by a list, without a model, and lost its sparkle icon.
+- **Studio captions:** scrolled up to read, the text no longer jumps to the end at every new line;
+  «↓ To the new lines» brings you back.
+- **Teams names in the studio** now reach every line of a long monologue (a Teams line lasts as long
+  as the person speaks), and appear as soon as the Teams captions come.
+
 ## 0.8.2 — English
 
 - **«Separate again» on the participants tab.** The lines are separated by voice again without
@@ -297,6 +307,16 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.3
+
+- **«Разделить по голосам» в панели распознавания**, рядом с моделями, а не только на вкладке «Участники».
+- **Знак ИИ** на кнопках, которые запускают модель: «Расшифровать», «Свести всё», «Разделить по
+  голосам». «Без запинок» работает по списку, без модели, и потерял иконку-искорку.
+- **Субтитры в студии:** если прокрутить вверх, текст больше не перематывается в конец с каждой новой
+  строкой; кнопка «↓ К новым репликам» возвращает вниз.
+- **Имена из Teams в студии** теперь стоят и у строк длинного монолога (строка Teams длится, пока
+  человек говорит) и появляются сразу, как приходят субтитры Teams.
 
 ## 0.8.2
 
