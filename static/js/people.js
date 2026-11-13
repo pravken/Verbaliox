@@ -265,6 +265,53 @@ function spAfterTranscriptEdit(m, data) {
   renderSpeakersPanel();
 }
 
+// «Разделить заново»: the voices split again on the text there is (nothing is recognized again);
+// the number said is the most there are, «Сами» lets the voices decide
+function openResplitDialog() {
+  const m = state.activeMeeting;
+  if (!m || !(m.segments || []).length) return;
+  if (!DONE_STATUSES.includes(m.status)) { showWarning(t('spResplitBusy')); return; }
+  document.getElementById('sp-resplit-dlg')?.remove();
+  const now = Number(m.num_speakers_hint || 0);
+  const wrap = document.createElement('div');
+  wrap.id = 'sp-resplit-dlg';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  const opts = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}"${n === now ? ' selected' : ''}>${escapeHtml(n ? t('spResplitUpTo').replace('{n}', () => String(n)) : t('spResplitAuto'))}</option>`).join('');
+  wrap.innerHTML = `<div class="an-dlg modal-card">
+      <div class="an-dlg-head"><h2>${escapeHtml(t('spResplitTitle'))}</h2><button data-a="no" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      <p class="an-dlg-text">${escapeHtml(t('spResplitText'))}</p>
+      <label class="sp-split-name"><span>${escapeHtml(t('spResplitCount'))}</span>
+        <select data-f="n" class="an-fld">${opts}</select></label>
+      <div class="an-dlg-foot">
+        <span class="flex-1"></span>
+        <button data-a="no" class="an-btn">${escapeHtml(t('cancel'))}</button>
+        <button data-a="ok" class="an-btn an-btn-primary">${escapeHtml(t('spResplitBtn'))}</button>
+      </div></div>`;
+  const close = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  wrap.addEventListener('click', async e => {
+    const a = e.target.closest('button[data-a]');
+    if (e.target === wrap || (a && a.dataset.a === 'no')) { close(); return; }
+    if (!a || a.dataset.a !== 'ok') return;
+    a.disabled = true;
+    const n = Number(wrap.querySelector('[data-f="n"]').value || 0);
+    const res = await fetch(`/api/meetings/${m.id}/speakers/resplit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num_speakers: n }),
+    });
+    const data = await readJson(res);
+    if (!res.ok) { a.disabled = false; showError(serverText(data.detail)); return; }
+    close();
+    await loadMeetingsList();
+    if (state.activeMeeting && state.activeMeeting.id === m.id) await selectMeeting(m.id, false);
+    showToast(t('spResplitStarted'));
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  wrap.querySelector('[data-f="n"]').focus();
+}
+
 // «Здесь два человека»: the lines the other person said go to a new speaker
 function openSplitDialog(id) {
   const m = state.activeMeeting;

@@ -113,9 +113,12 @@ def _split_segments_by_word_pauses(
 
     for seg in raw_segments:
         words = seg.get("words") or []
-        if not words or len(words) <= 2:
+        # keep_whole: a line typed over (app/transcriber.resplit_input), its text is not its words
+        if not words or len(words) <= 2 or seg.get("keep_whole"):
             refined.append(seg)
             continue
+        # what else the line holds (its language) goes with each of its pieces
+        extra = {k: v for k, v in seg.items() if k not in ("start", "end", "text", "words", "id", "speaker")}
 
         current_words = [words[0]]
         for prev_w, curr_w in zip(words[:-1], words[1:]):
@@ -130,6 +133,7 @@ def _split_segments_by_word_pauses(
                 if text:
                     refined.append(
                         {
+                            **extra,
                             "start": round(float(current_words[0]["start"]), 2),
                             "end": round(float(current_words[-1]["end"]), 2),
                             "text": text,
@@ -145,6 +149,7 @@ def _split_segments_by_word_pauses(
             if text:
                 refined.append(
                     {
+                        **extra,
                         "start": round(float(current_words[0]["start"]), 2),
                         "end": round(float(current_words[-1]["end"]), 2),
                         "text": text,
