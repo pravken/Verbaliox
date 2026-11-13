@@ -189,6 +189,7 @@ def init_db() -> None:
             "dictation_translate_cloud": "false",  # dictation is translated by the local model unless allowed
             "quiet_mode": "false",  # no tray notifications (run.py TrayController)
             "call_auto_record": "false",  # record calls by themselves (app/call_watch.py)
+            "rec_voice_filter": "true",  # the microphone cleaned by DeepFilterNet when downloaded (app/voice_filter.py)
             "import_copy": "false",  # imported files stay where they are; on: a copy in the data folder
             "meeting_follow": "true",  # a new Teams meeting: a new recording; the meeting over: it stops (app/meeting_watch.py)
             "call_apps": "zoom,teams,telegram",
