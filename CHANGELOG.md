@@ -6,6 +6,21 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.4 — English
+
+- **Voices no longer come twice in a recording through speakers.** The system sound and the microphone
+  could drift tens of seconds apart (a voice was heard again «from the future»); the echo was looked
+  for within 2 s only and nothing was lined up. The delay is now found first by the loudness of the
+  two tracks, up to 90 s apart and all along the recording, then measured exactly; the log tells how
+  far apart the tracks were and how much silence the system sound capture put in.
+- **«Unload all» stops the analysis too.** An overview, chapters or an answer of the assistant being
+  written is shown as using the model; unloading asks, then stops it at once instead of letting the
+  next part load the model again.
+- **Studio captions:** who spoke is on every line, as in Teams — the name and a round mark with the
+  initials in that person's colour.
+- **A person's own photo** («Фото…» on a speaker card, 📷 in «All people») shows instead of the
+  initials on the cards, in the directory and on the studio's captions.
+
 ## 0.8.3 — English
 
 - **«Separate by voice» in the transcript bar**, next to the models, as well as on the participants tab.
@@ -311,6 +326,21 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.4
+
+- **Голоса больше не звучат дважды на записи через колонки.** Звук компьютера и микрофон могли
+  разъехаться на десятки секунд (голос было слышно повторно, «из будущего»); эхо искалось только в
+  пределах 2 секунд, и дорожки не выравнивались. Теперь сдвиг сначала ищется по громкости обеих дорожек,
+  до 90 секунд и по всей записи, затем уточняется; в журнале видно, насколько разошлись дорожки и сколько
+  тишины вставил захват звука компьютера.
+- **«Выгрузить всё» останавливает и анализ.** Сводка, главы или ответ ассистента, которые сейчас
+  пишутся, показаны как занимающие модель; выгрузка спрашивает и сразу их останавливает, а не даёт
+  следующей части снова загрузить модель.
+- **Субтитры в студии:** кто говорит — на каждой строке, как в Teams: имя и кружок с инициалами цвета
+  человека.
+- **Своё фото человека** («Фото…» на карточке участника, 📷 в «Все люди») показывается вместо инициалов
+  на карточках, в справочнике и в субтитрах студии.
 
 ## 0.8.3
 
