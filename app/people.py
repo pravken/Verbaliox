@@ -530,3 +530,96 @@ def _move_photo(old: str, new: str) -> None:
             src.unlink()
         else:
             src.replace(dst)
+
+
+# --- The participants of a meeting, for the analysis model: their names written right ---
+def meeting_roster(meeting: Dict[str, Any]) -> List[str]:
+    """Who was in the meeting, as the directory writes them: the speakers named, the names marked in
+    the studio and in the Teams captions, the calendar's invitees; with a role when the directory
+    has one («Анна Петрова — дизайнер»)."""
+    from app.voice_profiles import is_default_name
+
+    names: List[str] = []
+    for sp in (meeting.get("speakers") or {}).values():
+        n = _clean((sp or {}).get("name") if isinstance(sp, dict) else "")
+        if n and not is_default_name(n):
+            names.append(n)
+    names += [_clean(mk.get("name")) for mk in meeting.get("speaker_marks") or [] if isinstance(mk, dict)]
+    names += calendar_attendees(meeting)
+    try:
+        rows = _rows()
+    except Exception:
+        rows = []
+    roles = {r["name"].lower(): r["role"] for r in rows if r.get("role")}
+    out, seen = [], set()
+    for n in names:
+        if not n:
+            continue
+        n = canonical(n, rows)
+        if n.lower() in seen:
+            continue
+        seen.add(n.lower())
+        out.append(f"{n} — {roles[n.lower()]}" if roles.get(n.lower()) else n)
+    return out[:40]
+
+
+_WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё'-]*")
+_NAME_ENDINGS = ("ами", "ями", "ого", "его", "ому", "ему", "ой", "ей", "ом", "ем", "ую", "юю", "ая", "яя",
+                 "ов", "ев", "ах", "ях", "ам", "ям", "а", "я", "у", "ю", "е", "ы", "и", "ь", "s")
+
+
+def _dist(a: str, b: str) -> int:
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _stem(word: str) -> tuple:
+    low = word.lower()
+    for end in _NAME_ENDINGS:
+        if low.endswith(end) and len(low) - len(end) >= 3:
+            return word[: len(word) - len(end)], word[len(word) - len(end):]
+    return word, ""
+
+
+def fix_name_typos(text: str, roster: List[str]) -> str:
+    """A participant's name or surname written by the analysis model with a letter or two wrong
+    («Яцкевич» for «Яцукевич») is written as in the roster; its case ending stays («Яцкевичу» →
+    «Яцукевичу»). Only capitalised words, only names whose stem has 6 letters or more (surnames,
+    long names: a short one is too like other words), one letter off, two for 8 letters or more."""
+    parts = {}
+    for entry in roster or []:
+        for w in _WORD_RE.findall(entry.split(" — ")[0]):
+            if len(w) >= 4 and w[0].isupper():
+                st, _ = _stem(w)
+                parts[st.lower()] = (w, st)
+    if not parts or not text:
+        return text
+
+    def fix(m: "re.Match") -> str:
+        word = m.group(0)
+        if not word[0].isupper() or len(word) < 4:
+            return word
+        stem, end = _stem(word)
+        low = stem.lower()
+        if low in parts:
+            return word  # written right (in any case form)
+        best, best_d = None, 9
+        for key, (name, name_stem) in parts.items():
+            # short names are left alone: «Марс» or «Марина» are not a misspelt «Мария»
+            if len(key) < 6 or abs(len(key) - len(low)) > 2 or key[0] != low[0]:
+                continue
+            allowed = 1 if len(key) < 8 else 2
+            d = _dist(low, key)
+            if d <= allowed and d < best_d:
+                best, best_d = (name, name_stem), d
+        if best is None:
+            return word
+        name, name_stem = best
+        return (name if not end else name_stem + end) if word[1:].islower() or not word[1:].isupper() else word
+
+    return _WORD_RE.sub(fix, text)
