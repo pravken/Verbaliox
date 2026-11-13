@@ -537,6 +537,11 @@ def record_mix_command(ffmpeg: str, page: Optional[Path], system: Optional[Path]
         return base + ["-i", str(mic), *sys_in, "-filter_complex",
                        "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "[a]",
                        "-c:a", "aac", "-b:a", "160k", str(dest)]
+    if mic and page and not system:  # a microphone alone, cleaned (app/voice_filter.py)
+        if has_video:
+            return base + ["-i", str(page), "-i", str(mic), "-map", "0:v", "-map", "1:a",
+                           "-c:v", "copy", "-c:a", "libopus", "-b:a", "128k", str(dest)]
+        return base + ["-i", str(mic), "-c:a", "aac", "-b:a", "160k", str(dest)]
     if page and not system:
         # MediaRecorder writes no index and no duration, sound alone too: a copy into a new file makes
         # it seekable with a known length (a second for an hour; a failed copy keeps the page's file)

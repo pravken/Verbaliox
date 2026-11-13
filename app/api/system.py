@@ -65,6 +65,19 @@ def api_ffmpeg_install() -> Dict[str, Any]:
     """Downloads the pinned FFmpeg build into the user data folder (the button; the first start does it by itself)."""
     return start_ffmpeg_download()
 
+@router.get("/api/voice-filter/status")
+def api_voice_filter_status() -> Dict[str, Any]:
+    from app import voice_filter
+
+    return voice_filter.status()
+
+@router.post("/api/voice-filter/install")
+def api_voice_filter_install() -> Dict[str, Any]:
+    """DeepFilterNet's program (app/voice_filter.py): downloaded in the background, checked by its hash."""
+    from app import voice_filter
+
+    return voice_filter.start_download()
+
 @router.post("/api/onnx-models/{model_id}/download")
 def api_onnx_download(model_id: str) -> Dict[str, Any]:
     """GigaAM / Parakeet (app/asr_onnx.py): downloaded in the background."""

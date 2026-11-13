@@ -6,6 +6,22 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.6 — English
+
+- **No more voices twice in recordings through speakers.** The capture of the computer's sound lost
+  pieces when the app was busy (Windows said so thousands of times in a meeting) and put silence where
+  sound only came late: the track drifted against the microphone. Silence now goes in only where sound
+  is really missing, lost pieces are filled, and the track never runs ahead of the clock.
+- **AI voice cleanup of the microphone** (DeepFilterNet 3, MIT / Apache 2.0): noise — a fan, the
+  keyboard, the street — is taken out of the microphone when the recording is saved, the voice kept.
+  Download the filter (27 MB) in Settings → Recording or in the studio's «Automatically».
+- **Imported files stay where they are**: «Files…» opens the Windows picker and adds the files by
+  their place, without a copy. A setting in Settings → Recording keeps copying them if you prefer.
+- **Unloading the analysis model with the video card busy** waits longer, finds its process, and is
+  retried by itself until the card is free.
+- The compact view of a Teams meeting no longer counts as another meeting; a Teams window closing
+  no longer breaks the captions search.
+
 ## 0.8.5 — English
 
 - **The recording follows the Teams meeting.** Going into another meeting saves the recording and
@@ -339,6 +355,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.6
+
+- **Голоса больше не звучат дважды на записях через колонки.** Захват звука компьютера терял куски,
+  когда программа была занята (Windows сообщала об этом тысячи раз за встречу), и вставлял тишину там,
+  где звук просто пришёл с опозданием: дорожка уезжала относительно микрофона. Теперь тишина вставляется
+  только там, где звука правда нет, потерянные куски восполняются, а дорожка не обгоняет реальное время.
+- **ИИ-очистка голоса в микрофоне** (DeepFilterNet 3, MIT / Apache 2.0): при сохранении записи из
+  микрофона убирается шум — вентилятор, клавиатура, улица, — голос остаётся. Фильтр (27 МБ) скачивается
+  в Настройки → Запись или в студии, в блоке «Автоматически».
+- **Импортированные файлы остаются на месте**: «Файлы…» открывает окно выбора Windows и добавляет файлы
+  по их пути, без копии. Копирование можно включить в Настройки → Запись.
+- **Выгрузка модели анализа при загруженной видеокарте** ждёт дольше, находит её процесс и сама
+  повторяется, пока видеокарта не освободится.
+- Компактный вид встречи Teams больше не считается другой встречей; закрытие окна Teams больше не
+  обрывает поиск субтитров.
 
 ## 0.8.5
 

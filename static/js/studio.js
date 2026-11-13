@@ -2280,6 +2280,32 @@ function studioFillAuto() {
   if (c) c.checked = s.call_auto_record === 'true';
   const f = document.getElementById('st-meeting-follow');
   if (f) f.checked = s.meeting_follow !== 'false';
+  const v = document.getElementById('st-voice-filter');
+  if (v) v.checked = s.rec_voice_filter !== 'false';
+  studioVoiceFilterState();
+}
+
+// The voice filter (app/voice_filter.py): not downloaded yet, the switch says so and offers the download
+async function studioVoiceFilterState(st) {
+  st = st || await fetch('/api/voice-filter/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  const note = document.getElementById('st-voice-filter-note');
+  const btn = document.getElementById('st-voice-filter-download');
+  if (!st || !note || !btn) return;
+  const dl = st.download || {};
+  note.textContent = dl.active ? t('voiceFilterDownloading').replace('{p}', () => String(dl.progress || 0))
+    : st.installed ? t('stVoiceFilterHint') : t('voiceFilterMissing').replace('{size}', () => String(st.size_mb));
+  btn.classList.toggle('hidden', !!st.installed || !!dl.active || !st.can_download);
+}
+
+async function studioInstallVoiceFilter() {
+  let st = await fetch('/api/voice-filter/install', { method: 'POST' }).then(r => r.json()).catch(() => null);
+  studioVoiceFilterState(st);
+  while (st && st.download && st.download.active) {
+    await new Promise(r => setTimeout(r, 1000));
+    st = await fetch('/api/voice-filter/status').then(r => r.json()).catch(() => null);
+    studioVoiceFilterState(st);
+  }
+  if (typeof refreshVoiceFilterStatus === 'function') refreshVoiceFilterStatus();
 }
 
 async function studioSetAuto(key, on) {
@@ -2295,7 +2321,7 @@ async function studioSetAuto(key, on) {
   const data = await readJson(res);
   if (data?.settings && state.system) state.system.settings = data.settings;
   // the same switch on the settings page
-  const mirror = { auto_summary: 'set-auto-summary', call_auto_record: 'set-call-record' }[key];
+  const mirror = { auto_summary: 'set-auto-summary', call_auto_record: 'set-call-record', rec_voice_filter: 'set-voice-filter' }[key];
   const el = mirror && document.getElementById(mirror);
   if (el) el.checked = on;
   if (key === 'call_auto_record' && typeof renderCallSettings === 'function') renderCallSettings();

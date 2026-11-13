@@ -409,6 +409,24 @@ def api_import_url(payload: UrlImportPayload) -> Dict[str, Any]:
     _keep_processing(m["id"], payload.processing)
     return {"created": [m]}
 
+@router.post("/api/import/pick-files")
+def api_import_pick_files() -> Dict[str, Any]:
+    """«Файлы…» of the import: the Windows file picker, which gives the files' places (a page's
+    picker gives only their content, so they were copied). [] when cancelled; unavailable: the page
+    falls back to its own picker."""
+    import sys
+
+    from app import native_dialog
+    from app.paths import MEDIA_EXTENSIONS
+
+    if sys.platform != "win32":
+        return {"available": False, "paths": []}
+    patterns = ";".join(f"*{e}" for e in sorted(MEDIA_EXTENSIONS))
+    chosen = native_dialog.run(["--mode", "open-many", "--dir", str(Path.home() / "Videos"),
+                                "--filter", f"Видео и аудио|{patterns}|Все файлы|*.*", "--title", "Добавить записи"],
+                               timeout=900)
+    return {"available": True, "paths": [p for p in (chosen or "").splitlines() if p.strip()]}
+
 class LocalPathPayload(BaseModel):
     path: str
     language: str = "auto"
@@ -450,12 +468,34 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
                 detail="В указанной папке не найдено поддерживаемых видео или аудио файлов",
             )
 
+    # «Копировать файлы в папку программы» (Settings): a copy the app owns, like a page's upload;
+    # otherwise the file stays where it is and the recording refers to it
+    copy = (settings.get("import_copy") or "false").lower() == "true"
     created = []
     for mf in media_files:
+        source_path = mf.resolve()
+        if copy:
+            safe_stem = _UNSAFE_NAME_RE.sub("_", mf.stem)[:120] or "recording"
+            dest = UPLOADS_DIR / f"{uuid.uuid4().hex[:8]}_{safe_stem}{mf.suffix.lower()}"
+            free = _free_bytes(UPLOADS_DIR)
+            size = mf.stat().st_size
+            if free >= 0 and free - size < DISK_STOP_BYTES:
+                raise HTTPException(status_code=507, detail=f"Недостаточно места на диске для «{mf.name}»: "
+                                                            f"нужно {size / 2**30:.1f} ГБ и запас")
+            UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            part = dest.with_suffix(dest.suffix + ".part")
+            try:
+                shutil.copyfile(source_path, part)
+                part.replace(dest)
+            except OSError as e:
+                part.unlink(missing_ok=True)
+                raise HTTPException(status_code=507, detail=f"Не удалось сохранить «{mf.name}»: {e}")
+            source_path = dest
         m = create_meeting(
             title=mf.stem,
             filename=mf.name,
-            media_path=str(mf.resolve()),
+            media_path=str(source_path),
+            owns_media=copy,
             language=chosen_lang,
             model_name=chosen_model,
             num_speakers_hint=chosen_speakers,

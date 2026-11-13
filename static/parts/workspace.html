@@ -164,6 +164,12 @@
             <span class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="rdSasMeetingFollowHint">Перешли в другую встречу — запись сохранится и начнётся новая; встреча закончилась — запись остановится</span></span>
           <input type="checkbox" id="st-meeting-follow" data-change="studioSetAuto" data-change-args='["meeting_follow", {"$": "checked"}]' role="switch" class="vs-switch" />
         </label>
+        <label class="st-toggle">
+          <span class="min-w-0 flex-1"><span class="block text-[13px] text-white" data-i18n="voiceFilterToggle">✦ ИИ-очистка голоса в микрофоне</span>
+            <span id="st-voice-filter-note" class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="stVoiceFilterHint">Шум убирается из микрофона при сохранении записи</span></span>
+          <input type="checkbox" id="st-voice-filter" data-change="studioSetAuto" data-change-args='["rec_voice_filter", {"$": "checked"}]' role="switch" class="vs-switch" />
+        </label>
+        <button type="button" id="st-voice-filter-download" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-click="studioInstallVoiceFilter" data-i18n="voiceFilterDownload">Скачать фильтр</button>
       </section>
 
       <!-- The old buttons of this column: the scripts still keep them in step, the record card has them now -->

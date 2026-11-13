@@ -39,7 +39,45 @@ function impFresh() {
 // "Import": the window, or the file picker at once when it should not ask
 function openImport() {
   if (askImportParams()) openImportDialog();
-  else clickElement('file-input');
+  else impPickFiles();
+}
+
+// «Файлы…»: the Windows file picker gives the files' places, and they are added where they are (no
+// copy in the program's folder). The page's own picker gives only their content, so it is used when
+// the files are to be copied (Settings «Копировать импортированные файлы») or the Windows one is not there.
+async function impPickFiles() {
+  const s = (state.system && state.system.settings) || {};
+  if (String(s.import_copy) === 'true') { clickElement('file-input'); return; }
+  const res = await fetch('/api/import/pick-files', { method: 'POST' }).catch(() => null);
+  const data = res && res.ok ? await readJson(res) : null;
+  if (!data || !data.available) { clickElement('file-input'); return; }
+  const paths = data.paths || [];
+  if (!paths.length) return;
+  if (impIsOpen()) { impAddPaths(paths); return; }
+  if (askImportParams()) { openImportDialog(); impAddPaths(paths); return; }
+  if (!requireRecognitionModel()) return;
+  const created = [];
+  for (const path of paths) {
+    const r = await fetch('/api/meetings/local-path', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+    });
+    const out = await readJson(r);
+    if (!r.ok) { showError(serverText(out.detail)); break; }
+    created.push(...(out.created || []));
+  }
+  if (!created.length) return;
+  switchAppView('library');
+  await loadMeetingsList();
+  await selectMeeting(created[0].id, true);
+  showToast(t('impQueued').replace('{n}', () => plural(created.length, t('impItemsForms'))), null, 'success');
+}
+
+function impAddPaths(paths) {
+  const imp = state.imp || (state.imp = impFresh());
+  for (const path of paths) {
+    if (!imp.items.some(x => x.kind === 'path' && x.path === path)) imp.items.push({ id: ++imp.seq, kind: 'path', path });
+  }
+  renderImport();
 }
 
 // The ⌄ of the import buttons: the file picker, the window with its parameters, a link, a path
@@ -47,7 +85,7 @@ function openImportMenu(e) {
   e.stopPropagation();
   const r = e.currentTarget.getBoundingClientRect();
   openTextMenuAt([
-    { label: t('impMenuFiles'), run: () => clickElement('file-input') },
+    { label: t('impMenuFiles'), run: () => impPickFiles() },
     { label: t('impMenuParams'), run: () => openImportDialog() },
     { label: t('impMenuLink'), run: () => openImportDialog({ row: 'link' }) },
     { label: t('impMenuPath'), run: () => openImportDialog({ row: 'path' }) },
