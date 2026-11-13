@@ -925,7 +925,7 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 /* The open view and the open tab of a recording: blue, so what is open is plain at a glance */
 .tb-tab.tb-active, .tb-subtab.tb-active { background: #0A84FF; color: #FFFFFF; font-weight: 600; }
 .tb-tab.tb-active:hover, .tb-subtab.tb-active:hover { background: #2B95FF; color: #FFFFFF; }
-.tb-active .tb-ai { fill: #FFFFFF; }  /* the gradient of the AI mark would fade on the blue */
+.tb-active .tb-ai, .ui-btn-primary .tb-ai { fill: #FFFFFF; }  /* the gradient of the AI mark would fade on the blue */
 .tb-group.hidden { display: none; }
 .tb-group {
   display: inline-flex; align-items: center; gap: 2px; height: 42px; padding: 0 4px; border-radius: 21px; min-width: 0;
@@ -2436,6 +2436,14 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lib-live-row { display: flex; align-items: center; gap: 9px; margin: 2px 0 6px; padding: 7px 10px; border-radius: 10px; cursor: pointer;
   background: rgba(255, 69, 58, 0.10); border: 1px solid rgba(255, 69, 58, 0.30); transition: background-color .15s; }
 .lib-live-row:hover { background: rgba(255, 69, 58, 0.18); }
+/* Not what is open (another recording is): it steps back, the dot still says it is recording */
+.lib-live-row:not(.is-current) { background: transparent; border-color: rgba(255, 69, 58, 0.22); }
+.lib-live-row:not(.is-current):hover { background: rgba(255, 69, 58, 0.10); }
+.lib-live-row:not(.is-current) .lib-live-title { color: var(--apple-label, #E5E5EA); font-weight: 500; }
+/* Open in the studio: lit like a chosen row */
+.lib-live-row.is-current { background: rgba(255, 69, 58, 0.24); border-color: rgba(255, 69, 58, 0.65); box-shadow: 0 0 0 1px rgba(255, 69, 58, 0.25); }
+/* The recording opened last, while the main area shows something else (library.js libSelectionShown) */
+.lib-row-soft { background: rgba(255, 255, 255, 0.06); box-shadow: inset 2px 0 0 rgba(10, 132, 255, 0.55); }
 .lib-live-dot { width: 9px; height: 9px; border-radius: 9999px; background: #FF453A; flex-shrink: 0; animation: lib-live-pulse 1.4s ease-in-out infinite; }
 @keyframes lib-live-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .lib-live-dot { animation: none; } }
@@ -2502,3 +2510,9 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .st-people-hint { font-size: 11px; line-height: 1.35; color: #8E8E93; }
 .st-people-teams { font-size: 11px; line-height: 1.35; color: #8CC4FF; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .st-people-teams .st-link { padding-top: 0; font-size: 11px; }
+
+/* «К новым репликам»: stays at the bottom of the captions while they are scrolled up (studio.js) */
+.cap-jump { position: sticky; bottom: 12px; display: block; margin: 8px auto 0; padding: 6px 14px; border-radius: 999px;
+  background: #0071E3; color: #FFFFFF; font-size: 12.5px; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,.35); z-index: 5; }
+.cap-jump.hidden { display: none; }
+.cap-jump:hover { filter: brightness(1.08); }

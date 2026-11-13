@@ -105,6 +105,8 @@ class AutoRecordNoticeTest(unittest.TestCase):
         self.assertIn("Ctrl+Alt+R", a["text"])
         self.assertEqual(b["title"], "Запись сохранена")
         self.assertIn("Планёрка", b["text"])
+        # a click on the notification opens the studio while recording, the recording once saved
+        self.assertEqual((a["target"], b["target"]), ("studio", "last"))
         self.assertEqual(app_status.take_notices(), [])  # shown once
         self.assertLessEqual(len(a["title"]), 63)
         self.assertLessEqual(len(a["text"]), 255)

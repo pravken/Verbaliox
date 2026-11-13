@@ -491,7 +491,7 @@ class TrayController:
         self._status = {"state": "idle", "text": "", "recording": False, "queue": []}
         self._running: dict = {}
         self._mf_default, self._mf_grayed = MF_DEFAULT, MF_GRAYED
-        self.tray = Tray(ICO_PATH, self.menu_items, self.on_command, self.show_window)
+        self.tray = Tray(ICO_PATH, self.menu_items, self.on_command, self.show_window, on_notice=self.open_target)
         window.events.closing += self.on_closing
 
     def start(self) -> None:
@@ -507,9 +507,18 @@ class TrayController:
 
         return (get_all_settings().get("quiet_mode") or "false").lower() == "true"
 
-    def _notify(self, title: str, text: str, warning: bool = False) -> None:
+    def _notify(self, title: str, text: str, warning: bool = False, target: str = "") -> None:
         if not self._quiet():
-            self.tray.notify(title, text, warning=warning)
+            self.tray.notify(title, text, warning=warning, target=target)
+
+    def open_target(self, target: str) -> None:
+        """A click on a notification: the window comes up at the place it was about (static/js/home.js
+        openFromNotice); without a place, as it was."""
+        self.show_window()
+        if target:
+            import json
+
+            self.window.evaluate_js(f"window.openFromNotice && window.openFromNotice({json.dumps(target)})")
 
     def _toggle_quiet(self) -> None:
         from app.database import update_settings
@@ -554,13 +563,13 @@ class TrayController:
         if now != was:
             self._hotkey_wait = None
             if now:
-                self._notify("Запись начата", f"Чтобы остановить, нажмите {key}" if key else "")
+                self._notify("Запись начата", f"Чтобы остановить, нажмите {key}" if key else "", target="studio")
             else:
-                self._notify("Запись остановлена", "Запись сохранена и отправлена на расшифровку")
+                self._notify("Запись остановлена", "Запись сохранена и отправлена на расшифровку", target="last")
         elif time.time() - since > 10:
             self._hotkey_wait = None
             self._notify("Запись не остановилась" if was else "Запись не началась",
-                         "Откройте окно Verbaliox, чтобы увидеть причину", warning=True)
+                         "Откройте окно Verbaliox, чтобы увидеть причину", warning=True, target="studio")
 
     def _warn_hotkey_failures(self) -> None:
         """A hotkey that could not be registered is said once, not only on the settings page."""
@@ -576,7 +585,7 @@ class TrayController:
                     warned.add(key)
                     self._notify(f"Горячая клавиша {name} не работает",
                                  f"{state.get('spec')}: {state.get('error')}. Её можно сменить в Настройках → Запись",
-                                 warning=True)
+                                 warning=True, target="settings:hotkeys")
 
     # ---- status
     def _poll(self) -> None:
@@ -603,7 +612,7 @@ class TrayController:
                 from app.app_status import take_notices
 
                 for n in take_notices():  # a recording started or stopped by itself: never silent
-                    self.tray.notify(n["title"], n["text"])
+                    self.tray.notify(n["title"], n["text"], target=n.get("target", ""))
                 self._check_hotkey_result(st)
                 self.tray.set_status(st["state"], st["text"])
                 running = {(q["id"], q["kind"]): q for q in st["queue"] if q.get("state") == "running"}
@@ -623,12 +632,13 @@ class TrayController:
         label = KIND_LABELS.get(q.get("kind"), "Задача")
         title = m.get("title") or ""
         status = m.get("status")
+        where = f"meeting:{m.get('id')}:{q.get('kind') or ''}"  # a click opens the recording
         if status == "failed":
-            self._notify(f"{label}: ошибка", title, warning=True)
+            self._notify(f"{label}: ошибка", title, warning=True, target=where)
         elif status == "cancelled":
             return
         else:
-            self._notify(f"{label} завершено", title)
+            self._notify(f"{label} завершено", title, target=where)
 
     def _window_in_front(self) -> bool:
         user32 = ctypes.windll.user32

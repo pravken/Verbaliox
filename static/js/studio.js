@@ -819,6 +819,7 @@ async function stTeamsPoll() {
   const speaking = (st.names || []).length;
   if (!stPeople.manual && speaking > stPeople.count && speaking >= 2) stPeople.count = Math.min(speaking, 10);
   renderStudioPeople();
+  if (capView.rows.size) syncStudioCaptions();  // the names of lines said before these captions came
 }
 
 function stTeamsStop() {
@@ -1390,9 +1391,24 @@ class CapTyper {
 }
 
 function capFollowBottom() {
-  if (!capView.stick) return;
   const box = document.getElementById('studio-captions');
-  box.scrollTop = box.scrollHeight;
+  if (capView.stick) box.scrollTop = box.scrollHeight;
+  else document.getElementById('studio-cap-jump')?.classList.remove('hidden');  // new lines below
+}
+
+// Scrolled up to read: the new lines no longer pull the text down (it jumped to the end at every
+// line); back at the bottom, or «К новым», it follows again
+document.getElementById('studio-captions')?.addEventListener('scroll', e => {
+  const box = e.currentTarget;
+  capView.stick = box.scrollHeight - box.scrollTop - box.clientHeight < 48;
+  if (capView.stick) document.getElementById('studio-cap-jump')?.classList.add('hidden');
+}, { passive: true });
+
+function capJumpToNew() {
+  capView.stick = true;
+  const box = document.getElementById('studio-captions');
+  box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+  document.getElementById('studio-cap-jump').classList.add('hidden');
 }
 
 function capReset() {
@@ -1400,6 +1416,7 @@ function capReset() {
   capView.draftKey = null;
   document.getElementById('studio-cap-rows').innerHTML = '';
   capView.stick = true;
+  document.getElementById('studio-cap-jump')?.classList.add('hidden');
 }
 
 function capResetTranslations() {
@@ -1409,29 +1426,36 @@ function capResetTranslations() {
   }
 }
 
-// Who said a caption line: the Teams caption whose words and time fit it best (app/teams_captions.py),
-// else the last «Сейчас говорит» clicked before it ended. Settled once the line is 30 s old.
+// Who said a caption line: the Teams caption whose time and words fit it best (app/teams_captions.py),
+// else the last «Сейчас говорит» clicked before it ended. A Teams line lasts from when it appeared
+// until the next one (a monologue is one line Teams keeps rewriting for half a minute): the caption
+// line takes the Teams line it overlaps most, the words they share count too. Matched by the start of
+// the Teams line alone, the later lines of a monologue were too far from it and got no name.
+// Settled 30 s after it ended when found, after 90 s when not (Teams captions come with a lag).
 function capWords(s) { return new Set(String(s || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []); }
 
 function capSpeaker(ln) {
   if (ln.who !== undefined || !ln.wall || !_recStartTime) return ln.who || '';
-  const end = ln.wallEnd || ln.wall;
+  const start = ln.wall, end = Math.max(ln.wallEnd || ln.wall, start + 500);
+  const marks = [...((stPeople.teams && stPeople.teams.recent) || [])].sort((x, y) => x.at - y.at);
   let best = '', bestScore = 0;
   const words = capWords(ln.text);
-  for (const m of ((stPeople.teams && stPeople.teams.recent) || [])) {
-    const t0 = _recStartTime + m.at * 1000;  // when the caption began (its lag taken off)
-    if (t0 < ln.wall - 10e3 || t0 > end + 4e3) continue;
+  marks.forEach((m, i) => {
+    const t0 = _recStartTime + m.at * 1000;  // when the Teams line began (its lag taken off)
+    const t1 = i + 1 < marks.length ? _recStartTime + marks[i + 1].at * 1000 : Date.now();
+    const overlap = Math.min(end, t1) - Math.max(start, t0);  // ms, below 0: apart by that much
     let common = 0;
     for (const w of capWords(m.text)) if (words.has(w)) common++;
-    const score = common * 3 + 2 - Math.abs(t0 - ln.wall) / 5e3;
+    if (overlap < -4e3 && common < 2) return;
+    const score = common * 3 + Math.max(0, overlap) / 1000 + (overlap > -4e3 ? 1 : 0);
     if (score > bestScore) { best = m.name; bestScore = score; }
-  }
+  });
   if (!best) {
     const before = stPeople.marks.filter(m => _recStartTime + m.at * 1000 <= end + 1e3);
     const last = before[before.length - 1];
     if (last && end - (_recStartTime + last.at * 1000) < 60e3) best = last.name;
   }
-  if (Date.now() - end > 30e3) ln.who = best;  // the Teams captions of it have come by now
+  if (Date.now() - end > (best ? 30e3 : 90e3)) ln.who = best;
   return best;
 }
 

@@ -139,6 +139,12 @@ function renderTxModelBar() {
   mergeBtn.classList.toggle('hidden', usable.length < 2 || !!m.media_removed && [...done].filter(x => x !== 'merged').length < 2);
   mergeBtn.disabled = busy;
   mergeBtn.classList.toggle('opacity-40', busy);
+  // «Разделить по голосам»: the text shown split by voices again (people.js openResplitDialog); not for
+  // the Teams captions (their speakers are the captions') nor without the sound
+  const resplitBtn = document.getElementById('tx-resplit-btn');
+  resplitBtn.classList.toggle('hidden', !shown || pick !== shown || shown === 'teams' || !!m.media_removed || !(m.segments || []).length);
+  resplitBtn.disabled = busy;
+  resplitBtn.classList.toggle('opacity-40', busy);
   // Clearing: the transcript of the model picked, when it made one (the one shown)
   const delBtn = document.getElementById('tx-delete-version-btn');
   delBtn.classList.toggle('hidden', !pick || pick !== shown);
