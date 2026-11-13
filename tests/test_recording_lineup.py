@@ -192,7 +192,7 @@ class FinishInBackgroundTest(unittest.TestCase):
         from unittest import mock
 
         if not shutil.which("ffmpeg"):
-            self.skipTest("ffmpeg is not installed")
+            self.skipTest("no ffmpeg on PATH")
         try:
             from fastapi.testclient import TestClient
 
