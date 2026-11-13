@@ -104,6 +104,53 @@ class EchoCancelTest(unittest.TestCase):
         part = slice(5 * sr, 25 * sr)
         self.assertGreater(np.corrcoef(in_room[part], echo[part])[0, 1], 0.95)
 
+    @staticmethod
+    def _speech(n, sr, seed):
+        """Syllables and pauses, like speech: the loudness has a shape to follow."""
+        import numpy as np
+
+        r = np.random.default_rng(seed)
+        x = np.convolve(r.standard_normal(n), np.ones(6) / 6, mode="same").astype(np.float32)
+        env = np.zeros(n, np.float32)
+        t = 0.0
+        while t < n / sr:
+            d = r.uniform(0.08, 0.35)
+            if r.random() < 0.7:
+                env[int(t * sr):int((t + d) * sr)] = r.uniform(0.4, 1.0)
+            t += d + r.uniform(0.02, 0.6 if r.random() < 0.9 else 2.0)
+        return (x * env * 0.2).astype(np.float32)
+
+    def test_tracks_far_apart_are_found_and_lined_up(self):
+        """The microphone heard the speakers 24 s after the system track had them (a voice came twice,
+        «from the future»): the fine measure alone looked within 2 s, found no echo and lined up nothing."""
+        import numpy as np
+
+        from app import echo_cancel as ec
+
+        sr = ec.SR
+        n = 150 * sr
+        far = self._speech(n + 30 * sr, sr, 1)
+        d = int(24.0 * sr)
+        rng = np.random.default_rng(5)
+        h = (rng.standard_normal(600) * np.exp(-np.arange(600) / 150)).astype(np.float32)
+        h *= 0.35 / np.sqrt(np.sum(h ** 2))
+        echo = np.convolve(far, h)[: n + 30 * sr]
+        mic = np.zeros(n, np.float32)
+        mic[d:] = echo[: n - d]
+        mic += self._speech(n, sr, 2) * 0.5  # the user too
+        found = ec.find_echo(mic, far[:n])
+        self.assertIsNotNone(found)
+        self.assertLess(abs(float(np.median(found[1])) - d) / sr, 0.05)
+        # the system sound is put where the microphone heard it (here without a room on the way)
+        plain = np.zeros(n, np.float32)
+        plain[d:] = 0.3 * far[: n - d]
+        plain += self._speech(n, sr, 2) * 0.5
+        done = ec.cancel_and_align(plain, far[:n])
+        self.assertIsNotNone(done)
+        _, in_room = done
+        part = slice(60 * sr, 120 * sr)
+        self.assertGreater(np.corrcoef(in_room[part], far[60 * sr - d:120 * sr - d])[0, 1], 0.95)
+
     def test_nothing_is_done_without_an_echo(self):
         from app import echo_cancel as ec
 
