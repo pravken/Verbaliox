@@ -239,7 +239,7 @@ async def lifespan(_app: FastAPI):
                 from app.database import delete_meeting
 
                 delete_meeting(int(m["id"]))
-        elif m.get("status") in ("translating", "rendering", "merging"):
+        elif m.get("status") in ("translating", "rendering", "merging", "splitting"):
             # Partial translations are kept and can be completed with "Update translation"
             update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Задача прервана перезапуском")
     yield

@@ -221,6 +221,29 @@ def api_split_speaker(meeting_id: int, payload: SpeakerSplitPayload) -> Dict[str
 
     return _speaker_edit(meeting_id, lambda: split_speaker(meeting_id, payload.speaker_id, payload.positions, payload.new_name))
 
+class SpeakerResplitPayload(BaseModel):
+    num_speakers: int = 0  # 0: the voices decide; else the most there are
+
+
+@router.post("/api/meetings/{meeting_id}/speakers/resplit")
+def api_resplit_speakers(meeting_id: int, payload: SpeakerResplitPayload) -> Dict[str, Any]:
+    """The participants split by voices again, in the background: the text is not recognized again."""
+    from app.transcriber import enqueue_resplit_job
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    _ensure_not_processing(meeting_id)
+    if not m.get("segments"):
+        raise HTTPException(status_code=400, detail="Нет расшифровки, которую можно разделить по голосам")
+    if m.get("transcript_model") == "teams":
+        raise HTTPException(status_code=400, detail="В версии из субтитров Teams участники взяты из субтитров: выберите расшифровку модели")
+    n = payload.num_speakers if 0 <= payload.num_speakers <= 20 else 0
+    update_meeting_fields(meeting_id, num_speakers_hint=n)
+    if not enqueue_resplit_job(meeting_id, n):
+        raise HTTPException(status_code=409, detail="Запись уже обрабатывается. Дождитесь окончания или отмените обработку.")
+    return get_meeting(meeting_id)
+
 @router.patch("/api/meetings/{meeting_id}/speakers/meta")
 def api_speaker_meta(meeting_id: int, payload: SpeakerMetaPayload) -> Dict[str, Any]:
     from app.people import set_speaker_meta

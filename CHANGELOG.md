@@ -6,6 +6,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.2 — English
+
+- **«Separate again» on the participants tab.** The lines are separated by voice again without
+  transcribing the text: say how many people spoke at most, or let the voices decide. Lines you
+  corrected stay whole with your text; names come back from known voices, studio marks, Teams
+  captions and the names you gave. Use it on recordings made before 0.8.1 where everyone became
+  one speaker.
+
 ## 0.8.1 — English
 
 - **Participants are told apart again.** In a call a few phrases are no one's voice (a laugh, a noise,
@@ -289,6 +297,14 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.2
+
+- **«Разделить заново» на вкладке «Участники».** Реплики заново делятся по голосам без повторного
+  распознавания текста: укажите, сколько людей говорило самое большее, или доверьте это голосам.
+  Исправленные вами реплики остаются целыми с вашим текстом; имена возвращаются из запомненных голосов,
+  пометок в студии, субтитров Teams и тех, что вы уже дали. Подходит для записей до 0.8.1, где все
+  оказались одним участником.
 
 ## 0.8.1
 

@@ -147,7 +147,7 @@ function renderTxModelBar() {
   const disputes = (m.segments || []).reduce((n, s) => n + (s.words || []).filter(w => w.alts && w.alts.length).length, 0);
   const status = document.getElementById('tx-model-status');
   let text, cls;
-  if (busy) [text, cls] = [m.status === 'merging' ? t('txMergingBusy') : t('txModelBusy').replace('{model}', () => formatModelName(m.asr_now || m.model_name)), 'text-apple-secondary'];
+  if (busy) [text, cls] = [m.status === 'merging' ? t('txMergingBusy') : m.status === 'splitting' ? t('txSplittingBusy') : t('txModelBusy').replace('{model}', () => formatModelName(m.asr_now || m.model_name)), 'text-apple-secondary'];
   else if (pick === 'merged' && shown === 'merged') [text, cls] = [`✓ ${t('txMergedDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}${
     disputes ? ' · ' + t('txDisputes').replace('{n}', () => disputes) : ''}`, 'text-apple-green'];
   else if (pick && pick === shown) [text, cls] = [`✓ ${t('txModelDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}`, 'text-apple-green'];
@@ -172,7 +172,7 @@ function txModelFits(i, m) {
 function renderTxModelChips(m, list, done, shown, pick, busy) {
   const box = document.getElementById('tx-model-chips');
   if (!box) return;
-  const working = busy ? (m.status === 'merging' ? 'merged' : m.asr_now || m.model_name) : '';
+  const working = busy ? (m.status === 'merging' ? 'merged' : m.status === 'splitting' ? '' : m.asr_now || m.model_name) : '';
   // The merged text shown: the chips of the models it was made from light up (a merge of an older
   // version did not keep them: the variants of its disputed words name them)
   let inMerge = new Set();
