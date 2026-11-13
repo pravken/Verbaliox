@@ -603,8 +603,9 @@ class OllamaForceUnloadTest(unittest.TestCase):
                 pass
             return [{"name": n} for n in last[0]]
 
-        with mock.patch.object(vram, "OLLAMA_UNLOAD_WAIT_SEC", 1.0), \
-                mock.patch.object(vram, "ollama_loaded", side_effect=loaded), \
+        with mock.patch.object(vram, "OLLAMA_UNLOAD_WAIT_SEC", 1.0), mock.patch.object(vram, "OLLAMA_AFTER_STOP_SEC", 1.0), \
+                mock.patch.object(vram, "_ollama_ps", side_effect=lambda timeout=0.8: loaded()), \
+                mock.patch.object(vram, "_retry_unload_later"), \
                 mock.patch.object(vram, "_stop_ollama_runners") as stop, \
                 mock.patch.object(vram, "_ollama_base", return_value="http://127.0.0.1:11434"), \
                 mock.patch("app.ollama_client._ollama_address", return_value=("127.0.0.1" if local else "10.0.0.5", 11434)), \

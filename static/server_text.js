@@ -289,7 +289,7 @@ const SERVER_TEXT_EN = {
 // Messages with values in them: {} in the Russian text, {0} {1} … in the English one
 const SERVER_PATTERNS_EN = [
   ["Формирование обзора записи ({}): часть {} из {}...", "Writing the overview ({0}): part {1} of {2}..."],
-  ["Ollama не выгрузила модель {}", "Ollama did not unload the model {0}"],
+  ["Видеокарта занята: Ollama выгрузит модель {}, как только освободится — программа повторяет попытку", "The video card is busy: Ollama will unload the model {0} as soon as it is free — the app keeps trying"],
   ["Для дубляжа записи длиной {} ч нужно около {} ГБ памяти, а в компьютере {} ГБ. Сделайте дубляж частей записи (Нарезка) или более короткой записи.", "Dubbing a {0} h recording needs about {1} GB of memory, and this computer has {2} GB. Dub parts of the recording (Cut) or a shorter recording."],
   ["В Ollama пока не скачана ни одна модель. Откройте «Настройки» и нажмите «Скачать» напротив {}.", "No model is downloaded in Ollama yet. Open Settings and press Download next to {0}."],
   ["{} понимает только один язык. Для записей на нескольких языках выберите Parakeet или Whisper.", "{0} understands one language only. For recordings in several languages choose Parakeet or Whisper."],
