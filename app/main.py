@@ -227,11 +227,18 @@ async def lifespan(_app: FastAPI):
             update_meeting_progress(int(m["id"]), status="failed", progress=0, stage_text="",
                                     error_message="Скачивание по ссылке прервано перезапуском — нажмите «Повторить»")
         elif m.get("status") == "mixing":
-            # A recording being mixed when the app closed: its parts are still there and are recovered
-            # just below, each as a recording; this placeholder without a file goes
-            from app.database import delete_meeting
+            from pathlib import Path as _P
 
-            delete_meeting(int(m["id"]))
+            if m.get("media_path") and _P(m["media_path"]).is_file():
+                # the mix had ended and its file was registered: it only was not queued yet
+                update_meeting_progress(int(m["id"]), status="queued", progress=0, stage_text="В очереди на распознавание")
+                enqueue_meeting_job(int(m["id"]))
+            else:
+                # A recording being mixed when the app closed: its parts were recovered above, each as a
+                # recording; this placeholder without a file goes
+                from app.database import delete_meeting
+
+                delete_meeting(int(m["id"]))
         elif m.get("status") in ("translating", "rendering", "merging"):
             # Partial translations are kept and can be completed with "Update translation"
             update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Задача прервана перезапуском")
