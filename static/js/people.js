@@ -28,6 +28,79 @@ function spInitial(name) {
   return digits && /^(Участник|Speaker)/i.test(s) ? digits[0] : (s[0] || '?').toUpperCase();
 }
 
+// --- A person's own photo (app/people.py): instead of the initials on the cards, in «Все люди» and on
+// the studio's captions. Known by name (variants too), loaded once and after a change ---
+const personPhotos = { map: {}, at: 0, loading: null };
+
+async function loadPersonPhotos(force = false) {
+  if (!force && personPhotos.at && Date.now() - personPhotos.at < 60e3) return personPhotos.map;
+  if (!personPhotos.loading) {
+    personPhotos.loading = fetch('/api/people/photos').then(r => (r.ok ? r.json() : {})).catch(() => ({}))
+      .then(map => { personPhotos.map = map || {}; personPhotos.at = Date.now(); personPhotos.loading = null; return personPhotos.map; });
+  }
+  return personPhotos.loading;
+}
+
+function personPhotoUrl(name) {
+  const n = String(name || '').trim();
+  const v = n && personPhotos.map[n.toLowerCase()];
+  return v ? `/api/people/photo?name=${encodeURIComponent(n)}&v=${v}` : '';
+}
+
+// The initials, or the photo when the person has one
+function spFaceHtml(name, initials) {
+  const url = personPhotoUrl(name);
+  return url ? `<img class="sp-photo" src="${escapeHtml(url)}" alt="">` : escapeHtml(initials);
+}
+
+// A picture chosen on the computer: cut to a square from its middle, 256 px, sent as JPEG
+function pickPersonPhoto(name) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let data;
+    try {
+      const img = await createImageBitmap(file);
+      const side = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
+      data = canvas.toDataURL('image/jpeg', 0.88);
+    } catch (e) {
+      showError(t('spPhotoBad'));
+      return;
+    }
+    const res = await fetch('/api/people/photo', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, data }),
+    });
+    const out = await readJson(res);
+    if (!res.ok) { showError(serverText(out.detail)); return; }
+    personPhotosChanged(out);
+    showToast(t('spPhotoSaved').replace('{name}', () => name), null, 'success');
+  });
+  input.click();
+}
+
+async function removePersonPhoto(name) {
+  const res = await fetch(`/api/people/photo?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+  const out = await readJson(res);
+  if (!res.ok) { showError(serverText(out.detail)); return; }
+  personPhotosChanged(out);
+}
+
+function personPhotosChanged(map) {
+  personPhotos.map = map || {};
+  personPhotos.at = Date.now();
+  if (state.activeMeeting) renderSpeakersPanel();
+  if (document.getElementById('sp-dir-dlg')) drawDirectory();
+  if (typeof capView !== 'undefined' && capView.rows.size) syncStudioCaptions();
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadPersonPhotos(); });
+
 function spTint(color) {
   const c = /^#[0-9a-f]{6}$/i.test(color || '') ? color : '#0A84FF';
   return `${c}2E`;
@@ -116,7 +189,7 @@ function renderSpeakersPanel(opts = {}) {
     }
     return `<div class="sp-card" data-spk="${escapeHtml(id)}">
       <div class="sp-top">
-        <label class="sp-av" style="background:${spTint(color)};color:${color}" title="${escapeHtml(t('tipSpeakerColor'))}">${escapeHtml(spInitial(s.name))}
+        <label class="sp-av" style="background:${spTint(color)};color:${color}" title="${escapeHtml(t('tipSpeakerColor'))}">${spFaceHtml(s.name, spInitial(s.name))}
           <input type="color" value="${escapeHtml(color)}" ${pageCall('change', 'updateSpeaker', [id, null, { $: 'value' }])} class="sp-color"></label>
         <div class="sp-main">
           <div class="sp-line">
@@ -150,7 +223,7 @@ function renderMentions(ctx) {
   box.innerHTML = `<div class="sp-head sp-head-sm"><h3 class="sp-h3">${escapeHtml(t('spMentioned'))}</h3>
       <span class="sp-note">${escapeHtml(t('spMentionedNote'))}</span></div>
     <div class="sp-mgrid">${items.map(x => `<button class="sp-mrow" ${pageCall('click', 'findInTranscript', [x.name])} title="${escapeHtml(t('spFindInText'))}">
-        <span class="sp-mav${x.kind === 'dept' ? ' sp-mav-dept' : ''}">${escapeHtml(x.kind === 'dept' ? '▦' : spInitial(x.name))}</span>
+        <span class="sp-mav${x.kind === 'dept' ? ' sp-mav-dept' : ''}">${x.kind === 'dept' ? '▦' : spFaceHtml(x.name, spInitial(x.name))}</span>
         <span class="sp-mtext"><b>${escapeHtml(x.name)}</b><span>${escapeHtml(t(x.kind === 'dept' ? 'spDept' : 'spPerson'))} · ${escapeHtml(t('spTimes').replace('{n}', () => String(x.count)))}</span></span>
         <span class="sp-mtime">${formatTime(x.first_at)}</span>
       </button>`).join('')}</div>`;
@@ -232,6 +305,11 @@ function openSpeakerCardMenu(id, el) {
   if (others.length) {
     items.push({ label: t('spSameAs'), disabled: true });
     others.forEach(k => items.push({ label: `   ${speakers[k].name || k}`, run: () => spMerge(id, k) }));
+    items.push({ sep: true });
+  }
+  if (!spIsDefault(s.name)) {  // a photo belongs to a person, not to «Участник 2»
+    items.push({ label: t(personPhotoUrl(s.name) ? 'spPhotoChange' : 'spPhoto'), run: () => pickPersonPhoto(s.name) });
+    if (personPhotoUrl(s.name)) items.push({ label: t('spPhotoRemove'), run: () => removePersonPhoto(s.name) });
     items.push({ sep: true });
   }
   items.push({ label: t('spSplit'), run: () => openSplitDialog(id) },
@@ -486,6 +564,15 @@ async function openPeopleDirectory() {
     if (b.dataset.a === 'add-no') { dir.adding = false; drawDirectory(); return; }
     if (b.dataset.a === 'add-ok') { await dirAdd(wrap.querySelector('[data-f="new"]').value); return; }
     if (b.dataset.me !== undefined) { await dirUpdate({ name: b.dataset.me, is_me: b.dataset.on !== '1' }); return; }
+    if (b.dataset.photo !== undefined) {
+      e.preventDefault();  // the row is a label: its checkbox stays as it is
+      const name = b.dataset.photo;
+      if (!personPhotoUrl(name)) { pickPersonPhoto(name); return; }
+      const r = b.getBoundingClientRect();
+      openTextMenuAt([{ label: t('spPhotoChange'), run: () => pickPersonPhoto(name) },
+        { label: t('spPhotoRemove'), run: () => removePersonPhoto(name) }], r.right, r.bottom + 4, { right: true });
+      return;
+    }
     if (b.dataset.edit !== undefined) {
       const p = dir.items.find(x => x.name === b.dataset.edit);
       const name = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
@@ -518,13 +605,14 @@ function drawDirectory() {
     const sub = [p.role, (p.aliases || []).length ? `${t('spAlso')}: ${p.aliases.join(', ')}` : ''].filter(Boolean).join(' · ');
     return `<label class="sp-drow${on ? ' sp-drow-on' : ''}">
         <input type="checkbox" data-pick="${escapeHtml(p.name)}" ${on ? 'checked' : ''} aria-label="${escapeHtml(t('spPick'))}">
-        <span class="sp-mav${p.kind === 'dept' ? ' sp-mav-dept' : ''}">${escapeHtml(p.kind === 'dept' ? '▦' : spInitial(p.name))}</span>
+        <span class="sp-mav${p.kind === 'dept' ? ' sp-mav-dept' : ''}">${p.kind === 'dept' ? '▦' : spFaceHtml(p.name, spInitial(p.name))}</span>
         <span class="sp-dname"><b>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</b><span>${escapeHtml(sub)}</span></span>
         <span class="sp-dcell">${escapeHtml(where(p))}</span>
         <span class="sp-dcell${p.voice ? ' sp-voice' : ''}">${escapeHtml(p.voice ? `● ${t('spSample')}` : '—')}</span>
         <span class="sp-dcell sp-dtasks">${p.tasks || '—'}</span>
         <span class="sp-dact">
           ${p.kind === 'person' ? `<button class="sp-dbtn" data-me="${escapeHtml(p.name)}" data-on="${p.is_me ? '1' : ''}" title="${escapeHtml(t('spMeTip'))}">${escapeHtml(t(p.is_me ? 'spNotMe' : 'spMe'))}</button>` : ''}
+          ${p.kind === 'person' ? `<button class="sp-dbtn" data-photo="${escapeHtml(p.name)}" title="${escapeHtml(t(personPhotoUrl(p.name) ? 'spPhotoChange' : 'spPhoto'))}">📷</button>` : ''}
           <button class="sp-dbtn" data-edit="${escapeHtml(p.name)}" title="${escapeHtml(t('spDirEditTip'))}">✎</button>
         </span>
       </label>`;
