@@ -570,6 +570,87 @@ async function handleCallEvent(ev) {
   }
 }
 
+// --- Following the Teams meeting while recording (app/meeting_watch.py): going into another meeting
+// starts a new recording (the one before is saved and transcribed), the meeting's window closed for
+// MEETING_GONE_MS stops it. Teams keeps the microphone from one meeting to the next: the call watcher
+// saw one long call and the first recording went on through the second meeting ---
+const MEETING_SWITCH_MS = 8000;   // the new meeting's window has stayed this long: not a glance at it
+const MEETING_GONE_MS = 30000;    // no meeting window this long: the meeting is over
+const meetingFollow = { base: '', cand: '', candSince: 0, goneSince: 0, busy: false };
+
+function meetingFollowOn() {
+  return String(((state.system && state.system.settings) || {}).meeting_follow || 'true') !== 'false';
+}
+
+async function meetingFollowTick() {
+  const mf = meetingFollow;
+  if (!isRecording()) {
+    if (!mf.busy) Object.assign(mf, { base: '', cand: '', goneSince: 0 });
+    return;
+  }
+  if (mf.busy || !meetingFollowOn()) return;
+  const st = await fetch('/api/teams/meeting').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!st || !isRecording() || mf.busy) return;
+  const title = String(st.title || '');
+  const now = Date.now();
+  if (!mf.base) {  // the meeting this recording is of, once its window is seen
+    if (!title) return;
+    mf.base = title;
+    const input = document.getElementById('record-title-input');
+    if (input && !input.value.trim()) input.value = title;  // named after the meeting
+    return;
+  }
+  if (!title) {
+    mf.cand = '';
+    if (!mf.goneSince) mf.goneSince = now;
+    else if (now - mf.goneSince >= MEETING_GONE_MS) {
+      mf.busy = true;
+      try {
+        showToast(t('meetingEndedStop').replace('{name}', () => mf.base));
+        autoRecordNotice(false, 'meeting', mf.base);
+        state.callRecording = null;
+        await stopAndTranscribeRecording();
+      } finally {
+        Object.assign(mf, { base: '', cand: '', goneSince: 0, busy: false });
+      }
+    }
+    return;
+  }
+  mf.goneSince = 0;
+  if (title === mf.base) { mf.cand = ''; return; }
+  if (title !== mf.cand) { mf.cand = title; mf.candSince = now; return; }
+  if (now - mf.candSince < MEETING_SWITCH_MS) return;
+  await meetingSwitchTo(title);
+}
+
+async function meetingSwitchTo(title) {
+  const mf = meetingFollow;
+  mf.busy = true;
+  const preset = state.recPresetId || defaultRecordPresetId();
+  const byCall = state.callRecording;
+  try {
+    showToast(t('meetingSwitched').replace('{name}', () => title));
+    await stopAndTranscribeRecording();
+    for (let i = 0; i < 240 && isRecording(); i++) await new Promise(r => setTimeout(r, 250));
+    if (isRecording()) return;
+    await openRecordModal(preset);
+    const input = document.getElementById('record-title-input');
+    if (input) input.value = title;
+    await startLiveRecording();
+    for (let i = 0; i < 40 && !isRecording(); i++) await new Promise(r => setTimeout(r, 250));
+    if (isRecording()) {
+      state.callRecording = byCall;  // the call's end still stops it
+      autoRecordNotice(true, 'meeting', title);
+    }
+  } catch (e) {
+    showToast(`${t('callRecordFailed')}: ${mediaErrorText(e)}`);
+  } finally {
+    Object.assign(mf, { base: isRecording() ? title : '', cand: '', goneSince: 0, busy: false });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => { setInterval(meetingFollowTick, 3000); });
+
 // --- Questions during a call: answered from the live captions so far ---
 async function studioAsk() {
   const input = document.getElementById('studio-ask-input');
@@ -2197,6 +2278,8 @@ function studioFillAuto() {
   if (a) a.checked = s.auto_summary !== 'false';
   const c = document.getElementById('st-call-record');
   if (c) c.checked = s.call_auto_record === 'true';
+  const f = document.getElementById('st-meeting-follow');
+  if (f) f.checked = s.meeting_follow !== 'false';
 }
 
 async function studioSetAuto(key, on) {

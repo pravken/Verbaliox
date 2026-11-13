@@ -197,6 +197,14 @@ async def api_teams_check() -> Dict[str, Any]:
 
     return await run_in_threadpool(teams_captions.check)
 
+@router.get("/api/teams/meeting")
+def api_teams_meeting() -> Dict[str, Any]:
+    """The Teams meeting open now, by its window's title (app/meeting_watch.py): the page starts a new
+    recording when it changes and stops the recording when the meeting is over."""
+    from app import meeting_watch
+
+    return meeting_watch.current()
+
 @router.get("/api/teams/status")
 def api_teams_status() -> Dict[str, Any]:
     from app import teams_captions
