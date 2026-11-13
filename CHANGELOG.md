@@ -15,6 +15,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   «↓ To the new lines» brings you back.
 - **Teams names in the studio** now reach every line of a long monologue (a Teams line lasts as long
   as the person speaks), and appear as soon as the Teams captions come.
+- **Library:** only what is open is blue. With the studio open, the running recording is lit and the
+  recording opened last keeps a soft mark; opening a recording dims the running one.
 
 ## 0.8.2 — English
 
@@ -317,6 +319,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   строкой; кнопка «↓ К новым репликам» возвращает вниз.
 - **Имена из Teams в студии** теперь стоят и у строк длинного монолога (строка Teams длится, пока
   человек говорит) и появляются сразу, как приходят субтитры Teams.
+- **Медиатека:** синим выделено только то, что открыто. В студии подсвечена идущая запись, а последняя
+  открытая — лишь лёгкой меткой; при открытии другой записи идущая отходит на второй план.
 
 ## 0.8.2
 
