@@ -416,6 +416,6 @@ def api_vram_unload_all(force: bool = True, stop: bool = False) -> Dict[str, Any
     if stop:
         stop_work()
     elif idle_unload._busy():
-        raise HTTPException(status_code=409, detail="Сейчас идёт обработка записи или субтитры")
+        raise HTTPException(status_code=409, detail="Сейчас идёт обработка записи, анализ или субтитры")
     res = idle_unload.unload_now(force=force)
     return {**vram_snapshot(), **res}

@@ -763,6 +763,63 @@ def _work_done() -> None:
     timer.start()
 
 
+# The analysis model's answers being written, by thread: an overview or a question to the assistant
+# runs as a plain request, not a queued job, so «Выгрузить всё» did not see it: the model was unloaded
+# and the next part of the overview loaded it again. They are known here and can be stopped
+# (stop_analysis). A thread stays «in the analysis» a little after an answer: an overview is many
+# answers one after another, and a stop between two of them still ends it
+_analysis_lock = threading.Lock()
+_analysis: Dict[int, str] = {}         # thread -> model writing an answer for it now
+_analysis_ended: Dict[int, float] = {}  # thread -> when its last answer ended
+ANALYSIS_LINGER_SEC = 3.0
+
+
+def analysis_running() -> List[str]:
+    """The analysis models writing an answer now (for the memory panel: the model is busy)."""
+    with _analysis_lock:
+        return sorted(set(_analysis.values()))
+
+
+def stop_analysis() -> int:
+    """The answers being written end at once (Aborted in their requests), and so does the overview or
+    answer they belong to. Returns how many were stopped."""
+    from app import cancel_scope
+
+    now = time.time()
+    with _analysis_lock:
+        threads = set(_analysis) | {t for t, at in _analysis_ended.items() if now - at < ANALYSIS_LINGER_SEC}
+    for tid in threads:
+        cancel_scope.abort(tid)
+    return len(threads)
+
+
+def _analysis_enter(model: str) -> None:
+    from app import cancel_scope
+
+    tid = threading.get_ident()
+    with _analysis_lock:
+        recent = time.time() - _analysis_ended.get(tid, 0.0) < ANALYSIS_LINGER_SEC
+        _analysis[tid] = model
+    try:
+        from app import transcriber
+
+        job_thread = tid == transcriber._running_thread
+    except Exception:
+        job_thread = False
+    # A stop of an earlier request on this pooled thread is not this one's (a job resets its own)
+    if not recent and not job_thread:
+        cancel_scope.reset(tid)
+
+
+def _analysis_leave() -> None:
+    tid = threading.get_ident()
+    with _analysis_lock:
+        _analysis.pop(tid, None)
+        _analysis_ended[tid] = time.time()
+        for t in [t for t, at in _analysis_ended.items() if time.time() - at > 600]:
+            del _analysis_ended[t]
+
+
 def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     from app import idle_unload
 
@@ -816,9 +873,11 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
         ollama_unload([model])
 
     _work_started()
+    _analysis_enter(model)
     try:
         return cancel_scope.call(request, on_abort=stop_answer)
     finally:
+        _analysis_leave()
         _work_done()
 
 
