@@ -2502,3 +2502,9 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .st-people-hint { font-size: 11px; line-height: 1.35; color: #8E8E93; }
 .st-people-teams { font-size: 11px; line-height: 1.35; color: #8CC4FF; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .st-people-teams .st-link { padding-top: 0; font-size: 11px; }
+
+/* «К новым репликам»: stays at the bottom of the captions while they are scrolled up (studio.js) */
+.cap-jump { position: sticky; bottom: 12px; display: block; margin: 8px auto 0; padding: 6px 14px; border-radius: 999px;
+  background: #0071E3; color: #FFFFFF; font-size: 12.5px; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,.35); z-index: 5; }
+.cap-jump.hidden { display: none; }
+.cap-jump:hover { filter: brightness(1.08); }
