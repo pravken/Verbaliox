@@ -341,8 +341,20 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     found: List[Dict[str, Any]] = []
     # Part by part, so the end of a long meeting is read too (it was cut to what fits the model before);
     # the parts overlap by a few lines, so a promise on a border is seen whole
+    try:  # who was there, their names written right (app/people.meeting_roster)
+        from app.people import fix_name_typos, meeting_roster
+
+        roster = meeting_roster(m)
+    except Exception:
+        roster, fix_name_typos = [], None
+    head = ("Участники встречи (имена и фамилии написаны верно, пиши их так же): " + "; ".join(roster) + "\n\n") if roster else ""
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
-        found += parse_answer(llm.chat(_SYSTEM, "Расшифровка:\n" + part))
+        found += parse_answer(llm.chat(_SYSTEM, head + "Расшифровка:\n" + part))
+    if roster and fix_name_typos:  # a name still written with a letter wrong: as in the roster
+        for x in found:
+            for k in ("who", "to_whom", "what"):
+                if isinstance(x.get(k), str):
+                    x[k] = fix_name_typos(x[k], roster)
     items = prune([x for x in found if supported(x, m)])
     items = verify(items, m, llm)  # a second look, task by task, with the lines around it
     _init()

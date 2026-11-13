@@ -183,11 +183,13 @@ def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[
             continue
         try:
             from app.grounding import maybe_ground
+            from app.people import meeting_roster
 
             summaries[key] = maybe_ground(generate_meeting_summary(
                 segments=m["segments"], speakers=m.get("speakers") or {}, template_key=key,
                 answer_lang=m.get("language") or "ru",
                 local_only=is_local_only(m), user_notes=m.get("user_notes") or "",
+                participants=meeting_roster(m),
             ), key, m)
             changed = True
         except Exception as e:

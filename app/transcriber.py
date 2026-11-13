@@ -1841,6 +1841,12 @@ def _process_meeting_job(meeting_id: int) -> None:
                 try:
                     where = "облачная модель" if cloud else "Ollama"
                     part_notes: Dict[str, Any] = {}  # the parts of a long recording, read once for both
+                    try:  # who was there, their names written right (app/people.meeting_roster)
+                        from app.people import meeting_roster
+
+                        roster = meeting_roster({**(get_meeting(meeting_id) or {}), "speakers": speakers_meta})
+                    except Exception:
+                        roster = []
                     summary_md = generate_meeting_summary(
                         progress=lambda done, total: update_meeting_progress(
                             meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
@@ -1851,6 +1857,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                         answer_lang=detected_lang,
                         local_only=local_only,
                         part_notes=part_notes,
+                        participants=roster,
                     )
                     from app.grounding import ground_summary
 
@@ -1864,7 +1871,8 @@ def _process_meeting_job(meeting_id: int) -> None:
                             update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
                             chapters_md = generate_meeting_summary(
                                 segments=merged_segments, speakers=speakers_meta, template_key="chapters",
-                                answer_lang=detected_lang, local_only=local_only, part_notes=part_notes)
+                                answer_lang=detected_lang, local_only=local_only, part_notes=part_notes,
+                                participants=roster)
                             summaries["chapters"] = chapters_md
                             merge_summaries(meeting_id, {"chapters": chapters_md})
                         except Exception as ch_err:

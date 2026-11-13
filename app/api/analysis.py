@@ -641,6 +641,14 @@ class SummaryRequestPayload(BaseModel):
     model: Optional[str] = None
     lang: Optional[str] = None
 
+def _roster(m: Dict[str, Any]) -> List[str]:
+    try:
+        from app.people import meeting_roster
+
+        return meeting_roster(m)
+    except Exception:
+        return []
+
 @router.post("/api/meetings/{meeting_id}/summary")
 def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dict[str, Any]:
     from app.diarizer import unload_diarizer
@@ -682,6 +690,7 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             local_only=is_local_only(m),
             user_notes=m.get("user_notes") or "",
             template_prompt=template_prompt,
+            participants=_roster(m),
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
