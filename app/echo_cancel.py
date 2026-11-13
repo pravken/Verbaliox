@@ -6,9 +6,10 @@ the system audio (clean) and once from the microphone (later and duller), and th
 someone talks over them. The system audio is recorded apart (app/system_audio.py), so it is known what
 the speakers played: the echo is predicted from it and taken out of the microphone before the mix.
 
-1. Where the echo is: the delay of the system audio in the microphone, measured all through the
-   recording (GCC-PHAT on windows where the speakers play); its slow drift between the two sound cards
-   and its jumps (a piece of the system sound lost) are followed.
+1. Where the echo is: first roughly, by the loudness of the two tracks, up to 90 s apart (they were
+   found 24 s apart); then exactly, the delay of the system audio in the microphone measured all
+   through the recording (GCC-PHAT on windows where the speakers play) around the rough one; its slow
+   drift between the two sound cards and its jumps (a piece of the system sound lost) are followed.
    No clear echo (headphones): nothing is done.
 2. An adaptive filter learns how the room changes the sound on its way from the speakers to the
    microphone (partitioned-block frequency-domain NLMS) and subtracts its prediction. It learns only
@@ -33,6 +34,14 @@ MARGIN_SEC = 0.012    # the filter starts a little before the measured delay
 MAX_DELAY_SEC = 2.0   # an echo later than this is not looked for (the two tracks can start ~1 s apart)
 MIN_ECHO_SCORE = 0.02  # GCC-PHAT peak of a clear echo; without one it stays near 0.006
 MAX_WINDOWS = 1500    # windows the delay is measured on, spread over the recording (~1 s of work each 100)
+# Before the fine measure: where the speakers' sound is in the microphone, by the loudness of the two
+# (10 ms steps), up to this far apart. The tracks were found 24 s apart: the fine measure, looking
+# within MAX_DELAY_SEC only, found no echo, nothing was lined up and every voice came twice
+COARSE_MAX_SEC = 90.0
+COARSE_WIN_SEC = 60.0
+COARSE_STEP_SEC = 20.0
+COARSE_MIN_SCORE = 0.35  # correlation of the loudness of a window that found the speakers
+FINE_AROUND_SEC = 0.5    # the fine measure then looks this far around the coarse one
 MU = 0.35             # step of the filter
 GAIN_FLOOR = 0.16     # the residual suppression lowers a bin by 16 dB at most
 
@@ -48,6 +57,61 @@ def _gcc_phat(mic: np.ndarray, ref: np.ndarray, max_lag: int) -> Tuple[int, floa
     return i - max_lag, float(np.abs(cc[i]))
 
 
+def _envelope(x: np.ndarray, sr: int, rate: int = 100) -> np.ndarray:
+    """Loudness in steps of 1/rate s, compressed and without its slow level (speech's syllables stay)."""
+    h = sr // rate
+    n = len(x) // h
+    if n < 2:
+        return np.zeros(0, np.float32)
+    e = np.log1p(1000.0 * np.sqrt(np.mean(x[: n * h].reshape(n, h).astype(np.float64) ** 2, axis=1)))
+    k = 2 * rate  # 2 s
+    slow = np.convolve(e, np.ones(k) / k, mode="same")
+    return (e - slow).astype(np.float32)
+
+
+def coarse_lags(mic: np.ndarray, ref: np.ndarray, sr: int = SR, rate: int = 100) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """Where the speakers' sound is in the microphone along the recording, roughly: (times, lags) in
+    samples, the microphone `lag` later than the system track. Found by the loudness of 60 s windows
+    of the microphone against the system track up to COARSE_MAX_SEC either way. None when the
+    microphone does not follow the speakers anywhere."""
+    em, er = _envelope(mic, sr, rate), _envelope(ref, sr, rate)
+    win, step, max_lag = int(COARSE_WIN_SEC * rate), int(COARSE_STEP_SEC * rate), int(COARSE_MAX_SEC * rate)
+    if len(em) < 10 * rate or len(er) < 10 * rate:
+        return None
+    win = min(win, len(em))
+    times, lags = [], []
+    for a in range(0, max(1, len(em) - win + 1), step):
+        seg = em[a:a + win]
+        if float(np.std(seg)) < 1e-3:
+            continue
+        lo, hi = max(0, a - max_lag), min(len(er), a + win + max_lag)
+        part = er[lo:hi]
+        if len(part) < win:
+            continue
+        # normalized cross-correlation of seg against every place in part
+        segz = (seg - seg.mean()) / (np.std(seg) * len(seg))
+        nfft = 1 << int(np.ceil(np.log2(len(part) + win)))
+        num = np.fft.irfft(np.fft.rfft(part, nfft) * np.conj(np.fft.rfft(segz, nfft)), nfft)[: len(part) - win + 1]
+        c1 = np.concatenate([[0.0], np.cumsum(part, dtype=np.float64)])
+        c2 = np.concatenate([[0.0], np.cumsum(part.astype(np.float64) ** 2)])
+        mean = (c1[win:] - c1[:-win]) / win
+        std = np.sqrt(np.maximum((c2[win:] - c2[:-win]) / win - mean ** 2, 1e-12))
+        ncc = num / std
+        j = int(np.argmax(ncc))
+        if ncc[j] >= COARSE_MIN_SCORE:
+            times.append((a + win / 2) / rate * sr)
+            lags.append((a - (lo + j)) / rate * sr)  # the microphone at a heard the system at lo + j
+    if len(times) < 2:
+        return None
+    t, lag = np.array(times), np.array(lags, dtype=float)
+    keep = np.ones(len(lag), bool)
+    for i in range(len(lag)):  # a window that matched something else
+        near = lag[max(0, i - 2): i + 3]
+        keep[i] = abs(lag[i] - np.median(near)) <= 0.25 * sr
+    t, lag = t[keep], lag[keep]
+    return (t, lag) if len(t) >= 2 else None
+
+
 def find_echo(mic: np.ndarray, ref: np.ndarray, sr: int = SR, window_sec: float = 4.0) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """The delay of the echo along the recording: (times, lags) in samples, measured on the windows
     where the speakers play, all through the recording (not only its first minutes). The delay drifts
@@ -55,23 +119,42 @@ def find_echo(mic: np.ndarray, ref: np.ndarray, sr: int = SR, window_sec: float 
     window keeps its own measure, a measure unlike its neighbours' is left out. None when the
     microphone does not hear the speakers (headphones)."""
     win = int(window_sec * sr)
-    n = min(len(mic), len(ref))
-    if n < win:
+    n = len(mic)
+    if n < win or len(ref) < win:
         return None
     max_lag = int(MAX_DELAY_SEC * sr)
-    level = np.sqrt(np.mean(ref[: n // win * win].reshape(-1, win) ** 2, axis=1))
+    # Far apart (a piece of the system sound lost or doubled, a late start): the fine measure looks
+    # around the coarse one instead of within MAX_DELAY_SEC of the same time
+    coarse = coarse_lags(mic, ref, sr) if min(n, len(ref)) > 30 * sr else None
+    if coarse is not None and np.max(np.abs(coarse[1])) < 0.8 * max_lag:
+        coarse = None  # within the fine measure's own reach: as before
+    if coarse is not None:
+        print(f"[echo] the tracks are {np.median(coarse[1]) / sr:.1f} s apart (by their loudness, "
+              f"{len(coarse[1])} windows)", flush=True)
+    reach = int(FINE_AROUND_SEC * sr) if coarse else max_lag
+    # each window of the microphone and the part of the system sound it is compared with
+    pairs = []
+    for k in range(n // win):
+        a = k * win
+        c = int(round(float(_delay_at(coarse[0], coarse[1], np.array([a + win / 2.0]))[0]))) if coarse else 0
+        if 0 <= a - c and a - c + win <= len(ref):
+            pairs.append((a, a - c, c))
+    if not pairs:
+        return None
+    level = np.array([np.sqrt(np.mean(ref[r:r + win] ** 2)) for _, r, _ in pairs])
     playing = level[level > 1e-3]
     if not len(playing):
         return None
     floor = max(1e-3, 0.3 * float(np.median(playing)))  # the speakers play there, not a quiet tail
-    loud = [int(k) for k in np.nonzero(level > floor)[0]]
+    loud = [i for i in np.nonzero(level > floor)[0]]
     if len(loud) > MAX_WINDOWS:  # spread over the whole recording
         loud = [loud[int(i)] for i in np.linspace(0, len(loud) - 1, MAX_WINDOWS)]
     points = []
-    for k in loud:
-        lag, score = _gcc_phat(mic[k * win:(k + 1) * win], ref[k * win:(k + 1) * win], max_lag)
+    for i in loud:
+        a, r, c = pairs[i]
+        lag, score = _gcc_phat(mic[a:a + win], ref[r:r + win], reach)
         if score >= MIN_ECHO_SCORE:
-            points.append((k * win + win / 2, lag))
+            points.append((a + win / 2, c + lag))
     if len(points) < max(2, len(loud) // 4):
         return None
     t = np.array([p[0] for p in points])
@@ -236,6 +319,8 @@ def clean_microphone(ffmpeg: str, page: Path, system: Path, system_skip: float, 
     try:
         mic = _decode(ffmpeg, page)
         ref = _decode(ffmpeg, system, system_skip)
+        print(f"[echo] microphone {len(mic) / SR:.1f} s, system sound {len(ref) / SR:.1f} s "
+              f"(after {system_skip:.2f} s skipped)", flush=True)
         done = cancel_and_align(mic, ref)
         if done is None:
             print("[echo] the microphone does not hear the speakers: nothing to remove", flush=True)
