@@ -114,19 +114,24 @@ def ollama_release_others(keep: Optional[str] = None) -> List[str]:
     return names
 
 
-def ollama_loaded() -> List[Dict[str, Any]]:
-    """Models Ollama keeps in memory. Never starts Ollama."""
+def _ollama_ps(timeout: float = 0.8) -> Optional[List[Dict[str, Any]]]:
+    """/api/ps of Ollama, or None when it did not answer (a busy video card slows it down)."""
     from app.ollama_client import _is_ollama_port_open
 
     if not _is_ollama_port_open():
         return []
     try:
-        with httpx.Client(timeout=0.8) as client:
+        with httpx.Client(timeout=timeout) as client:
             resp = client.get(f"{_ollama_base()}/api/ps")
             resp.raise_for_status()
-            models = resp.json().get("models") or []
+            return resp.json().get("models") or []
     except Exception:
-        return []
+        return None
+
+
+def ollama_loaded() -> List[Dict[str, Any]]:
+    """Models Ollama keeps in memory. Never starts Ollama."""
+    models = _ollama_ps() or []
     return [
         {"name": m.get("name") or m.get("model") or "?", "size_vram_gb": round((m.get("size_vram") or 0) / 2**30, 1),
          "expires_at": m.get("expires_at")}
@@ -134,8 +139,12 @@ def ollama_loaded() -> List[Dict[str, Any]]:
     ]
 
 
-# How long Ollama gets to let a model go by itself before its runner is stopped
-OLLAMA_UNLOAD_WAIT_SEC = 8.0
+# How long Ollama gets to let a model go by itself before its runner is stopped: with the video card
+# busy it takes longer (8 s was not enough: «Ollama не выгрузила модель»)
+OLLAMA_UNLOAD_WAIT_SEC = 15.0
+OLLAMA_AFTER_STOP_SEC = 10.0
+_BLOBS: Dict[str, List[str]] = {}  # model -> its weight files, kept from a moment Ollama answered
+RETRY_FOR_SEC = 180.0  # a model still there: tried again in the background this long
 
 
 def _model_blobs(names: List[str]) -> List[str]:
@@ -143,14 +152,44 @@ def _model_blobs(names: List[str]) -> List[str]:
     import re
 
     out: List[str] = []
-    with httpx.Client(timeout=5.0) as client:
+    with httpx.Client(timeout=15.0) as client:
         for name in names:
+            if name in _BLOBS:  # learnt earlier: a busy Ollama answers /api/show slowly or not at all
+                out += _BLOBS[name]
+                continue
             try:
                 info = client.post(f"{_ollama_base()}/api/show", json={"model": name}).json()
             except Exception:
                 continue
-            out += re.findall(r"sha256-[0-9a-f]{12,64}", str(info.get("modelfile") or ""))
+            found = re.findall(r"sha256-[0-9a-f]{12,64}", str(info.get("modelfile") or ""))
+            if found:
+                _BLOBS[name] = found
+            out += found
     return list(dict.fromkeys(out))
+
+
+def remember_blobs(names: List[str]) -> None:
+    """The weight files of loaded models, learnt while Ollama answers quickly (the memory panel asks
+    it often): a forced unload under load then finds their runner without asking."""
+    import threading
+
+    missing = [n for n in names if n not in _BLOBS and n not in _blobs_asked]
+    if not missing:
+        return
+    _blobs_asked.update(missing)
+
+    def ask() -> None:  # in the background: the memory panel does not wait for Ollama
+        try:
+            _model_blobs(missing)
+        except Exception:
+            pass
+        finally:
+            _blobs_asked.difference_update(missing)
+
+    threading.Thread(target=ask, daemon=True, name="ollama_blobs").start()
+
+
+_blobs_asked: set = set()
 
 
 def _stop_ollama_runners(names: List[str]) -> None:
@@ -190,22 +229,65 @@ def ollama_unload(names: List[str], force: bool = True) -> List[str]:
             except httpx.HTTPError:
                 pass  # busy with an answer: the wait below covers it
     left = list(names)
-    end = time.time() + OLLAMA_UNLOAD_WAIT_SEC
-    while left and time.time() < end:
-        time.sleep(0.5)
-        loaded = {m["name"] for m in ollama_loaded()}
-        left = [n for n in left if n in loaded]
+
+    def still(left: List[str], seconds: float) -> List[str]:
+        end = time.time() + seconds
+        while left and time.time() < end:
+            time.sleep(0.5)
+            ps = _ollama_ps(timeout=3.0)
+            if ps is None:
+                continue  # no answer is not «gone»: a busy Ollama answers late
+            loaded = {m.get("name") or m.get("model") for m in ps}
+            left = [n for n in left if n in loaded]
+        return left
+
+    left = still(left, OLLAMA_UNLOAD_WAIT_SEC)
     if left and force and _ollama_address(base)[0] == "127.0.0.1":
         try:
             _stop_ollama_runners(left)
         except Exception:
             traceback.print_exc()
-        end = time.time() + 4.0
-        while left and time.time() < end:
-            time.sleep(0.5)
-            loaded = {m["name"] for m in ollama_loaded()}
-            left = [n for n in left if n in loaded]
+        left = still(left, OLLAMA_AFTER_STOP_SEC)
+    if left and force:
+        _retry_unload_later(left)
     return left
+
+
+_retrying: Dict[str, float] = {}
+
+
+def _retry_unload_later(names: List[str]) -> None:
+    """A model Ollama would not let go (an answer still being written, the video card at its limit):
+    asked again every 10 s in the background for RETRY_FOR_SEC, so it does go once the card is free."""
+    import threading
+    import time
+
+    fresh = [n for n in names if time.time() - _retrying.get(n, 0) > RETRY_FOR_SEC]
+    if not fresh:
+        return
+    for n in fresh:
+        _retrying[n] = time.time()
+
+    def run() -> None:
+        left, end = list(fresh), time.time() + RETRY_FOR_SEC
+        while left and time.time() < end:
+            time.sleep(10)
+            from app.ollama_client import analysis_running
+
+            if set(left) & set(analysis_running()):
+                print(f"[vram] {', '.join(left)} in use again: not unloaded", flush=True)
+                break  # an overview or an answer asked since: the model is wanted
+            try:
+                left = ollama_unload(left, force=False)
+                if left and _ollama_address(_ollama_base())[0] == "127.0.0.1":
+                    _stop_ollama_runners(left)
+            except Exception:
+                traceback.print_exc()
+        print(f"[vram] unloaded later: {', '.join(fresh)}" if not left else f"[vram] still loaded: {', '.join(left)}", flush=True)
+        for n in fresh:
+            _retrying.pop(n, None)
+
+    threading.Thread(target=run, daemon=True, name="ollama_unload_retry").start()
 
 
 def ollama_installed() -> List[str]:
@@ -296,6 +378,7 @@ def vram_snapshot() -> Dict[str, Any]:
         traceback.print_exc()
 
     loaded_ollama = {m["name"]: m for m in ollama_loaded()}
+    remember_blobs(list(loaded_ollama))
     installed = ollama_installed()
     wanted_llm = settings.get("ollama_model") or ""
     names = list(dict.fromkeys(list(loaded_ollama) + installed)) or ([wanted_llm] if wanted_llm else [])
@@ -436,7 +519,7 @@ def unload(kind: str, name: str = "", stop: bool = False) -> Dict[str, Any]:
             # unloaded now, the next part of the overview would load it again at once
             raise RuntimeError("Модель анализа сейчас пишет ответ")
         if ollama_unload([name]):
-            raise RuntimeError(f"Ollama не выгрузила модель {name}")
+            raise RuntimeError(f"Видеокарта занята: Ollama выгрузит модель {name}, как только освободится — программа повторяет попытку")
     elif kind == "live":
         from app import live
 
