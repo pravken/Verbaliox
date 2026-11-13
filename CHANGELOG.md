@@ -17,6 +17,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   as the person speaks), and appear as soon as the Teams captions come.
 - **Library:** only what is open is blue. With the studio open, the running recording is lit and the
   recording opened last keeps a soft mark; opening a recording dims the running one.
+- **A click on a notification opens what it is about:** the finished recording, the studio with the
+  recording running, the recording just saved, or the settings of a hotkey that does not work.
 
 ## 0.8.2 — English
 
@@ -321,6 +323,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   человек говорит) и появляются сразу, как приходят субтитры Teams.
 - **Медиатека:** синим выделено только то, что открыто. В студии подсвечена идущая запись, а последняя
   открытая — лишь лёгкой меткой; при открытии другой записи идущая отходит на второй план.
+- **Щелчок по уведомлению открывает то, о чём оно:** готовую запись, студию с идущей записью, только что
+  сохранённую запись или настройки неработающей горячей клавиши.
 
 ## 0.8.2
 
