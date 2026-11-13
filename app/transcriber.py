@@ -1441,7 +1441,11 @@ def _process_meeting_job(meeting_id: int) -> None:
         if reuse_main:
             merged_segments = [dict(x) for x in shown]
             speakers_meta = dict(meeting.get("speakers") or {})
-            detected_lang = heard or (language or "ru")
+            # the language heard: the page's re-run writes its choice («auto») over it, so a real one
+            # is taken from the text itself when it is not there
+            if heard in ("", "auto", "mixed"):
+                heard = asr_onnx.guess_language(" ".join(str(x.get("text") or "") for x in shown[:80])) or ""
+            detected_lang = language or heard or "ru"
             whisper_model = None
             update_meeting_progress(meeting_id, status="transcribing", progress=66,
                                     stage_text=f"Точный режим: расшифровка {pretty_whisper} уже есть — берётся она")
