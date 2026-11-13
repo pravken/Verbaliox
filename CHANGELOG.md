@@ -6,6 +6,36 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.0 — English
+
+A release of fixes and speed-ups after an independent audit of the whole code by three models.
+
+- **Stop is instant.** A recording is in the library at once («Mixing the tracks») with its notes,
+  marks and Teams captions; echo removal and the mix run in the background, then it queues itself.
+  Closing the app during the mix is warned about; parts are never lost when the mix fails.
+- **Recording is sturdier.** A failed start no longer leaves the computer's sound recording; Stop
+  during the start stops it; a lost capture of the computer's sound is said at once; recording chunks
+  are numbered (none twice, none out of place, a delay is said and retried for two minutes, a lost one
+  no longer ends the rest); a microphone-only recording is seekable; «Save sound» and cuts never
+  destroy the file they replace.
+- **Teams captions:** no slowdown through long meetings, lines on screen before the recording do not
+  name voices, a short «Yes» no longer overwrites an earlier line, captions switched on mid-meeting
+  count, one reader at a time; the captions search backs off while captions are off.
+- **Precise mode** keeps your corrections in the main model's text, reuses other models' versions only
+  when made the same way, keeps the language, survives a cancel and a restart.
+- **Models and memory:** a transcription no longer unloads the live captions' model; a Whisper that
+  fell back to the processor is known as such; the analysis model stays as long as the settings say
+  (unloaded at once only for a transcription); a forced unload stops only that model's process; echo
+  removal needs ~2 GB less; the dictionary is 5× faster; status, player and model polls no longer read
+  whole transcripts; the parts of a long recording are read once for the overview and chapters.
+- **Editing:** typed text survives a redraw; a click on another recording is not lost; the word
+  playing is highlighted correctly with «No fillers»; edits wait during a merge of versions; names
+  given on screen stay after «Merge versions».
+- **Security:** text from the analysis model can no longer call page functions.
+- Also: «Show in folder» with network paths refused; ticked tasks stay done; a cancelled first
+  transcription keeps its searchable part; meaning search indexes edits made while indexing; the
+  watched folder skips the library's own recordings; work files of cancelled jobs are cleaned up.
+
 ## 0.7.10 — English
 
 - **Recordings through speakers no longer sound like two people at once:** the system sound is put in
@@ -247,6 +277,37 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.0
+
+Выпуск исправлений и ускорений после независимого аудита всего кода тремя моделями.
+
+- **«Стоп» мгновенный.** Запись сразу в медиатеке («Сведение дорожек») вместе с заметками, отметками
+  и субтитрами Teams; удаление эха и сведение идут в фоне, потом запись сама встаёт на расшифровку.
+  Закрытие программы во время сведения предупреждается; при сбое сведения части не теряются.
+- **Запись надёжнее.** Сорвавшийся старт больше не оставляет запись звука компьютера; «Стоп» во время
+  запуска её останавливает; обрыв захвата звука компьютера виден сразу; кусочки записи
+  пронумерованы (без повторов и перестановок, задержка видна и повторяется две минуты, потерянный
+  кусочек больше не обрывает остальное); запись только с микрофона перематывается; «Сохранить звук» и
+  нарезка не уничтожают заменяемый файл.
+- **Субтитры Teams:** не замедляются к концу долгой встречи, строки, бывшие на экране до записи, не
+  дают голосам чужие имена, короткое «Да» не затирает прежнюю реплику, включённые посреди встречи
+  субтитры учитываются, один поток чтения; пока субтитров нет, поиск панели реже.
+- **Точный режим** сохраняет ваши правки в тексте основной модели, берёт версии других моделей только
+  сделанные так же, сохраняет язык, переживает отмену и перезапуск.
+- **Модели и память:** расшифровка не выгружает модель живых субтитров; Whisper, откатившийся на
+  процессор, так и помечается; модель анализа держится по настройке (сразу выгружается только для
+  расшифровки); принудительная выгрузка закрывает только процесс этой модели; удаление эха берёт
+  ~2 ГБ меньше; словарь в 5 раз быстрее; статус, плеер и опрос моделей не читают всю расшифровку;
+  части длинной записи читаются один раз для обзора и глав.
+- **Редактирование:** набранный текст переживает перерисовку; щелчок по другой записи не теряется;
+  с «Без запинок» подсвечивается то слово, что звучит; правки ждут во время сведения версий; имена,
+  данные на экране, остаются после «Свести версии».
+- **Безопасность:** текст модели анализа больше не может вызвать функции страницы.
+- А также: «Показать в папке» не открывает сетевые пути; отмеченные задачи остаются выполненными;
+  отменённая первая расшифровка оставляет найденную поиском часть; поиск по смыслу учитывает правки
+  во время индексации; папка наблюдения не берёт записи самой медиатеки; служебные файлы отменённых
+  заданий удаляются.
 
 ## 0.7.10
 

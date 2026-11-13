@@ -1569,8 +1569,18 @@ function capDrawLines(lines, fresh, target, view) {
   status.className = `text-[11.5px] ${liveCap.error ? 'text-apple-amber' : 'text-apple-tertiary'}`;
 }
 
+// Stop pressed while a recording is still starting (the screen picker, the microphone, the server): the
+// start finished after it and recorded on. It is noted, and the start stops at its next step instead
+let _recStarting = false;
+let _recStopWanted = false;
+function recStartGoesOn() {
+  if (_recStopWanted) throw Object.assign(new Error('stopped while starting'), { startAborted: true });
+}
+
 async function startLiveRecording() {
-  if (isRecording()) return;
+  if (isRecording() || _recStarting) return;
+  _recStarting = true;
+  _recStopWanted = false;
   try {
     const sourceMode = document.getElementById('record-source-select').value || 'mic';
     const micId = document.getElementById('record-mic-select').value || '';
@@ -1623,7 +1633,9 @@ async function startLiveRecording() {
       return;
     }
     _recDiskWarned = false;
+    recStartGoesOn();
     if (appTarget) await startAppScreenCapture(appTarget);
+    recStartGoesOn();
 
     // System audio: recorded by the app (no prompt); the browser's screen share is only a fallback
     _recCaptureId = null;
@@ -1640,7 +1652,10 @@ async function startLiveRecording() {
         console.warn(e);
       }
     }
+    recStartGoesOn();
     const { ctx, mixedStream, acquiredStreams, sources } = await buildCaptureStream(sourceMode, micId, !!_recCaptureId);
+    _recStreams = acquiredStreams;  // known at once: a stop now releases the microphone too
+    recStartGoesOn();
     _recAudioCtx = ctx;
     _recSources = sources;
     recSourcesStart(!!sources.mic, !!(sources.sys || _recCaptureId));
@@ -1657,6 +1672,10 @@ async function startLiveRecording() {
       const res = await fetch('/api/record/page/start', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
+      if (_recStopWanted) {  // the part just made on the server goes too
+        fetch(`/api/record/page/${data.page_id}/cancel`, { method: 'POST' }).catch(() => {});
+        recStartGoesOn();
+      }
       _recPage = { id: data.page_id, upload: Promise.resolve(), failed: '', hasVideo: !!_recVideoStream, hasMic: pageAudio };
       _mediaRecorder = new MediaRecorder(new MediaStream(tracks), mimeType ? { mimeType, ...options } : options);
       _mediaRecorder.ondataavailable = (e) => {
@@ -1667,12 +1686,20 @@ async function startLiveRecording() {
     }
     if (_recCaptureId) {
       clearInterval(_recSysTimer);
+      let polling = false, warned = false;
       _recSysTimer = setInterval(async () => {
+        if (polling || !_recCaptureId) return;  // one request at a time
+        polling = true;
         try {
           const r = await fetch(`/api/record/${_recCaptureId}/level`);
-          if (r.ok) _recSysLevel = (await r.json()).level || 0;
-        } catch (e) {}
-      }, 200);
+          if (r.ok) {
+            const st = await r.json();
+            _recSysLevel = st.level || 0;
+            // the capture of the computer's sound ended (a headset unplugged): said at once, not after Stop
+            if (st.error && !warned) { warned = true; showError(t('recSysLost') + ' ' + serverText(st.error)); }
+          }
+        } catch (e) {} finally { polling = false; }
+      }, 250);
     }
     liveCap.lines = new Map();
     liveCap.partial = '';
@@ -1692,8 +1719,13 @@ async function startLiveRecording() {
     const timeBuf = new Uint8Array(analyser.fftSize);
     _recWaveHistory = new Array(68).fill(0.04);
 
+    let meterAt = 0;
     function updateMeter() {
       if (!_recAudioCtx) return;
+      // ~20 times a second, enough for a level: every frame (60 a second) rewrote the meters for hours
+      const t0 = performance.now();
+      if (t0 - meterAt < 50) { _recAnimFrame = requestAnimationFrame(updateMeter); return; }
+      meterAt = t0;
       let { db, visualAmp } = computeRmsAndDb(analyser, timeBuf);
       if (_recCaptureId && _recSysLevel > 0.0001) {
         // The louder of the microphone (page) and the system audio (app)
@@ -1719,11 +1751,13 @@ async function startLiveRecording() {
         : (db > -42 ? 'h-full bg-apple-green transition-all duration-75' : 'h-full bg-apple-secondary transition-all duration-75');
       for (const id of ['record-level-bar', 'studio-level']) {
         const bar = document.getElementById(id);
-        bar.style.width = `${pct}%`;
-        bar.className = levelCls;
+        if (bar.style.width !== `${pct}%`) bar.style.width = `${pct}%`;
+        if (bar.className !== levelCls) bar.className = levelCls;
       }
-      document.getElementById('record-db-display').textContent = `${db} dB`;
-      document.getElementById('studio-db').textContent = `${db} dB`;
+      for (const id of ['record-db-display', 'studio-db']) {
+        const el = document.getElementById(id);
+        if (el.textContent !== `${db} dB`) el.textContent = `${db} dB`;
+      }
 
       // A plain on/off dot with a short hold, so speech pauses do not make it blink
       const now = performance.now();
@@ -1763,8 +1797,28 @@ async function startLiveRecording() {
     syncStudioCaptions();
     document.getElementById('record-status-hint').textContent = t('recStatusRecording');
   } catch (err) {
+    // A start that failed half way (the microphone refused, a device unplugged): what was already
+    // started on the server stops too — the app's system audio would record on, and the studio would
+    // stay «recording» with nothing to stop
+    stTeamsStop();
+    if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+      _mediaRecorder.ondataavailable = null;
+      try { _mediaRecorder.stop(); } catch (e) {}
+    }
+    if (_recPage) {
+      const page = _recPage;
+      page.upload.then(() => fetch(`/api/record/page/${page.id}/cancel`, { method: 'POST' })).catch(() => {});
+      _recPage = null;
+    }
+    if (_recCaptureId) {
+      fetch(`/api/record/${_recCaptureId}/cancel`, { method: 'POST' }).catch(() => {});
+      _recCaptureId = null;
+    }
     _cleanupRecordingResources();
-    showMediaError(err);
+    if (!err || !err.startAborted) showMediaError(err);
+  } finally {
+    _recStarting = false;
+    _recStopWanted = false;
   }
 }
 
@@ -1780,17 +1834,32 @@ function recorderFormat(video, audio) {
   return { mimeType, options: video ? { videoBitsPerSecond: 2_500_000, audioBitsPerSecond: 128_000 } : { audioBitsPerSecond: 128_000 } };
 }
 
+// Each chunk carries its number: the server writes them in order and takes one sent again (its answer
+// lost) only once. A chunk that does not get through is tried again for about two minutes (the server
+// busy finishing another recording), and the studio says so at once, not after Stop.
 function sendRecordingChunk(page, blob) {
   if (!page) return;
+  const seq = page.nextSeq = (page.nextSeq ?? -1) + 1;
   page.upload = page.upload.then(async () => {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 12; attempt++) {
       try {
-        const r = await fetch(`/api/record/page/${page.id}/chunk`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob });
-        if (r.ok) return;
+        // after a chunk given up on, the next ones say so: the server writes them past the gap (a hole
+        // of a few seconds plays on; the rest of the meeting was thrown away)
+        const headers = { 'Content-Type': 'application/octet-stream', 'X-Chunk-Seq': String(seq) };
+        if (page.gap) headers['X-Chunk-After-Gap'] = '1';
+        const r = await fetch(`/api/record/page/${page.id}/chunk`, { method: 'POST', headers, body: blob });
+        if (r.ok) {
+          page.gap = false;
+          if (page.retrying) { page.retrying = false; showToast(t('recChunkBack')); }
+          return;
+        }
+        if (r.status === 404) break;  // the recording is gone on the server (cancelled): nothing to retry
       } catch (e) {}
-      await new Promise(res => setTimeout(res, 500 * (attempt + 1)));
+      if (attempt === 1 && !page.retrying) { page.retrying = true; showWarning(t('recChunkRetrying')); }
+      await new Promise(res => setTimeout(res, Math.min(15000, 1000 * 2 ** attempt)));
     }
-    page.failed = t('recChunkFailed');
+    page.gap = true;
+    if (!page.failed) { page.failed = t('recChunkFailed'); showError(page.failed); }
   });
 }
 
@@ -1893,6 +1962,7 @@ async function cancelLiveRecording() {
 async function stopAndTranscribeRecording(opts) {
   const quiet = !!(opts && opts.quiet);
   state.callRecording = null;
+  if (_recStarting) { _recStopWanted = true; return undefined; }  // the start stops itself (recStartGoesOn)
   if (!_mediaRecorder && !_recCaptureId && !_recScreenId) return undefined;
   document.getElementById('record-status-hint').textContent = t('recStatusSaving');
 
@@ -1923,7 +1993,8 @@ async function stopAndTranscribeRecording(opts) {
 async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
   _cleanupRecordingResources();
 
-  if (page) await page.upload;  // every chunk is on the server
+  // every chunk is on the server (waited for, but not for ever: a request that hangs)
+  if (page) await Promise.race([page.upload, new Promise(res => setTimeout(res, 180000))]);
   if (page && page.failed) showToast(page.failed);
   const res = await fetch('/api/record/finish', {
     method: 'POST',

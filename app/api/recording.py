@@ -63,12 +63,14 @@ def api_record_cancel(capture_id: str) -> Dict[str, Any]:
 # The page sends its MediaRecorder output every second, so a long recording with video never has to
 # fit into the window's memory, and what was recorded survives if the window is closed.
 _page_recordings: Dict[str, Path] = {}
+# The number of the next chunk each page recording expects: a chunk sent again (its answer was lost,
+# the page retried) is not written twice, and none is written out of its place
+_page_next_seq: Dict[str, int] = {}
 
 _page_lock = threading.Lock()
 
 def _page_part(page_id: str) -> Path:
-    with _page_lock:
-        p = _page_recordings.get(page_id)
+    p = _page_recordings.get(page_id)  # a dict read: not under the lock a chunk being written holds
     if p is None:
         raise HTTPException(status_code=404, detail="Запись не найдена")
     return p
@@ -86,18 +88,41 @@ def api_record_page_start() -> Dict[str, Any]:
 
 @router.post("/api/record/page/{page_id}/chunk")
 async def api_record_page_chunk(page_id: str, request: Request) -> Dict[str, Any]:
+    from starlette.concurrency import run_in_threadpool
+
     part = _page_part(page_id)
     data = await request.body()
     if len(data) > 64 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Слишком большой фрагмент записи")
-    with part.open("ab") as f:
-        f.write(data)
-    return {"ok": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
+    raw_seq = request.headers.get("x-chunk-seq")
+    seq = int(raw_seq) if raw_seq and raw_seq.isdigit() else None
+    gap = request.headers.get("x-chunk-after-gap") == "1"  # the page gave up on a chunk before this one
+
+    def append() -> Dict[str, Any]:  # off the event loop: a slow disk or a virus scan held every request
+        with _page_lock:  # one chunk of a page at a time, in its order
+            if _page_recordings.get(page_id) is not part:  # finished or cancelled meanwhile: not written into the mix
+                raise HTTPException(status_code=404, detail="Запись не найдена")
+            if seq is not None:
+                expected = _page_next_seq.get(page_id, 0)
+                if seq < expected:  # written already: its answer was lost and the page sent it again
+                    return {"ok": True, "duplicate": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
+                if seq > expected:
+                    if not gap:
+                        raise HTTPException(status_code=409, detail=f"Ожидается фрагмент {expected}")
+                    print(f"[record] chunks {expected}..{seq - 1} of {page_id[:8]} lost: the recording goes on past them", flush=True)
+            with part.open("ab") as f:
+                f.write(data)
+            if seq is not None:
+                _page_next_seq[page_id] = seq + 1
+        return {"ok": True, "size": part.stat().st_size, "free_bytes": _free_bytes(part.parent)}
+
+    return await run_in_threadpool(append)
 
 @router.post("/api/record/page/{page_id}/cancel")
 def api_record_page_cancel(page_id: str) -> Dict[str, Any]:
     with _page_lock:
         part = _page_recordings.pop(page_id, None)
+        _page_next_seq.pop(page_id, None)
     if part:
         part.unlink(missing_ok=True)
     return {"ok": True}
@@ -208,7 +233,6 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     from starlette.concurrency import run_in_threadpool
 
     from app import teams_captions
-    from app.ffmpeg_manager import tool_cmd
     from app.system_audio import finish_capture
 
     # «Speaking now» read from the Teams captions during the recording join the ones clicked in the studio
@@ -220,12 +244,17 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
 
     page: Optional[Path] = None
     if payload.page_id:
-        with _page_lock:
-            page = _page_recordings.pop(payload.page_id, None)
+        def take_page() -> Optional[Path]:  # the lock may wait for a chunk being written: not on the event loop
+            with _page_lock:
+                _page_next_seq.pop(payload.page_id, None)
+                return _page_recordings.pop(payload.page_id, None)
+
+        page = await run_in_threadpool(take_page)
         if page is not None and (not page.is_file() or page.stat().st_size == 0):
             page.unlink(missing_ok=True)
             page = None
-    cap = finish_capture(payload.capture_id) if payload.capture_id else None
+    # its thread is joined (up to 5 s): not on the event loop, which serves every other request
+    cap = await run_in_threadpool(finish_capture, payload.capture_id) if payload.capture_id else None
     system = cap.path if cap and cap.path.is_file() else None
     screen: Optional[Path] = None
     if payload.screen_id:
@@ -241,6 +270,41 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     system_skip = 0.0
     if cap and page and payload.page_started_at > 0 and cap.started_at > 0:
         system_skip = min(30.0, max(0.0, payload.page_started_at - cap.started_at))
+    safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
+
+    # The recording is in the library at once, «Сведение дорожек»: the echo removal and the mix (minutes
+    # for an hour-long meeting) run in the background, and it queues itself for transcription when done
+    settings = get_all_settings()
+    m = create_meeting(
+        title=payload.title.strip()[:300] or safe_stem,
+        filename=safe_stem,
+        media_path="",
+        language=settings.get("language", "auto"),
+        model_name=speech_route.default_choice(settings),
+        num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
+        source="recording",
+        owns_media=False,  # its file comes with the mix
+        title_is_default=True,
+        has_video=bool(screen or (payload.has_video and page)),
+    )
+    from app import app_status
+    from app.database import update_meeting_progress
+
+    app_status.mixing.add(m["id"])
+    update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
+    _attach_recording_info(m["id"], payload)
+    threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem),
+                     daemon=True, name="record_mix").start()
+    return {"created": [get_meeting(m["id"]) or m]}
+
+
+def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path], screen: Optional[Path],
+               system_skip: float, safe_stem: str) -> Optional[Dict[str, Any]]:
+    """The parts of a recording made one file: {"dest", "has_video"}, or None when they could not be
+    joined (each part is then kept as a recording of its own, _salvage_parts, and that is returned as
+    {"salvaged": ...})."""
+    from app.ffmpeg_manager import tool_cmd
+
     # The speakers' echo taken out of the microphone (app/echo_cancel.py): the mix then uses the
     # cleaned microphone instead of the page's sound
     mic: Optional[Path] = None
@@ -250,45 +314,43 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
 
         cleaned = page.with_name(page.name + ".mic.wav")
         lined_up = page.with_name(page.name + ".sys.wav")
-        if await run_in_threadpool(clean_microphone, tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up):
+        if clean_microphone(tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up):
             mic = cleaned
             if lined_up.is_file():
                 # the system sound where the microphone heard it: mixed instead, nothing more to skip
                 original_system, system, system_skip = system, lined_up, 0.0
     print(f"[record] tracks: page={'yes' if page else 'no'} system={'yes' if system else 'no'} "
           f"skip={system_skip:.2f}s echo={'removed' if mic else 'no'}", flush=True)
-    safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
     if screen:
         audio = [p for p in ((mic or page) if payload.has_mic else None, system) if p]
         dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}.mp4"
-        res = await run_in_threadpool(_run_ffmpeg, screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest,
-                                                                       system_skip if len(audio) == 2 else 0.0))
+        res = _run_ffmpeg(screen_mix_command(tool_cmd("ffmpeg"), screen, audio, dest, system_skip if len(audio) == 2 else 0.0))
         if res.returncode != 0 or not dest.is_file():
             print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
             dest.unlink(missing_ok=True)
+            if mic:
+                mic.unlink(missing_ok=True)  # the cleaned microphone was made for the mix: the page's part is kept
             if original_system:  # the parts kept are the ones recorded
                 system.unlink(missing_ok=True)
                 system = original_system
-            return _salvage_parts(payload.title.strip() or "Запись",
-                                  [(screen, True), *[(p, p is page and payload.has_video) for p in (page, system) if p]],
-                                  payload.notes)
-        for p in (screen, page, system, mic, original_system):
-            if p:
-                p.unlink(missing_ok=True)
-        return _queue_recording(payload, dest, safe_stem, has_video=True)
+            return {"salvaged": _salvage_parts(payload.title.strip() or "Запись",
+                                               [(screen, True), *[(p, p is page and payload.has_video) for p in (page, system) if p]],
+                                               payload.notes)}
+        # the parts go once the mixed file is registered (a crash in between kept nothing)
+        return {"dest": dest, "has_video": True, "cleanup": [p for p in (screen, page, system, mic, original_system) if p]}
 
     has_video = bool(payload.has_video and page)
     ext = ".webm" if page and (has_video or not system) else ".m4a"
     dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}{ext}"
     cmd = record_mix_command(tool_cmd("ffmpeg"), page, system, has_video, payload.has_mic, dest, system_skip, mic=mic)
     if cmd is None:
-        await run_in_threadpool(shutil.move, str(page), str(dest))  # the recordings folder may be on another drive
+        shutil.move(str(page), str(dest))  # the recordings folder may be on another drive
     else:
-        res = await run_in_threadpool(_run_ffmpeg, cmd)
+        res = _run_ffmpeg(cmd)
         if res.returncode != 0 or not dest.is_file():
             if page and not system:
                 dest.unlink(missing_ok=True)
-                await run_in_threadpool(shutil.move, str(page), str(dest))  # the original is still playable
+                shutil.move(str(page), str(dest))  # the original is still playable
             else:
                 print("[record] mix failed, parts kept:", (res.stderr or "")[-300:], flush=True)
                 dest.unlink(missing_ok=True)
@@ -297,54 +359,81 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
                 if original_system:
                     system.unlink(missing_ok=True)
                     system = original_system
-                return _salvage_parts(payload.title.strip() or "Запись",
-                                      [(p, has_video if p is page else False) for p in (page, system) if p], payload.notes)
-        if page:
-            page.unlink(missing_ok=True)
-    for p in (system, mic, original_system):
-        if p:
-            p.unlink(missing_ok=True)
-    return _queue_recording(payload, dest, safe_stem, has_video=has_video)
+                return {"salvaged": _salvage_parts(payload.title.strip() or "Запись",
+                                                   [(p, has_video if p is page else False) for p in (page, system) if p],
+                                                   payload.notes)}
+    cleanup = [p for p in (page if cmd is not None else None, system, mic, original_system) if p]
+    return {"dest": dest, "has_video": has_video, "cleanup": cleanup}
 
-def _queue_recording(payload: RecordFinishPayload, dest: Path, safe_stem: str, has_video: bool) -> Dict[str, Any]:
-    settings = get_all_settings()
-    m = create_meeting(
-        title=payload.title.strip()[:300] or safe_stem,
-        filename=dest.name,
-        media_path=str(dest),
-        language=settings.get("language", "auto"),
-        model_name=speech_route.default_choice(settings),
-        num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
-        source="recording",
-        owns_media=True,
-        title_is_default=True,
-        has_video=has_video,
-    )
-    from app.database import update_meeting_fields
+
+def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path],
+                       screen: Optional[Path], system_skip: float, safe_stem: str) -> None:
+    """The mix of a stopped recording, then its transcription queued; the recording waits as «mixing»."""
+    import traceback
+
+    from app import app_status, events
+    from app.database import delete_meeting, set_recording_media, update_meeting_progress
     from app.naming import rename_recording_file
 
+    done: Optional[Dict[str, Any]] = None
+    try:
+        done = _mix_parts(payload, page, system, screen, system_skip, safe_stem)
+        if done is None or done.get("salvaged") is not None:  # kept part by part: they are the recordings now
+            delete_meeting(meeting_id)
+            return
+        set_recording_media(meeting_id, str(done["dest"]), bool(done["has_video"]))
+        for p in done.get("cleanup") or []:  # registered: the parts can go
+            Path(p).unlink(missing_ok=True)
+        rename_recording_file(meeting_id)  # "2026-10-20 Запись 14-05.m4a"; renamed again once titled
+        update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
+        enqueue_meeting_job(meeting_id)
+    except Exception as e:
+        traceback.print_exc()
+        if not (done and done.get("dest") and (get_meeting(meeting_id) or {}).get("media_path")):
+            # failed before the recording had its file: what was recorded is kept part by part, now
+            try:
+                if done and done.get("dest"):
+                    Path(done["dest"]).unlink(missing_ok=True)
+                left = [(p, (p is page and payload.has_video) or p is screen) for p in (screen, page, system)
+                        if p and Path(p).is_file()]
+                from app.main import _salvage_parts
+
+                _salvage_parts(payload.title.strip() or "Запись", left, payload.notes)
+                delete_meeting(meeting_id)
+                return
+            except Exception:
+                traceback.print_exc()
+        update_meeting_progress(meeting_id, status="failed", progress=0, stage_text="",
+                                error_message=f"Не удалось свести дорожки записи: {e}"[:500])
+    finally:
+        app_status.mixing.discard(meeting_id)
+        events.publish({"type": "list"})
+
+
+def _attach_recording_info(meeting_id: int, payload: RecordFinishPayload) -> None:
+    """What the studio knew of the recording: the notes, the «Сейчас говорит» marks, the Teams captions
+    as a transcript version, the calendar meeting it was."""
+    from app.database import update_meeting_fields
+
     if payload.notes.strip():
-        update_meeting_fields(m["id"], user_notes=payload.notes[:50000])
+        update_meeting_fields(meeting_id, user_notes=payload.notes[:50000])
     if payload.speaker_marks:
         from app.database import save_transcript_version, set_speaker_marks
         from app.teams_captions import TEAMS, as_transcript
 
-        set_speaker_marks(m["id"], payload.speaker_marks)
+        set_speaker_marks(meeting_id, payload.speaker_marks)
         # The Teams captions are a transcript of their own: shown by their chip, a voice in the merging
         teams_version = as_transcript([mk for mk in payload.speaker_marks if mk.get("text")])
         if teams_version:
-            save_transcript_version(m["id"], TEAMS, teams_version)
+            save_transcript_version(meeting_id, TEAMS, teams_version)
     try:
         from datetime import datetime
 
         from app import calendar_ics
 
-        calendar_ics.apply_to_recording(m["id"], datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None)
+        calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None)
     except Exception as e:
         print("[calendar]", e, flush=True)
-    rename_recording_file(m["id"])  # "2026-10-20 Запись 14-05.m4a"; renamed again once titled
-    enqueue_meeting_job(m["id"])
-    return {"created": [get_meeting(m["id"]) or m]}
 
 class UiLangPayload(BaseModel):
     lang: str = "ru"

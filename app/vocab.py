@@ -128,29 +128,33 @@ class Rules:
 
     def _fuzzy(self, cores: List[str]) -> Optional[str]:
         joined = " ".join(cores)
+        # the same for every term: worked out once per window (it was per term, the bulk of the time)
+        k = sound_key(joined)
+        cyr = _is_cyr(joined)
+        stems_of_word: Optional[List[str]] = None  # "кубернетисе" without its Russian ending, made when needed
         for term, n, key, latin_term in self.terms:
             if abs(len(cores) - n) > 1:
                 continue
-            k = sound_key(joined)
             if len(cores) != n and (len(key) < 6 or min(len(c) for c in cores) < 2):
                 continue  # split or joined words only for a long term, and never a preposition ("в", "и")
             # Russian words for a Russian term: only the same sound, so "Максима" stays "Максима"
             # and is not made "Максим"; another script ("Maksim") may differ a little
-            limit = 0 if _is_cyr(joined) and not latin_term else _allowed_edits(len(key))
+            limit = 0 if cyr and not latin_term else _allowed_edits(len(key))
             if len(cores) != n:
                 limit = max(0, limit - 1)
-            if _distance(k, key, limit) <= limit:
+            if abs(len(k) - len(key)) <= limit and _distance(k, key, limit) <= limit:
                 return term
             # "кубернетисе": a Russian ending on a Latin term is dropped
-            if latin_term and len(cores) == 1 and _is_cyr(joined):
-                low = _norm(joined)
-                for end in _RU_ENDINGS:
-                    if low.endswith(end) and len(low) - len(end) >= 3:
-                        ks = sound_key(low[: -len(end)])
-                        # "Джире": the ending took the place of the term's last vowel
-                        stems = (key, key[:-1]) if key[-1] in "aiu" else (key,)
-                        if len(ks) >= 3 and any(_distance(ks, k2, limit) <= limit for k2 in stems if len(k2) >= 3):
-                            return term
+            if latin_term and len(cores) == 1 and cyr:
+                if stems_of_word is None:
+                    low = _norm(joined)
+                    stems_of_word = [sound_key(low[: -len(end)]) for end in _RU_ENDINGS
+                                     if low.endswith(end) and len(low) - len(end) >= 3]
+                # "Джире": the ending took the place of the term's last vowel
+                stems = (key, key[:-1]) if key[-1] in "aiu" else (key,)
+                for ks in stems_of_word:
+                    if len(ks) >= 3 and any(_distance(ks, k2, limit) <= limit for k2 in stems if len(k2) >= 3):
+                        return term
         return None
 
     def match(self, cores: List[str]) -> Optional[Tuple[int, str]]:

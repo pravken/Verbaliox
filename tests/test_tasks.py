@@ -114,6 +114,22 @@ class TasksTest(unittest.TestCase):
         again = self._extract(self.ANSWER)
         self.assertEqual(sorted(x["what"] for x in again), ["Сделать презентацию для встречи", "проверит реквизиты"])
 
+    def test_a_ticked_task_stays_done_when_worded_differently(self):
+        """Ticked off, then found again in other words (a new transcription): still done."""
+        from app import commitments
+        from app.database import _db_lock, get_connection
+
+        items = {x["who"]: x for x in self._extract(self.ANSWER)}
+        with _db_lock:  # ticked off in the list: the status alone changes, as the page does
+            conn = get_connection()
+            conn.execute("UPDATE commitments SET status = 'done' WHERE id = ?", (items["Анна"]["id"],))
+            conn.commit()
+            conn.close()
+        reworded = self.ANSWER.replace('"what": "подготовит презентацию"', '"what": "подготовить презентацию к встрече"')
+        again = {x["who"]: x for x in self._extract(reworded)}
+        self.assertEqual(again["Анна"]["status"], "done")
+        self.assertEqual(again["бухгалтерия"]["status"], "open")
+
     def test_create_update_delete(self):
         from app import commitments
 

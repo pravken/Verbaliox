@@ -79,6 +79,16 @@ class SemanticIndexTest(unittest.TestCase):
         self.assertEqual(len(embedded), 1)
         self.assertIn("Совсем новая тема", embedded[0])
 
+    def test_an_edit_made_while_indexing_is_indexed_later(self):
+        def edit_meanwhile(texts, settings=None):
+            db.save_meeting_results(self.b, segments=[_seg(1, 0, "Правка, сделанная во время индексации.")])
+            return _fake_embed(texts, settings)
+
+        with mock.patch.object(semantic, "embed", side_effect=edit_meanwhile):
+            semantic.index_meeting(self.b)
+        with mock.patch.object(semantic, "EDIT_QUIET_SEC", -1):
+            self.assertIn(self.b, semantic.pending_ids())  # still to do: the index has the text before the edit
+
     def test_assistant_gets_fragments_without_shared_words(self):
         for mid in semantic.pending_ids():
             semantic.index_meeting(mid)

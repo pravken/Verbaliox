@@ -51,12 +51,58 @@ class TeamsCaptionsTest(unittest.TestCase):
     def test_the_line_being_said_is_rewritten_not_added(self):
         r = tc.Reader()
         r.started_at = time.time()
+        r._seeded = True  # the recording ran already: the lines on screen are its own
         e, m = "Echo", "Maksim Pravko"
         for shown in ([(e, "Затем прослушать его."), (m, "1345")], [(e, "Затем прослушать его."), (m, "123456")],
                       [(e, "Затем прослушать его."), (m, "13456789 10")], [(m, "13456789 10"), (e, "90")]):
             r._take(shown)
         self.assertEqual([(x["name"], x["text"]) for x in r.snapshot()["marks"]],
                          [(e, "Затем прослушать его."), (m, "13456789 10"), (e, "90")])
+
+    def test_lines_on_screen_before_the_recording_are_not_marks(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        before = [("Natalia Rudavina", "Это было до записи."), ("Vladislav Lisnevskiy", "И это тоже было раньше.")]
+        r._take([*before, ("Natalia Rudavina", "А это говорится сейчас")])
+        r._take([*before, ("Natalia Rudavina", "А это говорится сейчас, дальше"), ("Vladislav Lisnevskiy", "Новая реплика.")])
+        self.assertEqual([m["text"] for m in r.snapshot()["marks"]], ["А это говорится сейчас, дальше", "Новая реплика."])
+
+    def test_captions_switched_on_during_the_recording_are_all_its_own(self):
+        r = tc.Reader()
+        r.started_at = time.time() - 180  # the panel is first found 3 minutes in
+        r._take([("Natalia Rudavina", "Сказано уже во время записи."), ("Echo", "И это тоже.")])
+        self.assertEqual(len(r.snapshot()["marks"]), 2)
+
+    def test_a_long_meeting_compares_recent_lines_only(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._seeded = True
+        for i in range(600):
+            r._take([("Echo", f"реплика номер {i} про совсем разные вещи {i * 7}")])
+        start = time.time()
+        r._take([("Echo", "ещё одна новая реплика про что-то другое")])
+        self.assertLess(time.time() - start, 0.1)
+        self.assertLessEqual(len(r._said["echo"]), tc.RECENT_LINES * 2)
+
+    def test_a_short_answer_is_its_own_line(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._seeded = True
+        r._take([("Echo", "Давайте начнём с отчёта по продажам за март.")])
+        r._take([("Echo", "Давайте начнём с отчёта по продажам за март."), ("Max", "Да, конечно, пришлю сегодня вечером.")])
+        r._take([("Max", "Да, конечно, пришлю сегодня вечером."), ("Echo", "Хорошо."), ("Max", "Да")])
+        r._take([("Echo", "Хорошо."), ("Max", "Да"), ("Echo", "Тогда до завтра.")])
+        self.assertEqual([m["text"] for m in r.snapshot()["marks"]],
+                         ["Давайте начнём с отчёта по продажам за март.", "Да, конечно, пришлю сегодня вечером.",
+                          "Хорошо.", "Да", "Тогда до завтра."])
+
+    def test_stop_forgets_the_lines_of_that_recording(self):
+        r = tc.Reader()
+        r.started_at = time.time()
+        r._seeded = True
+        r._take([("Echo", "Первая запись.")])
+        self.assertEqual(len(r.stop()["marks"]), 1)
+        self.assertEqual(r.snapshot()["marks"], [])  # a next recording that does not read gets nothing
 
     def test_ui_automation_loads_by_its_full_name_when_the_short_one_fails(self):
         import sys
@@ -119,3 +165,20 @@ class TeamsVersionTest(unittest.TestCase):
         save_transcript_version(m["id"], tc.TEAMS, tc.as_transcript([{"at": 0, "name": "Анна", "text": "раз два три"}]))
         clear_results(m["id"])
         self.assertEqual(list(all_transcripts(m["id"])), [tc.TEAMS])  # the model's text went, the captions stayed
+
+
+class TeamsVersionShownTest(unittest.TestCase):
+    def test_showing_the_captions_keeps_the_model_of_the_recording(self):
+        from app.database import (create_meeting, get_meeting, init_db, save_meeting_results,
+                                  save_transcript_version, switch_transcript_version, update_meeting_fields)
+
+        init_db()
+        m = create_meeting(title="Teams", filename="a.wav", media_path="a.wav")
+        update_meeting_fields(m["id"], model_name="gigaam-v3")
+        save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "speaker": "SPEAKER_00", "text": "раз"}],
+                             speakers={"SPEAKER_00": {"name": "Участник 1"}}, transcript_model="gigaam-v3")
+        save_transcript_version(m["id"], tc.TEAMS, tc.as_transcript([{"at": 0, "name": "Анна", "text": "раз два три"}]))
+        switch_transcript_version(m["id"], tc.TEAMS)
+        got = get_meeting(m["id"])
+        self.assertEqual(got["transcript_model"], tc.TEAMS)
+        self.assertEqual(got["model_name"], "gigaam-v3")  # the next Transcribe / precise run uses a real model

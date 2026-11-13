@@ -72,9 +72,12 @@ def _get_ecapa_encoder(device: str = "cpu"):
 
     from app.model_manager import ECAPA_REPO, ECAPA_REVISION
 
-    # from_hparams has no revision: the fixed commit is fetched into the folder (nothing is downloaded
-    # when it is already there) and the model is loaded from the folder
-    snapshot_download(ECAPA_REPO, revision=ECAPA_REVISION, local_dir=str(save_dir))
+    # from_hparams has no revision: the fixed commit is fetched into the folder and the model is loaded
+    # from the folder. Only when it is not there: the check itself asked huggingface.co at every job
+    from app.model_manager import is_diarizer_installed
+
+    if not is_diarizer_installed():
+        snapshot_download(ECAPA_REPO, revision=ECAPA_REVISION, local_dir=str(save_dir))
     _ecapa_model = EncoderClassifier.from_hparams(
         source=str(save_dir),
         savedir=str(save_dir),

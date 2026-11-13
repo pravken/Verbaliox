@@ -105,9 +105,15 @@ function renderTopbar() {
 // The bar fits the window at any width and interface scale: the steps of styles.css (tb-c1…tb-c6) are
 // tried in turn until nothing sticks out
 const TOPBAR_STEPS = ['tb-c1', 'tb-c2', 'tb-c3', 'tb-c4', 'tb-c5', 'tb-c6'];
+let _topbarFitFor = '';
 function fitTopbar() {
   const bar = document.getElementById('app-bar');
   if (!bar || !bar.offsetParent) return;
+  // the same text in the same width: already fitted (renderTopbar runs every 1.5 s, and each fit makes
+  // the browser lay the page out several times)
+  const sig = `${window.innerWidth}|${devicePixelRatio}|${document.documentElement.style.zoom}|${bar.textContent}|${bar.querySelectorAll('.hidden').length}`;
+  if (sig === _topbarFitFor) return;
+  _topbarFitFor = sig;
   bar.classList.remove(...TOPBAR_STEPS);
   for (const step of TOPBAR_STEPS) {
     if (bar.scrollWidth <= bar.clientWidth + 1) break;

@@ -8,7 +8,7 @@ a line the model skips or garbles is retried on its own.
 
 import json
 import re
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -41,19 +41,34 @@ def ollama_chat(
     model: str,
     system: str,
     user: str,
-    keep_alive: str = "5m",
+    keep_alive: Optional[str] = None,
     check_cancel: Optional[Callable[[], None]] = None,
 ) -> str:
+    from app import idle_unload
+    from app.ollama_client import _work_done, _work_started
+
     payload = {
         "model": model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "stream": check_cancel is not None,
-        "keep_alive": keep_alive,
         "options": {"temperature": 0.2, "top_p": 0.9, "num_ctx": 8192},
     }
+    # the idle limit of the settings, as the other requests to Ollama have (it was 5 min here whatever
+    # it said), and the work is counted: the model leaves after it like after an overview
+    keep = keep_alive or idle_unload.ollama_keep_alive()
+    if keep:
+        payload["keep_alive"] = keep
+    _work_started()
+    try:
+        return _ollama_request(base_url, payload, check_cancel)
+    finally:
+        _work_done()
+
+
+def _ollama_request(base_url: str, payload: Dict[str, Any], check_cancel: Optional[Callable[[], None]]) -> str:
     from app.llm_text import strip_think, thinking_off
 
-    payload.update(thinking_off(model))
+    payload.update(thinking_off(payload["model"]))
     with httpx.Client(timeout=600.0) as client:
         if check_cancel is None:
             resp = client.post(f"{base_url}/api/chat", json=payload)

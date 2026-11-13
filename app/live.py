@@ -216,6 +216,9 @@ class LiveSession:
         self.error = ""
         self.touched = time.time()
         self._busy = threading.Lock()
+        # the audio buffer is grown by the request thread and cut by the step thread at once: without a
+        # lock a cut could be undone by an append made from the buffer before it (the phrase came twice)
+        self._audio_lock = threading.Lock()
         self.translator = None
         if translate_to:
             from app.live_translate import LiveTranslator
@@ -238,8 +241,9 @@ class LiveSession:
                 sys_part = cap.take_live(chunk.size)
                 chunk = chunk.copy()
                 chunk[: sys_part.size] += sys_part
-        self.audio = np.concatenate([self.audio, chunk])
-        self.received += chunk.size / SR
+        with self._audio_lock:
+            self.audio = np.concatenate([self.audio, chunk])
+            self.received += chunk.size / SR
         # Nothing decoded for long (steps fail or one hangs): only the last part is kept. Not while a
         # step runs: it cuts the buffer from its start when it ends
         if self.audio.size > 2 * LIVE_WINDOW_SEC * SR and self._busy.acquire(blocking=False):
@@ -272,7 +276,12 @@ class LiveSession:
             self._busy.release()
 
     def _drop_to(self, keep_sec: float) -> None:
-        cut = max(0, self.audio.size - int(keep_sec * SR))
+        with self._audio_lock:
+            cut = max(0, self.audio.size - int(keep_sec * SR))
+            self._cut(cut)
+
+    def _cut(self, cut: int) -> None:
+        """Drops the first `cut` samples (call with _audio_lock held): what was appended meanwhile stays."""
         self.audio = self.audio[cut:]
         self.offset += cut / SR
 
@@ -327,14 +336,12 @@ class LiveSession:
             else:
                 break
         if final_until > 0:
-            cut = int(final_until * SR)
-            self.audio = self.audio[cut:]
-            self.offset += cut / SR
+            with self._audio_lock:
+                self._cut(int(final_until * SR))
         elif force:
             # Nothing ended in a long window (one endless phrase): keep only its last part
-            cut = int((win_sec - LIVE_WINDOW_SEC / 2) * SR)
-            self.audio = self.audio[cut:]
-            self.offset += cut / SR
+            with self._audio_lock:
+                self._cut(int((win_sec - LIVE_WINDOW_SEC / 2) * SR))
         self.lines.extend(new_lines)
         # Everything after the final phrases is the draft line
         self.partial = " ".join(s.text.strip() for s in segs[len(new_lines):]).strip()
@@ -387,7 +394,8 @@ class LiveSession:
             "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (self.translator and ln["translation"] is None)],
             "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
             # The language each line went into (differs per line with translate_to="auto")
-            "targets": {ln["id"]: ln.get("target") for ln in self.lines if ln.get("target")},
+            # the recent lines, like the two above: every line of the recording was gone through each second
+            "targets": {ln["id"]: ln.get("target") for ln in self.lines[-200:] if ln.get("target")},
             "partial_target": self.translator.draft_target if self.translator else "",
             "partial": self.partial,
             "partial_translation": self.translator.draft_translation if self.translator else "",

@@ -546,7 +546,7 @@ def api_precise_models(meeting_id: int) -> Dict[str, Any]:
     choice = (m.get("language_choice") or m.get("language") or "auto").strip() or "auto"
     heard = (m.get("language") or "").strip()  # the language found by an earlier transcription
     main = m.get("model_name") or ""
-    if not main or main == "merged":
+    if not main or main in ("merged", "teams"):
         main = speech_route.default_choice(settings)
     if main == speech_route.AUTO:
         main, _ = speech_route.resolve(settings, choice, lambda: heard if heard and heard != "auto" else None)
@@ -676,6 +676,10 @@ def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports:
     if is_job_active(meeting_id):
         request_cancel(meeting_id)
         raise HTTPException(status_code=409, detail="Запись обрабатывается: обработка отменяется, удалите её через несколько секунд.")
+    from app import app_status
+
+    if meeting_id in app_status.mixing:  # its tracks are being mixed: deleted once it has its file
+        raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся — удалите её через минуту.")
     from app import url_import
 
     url_import.cancel(meeting_id)  # a download of it stops and its file is removed

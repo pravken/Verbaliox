@@ -89,6 +89,22 @@ class ProcessMeetingJobTest(unittest.TestCase):
         self.assertEqual(m["status"], "cancelled")
         self.assertEqual([s["text"] for s in m["segments"]], ["прежняя правка"])
 
+    def test_a_first_transcription_cancelled_half_way_keeps_what_it_recognized(self):
+        from app.database import save_meeting_results
+
+        save_meeting_results(self.mid, segments=[], speakers={})  # nothing recognized before
+
+        def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
+            out.append(NEW[0])
+            with mock.patch.object(transcriber, "PARTIAL_EVERY_SEC", 0):
+                progress(0.5)
+            raise transcriber.JobCancelled()
+
+        m = self._run(transcribe)
+        self.assertEqual(m["status"], "cancelled")
+        self.assertTrue(m["segments"])
+        self.assertIn("часть, распознанная до отмены", m["stage_text"])
+
     def test_failure_keeps_the_previous_transcript_and_says_why(self):
         def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
             raise RuntimeError("model file damaged")
@@ -388,6 +404,83 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertNotIn("parakeet-v3", ran)  # its version was used as it was
         self.assertEqual(m["segments"][0]["text"], text)
 
+    def test_the_text_of_the_main_model_is_taken_as_it_is(self):
+        """«Все модели» on a recording GigaAM transcribed and the user corrected: GigaAM is not run again
+        and the corrections are what goes into the merge."""
+        from app.database import all_transcripts
+
+        text = "попроси Claude сделать обзор"
+        save_meeting_results(self.mid, segments=[{"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_00",
+                                                  "text": text, "words": _words(text)}],
+                             speakers={"SPEAKER_00": {"name": "Анна", "color": "#0A84FF"}}, transcript_model="gigaam-v3")
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        m = self._run(transcribe)
+        self.assertEqual(ran, ["parakeet-v3"])
+        self.assertEqual(m["transcript_model"], "merged")
+        self.assertEqual(all_transcripts(self.mid)["gigaam-v3"]["segments"][0]["text"], text)  # the corrected text kept
+
+    def test_the_main_text_is_made_again_when_its_settings_changed(self):
+        """GigaAM's text exists, but the number of people was changed since: it is recognized again."""
+        from app.database import update_meeting_fields
+
+        text = "попроси Claude сделать обзор"
+        save_meeting_results(self.mid, segments=[{"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_00",
+                                                  "text": text, "words": _words(text)}],
+                             speakers={"SPEAKER_00": {"name": "Анна"}}, transcript_model="gigaam-v3")
+        update_meeting_fields(self.mid, transcript_made_with='{"speakers": 5}', num_speakers_hint=2)
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        self._run(transcribe)
+        self.assertIn("gigaam-v3", ran)
+
+    def test_a_cancel_in_the_other_models_keeps_the_finished_transcript(self):
+        def transcribe(model, *a, **k):
+            if model == "parakeet-v3":
+                raise transcriber.JobCancelled()
+            return self._transcribe(model, *a, **k)
+
+        m = self._run(transcribe)
+        self.assertEqual(m["status"], "completed")
+        self.assertEqual(m["transcript_model"], "gigaam-v3")
+        self.assertIn("точный режим отменён", m["stage_text"])
+
+    def test_a_version_made_another_way_is_made_again(self):
+        from app.database import save_transcript_version
+
+        old = "совсем другой язык"
+        save_transcript_version(self.mid, "parakeet-v3", {
+            "segments": [{"id": 0, "start": 0.0, "end": 2.0, "speaker": "SPEAKER_00", "text": old, "words": _words(old)}],
+            "speakers": {}, "language": "en", "made_with": {"language": "en", "denoise": True, "loudnorm": True, "vad": True},
+            "at": "2026-11-01 10:00:00"})
+        ran = []
+
+        def transcribe(model, *a, **k):
+            ran.append(model)
+            return self._transcribe(model, *a, **k)
+
+        self._run(transcribe)
+        self.assertIn("parakeet-v3", ran)  # recognized again: the old version was made for English
+
+    def test_the_live_captions_keep_their_copy_of_the_model(self):
+        """A recording with GigaAM captions goes on while this job runs: only the video card's copies go."""
+        from app import live
+
+        gpu_release = mock.patch.object(self.asr, "release_gpu").start()
+        with mock.patch.object(live, "has_sessions", return_value=True):
+            self._run(self._transcribe)
+        self.assertNotIn(mock.call(), self.release.call_args_list)  # not every copy
+        self.assertNotIn(mock.call("parakeet-v3"), self.release.call_args_list)
+        gpu_release.assert_called()
+
     def test_without_another_model_the_main_one_stays(self):
         from app import asr_onnx
 
@@ -419,3 +512,28 @@ class EnsembleJobTest(unittest.TestCase):
         m = self._run(self._transcribe)
         self.assertEqual(m["transcript_model"], "gigaam-v3")
         self.assertEqual(self.asked, [])
+
+
+class WhisperFallbackTest(unittest.TestCase):
+    def test_a_processor_fallback_is_known_as_one(self):
+        if transcriber is None:
+            self.skipTest("app dependencies not installed")
+        calls = []
+
+        class FakeWhisper:
+            def __init__(self, path, device, compute_type, download_root):
+                calls.append((device, compute_type))
+                if device == "cuda":
+                    raise RuntimeError("cudnn missing")
+
+        fake = mock.Mock(WhisperModel=FakeWhisper)
+        with mock.patch.dict("sys.modules", {"faster_whisper": fake}), \
+                mock.patch.object(transcriber, "register_cuda_dlls"), \
+                mock.patch("app.model_manager.get_whisper_model_path", return_value="x"):
+            transcriber.release_whisper_model()
+            transcriber._get_whisper_model("large-v3-turbo", "cuda", "float16")
+            try:
+                self.assertEqual(transcriber.whisper_cache_key(), ("large-v3-turbo", "cpu", "int8"))
+                self.assertEqual(transcriber._whisper_device("cuda"), "cpu")  # no GPU batches on the processor
+            finally:
+                transcriber.release_whisper_model()
