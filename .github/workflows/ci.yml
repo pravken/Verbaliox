@@ -31,8 +31,15 @@ jobs:
       - name: Compile check
         run: python -m compileall -q app run.py build_exe.py tests
 
+      # The same check as the release build: a test may skip itself for a missing tool (FFmpeg),
+      # never for a missing Python package (else the release, built on Windows, stops after the PR was merged)
       - name: Unit tests
-        run: python -m unittest discover -s tests -t .
+        shell: pwsh
+        run: |
+          $out = python -m unittest discover -v -s tests -t . 2>&1 | Out-String
+          Write-Output $out
+          if ($LASTEXITCODE -ne 0) { throw "Unit tests failed" }
+          if ($IsWindows -and $out -match "skipped '[^']*not installed") { throw "Tests were skipped: a package is missing from requirements-test.txt" }
 
       - name: Build launcher (csc.exe from .NET Framework)
         if: runner.os == 'Windows'
