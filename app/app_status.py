@@ -40,7 +40,7 @@ def asr_model(meeting_id: int) -> str:
 
 _notices: List[Dict[str, Any]] = []  # Windows notifications the tray shows next (run.py)
 
-AUTO_SOURCES = {"call": "звонок", "calendar": "встреча по календарю"}
+AUTO_SOURCES = {"call": "звонок", "calendar": "встреча по календарю", "meeting": "встреча Teams"}
 
 
 def auto_recording_notice(started: bool, source: str, name: str = "") -> Dict[str, str]:
