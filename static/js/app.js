@@ -1023,9 +1023,11 @@ function renderMyNotesEditor(box) {
   };
 }
 
-// LLM output is derived from the recording's speech, so it is treated as untrusted HTML
+// LLM output is derived from the recording's speech, so it is treated as untrusted HTML. No data-*
+// attributes either: the page's event dispatcher (core.js) calls the function a data-click / data-error
+// names — an image that fails to load would have run one without a click
 function sanitizedMarkdown(md) {
-  return DOMPurify.sanitize(marked.parse(md || ''), { FORBID_TAGS: ['style', 'form', 'input'], FORBID_ATTR: ['style'] });
+  return DOMPurify.sanitize(marked.parse(md || ''), { FORBID_TAGS: ['style', 'form', 'input'], FORBID_ATTR: ['style'], ALLOW_DATA_ATTR: false });
 }
 
 function renderMarkdownWithTimestamps(box, md, durationSec) {

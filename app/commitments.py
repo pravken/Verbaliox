@@ -350,8 +350,19 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     day, speaking = _meeting_day(m), {n.casefold() for n in participants(m)}
     with _db_lock:
         conn = get_connection()
-        done = {r["what"].casefold() for r in conn.execute(
-            "SELECT what FROM commitments WHERE meeting_id = ? AND status = 'done'", (meeting_id,)).fetchall()}
+        # Ticked off: found again by the same task (its words, or the same person at the same moment in
+        # similar words) or the same quote from the recording — the model words it differently each time,
+        # and a done task came back open after a new transcription
+        done_rows = [dict(r) for r in conn.execute(
+            "SELECT who, what, quote, at FROM commitments WHERE meeting_id = ? AND status = 'done'", (meeting_id,)).fetchall()]
+        done_quotes = {(r["quote"] or "").strip().casefold() for r in done_rows} - {""}
+
+        done_what = {_norm_what(r["what"]) for r in done_rows}
+
+        def was_done(x: Dict[str, Any]) -> bool:
+            return (_norm_what(x.get("what")) in done_what  # the same words, whoever the model named
+                    or (x.get("quote") or "").strip().casefold() in done_quotes
+                    or any(_same_task(x, r) for r in done_rows))
         # What the user added or changed by hand stays as they left it; a task they reworded is still
         # the one the model finds again by its words in the recording (the quote) or its moment
         rows = conn.execute("SELECT what, quote, at, source FROM commitments WHERE meeting_id = ? AND (source = 'manual' OR edited = 1)",
@@ -364,7 +375,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
             if (x["what"].casefold() in kept or (x["quote"] or "").strip().casefold() in kept_quotes
                     or (x["at"] is not None and any(abs(x["at"] - a) <= 1 for a in kept_at))):
                 continue
-            status = "done" if x["what"].casefold() in done else "open"
+            status = "done" if was_done(x) else "open"
             kind = "part" if x["who"].casefold() in speaking else x["kind"]
             due_date = parse_due(x["due"], day)
             conn.execute(

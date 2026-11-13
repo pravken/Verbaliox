@@ -129,3 +129,138 @@ class EchoCancelTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveSystemSoundTest(unittest.TestCase):
+    def test_captions_get_the_system_sound_of_now_not_a_backlog(self):
+        import threading
+
+        import numpy as np
+
+        from app.system_audio import SystemCapture
+
+        cap = SystemCapture.__new__(SystemCapture)
+        cap._live_lock = threading.Lock()
+        cap._live = np.arange(16000 * 30, dtype=np.float32)  # captions switched on after 30 s of recording
+        got = cap.take_live(1600)
+        self.assertEqual(got[-1], 16000 * 30 - 1)  # the newest samples
+        self.assertEqual(cap._live.size, 0)
+        cap._live = np.arange(3000, dtype=np.float32)  # a little ahead (jitter): kept in order
+        self.assertEqual(cap.take_live(1600)[0], 0)
+
+
+class PageChunksTest(unittest.TestCase):
+    """The page's chunks are numbered: one sent again is written once, none out of its place."""
+
+    def test_a_chunk_sent_twice_is_written_once(self):
+        try:
+            from fastapi.testclient import TestClient
+
+            from app import main
+        except ImportError:
+            self.skipTest("app dependencies not installed")
+        from app.database import init_db
+
+        init_db()
+        client = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        client.get(f"/?token={main.SESSION_TOKEN}")
+        pid = client.post("/api/record/page/start").json()["page_id"]
+        try:
+            send = lambda seq, data: client.post(f"/api/record/page/{pid}/chunk", content=data,  # noqa: E731
+                                                 headers={"X-Chunk-Seq": str(seq), "Content-Type": "application/octet-stream"})
+            self.assertEqual(send(0, b"aaa").json()["size"], 3)
+            self.assertTrue(send(0, b"aaa").json().get("duplicate"))  # its answer was lost: sent again
+            self.assertEqual(send(2, b"ccc").status_code, 409)       # 1 is missing: not written out of place
+            self.assertEqual(send(1, b"bbb").json()["size"], 6)
+            # the page gave up on chunk 2: the next ones say so and are written past the gap
+            r = client.post(f"/api/record/page/{pid}/chunk", content=b"eee",
+                            headers={"X-Chunk-Seq": "4", "X-Chunk-After-Gap": "1", "Content-Type": "application/octet-stream"})
+            self.assertEqual(r.json()["size"], 9)
+        finally:
+            client.post(f"/api/record/page/{pid}/cancel")
+
+
+class FinishInBackgroundTest(unittest.TestCase):
+    """Stop returns at once with the recording «mixing»; it gets its file and is queued when mixed."""
+
+    def test_the_recording_is_there_at_once_and_queued_when_mixed(self):
+        import shutil
+        import subprocess
+        import tempfile
+        import time
+        from pathlib import Path
+        from unittest import mock
+
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg is not installed")
+        try:
+            from fastapi.testclient import TestClient
+
+            from app import main
+            from app.api import recording
+        except ImportError:
+            self.skipTest("app dependencies not installed")
+        from app.database import delete_meeting, get_meeting, init_db
+
+        init_db()
+        tmp = Path(tempfile.mkdtemp())
+        sample = tmp / "s.webm"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=300:duration=2", "-c:a", "libopus",
+                        str(sample)], check=True)
+        client = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        client.get(f"/?token={main.SESSION_TOKEN}")
+        pid = client.post("/api/record/page/start").json()["page_id"]
+        client.post(f"/api/record/page/{pid}/chunk", content=sample.read_bytes(), headers={"X-Chunk-Seq": "0"})
+        with mock.patch.object(recording, "enqueue_meeting_job") as enqueue, \
+                mock.patch("app.ffmpeg_manager.tool_cmd", return_value="ffmpeg"):
+            r = client.post("/api/record/finish", json={"title": "Фоновое сведение", "page_id": pid, "has_mic": True,
+                                                        "notes": "заметка"})
+            self.assertEqual(r.status_code, 200, r.text)
+            mid = r.json()["created"][0]["id"]
+            self.addCleanup(delete_meeting, mid, True)
+            for _ in range(100):
+                m = get_meeting(mid)
+                if m["status"] != "mixing":
+                    break
+                time.sleep(0.05)
+        self.assertEqual(m["status"], "queued")
+        self.assertTrue(Path(m["media_path"]).is_file())
+        self.assertEqual(m["user_notes"], "заметка")
+        enqueue.assert_called_once_with(mid)
+
+
+class FinishFailureTest(unittest.TestCase):
+    def test_a_mix_that_breaks_keeps_the_parts_as_recordings(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        try:
+            from app.api import recording
+        except ImportError:
+            self.skipTest("app dependencies not installed")
+        from app import app_status
+        from app.database import create_meeting, get_meeting, init_db
+
+        init_db()
+        page = Path(tempfile.mkdtemp()) / ".page_x.webm.part"
+        page.write_bytes(b"x" * 10000)
+        m = create_meeting(title="Сбой", filename="s", media_path="", source="recording")
+        app_status.mixing.add(m["id"])
+        payload = recording.RecordFinishPayload(title="Сбой", page_id="x", has_mic=True)
+        with mock.patch.object(recording, "_mix_parts", side_effect=OSError("диск переполнен")), \
+                mock.patch("app.main._salvage_parts") as salvage:
+            recording._mix_in_background(m["id"], payload, page, None, None, 0.0, "Сбой")
+        salvage.assert_called_once()
+        self.assertEqual(salvage.call_args[0][1][0][0], page)  # the page's part is kept
+        self.assertIsNone(get_meeting(m["id"]))  # the placeholder without a file goes
+        self.assertNotIn(m["id"], app_status.mixing)
+
+    def test_closing_the_app_while_mixing_is_warned_about(self):
+        from app import app_status
+
+        app_status.mixing.add(987654)
+        try:
+            self.assertIn("Сведение дорожек записи", app_status.background())
+        finally:
+            app_status.mixing.discard(987654)

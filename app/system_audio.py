@@ -50,10 +50,17 @@ class SystemCapture:
 
     def start(self) -> None:
         self._thread.start()
-        if not self._ready.wait(5):
-            raise RuntimeError("захват системного звука не начался")
-        if self.error:
-            raise RuntimeError(self.error)
+        if not self._ready.wait(5) or self.error:
+            # Not started in time (or failed): the thread is told to stop and its file goes — a device
+            # that came up later recorded into a file nothing could stop or finish
+            error = self.error or "захват системного звука не начался"
+            self._stop.set()
+            self._thread.join(timeout=2)
+            try:
+                self.path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise RuntimeError(error)
 
     def _run(self) -> None:
         import soundcard as sc
@@ -75,24 +82,38 @@ class SystemCapture:
                     if gap:
                         out.write(np.zeros((gap, 2), dtype=np.float32))
                         written += gap
-                        with self._live_lock:
-                            self._live = np.concatenate([self._live, np.zeros(gap // 3, dtype=np.float32)])[-16000 * 30:]
+                        if self._live_wanted():
+                            with self._live_lock:
+                                self._live = np.concatenate([self._live, np.zeros(gap // 3, dtype=np.float32)])[-16000 * 30:]
                     out.write(block)
                     written += len(block)
                     mono = block.mean(axis=1).astype(np.float32)
                     self.level = float(np.sqrt(np.mean(mono ** 2))) if mono.size else 0.0
-                    with self._live_lock:
-                        # 48 kHz -> 16 kHz by averaging groups of three samples (enough for captions)
-                        n = mono.size // 3 * 3
-                        self._live = np.concatenate([self._live, mono[:n].reshape(-1, 3).mean(axis=1)])[-16000 * 30:]
+                    if self._live_wanted():
+                        with self._live_lock:
+                            # 48 kHz -> 16 kHz by averaging groups of three samples (enough for captions)
+                            n = mono.size // 3 * 3
+                            self._live = np.concatenate([self._live, mono[:n].reshape(-1, 3).mean(axis=1)])[-16000 * 30:]
         except Exception as e:
             traceback.print_exc()
             self.error = f"Не удалось записать системный звук: {e}"[:300]
             self._ready.set()
 
+    _live_taken_at = 0.0  # when live captions last took the sound (set on the instance)
+
+    def _live_wanted(self) -> bool:
+        """Live captions take the sound now (within a few seconds): without them the 30 s buffer was
+        copied ten times a second for the whole recording."""
+        return time.time() - self._live_taken_at < 5.0
+
     def take_live(self, count: int) -> np.ndarray:
-        """Up to `count` samples (16 kHz mono) captured since the last call, for live captions."""
+        """Up to `count` samples (16 kHz mono) captured since the last call, for live captions. What
+        piled up beyond half a second (captions switched on during the recording: up to 30 s) is
+        dropped, so the system sound joins the microphone's chunk it was heard with, not late."""
+        self._live_taken_at = time.time()
         with self._live_lock:
+            if self._live.size - count > 8000:  # behind by more than the jitter of the chunks: the newest
+                self._live = self._live[self._live.size - count:]
             out, self._live = self._live[:count], self._live[count:]
         return out
 

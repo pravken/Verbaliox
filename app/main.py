@@ -50,7 +50,9 @@ def _ensure_not_transcribing(meeting_id: int) -> None:
 
 
 def _ensure_not_processing(meeting_id: int) -> None:
-    if is_job_active(meeting_id):
+    from app import app_status
+
+    if is_job_active(meeting_id) or meeting_id in app_status.mixing:
         raise HTTPException(status_code=409, detail="Запись уже обрабатывается. Дождитесь окончания или отмените обработку.")
 
 STATIC_DIR = BASE_DIR / "static"
@@ -224,6 +226,19 @@ async def lifespan(_app: FastAPI):
         elif m.get("status") == "downloading":
             update_meeting_progress(int(m["id"]), status="failed", progress=0, stage_text="",
                                     error_message="Скачивание по ссылке прервано перезапуском — нажмите «Повторить»")
+        elif m.get("status") == "mixing":
+            from pathlib import Path as _P
+
+            if m.get("media_path") and _P(m["media_path"]).is_file():
+                # the mix had ended and its file was registered: it only was not queued yet
+                update_meeting_progress(int(m["id"]), status="queued", progress=0, stage_text="В очереди на распознавание")
+                enqueue_meeting_job(int(m["id"]))
+            else:
+                # A recording being mixed when the app closed: its parts were recovered above, each as a
+                # recording; this placeholder without a file goes
+                from app.database import delete_meeting
+
+                delete_meeting(int(m["id"]))
         elif m.get("status") in ("translating", "rendering", "merging"):
             # Partial translations are kept and can be completed with "Update translation"
             update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Задача прервана перезапуском")
@@ -472,6 +487,10 @@ def recover_orphan_recordings() -> int:
     found: List[Tuple[Path, Optional[bool]]] = []
     try:
         rec = _recordings_dir()
+        # what finishing a recording made for its mix (the cleaned microphone, the lined-up system sound):
+        # left by a crash during the mix, the recorded parts themselves are recovered below
+        for left in [*rec.glob(".page_*.part.mic.wav"), *rec.glob(".page_*.part.sys.wav")]:
+            left.unlink(missing_ok=True)
         found += [(p, None) for p in rec.glob(".page_*.webm.part")]
         found += [(p, True) for p in rec.glob(".screen_*.mkv.part")]
         found += [(p, False) for p in UPLOADS_DIR.glob("system_*.wav") if p.stat().st_size > 4096]
@@ -519,8 +538,9 @@ def record_mix_command(ffmpeg: str, page: Optional[Path], system: Optional[Path]
                        "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[a]", "-map", "[a]",
                        "-c:a", "aac", "-b:a", "160k", str(dest)]
     if page and not system:
-        # Video from MediaRecorder has no index: a copy into a new file makes it seekable
-        return base + ["-i", str(page), "-c", "copy", str(dest)] if has_video else None
+        # MediaRecorder writes no index and no duration, sound alone too: a copy into a new file makes
+        # it seekable with a known length (a second for an hour; a failed copy keeps the page's file)
+        return base + ["-i", str(page), "-c", "copy", str(dest)]
     if system and not page:
         return base + ["-i", str(system), "-c:a", "aac", "-b:a", "160k", str(dest)]
     if has_video:

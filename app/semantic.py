@@ -118,6 +118,9 @@ def _known_vectors(meeting_id: int, model: str) -> Dict[str, bytes]:
 def index_meeting(meeting_id: int, settings: Optional[Dict[str, str]] = None) -> int:
     """Embeds and stores the chunks of one recording; returns how many chunks it has."""
     settings = settings or get_all_settings()
+    from app.database import text_edits
+
+    edits_before = text_edits.get(meeting_id, 0)  # an edit after this is not in what is embedded
     m = get_meeting(meeting_id)
     if not m:
         return 0
@@ -129,13 +132,16 @@ def index_meeting(meeting_id: int, settings: Optional[Dict[str, str]] = None) ->
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with _db_lock:
         conn = get_connection()
+        # The text was edited while it was embedded (seconds): the index stays «stale», so the edit is
+        # indexed next time — it was marked fresh and the edit never reached the search
+        stale = 1 if text_edits.get(meeting_id, 0) != edits_before else 0
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.executemany(
             "INSERT INTO semantic_chunks (meeting_id, chunk, start, speaker, text, vec) VALUES (?, ?, ?, ?, ?, ?)",
             [(meeting_id, i, c[0], c[1], c[2], vectors[i].tobytes()) for i, c in enumerate(chunks)],
         )
-        conn.execute("INSERT OR REPLACE INTO semantic_meta (meeting_id, model, updated_at, stale) VALUES (?, ?, ?, 0)",
-                     (meeting_id, model_name(settings), now))
+        conn.execute("INSERT OR REPLACE INTO semantic_meta (meeting_id, model, updated_at, stale) VALUES (?, ?, ?, ?)",
+                     (meeting_id, model_name(settings), now, stale))
         conn.commit()
         conn.close()
     _invalidate_cache()

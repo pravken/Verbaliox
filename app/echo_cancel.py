@@ -104,14 +104,19 @@ def _delay_at(times: np.ndarray, lags: np.ndarray, at: np.ndarray) -> np.ndarray
 
 def _align(ref: np.ndarray, n: int, times: np.ndarray, lags: np.ndarray, margin: int) -> np.ndarray:
     """ref moved so its echo falls at `margin` samples into the filter, following the delay along the
-    recording; done in pieces so an hour-long recording does not need gigabytes at once."""
+    recording. Done in pieces, each reading only the part of ref it needs: the whole of ref (and a
+    float64 grid as long) was converted for every piece, gigabytes for an hour-long recording."""
     out = np.zeros(n, dtype=np.float32)
-    grid = np.arange(len(ref), dtype=np.float64)
     step = 4_000_000
     for a in range(0, n, step):
         t = np.arange(a, min(n, a + step), dtype=np.float64)
         src = t - _delay_at(times, lags, t) + margin
-        out[a:a + len(t)] = np.interp(src, grid, ref, left=0.0, right=0.0)
+        lo = max(0, int(np.floor(src.min())))
+        hi = min(len(ref), int(np.ceil(src.max())) + 2)
+        if hi - lo < 2:
+            continue  # this piece falls outside ref: silence
+        out[a:a + len(t)] = np.interp(src, np.arange(lo, hi, dtype=np.float64), ref[lo:hi].astype(np.float64),
+                                      left=0.0, right=0.0)
     return out
 
 
@@ -200,7 +205,7 @@ def cancel_and_align(mic: np.ndarray, ref: np.ndarray, sr: int = SR) -> Optional
     print(f"[echo] delay {lags[0] / sr:.3f}..{lags[-1] / sr:.3f} s over {len(lags)} windows, jumps: {jumps}", flush=True)
     margin = int(MARGIN_SEC * sr)
     aligned = _align(ref, len(mic), times, lags, margin)
-    cleaned, echo = _adaptive(mic.astype(np.float32), aligned)
+    cleaned, echo = _adaptive(mic.astype(np.float32, copy=False), aligned)
     del aligned
     in_room = _align(ref, len(mic), times, lags, 0)
     return np.clip(_suppress(cleaned, echo), -1.0, 1.0), in_room

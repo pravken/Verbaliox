@@ -34,6 +34,39 @@ class LongSummaryTest(unittest.TestCase):
         self.assertIn("[00:00] начало части", final)  # the beginning of the meeting is there
         self.assertIn("от начала до конца", final)
 
+    def test_the_users_notes_leave_room_in_one_request(self):
+        """A recording just under the one-request limit, with 6000 characters of notes: read in parts,
+        so the request still fits the model's window."""
+        text = "обсуждаем настройку рендера и документацию " * 10
+        n = (ollama_client.SINGLE_PASS_MAX_CHARS - 2000) // (len(text) + 12)
+        segs = [{"start": i * 10, "end": i * 10 + 9, "speaker": "S1", "text": text} for i in range(n)]
+        asked = []
+        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm.chat.side_effect = lambda system, user: asked.append(user) or "- [00:00] конспект"
+        with mock.patch("app.llm.target", return_value=llm):
+            ollama_client.generate_meeting_summary(segs, {}, "protocol", user_notes="заметка " * 750)
+        self.assertTrue(any(a.startswith("Это фрагмент") for a in asked))
+        self.assertLessEqual(len(asked[-1]), ollama_client.SINGLE_PASS_MAX_CHARS + 6000 + 3000)
+
+    def test_the_parts_are_read_once_for_the_overview_and_the_chapters(self):
+        segs = [{"start": t, "end": t + 9, "speaker": "S1", "text": "обсуждаем настройку рендера " * 6}
+                for t in range(0, 5400, 10)]
+        asked = []
+
+        def chat(system, user):
+            asked.append(user[:20])
+            return "- [00:00] конспект" if user.startswith("Это фрагмент") else "ответ"
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000, label="qwen3:8b")
+        llm.chat.side_effect = chat
+        notes = {}
+        with mock.patch("app.llm.target", return_value=llm):
+            ollama_client.generate_meeting_summary(segs, {}, "protocol", part_notes=notes)
+            parts = sum(a.startswith("Это фрагмент") for a in asked)
+            ollama_client.generate_meeting_summary(segs, {}, "chapters", part_notes=notes)
+        self.assertGreater(parts, 1)
+        self.assertEqual(sum(a.startswith("Это фрагмент") for a in asked), parts)  # none asked again
+
 
 if __name__ == "__main__":
     unittest.main()

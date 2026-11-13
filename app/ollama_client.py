@@ -714,10 +714,26 @@ _work_lock = threading.Lock()
 _work = {"active": 0, "timer": None}
 
 
+def _speech_job_waits() -> bool:
+    """A transcription is queued or running: it needs the video memory the analysis model holds."""
+    try:
+        from app import transcriber
+
+        with transcriber._jobs_lock:
+            return any(q["kind"] == "transcribe" for q in transcriber._queue)
+    except Exception:
+        return False
+
+
 def _after_work_unload() -> None:
+    """After the analysis model's work: unloaded at once only when a transcription waits for the video
+    memory; otherwise it stays as long as Settings → «выгружать через N минут» says (keep_alive), so a
+    next question to the assistant does not wait seconds for it to load again."""
     with _work_lock:
         if _work["active"]:
             return
+    if not _speech_job_waits():
+        return
     try:
         from app.vram import ollama_release_others
 
@@ -858,10 +874,13 @@ def generate_meeting_summary(
     user_notes: str = "",
     template_prompt: str = "",
     progress: Optional[Callable[[int, int], None]] = None,
+    part_notes: Optional[Dict[str, Any]] = None,
 ) -> str:
     """template_prompt: the instruction of a template the user made (Settings → Analysis);
     user_notes: what the user wrote during the meeting, taken into account by every summary;
-    progress(done, total): the parts of a long recording read so far (it is read part by part)."""
+    progress(done, total): the parts of a long recording read so far (it is read part by part);
+    part_notes: a dict kept by the caller across calls on the same transcript — the notes of the parts
+    of a long recording are made once (the overview and the chapters asked for the very same ones)."""
     from app.llm import target
 
     # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
@@ -899,7 +918,10 @@ def generate_meeting_summary(
 
     source_label = "Вот точная расшифровка аудио/видеозаписи"
     single_pass_max = SINGLE_PASS_MAX_CHARS if not llm.is_cloud else llm.max_chars
-    if len(transcript_text) > single_pass_max:
+    # the user's notes go in the same request: the transcript gets the room they leave (a recording
+    # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
+    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]))
+    if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
         chunks = _chunk_lines(lines, CHUNK_MAX_CHARS if not llm.is_cloud else llm.max_chars // 2)
         focus = (
@@ -908,6 +930,11 @@ def generate_meeting_summary(
             else ""
         )
         notes: List[str] = []
+        reuse = part_notes is not None and not focus
+        if reuse and part_notes.get("chunks") == len(chunks) and part_notes.get("model") == llm.label \
+                and len(part_notes.get("notes") or []) == len(chunks):
+            notes = list(part_notes["notes"])
+            chunks = []  # read already, by the overview before
         for idx, chunk in enumerate(chunks, start=1):
             if progress:
                 progress(idx, len(chunks))
@@ -920,7 +947,9 @@ def generate_meeting_summary(
                     "Пиши только то, что есть в тексте фрагмента.",
                 )
             )
-        transcript_text = _fit_notes(llm, system_prompt, notes, single_pass_max, lang)
+        if reuse and chunks:
+            part_notes.update(chunks=len(chunks), model=llm.label, notes=list(notes))
+        transcript_text = _fit_notes(llm, system_prompt, notes, whole_max, lang)
         source_label = (
             "Запись длинная, поэтому ниже приведены последовательные конспекты всех её фрагментов "
             "(с таймкодами исходной записи, от начала до конца)"

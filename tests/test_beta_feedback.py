@@ -80,7 +80,8 @@ class RecordingApiTest(unittest.TestCase):
     def test_mix_commands(self):
         cmd = self.main.record_mix_command
         page, system, dest = Path("p.webm"), Path("s.wav"), Path("out")
-        self.assertIsNone(cmd("ff", page, None, False, True, dest))
+        # the microphone alone: copied into a new file, which gets an index and a duration
+        self.assertEqual(cmd("ff", page, None, False, True, dest)[-3:], ["-c", "copy", str(dest)])
         self.assertIn("copy", cmd("ff", page, None, True, False, dest))
         self.assertIn("aac", cmd("ff", None, system, False, False, dest))
         video_mic = cmd("ff", page, system, True, True, dest)

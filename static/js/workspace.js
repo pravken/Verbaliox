@@ -5,6 +5,11 @@
 let _selectSeq = 0;
 
 async function selectMeeting(id, reloadPlayer = true) {
+  // A refresh of the recording open (new lines, a status change) while another one is being opened by
+  // a click: skipped — it took the place of the click, whose answer was then dropped as older, and the
+  // clicked row stayed «opening» over the old recording
+  // (a click passes reloadPlayer = true: a click back on the open recording is the user's last word)
+  if (!reloadPlayer && state.pendingMeetingId != null && state.pendingMeetingId !== id && state.activeMeeting && state.activeMeeting.id === id) return;
   // Only the last request wins: a slow answer for an earlier click must not replace the open recording
   const seq = ++_selectSeq;
   // Audit 3.2. The click answers at once: the row lights up and the title shows the recording,
@@ -389,7 +394,7 @@ async function transcribeWithPickedModel() {
   if (!model) return;
   const precise = model === TX_PRECISE;
   // The precise mode starts from the recording's own model (its speakers come from that one)
-  if (precise) model = m.model_name && m.model_name !== 'merged' ? m.model_name : ((state.system && state.system.settings) || {}).whisper_model || 'large-v3-turbo';
+  if (precise) model = m.model_name && !['merged', 'teams'].includes(m.model_name) ? m.model_name : ((state.system && state.system.settings) || {}).whisper_model || 'large-v3-turbo';
   if (!precise && model === m.transcript_model && (m.segments || []).length
       && !(await confirmDialog(t('txTranscribeAgainTitle'), t('txTranscribeAgainText').replace('{model}', () => formatModelName(model)),
         t('txTranscribeAgain'), false))) return;
@@ -412,7 +417,8 @@ function updateProcessingBanner(m) {
   const isBusy = !DONE_STATUSES.includes(m.status);
   const banner = document.getElementById('workspace-processing-banner');
   banner.classList.toggle('hidden', !isBusy && !['failed', 'cancelled', 'cleared'].includes(m.status));
-  document.getElementById('workspace-cancel-btn').classList.toggle('hidden', !isBusy);
+  // the mix of a stopped recording is not a job that can be cancelled
+  document.getElementById('workspace-cancel-btn').classList.toggle('hidden', !isBusy || m.status === 'mixing');
   document.getElementById('workspace-retry-btn').classList.toggle('hidden', isBusy);
   const bar = document.getElementById('workspace-progress-bar');
   const q = (state.queue || []).find(x => x.id === m.id);
@@ -1505,7 +1511,40 @@ const TX_CHUNK = 40;
 const TX_EAGER_LIMIT = 150;
 const tx = { items: [], query: '', speakers: {}, observer: null };
 
+// A line being edited stays open, with what was typed, when the transcript is drawn again for another
+// reason (a status change of the recording, new lines, a speaker renamed): it was wiped with the typing.
+// It closes on «Отмена», Esc, a save, or when another recording is opened.
 function renderTranscript() {
+  const area = state._closeEdit ? null : document.querySelector('textarea[id^="seg-edit-area-"]');
+  // an editor whose line a search hid in the last drawing: still open, drawn again when it is shown
+  const hidden = state._closeEdit ? null : state._editHidden;
+  state._closeEdit = false;
+  state._editHidden = null;
+  const m = state.activeMeeting;
+  const ed = state._editFor;
+  const segId = area ? Number(area.id.slice('seg-edit-area-'.length)) : hidden ? hidden.segId : null;
+  const seg = m && segId != null ? (m.segments || []).find(x => x.id === segId) : null;
+  // kept only over the same line of the same text: another version shown, or the line changed under it
+  // (a transcription, a merge), and the typing would be saved over a different line
+  const keep = segId != null && ed && m && ed.id === m.id && ed.model === (m.transcript_model || '') && seg && seg.text === ed.text
+    ? (area ? { segId, value: area.value, a: area.selectionStart, b: area.selectionEnd, focused: document.activeElement === area }
+      : { ...hidden, focused: false })
+    : null;
+  renderTranscriptNow();
+  if (!keep) return;
+  openInlineSegmentEditor(keep.segId, keep.focused);  // focus stays where it is (the search box being typed in)
+  const again = document.getElementById(`seg-edit-area-${keep.segId}`);
+  if (!again) { state._editHidden = keep; return; }
+  again.value = keep.value;
+  if (keep.focused) again.setSelectionRange(keep.a, keep.b);
+}
+
+function closeSegmentEdit() {
+  state._closeEdit = true;
+  renderTranscript();
+}
+
+function renderTranscriptNow() {
   const container = document.getElementById('transcript-inner');
   const m = state.activeMeeting;
   if (!m) return;
@@ -1598,6 +1637,14 @@ function renderTranscriptChunk(el) {
     .map((seg, j) => transcriptSegmentHtml(seg, start + j)).join('');
   el.style.height = '';
   el.dataset.rendered = '1';
+  // a line being edited that this part holds (a long transcript draws its parts as they scroll in)
+  const ed = state._editHidden;
+  if (ed && tx.items.slice(start, start + TX_CHUNK).some(seg => seg.id === ed.segId)) {
+    state._editHidden = null;
+    openInlineSegmentEditor(ed.segId, false);
+    const area = document.getElementById(`seg-edit-area-${ed.segId}`);
+    if (area) area.value = ed.value;
+  }
 }
 
 function transcriptSegmentHtml(seg, idx) {
@@ -1624,8 +1671,8 @@ function transcriptSegmentHtml(seg, idx) {
       const cap = (wi, word) => (wi === lead ? String(word).replace(/^(\s*)(\p{Ll})/u, (_, sp, c) => sp + c.toUpperCase()) : word);
       bodyHtml = words.map((w, wi) => hidden.has(wi) ? '' : (w.alts && w.alts.length)
         // A place the models heard differently (a merged transcript): a click shows the variants
-        ? `<span class="word-token word-disputed cursor-pointer" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" title="${escapeHtml(disputeTitle(w))}" data-click="openWordAlts" data-click-args='[{"$": "event"}, ${Number(seg.id)}, ${wi}]'>${escapeHtml(cap(wi, w.word))}</span>`
-        : `<span class="word-token cursor-pointer" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" data-click="seekPlayer" data-click-args='[${Number(w.start) || 0}]'>${escapeHtml(cap(wi, w.word))}</span>`
+        ? `<span class="word-token word-disputed cursor-pointer" data-wi="${wi}" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" title="${escapeHtml(disputeTitle(w))}" data-click="openWordAlts" data-click-args='[{"$": "event"}, ${Number(seg.id)}, ${wi}]'>${escapeHtml(cap(wi, w.word))}</span>`
+        : `<span class="word-token cursor-pointer" data-wi="${wi}" data-start="${Number(w.start) || 0}" data-end="${Number(w.end) || 0}" data-click="seekPlayer" data-click-args='[${Number(w.start) || 0}]'>${escapeHtml(cap(wi, w.word))}</span>`
       ).join('');
     } else {
       const shown = quiet && !(words.length && !query) && typeof quiet.text === 'string' ? quiet.text : seg.text;
@@ -1800,7 +1847,9 @@ function updatePlaybackHighlight(cur, followPlayback) {
   if (segEl && !tx.query) {
     const words = tx.items[segIdx].words || [];
     const wi = findActiveItem(words, cur, 0.08, w => Number(w.start), w => Number(w.end));
-    if (wi >= 0) wordEl = segEl.querySelectorAll('.word-token')[wi] || null;
+    // by its number, not its place: with «Без запинок» the hidden fillers are not drawn and the place
+    // shifted the highlight onto the next words
+    if (wi >= 0) wordEl = segEl.querySelector(`.word-token[data-wi="${wi}"]`);
   }
   if (wordEl !== _playbackIndex.activeWord) {
     _playbackIndex.activeWord?.classList.remove('word-active');
@@ -1921,7 +1970,7 @@ function renderFillerButton() {
   rpRenderFillerButton();
 }
 
-function openInlineSegmentEditor(segId) {
+function openInlineSegmentEditor(segId, focus = true) {
   const m = state.activeMeeting;
   if (!m) return;
   const seg = (m.segments || []).find(s => s.id === segId);
@@ -1929,38 +1978,42 @@ function openInlineSegmentEditor(segId) {
 
   const textBox = document.getElementById(`seg-text-${segId}`);
   if (!textBox || document.getElementById(`seg-edit-area-${segId}`)) return;
+  state._editFor = { id: m.id, model: m.transcript_model || '', text: seg.text };
   textBox.innerHTML = `
     <textarea id="seg-edit-area-${segId}" rows="2" data-keydown="segEditKey" data-keydown-args='[{"$": "event"}, ${Number(segId)}]'
       class="w-full bg-apple-sidebar border border-apple-blue rounded-lg p-2 text-[13px] text-white focus:outline-none mt-1">${escapeHtml(seg.text)}</textarea>
     <div class="flex items-center justify-end gap-2 mt-1.5">
       <span class="mr-auto text-[11.5px] text-apple-secondary">${escapeHtml(t('segEditHint'))}</span>
-      <button data-click="renderTranscript" title="${escapeHtml(t('tipCancelBtn'))}" class="ui-btn ui-btn-subtle">${t('cancel')}</button>
+      <button data-click="closeSegmentEdit" title="${escapeHtml(t('tipCancelBtn'))}" class="ui-btn ui-btn-subtle">${t('cancel')}</button>
       <button data-click="saveSegmentEdit" data-click-args='[${segId}]' title="${escapeHtml(t('tipSaveSettingsBtn'))}" class="ui-btn ui-btn-primary">${t('save')}</button>
     </div>
   `;
   const area = document.getElementById(`seg-edit-area-${segId}`);
-  area.focus();
+  if (!focus) return;  // opened again by a redraw while typing elsewhere (the search): focus stays there
+  area.focus({ preventScroll: true });
   area.setSelectionRange(area.value.length, area.value.length);
 }
 
 function segEditKey(e, segId) {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveSegmentEdit(segId); }
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); renderTranscript(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSegmentEdit(); }
 }
 
 async function saveSegmentEdit(segId) {
   const m = state.activeMeeting;
   const oldText = ((m && m.segments) || []).find(s => s.id === segId)?.text || '';
   const newText = document.getElementById(`seg-edit-area-${segId}`).value.trim();
-  const res = await fetch(`/api/meetings/${state.activeMeeting.id}/segments/${segId}`, {
+  const res = await fetch(`/api/meetings/${m.id}/segments/${segId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: newText })
   });
   const data = await readJson(res);
   if (!res.ok) { showToast(errorText(data, res)); return; }  // the edit box stays open with the text
+  // another recording opened meanwhile: the answer is not put in its place
+  if (!state.activeMeeting || state.activeMeeting.id !== m.id) return;
   state.activeMeeting = data;
-  renderTranscript();
+  closeSegmentEdit();
   if (newText !== oldText.trim()) showToast(t('segSaved'), { label: t('spUndo'), onClick: () => restoreSegmentText(m.id, segId, oldText) });
 }
 
@@ -1974,12 +2027,14 @@ async function restoreSegmentText(meetingId, segId, text) {
 }
 
 async function changeSegmentSpeaker(segId, newSpeaker) {
-  const res = await fetch(`/api/meetings/${state.activeMeeting.id}/segments/${segId}`, {
+  const id = state.activeMeeting.id;
+  const res = await fetch(`/api/meetings/${id}/segments/${segId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ speaker: newSpeaker })
   });
   const data = await readJson(res);
+  if (!state.activeMeeting || state.activeMeeting.id !== id) return;  // another recording is open now
   if (!res.ok) { showToast(errorText(data, res)); renderTranscript(); return; }
   state.activeMeeting = data;
   renderSpeakerPillsBar();

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from app.database import get_all_settings, get_meeting
+from app.database import get_all_settings
 
 
 def _ollama_base() -> str:
@@ -138,19 +138,40 @@ def ollama_loaded() -> List[Dict[str, Any]]:
 OLLAMA_UNLOAD_WAIT_SEC = 8.0
 
 
-def _stop_ollama_runners() -> None:
-    """The processes in which Ollama holds models (its "runner"; ollama_llama_server in older versions).
-    Its server stays and starts a new runner at the next request."""
+def _model_blobs(names: List[str]) -> List[str]:
+    """The weight files («sha256-…») of these models, which their runner's command line names."""
+    import re
+
+    out: List[str] = []
+    with httpx.Client(timeout=5.0) as client:
+        for name in names:
+            try:
+                info = client.post(f"{_ollama_base()}/api/show", json={"model": name}).json()
+            except Exception:
+                continue
+            out += re.findall(r"sha256-[0-9a-f]{12,64}", str(info.get("modelfile") or ""))
+    return list(dict.fromkeys(out))
+
+
+def _stop_ollama_runners(names: List[str]) -> None:
+    """The processes in which Ollama holds these models (its "runner"; ollama_llama_server in older
+    versions), found by their weight file: the runners of other models — another program's — stay (all
+    of them were stopped before). Its server stays and starts a new runner at the next request."""
     import subprocess
 
+    blobs = _model_blobs(names)
+    if not blobs:
+        print(f"[vram] runner of {', '.join(names)} not found: not stopped", flush=True)
+        return
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     if sys.platform == "win32":
-        script = ("Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'ollama.exe' -and $_.CommandLine -match ' runner') "
-                  "-or $_.Name -eq 'ollama_llama_server.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
+        match = " -or ".join(f"$_.CommandLine -match '{b}'" for b in blobs)
+        script = ("Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'ollama.exe' -or $_.Name -eq 'ollama_llama_server.exe') "
+                  f"-and ({match}) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}")
         subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=30, creationflags=flags)
     else:
-        subprocess.run(["pkill", "-f", "ollama runner"], capture_output=True, timeout=30)
-        subprocess.run(["pkill", "-f", "ollama_llama_server"], capture_output=True, timeout=30)
+        for b in blobs:
+            subprocess.run(["pkill", "-f", f"ollama.*{b}"], capture_output=True, timeout=30)
 
 
 def ollama_unload(names: List[str], force: bool = True) -> List[str]:
@@ -176,7 +197,7 @@ def ollama_unload(names: List[str], force: bool = True) -> List[str]:
         left = [n for n in left if n in loaded]
     if left and force and _ollama_address(base)[0] == "127.0.0.1":
         try:
-            _stop_ollama_runners()
+            _stop_ollama_runners(left)
         except Exception:
             traceback.print_exc()
         end = time.time() + 4.0
@@ -329,8 +350,10 @@ def job_stage() -> Optional[str]:
     if transcriber.running_job_kind() != "transcribe":
         return None
     mid = transcriber.running_meeting_id()
-    m = get_meeting(mid) if mid is not None else None
-    return (m or {}).get("status") or "transcribing"
+    # the status alone: the whole recording was read for it every 5 s and before every LLM request
+    from app.database import meeting_status
+
+    return (meeting_status(mid) if mid is not None else "") or "transcribing"
 
 
 def release_idle_speech_models() -> List[str]:

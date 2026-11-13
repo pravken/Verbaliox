@@ -326,7 +326,9 @@ def preload_async(model_id: str) -> str:
 
 
 def loaded_models() -> List[str]:
-    return list(dict.fromkeys(k.split("@")[0] for k in _loaded))
+    with _lock:  # a load or release in another thread changed the dict while it was read
+        keys = list(_loaded)
+    return list(dict.fromkeys(k.split("@")[0] for k in keys))
 
 
 # Frequent short words of the Latin-script languages Parakeet hears most: enough to tell them apart in a
@@ -406,14 +408,20 @@ def level(audio: Any, sr: int = 16000) -> Any:
     n = a.size // win
     if n < 2 or peak <= SILENT_PEAK:
         return a
-    peaks = np.percentile(np.abs(a[: n * win].reshape(n, win)), 99.9, axis=1)
+    # part by part: the whole recording was copied five or six times over (2 GB for an hour and a half)
+    peaks = np.array([np.percentile(np.abs(a[i * win:(i + 1) * win]), 99.9) for i in range(n)])
     floor = max(SILENT_PEAK, peak * NOISE_SHARE)
     gains = np.where((peaks > floor) & (peaks < QUIET_PEAK), np.minimum(0.9 / np.maximum(peaks, 1e-6), MAX_GAIN), 1.0)
     if np.all(gains == 1.0):
         return a
     centers = (np.arange(n) + 0.5) * win
-    g = np.interp(np.arange(a.size, dtype=np.float32), centers, gains).astype(np.float32)
-    return np.clip(a * g, -1.0, 1.0)
+    out = np.empty_like(a)
+    step = 1 << 20
+    for s in range(0, a.size, step):
+        e = min(a.size, s + step)
+        g = np.interp(np.arange(s, e, dtype=np.float64), centers, gains).astype(np.float32)
+        np.clip(a[s:e] * g, -1.0, 1.0, out=out[s:e])
+    return out
 
 
 def recognize_array(model_id: str, audio: Any) -> List[Tuple[float, float, str]]:

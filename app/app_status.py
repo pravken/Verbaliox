@@ -19,6 +19,9 @@ KIND_LABELS = {
 }
 
 
+# Stopped recordings whose tracks are being mixed (app/api/recording.py): no job may take them meanwhile
+mixing: set = set()
+
 # The speech model recognizing each recording right now (the routed model, each model of the precise
 # mode in turn): shown as «Идёт расшифровка: <model>», the recording's own choice may be «Авто»
 _asr_now: Dict[int, str] = {}
@@ -94,6 +97,9 @@ def background() -> List[str]:
     check("Резервная копия", lambda: backup.busy > 0)
     check("Диктовка", lambda: dictation._state.get("active"))
     check("Скачивание по ссылке", _downloading)
+    # a stopped recording whose tracks are being mixed: closing the app now loses the mix, its title
+    # and notes (its parts come back only as separate recordings)
+    check("Сведение дорожек записи", lambda: bool(mixing))
     return out
 
 
