@@ -189,6 +189,7 @@ def init_db() -> None:
             "dictation_translate_cloud": "false",  # dictation is translated by the local model unless allowed
             "quiet_mode": "false",  # no tray notifications (run.py TrayController)
             "call_auto_record": "false",  # record calls by themselves (app/call_watch.py)
+            "meeting_follow": "true",  # a new Teams meeting: a new recording; the meeting over: it stops (app/meeting_watch.py)
             "call_apps": "zoom,teams,telegram",
             "call_preset": "call",  # system-wide start/stop of a recording (app/tray.py); "" = off
             "semantic_search": "false",  # search by meaning with a local embedding model (app/semantic.py)

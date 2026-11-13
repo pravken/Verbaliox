@@ -934,8 +934,11 @@ def generate_meeting_summary(
     template_prompt: str = "",
     progress: Optional[Callable[[int, int], None]] = None,
     part_notes: Optional[Dict[str, Any]] = None,
+    participants: Optional[List[str]] = None,
 ) -> str:
-    """template_prompt: the instruction of a template the user made (Settings → Analysis);
+    """participants: who was in the meeting, their names written right (app/people.meeting_roster):
+    the model writes them so, and a name it still misspells is put right in its answer;
+    template_prompt: the instruction of a template the user made (Settings → Analysis);
     user_notes: what the user wrote during the meeting, taken into account by every summary;
     progress(done, total): the parts of a long recording read so far (it is read part by part);
     part_notes: a dict kept by the caller across calls on the same transcript — the notes of the parts
@@ -975,6 +978,14 @@ def generate_meeting_summary(
     elif template_key == "notes" and not custom_prompt.strip():
         raise RuntimeError("У записи нет ваших заметок: напишите их во вкладке «Мои заметки» или во время записи в студии")
 
+    roster = [p for p in (participants or []) if str(p).strip()][:40]
+    roster_note = (
+        "Участники этой встречи — их имена и фамилии написаны верно: " + "; ".join(roster) + ". "
+        "Когда речь о ком-то из них (в том числе когда распознавание исказило имя), пиши имя и фамилию "
+        "точно как в этом списке, буква в букву. Не придумывай фамилии, отчества и должности, которых нет "
+        "ни в этом списке, ни в расшифровке; если не ясно, о ком речь, пиши имя так, как оно сказано."
+    ) if roster else ""
+
     source_label = "Вот точная расшифровка аудио/видеозаписи"
     single_pass_max = SINGLE_PASS_MAX_CHARS if not llm.is_cloud else llm.max_chars
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
@@ -1003,7 +1014,7 @@ def generate_meeting_summary(
                     f"Это фрагмент {idx} из {len(chunks)} расшифровки длинной записи:\n```text\n{chunk}\n```\n\n"
                     f"Составь {lang} подробный конспект этого фрагмента списком: кто что сказал, факты, мнения, "
                     f"решения, задачи и сроки — каждый пункт с таймкодом `[ММ:СС]`. {focus}"
-                    "Пиши только то, что есть в тексте фрагмента.",
+                    "Пиши только то, что есть в тексте фрагмента." + (f"\n\n{roster_note}" if roster_note else ""),
                 )
             )
         if reuse and chunks:
@@ -1021,11 +1032,17 @@ def generate_meeting_summary(
     user_message = (
         f"{source_label}:\n"
         f"```text\n{transcript_text}\n```\n\n"
-        f"Задание:\n{instruction}\n\n"
+        + (f"{roster_note}\n\n" if roster_note else "")
+        + f"Задание:\n{instruction}\n\n"
         "Напоминание: пиши ТОЛЬКО о том, что реально сказано в записи. "
         "Не выдумывай посторонних людей, встреч или проектов."
     )
-    return llm.chat(system_prompt, user_message)
+    answer = llm.chat(system_prompt, user_message)
+    if roster:  # a participant's name still written with a letter wrong
+        from app.people import fix_name_typos
+
+        answer = fix_name_typos(answer, roster)
+    return answer
 
 
 # --- A title for a recording, from its content ---
