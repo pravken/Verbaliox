@@ -42,6 +42,9 @@ class SystemCapture:
         self.level = 0.0          # RMS of the last block, for the record meter
         self.error = ""
         self.started_at = 0.0
+        self.written = 0          # samples in the file
+        self.padded = 0           # of them, silence put for pauses the loopback did not deliver
+        self.gaps = 0
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._live = np.zeros(0, dtype=np.float32)  # 16 kHz mono, not yet taken by live captions
@@ -82,11 +85,14 @@ class SystemCapture:
                     if gap:
                         out.write(np.zeros((gap, 2), dtype=np.float32))
                         written += gap
+                        self.padded += gap
+                        self.gaps += 1
                         if self._live_wanted():
                             with self._live_lock:
                                 self._live = np.concatenate([self._live, np.zeros(gap // 3, dtype=np.float32)])[-16000 * 30:]
                     out.write(block)
                     written += len(block)
+                    self.written = written
                     mono = block.mean(axis=1).astype(np.float32)
                     self.level = float(np.sqrt(np.mean(mono ** 2))) if mono.size else 0.0
                     if self._live_wanted():
@@ -120,6 +126,10 @@ class SystemCapture:
     def stop(self) -> None:
         self._stop.set()
         self._thread.join(timeout=5)
+        if self.started_at:
+            # what lines the tracks up later: the file against the clock, and the silence put in it
+            print(f"[system audio] {self.written / SR:.1f} s written over {time.time() - self.started_at:.1f} s, "
+                  f"{self.padded / SR:.1f} s of it silence for {self.gaps} pause(s)", flush=True)
 
 
 def start_capture(path: Path) -> SystemCapture:
