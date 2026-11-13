@@ -925,7 +925,7 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 /* The open view and the open tab of a recording: blue, so what is open is plain at a glance */
 .tb-tab.tb-active, .tb-subtab.tb-active { background: #0A84FF; color: #FFFFFF; font-weight: 600; }
 .tb-tab.tb-active:hover, .tb-subtab.tb-active:hover { background: #2B95FF; color: #FFFFFF; }
-.tb-active .tb-ai { fill: #FFFFFF; }  /* the gradient of the AI mark would fade on the blue */
+.tb-active .tb-ai, .ui-btn-primary .tb-ai { fill: #FFFFFF; }  /* the gradient of the AI mark would fade on the blue */
 .tb-group.hidden { display: none; }
 .tb-group {
   display: inline-flex; align-items: center; gap: 2px; height: 42px; padding: 0 4px; border-radius: 21px; min-width: 0;
