@@ -23,6 +23,11 @@ SECTIONS = {
     "assignments", "задания", "approvals", "утверждения", "notification", "уведомление", "уведомления",
     "settings", "параметры", "настройки", "help", "справка", "search", "поиск", "команды", "copilot",
 }
+# A view of the meeting's window, put before the meeting's name: «Компактное представление собрания |
+# MW maps | Microsoft Teams» is still the meeting «MW maps» (switching the view restarted the recording)
+VIEW_PREFIXES = {"компактное представление собрания", "compact meeting view", "meeting compact view",
+                 "компактное представление", "compact view", "общий доступ к экрану", "screen sharing",
+                 "демонстрация экрана", "sharing control bar", "панель управления общим доступом"}
 _LAST: List[str] = [""]
 _HAS_LEAVE: Dict[tuple, tuple] = {}  # (window, title) -> (holds «Покинуть» / «Leave», when looked)
 RECHECK_SEC = 20.0  # a window without the button is looked at again: the lobby has none until you join
@@ -38,9 +43,13 @@ def meeting_title(titles: List[str]) -> str:
         if not raw or "teams" not in raw.lower():
             continue
         name = _SUFFIX_RE.sub("", raw).strip()
-        if not name:
+        parts = [p.strip() for p in re.split(r"\s*\|\s*", name) if p.strip()]
+        while len(parts) > 1 and parts[0].lower() in VIEW_PREFIXES:
+            parts = parts[1:]
+        if not parts or parts[0].lower() in VIEW_PREFIXES:
             continue
-        first = re.split(r"\s*\|\s*", name)[0].strip().lower()
+        name = " | ".join(parts)
+        first = parts[0].lower()
         if first in SECTIONS or name.lower() in SECTIONS:
             continue
         return name[:200]

@@ -11,6 +11,10 @@ class MeetingTitleTest(unittest.TestCase):
         self.assertEqual(mw.meeting_title(["Чат | Анна Петрова | Microsoft Teams", "Планёрка дизайна | Microsoft Teams"]),
                          "Планёрка дизайна")
         self.assertEqual(mw.meeting_title(["Meeting with Anna | Microsoft Teams (work or school)"]), "Meeting with Anna")
+        # the compact view of the same meeting is the same meeting (switching it restarted the recording)
+        self.assertEqual(mw.meeting_title(["Компактное представление собрания | MW maps VFX party | Microsoft Teams"]),
+                         "MW maps VFX party")
+        self.assertEqual(mw.meeting_title(["MW maps VFX party | Microsoft Teams"]), "MW maps VFX party")
         for none in (["Календарь | Microsoft Teams"], ["Microsoft Teams"], ["Activity | Microsoft Teams"], [], [""]):
             self.assertEqual(mw.meeting_title(none), "")
 
