@@ -6,6 +6,18 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.1 — English
+
+- **Participants are told apart again.** In a call a few phrases are no one's voice (a laugh, a noise,
+  a cut-off word); each became a speaker of its own, so with six participants said (from the calendar
+  or Teams captions) the whole meeting went to one person, and without a count it came out as one
+  speaker as well. Such phrases are now set aside while the voices are grouped and then go to the
+  nearest voice.
+- **The number of participants is the most there are.** The count from the calendar or captions is an
+  upper bound: ten invited and two speaking stay two people.
+- Voices of different people coming through the same call codec are no longer merged into one.
+- Names from Teams captions now land on separate voices, one name each.
+
 ## 0.8.0 — English
 
 A release of fixes and speed-ups after an independent audit of the whole code by three models.
@@ -277,6 +289,18 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.1
+
+- **Участники снова различаются.** В созвоне всегда есть фразы, которые не похожи ни на чей голос
+  (смех, шум, обрывок слова). Каждая становилась отдельным участником, поэтому при указанных шести
+  участниках (из календаря или субтитров Teams) вся встреча доставалась одному человеку, а без числа
+  она тоже выходила одним участником. Теперь такие фразы откладываются при разделении по голосам и потом
+  получают ближайший голос.
+- **Число участников — это максимум.** Число из календаря или субтитров считается верхней границей:
+  если пригласили десятерых, а говорили двое, участников будет двое.
+- Голоса разных людей, прошедшие через один кодек созвона, больше не сливаются в один.
+- Имена из субтитров Teams теперь достаются разным голосам, каждому своё.
 
 ## 0.8.0
 
