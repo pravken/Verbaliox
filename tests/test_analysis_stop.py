@@ -36,6 +36,9 @@ class AnalysisStopTest(unittest.TestCase):
         from app.database import init_db
 
         init_db()  # the request reads the settings (how long the model stays)
+        with ollama_client._analysis_lock:  # nothing left from another test's requests
+            ollama_client._analysis.clear()
+            ollama_client._analysis_ended.clear()
 
     def _chat(self, box):
         try:
