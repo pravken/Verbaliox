@@ -1841,13 +1841,15 @@ function sendRecordingChunk(page, blob) {
   if (!page) return;
   const seq = page.nextSeq = (page.nextSeq ?? -1) + 1;
   page.upload = page.upload.then(async () => {
-    if (page.failed) return;  // a hole already: the chunks after it would not play
     for (let attempt = 0; attempt < 12; attempt++) {
       try {
-        const r = await fetch(`/api/record/page/${page.id}/chunk`, {
-          method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Chunk-Seq': String(seq) }, body: blob,
-        });
+        // after a chunk given up on, the next ones say so: the server writes them past the gap (a hole
+        // of a few seconds plays on; the rest of the meeting was thrown away)
+        const headers = { 'Content-Type': 'application/octet-stream', 'X-Chunk-Seq': String(seq) };
+        if (page.gap) headers['X-Chunk-After-Gap'] = '1';
+        const r = await fetch(`/api/record/page/${page.id}/chunk`, { method: 'POST', headers, body: blob });
         if (r.ok) {
+          page.gap = false;
           if (page.retrying) { page.retrying = false; showToast(t('recChunkBack')); }
           return;
         }
@@ -1856,8 +1858,8 @@ function sendRecordingChunk(page, blob) {
       if (attempt === 1 && !page.retrying) { page.retrying = true; showWarning(t('recChunkRetrying')); }
       await new Promise(res => setTimeout(res, Math.min(15000, 1000 * 2 ** attempt)));
     }
-    page.failed = t('recChunkFailed');
-    showError(page.failed);
+    page.gap = true;
+    if (!page.failed) { page.failed = t('recChunkFailed'); showError(page.failed); }
   });
 }
 
