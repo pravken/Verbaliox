@@ -227,6 +227,8 @@ const SERVER_TEXT_EN = {
   "Нужна картинка JPEG или PNG": "A JPEG or PNG picture is needed",
   "Картинка слишком большая": "The picture is too large",
   "Фото не найдено": "No photo",
+  "Контрольная сумма фильтра голоса не совпала — файл отклонён": "The voice filter's checksum did not match — the file was rejected",
+  "Фильтр голоса скачивается только в Windows": "The voice filter can be downloaded on Windows only",
   "Сейчас идёт обработка записи, анализ или субтитры": "A recording is being processed, analysed or captioned now",
   "Разделение участников отменено": "Separating the speakers cancelled",
   "Разделение участников в очереди...": "Separating the speakers: queued...",

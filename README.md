@@ -150,6 +150,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
 | Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
 | First start without FFmpeg in `PATH` (or **Download FFmpeg** in Settings) | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
+| **Download the filter** in Settings → Recording (optional) | github.com (release `v0.5.6` of `Rikorose/DeepFilterNet`, checked by SHA-256) |
 | App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer |
 | You click **Install** for an update | github.com: the release archive and `SHA256SUMS.txt`; PyPI and download.pytorch.org if the new version needs other Python packages. The checksum proves the archive arrived complete and unchanged. Once the author's release key is set up, `SHA256SUMS.txt` is also signed (`SHA256SUMS.txt.minisig`, minisign format) and the app installs only releases signed with it ([docs/release-signing.md](docs/release-signing.md)) |
 | Only if you turned on a cloud model in Settings → Analysis: an overview, a question, a title or an Obsidian note is made | The chosen service (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` or your Base URL): the transcript text of that recording, or the fragments found for a library question. Audio and video are never sent. The API key is stored encrypted with Windows DPAPI |
@@ -184,6 +185,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | SoundCard (system audio recording) | BSD-3 |
 | yt-dlp (installed when you first import by link) | Unlicense |
 | FFmpeg (downloaded at the first start when missing, Gyan.dev essentials build) | GPL v3 |
+| [DeepFilterNet 3](https://github.com/Rikorose/DeepFilterNet) `deep-filter.exe` (optional microphone cleanup, downloaded in Settings → Recording) | MIT or Apache 2.0 (code and weights) |
 | [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) TTS (optional dubbing) | Apache 2.0 |
 | Perth watermark `resemble-perth` (optional dubbing) | MIT |
 | Demucs `htdemucs` (optional dubbing) | MIT |
@@ -355,6 +357,7 @@ start.bat
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |
 | Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |
 | Первый запуск без FFmpeg в `PATH` (или **Скачать FFmpeg** в настройках) | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
+| **Скачать фильтр** в Настройки → Запись (по желанию) | github.com (релиз `v0.5.6` репозитория `Rikorose/DeepFilterNet`, проверка SHA-256) |
 | Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере |
 | Вы нажимаете **Установить** для обновления | github.com: архив релиза и `SHA256SUMS.txt`; PyPI и download.pytorch.org, если новой версии нужны другие пакеты Python. Контрольная сумма подтверждает, что архив дошёл целым и неизменным. Когда настроен ключ автора, `SHA256SUMS.txt` ещё и подписан (`SHA256SUMS.txt.minisig`, формат minisign), и программа ставит только релизы с этой подписью ([docs/release-signing.md](docs/release-signing.md)) |
 | Только если в «Настройки → Анализ» включена облачная модель: создаётся обзор, ответ на вопрос, название или заметка Obsidian | Выбранный сервис (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` или ваш Base URL): текст расшифровки этой записи, а для вопросов по медиатеке — найденные фрагменты. Аудио и видео не отправляются. API-ключ хранится зашифрованным (Windows DPAPI) |

@@ -316,6 +316,7 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
     # The speakers' echo taken out of the microphone (app/echo_cancel.py): the mix then uses the
     # cleaned microphone instead of the page's sound
     mic: Optional[Path] = None
+    echo_done = False
     original_system: Optional[Path] = None
     if page and system and payload.has_mic and (get_all_settings().get("rec_echo_cancel") or "true").lower() == "true":
         from app.echo_cancel import clean_microphone
@@ -323,12 +324,23 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
         cleaned = page.with_name(page.name + ".mic.wav")
         lined_up = page.with_name(page.name + ".sys.wav")
         if clean_microphone(tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up):
-            mic = cleaned
+            mic, echo_done = cleaned, True
             if lined_up.is_file():
                 # the system sound where the microphone heard it: mixed instead, nothing more to skip
                 original_system, system, system_skip = system, lined_up, 0.0
+    # The voice without its noise (app/voice_filter.py, DeepFilterNet): the microphone after the echo
+    voice = "no"
+    if page and payload.has_mic and (get_all_settings().get("rec_voice_filter") or "true").lower() == "true":
+        from app import voice_filter
+
+        if voice_filter.find_exe():
+            filtered = page.with_name(page.name + ".voice.wav")
+            if voice_filter.clean(tool_cmd("ffmpeg"), mic or page, filtered):
+                if mic:
+                    mic.unlink(missing_ok=True)
+                mic, voice = filtered, "cleaned"
     print(f"[record] tracks: page={'yes' if page else 'no'} system={'yes' if system else 'no'} "
-          f"skip={system_skip:.2f}s echo={'removed' if mic else 'no'}", flush=True)
+          f"skip={system_skip:.2f}s echo={'removed' if echo_done else 'no'} voice={voice}", flush=True)
     if screen:
         audio = [p for p in ((mic or page) if payload.has_mic else None, system) if p]
         dest = _recording_folder() / f"{uuid.uuid4().hex[:8]}_{safe_stem}.mp4"
