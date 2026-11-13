@@ -503,8 +503,142 @@ def enqueue_merge_job(meeting_id: int) -> bool:
     return _enqueue_side_job(meeting_id, "merge", "", "merging", "Сведение версий в очереди...", _merge_runner)
 
 
+def _words_text(seg: Dict[str, Any]) -> str:
+    return " ".join("".join(str(w.get("word") or "") for w in seg.get("words") or []).split())
+
+
+def resplit_input(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The lines of a transcript as the splitting by voices takes them. A line whose text is still its
+    words may be cut at pauses; a line typed over (its text no longer its words) stays whole, so the
+    correction is kept."""
+    out = []
+    for seg in segments:
+        s = {k: v for k, v in seg.items() if k not in ("id", "speaker")}
+        if seg.get("words") and _words_text(seg) != " ".join(str(seg.get("text") or "").split()):
+            s["keep_whole"] = True
+        out.append(s)
+    return out
+
+
+def carry_names(old_segments: List[Dict[str, Any]], old_speakers: Dict[str, Dict[str, Any]],
+                new_segments: List[Dict[str, Any]], new_speakers: Dict[str, Dict[str, Any]]) -> int:
+    """Names given before the new split: a voice still called «Участник N» takes the name of the earlier
+    speaker it shares most of its time with, when that is more than half of its time. Each name once,
+    to the voice sharing the most seconds with it (one person split in two: the larger part)."""
+    from app.voice_profiles import is_default_name
+
+    def spans(segs):
+        return [(float(s.get("start") or 0), float(s.get("end") or 0), s.get("speaker")) for s in segs]
+
+    old = spans(old_segments)
+    taken = {str(m.get("name") or "").strip().lower() for m in new_speakers.values() if not is_default_name(str(m.get("name") or ""))}
+    best: List[Tuple[float, str, str]] = []  # (seconds shared, new speaker, old speaker)
+    for sid in new_speakers:
+        mine = [(a, b) for a, b, s in spans(new_segments) if s == sid]
+        total = sum(b - a for a, b in mine) or 1.0
+        shared: Dict[str, float] = {}
+        for a, b in mine:
+            for oa, ob, os_ in old:
+                ov = min(b, ob) - max(a, oa)
+                if ov > 0:
+                    shared[os_] = shared.get(os_, 0.0) + ov
+        for os_, sec in shared.items():
+            if sec / total > 0.5:
+                best.append((sec, sid, os_))
+    named = 0
+    used = set()
+    for _sec, sid, os_ in sorted(best, key=lambda b: -b[0]):
+        meta = old_speakers.get(os_) or {}
+        name = str(meta.get("name") or "").strip()
+        if sid in used or not name or is_default_name(name) or name.lower() in taken:
+            continue
+        if not is_default_name(str(new_speakers[sid].get("name") or "")):
+            continue
+        new_speakers[sid]["name"] = name
+        for k in ("color", "role", "is_me"):
+            if meta.get(k) not in (None, ""):
+                new_speakers[sid][k] = meta[k]
+        used.add(sid)
+        taken.add(name.lower())
+        named += 1
+    return named
+
+
+def _resplit_runner(meeting_id: int, num_speakers: int) -> str:
+    """The participants split by voices again on the text there is: nothing is recognized again, the
+    corrections typed stay; names come back from the voices known, the studio's marks and Teams
+    captions, and the names given before."""
+    from app.diarizer import diarize_and_merge_segments, unload_diarizer
+
+    meeting = get_meeting(meeting_id)
+    if not meeting:
+        raise RuntimeError("Запись не найдена")
+    old_segments = meeting.get("segments") or []
+    if not old_segments:
+        raise RuntimeError("Нет расшифровки, которую можно разделить по голосам")
+    wav = Path(meeting.get("audio_path") or "")
+    made = None
+    if not wav.is_file():
+        media = Path(meeting.get("media_path") or "")
+        if not media.is_file():
+            raise RuntimeError(f"Исходный файл не найден: {media}")
+        update_meeting_progress(meeting_id, progress=2, stage_text="Разделение участников: извлечение звука...")
+        processing = meeting.get("processing") or {}
+        made = wav = AUDIO_DIR / f"resplit_{meeting_id}.wav"
+        extract_audio_16k_mono(media, wav, denoise=processing.get("denoise", True), loudnorm=processing.get("loudnorm", True),
+                               check_cancel=lambda: _check_cancel(meeting_id))
+    try:
+        settings = get_all_settings()
+        device = settings.get("device") or get_hardware_info()["recommended_device"]
+        release_whisper_model()
+        _release_onnx()
+
+        def _cb(pct: int, msg: str) -> None:
+            _check_cancel(meeting_id)
+            update_meeting_progress(meeting_id, progress=pct, stage_text=msg)
+
+        speakers, segments = diarize_and_merge_segments(
+            wav_path=wav, raw_segments=resplit_input(old_segments), device=device,
+            num_speakers_hint=max(0, int(num_speakers or 0)), diarization_enabled=True, progress_callback=_cb)
+    finally:
+        unload_diarizer()
+        if made is not None:
+            from app.database import delete_file
+
+            delete_file(str(made))
+    for seg in segments:
+        seg.pop("keep_whole", None)
+    try:
+        from app.voice_profiles import apply_to_speakers
+
+        apply_to_speakers(speakers)
+    except Exception:
+        traceback.print_exc()
+    if meeting.get("speaker_marks"):
+        apply_speaker_marks(speakers, segments, meeting["speaker_marks"])
+    carry_names(old_segments, meeting.get("speakers") or {}, segments, speakers)
+    _check_cancel(meeting_id)
+
+    from app.database import edit_meeting
+
+    def _put(m: Dict[str, Any]) -> tuple:
+        # the backup of a cleaning (fillers) is of the lines before this split: brought back it would undo it
+        m["segments_backup"] = []
+        m["segments"], m["speakers"] = segments, speakers
+        return ("segments", "speakers", "segments_backup")
+
+    edit_meeting(meeting_id, _put)
+    return f"Участники разделены заново: {len(speakers)}, реплик: {len(segments)}"
+
+
+def enqueue_resplit_job(meeting_id: int, num_speakers: int = 0) -> bool:
+    return _enqueue_side_job(meeting_id, "resplit", "", "splitting", "Разделение участников в очереди...",
+                             _resplit_runner, num_speakers)
+
+
 # runner -> (name for error messages, text after a cancel)
 _SIDE_JOB_NAMES = {
+    _resplit_runner: ("разделение участников", "Разделение участников отменено"),
     _cut_runner: ("нарезка записи", "Нарезка отменена"),
     _translate_runner: ("перевод", "Перевод отменён"),
     _burn_runner: ("встраивание субтитров", "Встраивание субтитров отменено"),
