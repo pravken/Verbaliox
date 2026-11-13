@@ -775,7 +775,9 @@ function recordingBadgesHtml(m) {
 }
 
 function meetingRowHtml(m, depth) {
-  const isSelected = libIsSelected(m);
+  const picked = libIsSelected(m);
+  const isSelected = picked && libSelectionShown();
+  const soft = picked && !isSelected;
   const isBusy = !DONE_STATUSES.includes(m.status);
   const spkCount = Object.keys(m.speakers || {}).length;
   const thumb = m.is_video
@@ -789,7 +791,7 @@ function meetingRowHtml(m, depth) {
          data-contextmenu="openRecordingContextMenu" data-contextmenu-args='[{"$": "event"}, ${m.id}]'
          draggable="true" data-dragstart="libraryDragStart" data-dragstart-args='[{"$": "event"}, "m", ${m.id}]'
          class="group cursor-pointer pr-2 py-1.5 rounded-lg transition relative flex items-center gap-2 ${
-           isSelected ? 'bg-apple-blue text-white' : 'text-apple-label hover:bg-white/5'
+           isSelected ? 'bg-apple-blue text-white' : soft ? 'lib-row-soft text-apple-label' : 'text-apple-label hover:bg-white/5'
          }" style="padding-left:${10 + depth * 14}px">
       ${thumb}
       <div class="min-w-0 flex-1">
@@ -1206,6 +1208,13 @@ function libIsSelected(m) {
   return !!(state.activeMeeting && state.activeMeeting.id === m.id);
 }
 
+// The recording open is blue only while it is what the main area shows. With the studio (the
+// recording running) or another part open, the last one opened keeps a soft mark: blue there, it
+// looked chosen while the studio was
+function libSelectionShown() {
+  return state.multi.size > 0 || !state.appView || state.appView === 'library';
+}
+
 function libVisibleIds() {
   return [...document.querySelectorAll('#meetings-list [data-mid]')].map(el => Number(el.dataset.mid));
 }
@@ -1365,13 +1374,15 @@ function rowMoreButton(m) {
 }
 
 function meetingCompactRowHtml(m, depth) {
-  const isSelected = libIsSelected(m);
+  const picked = libIsSelected(m);
+  const isSelected = picked && libSelectionShown();
+  const soft = picked && !isSelected;
   const isBusy = !DONE_STATUSES.includes(m.status);
   return `
     <div data-click="libRowClick" data-click-args='[{"$": "event"}, ${m.id}]' data-mid="${m.id}" tabindex="0" role="button" data-contextmenu="openRecordingContextMenu" data-contextmenu-args='[{"$": "event"}, ${m.id}]'
          draggable="true" data-dragstart="libraryDragStart" data-dragstart-args='[{"$": "event"}, "m", ${m.id}]' title="${escapeHtml(m.title)}"
          class="group cursor-pointer pr-2 py-1 rounded-md transition flex items-center gap-2 text-[12px] ${
-           isSelected ? 'bg-apple-blue text-white' : 'text-apple-label hover:bg-white/5'
+           isSelected ? 'bg-apple-blue text-white' : soft ? 'lib-row-soft text-apple-label' : 'text-apple-label hover:bg-white/5'
          }" style="padding-left:${10 + depth * 14}px">
       <span class="shrink-0 ${isSelected ? 'text-white' : 'text-apple-tertiary'}">${m.is_video ? ICON_FILE_VIDEO : ICON_FILE_AUDIO}</span>
       <span class="truncate flex-1 min-w-0">${escapeHtml(libTitle(m))}</span>
@@ -1382,7 +1393,9 @@ function meetingCompactRowHtml(m, depth) {
 }
 
 function meetingTileHtml(m) {
-  const isSelected = libIsSelected(m);
+  const picked = libIsSelected(m);
+  const isSelected = picked && libSelectionShown();
+  const soft = picked && !isSelected;
   const isBusy = !DONE_STATUSES.includes(m.status);
   const cover = m.is_video
     ? `<img src="/api/meetings/${m.id}/thumb" loading="lazy" alt="" draggable="false" data-error="tileIconFallback" data-error-args='[{"$": "el"}]' class="w-full h-full object-cover" />`
@@ -1390,7 +1403,7 @@ function meetingTileHtml(m) {
   return `
     <div data-click="libRowClick" data-click-args='[{"$": "event"}, ${m.id}]' data-mid="${m.id}" tabindex="0" role="button" data-contextmenu="openRecordingContextMenu" data-contextmenu-args='[{"$": "event"}, ${m.id}]'
          draggable="true" data-dragstart="libraryDragStart" data-dragstart-args='[{"$": "event"}, "m", ${m.id}]' title="${escapeHtml(m.title)}"
-         class="lib-tile group ${isSelected ? 'lib-tile-on' : ''}">
+         class="lib-tile group ${isSelected ? 'lib-tile-on' : soft ? 'lib-row-soft' : ''}">
       <div class="lib-tile-cover">
         ${cover}
         <span class="lib-tile-time">${isBusy ? `${m.progress}%` : formatTime(m.duration)}</span>
@@ -1436,7 +1449,7 @@ function libLiveRowHtml() {
   // stays, saying so, until the recording is in the list
   if (!isRecording() && state.recSaving) {
     return `
-    <div data-click="openLiveStudio" tabindex="0" role="button" class="lib-live-row is-saving" title="${escapeHtml(t('libSavingTip'))}">
+    <div data-click="openLiveStudio" tabindex="0" role="button" class="lib-live-row is-saving${state.appView === 'studio' ? ' is-current' : ''}" title="${escapeHtml(t('libSavingTip'))}">
       <span class="lib-live-dot" aria-hidden="true"></span>
       <span class="flex-1 min-w-0">
         <span class="lib-live-title">${escapeHtml(state.recSaving.title || t('studioRecording'))}</span>
@@ -1446,8 +1459,10 @@ function libLiveRowHtml() {
   }
   const title = (document.getElementById('record-title-input')?.value || '').trim();
   const timer = document.getElementById('studio-timer')?.textContent || '';
+  // In the studio it is what is open: lit; with another recording open it steps back
+  const cur = state.appView === 'studio' ? ' is-current' : '';
   return `
-    <div data-click="openLiveStudio" tabindex="0" role="button" class="lib-live-row" title="${escapeHtml(t('libLiveTip'))}">
+    <div data-click="openLiveStudio" tabindex="0" role="button" class="lib-live-row${cur}" title="${escapeHtml(t('libLiveTip'))}">
       <span class="lib-live-dot" aria-hidden="true"></span>
       <span class="flex-1 min-w-0">
         <span class="lib-live-title">${escapeHtml(title || t('studioRecording'))}</span>
