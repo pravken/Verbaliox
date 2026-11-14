@@ -582,6 +582,15 @@ class PrivacyTest(unittest.TestCase):
             for m in (a, b):
                 save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "text": "текст"}])
                 update_meeting_progress(m["id"], status="completed")
+            # an old file imported just now keeps its sound for the days set too
+            self.assertNotIn(a["id"], expired_media_ids(30))
+            from app.database import _db_lock, get_connection
+
+            with _db_lock:
+                conn = get_connection()
+                conn.execute("UPDATE meetings SET created_at = '2020-01-02 10:00:00' WHERE id IN (?, ?)", (a["id"], b["id"]))
+                conn.commit()
+                conn.close()
             self.assertIn(a["id"], expired_media_ids(30))
             self.assertNotIn(b["id"], expired_media_ids(30))
             self.assertTrue(remove_media(a["id"]))

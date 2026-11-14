@@ -1530,7 +1530,8 @@ def remove_media(meeting_id: int) -> bool:
 
 
 def expired_media_ids(days: int) -> List[int]:
-    """Completed recordings older than `days` that still keep their sound (retention setting)."""
+    """Completed recordings that still keep their sound, older than `days` both by when they were made and
+    by when they came into the app: an old file imported today keeps its sound for `days` too."""
     if days <= 0:
         return []
     from datetime import datetime, timedelta
@@ -1540,7 +1541,8 @@ def expired_media_ids(days: int) -> List[int]:
         conn = get_connection()
         rows = conn.execute(
             "SELECT id FROM meetings WHERE status = 'completed' AND owns_media = 1 AND COALESCE(media_removed, 0) = 0 "
-            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ?", (cutoff,)).fetchall()
+            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ? AND created_at < ?",
+            (cutoff, cutoff)).fetchall()
         conn.close()
     return [int(r["id"]) for r in rows]
 
