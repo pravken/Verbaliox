@@ -67,6 +67,12 @@ def auto_recording_notice(started: bool, source: str, name: str = "") -> Dict[st
     return notice
 
 
+def add_notice(title: str, text: str, target: str = "") -> None:
+    """A Windows notification the tray shows next (a click opens `target`, static/js/home.js openFromNotice)."""
+    _notices.append({"title": title, "text": text, "target": target})
+    del _notices[:-5]
+
+
 def take_notices() -> List[Dict[str, Any]]:
     out = list(_notices)
     _notices.clear()

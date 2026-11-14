@@ -209,12 +209,8 @@ def api_calendar_upcoming(refresh: bool = False) -> Dict[str, Any]:
     items = calendar_ics.upcoming()
     done = sorted((r for r in list_meetings() if r.get("status") == "completed"),
                   key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
-    known = {n for r in done for n in series.people(r)}
     for it in items:
-        key = series.title_key(it["title"])
-        same = next((r for r in done if r.get("series_id") and len(key) >= 6 and series.title_key(r.get("title") or "") == key), None)
-        it["series_id"] = same.get("series_id") if same else None
-        it["person"] = next((a for a in it["attendees"] if a.strip().lower() in known), None)
+        it.update(series.match_event(it["title"], it["attendees"], done))
     from app import calendar_outlook
 
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
