@@ -23,7 +23,7 @@ numpy only; about 20-40 s of work per hour of recording.
 
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
@@ -63,7 +63,13 @@ def _envelope(x: np.ndarray, sr: int, rate: int = 100) -> np.ndarray:
     n = len(x) // h
     if n < 2:
         return np.zeros(0, np.float32)
-    e = np.log1p(1000.0 * np.sqrt(np.mean(x[: n * h].reshape(n, h).astype(np.float64) ** 2, axis=1)))
+    # in pieces of a minute: the whole recording at once (float64 squares) was 0.7 GB an hour
+    e = np.empty(n, dtype=np.float64)
+    per = 60 * rate
+    for a in range(0, n, per):
+        b = min(n, a + per)
+        e[a:b] = np.mean(np.asarray(x[a * h: b * h]).reshape(b - a, h).astype(np.float64) ** 2, axis=1)
+    e = np.log1p(1000.0 * np.sqrt(e))
     k = 2 * rate  # 2 s
     slow = np.convolve(e, np.ones(k) / k, mode="same")
     return (e - slow).astype(np.float32)
@@ -192,86 +198,136 @@ def _align(ref: np.ndarray, n: int, times: np.ndarray, lags: np.ndarray, margin:
     out = np.zeros(n, dtype=np.float32)
     step = 4_000_000
     for a in range(0, n, step):
-        t = np.arange(a, min(n, a + step), dtype=np.float64)
-        src = t - _delay_at(times, lags, t) + margin
-        lo = max(0, int(np.floor(src.min())))
-        hi = min(len(ref), int(np.ceil(src.max())) + 2)
-        if hi - lo < 2:
-            continue  # this piece falls outside ref: silence
-        out[a:a + len(t)] = np.interp(src, np.arange(lo, hi, dtype=np.float64), ref[lo:hi].astype(np.float64),
-                                      left=0.0, right=0.0)
+        out[a:min(n, a + step)] = _align_range(ref, a, min(n, a + step), times, lags, margin)
     return out
 
 
+def _align_range(ref: np.ndarray, a: int, b: int, times: np.ndarray, lags: np.ndarray, margin: int) -> np.ndarray:
+    """_align for the samples a..b only."""
+    t = np.arange(a, b, dtype=np.float64)
+    src = t - _delay_at(times, lags, t) + margin
+    lo = max(0, int(np.floor(src.min())))
+    hi = min(len(ref), int(np.ceil(src.max())) + 2)
+    if hi - lo < 2:
+        return np.zeros(b - a, dtype=np.float32)  # this piece falls outside ref: silence
+    return np.interp(src, np.arange(lo, hi, dtype=np.float64), np.asarray(ref[lo:hi]).astype(np.float64),
+                     left=0.0, right=0.0).astype(np.float32)
+
+
+class _Adaptive:
+    """Partitioned-block frequency-domain NLMS that learns only while the speakers play and the
+    microphone holds no other voice; fed piece by piece (whole blocks), its state carried over."""
+
+    def __init__(self) -> None:
+        B = BLOCK
+        self.P = int(np.ceil(FILTER_SEC * SR / B)) + 1
+        self.W = np.zeros((self.P, B + 1), dtype=np.complex64)
+        self.X = np.zeros((self.P, B + 1), dtype=np.complex64)
+        self.power = np.full(B + 1, 1e-6, dtype=np.float32)
+        self.prev = np.zeros(B, dtype=np.float32)
+        self.ref_peak = np.zeros(self.P, dtype=np.float32)
+        self.b = 0  # blocks done
+
+    def run(self, mic: np.ndarray, ref: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """(mic without the predicted echo, the predicted echo) for len(mic) // BLOCK blocks."""
+        B, P = BLOCK, self.P
+        blocks = len(mic) // B
+        out = np.zeros(blocks * B, dtype=np.float32)
+        echo = np.zeros(blocks * B, dtype=np.float32)
+        W, X, power, prev, ref_peak = self.W, self.X, self.power, self.prev, self.ref_peak
+        for k in range(blocks):
+            b = self.b + k
+            s = k * B
+            cur = ref[s:s + B]
+            X = np.roll(X, 1, axis=0)
+            X[0] = np.fft.rfft(np.concatenate([prev, cur]))
+            prev = cur
+            ref_peak = np.roll(ref_peak, 1)
+            ref_peak[0] = float(np.max(np.abs(cur))) if cur.size else 0.0
+            y = np.fft.irfft((W * X).sum(axis=0))[B:]
+            d = mic[s:s + B]
+            e = d - y
+            out[s:s + B] = e
+            echo[s:s + B] = y
+            power = 0.9 * power + 0.1 * (np.abs(X[0]) ** 2) / 2
+            speakers_play = ref_peak.max() > 1e-3
+            # Double talk: the microphone well above what the echo can be (the filter's own estimate and
+            # the loudest the speakers played lately) means someone speaks into it: no learning then
+            e_pow, y_pow, d_pow = float(np.mean(e * e)), float(np.mean(y * y)), float(np.mean(d * d))
+            near_speech = d_pow > 4.0 * y_pow + 1e-7 and b > 40 and y_pow > 1e-9
+            if speakers_play and not near_speech:
+                E = np.fft.rfft(np.concatenate([np.zeros(B, dtype=np.float32), e]))
+                W += (MU * np.conj(X) * E / (power * P + 1e-6)).astype(np.complex64)
+                # the filter is kept to one block per partition (gradient constraint, every 4th block)
+                if b % 4 == 0:
+                    w = np.fft.irfft(W, axis=1)
+                    w[:, B:] = 0
+                    W = np.fft.rfft(w, axis=1).astype(np.complex64)
+            elif e_pow > 4.0 * d_pow and b > 40:
+                W *= 0.5  # diverged (the error grew beyond the microphone itself): back off
+        self.W, self.X, self.power, self.prev, self.ref_peak = W, X, power, prev, ref_peak
+        self.b += blocks
+        return out, echo
+
+
 def _adaptive(mic: np.ndarray, ref: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """(mic without the predicted echo, the predicted echo): partitioned-block frequency-domain NLMS
-    that learns only while the speakers play and the microphone holds no other voice."""
-    B, n = BLOCK, len(mic)
-    P = int(np.ceil(FILTER_SEC * SR / B)) + 1
-    blocks = n // B
-    W = np.zeros((P, B + 1), dtype=np.complex64)
-    X = np.zeros((P, B + 1), dtype=np.complex64)
-    power = np.full(B + 1, 1e-6, dtype=np.float32)
-    out = np.zeros(n, dtype=np.float32)
-    echo = np.zeros(n, dtype=np.float32)
-    prev = np.zeros(B, dtype=np.float32)
-    ref_peak = np.zeros(P, dtype=np.float32)
-    for b in range(blocks):
-        s = b * B
-        cur = ref[s:s + B]
-        X = np.roll(X, 1, axis=0)
-        X[0] = np.fft.rfft(np.concatenate([prev, cur]))
-        prev = cur
-        ref_peak = np.roll(ref_peak, 1)
-        ref_peak[0] = float(np.max(np.abs(cur))) if cur.size else 0.0
-        y = np.fft.irfft((W * X).sum(axis=0))[B:]
-        d = mic[s:s + B]
-        e = d - y
-        out[s:s + B] = e
-        echo[s:s + B] = y
-        power = 0.9 * power + 0.1 * (np.abs(X[0]) ** 2) / 2
-        speakers_play = ref_peak.max() > 1e-3
-        # Double talk: the microphone well above what the echo can be (the filter's own estimate and
-        # the loudest the speakers played lately) means someone speaks into it: no learning then
-        e_pow, y_pow, d_pow = float(np.mean(e * e)), float(np.mean(y * y)), float(np.mean(d * d))
-        near_speech = d_pow > 4.0 * y_pow + 1e-7 and b > 40 and y_pow > 1e-9
-        if speakers_play and not near_speech:
-            E = np.fft.rfft(np.concatenate([np.zeros(B, dtype=np.float32), e]))
-            W += (MU * np.conj(X) * E / (power * P + 1e-6)).astype(np.complex64)
-            # the filter is kept to one block per partition (gradient constraint, every 4th block)
-            if b % 4 == 0:
-                w = np.fft.irfft(W, axis=1)
-                w[:, B:] = 0
-                W = np.fft.rfft(w, axis=1).astype(np.complex64)
-        elif e_pow > 4.0 * d_pow and b > 40:
-            W *= 0.5  # diverged (the error grew beyond the microphone itself): back off
-    tail = blocks * B
-    out[tail:] = mic[tail:]
-    return out, echo
+    """(mic without the predicted echo, the predicted echo) of a whole recording."""
+    n = len(mic)
+    out, echo = _Adaptive().run(mic, ref)
+    tail = len(out)
+    return np.concatenate([out, np.asarray(mic[tail:], dtype=np.float32)]), np.concatenate([echo, np.zeros(n - tail, np.float32)])
+
+
+class _Suppressor:
+    """What remains of the echo lowered where the prediction is strong, never below GAIN_FLOOR: a short
+    STFT fed piece by piece, giving out each sample once no later frame adds to it."""
+    N_FFT, HOP = 512, 256
+
+    def __init__(self) -> None:
+        self.win = np.hanning(self.N_FFT + 1)[:-1].astype(np.float32)
+        self.x = np.zeros(self.N_FFT, np.float32)  # the padding before the signal (as the whole version)
+        self.y = np.zeros(self.N_FFT, np.float32)
+        self.acc = np.zeros(self.N_FFT, np.float32)
+        self.norm = np.zeros(self.N_FFT, np.float32)
+        self.gain = np.ones(self.N_FFT // 2 + 1, dtype=np.float32)
+        self.skip = self.N_FFT  # samples of the padding still to drop from what is given out
+
+    def feed(self, sig: np.ndarray, echo: np.ndarray) -> np.ndarray:
+        n_fft, hop, win = self.N_FFT, self.HOP, self.win
+        self.x = np.concatenate([self.x, sig.astype(np.float32, copy=False)])
+        self.y = np.concatenate([self.y, echo.astype(np.float32, copy=False)])
+        done = []
+        pos = 0
+        while len(self.x) - pos >= n_fft:
+            E = np.fft.rfft(self.x[pos:pos + n_fft] * win)
+            Y = np.fft.rfft(self.y[pos:pos + n_fft] * win)
+            g = 1.0 - 1.2 * (np.abs(Y) ** 2) / (np.abs(E) ** 2 + np.abs(Y) ** 2 + 1e-10)
+            g = np.clip(g, GAIN_FLOOR, 1.0).astype(np.float32)
+            self.gain = np.maximum(g, 0.6 * self.gain + 0.4 * g)  # opens at once, closes softly: no musical noise
+            self.acc += (np.fft.irfft(E * self.gain) * win).astype(np.float32)
+            self.norm += win * win
+            done.append(self.acc[:hop] / np.maximum(self.norm[:hop], 1e-6))  # no later frame reaches these
+            self.acc = np.concatenate([self.acc[hop:], np.zeros(hop, np.float32)])
+            self.norm = np.concatenate([self.norm[hop:], np.zeros(hop, np.float32)])
+            pos += hop
+        self.x, self.y = self.x[pos:], self.y[pos:]
+        out = np.concatenate(done) if done else np.zeros(0, np.float32)
+        if self.skip:
+            cut = min(self.skip, len(out))
+            out, self.skip = out[cut:], self.skip - cut
+        return out
+
+    def finish(self, total: int, given: int) -> np.ndarray:
+        """The rest, up to `total` samples given out in all (`given` so far)."""
+        out = self.feed(np.zeros(2 * self.N_FFT, np.float32), np.zeros(2 * self.N_FFT, np.float32))
+        return out[: max(0, total - given)]
 
 
 def _suppress(sig: np.ndarray, echo: np.ndarray) -> np.ndarray:
     """What remains of the echo lowered where the prediction is strong, never below GAIN_FLOOR."""
-    n_fft, hop = 512, 256
-    win = np.hanning(n_fft + 1)[:-1].astype(np.float32)
-    pad = n_fft
-    x = np.concatenate([np.zeros(pad, np.float32), sig, np.zeros(pad + n_fft, np.float32)])
-    y = np.concatenate([np.zeros(pad, np.float32), echo, np.zeros(pad + n_fft, np.float32)])
-    frames = (len(x) - n_fft) // hop
-    out = np.zeros(len(x), dtype=np.float32)
-    norm = np.zeros(len(x), dtype=np.float32)
-    gain = np.ones(n_fft // 2 + 1, dtype=np.float32)
-    for f in range(frames):
-        s = f * hop
-        E = np.fft.rfft(x[s:s + n_fft] * win)
-        Y = np.fft.rfft(y[s:s + n_fft] * win)
-        g = 1.0 - 1.2 * (np.abs(Y) ** 2) / (np.abs(E) ** 2 + np.abs(Y) ** 2 + 1e-10)
-        g = np.clip(g, GAIN_FLOOR, 1.0).astype(np.float32)
-        gain = np.maximum(g, 0.6 * gain + 0.4 * g)  # opens at once, closes softly: no musical noise
-        out[s:s + n_fft] += np.fft.irfft(E * gain) * win
-        norm[s:s + n_fft] += win * win
-    out /= np.maximum(norm, 1e-6)
-    return out[pad:pad + len(sig)]
+    sp = _Suppressor()
+    head = sp.feed(sig, echo)
+    return np.concatenate([head, sp.finish(len(sig), len(head))])[: len(sig)]
 
 
 def cancel_and_align(mic: np.ndarray, ref: np.ndarray, sr: int = SR) -> Optional[Tuple[np.ndarray, np.ndarray]]:
@@ -309,26 +365,69 @@ def _decode(ffmpeg: str, path: Path, skip: float = 0.0) -> np.ndarray:
     return np.frombuffer(res.stdout, dtype=np.float32)
 
 
+def _decode_to_disk(ffmpeg: str, path: Path, raw: Path, skip: float = 0.0) -> np.ndarray:
+    """The track as float32 samples in a file on disk, read through a memory map: an hour is 345 MB a
+    track, and the two tracks with what was made of them held 2.5–3 GB of memory at once."""
+    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", *(["-ss", f"{skip:.3f}"] if skip >= 0.02 else []),
+           "-i", str(path), "-vn", "-ac", "1", "-ar", str(SR), "-f", "f32le", str(raw)]
+    res = subprocess.run(cmd, capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if res.returncode != 0 or not raw.is_file():
+        raise RuntimeError((res.stderr or b"").decode("utf-8", "replace")[-300:])
+    if raw.stat().st_size < 4:
+        return np.zeros(0, dtype=np.float32)
+    return np.memmap(raw, dtype=np.float32, mode="r")
+
+
+CHUNK_SEC = 60  # what is worked on at a time: memory stays the same (~150 MB) for an hour or for eight
+
+
 def clean_microphone(ffmpeg: str, page: Path, system: Path, system_skip: float, out: Path,
-                     system_out: Optional[Path] = None) -> bool:
+                     system_out: Optional[Path] = None, progress: Optional[Callable[[float], None]] = None) -> bool:
     """Writes the page's microphone without the speakers' echo to `out` (WAV) and, given system_out,
     the system sound lined up with it by the echo (WAV, for the mix). False when there is no echo to
-    remove (headphones) or it could not be done: the recording is then mixed as it was."""
+    remove (headphones) or it could not be done: the recording is then mixed as it was. Worked through
+    in pieces of CHUNK_SEC, the filter carried from one to the next (the result is the same as at once);
+    `progress(0..1)` says how far."""
+    import shutil
+    import tempfile
+
     import soundfile as sf
 
+    tmp = Path(tempfile.mkdtemp(prefix=".echo_", dir=str(out.parent)))
+    mic = ref = None
     try:
-        mic = _decode(ffmpeg, page)
-        ref = _decode(ffmpeg, system, system_skip)
-        print(f"[echo] microphone {len(mic) / SR:.1f} s, system sound {len(ref) / SR:.1f} s "
+        mic = _decode_to_disk(ffmpeg, page, tmp / "mic.f32")
+        ref = _decode_to_disk(ffmpeg, system, tmp / "sys.f32", system_skip)
+        n = len(mic)
+        print(f"[echo] microphone {n / SR:.1f} s, system sound {len(ref) / SR:.1f} s "
               f"(after {system_skip:.2f} s skipped)", flush=True)
-        done = cancel_and_align(mic, ref)
-        if done is None:
+        found = find_echo(mic, ref, SR)
+        if not found:
             print("[echo] the microphone does not hear the speakers: nothing to remove", flush=True)
             return False
-        cleaned, in_room = done
-        sf.write(str(out), cleaned, SR, subtype="PCM_16")
-        if system_out is not None:
-            sf.write(str(system_out), np.clip(in_room, -1.0, 1.0), SR, subtype="PCM_16")
+        times, lags = found
+        jumps = int(np.sum(np.abs(np.diff(lags)) > 0.005 * SR))
+        print(f"[echo] delay {lags[0] / SR:.3f}..{lags[-1] / SR:.3f} s over {len(lags)} windows, jumps: {jumps}", flush=True)
+        margin = int(MARGIN_SEC * SR)
+        chunk = max(BLOCK, int(CHUNK_SEC * SR) // BLOCK * BLOCK)
+        adaptive, suppressor, given = _Adaptive(), _Suppressor(), 0
+        with sf.SoundFile(str(out), "w", samplerate=SR, channels=1, subtype="PCM_16") as fo, \
+                (sf.SoundFile(str(system_out), "w", samplerate=SR, channels=1, subtype="PCM_16")
+                 if system_out is not None else _NoFile()) as fs:
+            for a in range(0, n, chunk):
+                b = min(n, a + chunk)
+                m = np.asarray(mic[a:b], dtype=np.float32)
+                cleaned, echo = adaptive.run(m, _align_range(ref, a, b, times, lags, margin))
+                if len(cleaned) < len(m):  # the end of the recording: less than a block, as it was
+                    cleaned = np.concatenate([cleaned, m[len(cleaned):]])
+                    echo = np.concatenate([echo, np.zeros(len(m) - len(echo), np.float32)])
+                done = suppressor.feed(cleaned, echo)
+                fo.write(np.clip(done, -1.0, 1.0))
+                given += len(done)
+                fs.write(np.clip(_align_range(ref, a, b, times, lags, 0), -1.0, 1.0))
+                if progress:
+                    progress(b / max(1, n))
+            fo.write(np.clip(suppressor.finish(n, given), -1.0, 1.0))
         return True
     except Exception as e:  # the recording is saved anyway, with the echo
         print(f"[echo] not removed: {e}", flush=True)
@@ -336,3 +435,17 @@ def clean_microphone(ffmpeg: str, page: Path, system: Path, system_skip: float, 
         if system_out is not None:
             system_out.unlink(missing_ok=True)
         return False
+    finally:
+        del mic, ref  # the memory maps let go of their files before they are deleted (Windows)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+class _NoFile:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def write(self, _data) -> None:
+        pass

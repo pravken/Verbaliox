@@ -3,6 +3,8 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "Сведение дорожек: очистка голоса…": "Mixing the tracks: cleaning the voice…",
+  "Сведение дорожек: сборка файла…": "Mixing the tracks: making the file…",
   "Число вне допустимого диапазона": "The number is out of range",
   "В файле нет реплик расшифровки Teams (нужен файл .vtt из «Скачать расшифровку»)": "The file has no lines of a Teams transcript (a .vtt file from «Download transcript» is needed)",
   "Файл расшифровки слишком большой": "The transcript file is too large",
@@ -320,6 +322,7 @@ const SERVER_PATTERNS_EN = [
   ["{}: адрес в интернете должен начинаться с https://", "{0}: an internet address must start with https://"],
   ["{}: нужен адрес вида http(s)://сервер[:порт]", "{0}: an address like http(s)://server[:port] is needed"],
   ["Не удалось извлечь звук: {}", "Could not extract the sound: {0}"],
+  ["Сведение дорожек: убираем эхо колонок… {}%", "Mixing the tracks: removing the speakers' echo… {0}%"],
   ["Длина файла {} мин {} с, а у записи {} мин {} с. Это тот же файл?", "The file is {0} min {1} s long, the recording {2} min {3} s. Is it the same file?"],
   ["Скачивание по ссылке… ({} из {})", "Downloading from the link… ({0} of {1})"],
   ["Ждёт скачивания ({} из {})", "Waiting to download ({0} of {1})"],
