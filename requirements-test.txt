@@ -12,3 +12,4 @@ aiofiles>=24.1.0
 faster-whisper>=1.2.0
 onnx-asr>=0.12.0
 onnxruntime>=1.18
+tzdata>=2026.6  # calendar time zones on Windows (tests/test_calendar_zones.py)
