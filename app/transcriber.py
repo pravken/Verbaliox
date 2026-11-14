@@ -5,7 +5,9 @@ import re
 import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+import heapq
+import itertools
+from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -39,8 +41,60 @@ from app.text_utils import (
     is_low_quality_segment,
 )
 
+# The order of kinds of jobs in the queue: a meeting just recorded is transcribed first, a dub or a
+# translation started before it (tens of minutes) waits. Within a kind, the order they were given
+KIND_PRIORITY = {"transcribe": 0, "resplit": 1, "merge": 1, "cut": 2, "translate": 2, "burn": 2, "dub": 3}
+
+
+class _PriorityExecutor:
+    """One worker, as before (jobs never share the video card), taking the job of the highest priority
+    first. A job that runs is never interrupted: a new recording waits for it to end, not for the whole
+    queue."""
+
+    def __init__(self) -> None:
+        self._heap: List[tuple] = []
+        self._cv = threading.Condition()
+        self._seq = itertools.count()
+        self._thread: Optional[threading.Thread] = None
+
+    def submit(self, fn: Callable, *args: Any, priority: Optional[int] = None) -> Future:
+        fut: Future = Future()
+        if priority is None:
+            priority = _job_priority(fn, args)
+        with self._cv:
+            heapq.heappush(self._heap, (priority, next(self._seq), fut, fn, args))
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._work, daemon=True, name="whisper_worker_0")
+                self._thread.start()
+            self._cv.notify()
+        return fut
+
+    def _work(self) -> None:
+        while True:
+            with self._cv:
+                while not self._heap:
+                    self._cv.wait()
+                _prio, _n, fut, fn, args = heapq.heappop(self._heap)
+            if not fut.set_running_or_notify_cancel():
+                continue
+            try:
+                fut.set_result(fn(*args))
+            except BaseException as e:  # noqa: BLE001 - kept in the future, as the pool did
+                fut.set_exception(e)
+
+
+def _job_priority(fn: Callable, args: tuple) -> int:
+    if fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper":
+        return KIND_PRIORITY["transcribe"]
+    if fn is _run_dub_job:
+        return KIND_PRIORITY["dub"]
+    if fn is _run_side_job and len(args) > 2:
+        return 1 if args[2] in (_resplit_runner, _merge_runner) else 2
+    return 2
+
+
 # Single worker queue ensures batch jobs run one after another without VRAM collisions
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper_worker")
+_executor = _PriorityExecutor()
 
 # Jobs that are queued or running, and jobs the user asked to cancel
 _jobs_lock = threading.Lock()
@@ -49,6 +103,7 @@ _cancel_requested: Set[int] = set()
 # Mirror of the executor's FIFO for the UI: which recording is running and which are waiting
 _queue: List[Dict[str, Any]] = []
 _running_id: Optional[int] = None
+_queue_seq = itertools.count()
 
 
 class JobCancelled(Exception):
@@ -130,7 +185,8 @@ def _publish_queue_changed() -> None:
 
 def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> None:
     """Call with _jobs_lock held."""
-    _queue.append({"id": meeting_id, "kind": kind, "lang": lang, "queued_at": time.time(), "started_at": None})
+    _queue.append({"id": meeting_id, "kind": kind, "lang": lang, "queued_at": time.time(), "started_at": None,
+                   "prio": KIND_PRIORITY.get(kind, 2), "n": next(_queue_seq)})
 
 
 def _queue_start(meeting_id: int) -> None:
@@ -174,7 +230,8 @@ def queue_snapshot() -> List[Dict[str, Any]]:
     if not items:
         return []
     meetings = meeting_briefs(list({q["id"] for q in items}))
-    items.sort(key=lambda q: 0 if q["id"] == running else 1)
+    # the order they will run in: the running one, then by priority, then as given
+    items.sort(key=lambda q: (0 if q["id"] == running else 1, q.get("prio", 2), q.get("n", 0)))
     out = []
     waiting_pos = 0
     for q in items:
