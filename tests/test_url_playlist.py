@@ -82,6 +82,29 @@ class PlaylistTest(unittest.TestCase):
             self.assertEqual(url_import.probe("https://example.com/playlist"), {"playlist": True, "title": "Курс", "count": 3})
             self.assertFalse(url_import.probe("https://example.com/v/1")["playlist"])
 
+    def test_deleting_one_video_leaves_the_others(self):
+        init_db()
+        FakeYDL.downloaded = []
+        state = {}
+        real_one = url_import._download_one
+
+        def one(mid, url, stop):
+            if not state:  # while the first downloads, the user deletes it and the third one
+                state["ids"] = sorted(url_import._waiting)
+                url_import.drop(mid)
+                url_import.drop(state["ids"][-1])
+            real_one(mid, url, stop)
+
+        with mock.patch.dict(sys.modules, {"yt_dlp": types.SimpleNamespace(YoutubeDL=FakeYDL)}), \
+                mock.patch.object(url_import, "ensure_package"), \
+                mock.patch.object(url_import, "_download_one", one), \
+                mock.patch("threading.Thread", side_effect=lambda target, args, **kw: types.SimpleNamespace(start=lambda: target(*args))), \
+                mock.patch("app.transcriber.enqueue_meeting_job") as enq:
+            url_import.start("https://example.com/playlist", "large-v3-turbo", "auto", 0, playlist=True)
+        self.assertEqual(FakeYDL.downloaded, [VIDEOS[1][0]])  # the second still came
+        self.assertEqual(enq.call_count, 1)
+        self.assertEqual(url_import._cancel, {})
+
 
 if __name__ == "__main__":
     unittest.main()
