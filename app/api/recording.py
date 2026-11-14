@@ -264,6 +264,10 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     # its thread is joined (up to 5 s): not on the event loop, which serves every other request
     cap = await run_in_threadpool(finish_capture, payload.capture_id) if payload.capture_id else None
     system = cap.path if cap and cap.path.is_file() else None
+    if system is not None and cap._thread.is_alive():  # its thread did not end in time: the file is not closed
+        from app.system_audio import repair_rf64
+
+        await run_in_threadpool(repair_rf64, system)
     screen: Optional[Path] = None
     if payload.screen_id:
         from app import screen_capture

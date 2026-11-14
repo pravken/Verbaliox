@@ -86,12 +86,29 @@ class DeviceChangeTest(unittest.TestCase):
             def none():
                 raise RuntimeError("no device")
             fake.default_speaker = none
-            time.sleep(0.6)
+            time.sleep(1.5)  # the failed read waits 0.5 s, then silence comes at the clock's pace
             cap.stop()
             data, sr = sf.read(str(cap.path), dtype="float32")
         self.assertEqual(cap.error, "")
         self.assertAlmostEqual(float(data[-1, 0]), 0.0)
-        self.assertGreater(len(data) / sr, 0.8)
+        self.assertGreater(len(data) / sr, 1.5)
+
+
+@unittest.skipIf(system_audio is None, "app dependencies not installed")
+class CrashedFileTest(unittest.TestCase):
+    def test_a_file_left_open_by_a_crash_is_read_whole_after_repair(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "system_x.wav"
+            code = ("import os, numpy as np, soundfile as sf\n"
+                    f"f = sf.SoundFile(r'{path}', 'w', samplerate=48000, channels=2, subtype='PCM_16', format='RF64')\n"
+                    "f.write(np.full((48000 * 2, 2), 0.1, dtype=np.float32))\nos._exit(0)\n")
+            subprocess.run([sys.executable, "-c", code], check=True)
+            self.assertEqual(sf.info(str(path)).frames, 0)  # what FFmpeg and soundfile saw: nothing
+            self.assertTrue(system_audio.repair_rf64(path))
+            self.assertEqual(sf.info(str(path)).frames, 48000 * 2)
+            self.assertFalse(system_audio.repair_rf64(path))  # set right already
 
 
 if __name__ == "__main__":
