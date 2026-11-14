@@ -167,6 +167,10 @@ def status() -> Dict[str, Any]:
             "git_checkout": is_git_checkout(),
             "download": dict(_state["download"]),
         }
+        dl = out["download"]
+        if dl.get("done") and dl.get("version") and latest and latest.get("version") != dl.get("version"):
+            # an archive of an older release than the one found: offered for download again, not to install
+            out["download"] = {**dl, "done": False, "stale": True}
     out["auto"] = auto_enabled()
     # A git clone is updated with git: an archive would overwrite the working copy (and its changes)
     out["can_install"] = out["available"] and bool(latest and latest.get("zip_url")) and not out["git_checkout"]
