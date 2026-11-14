@@ -53,7 +53,6 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
 }
 
 CLOUD_MAX_CHARS = 300_000     # one request: about 100k tokens of Russian text
-OLLAMA_MAX_CHARS = 20_000     # app/ollama_client.SINGLE_PASS_MAX_CHARS
 TIMEOUT_SEC = 300.0
 RETRIES = 2                   # rate limit or a server error: try again after a pause
 
@@ -226,7 +225,9 @@ def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) 
     if wanted not in models:
         same = [m for m in models if m.startswith(wanted.split(":")[0])]
         wanted = same[0] if same else models[0]
-    return Target("ollama", wanted, OLLAMA_MAX_CHARS, lambda system, user: _ollama_chat(base_url, wanted, system, user))
+    from app.ollama_client import single_pass_max_chars
+
+    return Target("ollama", wanted, single_pass_max_chars(), lambda system, user: _ollama_chat(base_url, wanted, system, user))
 
 
 # ------------------------------------------------------------------ cloud
