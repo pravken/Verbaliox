@@ -53,6 +53,11 @@ async function impPickFiles() {
   if (!data || !data.available) { clickElement('file-input'); return; }
   const paths = data.paths || [];
   if (!paths.length) return;
+  await importPaths(paths);
+}
+
+// Files by their place on disk (the Windows picker, or dropped on the window): added where they are
+async function importPaths(paths) {
   if (impIsOpen()) { impAddPaths(paths); return; }
   if (askImportParams()) { openImportDialog(); impAddPaths(paths); return; }
   if (!requireRecognitionModel()) return;
@@ -160,7 +165,7 @@ function impProbeDuration(file) {
   });
 }
 
-function impDropFiles(e) {
+async function impDropFiles(e) {
   e.preventDefault();
   e.stopPropagation();  // not the drop of the whole window under it
   hideDropOverlay();
@@ -170,7 +175,36 @@ function impDropFiles(e) {
     const skipped = files.filter(f => !isMediaFile(f)).map(f => f.name).slice(0, 3).join(', ');
     showToast(t('dropSkipped').replace('{names}', () => skipped));
   }
-  if (media.length) impAddFiles(media);
+  if (!media.length) return;
+  const paths = await nativeDropPaths(media);
+  if (paths) impAddPaths(paths);
+  else impAddFiles(media);
+}
+
+// A drop on the app's window: the window (run.py) tells the dropped files' places on disk, so they are
+// added where they are, as with «Файлы…» — without it a 4 GB video was copied to the system disk. In
+// a browser, with copying turned on in Settings, or when the places do not come: the files' content
+let _nativeDrop = null;
+function nativeDropPaths(media) {
+  const s = (state.system && state.system.settings) || {};
+  if (!(window.pywebview && window.pywebview.api) || String(s.import_copy) === 'true') return Promise.resolve(null);
+  return new Promise(resolve => {
+    const names = media.map(f => f.name);
+    const timer = setTimeout(() => { _nativeDrop = null; resolve(null); }, 1500);
+    _nativeDrop = (paths) => {
+      const byName = new Map(paths.map(p => [String(p).split(/[\\/]/).pop(), p]));
+      const found = names.map(n => byName.get(n)).filter(Boolean);
+      if (found.length !== names.length) return;  // another drop's places, or not all of them yet
+      clearTimeout(timer);
+      _nativeDrop = null;
+      resolve(found);
+    };
+  });
+}
+
+// Called by the window (run.py) with the places of the files dropped on it
+function onNativeDrop(paths) {
+  if (_nativeDrop && Array.isArray(paths)) _nativeDrop(paths);
 }
 
 // The link and path fields are always shown: opened «with a link» or «with a path», the window puts the cursor there

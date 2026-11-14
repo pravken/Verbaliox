@@ -1698,7 +1698,7 @@ function onWindowDragOver(e) {
   if (isFileDrag(e)) e.dataTransfer.dropEffect = _dragSupported ? 'copy' : 'none';
 }
 
-function dropMediaFiles(e) {
+async function dropMediaFiles(e) {
   e.preventDefault();
   hideDropOverlay();
   const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
@@ -1708,7 +1708,10 @@ function dropMediaFiles(e) {
     const skipped = files.filter(f => !isMediaFile(f)).map(f => f.name).slice(0, 3).join(', ');
     showToast(t('dropSkipped').replace('{names}', () => skipped));
   }
-  if (media.length) handleFileSelect(media);
+  if (!media.length) return;
+  const paths = await nativeDropPaths(media);  // added where they are (importdlg.js)
+  if (paths) importPaths(paths);
+  else handleFileSelect(media);
 }
 
 function handleGlobalDrop(e) {

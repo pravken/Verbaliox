@@ -1,5 +1,6 @@
 import argparse
 import ctypes
+import json
 import os
 import socket
 import shutil
@@ -850,6 +851,31 @@ def grant_media_to_app(window, host: str, port: int) -> None:
     window.events.loaded += _on_loaded
 
 
+def _attach_native_drop(window) -> None:
+    """Files dropped on the window: WebView2 knows their places on disk and pywebview hands them to a
+    Python handler of the drop (the page gets only their content). They go to the page, which adds the
+    files where they are instead of copying them (static/js/importdlg.js nativeDropPaths)."""
+
+    def _on_drop(event) -> None:
+        try:
+            files = ((event or {}).get("dataTransfer") or {}).get("files") or []
+            paths = [f.get("pywebviewFullPath") for f in files if isinstance(f, dict) and f.get("pywebviewFullPath")]
+            if paths:
+                window.evaluate_js(f"window.onNativeDrop && onNativeDrop({json.dumps(paths)})")
+        except Exception as e:
+            print(f"[drop] {e}", file=sys.stderr)
+
+    def _on_loaded() -> None:  # the page's document is new after each load: the handler goes on it again
+        try:
+            from webview.dom import DOMEventHandler
+
+            window.dom.document.events.drop += DOMEventHandler(_on_drop)
+        except Exception as e:
+            print(f"[drop] places of dropped files not available: {e}", file=sys.stderr)
+
+    window.events.loaded += _on_loaded
+
+
 _update_launched = False
 
 
@@ -1014,6 +1040,7 @@ def main() -> None:
 
             window.events.closed += _exit_soon
             grant_media_to_app(window, args.host, args.port)
+            _attach_native_drop(window)
             icon_arg = str(ICO_PATH) if ICO_PATH.exists() else None
             # A persistent profile in the data folder: the page's own saved preferences (volume,
             # last tabs, ...) survive a restart; private mode (pywebview's default) forgets them
