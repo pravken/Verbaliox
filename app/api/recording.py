@@ -470,8 +470,15 @@ def recover_sessions() -> List[Path]:
     return used
 
 
+def _mix_stage(meeting_id: Optional[int], progress: int, text: str) -> None:
+    if meeting_id is not None:
+        from app.database import update_meeting_progress
+
+        update_meeting_progress(meeting_id, progress=progress, stage_text=text)
+
+
 def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path], screen: Optional[Path],
-               system_skip: float, safe_stem: str) -> Optional[Dict[str, Any]]:
+               system_skip: float, safe_stem: str, meeting_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The parts of a recording made one file: {"dest", "has_video"}, or None when they could not be
     joined (each part is then kept as a recording of its own, _salvage_parts, and that is returned as
     {"salvaged": ...})."""
@@ -487,7 +494,18 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
 
         cleaned = page.with_name(page.name + ".mic.wav")
         lined_up = page.with_name(page.name + ".sys.wav")
-        if clean_microphone(tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up):
+        step = {"pct": -1}
+
+        def progress(done: float) -> None:  # «Сведение дорожек: эхо колонок 40%» instead of «1 %» for minutes
+            pct = int(done * 100)
+            if meeting_id is not None and pct >= step["pct"] + 5:
+                step["pct"] = pct
+                from app.database import update_meeting_progress
+
+                update_meeting_progress(meeting_id, progress=max(1, min(80, int(pct * 0.8))),
+                                        stage_text=f"Сведение дорожек: убираем эхо колонок… {pct}%")
+
+        if clean_microphone(tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up, progress=progress):
             mic, echo_done = cleaned, True
             if lined_up.is_file():
                 # the system sound where the microphone heard it: mixed instead, nothing more to skip
@@ -498,11 +516,13 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
         from app import voice_filter
 
         if voice_filter.find_exe():
+            _mix_stage(meeting_id, 82, "Сведение дорожек: очистка голоса…")
             filtered = page.with_name(page.name + ".voice.wav")
             if voice_filter.clean(tool_cmd("ffmpeg"), mic or page, filtered):
                 if mic:
                     mic.unlink(missing_ok=True)
                 mic, voice = filtered, "cleaned"
+    _mix_stage(meeting_id, 92, "Сведение дорожек: сборка файла…")
     print(f"[record] tracks: page={'yes' if page else 'no'} system={'yes' if system else 'no'} "
           f"skip={system_skip:.2f}s echo={'removed' if echo_done else 'no'} voice={voice}", flush=True)
     if screen:
@@ -561,7 +581,7 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
 
     done: Optional[Dict[str, Any]] = None
     try:
-        done = _mix_parts(payload, page, system, screen, system_skip, safe_stem)
+        done = _mix_parts(payload, page, system, screen, system_skip, safe_stem, meeting_id)
         if done is None or done.get("salvaged") is not None:  # kept part by part: they are the recordings now
             delete_meeting(meeting_id)
             return
