@@ -252,8 +252,22 @@ async def lifespan(_app: FastAPI):
 
 
 from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
+
+class PageJSONResponse(JSONResponse):
+    """Every answer of the API, without the participants' voice prints (192 numbers each): the page never
+    uses them, and a recording's every reading and edit sent them along. The server reads them itself."""
+
+    def render(self, content: Any) -> bytes:
+        if isinstance(content, dict) and isinstance(content.get("speakers"), dict):
+            content = {**content, "speakers": {k: ({f: x for f, x in v.items() if f != "embedding"} if isinstance(v, dict) else v)
+                                               for k, v in content["speakers"].items()}}
+        return super().render(content)
+
 
 app = FastAPI(
+    default_response_class=PageJSONResponse,
     title="Verbaliox",
     version=__version__,
     lifespan=lifespan,
