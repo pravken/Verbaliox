@@ -183,6 +183,9 @@ async def lifespan(_app: FastAPI):
     except Exception:
         traceback.print_exc()
     threading.Thread(target=_retention_loop, daemon=True, name="retention").start()
+    from app.api.recording import watchdog_loop
+
+    threading.Thread(target=watchdog_loop, daemon=True, name="record_watchdog").start()
     try:
         from app.model_manager import remove_retired_models
 
@@ -508,6 +511,15 @@ def recover_orphan_recordings() -> int:
     """At start: parts of recordings that were never finished (the app closed or crashed while
     recording) become recordings, instead of staying hidden in the folders."""
     found: List[Tuple[Path, Optional[bool]]] = []
+    # Recordings the watchdog kept a file for (app/api/recording.py): their parts paired, one recording
+    # with its notes; only the parts left over are recovered one by one below
+    try:
+        from app.api.recording import recover_sessions
+
+        used = {str(p) for p in recover_sessions()}
+    except Exception:
+        traceback.print_exc()
+        used = set()
     try:
         rec = _recordings_dir()
         # what finishing a recording made for its mix (the cleaned microphone, the lined-up system sound):
@@ -524,6 +536,7 @@ def recover_orphan_recordings() -> int:
                 found.append((p, False))
     except OSError:
         return 0
+    found = [(p, v) for p, v in found if str(p) not in used and p.is_file()]
     n = 0
     for part, has_video in found:
         if part.stat().st_size < 4096:

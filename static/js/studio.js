@@ -8,6 +8,7 @@ let _mediaRecorder = null;
 let _recStreams = [];
 let _recAudioCtx = null;
 let _recStartTime = 0;
+let _recBeatTimer = null;
 let _recTimerInterval = null;
 let _recAnimFrame = null;
 let _recWaveHistory = [];
@@ -1936,6 +1937,8 @@ async function startLiveRecording() {
     renderStudioState();
     clearInterval(_recDiskTimer);
     _recDiskTimer = setInterval(checkRecordingDisk, 15000);
+    _recBeatTimer = setInterval(recordHeartbeat, 10000);
+    setTimeout(recordHeartbeat, 1500);
     clearInterval(_recTimerInterval);
     _recTimerInterval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - _recStartTime) / 1000);
@@ -2048,6 +2051,8 @@ function _cleanupRecordingResources() {
   }
   clearInterval(_recDiskTimer);
   _recDiskTimer = null;
+  clearInterval(_recBeatTimer);
+  _recBeatTimer = null;
   reportRecordingState(false);
   window._recMixedStream = null;
   clearInterval(_recSysTimer);
@@ -2144,27 +2149,53 @@ async function stopAndTranscribeRecording(opts) {
   }
 }
 
+// What the server is told of the recording: at «Стоп», and every 10 s while it goes on (the watchdog of
+// app/api/recording.py saves it with these notes if the page is gone before «Стоп»)
+function recordingInfo({ page, captureId, screenId, rawTitle, startedAt }) {
+  const ta = document.getElementById('studio-notes-input');
+  return {
+    title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
+    has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
+    notes: ta ? ta.value : '', started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
+    speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
+  };
+}
+
+function recordHeartbeat() {
+  if (!isRecording() || (!_recPage && !_recCaptureId && !_recScreenId)) return;
+  const rawTitle = (document.getElementById('record-title-input').value || t('recordDefaultTitle')).trim();
+  const body = recordingInfo({ page: _recPage, captureId: _recCaptureId, screenId: _recScreenId, rawTitle,
+    startedAt: _recStartTime ? _recStartTime / 1000 : 0 });
+  fetch('/api/record/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .catch(() => {});
+}
+
 async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
   _cleanupRecordingResources();
 
   // every chunk is on the server (waited for, but not for ever: a request that hangs)
   if (page) await Promise.race([page.upload, new Promise(res => setTimeout(res, 180000))]);
   if (page && page.failed) showToast(page.failed);
-  const res = await fetch('/api/record/finish', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
-      has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
-      notes: takeStudioNotes(), started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
-      speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    showError(data.detail);
-    return undefined;
-  }
+  const body = JSON.stringify(recordingInfo({ page, captureId, screenId, rawTitle, startedAt }));
+  // The notes go when the server has the recording: a failed answer keeps them, and «Сохранить ещё раз»
+  // sends the same again (the parts wait on the server; its watchdog saves them in 3 minutes otherwise)
+  const send = async () => {
+    const res = await fetch('/api/record/finish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      .catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok) {
+      showError(errorText(data, res), { label: t('recSaveAgain'), onClick: () => send().then(r => r && afterSaved(r)) });
+      return null;
+    }
+    takeStudioNotes();
+    return data;
+  };
+  const data = await send();
+  if (!data) return undefined;
+  return afterSaved(data, quiet);
+}
+
+async function afterSaved(data, quiet = false) {
   const created = data.created;
   await loadMeetingsList();
   prepareStudio();
