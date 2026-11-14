@@ -333,12 +333,13 @@ def _run_dub_job(meeting_id: int, target_lang: str, back: str = "completed") -> 
         update_meeting_progress(meeting_id, status=back, progress=100, stage_text="Дубляж отменён", error_message="")
     except Exception as e:
         tb = traceback.format_exc()
+        print(tb, flush=True)  # the details stay in the log; the recording keeps what the user can read
         update_meeting_progress(
             meeting_id,
             status=back,
             progress=100,
             stage_text=f"Ошибка дубляжа: {str(e)[:140]}",
-            error_message=f"{e}\n\n{tb[-800:]}",
+            error_message=str(e)[:600],
         )
     finally:
         _queue_finish(meeting_id)
@@ -375,12 +376,13 @@ def _run_side_job(meeting_id: int, back: str, runner, *args) -> None:
         update_meeting_progress(meeting_id, status=back, progress=100, stage_text=_SIDE_JOB_NAMES[runner][1], error_message="")
     except Exception as e:
         tb = traceback.format_exc()
+        print(tb, flush=True)  # the details stay in the log; the recording keeps what the user can read
         update_meeting_progress(
             meeting_id,
             status=back,
             progress=100,
             stage_text=f"Ошибка ({_SIDE_JOB_NAMES[runner][0]}): {str(e)[:140]}",
-            error_message=f"{e}\n\n{tb[-800:]}",
+            error_message=str(e)[:600],
         )
     finally:
         _queue_finish(meeting_id)
@@ -1939,10 +1941,11 @@ def _process_meeting_job(meeting_id: int) -> None:
         whisper_model = None
         release_whisper_model()
         tb = traceback.format_exc()
+        print(tb, flush=True)  # the details stay in the log; the recording keeps what the user can read
         _index_partial(meeting_id)
         update_meeting_progress(
             meeting_id,
             status="failed",
             stage_text=f"Ошибка: {str(e)[:140]}",
-            error_message=f"{e}\n\n{tb[-800:]}",
+            error_message=str(e)[:600],
         )

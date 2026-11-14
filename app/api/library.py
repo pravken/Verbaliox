@@ -325,6 +325,8 @@ async def api_upload_meetings(
         ext = Path(uf.filename or "recording.mp4").suffix.lower() or ".mp4"
         if ext not in SUPPORTED_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"Формат файла {ext} не поддерживается")
+        if uf.size == 0:  # nothing to transcribe: said now, not as a failed recording after the queue
+            raise HTTPException(status_code=400, detail=f"Файл «{uf.filename}» пустой")
     created = []
     for i, uf in enumerate(files):
         orig_name = uf.filename or "recording.mp4"
