@@ -3,6 +3,12 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "файл повреждён или это не звук и не видео": "the file is damaged, or it is not sound or video",
+  "файл не найден — его переместили или удалили?": "the file is not found — was it moved or deleted?",
+  "в файле нет звуковой дорожки": "the file has no sound track",
+  "нет доступа к файлу": "no access to the file",
+  "файл пустой": "the file is empty",
+  "неизвестная ошибка FFmpeg": "an unknown FFmpeg error",
   "Неизвестная модель распознавания": "Unknown speech recognition model",
   " на видеокарте": " on the video card",
   "Не удалось найти или установить Python 3.11 с python.org": "Could not find or install Python 3.11 from python.org",
@@ -305,7 +311,8 @@ const SERVER_PATTERNS_EN = [
   ["Дубляж ({}) готов: {}; не удалось озвучить фраз: {}", "Dub ({0}) ready: {1}; phrases not voiced: {2}"],
   ["{}: адрес в интернете должен начинаться с https://", "{0}: an internet address must start with https://"],
   ["{}: нужен адрес вида http(s)://сервер[:порт]", "{0}: an address like http(s)://server[:port] is needed"],
-  ["Ошибка извлечения звука через FFmpeg:\n{}", "FFmpeg could not extract the sound:\n{0}"],
+  ["Не удалось извлечь звук: {}", "Could not extract the sound: {0}"],
+  ["Файл «{}» пустой", "The file «{0}» is empty"],
   ["Перевод ({}) готов: {} реплик, модель {}", "Translation ({0}) ready: {1} lines, model {2}"],
   ["Распознавание речи — {} (обычный режим)", "Transcribing — {0} (standard mode)"],
   ["Готово! Участников: {}, реплик: {}; {}", "Done! Speakers: {0}, lines: {1}; {2}"],
