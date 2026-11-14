@@ -22,6 +22,8 @@ _KEEP_THINKING = ("gemma4",)
 _THINK_LOW = ("gpt-oss",)
 
 _can_think: Dict[str, bool] = {}  # model name -> what Ollama said; asked once per name
+_unanswered: Dict[str, float] = {}  # Ollama address -> when it did not answer: not asked again for a while
+UNANSWERED_RETRY_SEC = 30.0
 _lock = threading.Lock()
 
 
@@ -30,18 +32,30 @@ def _bare(name: str) -> str:
     return name.rsplit("/", 1)[-1]
 
 
-def _ask_ollama(model: str) -> Optional[bool]:
-    try:
-        from app.database import get_all_settings
+def _ollama_url(base_url: Optional[str]) -> str:
+    url = base_url
+    if not url:
+        try:
+            from app.database import get_all_settings
 
-        url = get_all_settings().get("ollama_url")
-    except Exception:
-        url = None
-    base = (url or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
+            url = get_all_settings().get("ollama_url")
+        except Exception:
+            url = None
+    return (url or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
+
+
+def _ask_ollama(model: str, base_url: Optional[str] = None) -> Optional[bool]:
+    import time
+
+    base = _ollama_url(base_url)
+    with _lock:
+        if time.time() - _unanswered.get(base, 0.0) < UNANSWERED_RETRY_SEC:
+            return None
     try:
         import httpx
 
-        r = httpx.post(f"{base}/api/show", json={"model": model}, timeout=3.0)
+        # a short wait to connect: on Windows a port nobody listens on takes about 2 s to refuse
+        r = httpx.post(f"{base}/api/show", json={"model": model}, timeout=httpx.Timeout(3.0, connect=0.3))
         if r.status_code != 200:
             return None
         caps = r.json().get("capabilities")
@@ -49,14 +63,16 @@ def _ask_ollama(model: str) -> Optional[bool]:
             return None
         return "thinking" in caps
     except Exception:
+        with _lock:
+            _unanswered[base] = time.time()
         return None
 
 
-def can_think(model: str) -> bool:
+def can_think(model: str, base_url: Optional[str] = None) -> bool:
     with _lock:
         if model in _can_think:
             return _can_think[model]
-    said = _ask_ollama(model)
+    said = _ask_ollama(model, base_url)
     if said is None:  # Ollama not reachable: judge by the name, and ask again next time
         return _bare(model.lower()).startswith(_THINKING_FAMILIES + _THINK_LOW)
     with _lock:
@@ -64,7 +80,7 @@ def can_think(model: str) -> bool:
     return said
 
 
-def thinking_off(model: Optional[str], analysis: bool = False) -> Dict[str, Any]:
+def thinking_off(model: Optional[str], analysis: bool = False, base_url: Optional[str] = None) -> Dict[str, Any]:
     """What to add to an Ollama chat request so the model does not spend the answer on reasoning.
     `analysis`: a summary, tasks or an answer about the meeting, where gemma4 keeps its thinking;
     a translation or dubbing line is short and waited for, so there gemma4 does not think either."""
@@ -73,7 +89,7 @@ def thinking_off(model: Optional[str], analysis: bool = False) -> Dict[str, Any]
     name = _bare(model.lower())
     if analysis and name.startswith(_KEEP_THINKING):
         return {}
-    if not can_think(model):
+    if not can_think(model, base_url):
         return {}  # `think` sent to a model that cannot think is refused by some Ollama versions
     if name.startswith(_THINK_LOW):
         return {"think": "low"}

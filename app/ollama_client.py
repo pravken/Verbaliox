@@ -911,8 +911,6 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     if keep_alive:
         payload["keep_alive"] = keep_alive  # Ollama frees the model after the same idle time
     from app.llm_text import strip_think, thinking_off
-
-    payload.update(thinking_off(model, analysis=True))
     from app import cancel_scope
 
     try:  # one model in memory at a time: the idle speech models and another analysis model go first
@@ -926,6 +924,8 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
         print(f"[ollama] others not unloaded: {e}", flush=True)
 
     def request() -> str:
+        # asked here, once the answer counts as being written: Ollama is asked what the model can do
+        payload.update(thinking_off(model, analysis=True, base_url=base_url))
         with httpx.Client(timeout=600.0) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
             raise_for_ollama(resp)

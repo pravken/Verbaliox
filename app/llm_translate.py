@@ -68,7 +68,7 @@ def ollama_chat(
 def _ollama_request(base_url: str, payload: Dict[str, Any], check_cancel: Optional[Callable[[], None]]) -> str:
     from app.llm_text import strip_think, thinking_off
 
-    payload.update(thinking_off(payload["model"]))
+    payload.update(thinking_off(payload["model"], base_url=base_url))
     with httpx.Client(timeout=600.0) as client:
         if check_cancel is None:
             resp = client.post(f"{base_url}/api/chat", json=payload)
