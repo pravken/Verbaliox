@@ -265,34 +265,35 @@ def _group_voices(embs: np.ndarray, durs: np.ndarray, k: int, min_dur: float, ro
     return None
 
 
-def _join_closest(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
-    """The groups of `labels` joined two by two, the closest voices first (duration-weighted centroids),
-    until there are k; renumbered in the order they first speak."""
-    groups = {int(g): [int(g)] for g in set(labels.tolist())}
+def _fold_least_heard(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+    """Fewer groups than Auto found, as many as said: the group heard least is taken apart, each of its
+    phrases going to the closest remaining voice (duration-weighted centroids), until k are left;
+    renumbered in the order they first speak. The extra group Auto finds is a small one (scraps of
+    speech, a laugh, one person's other microphone): joined whole to its closest group instead, two
+    real people were put together (AMI with 4 said: 11-26 % of the time to the wrong person against
+    3-7 % in Auto, bench-report/diarization.md, 2026-11-15)."""
+    labels = labels.copy()
 
-    def centroid(members: List[int]) -> np.ndarray:
-        mask = np.isin(labels, members)
+    def centroid(g: int) -> np.ndarray:
+        mask = labels == g
         w = np.clip(durations[mask], 0.5, 10.0)[:, None]
         c = np.sum(embeddings[mask] * w, axis=0)
         n = np.linalg.norm(c)
         return c / (n if n > 1e-8 else 1.0)
 
-    while len(groups) > k:
-        keys = list(groups)
-        cents = {g: centroid(groups[g]) for g in keys}
-        best = None
-        for i, a in enumerate(keys):
-            for b in keys[i + 1:]:
-                d = float(1.0 - np.dot(cents[a], cents[b]))
-                if best is None or d < best[0]:
-                    best = (d, a, b)
-        _, a, b = best
-        groups[a] += groups.pop(b)
-    owner = {m: g for g, members in groups.items() for m in members}
+    while len(set(labels.tolist())) > k:
+        groups = sorted(set(labels.tolist()))
+        heard = {g: float(np.sum(durations[labels == g])) for g in groups}
+        least = min(groups, key=lambda g: heard[g])
+        rest = [g for g in groups if g != least]
+        cents = np.vstack([centroid(g) for g in rest])
+        idx = np.where(labels == least)[0]
+        nearest = np.argmax(embeddings[idx] @ cents.T, axis=1)
+        labels[idx] = np.array(rest)[nearest]
     order: Dict[int, int] = {}
     out = np.zeros(len(labels), dtype=int)
     for i, lbl in enumerate(labels):
-        g = owner[int(lbl)]
+        g = int(lbl)
         if g not in order:
             order[g] = len(order)
         out[i] = order[g]
@@ -345,8 +346,8 @@ def _determine_clusters(
             print(f"[diarizer] {found} voice(s), as in Auto, within the {num_speakers_hint} said", flush=True)
             return auto
         if found > num_speakers_hint:
-            print(f"[diarizer] {found} voices against {num_speakers_hint} said: the closest are joined", flush=True)
-            return _join_closest(embeddings, durations, auto, num_speakers_hint)
+            print(f"[diarizer] {found} voices against {num_speakers_hint} said: the least heard taken apart", flush=True)
+            return _fold_least_heard(embeddings, durations, auto, num_speakers_hint)
         # Auto heard one voice: the count said decides how many there are (below)
 
     # Filter reliable anchor segments (duration >= 2.2s) to determine speaker clusters
