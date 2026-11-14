@@ -1,0 +1,84 @@
+{
+  "meeting_id": 87,
+  "source": "https://www.youtube.com/watch?v=0BMK2sIMnTA",
+  "title": "English-Russian language exchange podcast, episode 1 (10.04.2021)",
+  "language": "mixed",
+  "duration_min": 62.8,
+  "status": "checked",
+  "note": "Расшифровка в режиме «смешанный язык»: первые ~30 минут по-английски, дальше по-русски; есть ошибки распознавания (куски «по-валлийски» и «по-белорусски»). Участник 1 — Alex (англичанин), Участник 2 — Julia. Протокол ожидается на языке, который выберет программа для смешанной записи.",
+  "tasks": [
+    {
+      "who": "Julia",
+      "what": "спросить соседку по квартире, какое название подкаста ей кажется лучше",
+      "due": "",
+      "at": "23:40",
+      "quote": "I guess I might run this idea past my flatmate."
+    },
+    {
+      "who": "Alex",
+      "what": "спросить брата (Австралия) о вариантах названия",
+      "due": "",
+      "at": "24:03",
+      "quote": "I'll ask my brother."
+    },
+    {
+      "who": "Julia",
+      "what": "проверить в Google, нет ли уже подкаста с таким названием",
+      "due": "после сессии",
+      "at": "23:02",
+      "quote": "I can Google it after our session"
+    },
+    {
+      "who": "Julia",
+      "what": "выложить все варианты названия в Facebook и сделать опрос в Google Forms",
+      "due": "",
+      "at": "1:01:45",
+      "quote": "давай я напишу в Фейсбуке все варианты, которые у нас есть, и потом я создам какую-нибудь там гугл-форму"
+    },
+    {
+      "who": "Alex",
+      "what": "подумать над названием",
+      "due": "",
+      "at": "1:01:37",
+      "quote": "И я подумаю по имени, да?"
+    },
+    {
+      "who": "Julia и Alex",
+      "what": "продумать вопросы для гостей подкаста (подруга из Лондона, парень из США в Голландии, подруга Alex в Голландии, учительница Нина Васильевна)",
+      "due": "",
+      "at": "25:01",
+      "quote": "we can plan what questions we might ask these people."
+    },
+    {
+      "who": "Julia",
+      "what": "написать во вторник, будет ли у неё семинар на следующей неделе",
+      "due": "во вторник",
+      "at": "1:00:52",
+      "quote": "Поэтому я смогу тебе написать во вторник, я думаю."
+    },
+    {
+      "who": "Julia",
+      "what": "прислать Alex выражение «богатый стол» письменно",
+      "due": "",
+      "at": "53:06",
+      "quote": "Ну, я тебе напишу, что «богатый стол»"
+    }
+  ],
+  "decisions": [
+    {
+      "what": "Следующая встреча — в четверг, как обычно; если что-то изменится, Julia сообщит",
+      "at": "1:01:28",
+      "quote": "Мы можем пока договориться на четверг, как обычно."
+    },
+    {
+      "what": "Название канала сегодня не выбирают: варианты («Julia and Alex Language Exchange», «Alex and Julia Podcast», «Pol-English / Pol-Russki») обсудят на следующей неделе",
+      "at": "23:17",
+      "quote": "We don't have to decide today, but I just wanted to put that idea to you"
+    },
+    {
+      "what": "Формат подкаста: половину времени говорят по-английски, половину по-русски",
+      "at": "20:22",
+      "quote": "we spend half our time on each of these sessions speaking Russian and half speaking English."
+    }
+  ]
+}
