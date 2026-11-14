@@ -600,6 +600,8 @@ def api_generate_title(meeting_id: int) -> Dict[str, Any]:
 def api_rename_meeting(meeting_id: int, payload: MeetingTitlePayload) -> Dict[str, Any]:
     from app.obsidian import refresh_if_exported
 
+    if not get_meeting(meeting_id):  # deleted meanwhile (another window, the cleanup of a mix)
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Название не может быть пустым")

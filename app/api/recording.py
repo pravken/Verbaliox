@@ -95,7 +95,7 @@ async def api_record_page_chunk(page_id: str, request: Request) -> Dict[str, Any
     if len(data) > 64 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Слишком большой фрагмент записи")
     raw_seq = request.headers.get("x-chunk-seq")
-    seq = int(raw_seq) if raw_seq and raw_seq.isdigit() else None
+    seq = int(raw_seq) if raw_seq and re.fullmatch(r"[0-9]{1,9}", raw_seq) else None  # «²» is a digit to isdigit()
     gap = request.headers.get("x-chunk-after-gap") == "1"  # the page gave up on a chunk before this one
 
     def append() -> Dict[str, Any]:  # off the event loop: a slow disk or a virus scan held every request
