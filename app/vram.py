@@ -91,6 +91,49 @@ def gpu_memory() -> Optional[Dict[str, float]]:
     return {"total_gb": round(total / gb, 1), "free_gb": round(free / gb, 1), "used_gb": round((total - free) / gb, 1)}
 
 
+# An analysis model that shares the card with speech recognition, and the video memory it takes at
+# a 32k context (bench-report/llm-profiles.md: gemma4:e4b with GigaAM fits even an 8 GB card, and
+# neither pushes the other out). Any other model still takes the card alone, as before.
+SHARES_THE_CARD_GB = {"gemma4:e4b": 5.8, "gemma4:e2b": 3.1}
+SHARE_MIN_CARD_GB = 7.5  # an "8 GB" card reports a little under 8
+
+
+def _sharing_size(model: str) -> Optional[float]:
+    name = model if ":" in model else f"{model}:latest"
+    for tag, gb in SHARES_THE_CARD_GB.items():
+        if name == tag or name.startswith(tag + "-"):  # gemma4:e4b-it-q4_K_M too
+            return gb
+    return None
+
+
+def room_for_analysis(model: Optional[str]) -> bool:
+    """The speech models may stay while `model` answers: a card of 8 GB and more, a model measured to
+    share it, and the memory it needs free now (or the model already loaded)."""
+    gb = _sharing_size(model or "")
+    mem = gpu_memory() if gb else None
+    if not mem or mem["total_gb"] < SHARE_MIN_CARD_GB:
+        return False
+    try:
+        if any(_same_model(m["name"], model or "") for m in ollama_loaded()):
+            return True
+    except Exception:
+        pass
+    return mem["free_gb"] >= gb
+
+
+def room_for_speech(need_gb: float) -> bool:
+    """The analysis models Ollama holds may stay while a recording is recognized: all of them share the
+    card, it has 8 GB and more, and the speech model's memory is free now."""
+    mem = gpu_memory()
+    if not mem or mem["total_gb"] < SHARE_MIN_CARD_GB or mem["free_gb"] < need_gb:
+        return False
+    try:
+        loaded = [m["name"] for m in ollama_loaded()]
+    except Exception:
+        return False
+    return all(_sharing_size(n) for n in loaded)
+
+
 def _same_model(a: str, b: str) -> bool:
     norm = lambda n: n if ":" in n else f"{n}:latest"  # noqa: E731
     return norm(a) == norm(b)
@@ -443,14 +486,17 @@ def job_stage() -> Optional[str]:
     return (meeting_status(mid) if mid is not None else "") or "transcribing"
 
 
-def release_idle_speech_models() -> List[str]:
+def release_idle_speech_models(model: Optional[str] = None) -> List[str]:
     """Before an analysis model answers: every speech model nothing uses now leaves the memory —
     Whisper, GigaAM / Parakeet, the speaker model and the idle worker of live captions (it kept its
-    Whisper loaded after a recording). Not while a job recognizes or captions run. Returns what went."""
+    Whisper loaded after a recording). Not while a job recognizes or captions run, nor when `model`
+    fits next to them (room_for_analysis). Returns what went."""
     from app import asr_onnx, live, transcriber
     from app.diarizer import ecapa_loaded_on, unload_diarizer
 
     if job_stage() in _ASR_STAGES or job_stage() == "diarizing" or live.has_sessions():
+        return []
+    if model and room_for_analysis(model):
         return []
     gone: List[str] = []
     if transcriber.whisper_cache_key():
