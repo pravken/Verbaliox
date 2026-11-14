@@ -160,6 +160,7 @@ const recSrc = { mic: { on: false, lv: 0, at: 0, used: false }, sys: { on: false
 function recSourcesStart(mic, sys) {
   for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: performance.now() });
   recSrc.sys.warned = false;
+  recSrc.sys.heard = false;
   document.querySelectorAll('[data-rec-src]').forEach(box => {
     box.innerHTML = ['mic', 'sys'].filter(k => recSrc[k].used).map(k =>
       `<span class="rec-src-item" data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
@@ -182,7 +183,7 @@ function recSourcesUpdate(levels) {
     if (!s.used || db == null) continue;
     const amp = Math.max(0, Math.min(1, (db + 54) / 42));
     s.lv = Math.max(amp, s.lv * 0.86);
-    if (db > -44) s.at = now;
+    if (db > -44) { s.at = now; s.heard = true; }
     s.on = now - s.at < 700;
   }
   recSilenceWatch(now);
@@ -191,12 +192,15 @@ function recSourcesUpdate(levels) {
 
 // A call is on, and the computer's sound stays silent: the call plays on another device than the one
 // recorded, or the sound is off. Said at once, not found out after the meeting (once a recording)
+// Not a word from the others yet a minute into the call (the sound plays elsewhere), or five minutes of
+// silence later (a talk of one's own lasts that long only rarely): a long monologue is not an alarm
 const REC_SYS_SILENT_MS = 60000;
+const REC_SYS_SILENT_LATER_MS = 5 * 60000;
 function recSilenceWatch(now) {
   const s = recSrc.sys;
   if (!s.used || s.warned || !isRecording()) return;
   const inCall = !!(state.callRecording || (typeof meetingFollow !== 'undefined' && meetingFollow.base));
-  if (inCall && now - s.at > REC_SYS_SILENT_MS) {
+  if (inCall && now - s.at > (s.heard ? REC_SYS_SILENT_LATER_MS : REC_SYS_SILENT_MS)) {
     s.warned = true;
     showError(t('recSysSilent'));
   }
@@ -615,11 +619,14 @@ async function meetingFollowTick() {
     // Only a recording of a Teams meeting follows it: one started by the call, or with the meeting's window
     // open as it began. A recording of a meeting in the room or in another app is never stopped or cut
     // because a Teams call came and went meanwhile
+    // a call of another app (Zoom) started it: a Teams window coming and going is not its meeting
+    const byTeams = /teams/i.test(String(state.callRecording || ''));
+    if (state.callRecording && !byTeams) { mf.off = true; return; }
     if (!title) {
-      if (!state.callRecording && now - mf.since >= MEETING_ADOPT_MS) mf.off = true;
+      if (!byTeams && now - mf.since >= MEETING_ADOPT_MS) mf.off = true;
       return;
     }
-    if (!state.callRecording && now - mf.since >= MEETING_ADOPT_MS) { mf.off = true; return; }
+    if (!byTeams && now - mf.since >= MEETING_ADOPT_MS) { mf.off = true; return; }
     mf.base = title;
     const input = document.getElementById('record-title-input');
     if (input && !input.value.trim()) input.value = title;  // named after the meeting
