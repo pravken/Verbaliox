@@ -71,6 +71,45 @@ class UnloadSwitchTest(unittest.TestCase):
             self.assertEqual(vram.release_idle_speech_models(), [])  # in use: left alone
         rel.assert_not_called()
 
+    def test_gemma4_and_speech_share_a_card_of_8_gb(self):
+        card = lambda total, free: mock.patch.object(vram, "gpu_memory", return_value={  # noqa: E731
+            "total_gb": total, "free_gb": free, "used_gb": total - free})
+        with mock.patch.object(vram, "ollama_loaded", return_value=[]):
+            with card(7.6, 6.0):
+                self.assertTrue(vram.room_for_analysis("gemma4:e4b"))
+                self.assertFalse(vram.room_for_analysis("qwen3:8b"))  # not measured to share: alone as before
+            with card(7.6, 4.0):
+                self.assertFalse(vram.room_for_analysis("gemma4:e4b"))  # Whisper takes the room now
+                self.assertTrue(vram.room_for_analysis("gemma4:e2b"))
+            with card(6.0, 5.0):
+                self.assertFalse(vram.room_for_analysis("gemma4:e2b"))  # a 6 GB card: one at a time
+            with mock.patch.object(vram, "gpu_memory", return_value=None):
+                self.assertFalse(vram.room_for_analysis("gemma4:e2b"))
+        with card(7.6, 1.0), mock.patch.object(vram, "ollama_loaded", return_value=[{"name": "gemma4:e4b"}]):
+            self.assertTrue(vram.room_for_analysis("gemma4:e4b"))  # already in the memory with the speech model
+            self.assertFalse(vram.room_for_speech(3.0))  # and no room for one more speech model
+        with card(10.0, 4.0):
+            with mock.patch.object(vram, "ollama_loaded", return_value=[{"name": "gemma4:e4b"}]):
+                self.assertTrue(vram.room_for_speech(3.0))
+                self.assertFalse(vram.room_for_speech(5.0))  # large-v3 does not fit next to it
+            with mock.patch.object(vram, "ollama_loaded", return_value=[{"name": "qwen3:8b"}]):
+                self.assertFalse(vram.room_for_speech(3.0))
+
+    def test_speech_models_stay_when_the_analysis_model_fits(self):
+        from app import live
+
+        with self._stage("summarizing"), mock.patch.object(live, "has_sessions", return_value=False), \
+                mock.patch.object(vram, "room_for_analysis", return_value=True), \
+                mock.patch.object(transcriber, "whisper_cache_key", return_value=("x", "cuda", "f")), \
+                mock.patch.object(transcriber, "release_whisper_model") as rel:
+            self.assertEqual(vram.release_idle_speech_models("gemma4:e4b"), [])
+        rel.assert_not_called()
+        with mock.patch.object(vram, "room_for_speech", return_value=True), \
+                mock.patch.object(vram, "ollama_release_others") as others, \
+                mock.patch.object(vram, "ollama_loaded", return_value=[{"name": "gemma4:e4b"}]):
+            transcriber._release_analysis_models(3.0)
+        others.assert_not_called()  # the analysis model stays next to GigaAM
+
     def test_stop_all_jobs_cancels_queued_and_running(self):
         with transcriber._jobs_lock:
             transcriber._active_jobs.update({901, 902})

@@ -1282,14 +1282,15 @@ def _release_speech_models() -> None:
     clear_vram()
 
 
-def _release_analysis_models() -> None:
+def _release_analysis_models(need_gb: float = 3.0) -> None:
     """The analysis models Ollama holds go before a speech model loads (not while live captions run),
     and so does the Whisper the caption worker keeps for two minutes after a recording: with them still
-    in the video memory GigaAM / Parakeet went to the processor for the whole recording."""
+    in the video memory GigaAM / Parakeet went to the processor for the whole recording. A model that
+    shares a card of 8 GB and more with `need_gb` of speech models stays (app/vram.room_for_speech)."""
     try:
-        from app.vram import ollama_loaded, ollama_release_others
+        from app.vram import ollama_loaded, ollama_release_others, room_for_speech
 
-        asked = set(ollama_release_others())
+        asked = set() if room_for_speech(need_gb) else set(ollama_release_others())
         # Ollama frees the memory a while after it is asked: waited for (a second was often too short)
         deadline = time.time() + 6.0
         while asked and time.time() < deadline and asked & {m["name"] for m in ollama_loaded()}:
@@ -1602,7 +1603,10 @@ def _process_meeting_job(meeting_id: int) -> None:
         extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm,
                                check_cancel=lambda: _check_cancel(meeting_id))
         duration = get_media_duration(wav_path) or get_media_duration(media_path)
-        _release_analysis_models()  # the speech model gets the memory an analysis model held
+        # the speech model gets the memory an analysis model held (GigaAM / Parakeet with the speaker
+        # model take about 3 GB, Whisper more)
+        _release_analysis_models(max(_JOB_VRAM_GB.get(str(meeting.get("model_name") or ""), 3.0),
+                                     _JOB_VRAM_GB.get(str(settings.get("whisper_model") or ""), 3.0)))
 
         update_meeting_progress(
             meeting_id,
