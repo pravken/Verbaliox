@@ -139,13 +139,15 @@ def _tasks(m: Dict[str, Any], mid: str) -> Dict[str, Any]:
     found, answers = [], []
     parts = c.transcript_parts(lines, max(8000, llm.max_chars - 3000))
     for part in parts:
-        ans = llm.chat(c._SYSTEM, head + "Расшифровка:\n" + part)
+        ans = llm.chat(c._SYSTEM + (c._dismissed_examples() if hasattr(c, "_dismissed_examples") else ""), head + "Расшифровка:\n" + part)
         answers.append(ans)
         found += c.parse_answer(ans)
     raw_found = len(found)
     supported = [x for x in found if c.supported(x, m)]
-    items = c.prune(supported)
+    in_meeting = getattr(c, "in_meeting_action", lambda x: False)  # actions of the meeting itself are not tasks
+    items = c.prune([x for x in supported if not in_meeting(x)])
     items = c.verify(items, m, llm)
+    items = [x for x in items if not in_meeting(x)]
     # JSON objects the model wrote that do not parse (the app drops them silently)
     objs = [o for a in answers for o in re.findall(r"\{[^{}]*\}", re.sub(r"```(?:json)?", "", a))]
     bad = 0
