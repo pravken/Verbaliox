@@ -4,6 +4,8 @@
 // app/ is here.
 const SERVER_TEXT_EN = {
   "Сведение дорожек: очистка голоса…": "Mixing the tracks: cleaning the voice…",
+  "Разметка «кто когда говорит» (Nemotron)...": "Marking who speaks when (Nemotron)...",
+  "Для Nemotron нужна библиотека transformers: обновите программу до последней версии": "Nemotron needs the transformers library: update the app to the latest version",
   "Сведение дорожек: сборка файла…": "Mixing the tracks: making the file…",
   "Число вне допустимого диапазона": "The number is out of range",
   "В файле нет реплик расшифровки Teams (нужен файл .vtt из «Скачать расшифровку»)": "The file has no lines of a Teams transcript (a .vtt file from «Download transcript» is needed)",
@@ -309,6 +311,7 @@ const SERVER_PATTERNS_EN = [
   ["Видеокарта занята: Ollama выгрузит модель {}, как только освободится — программа повторяет попытку", "The video card is busy: Ollama will unload the model {0} as soon as it is free — the app keeps trying"],
   ["Для дубляжа записи длиной {} ч нужно около {} ГБ памяти, а в компьютере {} ГБ. Сделайте дубляж частей записи (Нарезка) или более короткой записи.", "Dubbing a {0} h recording needs about {1} GB of memory, and this computer has {2} GB. Dub parts of the recording (Cut) or a shorter recording."],
   ["Для модели {} нужна Ollama {} или новее, а установлена {}. Обновите Ollama (https://ollama.com/download) и нажмите «Скачать» ещё раз.", "{0} needs Ollama {1} or newer, and {2} is installed. Update Ollama (https://ollama.com/download) and press Download again."],
+  ["Nemotron ждёт звук 16 кГц, а в файле {} Гц", "Nemotron expects 16 kHz sound, and the file has {0} Hz"],
   ["В Ollama пока не скачана ни одна модель. Откройте «Настройки» и нажмите «Скачать» напротив {}.", "No model is downloaded in Ollama yet. Open Settings and press Download next to {0}."],
   ["{} понимает только один язык. Для записей на нескольких языках выберите Parakeet или Whisper.", "{0} understands one language only. For recordings in several languages choose Parakeet or Whisper."],
   ["Нет проверенной контрольной суммы onnxruntime-gpu {} для Python {}.{}: обновите программу", "No checked checksum of onnxruntime-gpu {0} for Python {1}.{2}: update the app"],

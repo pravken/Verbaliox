@@ -551,6 +551,19 @@
               <span data-i18n="diarizationToggle">Разделение участников по голосам</span>
               <input type="checkbox" role="switch" class="vs-switch" id="set-diarization" checked data-change="syncVoiceProfilesToggle" />
             </label>
+            <!-- Nemotron 3 Diarization (app/nemotron_diar.py): downloaded on request, ECAPA otherwise -->
+            <div id="nemotron-box" class="mt-2 ml-6 rounded-lg border apple-border bg-white/[0.02] px-3 py-2.5 space-y-2">
+              <label class="vs-row cursor-pointer text-xs text-apple-label">
+                <span data-i18n="nemotronToggle">Точное разделение (Nemotron 3)</span>
+                <input type="checkbox" role="switch" class="vs-switch" id="set-nemotron" data-change="toggleNemotron" />
+              </label>
+              <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="nemotronHint">Модель NVIDIA размечает, кто когда говорит, по всей записи сразу: на тестовых совещаниях путала людей втрое реже. До 8 участников. Скачивается отдельно; без неё работает обычное разделение.</p>
+              <div class="flex items-center gap-2">
+                <span id="nemotron-status" class="text-[11.5px] text-apple-secondary"></span>
+                <button data-click="installNemotron" id="nemotron-install" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="nemotronInstall">Скачать</button>
+                <button data-click="removeNemotron" id="nemotron-remove" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="onnxGpuRemove">Удалить</button>
+              </div>
+            </div>
             <div id="voice-profiles-box" class="mt-2 ml-6 rounded-lg border apple-border bg-white/[0.02] px-3 py-2.5 space-y-2">
               <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipVoiceProfilesToggle"
                 title="Когда вы называете участника по имени, его голос запоминается, и в новых записях он получает это имя автоматически">
