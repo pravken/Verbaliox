@@ -576,7 +576,8 @@ async function handleCallEvent(ev) {
 // saw one long call and the first recording went on through the second meeting ---
 const MEETING_SWITCH_MS = 8000;   // the new meeting's window has stayed this long: not a glance at it
 const MEETING_GONE_MS = 30000;    // no meeting window this long: the meeting is over
-const meetingFollow = { base: '', cand: '', candSince: 0, goneSince: 0, busy: false };
+const MEETING_ADOPT_MS = 15000;   // a recording follows the meeting whose window is there this soon after its start
+const meetingFollow = { base: '', cand: '', candSince: 0, goneSince: 0, busy: false, since: 0, off: false };
 
 function meetingFollowOn() {
   return String(((state.system && state.system.settings) || {}).meeting_follow || 'true') !== 'false';
@@ -585,16 +586,25 @@ function meetingFollowOn() {
 async function meetingFollowTick() {
   const mf = meetingFollow;
   if (!isRecording()) {
-    if (!mf.busy) Object.assign(mf, { base: '', cand: '', goneSince: 0 });
+    if (!mf.busy) Object.assign(mf, { base: '', cand: '', goneSince: 0, since: 0, off: false });
     return;
   }
-  if (mf.busy || !meetingFollowOn()) return;
+  if (mf.busy || mf.off || !meetingFollowOn()) return;
+  if (!mf.since) mf.since = Date.now();
   const st = await fetch('/api/teams/meeting').then(r => (r.ok ? r.json() : null)).catch(() => null);
-  if (!st || !isRecording() || mf.busy) return;
+  // Not sure it is a meeting (no UI Automation to look for its «Leave» button): nothing is done by itself
+  if (!st || st.verified === false || !isRecording() || mf.busy) return;
   const title = String(st.title || '');
   const now = Date.now();
-  if (!mf.base) {  // the meeting this recording is of, once its window is seen
-    if (!title) return;
+  if (!mf.base) {
+    // Only a recording of a Teams meeting follows it: one started by the call, or with the meeting's window
+    // open as it began. A recording of a meeting in the room or in another app is never stopped or cut
+    // because a Teams call came and went meanwhile
+    if (!title) {
+      if (!state.callRecording && now - mf.since >= MEETING_ADOPT_MS) mf.off = true;
+      return;
+    }
+    if (!state.callRecording && now - mf.since >= MEETING_ADOPT_MS) { mf.off = true; return; }
     mf.base = title;
     const input = document.getElementById('record-title-input');
     if (input && !input.value.trim()) input.value = title;  // named after the meeting
@@ -611,7 +621,7 @@ async function meetingFollowTick() {
         state.callRecording = null;
         await stopAndTranscribeRecording();
       } finally {
-        Object.assign(mf, { base: '', cand: '', goneSince: 0, busy: false });
+        Object.assign(mf, { base: '', cand: '', goneSince: 0, busy: false, since: 0, off: false });
       }
     }
     return;
@@ -645,7 +655,7 @@ async function meetingSwitchTo(title) {
   } catch (e) {
     showToast(`${t('callRecordFailed')}: ${mediaErrorText(e)}`);
   } finally {
-    Object.assign(mf, { base: isRecording() ? title : '', cand: '', goneSince: 0, busy: false });
+    Object.assign(mf, { base: isRecording() ? title : '', cand: '', goneSince: 0, busy: false, since: Date.now(), off: false });
   }
 }
 
