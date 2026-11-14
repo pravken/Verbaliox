@@ -3,6 +3,7 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "Неизвестная модель распознавания": "Unknown speech recognition model",
   " на видеокарте": " on the video card",
   "Не удалось найти или установить Python 3.11 с python.org": "Could not find or install Python 3.11 from python.org",
   "Нет ни uv, ни Python 3.11: запустите setup.bat": "Neither uv nor Python 3.11 is installed: run setup.bat",

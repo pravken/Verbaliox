@@ -292,6 +292,14 @@ def api_disk() -> Dict[str, Any]:
 
 _UNSAFE_NAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
+def _check_model(name: str) -> None:
+    """A model the API was asked for by name must be one of the catalog (app/settings_schema.py)."""
+    from app.settings_schema import is_speech_model
+
+    if not is_speech_model(name):
+        raise HTTPException(status_code=400, detail="Неизвестная модель распознавания")
+
+
 @router.post("/api/meetings/upload")
 async def api_upload_meetings(
     files: List[UploadFile] = File(...),
@@ -305,10 +313,11 @@ async def api_upload_meetings(
     processing: str = Form(""),  # JSON: the sound and text steps chosen in the import window (database.PROCESSING_KEYS)
 ) -> Dict[str, Any]:
     chosen_processing = _processing_from_form(processing)
+    _check_model(model_name)
     settings = get_all_settings()
     chosen_model = model_name.strip() or speech_route.default_choice(settings)
     chosen_lang = language.strip() or settings.get("language", "auto")
-    chosen_speakers = num_speakers if num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
+    chosen_speakers = min(num_speakers, 20) if num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
     is_recording = source == "recording"
     target_dir = _recordings_dir() if is_recording else UPLOADS_DIR
 
@@ -399,10 +408,11 @@ def api_import_url(payload: UrlImportPayload) -> Dict[str, Any]:
     """A video or podcast by its link (app/url_import.py): downloaded, then transcribed."""
     from app import url_import
 
+    _check_model(payload.model_name)
     settings = get_all_settings()
     try:
         m = url_import.start(payload.url.strip(), payload.model_name or speech_route.default_choice(settings),
-                             payload.language or "auto", int(payload.num_speakers or 0))
+                             payload.language or "auto", max(0, min(20, int(payload.num_speakers or 0))))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     # The download takes a while: the choice is stored long before the transcription reads it
@@ -445,10 +455,11 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
     if not target.exists():
         raise HTTPException(status_code=400, detail=f"Путь не найден на диске: {raw_path}")
 
+    _check_model(payload.model_name)
     settings = get_all_settings()
     chosen_model = payload.model_name.strip() or speech_route.default_choice(settings)
     chosen_lang = payload.language.strip() or settings.get("language", "auto")
-    chosen_speakers = payload.num_speakers if payload.num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
+    chosen_speakers = min(payload.num_speakers, 20) if payload.num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
 
     media_files: List[Path] = []
     if target.is_file():
@@ -609,13 +620,14 @@ def api_reconfigure_meeting(meeting_id: int, payload: MeetingReconfigurePayload)
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     _ensure_not_processing(meeting_id)
+    _check_model(payload.model_name)
 
     update_meeting_fields(
         meeting_id,
         model_name=payload.model_name.strip() or "large-v3-turbo",
         language=payload.language.strip() or "auto",
         language_choice=payload.language.strip() or "auto",
-        num_speakers_hint=max(0, int(payload.num_speakers_hint)),
+        num_speakers_hint=max(0, min(20, int(payload.num_speakers_hint))),
     )
     if payload.processing is not None:
         from app.database import set_meeting_processing
