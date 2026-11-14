@@ -281,29 +281,35 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
 
     # The recording is in the library at once, «Сведение дорожек»: the echo removal and the mix (minutes
-    # for an hour-long meeting) run in the background, and it queues itself for transcription when done
-    settings = get_all_settings()
-    m = create_meeting(
-        title=payload.title.strip()[:300] or safe_stem,
-        filename=safe_stem,
-        media_path="",
-        language=settings.get("language", "auto"),
-        model_name=speech_route.default_choice(settings),
-        num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
-        source="recording",
-        owns_media=False,  # its file comes with the mix
-        title_is_default=True,
-        has_video=bool(screen or (payload.has_video and page)),
-    )
-    from app import app_status
-    from app.database import update_meeting_progress
+    # for an hour-long meeting) run in the background, and it queues itself for transcription when done.
+    # Off the event loop: the database lock, and the calendar (its link or Outlook, up to a minute and a
+    # half) read for the meeting's name, would hold every other request meanwhile
+    def register() -> Dict[str, Any]:
+        settings = get_all_settings()
+        m = create_meeting(
+            title=payload.title.strip()[:300] or safe_stem,
+            filename=safe_stem,
+            media_path="",
+            language=settings.get("language", "auto"),
+            model_name=speech_route.default_choice(settings),
+            num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
+            source="recording",
+            owns_media=False,  # its file comes with the mix
+            title_is_default=True,
+            has_video=bool(screen or (payload.has_video and page)),
+        )
+        from app import app_status
+        from app.database import update_meeting_progress
 
-    app_status.mixing.add(m["id"])
-    update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
-    _attach_recording_info(m["id"], payload)
-    threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem),
-                     daemon=True, name="record_mix").start()
-    return {"created": [get_meeting(m["id"]) or m]}
+        app_status.mixing.add(m["id"])
+        update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
+        _attach_recording_info(m["id"], payload)
+        threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem),
+                         daemon=True, name="record_mix").start()
+        return m
+
+    m = await run_in_threadpool(register)
+    return {"created": [await run_in_threadpool(get_meeting, m["id"]) or m]}
 
 
 def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path], screen: Optional[Path],
