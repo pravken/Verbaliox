@@ -16,9 +16,9 @@ rules (DAILY / WEEKLY / MONTHLY with INTERVAL, BYDAY, COUNT, UNTIL, EXDATE).
 import re
 import threading
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 CACHE_SEC = 15 * 60
 _cache: Dict[str, Any] = {"source": "", "at": 0.0, "events": [], "error": ""}
@@ -102,9 +102,44 @@ WINDOWS_ZONES = {
     "line islands standard time": "Pacific/Kiritimati",
 }
 
-# Zones described in the file itself (VTIMEZONE): their standard offset, for a name neither IANA nor
-# Windows knows («Customized Time Zone» of Outlook). Filled by parse()
-_FILE_ZONES: Dict[str, timedelta] = {}
+class _FileZone(tzinfo):
+    """A zone described in the file itself (VTIMEZONE), for a name neither IANA nor Windows knows
+    («Customized Time Zone» of Outlook): its standard offset, and its summer one between the yearly
+    changes the file gives (RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU at the time of its DTSTART)."""
+
+    def __init__(self) -> None:
+        self.std_off: Optional[timedelta] = None
+        self.summer_off: Optional[timedelta] = None
+        self.rules: Dict[str, tuple] = {}  # "STANDARD"/"DAYLIGHT" -> (month, nth, weekday, hour, minute)
+
+    @staticmethod
+    def _change(year: int, rule: tuple) -> datetime:
+        import calendar
+
+        month, nth, wd, hour, minute = rule
+        days = [d for d in range(1, calendar.monthrange(year, month)[1] + 1) if calendar.weekday(year, month, d) == wd]
+        day = days[nth - 1] if 0 < nth <= len(days) else days[-1]
+        return datetime(year, month, day, hour, minute)
+
+    def _summer(self, dt: datetime) -> bool:
+        if self.summer_off is None or "DAYLIGHT" not in self.rules or "STANDARD" not in self.rules:
+            return False
+        wall = dt.replace(tzinfo=None)
+        on, off = self._change(wall.year, self.rules["DAYLIGHT"]), self._change(wall.year, self.rules["STANDARD"])
+        return on <= wall < off if on < off else not (off <= wall < on)  # the south: summer over the new year
+
+    def utcoffset(self, dt):
+        return (self.summer_off if self._summer(dt) else self.std_off) or timedelta(0)
+
+    def dst(self, dt):
+        return (self.summer_off - self.std_off) if self._summer(dt) and self.std_off is not None else timedelta(0)
+
+    def tzname(self, dt):
+        return None
+
+
+# Filled by parse(): the zones of the file being read
+_FILE_ZONES: Dict[str, _FileZone] = {}
 
 
 def _zone(name: str):
@@ -121,8 +156,8 @@ def _zone(name: str):
             return ZoneInfo(iana)
         except Exception:
             pass
-    offset = _FILE_ZONES.get(name)
-    return timezone(offset) if offset is not None else None
+    fz = _FILE_ZONES.get(name)
+    return fz if fz is not None and fz.std_off is not None else None
 
 
 def _parse_dt(value: str, params: str) -> Optional[datetime]:
@@ -151,6 +186,17 @@ def _parse_dt(value: str, params: str) -> Optional[datetime]:
 _LINK_RE = re.compile(r"https?://", re.I)
 
 
+def _split_property(line: str) -> Tuple[str, str]:
+    """NAME;PARAMS and the value: at the first colon outside quotes (TZID="(UTC+01:00) Amsterdam")."""
+    quoted = False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == ":" and not quoted:
+            return line[:i], line[i + 1:]
+    return line, ""
+
+
 def parse(text: str) -> List[Dict[str, Any]]:
     """Events as dicts: {uid, title, start, end, attendees, rrule, exdates, all_day, location, online}.
     `online`: the event has a link (in its place, description or URL): a call, not a room."""
@@ -172,11 +218,29 @@ def parse(text: str) -> List[Dict[str, Any]]:
         if cur is None and line.upper().startswith("TZID:"):
             zone = line.split(":", 1)[1].strip()
             continue
-        if cur is None and zone and zone_part == "STANDARD" and line.upper().startswith("TZOFFSETTO:"):
-            m = re.fullmatch(r"([+-])(\d\d)(\d\d)", line.split(":", 1)[1].strip())
-            if m:
-                sign = -1 if m.group(1) == "-" else 1
-                _FILE_ZONES[zone] = sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+        if cur is None and zone and zone_part in ("STANDARD", "DAYLIGHT"):
+            fz = _FILE_ZONES.setdefault(zone, _FileZone())
+            key, _, val = line.partition(":")
+            key, val = key.upper(), val.strip()
+            if key == "TZOFFSETTO":
+                m = re.fullmatch(r"([+-])(\d\d)(\d\d)", val)
+                if m:
+                    off = (-1 if m.group(1) == "-" else 1) * timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+                    if zone_part == "STANDARD":
+                        fz.std_off = off
+                    else:
+                        fz.summer_off = off
+            elif key == "DTSTART":
+                fz._at = re.match(r"\d{8}T(\d\d)(\d\d)", val)
+                fz._at_part = zone_part
+            elif key == "RRULE":
+                r = {k.upper(): v for k, v in (p.split("=", 1) for p in val.split(";") if "=" in p)}
+                bd = re.fullmatch(r"([+-]?\d)?(MO|TU|WE|TH|FR|SA|SU)", r.get("BYDAY", "").upper())
+                at = getattr(fz, "_at", None) if getattr(fz, "_at_part", "") == zone_part else None
+                if r.get("BYMONTH", "").isdigit() and bd:
+                    nth = int(bd.group(1) or 1)
+                    fz.rules[zone_part] = (int(r["BYMONTH"]), nth, _DAYS[bd.group(2)],
+                                           int(at.group(1)) if at else 2, int(at.group(2)) if at else 0)
             continue
         if line == "BEGIN:VEVENT":
             cur = {"uid": "", "title": "", "start": None, "end": None, "attendees": [], "rrule": "", "exdates": [],
@@ -197,7 +261,7 @@ def parse(text: str) -> List[Dict[str, Any]]:
             continue
         if cur is None or ":" not in line:
             continue
-        head, value = line.split(":", 1)
+        head, value = _split_property(line)
         name, _, params = head.partition(";")
         name = name.upper()
         if name == "SUMMARY":
@@ -216,6 +280,14 @@ def parse(text: str) -> List[Dict[str, Any]]:
             cur["start" if name == "DTSTART" else "end"] = dt
             if name == "DTSTART" and ("VALUE=DATE" in params.upper() or re.fullmatch(r"\d{8}", value.strip())):
                 cur["all_day"] = True
+            zm = re.search(r'TZID=("[^"]+"|[^;:]+)', params)
+            if name == "DTSTART" and zm and dt is not None and not value.strip().endswith("Z"):
+                tz = _zone(zm.group(1))
+                if tz is not None:  # a series repeats at its wall time there, across its own summer time
+                    try:
+                        cur["tz"], cur["src_start"] = tz, datetime.strptime(value.strip()[:15], "%Y%m%dT%H%M%S")
+                    except ValueError:
+                        pass
         elif name == "RRULE":
             cur["rrule"] = value.strip()
         elif name == "RECURRENCE-ID":
@@ -282,6 +354,22 @@ def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict
     sense (a date past the year 9999, an INTERVAL that is not a number) ends the series there."""
     out: List[Dict[str, Any]] = []
     try:
+        tz = ev.get("tz")
+        if tz is not None and ev.get("rrule") and ev.get("src_start"):
+            # Expanded at the wall time of the event's zone, then each meeting brought to local time: a
+            # Berlin series seen from Moscow moves by an hour when Berlin changes its clocks, not before
+            def wall(local: datetime) -> datetime:
+                return local.astimezone(tz).replace(tzinfo=None)
+
+            dur = ev["end"] - ev["start"]
+            src = {**ev, "start": ev["src_start"], "end": ev["src_start"] + dur, "exdates": [wall(x) for x in ev["exdates"]]}
+            found: List[Dict[str, Any]] = []
+            _expand(src, wall(start) - timedelta(days=1), wall(end) + timedelta(days=1), found)
+            for o in found:
+                s_local = o["start"].replace(tzinfo=tz).astimezone().replace(tzinfo=None)
+                if s_local + dur > start and s_local < end:
+                    out.append({**ev, "start": s_local, "end": s_local + dur})
+            return out
         _expand(ev, start, end, out)
     except (ValueError, OverflowError):
         pass
@@ -349,8 +437,9 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
             cursor = week_start + timedelta(weeks=step)
             cursor = cursor.replace(hour=ev["start"].hour, minute=ev["start"].minute, second=ev["start"].second)
             continue
-        n += 1
-        add(cursor)
+        if freq != "MONTHLY" or cursor.day == ev["start"].day:  # no 31st this month: none that month
+            n += 1
+            add(cursor)
         if freq == "DAILY":
             cursor += timedelta(days=step)
         elif freq == "WEEKLY":
@@ -358,8 +447,8 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
         elif freq == "MONTHLY":
             month = cursor.month - 1 + step
             year = cursor.year + month // 12
-            try:
-                cursor = cursor.replace(year=year, month=month % 12 + 1)
+            try:  # the day of the first meeting each time: after a short month, the 31st again
+                cursor = cursor.replace(year=year, month=month % 12 + 1, day=ev["start"].day)
             except ValueError:  # the 31st in a short month: skipped, as calendars do
                 cursor = cursor.replace(year=year, month=month % 12 + 1, day=28)
         elif freq == "YEARLY":
