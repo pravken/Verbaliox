@@ -162,14 +162,14 @@ def _schema_check(m: Dict[str, Any], mid: str, base: str) -> Dict[str, Any]:
     """The same task prompt once with Ollama's `format` (a JSON schema): is the answer valid JSON."""
     from app import commitments as c
     from app.llm_text import thinking_off
-    from app.ollama_client import LLM_NUM_CTX, build_transcript_lines
+    from app.ollama_client import build_transcript_lines, llm_num_ctx
 
     lines = build_transcript_lines(m["segments"], m.get("speakers") or {})
     part = c.transcript_parts(lines, 12000)[0]
     body = {"model": mid, "stream": False, "format": TASK_SCHEMA,
             "messages": [{"role": "system", "content": c._SYSTEM},
                          {"role": "user", "content": "Расшифровка:\n" + part + "\n\nОтветь JSON-объектом {\"tasks\": [...]}."}],
-            "options": {"temperature": 0.1, "num_ctx": LLM_NUM_CTX, "num_predict": 3072}}
+            "options": {"temperature": 0.1, "num_ctx": llm_num_ctx(), "num_predict": 3072}}
     body.update(thinking_off(mid))
     with httpx.Client(timeout=900.0) as client:
         resp = client.post(f"{base}/api/chat", json=body)
@@ -193,12 +193,9 @@ def run(args) -> None:
     from app.ollama_client import generate_meeting_summary
     from app.vram import _ollama_base
 
-    if args.ctx != ollama_client.LLM_NUM_CTX:
-        # A longer context reads a longer recording in one pass (the same share of the context as at 16k)
-        scale = args.ctx / ollama_client.LLM_NUM_CTX
-        ollama_client.LLM_NUM_CTX = args.ctx
-        ollama_client.SINGLE_PASS_MAX_CHARS = int(ollama_client.SINGLE_PASS_MAX_CHARS * scale)
-        ollama_client.CHUNK_MAX_CHARS = int(ollama_client.CHUNK_MAX_CHARS * scale)
+    # The context as asked, not as the card would choose (a longer context reads a longer recording
+    # in one pass: the same share of the context as at 16k)
+    ollama_client.CONTEXT_SCALE = args.ctx / ollama_client.LLM_NUM_CTX
     if args.cpu:
         _force_options["num_gpu"] = 0
     if args.max_answer:
@@ -210,7 +207,7 @@ def run(args) -> None:
     for mid in args.models:
         bench._ollama_unload_all()
         t0 = time.perf_counter()
-        opts = {"num_ctx": ollama_client.LLM_NUM_CTX, **_force_options}
+        opts = {"num_ctx": ollama_client.llm_num_ctx(), **_force_options}
         try:
             with httpx.Client(timeout=1800.0) as client:
                 w = client.post(f"{base}/api/generate", json={"model": mid, "prompt": "Скажи одно слово: готово.",
@@ -229,7 +226,7 @@ def run(args) -> None:
             _calls.clear()
             peak = Peak()
             peak.start()
-            rec: Dict[str, Any] = {"model": mid, "profile": args.profile, "think_off": bool(getattr(args, "think_off", False)), "num_gpu": args.num_gpu, "max_answer": args.max_answer, "ctx": ollama_client.LLM_NUM_CTX,
+            rec: Dict[str, Any] = {"model": mid, "profile": args.profile, "think_off": bool(getattr(args, "think_off", False)), "num_gpu": args.num_gpu, "max_answer": args.max_answer, "ctx": ollama_client.llm_num_ctx(),
                                    "cpu": args.cpu, "meeting": meeting_id, "warm_load_sec": round(warm, 1),
                                    "transcript_chars": sum(len(str(s.get("text") or "")) for s in m["segments"]),
                                    "duration_min": round(float(m.get("duration") or 0) / 60, 1)}

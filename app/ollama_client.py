@@ -614,10 +614,41 @@ def _chunk_lines(lines: List[str], max_chars: int) -> List[str]:
 
 # A transcript up to this size is analysed in one request (fits num_ctx together with the prompt).
 # Longer recordings are summarised chunk by chunk first, so nothing in the middle is dropped.
+# These are the sizes for a card under 8 GB and for the processor; see llm_context_scale.
 SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
 LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
+LARGE_CONTEXT_VRAM_GB = 7.5   # an "8 GB" card reports a little under 8
+CONTEXT_SCALE: Optional[float] = None  # set by tools/llm_bench.py --ctx; None: chosen by the card
+
+
+def llm_context_scale() -> float:
+    """2 on a card of 8 GB and more: the context doubles to 32k and a recording is read in bigger
+    parts (an hour in 3 parts instead of 5). Measured on the PC (bench-report/llm-profiles.md): the
+    protocol is ready 1.5-2 times sooner, no worse, for 0.3-0.5 GB more. A 6 GB card and the
+    processor keep 16k: there the longer context costs memory and time the model does not have."""
+    if CONTEXT_SCALE is not None:
+        return CONTEXT_SCALE
+    try:
+        from app.hardware import _gpu_probe
+
+        gpu = _gpu_probe()
+    except Exception:
+        gpu = None
+    return 2.0 if gpu and float(gpu[1] or 0) >= LARGE_CONTEXT_VRAM_GB else 1.0
+
+
+def llm_num_ctx() -> int:
+    return int(LLM_NUM_CTX * llm_context_scale())
+
+
+def single_pass_max_chars() -> int:
+    return int(SINGLE_PASS_MAX_CHARS * llm_context_scale())
+
+
+def chunk_max_chars() -> int:
+    return int(CHUNK_MAX_CHARS * llm_context_scale())
 
 _LANG_PHRASES: Dict[str, str] = {
     "ru": "на русском языке",
@@ -835,7 +866,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
             "temperature": 0.1,
             "top_p": 0.85,
             "repeat_penalty": 1.15,
-            "num_ctx": LLM_NUM_CTX,
+            "num_ctx": llm_num_ctx(),
             # An answer stops at this length: a small model caught in a loop (the same lines again and
             # again) wrote until the whole context was full, for many minutes on a processor
             "num_predict": LLM_MAX_ANSWER_TOKENS,
@@ -987,13 +1018,13 @@ def generate_meeting_summary(
     ) if roster else ""
 
     source_label = "Вот точная расшифровка аудио/видеозаписи"
-    single_pass_max = SINGLE_PASS_MAX_CHARS if not llm.is_cloud else llm.max_chars
+    single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
     whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]))
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
-        chunks = _chunk_lines(lines, CHUNK_MAX_CHARS if not llm.is_cloud else llm.max_chars // 2)
+        chunks = _chunk_lines(lines, chunk_max_chars() if not llm.is_cloud else llm.max_chars // 2)
         focus = (
             f"Особенно подробно выпиши всё, что относится к вопросу: {custom_prompt.strip()}\n"
             if custom_prompt.strip()
