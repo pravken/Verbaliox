@@ -1730,6 +1730,10 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tk-src-none:hover { color: var(--hc-dim, #8E8E93); }
 .tk-who { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 4px; border: 0; border-radius: 14px; background: transparent; color: #E5E5EA; font-size: var(--fs-ui); white-space: nowrap; cursor: pointer; justify-self: end; }
 .tk-who:hover { background: rgba(255, 255, 255, 0.07); }
+/* a long assignee («Отдел маркетинга и продаж (…)») is cut, the task's text keeps its room */
+.tk-who { max-width: 10rem; overflow: hidden; }
+.tk-row-main { min-width: 9rem; }
+.tk-who-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tk-who-name.tk-dim { color: var(--hc-dim, #8E8E93); }
 .tk-due { justify-self: end; min-height: 24px; padding: 2px 9px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, 0.07); color: #C7C7CC; font-size: var(--fs-caption); line-height: 1.35; white-space: nowrap; cursor: pointer; }
 .tk-due:hover { filter: brightness(1.2); }
