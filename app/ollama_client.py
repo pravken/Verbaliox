@@ -16,6 +16,39 @@ from app.audio_utils import format_timestamp
 from app.database import get_all_settings, update_settings
 
 RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
+    # Measured on 9 real meetings at 10, 8 and 6 GB and without a GPU (bench-report/llm-profiles.md)
+    {
+        "id": "gemma4:e4b",
+        "name": "Gemma 4 E4B",
+        "badge": "9.5 GB · Apache",
+        "size": "9.5 GB",
+        "vram": "8+ GB VRAM",
+        "license": "Apache",
+        "desc_ru": "Рекомендуется для видеокарт с 8 ГБ и больше: в сравнении на настоящих встречах нашла больше всех задач (около половины против трети у Qwen3 8B), протокол часовой встречи — за полторы минуты",
+        "desc_en": "Recommended for GPUs with 8 GB or more: on real meetings it found the most tasks (about half, against a third for Qwen3 8B); an hour's protocol in a minute and a half",
+        "good_ru": "Задачи и решения встречи, протоколы на русском и английском почти без выдуманных чисел; в памяти около 5 ГБ, помещается вместе с распознаванием речи",
+        "good_en": "Tasks and decisions of a meeting, summaries in Russian and English with almost no made-up numbers; about 5 GB in memory, fits next to speech recognition",
+        "weak_ru": "Находит не все задачи и иногда добавляет лишние — проверяйте список; длинный протокол иногда обрывается в конце; без видеокарты протокол часа — около 11 минут",
+        "weak_en": "Does not find every task and sometimes adds extra ones, so check the list; a long protocol is sometimes cut at the end; without a GPU an hour's protocol takes about 11 minutes",
+        "min_vram_gb": 8,  # 0: fine without a GPU too
+        "cpu_ok": False,
+    },
+    {
+        "id": "gemma4:e2b",
+        "name": "Gemma 4 E2B",
+        "badge": "7.5 GB · Apache",
+        "size": "7.5 GB",
+        "vram": "4–8 GB / CPU",
+        "license": "Apache",
+        "desc_ru": "Рекомендуется для видеокарт до 8 ГБ и компьютеров без видеокарты: в сравнении находит задачи в 3–5 раз чаще, чем Qwen3.5 4B, протокол часовой встречи без видеокарты — около 5 минут",
+        "desc_en": "Recommended for GPUs under 8 GB and computers without one: on real meetings it found tasks 3–5 times as often as Qwen3.5 4B; an hour's protocol without a GPU in about 5 minutes",
+        "good_ru": "Лёгкая: около 3 ГБ видеопамяти; протоколы на русском и английском без выдуманных чисел; лучший выбор для ноутбуков",
+        "good_en": "Light: about 3 GB of video memory; summaries in Russian and English without made-up numbers; the best choice for laptops",
+        "weak_ru": "Находит меньше задач, чем Gemma 4 E4B (на 6 ГБ — около трети), — проверяйте список",
+        "weak_en": "Finds fewer tasks than Gemma 4 E4B (about a third on 6 GB), so check the list",
+        "min_vram_gb": 4,  # 0: fine without a GPU too
+        "cpu_ok": True,
+    },
     {
         "id": "qwen3.5:4b",
         "name": "Qwen3.5 4B",
@@ -23,8 +56,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "size": "3.4 GB",
         "vram": "4–6 GB / CPU",
         "license": "Apache",
-        "desc_ru": "Рекомендуется: в сравнении на реальных записях не хуже моделей вдвое больше, а памяти нужно меньше всех; подходит и для ноутбуков",
-        "desc_en": "Recommended: on real recordings as good as models twice its size, with the least memory; fine for laptops too",
+        "desc_ru": "Прежняя модель по умолчанию: быстрая и лёгкая, но в сравнении на настоящих встречах находит заметно меньше задач, чем Gemma 4",
+        "desc_en": "The former default: fast and light, but on real meetings it found far fewer tasks than Gemma 4",
         "good_ru": "Протоколы, задачи и ответы по записям на русском и английском; быстрая работа, в том числе без видеокарты",
         "good_en": "Summaries, tasks and answers for Russian and English recordings; fast, including without a GPU",
         "weak_ru": "На длинных записях и сложных вопросах возможны пропуски деталей; без видеокарты ответ формируется дольше",
@@ -39,12 +72,12 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "size": "5.2 GB",
         "vram": "10+ GB VRAM",
         "license": "Apache",
-        "desc_ru": "Новое поколение Qwen: лучше русский, длинные тексты и точность, та же свободная лицензия",
-        "desc_en": "The new Qwen generation: better Russian, long texts and accuracy, same free license",
-        "good_ru": "Более высокая точность на длинных встречах, связность анализа всего разговора",
-        "good_en": "Higher accuracy on long meetings, coherent analysis of the whole conversation",
-        "weak_ru": "Требуется видеокарта с 10 ГБ памяти; без неё работает медленно",
-        "weak_en": "Requires a GPU with 10 GB of memory; slow without one",
+        "desc_ru": "Для тех, кто к ней привык; в сравнении на настоящих встречах Gemma 4 E4B находит больше задач и пишет протокол в 2–4 раза быстрее",
+        "desc_en": "For those used to it; on real meetings Gemma 4 E4B found more tasks and wrote the protocol 2–4 times as fast",
+        "good_ru": "Связный анализ всего разговора, хороший русский",
+        "good_en": "Coherent analysis of the whole conversation, good Russian",
+        "weak_ru": "Требуется видеокарта с 10 ГБ памяти, занимает её почти целиком; без неё работает медленно",
+        "weak_en": "Requires a GPU with 10 GB of memory and takes almost all of it; slow without one",
         "min_vram_gb": 10,  # 0: fine without a GPU too
         "cpu_ok": False,
     },
@@ -83,6 +116,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
 ]
 
 _LLM_DISPLAY_NAMES: Dict[str, str] = {
+    "gemma4:e4b": "Gemma 4 E4B",
+    "gemma4:e2b": "Gemma 4 E2B",
     "qwen3:8b": "Qwen3 8B",
     "qwen3:14b": "Qwen3 14B",
     "qwen3:4b": "Qwen3 4B",
@@ -883,7 +918,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     try:  # one model in memory at a time: the idle speech models and another analysis model go first
         from app.vram import ollama_release_others, release_idle_speech_models
 
-        gone = release_idle_speech_models()
+        gone = release_idle_speech_models(model)
         if gone:
             print(f"[ollama] unloaded before {model}: {', '.join(gone)}", flush=True)
         ollama_release_others(keep=model)

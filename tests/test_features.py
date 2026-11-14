@@ -363,6 +363,26 @@ class ThinkingModelTest(unittest.TestCase):
             self.assertIsNone(llm_text._ask_ollama("qwen3:8b"))
 
 
+class DefaultAnalysisModelTest(unittest.TestCase):
+    def test_gemma4_by_the_card(self):
+        """bench-report/llm-profiles.md: gemma4:e4b from 8 GB (it reports a little under), gemma4:e2b below and without a GPU"""
+        from unittest import mock
+
+        from app import hardware
+        from app.ollama_client import RECOMMENDED_LLM_MODELS
+
+        for gpu, model in ((("RTX 3080", 10.0, 9.0), "gemma4:e4b"), (("RTX 4060", 7.6, 7.0), "gemma4:e4b"),
+                           (("RTX 3060 Laptop", 6.0, 5.5), "gemma4:e2b"), (("GTX 1650", 4.0, 3.5), "gemma4:e2b"),
+                           (None, "gemma4:e2b")):
+            with self.subTest(gpu=gpu), mock.patch.object(hardware, "_gpu_probe", return_value=gpu):
+                self.assertEqual(hardware.get_hardware_info()["recommended_ollama_model"], model)
+        ids = [m["id"] for m in RECOMMENDED_LLM_MODELS]
+        self.assertEqual(ids[:2], ["gemma4:e4b", "gemma4:e2b"])
+        self.assertIn("qwen3:8b", ids)  # kept for those used to it
+        qwen35 = next(m for m in RECOMMENDED_LLM_MODELS if m["id"] == "qwen3.5:4b")
+        self.assertNotIn("вдвое больше", qwen35["desc_ru"])  # not confirmed by the measurement
+
+
 class AnalyticsTest(unittest.TestCase):
     def test_talk_time_turns_interruptions(self):
         from app.analytics import conversation_analytics
