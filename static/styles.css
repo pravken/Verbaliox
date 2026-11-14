@@ -1921,7 +1921,11 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .sx-section-head { padding: 0 0 6px; }
 .sx-section-title { margin: 0; font-size: var(--fs-title); letter-spacing: -0.015em; line-height: 1.15; font-weight: 700; color: #FFFFFF; }
 .sx-section-desc { margin: 4px 0 0; font-size: var(--fs-ui); line-height: 1.45; color: var(--hc-dim, #98989D); }
+/* A section of a former tab inside a tab: a line and a smaller heading; scrolled to below the sticky reset row */
+.sx-section.sx-sub { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); scroll-margin-top: 36px; }
+.sx-sub .sx-section-title { font-size: var(--fs-sub); letter-spacing: -0.011em; }
 .sx-searching .sx-section { margin-bottom: 26px; }
+.sx-searching .sx-section.sx-sub { margin-top: 0; padding-top: 0; border-top: 0; }
 .sx-searching .sx-section-title { font-size: var(--fs-sub); letter-spacing: -0.011em; }
 .sx-searching .sx-section-desc { display: none; }
 .sx-hit { box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.75); }

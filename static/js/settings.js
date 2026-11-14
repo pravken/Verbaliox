@@ -2629,8 +2629,13 @@ function setSettingsControl([id, , kind], value) {
   else el.value = value;
 }
 
-function settingsSectionChanges(sec) {
-  return (SETTINGS_RESET[sec] || []).filter(c => {
+// The controls of a tab: those of its own section and of the sections moved into it (core.js SETTINGS_SECTION_TAB)
+function settingsTabControls(tab) {
+  return Object.keys(SETTINGS_RESET).filter(sec => settingsTabOf(sec) === tab).flatMap(sec => SETTINGS_RESET[sec]);
+}
+
+function settingsSectionChanges(tab) {
+  return settingsTabControls(tab).filter(c => {
     const v = settingsControlValue(c);
     return v !== null && v !== SETTINGS_DEFAULTS[c[1]];
   }).length;
@@ -2638,7 +2643,7 @@ function settingsSectionChanges(sec) {
 
 // The dot of a section that differs from the defaults, and the reset button of the section shown
 function refreshSettingsChanged() {
-  Object.keys(SETTINGS_RESET).forEach(sec => document.getElementById(`stab-${sec}`)?.classList.toggle('sx-changed', settingsSectionChanges(sec) > 0));
+  SETTINGS_TABS.forEach(tab => document.getElementById(`stab-${tab}`)?.classList.toggle('sx-changed', settingsSectionChanges(tab) > 0));
   const sec = document.getElementById('modal-settings')?.dataset.tab;
   const btn = document.getElementById('settings-reset-btn');
   if (!btn) return;
@@ -2655,8 +2660,7 @@ function onSettingsTabShown(name) {
 }
 
 async function resetSettingsSection() {
-  const sec = document.getElementById('modal-settings').dataset.tab;
-  const controls = SETTINGS_RESET[sec] || [];
+  const controls = settingsTabControls(document.getElementById('modal-settings').dataset.tab);
   const before = controls.map(c => [c, settingsControlValue(c)]);
   controls.forEach(c => setSettingsControl(c, SETTINGS_DEFAULTS[c[1]]));
   syncVoiceProfilesToggle();
@@ -2772,6 +2776,7 @@ function settingsSearch(value) {
   if (!q) { clearSettingsSearch(); return; }
   main.classList.add('sx-searching');
   let any = 0;
+  const tabHits = {};
   sections.forEach(sec => {
     let hits = 0;
     settingsCards(sec).forEach(card => {
@@ -2782,9 +2787,11 @@ function settingsSearch(value) {
       if (hit && !card.classList.contains('hidden')) hits++;
     });
     sec.classList.toggle('hidden', !hits);
-    document.getElementById(`stab-${sec.dataset.stab}`)?.classList.toggle('sx-dim', !hits);
+    const tab = settingsTabOf(sec.dataset.stab);
+    tabHits[tab] = (tabHits[tab] || 0) + hits;
     any += hits;
   });
+  SETTINGS_TABS.forEach(tab => document.getElementById(`stab-${tab}`)?.classList.toggle('sx-dim', !tabHits[tab]));
   document.getElementById('settings-search-empty').classList.toggle('hidden', any > 0);
   document.getElementById('settings-reset-btn')?.classList.add('hidden');
   main.scrollTop = 0;
@@ -2813,7 +2820,7 @@ function settingsSearchKey(e) {
   if (!card) return;
   const sec = card.closest('[data-stab]').dataset.stab;
   clearSettingsSearch(true);
-  selectSettingsTab(sec);
+  selectSettingsTab(settingsTabOf(sec));  // the tab only: the card itself is scrolled to below
   card.scrollIntoView({ block: 'center' });
   card.classList.add('sx-hit');
   setTimeout(() => card.classList.remove('sx-hit'), 1600);
