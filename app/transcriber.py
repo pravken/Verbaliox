@@ -86,6 +86,42 @@ def request_cancel(meeting_id: int) -> bool:
     return True
 
 
+# Jobs taken out of the queue before they began: the worker skips them when their turn comes (the
+# executor runs in the order jobs were given, so a count per recording is enough)
+_dropped: Dict[int, int] = {}
+
+
+def cancel_waiting(meeting_id: int) -> bool:
+    """A recognition still waiting for its turn is taken out of the queue at once: «Отменить» took effect
+    only when the job running before it ended (tens of minutes), and the recording could not be deleted
+    or started again meanwhile. False when it is not waiting (running, or another kind of job)."""
+    with _jobs_lock:
+        entry = next((q for q in _queue if q["id"] == meeting_id), None)
+        if not entry or entry["kind"] != "transcribe" or _running_id == meeting_id or entry.get("started_at"):
+            return False
+        _queue[:] = [q for q in _queue if q["id"] != meeting_id]
+        _active_jobs.discard(meeting_id)
+        _cancel_requested.discard(meeting_id)
+        _dropped[meeting_id] = _dropped.get(meeting_id, 0) + 1
+    from app.database import update_meeting_progress
+
+    update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Обработка отменена", error_message="")
+    _publish_queue_changed()
+    return True
+
+
+def _skip_dropped(meeting_id: int) -> bool:
+    with _jobs_lock:
+        n = _dropped.get(meeting_id, 0)
+        if not n:
+            return False
+        if n == 1:
+            _dropped.pop(meeting_id)
+        else:
+            _dropped[meeting_id] = n - 1
+        return True
+
+
 def _publish_queue_changed() -> None:
     from app import events
 
@@ -246,6 +282,8 @@ def enqueue_meeting_job(meeting_id: int) -> bool:
 
 
 def _run_job(meeting_id: int) -> None:
+    if _skip_dropped(meeting_id):  # cancelled while it waited
+        return
     _queue_start(meeting_id)
     try:
         _process_meeting_job(meeting_id)
