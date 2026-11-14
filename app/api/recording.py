@@ -4,6 +4,8 @@ import re
 import shutil
 import subprocess
 import threading
+import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -240,80 +242,232 @@ async def api_record_finish(payload: RecordFinishPayload) -> Dict[str, Any]:
     (microphone, video) and queues the result for transcription."""
     from starlette.concurrency import run_in_threadpool
 
-    from app import teams_captions
-    from app.system_audio import finish_capture
+    # Off the event loop: the capture threads are joined, the database lock and the files are waited for
+    return await run_in_threadpool(finish_recording, payload)
 
-    # «Speaking now» read from the Teams captions during the recording join the ones clicked in the studio
-    teams = await run_in_threadpool(teams_captions.stop)
-    if teams.get("marks"):
-        payload.speaker_marks = [*payload.speaker_marks,
-                                 *({"at": m["at"], "name": m["name"], "text": m.get("text", "")} for m in teams["marks"])]
-        print(f"[teams] {len(teams['marks'])} caption line(s), {len(teams['names'])} name(s) read", flush=True)
 
+def finish_recording(payload: RecordFinishPayload, recovered: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The end of a recording, from the page («Стоп»), from the watchdog (the page that recorded is gone)
+    or at start from a crash (`recovered`: the parts' files, the captures are not running any more)."""
     page: Optional[Path] = None
-    if payload.page_id:
-        def take_page() -> Optional[Path]:  # the lock may wait for a chunk being written: not on the event loop
+    system: Optional[Path] = None
+    screen: Optional[Path] = None
+    cap_started = 0.0
+    if recovered is None:
+        from app import teams_captions
+        from app.system_audio import finish_capture
+
+        # «Speaking now» read from the Teams captions during the recording join the ones clicked in the studio
+        teams = teams_captions.stop()
+        if teams.get("marks"):
+            payload.speaker_marks = [*payload.speaker_marks,
+                                     *({"at": m["at"], "name": m["name"], "text": m.get("text", "")} for m in teams["marks"])]
+            print(f"[teams] {len(teams['marks'])} caption line(s), {len(teams['names'])} name(s) read", flush=True)
+        if payload.page_id:
             with _page_lock:
                 _page_next_seq.pop(payload.page_id, None)
-                return _page_recordings.pop(payload.page_id, None)
+                page = _page_recordings.pop(payload.page_id, None)
+        cap = finish_capture(payload.capture_id) if payload.capture_id else None  # its thread joined (up to 5 s)
+        if cap and cap.path.is_file():
+            system, cap_started = cap.path, cap.started_at
+            if cap._thread.is_alive():  # its thread did not end in time: the file is not closed
+                from app.system_audio import repair_rf64
 
-        page = await run_in_threadpool(take_page)
-        if page is not None and (not page.is_file() or page.stat().st_size == 0):
-            page.unlink(missing_ok=True)
-            page = None
-    # its thread is joined (up to 5 s): not on the event loop, which serves every other request
-    cap = await run_in_threadpool(finish_capture, payload.capture_id) if payload.capture_id else None
-    system = cap.path if cap and cap.path.is_file() else None
-    if system is not None and cap._thread.is_alive():  # its thread did not end in time: the file is not closed
-        from app.system_audio import repair_rf64
+                repair_rf64(system)
+        if payload.screen_id:
+            from app import screen_capture
 
-        await run_in_threadpool(repair_rf64, system)
-    screen: Optional[Path] = None
-    if payload.screen_id:
-        from app import screen_capture
+            scap = screen_capture.finish_capture(payload.screen_id)
+            if scap and scap.path.is_file():
+                screen = scap.path
+    else:
+        page = Path(recovered["page"]) if recovered.get("page") else None
+        system = Path(recovered["system"]) if recovered.get("system") else None
+        screen = Path(recovered["screen"]) if recovered.get("screen") else None
+        cap_started = float(recovered.get("system_started") or 0)
+        if system is not None and system.is_file():
+            from app.system_audio import repair_rf64
 
-        scap = await run_in_threadpool(screen_capture.finish_capture, payload.screen_id)
-        if scap and scap.path.is_file() and scap.path.stat().st_size > 0:
-            screen = scap.path
+            repair_rf64(system)
+    _drop_session(payload)
+    if page is not None and (not page.is_file() or page.stat().st_size == 0):
+        page.unlink(missing_ok=True)
+        page = None
+    if system is not None and not system.is_file():
+        system = None
+    if screen is not None and (not screen.is_file() or screen.stat().st_size == 0):
+        screen = None
     if not page and not system and not screen:
         raise HTTPException(status_code=404, detail="Запись пуста: звук не был получен")
 
     # The system audio begins before the page's recorder (the microphone is asked for meanwhile)
     system_skip = 0.0
-    if cap and page and payload.page_started_at > 0 and cap.started_at > 0:
-        system_skip = min(30.0, max(0.0, payload.page_started_at - cap.started_at))
+    if system and page and payload.page_started_at > 0 and cap_started > 0:
+        system_skip = min(30.0, max(0.0, payload.page_started_at - cap_started))
     safe_stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", payload.title.strip() or "Запись")[:100]
 
     # The recording is in the library at once, «Сведение дорожек»: the echo removal and the mix (minutes
-    # for an hour-long meeting) run in the background, and it queues itself for transcription when done.
-    # Off the event loop: the database lock, and the calendar (its link or Outlook, up to a minute and a
-    # half) read for the meeting's name, would hold every other request meanwhile
-    def register() -> Dict[str, Any]:
-        settings = get_all_settings()
-        m = create_meeting(
-            title=payload.title.strip()[:300] or safe_stem,
-            filename=safe_stem,
-            media_path="",
-            language=settings.get("language", "auto"),
-            model_name=speech_route.default_choice(settings),
-            num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
-            source="recording",
-            owns_media=False,  # its file comes with the mix
-            title_is_default=True,
-            has_video=bool(screen or (payload.has_video and page)),
-        )
-        from app import app_status
-        from app.database import update_meeting_progress
+    # for an hour-long meeting) run in the background, and it queues itself for transcription when done
+    settings = get_all_settings()
+    m = create_meeting(
+        title=payload.title.strip()[:300] or safe_stem,
+        filename=safe_stem,
+        media_path="",
+        language=settings.get("language", "auto"),
+        model_name=speech_route.default_choice(settings),
+        num_speakers_hint=payload.speakers_hint if 0 < payload.speakers_hint <= 20 else as_int(settings.get("num_speakers"), 0),
+        source="recording",
+        owns_media=False,  # its file comes with the mix
+        title_is_default=True,
+        has_video=bool(screen or (payload.has_video and page)),
+    )
+    from app import app_status
+    from app.database import update_meeting_progress
 
-        app_status.mixing.add(m["id"])
-        update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
-        _attach_recording_info(m["id"], payload)
-        threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem),
-                         daemon=True, name="record_mix").start()
-        return m
+    app_status.mixing.add(m["id"])
+    update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
+    _attach_recording_info(m["id"], payload)
+    threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem),
+                     daemon=True, name="record_mix").start()
+    return {"created": [get_meeting(m["id"]) or m]}
 
-    m = await run_in_threadpool(register)
-    return {"created": [await run_in_threadpool(get_meeting, m["id"]) or m]}
+
+# --- The watchdog of a recording ---
+# The page tells the server every 10 s that it still records, with its notes and marks; they are kept in a
+# small file next to the parts. The page gone (the window closed or reloaded, WebView2 crashed) the
+# capture of the computer's sound and of the screen went on for hours with nobody to stop it; now it is
+# saved as one recording with the notes. After a crash of the app the file pairs the parts at the next
+# start: one recording instead of two «Восстановленная запись» without notes.
+ORPHAN_AFTER_SEC = 180.0
+_beats: Dict[str, float] = {}
+
+
+def _session_key(payload: RecordFinishPayload) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]", "", payload.page_id or payload.capture_id or payload.screen_id or "")[:64]
+
+
+def _sidecar(key: str) -> Path:
+    return _recordings_dir() / f".rec_{key}.json"
+
+
+def _drop_session(payload: RecordFinishPayload) -> None:
+    key = _session_key(payload)
+    if key:
+        _beats.pop(key, None)
+        try:
+            _sidecar(key).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+@router.post("/api/record/heartbeat")
+def api_record_heartbeat(payload: RecordFinishPayload) -> Dict[str, Any]:
+    """The page still records: what it knows of the recording, kept in case it is gone before «Стоп»."""
+    import json
+
+    from app.system_audio import get_capture
+
+    key = _session_key(payload)
+    if not key:
+        raise HTTPException(status_code=400, detail="Запись не найдена")
+    paths: Dict[str, Any] = {}
+    if payload.page_id and payload.page_id in _page_recordings:
+        paths["page"] = str(_page_recordings[payload.page_id])
+    cap = get_capture(payload.capture_id) if payload.capture_id else None
+    if cap:
+        paths["system"], paths["system_started"] = str(cap.path), cap.started_at
+    if payload.screen_id:
+        from app import screen_capture
+
+        scap = screen_capture._captures.get(payload.screen_id)
+        if scap:
+            paths["screen"] = str(scap.path)
+    if not paths:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    _beats[key] = time.time()
+    data = {"payload": payload.model_dump(), "paths": paths, "beat": _beats[key]}
+    target = _sidecar(key)
+    part = target.with_suffix(".tmp")
+    try:
+        part.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        part.replace(target)
+    except OSError as e:
+        print(f"[record] heartbeat not kept: {e}", flush=True)
+    return {"ok": True}
+
+
+def save_orphans(older_than: float = ORPHAN_AFTER_SEC) -> int:
+    """Recordings whose page stopped telling it records (for `older_than` seconds) are finished and saved."""
+    import json
+
+    from app import events
+
+    n = 0
+    for key, beat in list(_beats.items()):
+        if time.time() - beat < older_than:
+            continue
+        _beats.pop(key, None)
+        try:
+            data = json.loads(_sidecar(key).read_text(encoding="utf-8"))
+            payload = RecordFinishPayload(**data["payload"])
+            print(f"[record] the page of recording {key} is gone: saved by the watchdog", flush=True)
+            finish_recording(payload)
+            n += 1
+        except Exception:
+            traceback.print_exc()
+    if n:
+        events.publish({"type": "notice", "kind": "recording_saved_orphan", "count": n})
+        events.publish({"type": "list"})
+    return n
+
+
+class OrphanPayload(BaseModel):
+    older_than: float = 12.0
+
+
+@router.post("/api/record/orphans/save")
+def api_save_orphans(payload: OrphanPayload) -> Dict[str, Any]:
+    """The page has just loaded: recordings of the page before it (reloaded mid-recording) are saved now."""
+    return {"saved": save_orphans(max(5.0, payload.older_than))}
+
+
+def watchdog_loop() -> None:
+    while True:
+        time.sleep(60)
+        try:
+            save_orphans()
+        except Exception:
+            traceback.print_exc()
+
+
+def recover_sessions() -> List[Path]:
+    """At start, after a crash: each recording's parts, paired by its file, saved as one recording with
+    its notes. The parts used are returned (the rest are recovered one by one, as before)."""
+    import json
+
+    used: List[Path] = []
+    try:
+        sidecars = list(_recordings_dir().glob(".rec_*.json"))
+    except OSError:
+        return used
+    for sc in sidecars:
+        try:
+            data = json.loads(sc.read_text(encoding="utf-8"))
+            payload = RecordFinishPayload(**data["payload"])
+            paths = data.get("paths") or {}
+            parts = [Path(paths[k]) for k in ("page", "system", "screen") if paths.get(k)]
+            if not any(p.is_file() and p.stat().st_size > 4096 for p in parts):
+                sc.unlink(missing_ok=True)
+                continue
+            payload.title = payload.title or "Восстановленная запись"
+            finish_recording(payload, recovered=paths)
+            used += parts
+            print(f"[record] recovered recording «{payload.title}» with its notes ({len(parts)} part(s))", flush=True)
+        except Exception:
+            traceback.print_exc()
+        finally:
+            sc.unlink(missing_ok=True)
+    return used
 
 
 def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path], screen: Optional[Path],
