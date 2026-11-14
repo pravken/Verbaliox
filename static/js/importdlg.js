@@ -62,6 +62,7 @@ async function impPickFiles() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
     });
     const out = await readJson(r);
+    if (r.status === 409) { showToast(serverText(out.detail)); continue; }  // already in the library: the rest still go
     if (!r.ok) { showError(serverText(out.detail)); break; }
     created.push(...(out.created || []));
   }
@@ -367,6 +368,11 @@ async function impSubmit() {
         body: JSON.stringify({ ...(link ? { url: x.url, playlist } : { path: x.path }), model_name: model, language, num_speakers: speakers, processing }),
       });
       const data = await readJson(res);
+      if (res.status === 409 && !link) {  // already in the library: said, and the others go on
+        showToast(serverText(data.detail));
+        imp.items = imp.items.filter(i => i !== x);
+        continue;
+      }
       if (!res.ok) throw new Error(serverText(data.detail) || `HTTP ${res.status}`);
       created.push(...(data.created || []));
       imp.items = imp.items.filter(i => i !== x);  // what went is not sent twice if a later one fails
