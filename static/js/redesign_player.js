@@ -380,16 +380,19 @@ function rpRenderNow(cur, seg, color, idx) {
   const btn = document.getElementById('rp-speaker');
   if (!btn) return;
   btn.classList.toggle('hidden', !seg);
-  if (!seg) return;
+  const cap = document.getElementById('rp-caption');
+  if (!seg) {  // no phrase here (another recording opened, none recognised): none of the one before
+    if (cap && cap.dataset.key) { cap.textContent = ''; cap.dataset.key = ''; }
+    return;
+  }
   const spk = rpSpeaker(seg.speaker);
   document.getElementById('rp-speaker-dot').style.background = color;
   document.getElementById('rp-speaker-dot').style.boxShadow = `0 0 0 3px ${rpHexA(color, 0.22)}`;
   const nameEl = document.getElementById('rp-speaker-name');
   nameEl.textContent = spk.name;
   nameEl.style.color = color;
-  const cap = document.getElementById('rp-caption');
   const words = (seg.words || []).filter(w => String(w.word || '').trim());
-  const key = `${idx}:${words.length ? words.findIndex(w => (Number(w.start) || 0) > cur) : 0}:${state.noFillers ? 1 : 0}`;
+  const key = `${(state.activeMeeting && state.activeMeeting.id) || 0}:${idx}:${words.length ? words.findIndex(w => (Number(w.start) || 0) > cur) : 0}:${state.noFillers ? 1 : 0}`;
   if (cap.dataset.key === key) return;
   cap.dataset.key = key;
   const hide = new Set(state.noFillers && rp.fillers ? ((rp.fillers.segments || {})[String(seg.id)] || {}).drop || [] : []);
