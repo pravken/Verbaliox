@@ -2124,11 +2124,12 @@ async function openExternal(url) {
 document.addEventListener('click', (e) => {
   const a = e.target.closest && e.target.closest('a[href]');
   if (!a) return;
-  const href = a.getAttribute('href') || '';
-  if (/^https?:\/\//i.test(href)) {
-    e.preventDefault();
-    openExternal(href);
-  }
+  const href = (a.getAttribute('href') || '').trim();
+  if (href.startsWith('#') || a.hasAttribute('download')) return;  // the page's own anchors and file saves
+  // Every other link opens in the browser or nowhere: the window itself never leaves the app
+  e.preventDefault();
+  if (/^https?:\/\//i.test(href)) openExternal(href);
+  else if (/^\/\/[^/]/.test(href)) openExternal('https:' + href);
 }, true);
 
 async function selectActiveOllamaModel(modelId) {
