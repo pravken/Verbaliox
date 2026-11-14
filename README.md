@@ -183,6 +183,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | DOMPurify (in `static/vendor`) | Apache 2.0 or MPL 2.0 |
 | PyTorch, torchaudio | BSD-3 |
 | SoundCard (system audio recording) | BSD-3 |
+| tzdata (time zones of calendar events) | Apache 2.0 |
 | yt-dlp (installed when you first import by link) | Unlicense |
 | FFmpeg (downloaded at the first start when missing, Gyan.dev essentials build) | GPL v3 |
 | [DeepFilterNet 3](https://github.com/Rikorose/DeepFilterNet) `deep-filter.exe` (optional microphone cleanup, downloaded in Settings → Recording) | MIT or Apache 2.0 (code and weights) |

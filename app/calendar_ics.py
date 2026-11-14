@@ -43,6 +43,88 @@ def _unescape(v: str) -> str:
     return v.replace("\\n", "\n").replace("\\N", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
 
 
+# Outlook names zones the Windows way («Russian Standard Time»); zoneinfo knows the IANA names only
+# (from CLDR windowsZones, the zones people meet in)
+WINDOWS_ZONES = {
+    "dateline standard time": "Etc/GMT+12", "utc-11": "Etc/GMT+11", "hawaiian standard time": "Pacific/Honolulu",
+    "alaskan standard time": "America/Anchorage", "pacific standard time": "America/Los_Angeles",
+    "us mountain standard time": "America/Phoenix", "mountain standard time": "America/Denver",
+    "central america standard time": "America/Guatemala", "central standard time": "America/Chicago",
+    "central standard time (mexico)": "America/Mexico_City", "canada central standard time": "America/Regina",
+    "sa pacific standard time": "America/Bogota", "eastern standard time": "America/New_York",
+    "us eastern standard time": "America/Indianapolis", "venezuela standard time": "America/Caracas",
+    "atlantic standard time": "America/Halifax", "sa western standard time": "America/La_Paz",
+    "pacific sa standard time": "America/Santiago", "newfoundland standard time": "America/St_Johns",
+    "e. south america standard time": "America/Sao_Paulo", "argentina standard time": "America/Buenos_Aires",
+    "sa eastern standard time": "America/Cayenne", "greenland standard time": "America/Godthab",
+    "montevideo standard time": "America/Montevideo", "utc-02": "Etc/GMT+2", "azores standard time": "Atlantic/Azores",
+    "cape verde standard time": "Atlantic/Cape_Verde", "utc": "Etc/UTC", "coordinated universal time": "Etc/UTC",
+    "gmt standard time": "Europe/London", "greenwich standard time": "Atlantic/Reykjavik",
+    "morocco standard time": "Africa/Casablanca", "w. europe standard time": "Europe/Berlin",
+    "central europe standard time": "Europe/Budapest", "romance standard time": "Europe/Paris",
+    "central european standard time": "Europe/Warsaw", "w. central africa standard time": "Africa/Lagos",
+    "jordan standard time": "Asia/Amman", "gtb standard time": "Europe/Bucharest",
+    "middle east standard time": "Asia/Beirut", "egypt standard time": "Africa/Cairo",
+    "e. europe standard time": "Europe/Chisinau", "syria standard time": "Asia/Damascus",
+    "south africa standard time": "Africa/Johannesburg", "fle standard time": "Europe/Kiev",
+    "israel standard time": "Asia/Jerusalem", "kaliningrad standard time": "Europe/Kaliningrad",
+    "libya standard time": "Africa/Tripoli", "arabic standard time": "Asia/Baghdad",
+    "turkey standard time": "Europe/Istanbul", "arab standard time": "Asia/Riyadh",
+    "belarus standard time": "Europe/Minsk", "russian standard time": "Europe/Moscow",
+    "e. africa standard time": "Africa/Nairobi", "volgograd standard time": "Europe/Volgograd",
+    "iran standard time": "Asia/Tehran", "arabian standard time": "Asia/Dubai",
+    "astrakhan standard time": "Europe/Astrakhan", "azerbaijan standard time": "Asia/Baku",
+    "russia time zone 3": "Europe/Samara", "mauritius standard time": "Indian/Mauritius",
+    "saratov standard time": "Europe/Saratov", "georgian standard time": "Asia/Tbilisi",
+    "caucasus standard time": "Asia/Yerevan", "afghanistan standard time": "Asia/Kabul",
+    "west asia standard time": "Asia/Tashkent", "ekaterinburg standard time": "Asia/Yekaterinburg",
+    "pakistan standard time": "Asia/Karachi", "qyzylorda standard time": "Asia/Qyzylorda",
+    "india standard time": "Asia/Calcutta", "sri lanka standard time": "Asia/Colombo",
+    "nepal standard time": "Asia/Katmandu", "central asia standard time": "Asia/Almaty",
+    "bangladesh standard time": "Asia/Dhaka", "omsk standard time": "Asia/Omsk",
+    "myanmar standard time": "Asia/Rangoon", "se asia standard time": "Asia/Bangkok",
+    "altai standard time": "Asia/Barnaul", "w. mongolia standard time": "Asia/Hovd",
+    "north asia standard time": "Asia/Krasnoyarsk", "n. central asia standard time": "Asia/Novosibirsk",
+    "tomsk standard time": "Asia/Tomsk", "china standard time": "Asia/Shanghai",
+    "north asia east standard time": "Asia/Irkutsk", "singapore standard time": "Asia/Singapore",
+    "w. australia standard time": "Australia/Perth", "taipei standard time": "Asia/Taipei",
+    "ulaanbaatar standard time": "Asia/Ulaanbaatar", "transbaikal standard time": "Asia/Chita",
+    "tokyo standard time": "Asia/Tokyo", "north korea standard time": "Asia/Pyongyang",
+    "korea standard time": "Asia/Seoul", "yakutsk standard time": "Asia/Yakutsk",
+    "cen. australia standard time": "Australia/Adelaide", "aus central standard time": "Australia/Darwin",
+    "e. australia standard time": "Australia/Brisbane", "aus eastern standard time": "Australia/Sydney",
+    "west pacific standard time": "Pacific/Port_Moresby", "tasmania standard time": "Australia/Hobart",
+    "vladivostok standard time": "Asia/Vladivostok", "russia time zone 10": "Asia/Srednekolymsk",
+    "magadan standard time": "Asia/Magadan", "sakhalin standard time": "Asia/Sakhalin",
+    "central pacific standard time": "Pacific/Guadalcanal", "russia time zone 11": "Asia/Kamchatka",
+    "new zealand standard time": "Pacific/Auckland", "utc+12": "Etc/GMT-12", "fiji standard time": "Pacific/Fiji",
+    "tonga standard time": "Pacific/Tongatapu", "samoa standard time": "Pacific/Apia",
+    "line islands standard time": "Pacific/Kiritimati",
+}
+
+# Zones described in the file itself (VTIMEZONE): their standard offset, for a name neither IANA nor
+# Windows knows («Customized Time Zone» of Outlook). Filled by parse()
+_FILE_ZONES: Dict[str, timedelta] = {}
+
+
+def _zone(name: str):
+    from zoneinfo import ZoneInfo
+
+    name = name.strip().strip('"')
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        pass
+    iana = WINDOWS_ZONES.get(name.lower())
+    if iana:
+        try:
+            return ZoneInfo(iana)
+        except Exception:
+            pass
+    offset = _FILE_ZONES.get(name)
+    return timezone(offset) if offset is not None else None
+
+
 def _parse_dt(value: str, params: str) -> Optional[datetime]:
     """Local naive datetime of DTSTART/DTEND/EXDATE values."""
     v = value.strip()
@@ -53,14 +135,12 @@ def _parse_dt(value: str, params: str) -> Optional[datetime]:
         if v.endswith("Z"):
             return datetime.strptime(v[:15], "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
         dt = datetime.strptime(v[:15], "%Y%m%dT%H%M%S")
-        m = re.search(r"TZID=([^;:]+)", params)
+        m = re.search(r'TZID=("[^"]+"|[^;:]+)', params)
         if m:
-            try:
-                from zoneinfo import ZoneInfo
-
-                return dt.replace(tzinfo=ZoneInfo(m.group(1).strip('"'))).astimezone().replace(tzinfo=None)
-            except Exception:
-                return dt  # a Windows zone name or no tz database: taken as local time
+            tz = _zone(m.group(1))
+            if tz is None:
+                return dt  # a zone nobody knows: taken as local time
+            return dt.replace(tzinfo=tz).astimezone().replace(tzinfo=None)
         return dt
     # A date the calendar cannot have (year 99999, beyond 9999 in UTC); on Windows also a local time
     # outside the C library's range (from year 3001), which raises OSError instead
@@ -76,12 +156,35 @@ def parse(text: str) -> List[Dict[str, Any]]:
     `online`: the event has a link (in its place, description or URL): a call, not a room."""
     events: List[Dict[str, Any]] = []
     cur: Optional[Dict[str, Any]] = None
+    moved: List[tuple] = []  # (uid, the time of the series it replaces): a moved or cancelled meeting
+    zone, zone_part = "", ""
+    _FILE_ZONES.clear()
     for line in _unfold(text):
+        if line == "BEGIN:VTIMEZONE":
+            zone, zone_part = "", ""
+            continue
+        if line in ("BEGIN:STANDARD", "BEGIN:DAYLIGHT"):
+            zone_part = line.split(":", 1)[1]
+            continue
+        if line == "END:VTIMEZONE":
+            zone = ""
+            continue
+        if cur is None and line.upper().startswith("TZID:"):
+            zone = line.split(":", 1)[1].strip()
+            continue
+        if cur is None and zone and zone_part == "STANDARD" and line.upper().startswith("TZOFFSETTO:"):
+            m = re.fullmatch(r"([+-])(\d\d)(\d\d)", line.split(":", 1)[1].strip())
+            if m:
+                sign = -1 if m.group(1) == "-" else 1
+                _FILE_ZONES[zone] = sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+            continue
         if line == "BEGIN:VEVENT":
             cur = {"uid": "", "title": "", "start": None, "end": None, "attendees": [], "rrule": "", "exdates": [],
-                   "all_day": False, "status": "", "location": "", "online": False}
+                   "all_day": False, "status": "", "location": "", "online": False, "recurrence_id": None}
             continue
         if line == "END:VEVENT":
+            if cur and cur["recurrence_id"] and cur["uid"]:
+                moved.append((cur["uid"], cur["recurrence_id"]))
             if cur and cur["start"] and cur["status"].upper() != "CANCELLED":
                 if not cur["end"] or cur["end"] < cur["start"]:
                     try:
@@ -115,6 +218,8 @@ def parse(text: str) -> List[Dict[str, Any]]:
                 cur["all_day"] = True
         elif name == "RRULE":
             cur["rrule"] = value.strip()
+        elif name == "RECURRENCE-ID":
+            cur["recurrence_id"] = _parse_dt(value, params)
         elif name == "EXDATE":
             for v in value.split(","):
                 dt = _parse_dt(v, params)
@@ -125,11 +230,51 @@ def parse(text: str) -> List[Dict[str, Any]]:
             who = (m.group(1) if m else value.replace("mailto:", "").replace("MAILTO:", "")).strip()
             if who and who not in cur["attendees"]:
                 cur["attendees"].append(who)
+    # A meeting of a series moved to another time (or cancelled) comes as its own event with the
+    # series' UID: the series no longer has it at its usual time
+    for uid, when in moved:
+        if when is None:
+            continue
+        for ev in events:
+            if ev["uid"] == uid and ev["rrule"] and not ev.get("recurrence_id"):
+                ev["exdates"].append(when)
     return events
 
 
 def _number(value: str, default: int) -> int:
     return int(value) if value.strip().isdigit() else default
+
+
+def _month_rule(rule: Dict[str, str]):
+    """For FREQ=MONTHLY with BYDAY (1MO, -1FR, or MO with BYSETPOS=1): the days of a month it gives, as a
+    function of (year, month). None for a rule by the day of the month (the usual walk does that)."""
+    import calendar
+
+    tokens = [t.strip().upper() for t in rule.get("BYDAY", "").split(",") if t.strip()]
+    parsed = []
+    for t in tokens:
+        m = re.fullmatch(r"([+-]?\d{1,2})?(MO|TU|WE|TH|FR|SA|SU)", t)
+        if m:
+            parsed.append((int(m.group(1)) if m.group(1) else None, _DAYS[m.group(2)]))
+    if not parsed:
+        return None
+    setpos = [int(x) for x in rule.get("BYSETPOS", "").split(",") if re.fullmatch(r"[+-]?\d{1,3}", x.strip() or "x")]
+
+    def days(year: int, month: int) -> List[int]:
+        total = calendar.monthrange(year, month)[1]
+        out = set()
+        for nth, wd in parsed:
+            all_wd = [d for d in range(1, total + 1) if calendar.weekday(year, month, d) == wd]
+            if nth is None:
+                out.update(all_wd)
+            elif 0 < abs(nth) <= len(all_wd):
+                out.add(all_wd[nth - 1] if nth > 0 else all_wd[nth])
+        ordered = sorted(out)
+        if setpos:
+            ordered = sorted({ordered[p - 1] if p > 0 else ordered[p] for p in setpos if 0 < abs(p) <= len(ordered)})
+        return ordered
+
+    return days
 
 
 def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict[str, Any]]:
@@ -178,9 +323,20 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
                 cursor = ev["start"]
         else:
             cursor += skip * period
+    month_days = _month_rule(rule) if freq == "MONTHLY" else None
     for _ in range(5000):
         if cursor >= limit or (count is not None and n >= count):
             break
+        if month_days:  # «the first Monday», «the last Friday» of the month
+            for d in month_days(cursor.year, cursor.month):
+                s = cursor.replace(day=d)
+                if s < ev["start"] or s >= limit or (count is not None and n >= count):
+                    continue
+                n += 1
+                add(s)
+            month = cursor.month - 1 + step
+            cursor = cursor.replace(year=cursor.year + month // 12, month=month % 12 + 1, day=1)
+            continue
         if freq == "WEEKLY" and days:
             week_start = cursor - timedelta(days=cursor.weekday())
             for d in sorted(days):
