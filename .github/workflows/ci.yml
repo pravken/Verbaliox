@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# Tests read the code only: the token can write nothing
+permissions:
+  contents: read
+
 jobs:
   test:
     # Windows is what users run; Ubuntu also runs the browser smoke test
