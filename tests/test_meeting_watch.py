@@ -25,14 +25,17 @@ class MeetingTitleTest(unittest.TestCase):
         with mock.patch.object(mw, "teams_windows", return_value=wins), \
                 mock.patch.object(mw, "_has_leave_button", side_effect=lambda h: h == 2):
             self.assertEqual(mw.current()["title"], "Планёрка")
+            self.assertTrue(mw.current()["verified"])
         mw._HAS_LEAVE.clear()
         with mock.patch.object(mw, "teams_windows", return_value=wins[:1]), \
                 mock.patch.object(mw, "_has_leave_button", return_value=False):
             self.assertEqual(mw.current()["title"], "")
         mw._HAS_LEAVE.clear()
         with mock.patch.object(mw, "teams_windows", return_value=wins[1:]), \
-                mock.patch.object(mw, "_has_leave_button", return_value=None):  # no UI Automation: the title decides
-            self.assertEqual(mw.current()["title"], "Планёрка")
+                mock.patch.object(mw, "_has_leave_button", return_value=None):  # no UI Automation: the title says so
+            st = mw.current()
+            self.assertEqual(st["title"], "Планёрка")
+            self.assertFalse(st["verified"])  # the page then does nothing by itself
 
 
 if __name__ == "__main__":

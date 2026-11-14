@@ -127,14 +127,14 @@ def _has_leave_button(hwnd: int) -> bool:
 
 
 def current() -> Dict[str, Any]:
-    """{"title": the meeting open now or "", "windows": the Teams window titles}. A change is written
+    """{"title": the meeting open now or "", "verified", "windows": the Teams window titles}. A change is written
     to the log: the titles of Teams are not documented, the log shows what was seen."""
     try:
         wins = teams_windows()
     except Exception as e:  # never in the way of a recording
         return {"title": "", "windows": [], "error": str(e)[:200]}
     titles = [t for _, t in wins]
-    title = ""
+    title, verified = "", True
     for hwnd, t in wins:
         name = meeting_title([t])
         if not name:
@@ -147,9 +147,11 @@ def current() -> Dict[str, Any]:
             seen = _HAS_LEAVE[key] = (_has_leave_button(hwnd), time.time())
         if seen[0] is False:
             continue  # the main window with a chat or a channel open: not a meeting
-        title = name
+        title, verified = name, seen[0] is True  # None: no UI Automation, the title alone says so
         break
     if title != _LAST[0]:
         _LAST[0] = title
         print(f"[meeting] Teams meeting: {title or 'none'}; windows: {titles[:6]!r}", flush=True)
-    return {"title": title, "windows": titles[:12]}
+    # "verified": the window holds the «Leave» button. Without it the page does nothing by itself: a chat
+    # titled «Анна | Microsoft Teams» would have cut the recording in two
+    return {"title": title, "verified": verified, "windows": titles[:12]}
