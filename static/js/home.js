@@ -236,11 +236,18 @@ function renderHomeMeetings() {
       const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever' }[st];
       action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t(label))}</button>`;
     }
+    // A meeting ahead that continues a series: what is open from last time, and the brief on a click
+    const bf = !past && e.before;
+    const brief = bf
+      ? `<button ${pageCall('click', 'openBriefFor', bf.series_id ? ['series', bf.series_id] : ['person', bf.person])} class="hm-mt-link"
+          title="${escapeHtml(t('hmBriefTip').replace('{n}', () => bf.open_tasks).replace('{title}', () => bf.last.title).replace('{date}', () => bf.last.date))}">${escapeHtml(
+          bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
+      : '';
     html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}" style="top: ${top(s)}px; height: ${hpx}px">
         <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml(`${time} · ${who}`)}">
           <span class="flex items-baseline gap-1.5 min-w-0"><span class="hm-mt-title">${escapeHtml(e.title || t('hmUntitled'))}</span>${hpx < 34 ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
           ${hpx >= 34 ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
-        </span>${action}
+        </span>${brief}${action}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
@@ -583,7 +590,19 @@ async function openFromNotice(target) {
     openLastRecording();
   } else if (kind === 'settings') {
     openModal('settings', a || undefined);
+  } else if (kind === 'brief') {  // «brief:series:ID» or «brief:person:NAME» (app/brief_notice.py)
+    openBriefFor(a, String(target).split(':').slice(2).join(':'));
   }
+}
+
+// The brief before a meeting: what is open from the last meetings of its series (or with that person)
+function openBriefFor(kind, value) {
+  if (kind === 'series' && Number(value)) state.askScope = { type: 'series', id: Number(value) };
+  else if (kind === 'person' && value) state.askScope = { type: 'person', name: value };
+  else return;
+  switchAppView('ask');
+  if (typeof renderAskScope === 'function') renderAskScope();
+  makeBrief();
 }
 
 registerView('home', { show: renderHome, refresh: (changed) => { if (changed) home.recentAt = 0; renderHome(); } });

@@ -186,6 +186,9 @@ async def lifespan(_app: FastAPI):
     from app.api.recording import watchdog_loop
 
     threading.Thread(target=watchdog_loop, daemon=True, name="record_watchdog").start()
+    from app import brief_notice
+
+    brief_notice.start()
     try:
         from app.model_manager import remove_retired_models
 
