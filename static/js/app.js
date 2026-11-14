@@ -1034,6 +1034,8 @@ function sanitizedMarkdown(md) {
   const html = DOMPurify.sanitize(marked.parse(md || ''), {
     ALLOWED_TAGS: MARKDOWN_TAGS, ALLOWED_ATTR: ['href', 'title', 'start', 'align', 'colspan', 'rowspan'],
     ALLOWED_URI_REGEXP: /^https?:\/\//i, ALLOW_DATA_ATTR: false,
+    // not addresses: DOMPurify would hold them to the URI rule above and drop them («3.» shown as «1.»)
+    ADD_URI_SAFE_ATTR: ['start', 'align', 'colspan', 'rowspan'],
   });
   return html;
 }
