@@ -277,7 +277,7 @@ class LiveTranslator:
         }
         from app.llm_text import strip_think, thinking_off
 
-        payload.update(thinking_off(payload["model"]))
+        payload.update(thinking_off(payload["model"], base_url=_base_url()))
         with httpx.Client(timeout=timeout) as c:
             r = c.post(f"{_base_url()}/api/chat", json=payload)
             from app.ollama_client import raise_for_ollama

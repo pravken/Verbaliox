@@ -306,7 +306,9 @@ class ThinkingModelTest(unittest.TestCase):
         from app import llm_text
 
         llm_text._can_think.clear()
+        llm_text._unanswered.clear()
         self.addCleanup(llm_text._can_think.clear)
+        self.addCleanup(llm_text._unanswered.clear)
 
     def test_qwen3_does_not_think_aloud(self):
         from unittest import mock
@@ -328,7 +330,7 @@ class ThinkingModelTest(unittest.TestCase):
 
         said = {"hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M": True, "my-tuned:latest": True, "qwen3-like:1b": False,
                 "gpt-oss:20b": True, "gemma4:e4b": True}
-        with mock.patch.object(llm_text, "_ask_ollama", side_effect=lambda m: said[m]) as ask:
+        with mock.patch.object(llm_text, "_ask_ollama", side_effect=lambda m, base=None: said[m]) as ask:
             self.assertEqual(thinking_off("hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M"), {"think": False})
             self.assertEqual(thinking_off("my-tuned:latest"), {"think": False})  # any name that can think
             self.assertEqual(thinking_off("qwen3-like:1b"), {})  # cannot think: nothing is sent
@@ -359,8 +361,10 @@ class ThinkingModelTest(unittest.TestCase):
             self.assertTrue(post.call_args.args[0].endswith("/api/show"))
         with mock.patch("httpx.post", return_value=Resp(["completion"])):
             self.assertFalse(llm_text._ask_ollama("qwen2.5:7b"))
-        with mock.patch("httpx.post", side_effect=OSError("refused")):
+        with mock.patch("httpx.post", side_effect=OSError("refused")) as post:
             self.assertIsNone(llm_text._ask_ollama("qwen3:8b"))
+            self.assertIsNone(llm_text._ask_ollama("qwen3:8b", "http://localhost:11434"))
+        post.assert_called_once()  # Ollama not running: not asked again before every line of a translation
 
 
 class DefaultAnalysisModelTest(unittest.TestCase):
