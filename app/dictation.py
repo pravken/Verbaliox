@@ -312,10 +312,11 @@ def type_text(text: str) -> None:
         try:
             user32.EmptyClipboard()
             user32.SetClipboardData(CF_UNICODETEXT, h)
-            # Kept out of the clipboard history (Win+V), its sync to other devices and clipboard
-            # managers: the dictated text is in the clipboard only for the moment of the paste
-            for name in ("ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory",
-                         "CanUploadToCloudClipboard"):
+            # Kept out of the clipboard history (Win+V) and its sync to other devices: the dictated text
+            # is in the clipboard only for the moment of the paste
+            # (not ExcludeClipboardContentFromMonitorProcessing: remote desktops and virtual machines watch
+            # the clipboard that way, and the paste there would get nothing)
+            for name in ("CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"):
                 fmt = user32.RegisterClipboardFormatW(name)
                 hz = kernel32.GlobalAlloc(GMEM_MOVEABLE, 4)  # a DWORD 0: «no»
                 pz = kernel32.GlobalLock(hz)
