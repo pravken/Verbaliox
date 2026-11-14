@@ -245,6 +245,8 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+
 app = FastAPI(
     title="Verbaliox",
     version=__version__,
@@ -253,6 +255,24 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def _invalid_request(request: Request, exc: RequestValidationError):
+    """FastAPI's 422 without the values sent: Infinity or NaN in them made the answer itself fail (500)."""
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(e.get("loc", ())), "msg": str(e.get("msg", "")), "type": str(e.get("type", ""))} for e in exc.errors()]})
+
+
+@app.exception_handler(OverflowError)
+async def _number_out_of_range(request: Request, exc: OverflowError):
+    """A number too large for the database (an id of 20 digits, Infinity in JSON): the request is wrong,
+    not the server."""
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=400, content={"detail": "Число вне допустимого диапазона"})
 
 
 @app.middleware("http")

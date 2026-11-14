@@ -127,7 +127,7 @@ def api_update_folder(folder_id: int, payload: Dict[str, Any]) -> Dict[str, Any]
         pid = payload.get("parent_id")
         try:
             kwargs["parent_id"] = None if pid is None else int(pid)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):  # "abc", Infinity
             raise HTTPException(status_code=400, detail="Папка назначения не найдена")
     if "local_only" in payload:
         kwargs["local_only"] = bool(payload.get("local_only"))

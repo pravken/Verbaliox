@@ -3,6 +3,7 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "Число вне допустимого диапазона": "The number is out of range",
   "В файле нет реплик расшифровки Teams (нужен файл .vtt из «Скачать расшифровку»)": "The file has no lines of a Teams transcript (a .vtt file from «Download transcript» is needed)",
   "Файл расшифровки слишком большой": "The transcript file is too large",
   "Укажите путь к файлу": "Give the path to the file",
