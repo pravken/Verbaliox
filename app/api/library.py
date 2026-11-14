@@ -636,6 +636,72 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     enqueue_meeting_job(meeting_id)
     return get_meeting(meeting_id)
 
+class RelinkPayload(BaseModel):
+    path: str = ""      # empty: the Windows file picker asks for it
+    force: bool = False  # the length differs from the recording's, and the user said it is the same file
+
+
+@router.post("/api/meetings/{meeting_id}/relink")
+def api_relink_media(meeting_id: int, payload: RelinkPayload) -> Any:
+    """«Указать файл…»: the recording's file moved (another folder, another disk); the user shows where it
+    is now. Its length must be the recording's (within 2 %), so another file is not put under its text.
+    A recording without a transcript goes to the queue."""
+    import sys
+
+    from app.audio_utils import get_media_duration
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    _ensure_not_processing(meeting_id)
+    raw = payload.path.strip().strip('"')
+    if not raw:
+        if sys.platform != "win32":
+            raise HTTPException(status_code=400, detail="Укажите путь к файлу")
+        from app import native_dialog
+        from app.paths import MEDIA_EXTENSIONS
+
+        patterns = ";".join(f"*{e}" for e in sorted(MEDIA_EXTENSIONS))
+        start = Path(m.get("media_path") or "").parent
+        raw = (native_dialog.run(["--mode", "open", "--dir", str(start if start.is_dir() else Path.home()),
+                                  "--filter", f"Видео и аудио|{patterns}|Все файлы|*.*", "--title", "Где теперь файл записи?"],
+                                 timeout=900) or "").strip()
+        if not raw:
+            return {"cancelled": True}
+    target = Path(raw)
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail=f"Путь не найден на диске: {raw}")
+    if target.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Формат файла {target.suffix} не поддерживается")
+    known = float(m.get("duration") or 0)
+    if known > 0 and not payload.force:
+        try:
+            got = float(get_media_duration(target) or 0)
+        except Exception:
+            got = 0.0
+        if got > 0 and abs(got - known) > max(3.0, known * 0.02):
+            from fastapi.responses import JSONResponse
+
+            # the path chosen goes back: «use it anyway» sends it again instead of opening the picker twice
+            return JSONResponse(status_code=409, content={
+                "detail": f"Длина файла {int(got // 60)} мин {int(got % 60)} с, а у записи {int(known // 60)} мин "
+                          f"{int(known % 60)} с. Это тот же файл?", "path": str(target)})
+    from app.database import relink_media
+
+    relink_media(meeting_id, str(target.resolve()))
+    print(f"[relink] meeting {meeting_id}: {target}", flush=True)
+    if not m.get("segments") and m.get("status") in ("failed", "cancelled", "cleared"):
+        update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание",
+                                error_message="")
+        enqueue_meeting_job(meeting_id)
+    elif m.get("status") == "failed":
+        update_meeting_progress(meeting_id, status="completed", progress=100, stage_text="", error_message="")
+    from app import events
+
+    events.publish({"type": "list"})
+    return api_get_meeting(meeting_id)
+
+
 @router.get("/api/meetings/{meeting_id}/precise-models")
 def api_precise_models(meeting_id: int) -> Dict[str, Any]:
     """The models «Все модели» (the precise mode) would run for this recording, the first one leading:
