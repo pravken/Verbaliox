@@ -265,6 +265,40 @@ def _group_voices(embs: np.ndarray, durs: np.ndarray, k: int, min_dur: float, ro
     return None
 
 
+def _join_closest(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+    """The groups of `labels` joined two by two, the closest voices first (duration-weighted centroids),
+    until there are k; renumbered in the order they first speak."""
+    groups = {int(g): [int(g)] for g in set(labels.tolist())}
+
+    def centroid(members: List[int]) -> np.ndarray:
+        mask = np.isin(labels, members)
+        w = np.clip(durations[mask], 0.5, 10.0)[:, None]
+        c = np.sum(embeddings[mask] * w, axis=0)
+        n = np.linalg.norm(c)
+        return c / (n if n > 1e-8 else 1.0)
+
+    while len(groups) > k:
+        keys = list(groups)
+        cents = {g: centroid(groups[g]) for g in keys}
+        best = None
+        for i, a in enumerate(keys):
+            for b in keys[i + 1:]:
+                d = float(1.0 - np.dot(cents[a], cents[b]))
+                if best is None or d < best[0]:
+                    best = (d, a, b)
+        _, a, b = best
+        groups[a] += groups.pop(b)
+    owner = {m: g for g, members in groups.items() for m in members}
+    order: Dict[int, int] = {}
+    out = np.zeros(len(labels), dtype=int)
+    for i, lbl in enumerate(labels):
+        g = owner[int(lbl)]
+        if g not in order:
+            order[g] = len(order)
+        out[i] = order[g]
+    return out
+
+
 def _determine_clusters(
     embeddings: np.ndarray,
     durations: np.ndarray,
@@ -300,6 +334,20 @@ def _determine_clusters(
     if n_samples == 1 or num_speakers_hint == 1:
         print(f"[diarizer] one speaker: {'one phrase' if n_samples == 1 else 'the recording says one speaker'}", flush=True)
         return np.zeros(n_samples, dtype=int)
+    # A count said: the voices are first grouped as in Auto (up to max_speakers, close voices joined),
+    # and the count is the most there may be. Searched only within 2..count, the split scoring best
+    # was often a smaller one: four people of a meeting became three, and more phrases went to the
+    # wrong person than in Auto (AMI: 14 % of the time against 6 %, bench-report/diarization.md)
+    if num_speakers_hint > 1:
+        auto = _determine_clusters(embeddings, durations, 0, max(max_speakers, num_speakers_hint))
+        found = len(set(auto.tolist()))
+        if 2 <= found <= num_speakers_hint:
+            print(f"[diarizer] {found} voice(s), as in Auto, within the {num_speakers_hint} said", flush=True)
+            return auto
+        if found > num_speakers_hint:
+            print(f"[diarizer] {found} voices against {num_speakers_hint} said: the closest are joined", flush=True)
+            return _join_closest(embeddings, durations, auto, num_speakers_hint)
+        # Auto heard one voice: the count said decides how many there are (below)
 
     # Filter reliable anchor segments (duration >= 2.2s) to determine speaker clusters
     # Short emotional phrases (< 2.2s) have higher pitch/timbre variance in ECAPA space

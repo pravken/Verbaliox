@@ -101,6 +101,23 @@ class DetermineClustersTest(unittest.TestCase):
         labels = _determine_clusters(embs, durs, num_speakers_hint=10)
         self.assertEqual(len(set(labels.tolist())), 2)
 
+    def test_a_count_said_gives_what_auto_finds_within_it(self):
+        # «4 said» grouped worse than Auto: within 2..4 the best-scoring split was often three groups
+        embs, durs, truth = self._meeting([90, 60, 35, 20])
+        auto = _determine_clusters(embs, durs)
+        said = _determine_clusters(embs, durs, num_speakers_hint=4)
+        self.assertEqual(len(set(said.tolist())), 4)
+        self.assertEqual(said.tolist(), auto.tolist())
+        self.assertGreater(self._agrees(said, truth), 0.95)
+
+    def test_more_voices_than_said_are_joined_closest_first(self):
+        embs, durs, truth = self._meeting([80, 60, 40, 30, 25])
+        labels = _determine_clusters(embs, durs, num_speakers_hint=4)
+        self.assertEqual(len(set(labels.tolist())), 4)
+        # every true voice stays whole: only two voices share a group
+        for v in range(5):
+            self.assertEqual(len(set(labels[truth == v].tolist())), 1)
+
     def test_one_voice_of_a_call_stays_one_speaker(self):
         embs, durs, _ = self._meeting([200], outliers=6, spread=1.1)
         self.assertEqual(set(_determine_clusters(embs, durs).tolist()), {0})
