@@ -25,7 +25,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Speaker separation** by clustering SpeechBrain ECAPA-TDNN voice embeddings. Works without tokens. Accuracy drops with overlapping speech, very short replies, or similar voices, so check the result and fix speakers where needed.
 - **Optional audio cleanup** before recognition: FFmpeg filters for noise reduction, click removal and loudness leveling. A simple voice filter is also available in the player.
 - **Filler-word removal** ("uh", "um", "э-э", "ммм"…). The original text is kept and can be restored.
-- **Local summaries and Q&A** via Ollama (by default Qwen3.5 4B, or Qwen3 8B on GPUs with 10 GB and more), or optionally a **cloud model over its API** (OpenAI, Claude, Gemini, OpenAI-compatible) with your key; long recordings then fit in one request. Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
+- **Local summaries and Q&A** via Ollama (by default Gemma 4 E4B on GPUs with 8 GB and more, Gemma 4 E2B on smaller GPUs and without one), or optionally a **cloud model over its API** (OpenAI, Claude, Gemini, OpenAI-compatible) with your key; long recordings then fit in one request. Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
 - **Transcript editor and player**: click a word to jump to it, edit segments, merge them, rename speakers, waveform, playback speed.
 - **Recording** from a microphone, system audio, or both, with saved presets for one-click starts. System audio is captured directly (WASAPI loopback), without a screen-share prompt.
 - **Three parts of the app**: the **Library** (recordings, transcripts, analysis), the **Studio** (recording with live captions and real-time translation that is typed in without flicker; can fill the whole window) and **Ask** (questions about one recording, a folder or the whole library).
@@ -173,6 +173,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (ONNX export by istupakov) | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/): credit "Parakeet TDT 0.6B v3 by NVIDIA" |
 | BGE-M3 embeddings (BAAI) | MIT |
 | SpeechBrain ECAPA-TDNN (`spkrec-ecapa-voxceleb`) | Apache 2.0 |
+| Gemma 4 E4B / E2B ([google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) rev. 4ecc2ba6, [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) rev. 4adf1574; Ollama `gemma4:e4b` dc35e8d9c606, `gemma4:e2b` b37049369adf) | Apache 2.0 |
 | Qwen3.5 4B, Qwen3 8B / 14B, Qwen 2.5 1.5B | Apache 2.0 |
 | Ollama, FastAPI, pywebview | MIT / BSD-3 |
 | ONNX Runtime, CTranslate2, pythonnet | MIT |
@@ -194,7 +195,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Inter, JetBrains Mono fonts | SIL Open Font License |
 | Inno Setup (builds `Verbaliox-Installer.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
-Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). If you download other models through Ollama, check their terms.
+Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). Only Gemma 4 is Apache 2.0: earlier Gemma versions (Gemma 3 and older) use Google's own terms of use. If you download other models through Ollama, check their terms.
 
 ### Support
 
@@ -234,7 +235,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Разделение по спикерам**: кластеризация голосовых эмбеддингов SpeechBrain ECAPA-TDNN, без токенов. Точность снижается при перебиваниях, очень коротких репликах и похожих голосах, поэтому результат стоит проверять и при необходимости поправлять спикеров вручную.
 - **Очистка звука перед распознаванием** (по желанию): фильтры FFmpeg для шумоподавления, удаления щелчков и выравнивания громкости. В плеере также есть простой голосовой фильтр.
 - **Удаление слов-паразитов** («э-э», «ммм», «uh», «um»…). Исходный текст сохраняется, его можно вернуть.
-- **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Qwen3.5 4B, на видеокартах от 10 ГБ — Qwen3 8B) или, по желанию, **облачной моделью по API** (OpenAI, Claude, Gemini, OpenAI-совместимые) с вашим ключом; длинные записи тогда обрабатываются одним запросом. Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
+- **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Gemma 4 E4B на видеокартах от 8 ГБ, Gemma 4 E2B на меньших и без видеокарты) или, по желанию, **облачной моделью по API** (OpenAI, Claude, Gemini, OpenAI-совместимые) с вашим ключом; длинные записи тогда обрабатываются одним запросом. Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
 - **Редактор расшифровки и плеер**: клик по слову перематывает к нему, реплики можно править и склеивать, спикеров — переименовывать; есть звуковая дорожка и выбор скорости.
 - **Запись** с микрофона, системного звука или обоих источников, с пресетами для запуска в один клик. Системный звук захватывается напрямую (WASAPI loopback), без запроса на показ экрана.
 - **Три раздела программы**: **Медиатека** (записи, расшифровки, анализ), **Студия** (запись с живыми субтитрами и переводом в реальном времени, текст печатается без мерцания; можно развернуть на всё окно) и **Вопросы** (к одной записи, к папке или ко всей медиатеке).
@@ -371,7 +372,7 @@ start.bat
 
 ### Лицензии
 
-Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
+Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Под Apache 2.0 только Gemma 4: у прежних версий Gemma (Gemma 3 и старше) собственные условия Google. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
 
 ### Поддержать проект
 

@@ -551,6 +551,8 @@ const MODEL_DISPLAY_NAMES = {
   'parakeet-v3': 'Parakeet TDT v3',
   'large-v3-turbo': 'Whisper Turbo',
   'large-v3': 'Whisper Pro',
+  'gemma4:e4b': 'Gemma 4 E4B',
+  'gemma4:e2b': 'Gemma 4 E2B',
   'qwen3:8b': 'Qwen3 8B',
   'qwen3:14b': 'Qwen3 14B',
   'qwen3.5:4b': 'Qwen3.5 4B',
@@ -782,7 +784,7 @@ function firstRunPicks(data, lang) {
   const hw = data.hardware || {};
   const gpu = !!(hw.cuda_available && Number(hw.vram_total_gb || 0) >= 4);
   const vram = Number(hw.vram_total_gb || 0);
-  const llm = vram >= 10 ? 'qwen3:8b' : 'qwen3.5:4b';  // bench-report/report.md
+  const llm = gpu && vram >= 7.5 ? 'gemma4:e4b' : 'gemma4:e2b';  // bench-report/llm-profiles.md
   // Outside Russian: Whisper Turbo with a GPU (99 languages), Parakeet without one (fast on the CPU)
   const other = gpu ? 'large-v3-turbo' : 'parakeet-v3';
   const presets = [
@@ -1591,11 +1593,13 @@ const MODEL_METERS = {
   'parakeet-v3': { acc: { ru: [4, 5.5], en: [4, 7.8] }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
   'large-v3-turbo': { acc: { ru: [5, 4.0], en: [5, 5.8] }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
   'large-v3': { acc: { ru: [5, 3.8], en: [5, 5.7] }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
-  // Analysis: quality from the comparison on real recordings (bench-report/report.md, «Анализ») and
+  // Analysis: quality from the comparisons on real recordings (bench-report/llm-profiles.md, report.md) and
   // the model size; speed and memory from the size of each model
   'qwen2.5:1.5b': { quality: 2, speed: { cpu: [4, ''], gpu: [5, ''] }, load: [1], ram: 2, vram: 2 },
-  'qwen3.5:4b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 5, vram: 5 },
-  'qwen3:8b': { quality: 4, speed: { cpu: [1, ''], gpu: [4, ''] }, load: [3], ram: 10, vram: 10 },
+  'gemma4:e4b': { quality: 5, speed: { cpu: [2, ''], gpu: [5, ''] }, load: [3], ram: 6, vram: 5 },
+  'gemma4:e2b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 4, vram: 3 },
+  'qwen3.5:4b': { quality: 3, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 5, vram: 5 },
+  'qwen3:8b': { quality: 3, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [3], ram: 10, vram: 10 },
   'qwen3:14b': { quality: 5, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [5], ram: 12, vram: 12 },
 };
 
