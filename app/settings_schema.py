@@ -95,13 +95,15 @@ def clean(key: str, value: Any) -> str:
         lo, hi = INTS[key]
         try:
             n = int(float(text_s or 0))
-        except ValueError:
+        except (ValueError, OverflowError):  # "inf", "1e999"
             raise ValueError(f"{key}: нужно число")
         return str(min(hi, max(lo, n)))
     if key in FLOATS:
         lo, hi = FLOATS[key]
         try:
             x = float(text_s)
+            if x != x:  # "nan"
+                raise ValueError
         except ValueError:
             raise ValueError(f"{key}: нужно число")
         return str(min(hi, max(lo, x)))
