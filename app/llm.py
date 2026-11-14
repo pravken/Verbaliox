@@ -90,6 +90,9 @@ def cloud_base_url(provider: str, settings: Optional[Dict[str, str]] = None) -> 
     return PROVIDERS[provider]["base_url"]
 
 
+CONSENT_ERROR = "Подтвердите отправку текста в облачный сервис в «Настройки → Анализ»"
+
+
 def uses_cloud(settings: Optional[Dict[str, str]] = None) -> bool:
     """The cloud is used only with the consent given in Settings → Analysis, whatever else is stored."""
     settings = settings or _settings()
@@ -184,6 +187,8 @@ def target(model: Optional[str] = None, start_ollama: bool = True, local_only: b
     settings = _settings()
     if local_only and model == "cloud":
         raise LlmError(LOCAL_ONLY_ERROR)
+    if model == "cloud" and settings.get("llm_cloud_consent") != "true":  # asked by name: the consent still holds
+        raise LlmError(CONSENT_ERROR)
     if model == "cloud" or (model is None and uses_cloud(settings) and not local_only):
         return _cloud_target(settings)
     return _ollama_target(model, settings, start_ollama)
