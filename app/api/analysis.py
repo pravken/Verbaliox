@@ -443,6 +443,7 @@ def api_unmerge_segment(meeting_id: int, segment_id: int, payload: UnmergePayloa
 def api_clean_fillers(meeting_id: int) -> Dict[str, Any]:
     from app.transcriber import clean_meeting_transcript
 
+    _ensure_not_transcribing(meeting_id)
     try:
         return clean_meeting_transcript(meeting_id)
     except ValueError as e:
@@ -470,6 +471,7 @@ def api_restore_segments(meeting_id: int) -> Dict[str, Any]:
 
     if not get_meeting(meeting_id):
         raise HTTPException(status_code=404, detail="Встреча не найдена")
+    _ensure_not_transcribing(meeting_id)
     if not restore_segments_backup(meeting_id):
         raise HTTPException(status_code=400, detail="Нет сохранённой версии для восстановления")
     return get_meeting(meeting_id)

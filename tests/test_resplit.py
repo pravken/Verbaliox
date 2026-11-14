@@ -120,5 +120,25 @@ class ResplitJobTest(unittest.TestCase):
         self.assertEqual((new_spk["SPEAKER_00"]["name"], new_spk["SPEAKER_01"]["name"]), ("Участник 1", "Мария"))
 
 
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class EditsWhileSplittingTest(unittest.TestCase):
+    def test_edits_wait_for_a_new_split(self):
+        """Its result replaces the transcript: an edit made meanwhile would be lost under it."""
+        from fastapi import HTTPException
+
+        from app.main import _ensure_not_transcribing
+
+        with transcriber._jobs_lock:
+            transcriber._queue_add(987654, "resplit")
+        try:
+            self.assertTrue(transcriber.is_transcribing(987654))
+            with self.assertRaises(HTTPException) as err:
+                _ensure_not_transcribing(987654)
+            self.assertEqual(err.exception.status_code, 409)
+        finally:
+            with transcriber._jobs_lock:
+                transcriber._queue[:] = [q for q in transcriber._queue if q["id"] != 987654]
+
+
 if __name__ == "__main__":
     unittest.main()

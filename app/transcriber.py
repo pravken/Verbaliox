@@ -61,10 +61,10 @@ def is_job_active(meeting_id: int) -> bool:
 
 
 def is_transcribing(meeting_id: int) -> bool:
-    """A recognition job or a merge of versions of this recording is queued or running: either replaces
-    the transcript shown, and edits made meanwhile were hidden by its result."""
+    """A recognition job, a merge of versions or a new split by voices of this recording is queued or
+    running: each replaces the transcript shown, and edits made meanwhile were lost under its result."""
     with _jobs_lock:
-        return any(q["id"] == meeting_id and q["kind"] in ("transcribe", "merge") for q in _queue)
+        return any(q["id"] == meeting_id and q["kind"] in ("transcribe", "merge", "resplit") for q in _queue)
 
 
 _running_thread: Optional[int] = None
