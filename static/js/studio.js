@@ -2458,3 +2458,9 @@ async function studioMicTest() {
     setTimeout(() => { if (!_micTest && label) label.textContent = t('rdSasMicTest'); }, 4000);
   }
 }
+
+// The gear of the captions closes on a click elsewhere, as a menu does
+document.addEventListener('click', (e) => {
+  const more = document.getElementById('st-cap-more');
+  if (more && more.open && !more.contains(e.target)) more.removeAttribute('open');
+});

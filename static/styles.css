@@ -2545,3 +2545,11 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .sp-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; pointer-events: none; }
 .sp-mav { position: relative; overflow: hidden; }
 .cap-av { overflow: hidden; }
+
+/* Studio: the captions' row keeps «Субтитры» and «Перевод»; the rest opens under the gear */
+.st-cap-more { position: relative; }
+.st-cap-more > summary { list-style: none; cursor: pointer; }
+.st-cap-more > summary::-webkit-details-marker { display: none; }
+.st-cap-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: max-content; max-width: min(560px, 80vw);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px;
+  background: #1C1D21; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
