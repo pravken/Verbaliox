@@ -106,9 +106,11 @@ function pageArg(a, el, ev) {
 
 // Only a function of the page's own scripts: never one of the browser's (fetch, open, …), even wrapped by
 // the page, so markup that should not be there (a hostile backup, say) cannot call them with its own arguments
+const PAGE_WRAPS_BROWSER = new Set(['fetch']);  // the page's wrappers of a browser function: still the browser's
 function pageFunction(name) {
-  if (!/^[A-Za-z_$][\w$]*$/.test(name || '') || (window.BROWSER_NAMES && window.BROWSER_NAMES.has(name))) return null;
+  if (!/^[A-Za-z_$][\w$]*$/.test(name || '') || PAGE_WRAPS_BROWSER.has(name)) return null;
   const fn = window[name];
+  if (window.BROWSER_VALUES && window.BROWSER_VALUES.has(name) && window.BROWSER_VALUES.get(name) === fn) return null;
   if (typeof fn !== 'function' || /\[native code\]\s*\}$/.test(Function.prototype.toString.call(fn))) return null;
   return fn;
 }
