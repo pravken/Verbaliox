@@ -6,6 +6,44 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.7 — English
+
+- **Settings in 7 tabs instead of 14**: the former tabs are sections (Updates and About in General,
+  Hotkeys and Calendar in Recording, Speech models and Dictionary in Recognition, Model comparison and
+  Dubbing in Advanced). Old links open the right section.
+- **A brief before the meeting.** On Today a meeting that continues a series shows «Brief · N» (the
+  tasks still open); five minutes before it a notification opens the brief.
+- **The Teams transcript (.vtt)** can be added to a recording (its ⋯ menu): a version of its own, and
+  its names go to the voices still called «Participant N».
+- **«Locate file…»** for a recording whose file was moved, checked by its length.
+- **Playlists**: a link to a playlist or a channel asks whether to download all of it (each video a
+  recording in a folder of its own) or the first video.
+- **The recording is safer.** The computer's sound follows the output device Windows uses (a headset
+  plugged in mid-call); a call with the computer silent for a minute is said at once. A recording whose
+  window was closed or reloaded is saved with its notes by itself; after a crash its parts become one
+  recording with its notes. Long recordings are mixed with the same memory (~150 MB) at any length, with
+  progress.
+- **Files dropped on the window are added where they are**, without a copy; a file already in the
+  library is not added again.
+- **The queue**: a meeting just recorded is transcribed before a dub or a translation; cancelling a
+  recording waiting in the queue works at once.
+- **Simpler screens**: echo and voice cleanup decide by themselves (their switches in Settings →
+  Recording → More); the studio's captions row keeps «Captions» and «Translation», the rest under the
+  gear; the assistant without a model says so once; tasks fit a narrow window.
+- **Fixes after a triple audit**:
+  - the cloud model is never used without your consent;
+  - recordings of a «local only» folder stay protected when the folder is deleted;
+  - links in the AI's text open in the browser, not in the app's window;
+  - the calendar handles time zones on Windows (Outlook's zone names, summer time of other zones),
+    moved meetings of a series, «the first Monday of the month» and the 31st;
+  - edits made while participants are split anew are no longer lost;
+  - errors are said in plain words;
+  - the Word export takes text pasted from Word;
+  - sound retention counts from when the recording came into the app;
+  - an update downloaded before a newer one came out is downloaded again;
+  - dictation stays out of the clipboard history;
+  - large libraries open faster.
+
 ## 0.8.6 — English
 
 - **No more voices twice in recordings through speakers.** The capture of the computer's sound lost
@@ -355,6 +393,44 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.7
+
+- **Настройки — 7 вкладок вместо 14**: бывшие вкладки стали разделами (Обновления и О программе — в
+  Общих, Горячие клавиши и Календарь — в Записи, Модели речи и Словарь — в Распознавании, Сравнение моделей
+  и Дубляж — в «Для опытных»). Старые ссылки открывают нужный раздел.
+- **Бриф перед встречей.** На «Сегодня» у встречи, которая продолжает серию, есть «Бриф · N» (открытые
+  задачи); за пять минут до неё уведомление открывает бриф.
+- **Расшифровку Teams (.vtt)** можно добавить к записи (её меню ⋯): отдельная версия, а её имена получают
+  голоса, которые ещё называются «Участник N».
+- **«Указать файл…»** у записи, чей файл переместили; файл проверяется по длине.
+- **Плейлисты**: ссылка на плейлист или канал спрашивает, скачать всё (каждое видео — запись в своей
+  папке) или только первое видео.
+- **Запись надёжнее.** Звук компьютера переходит на устройство вывода, которое выбрала Windows
+  (подключили гарнитуру посреди звонка); если во время звонка звука компьютера нет минуту, студия скажет
+  сразу. Запись, у которой закрыли или перезагрузили окно, сохраняется сама вместе с заметками; после
+  сбоя её части становятся одной записью с заметками. Длинные записи сводятся при любой длине с одним и
+  тем же расходом памяти (~150 МБ) и показывают ход.
+- **Перетащенные в окно файлы добавляются на месте**, без копии; файл, который уже есть в медиатеке,
+  второй раз не добавляется.
+- **Очередь**: только что записанная встреча расшифровывается раньше дубляжа и перевода; отмена записи,
+  ждущей в очереди, срабатывает сразу.
+- **Экраны проще**: эхо и очистка голоса включаются сами (переключатели — в Настройки → Запись →
+  Дополнительно); в строке субтитров студии остались «Субтитры» и «Перевод», остальное — под шестерёнкой;
+  ассистент без модели говорит об этом один раз; задачи помещаются в узкое окно.
+- **Исправления после тройного аудита**:
+  - облачная модель не используется без вашего согласия;
+  - записи папки «только локально» остаются защищёнными, если папку удалить;
+  - ссылки в тексте ИИ открываются в браузере, а не в окне программы;
+  - календарь учитывает часовые пояса в Windows (названия зон Outlook, летнее время других стран),
+    перенесённые встречи серии, «первый понедельник месяца» и 31-е число;
+  - правки во время «Разделить заново» больше не теряются;
+  - ошибки объясняются понятными словами;
+  - экспорт в Word принимает текст, вставленный из Word;
+  - срок хранения звука считается с момента, когда запись попала в программу;
+  - обновление, скачанное до выхода более новой версии, скачивается заново;
+  - продиктованный текст не попадает в журнал буфера обмена;
+  - большие медиатеки открываются быстрее.
 
 ## 0.8.6
 

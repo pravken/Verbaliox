@@ -183,6 +183,12 @@ async def lifespan(_app: FastAPI):
     except Exception:
         traceback.print_exc()
     threading.Thread(target=_retention_loop, daemon=True, name="retention").start()
+    from app.api.recording import watchdog_loop
+
+    threading.Thread(target=watchdog_loop, daemon=True, name="record_watchdog").start()
+    from app import brief_notice
+
+    brief_notice.start()
     try:
         from app.model_manager import remove_retired_models
 
@@ -245,7 +251,23 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
+
+class PageJSONResponse(JSONResponse):
+    """Every answer of the API, without the participants' voice prints (192 numbers each): the page never
+    uses them, and a recording's every reading and edit sent them along. The server reads them itself."""
+
+    def render(self, content: Any) -> bytes:
+        if isinstance(content, dict) and isinstance(content.get("speakers"), dict):
+            content = {**content, "speakers": {k: ({f: x for f, x in v.items() if f != "embedding"} if isinstance(v, dict) else v)
+                                               for k, v in content["speakers"].items()}}
+        return super().render(content)
+
+
 app = FastAPI(
+    default_response_class=PageJSONResponse,
     title="Verbaliox",
     version=__version__,
     lifespan=lifespan,
@@ -253,6 +275,24 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def _invalid_request(request: Request, exc: RequestValidationError):
+    """FastAPI's 422 without the values sent: Infinity or NaN in them made the answer itself fail (500)."""
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(e.get("loc", ())), "msg": str(e.get("msg", "")), "type": str(e.get("type", ""))} for e in exc.errors()]})
+
+
+@app.exception_handler(OverflowError)
+async def _number_out_of_range(request: Request, exc: OverflowError):
+    """A number too large for the database (an id of 20 digits, Infinity in JSON): the request is wrong,
+    not the server."""
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=400, content={"detail": "Число вне допустимого диапазона"})
 
 
 @app.middleware("http")
@@ -340,7 +380,10 @@ def api_get_meeting(meeting_id: int) -> Dict[str, Any]:
     m = get_meeting(meeting_id)
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
-    return {**m, "local_only_effective": is_local_only(m)}
+    path = m.get("media_path") or ""
+    # The file was moved or its disk is not there: the page offers «Указать файл…»
+    missing = bool(path) and not m.get("media_removed") and m.get("status") != "mixing" and not Path(path).is_file()
+    return {**m, "local_only_effective": is_local_only(m), "media_missing": missing}
 
 
 def _recordings_dir() -> Path:
@@ -485,6 +528,15 @@ def recover_orphan_recordings() -> int:
     """At start: parts of recordings that were never finished (the app closed or crashed while
     recording) become recordings, instead of staying hidden in the folders."""
     found: List[Tuple[Path, Optional[bool]]] = []
+    # Recordings the watchdog kept a file for (app/api/recording.py): their parts paired, one recording
+    # with its notes; only the parts left over are recovered one by one below
+    try:
+        from app.api.recording import recover_sessions
+
+        used = {str(p) for p in recover_sessions()}
+    except Exception:
+        traceback.print_exc()
+        used = set()
     try:
         rec = _recordings_dir()
         # what finishing a recording made for its mix (the cleaned microphone, the lined-up system sound):
@@ -493,9 +545,15 @@ def recover_orphan_recordings() -> int:
             left.unlink(missing_ok=True)
         found += [(p, None) for p in rec.glob(".page_*.webm.part")]
         found += [(p, True) for p in rec.glob(".screen_*.mkv.part")]
-        found += [(p, False) for p in UPLOADS_DIR.glob("system_*.wav") if p.stat().st_size > 4096]
+        from app.system_audio import repair_rf64
+
+        for p in UPLOADS_DIR.glob("system_*.wav"):
+            if p.stat().st_size > 4096:
+                repair_rf64(p)  # left open by the crash: its header still says it is empty
+                found.append((p, False))
     except OSError:
         return 0
+    found = [(p, v) for p, v in found if str(p) not in used and p.is_file()]
     n = 0
     for part, has_video in found:
         if part.stat().st_size < 4096:

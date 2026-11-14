@@ -40,3 +40,5 @@ idna>=3.7
 # decompression flaws (pip-audit in CI)
 httpx2>=2.13.1
 httpcore2>=2.13.1
+# Time zones of calendar events (zoneinfo): Python on Windows has no tz database of its own
+tzdata>=2026.6

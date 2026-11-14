@@ -95,13 +95,15 @@ def clean(key: str, value: Any) -> str:
         lo, hi = INTS[key]
         try:
             n = int(float(text_s or 0))
-        except ValueError:
+        except (ValueError, OverflowError):  # "inf", "1e999"
             raise ValueError(f"{key}: нужно число")
         return str(min(hi, max(lo, n)))
     if key in FLOATS:
         lo, hi = FLOATS[key]
         try:
             x = float(text_s)
+            if x != x:  # "nan"
+                raise ValueError
         except ValueError:
             raise ValueError(f"{key}: нужно число")
         return str(min(hi, max(lo, x)))
@@ -110,12 +112,7 @@ def clean(key: str, value: Any) -> str:
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
     if key in SPEECH_MODELS:
-        from app.asr_onnx import ONNX_MODELS
-        from app.model_manager import WHISPER_CATALOG, WHISPER_REPLACED
-
-        # Only a model of the catalog: faster-whisper would take any other name as a Hugging Face repository
-        known = {m["id"] for m in WHISPER_CATALOG} | set(ONNX_MODELS) | set(WHISPER_REPLACED) | {"", "auto"}
-        if text_s not in known:
+        if not is_speech_model(text_s):
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
     if key == "dictation_translate_to":
@@ -179,3 +176,13 @@ def as_int(value: Any, default: int = 0) -> int:
 
 def clean_all(settings: Dict[str, Any]) -> Dict[str, str]:
     return {str(k): clean(str(k), v) for k, v in settings.items()}
+
+
+def is_speech_model(name: str) -> bool:
+    """A model of the catalog, "auto" or nothing (the settings decide). faster-whisper would take any
+    other name as a Hugging Face repository and download it: a model nobody checked, under any license."""
+    from app.asr_onnx import ONNX_MODELS
+    from app.model_manager import WHISPER_CATALOG, WHISPER_REPLACED
+
+    known = {m["id"] for m in WHISPER_CATALOG} | set(ONNX_MODELS) | set(WHISPER_REPLACED) | {"", "auto"}
+    return (name or "").strip() in known

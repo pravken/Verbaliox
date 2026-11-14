@@ -127,6 +127,9 @@ def answer_text(question: str, answer: str, sources: List[Dict[str, Any]], headi
 def answer_docx(question: str, answer: str, sources: List[Dict[str, Any]], heading_sources: str) -> bytes:
     from docx import Document
 
+    from app.exporter import _xml_safe  # a vertical tab from Word refused the whole file
+
+    question, answer, sources, heading_sources = _xml_safe([question, answer, sources, heading_sources])
     doc = Document()
     doc.add_heading(question.strip() or "—", level=1)
     for raw in (answer or "").splitlines():

@@ -71,7 +71,7 @@ def extract_audio_16k_mono(
     if chain:
         enhanced_cmd = [
             tool_cmd("ffmpeg"),
-            "-y",
+            "-y", "-hide_banner", "-loglevel", "error",
             "-i",
             str(in_path),
             "-vn",
@@ -92,7 +92,7 @@ def extract_audio_16k_mono(
     # Fallback: raw 16kHz mono extraction without filter chain
     cmd = [
         tool_cmd("ffmpeg"),
-        "-y",
+        "-y", "-hide_banner", "-loglevel", "error",
         "-i",
         str(in_path),
         "-vn",
@@ -108,9 +108,31 @@ def extract_audio_16k_mono(
     proc = _run_ffmpeg(cmd, creation_flags, check_cancel)
 
     if proc.returncode != 0 or not out_path.exists():
-        raise RuntimeError(f"Ошибка извлечения звука через FFmpeg:\n{proc.stderr[-600:]}")
+        raise RuntimeError(f"Не удалось извлечь звук: {ffmpeg_reason(proc.stderr, in_path)}")
 
     return out_path
+
+
+# What FFmpeg says, in words the user can act on; the rest is its last line, not its banner
+_FFMPEG_REASONS = (
+    # before «Invalid argument»: a video without sound says both
+    (("does not contain any stream", "Output file does not contain", "matches no streams"), "в файле нет звуковой дорожки"),
+    (("Invalid data found", "moov atom not found", "Invalid argument", "could not find codec",
+      "Failed to read frame size", "End of file"), "файл повреждён или это не звук и не видео"),
+    (("No such file", "does not exist"), "файл не найден — его переместили или удалили?"),
+    (("Permission denied",), "нет доступа к файлу"),
+)
+
+
+def ffmpeg_reason(stderr: str, path: Path | None = None) -> str:
+    text = stderr or ""
+    if path is not None and path.is_file() and path.stat().st_size == 0:
+        return "файл пустой"
+    for marks, reason in _FFMPEG_REASONS:
+        if any(m.lower() in text.lower() for m in marks):
+            return reason
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return (lines[-1] if lines else "неизвестная ошибка FFmpeg")[:300]
 
 
 def get_media_duration(media_path: str | Path) -> float:

@@ -5,7 +5,9 @@ import re
 import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+import heapq
+import itertools
+from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -39,8 +41,60 @@ from app.text_utils import (
     is_low_quality_segment,
 )
 
+# The order of kinds of jobs in the queue: a meeting just recorded is transcribed first, a dub or a
+# translation started before it (tens of minutes) waits. Within a kind, the order they were given
+KIND_PRIORITY = {"transcribe": 0, "resplit": 1, "merge": 1, "cut": 2, "translate": 2, "burn": 2, "dub": 3}
+
+
+class _PriorityExecutor:
+    """One worker, as before (jobs never share the video card), taking the job of the highest priority
+    first. A job that runs is never interrupted: a new recording waits for it to end, not for the whole
+    queue."""
+
+    def __init__(self) -> None:
+        self._heap: List[tuple] = []
+        self._cv = threading.Condition()
+        self._seq = itertools.count()
+        self._thread: Optional[threading.Thread] = None
+
+    def submit(self, fn: Callable, *args: Any, priority: Optional[int] = None) -> Future:
+        fut: Future = Future()
+        if priority is None:
+            priority = _job_priority(fn, args)
+        with self._cv:
+            heapq.heappush(self._heap, (priority, next(self._seq), fut, fn, args))
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._work, daemon=True, name="whisper_worker_0")
+                self._thread.start()
+            self._cv.notify()
+        return fut
+
+    def _work(self) -> None:
+        while True:
+            with self._cv:
+                while not self._heap:
+                    self._cv.wait()
+                _prio, _n, fut, fn, args = heapq.heappop(self._heap)
+            if not fut.set_running_or_notify_cancel():
+                continue
+            try:
+                fut.set_result(fn(*args))
+            except BaseException as e:  # noqa: BLE001 - kept in the future, as the pool did
+                fut.set_exception(e)
+
+
+def _job_priority(fn: Callable, args: tuple) -> int:
+    if fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper":
+        return KIND_PRIORITY["transcribe"]
+    if fn is _run_dub_job:
+        return KIND_PRIORITY["dub"]
+    if fn is _run_side_job and len(args) > 2:
+        return 1 if args[2] in (_resplit_runner, _merge_runner) else 2
+    return 2
+
+
 # Single worker queue ensures batch jobs run one after another without VRAM collisions
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper_worker")
+_executor = _PriorityExecutor()
 
 # Jobs that are queued or running, and jobs the user asked to cancel
 _jobs_lock = threading.Lock()
@@ -49,6 +103,7 @@ _cancel_requested: Set[int] = set()
 # Mirror of the executor's FIFO for the UI: which recording is running and which are waiting
 _queue: List[Dict[str, Any]] = []
 _running_id: Optional[int] = None
+_queue_seq = itertools.count()
 
 
 class JobCancelled(Exception):
@@ -61,10 +116,10 @@ def is_job_active(meeting_id: int) -> bool:
 
 
 def is_transcribing(meeting_id: int) -> bool:
-    """A recognition job or a merge of versions of this recording is queued or running: either replaces
-    the transcript shown, and edits made meanwhile were hidden by its result."""
+    """A recognition job, a merge of versions or a new split by voices of this recording is queued or
+    running: each replaces the transcript shown, and edits made meanwhile were lost under its result."""
     with _jobs_lock:
-        return any(q["id"] == meeting_id and q["kind"] in ("transcribe", "merge") for q in _queue)
+        return any(q["id"] == meeting_id and q["kind"] in ("transcribe", "merge", "resplit") for q in _queue)
 
 
 _running_thread: Optional[int] = None
@@ -86,6 +141,50 @@ def request_cancel(meeting_id: int) -> bool:
     return True
 
 
+# Jobs taken out of the queue before they began: the worker skips them when their turn comes (the
+# executor runs in the order jobs were given, so a count per recording is enough)
+_dropped: Dict[int, int] = {}
+
+
+def cancel_waiting(meeting_id: int) -> bool:
+    """A recognition still waiting for its turn is taken out of the queue at once: «Отменить» took effect
+    only when the job running before it ended (tens of minutes), and the recording could not be deleted
+    or started again meanwhile. False when it is not waiting (running, or another kind of job)."""
+    with _jobs_lock:
+        entry = next((q for q in _queue if q["id"] == meeting_id), None)
+        if not entry or entry["kind"] != "transcribe" or _running_id == meeting_id or entry.get("started_at"):
+            return False
+        _queue[:] = [q for q in _queue if q["id"] != meeting_id]
+        _active_jobs.discard(meeting_id)
+        _cancel_requested.discard(meeting_id)
+        _dropped[meeting_id] = _dropped.get(meeting_id, 0) + 1
+    from app.database import update_meeting_progress
+
+    update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Обработка отменена", error_message="")
+    _publish_queue_changed()
+    # exports that waited for its end are settled now, as at the end of a job
+    threading.Thread(target=_run_pending_exports, args=(meeting_id,), daemon=True).start()
+    return True
+
+
+def _skip_dropped(meeting_id: int) -> bool:
+    """True: this run was cancelled while it waited. Otherwise the job is marked begun in the same step
+    (started_at), so a cancel coming now is an ordinary one, of a running job: one that came between the
+    check and the start ran the job anyway and left the count to skip its next run."""
+    with _jobs_lock:
+        n = _dropped.get(meeting_id, 0)
+        if not n:
+            for q in _queue:
+                if q["id"] == meeting_id and q["kind"] == "transcribe":
+                    q["started_at"] = q.get("started_at") or time.time()
+            return False
+        if n == 1:
+            _dropped.pop(meeting_id)
+        else:
+            _dropped[meeting_id] = n - 1
+        return True
+
+
 def _publish_queue_changed() -> None:
     from app import events
 
@@ -94,7 +193,8 @@ def _publish_queue_changed() -> None:
 
 def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> None:
     """Call with _jobs_lock held."""
-    _queue.append({"id": meeting_id, "kind": kind, "lang": lang, "queued_at": time.time(), "started_at": None})
+    _queue.append({"id": meeting_id, "kind": kind, "lang": lang, "queued_at": time.time(), "started_at": None,
+                   "prio": KIND_PRIORITY.get(kind, 2), "n": next(_queue_seq)})
 
 
 def _queue_start(meeting_id: int) -> None:
@@ -138,7 +238,8 @@ def queue_snapshot() -> List[Dict[str, Any]]:
     if not items:
         return []
     meetings = meeting_briefs(list({q["id"] for q in items}))
-    items.sort(key=lambda q: 0 if q["id"] == running else 1)
+    # the order they will run in: the running one, then by priority, then as given
+    items.sort(key=lambda q: (0 if q["id"] == running else 1, q.get("prio", 2), q.get("n", 0)))
     out = []
     waiting_pos = 0
     for q in items:
@@ -246,6 +347,8 @@ def enqueue_meeting_job(meeting_id: int) -> bool:
 
 
 def _run_job(meeting_id: int) -> None:
+    if _skip_dropped(meeting_id):  # cancelled while it waited
+        return
     _queue_start(meeting_id)
     try:
         _process_meeting_job(meeting_id)
@@ -333,12 +436,13 @@ def _run_dub_job(meeting_id: int, target_lang: str, back: str = "completed") -> 
         update_meeting_progress(meeting_id, status=back, progress=100, stage_text="Дубляж отменён", error_message="")
     except Exception as e:
         tb = traceback.format_exc()
+        print(tb, flush=True)  # the details stay in the log; the recording keeps what the user can read
         update_meeting_progress(
             meeting_id,
             status=back,
             progress=100,
             stage_text=f"Ошибка дубляжа: {str(e)[:140]}",
-            error_message=f"{e}\n\n{tb[-800:]}",
+            error_message=str(e)[:600],
         )
     finally:
         _queue_finish(meeting_id)
@@ -375,12 +479,13 @@ def _run_side_job(meeting_id: int, back: str, runner, *args) -> None:
         update_meeting_progress(meeting_id, status=back, progress=100, stage_text=_SIDE_JOB_NAMES[runner][1], error_message="")
     except Exception as e:
         tb = traceback.format_exc()
+        print(tb, flush=True)  # the details stay in the log; the recording keeps what the user can read
         update_meeting_progress(
             meeting_id,
             status=back,
             progress=100,
             stage_text=f"Ошибка ({_SIDE_JOB_NAMES[runner][0]}): {str(e)[:140]}",
-            error_message=f"{e}\n\n{tb[-800:]}",
+            error_message=str(e)[:600],
         )
     finally:
         _queue_finish(meeting_id)
@@ -1939,10 +2044,11 @@ def _process_meeting_job(meeting_id: int) -> None:
         whisper_model = None
         release_whisper_model()
         tb = traceback.format_exc()
+        print(tb, flush=True)  # the details stay in the log; the recording keeps what the user can read
         _index_partial(meeting_id)
         update_meeting_progress(
             meeting_id,
             status="failed",
             stage_text=f"Ошибка: {str(e)[:140]}",
-            error_message=f"{e}\n\n{tb[-800:]}",
+            error_message=str(e)[:600],
         )

@@ -452,6 +452,44 @@ function updateProcessingBanner(m) {
     bar.style.width = '100%';
     bar.style.background = failed ? 'rgba(255, 69, 58, 0.7)' : 'rgba(255, 255, 255, 0.2)';
   }
+  // The recording's file was moved or its disk is not there: where it is now, instead of a Retry that
+  // fails the same way
+  const missing = !isBusy && !!m.media_missing;
+  document.getElementById('workspace-relink-btn').classList.toggle('hidden', !missing);
+  if (missing) {
+    banner.classList.remove('hidden');
+    document.getElementById('workspace-retry-btn').classList.add('hidden');
+    const st = document.getElementById('workspace-stage-text');
+    st.textContent = t('mediaMissingText');
+    st.title = m.media_path || '';
+    bar.style.width = '100%';
+    bar.style.background = 'rgba(255, 159, 10, 0.6)';
+  }
+}
+
+// «Указать файл…»: the Windows picker (or a path typed in a browser), checked against the recording's length
+async function relinkActiveMedia(force = false, path = '') {
+  const m = state.activeMeeting;
+  if (!m) return;
+  if (!path && !(window.pywebview && window.pywebview.api)) {  // a browser: no picker that gives a path
+    path = await askText(t('relinkPrompt'), m.media_path || '');
+    if (!path) return;
+  }
+  const res = await fetch(`/api/meetings/${m.id}/relink`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, force }),
+  });
+  const data = await readJson(res);
+  if (res.status === 409 && !force) {
+    if (await confirmDialog(t('relinkCheckTitle'), serverText(data.detail), t('relinkUseAnyway'), false)) {
+      relinkActiveMedia(true, path || data.path || '');
+    }
+    return;
+  }
+  if (!res.ok) { showError(serverText(data.detail)); return; }
+  if (data.cancelled) return;
+  await loadMeetingsList();
+  await selectMeeting(m.id, false);
+  showToast(t('relinkDone'), null, 'success');
 }
 
 function showProcessingErrorDetails() {
