@@ -162,13 +162,21 @@ def cancel_waiting(meeting_id: int) -> bool:
 
     update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Обработка отменена", error_message="")
     _publish_queue_changed()
+    # exports that waited for its end are settled now, as at the end of a job
+    threading.Thread(target=_run_pending_exports, args=(meeting_id,), daemon=True).start()
     return True
 
 
 def _skip_dropped(meeting_id: int) -> bool:
+    """True: this run was cancelled while it waited. Otherwise the job is marked begun in the same step
+    (started_at), so a cancel coming now is an ordinary one, of a running job: one that came between the
+    check and the start ran the job anyway and left the count to skip its next run."""
     with _jobs_lock:
         n = _dropped.get(meeting_id, 0)
         if not n:
+            for q in _queue:
+                if q["id"] == meeting_id and q["kind"] == "transcribe":
+                    q["started_at"] = q.get("started_at") or time.time()
             return False
         if n == 1:
             _dropped.pop(meeting_id)
