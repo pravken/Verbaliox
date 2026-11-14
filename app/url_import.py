@@ -27,11 +27,16 @@ class _Cancelled(Exception):
 
 
 def cancel(meeting_id: int) -> bool:
-    """Stops the download of this recording; False when none runs."""
+    """Stops the download of this recording (a playlist's video still waiting: it is not downloaded);
+    False when none runs."""
     ev = _cancel.get(meeting_id)
     if ev is None:
         return False
     ev.set()
+    if meeting_id in _waiting:  # said at once, not when its turn comes
+        from app.database import update_meeting_progress
+
+        update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Скачивание отменено", error_message="")
     return True
 
 
@@ -165,28 +170,31 @@ def _download(meeting_id: int, url: str, playlist: bool = False) -> None:
         ids = _make_playlist(meeting_id, items, stop)
         total = len(ids)
         for i, (mid, (entry_url, _title)) in enumerate(zip(ids, items["entries"])):
-            if stop.is_set():  # «Отменить» on any of them stops the whole playlist
-                for rest in ids[i:]:
-                    if rest in _waiting or rest == mid:
-                        _waiting.discard(rest)
-                        update_meeting_progress(rest, status="cancelled", progress=0, stage_text="Скачивание отменено",
-                                                error_message="")
-                break
-            if i and mid not in _waiting:  # deleted while it waited
+            # Each video has its own cancel: «Отменить» or deleting one leaves the others
+            own = _cancel.get(mid) if i else stop
+            if i and (mid not in _waiting or own is None):  # deleted while it waited
                 continue
             _waiting.discard(mid)
+            if own.is_set():
+                update_meeting_progress(mid, status="cancelled", progress=0, stage_text="Скачивание отменено",
+                                        error_message="")
+                _cancel.pop(mid, None)
+                continue
             update_meeting_progress(mid, status="downloading", progress=1,
                                     stage_text=f"Скачивание по ссылке… ({i + 1} из {total})")
-            _download_one(mid, entry_url, stop)
+            try:
+                _download_one(mid, entry_url, own)
+            finally:
+                _cancel.pop(mid, None)  # done: «Повторить» of this one need not wait for the playlist
     finally:
         for mid in ids:
-            _cancel.pop(mid, None)
             _waiting.discard(mid)
+        _cancel.pop(meeting_id, None)
 
 
 def _make_playlist(meeting_id: int, items: Dict[str, Any], stop: threading.Event) -> list:
     """The folder of the playlist and a recording for each of its videos (the first is the one made
-    already); all of them share one cancel. Their ids, in the playlist's order."""
+    already), each with its own cancel. Their ids, in the playlist's order."""
     from app.database import (create_folder, create_meeting, get_meeting, set_meeting_folder, set_meeting_processing,
                               update_meeting_fields, update_meeting_progress)
 
@@ -196,7 +204,7 @@ def _make_playlist(meeting_id: int, items: Dict[str, Any], stop: threading.Event
     ids = [meeting_id]
     entries = items["entries"]
     if entries[0][1]:
-        update_meeting_fields(meeting_id, title=entries[0][1], filename=entries[0][0][:300])
+        update_meeting_fields(meeting_id, title=entries[0][1], title_is_default=False)
     for n, (entry_url, title) in enumerate(entries[1:], start=2):
         m = create_meeting(title=title or f"{items['title'] or 'Видео'} {n}", filename=entry_url[:300], media_path="",
                            language=first.get("language") or "auto", model_name=first.get("model_name") or "",
@@ -206,7 +214,7 @@ def _make_playlist(meeting_id: int, items: Dict[str, Any], stop: threading.Event
             set_meeting_processing(m["id"], first["processing"])
         update_meeting_progress(m["id"], status="downloading", progress=0,
                                 stage_text=f"Ждёт скачивания ({n} из {len(entries)})")
-        _cancel[m["id"]] = stop
+        _cancel[m["id"]] = threading.Event()
         _waiting.add(m["id"])
         ids.append(m["id"])
     print(f"[url] playlist «{items['title']}»: {len(ids)} video(s) into folder {folder['id']}", flush=True)
@@ -277,7 +285,7 @@ def _download_one(meeting_id: int, url: str, stop: threading.Event) -> None:
             return
         title = str((info or {}).get("title") or "").strip()[:300]
         date = str((info or {}).get("upload_date") or "")
-        if title:
+        if title and (get_meeting(meeting_id) or {}).get("title_is_default", True):  # a title from the playlist stays
             update_meeting_fields(meeting_id, title=title)
         from app.database import _db_lock, get_connection
 
