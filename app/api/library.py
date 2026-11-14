@@ -405,6 +405,25 @@ class UrlImportPayload(BaseModel):
     model_name: str = ""
     num_speakers: int = 0
     processing: Optional[Dict[str, bool]] = None
+    playlist: bool = False  # a playlist or a channel: every video, each a recording, in a folder of its own
+
+
+class UrlProbePayload(BaseModel):
+    url: str
+
+
+@router.post("/api/meetings/url/probe")
+def api_probe_url(payload: UrlProbePayload) -> Dict[str, Any]:
+    """Whether a link is a playlist (and how long), asked before its import."""
+    from app import url_import
+
+    try:
+        return url_import.probe(payload.url.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:  # yt-dlp could not be installed
+        raise HTTPException(status_code=503, detail=str(e)[:300])
+
 
 @router.post("/api/meetings/url")
 def api_import_url(payload: UrlImportPayload) -> Dict[str, Any]:
@@ -415,7 +434,8 @@ def api_import_url(payload: UrlImportPayload) -> Dict[str, Any]:
     settings = get_all_settings()
     try:
         m = url_import.start(payload.url.strip(), payload.model_name or speech_route.default_choice(settings),
-                             payload.language or "auto", max(0, min(20, int(payload.num_speakers or 0))))
+                             payload.language or "auto", max(0, min(20, int(payload.num_speakers or 0))),
+                             playlist=payload.playlist)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     # The download takes a while: the choice is stored long before the transcription reads it
@@ -769,7 +789,7 @@ def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports:
         raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся — удалите её через минуту.")
     from app import url_import
 
-    url_import.cancel(meeting_id)  # a download of it stops and its file is removed
+    url_import.drop(meeting_id)  # a download of it stops and its file is removed
     ok = delete_meeting(meeting_id, with_source=with_source, with_exports=with_exports, with_note=with_note)
     if not ok:
         raise HTTPException(status_code=404, detail="Встреча не найдена")

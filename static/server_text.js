@@ -314,6 +314,8 @@ const SERVER_PATTERNS_EN = [
   ["{}: адрес в интернете должен начинаться с https://", "{0}: an internet address must start with https://"],
   ["{}: нужен адрес вида http(s)://сервер[:порт]", "{0}: an address like http(s)://server[:port] is needed"],
   ["Не удалось извлечь звук: {}", "Could not extract the sound: {0}"],
+  ["Скачивание по ссылке… ({} из {})", "Downloading from the link… ({0} of {1})"],
+  ["Ждёт скачивания ({} из {})", "Waiting to download ({0} of {1})"],
   ["Файл «{}» пустой", "The file «{0}» is empty"],
   ["Перевод ({}) готов: {} реплик, модель {}", "Translation ({0}) ready: {1} lines, model {2}"],
   ["Распознавание речи — {} (обычный режим)", "Transcribing — {0} (standard mode)"],
