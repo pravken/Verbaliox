@@ -608,14 +608,27 @@ function formatTime(sec) {
 }
 
 // --- Modals & Menus ---
-// Settings are split into tabs; the last one is remembered
-const SETTINGS_TABS = ['general', 'record', 'recognition', 'models', 'analysis', 'calendar', 'hotkeys', 'dictionary',
-  'export', 'privacy', 'updates', 'dub', 'bench', 'about'];
+// Settings are split into tabs; the last one is remembered. A tab holds one or more sections
+// ([data-stab]): the sections of the former tabs are listed in SETTINGS_SECTION_TAB, and their old
+// names (openModal('settings', 'hotkeys'), "settings:hotkeys" of a notification, #settings/models)
+// open the tab and scroll to the section
+const SETTINGS_TABS = ['general', 'record', 'recognition', 'analysis', 'export', 'privacy', 'advanced'];
+const SETTINGS_SECTION_TAB = {
+  updates: 'general', about: 'general',
+  hotkeys: 'record', calendar: 'record',
+  models: 'recognition', dictionary: 'recognition',
+  bench: 'advanced', dub: 'advanced',
+};
 const SETTINGS_TAB_ALIASES = { integrations: 'export', interface: 'general', ui: 'general', ai: 'analysis', dict: 'dictionary', recog: 'recognition' };
+function settingsTabOf(section) {
+  return SETTINGS_SECTION_TAB[section] || section;
+}
 function selectSettingsTab(name) {
   name = SETTINGS_TAB_ALIASES[name] || name;
+  const section = SETTINGS_SECTION_TAB[name] ? name : null;  // a section inside a tab: scrolled to
+  name = settingsTabOf(name);
   if (!SETTINGS_TABS.includes(name)) name = 'general';
-  document.querySelectorAll('#modal-settings [data-stab]').forEach(el => el.classList.toggle('hidden', el.dataset.stab !== name));
+  document.querySelectorAll('#modal-settings [data-stab]').forEach(el => el.classList.toggle('hidden', settingsTabOf(el.dataset.stab) !== name));
   SETTINGS_TABS.forEach(k => {
     const btn = document.getElementById(`stab-${k}`);
     if (!btn) return;
@@ -624,8 +637,17 @@ function selectSettingsTab(name) {
   });
   document.getElementById('modal-settings').dataset.tab = name;
   try { localStorage.setItem('verbaliox_settings_tab', name); } catch (e) {}
-  if (name === 'bench' && typeof loadBench === 'function') loadBench();
+  if (name === 'advanced' && typeof loadBench === 'function') loadBench();
   if (typeof onSettingsTabShown === 'function') onSettingsTabShown(name);  // static/js/settings.js
+  if (section) scrollToSettingsSection(section);
+}
+
+function scrollToSettingsSection(section) {
+  const el = document.querySelector(`#modal-settings [data-stab="${section}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'start' });
+  // once more after the layout: the page may have just been mounted or shown
+  requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
 }
 
 // Keyboard: an opened window takes the focus, Tab stays inside the top one, and the focus goes back
