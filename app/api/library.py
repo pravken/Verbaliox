@@ -268,6 +268,9 @@ def api_bench(choices: bool = False) -> Dict[str, Any]:
 def api_bench_start(payload: BenchPayload) -> Dict[str, Any]:
     from app import bench
 
+    if payload.kind == "asr":  # only models of the catalog, as everywhere else
+        for name in payload.models:
+            _check_model(name)
     try:
         return bench.start(payload.kind, payload.meeting_id, payload.models, payload.clip_sec)
     except ValueError as e:

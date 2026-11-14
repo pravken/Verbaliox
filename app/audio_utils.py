@@ -115,10 +115,11 @@ def extract_audio_16k_mono(
 
 # What FFmpeg says, in words the user can act on; the rest is its last line, not its banner
 _FFMPEG_REASONS = (
+    # before «Invalid argument»: a video without sound says both
+    (("does not contain any stream", "Output file does not contain", "matches no streams"), "в файле нет звуковой дорожки"),
     (("Invalid data found", "moov atom not found", "Invalid argument", "could not find codec",
       "Failed to read frame size", "End of file"), "файл повреждён или это не звук и не видео"),
     (("No such file", "does not exist"), "файл не найден — его переместили или удалили?"),
-    (("does not contain any stream", "Output file does not contain", "matches no streams"), "в файле нет звуковой дорожки"),
     (("Permission denied",), "нет доступа к файлу"),
 )
 
