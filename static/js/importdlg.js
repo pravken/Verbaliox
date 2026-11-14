@@ -327,6 +327,20 @@ function impOnModel() {
 }
 
 // --- Start: each file with the chosen processing; the window stays open on an error ---
+// A link to a playlist or a channel: all its videos (each a recording, in a folder of its own) or the
+// first one. Asked only when the site says it is a list of several videos
+async function impAskPlaylist(url) {
+  const res = await fetch('/api/meetings/url/probe', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+  }).catch(() => null);
+  const info = res && res.ok ? await readJson(res) : null;
+  if (!info || !info.playlist) return false;
+  const name = info.title || url;
+  return confirmDialog(t('impPlaylistTitle').replace('{name}', () => name),
+    t('impPlaylistText').replace('{n}', () => plural(info.count, t('impVideoForms'))).replace('{name}', () => name),
+    `${t('impPlaylistAll')} (${info.count})`, false, { cancel: t('impPlaylistFirst') });
+}
+
 // «Recognize»: the window closes at once. Links and paths are only a request each; files go to the
 // library in the background with their progress in a notice (a large video takes a while to copy)
 async function impSubmit() {
@@ -347,9 +361,10 @@ async function impSubmit() {
   try {
     for (const x of imp.items.filter(i => i.kind !== 'file')) {
       const link = x.kind === 'link';
+      const playlist = link ? await impAskPlaylist(x.url) : false;
       const res = await fetch(link ? '/api/meetings/url' : '/api/meetings/local-path', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(link ? { url: x.url } : { path: x.path }), model_name: model, language, num_speakers: speakers, processing }),
+        body: JSON.stringify({ ...(link ? { url: x.url, playlist } : { path: x.path }), model_name: model, language, num_speakers: speakers, processing }),
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(serverText(data.detail) || `HTTP ${res.status}`);
