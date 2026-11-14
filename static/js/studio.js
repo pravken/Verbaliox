@@ -158,7 +158,8 @@ const REC_SRC_ICONS = {
 const recSrc = { mic: { on: false, lv: 0, at: 0, used: false }, sys: { on: false, lv: 0, at: 0, used: false } };
 
 function recSourcesStart(mic, sys) {
-  for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: 0 });
+  for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: performance.now() });
+  recSrc.sys.warned = false;
   document.querySelectorAll('[data-rec-src]').forEach(box => {
     box.innerHTML = ['mic', 'sys'].filter(k => recSrc[k].used).map(k =>
       `<span class="rec-src-item" data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
@@ -184,7 +185,21 @@ function recSourcesUpdate(levels) {
     if (db > -44) s.at = now;
     s.on = now - s.at < 700;
   }
+  recSilenceWatch(now);
   recSourcesRender();
+}
+
+// A call is on, and the computer's sound stays silent: the call plays on another device than the one
+// recorded, or the sound is off. Said at once, not found out after the meeting (once a recording)
+const REC_SYS_SILENT_MS = 60000;
+function recSilenceWatch(now) {
+  const s = recSrc.sys;
+  if (!s.used || s.warned || !isRecording()) return;
+  const inCall = !!(state.callRecording || (typeof meetingFollow !== 'undefined' && meetingFollow.base));
+  if (inCall && now - s.at > REC_SYS_SILENT_MS) {
+    s.warned = true;
+    showError(t('recSysSilent'));
+  }
 }
 
 function recSourcesRender() {
