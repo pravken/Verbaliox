@@ -158,6 +158,7 @@ def init_db() -> None:
             "compute_type": hw["recommended_compute_type"],
             "language": "auto",
             "diarization_enabled": "true",
+            "diarizer_engine": "ecapa",  # "nemotron": Nemotron 3 Diarization, downloaded on request (app/nemotron_diar.py)
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "ollama_url": "http://localhost:11434",

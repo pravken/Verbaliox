@@ -265,6 +265,109 @@ def _group_voices(embs: np.ndarray, durs: np.ndarray, k: int, min_dur: float, ro
     return None
 
 
+def _turn_speaker(start: float, end: float, turns: List[Tuple[float, float, int]], min_share: float = 0.3) -> Optional[int]:
+    """The speaker of Nemotron's turns (start, end, speaker) who covers most of start..end, if they cover
+    at least `min_share` of it; None when the span is mostly unmarked (Nemotron leaves short or quiet
+    speech out: 23 % of the speech on AMI)."""
+    span = max(end - start, 0.05)
+    covered: Dict[int, float] = {}
+    for t0, t1, spk in turns:
+        if t1 <= start or t0 >= end:
+            continue
+        covered[spk] = covered.get(spk, 0.0) + min(t1, end) - max(t0, start)
+    if not covered:
+        return None
+    spk, sec = max(covered.items(), key=lambda kv: kv[1])
+    return spk if sec >= min_share * span else None
+
+
+def _split_by_turns(segments: List[Dict[str, Any]], turns: List[Tuple[float, float, int]]) -> List[Dict[str, Any]]:
+    """A phrase whose words Nemotron gives to two people is cut where the speaker changes (a quick
+    «да» of another person inside someone's phrase); a word nobody covers stays with the one before."""
+    out: List[Dict[str, Any]] = []
+    for seg in segments:
+        words = seg.get("words") or []
+        if len(words) < 2 or seg.get("keep_whole"):
+            out.append(seg)
+            continue
+        owners: List[Optional[int]] = [_turn_speaker(float(w["start"]), float(w["end"]), turns, 0.01) for w in words]
+        last = next((o for o in owners if o is not None), None)
+        for i, o in enumerate(owners):
+            owners[i] = last = (o if o is not None else last)
+        if len(set(owners)) <= 1:
+            out.append(seg)
+            continue
+        extra = {k: v for k, v in seg.items() if k not in ("start", "end", "text", "words", "id", "speaker")}
+        run = [words[0]]
+        for w, prev_o, o in zip(words[1:], owners[:-1], owners[1:]):
+            if o != prev_o:
+                out.append(_words_piece(extra, run))
+                run = []
+            run.append(w)
+        out.append(_words_piece(extra, run))
+    return [p for p in out if str(p.get("text") or "").strip() or not p.get("words")]
+
+
+def _words_piece(extra: Dict[str, Any], words: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {**extra, "start": round(float(words[0]["start"]), 2), "end": round(float(words[-1]["end"]), 2),
+            "text": "".join(w["word"] for w in words).strip(), "words": words}
+
+
+def _labels_from_turns(
+    segments: List[Dict[str, Any]],
+    valid_indices: List[int],
+    embeddings: Optional[np.ndarray],
+    durations: np.ndarray,
+    turns: List[Tuple[float, float, int]],
+    num_speakers_hint: int = 0,
+) -> List[int]:
+    """A speaker for every phrase from Nemotron's turns. A phrase it left unmarked goes to the closest
+    voice (ECAPA, the centroid of the phrases it did mark for each person), or to the phrase next to it
+    when it has no voice print either. A count said is the most there are: the people heard least are
+    taken apart as with ECAPA (_fold_least_heard). Numbered in the order they first speak."""
+    n = len(segments)
+    by_turn: List[Optional[int]] = [_turn_speaker(float(s["start"]), float(s["end"]), turns) for s in segments]
+    pos_of = {seg_idx: pos for pos, seg_idx in enumerate(valid_indices)}
+    if embeddings is not None and len(embeddings):
+        known = [(pos_of[i], by_turn[i]) for i in range(n) if i in pos_of and by_turn[i] is not None]
+        spks = sorted({spk for _, spk in known})
+        if spks:
+            cents = []
+            for spk in spks:
+                rows = [p for p, sp in known if sp == spk]
+                w = np.clip(durations[rows], 0.5, 10.0)[:, None]
+                c = np.sum(embeddings[rows] * w, axis=0)
+                cents.append(c / max(float(np.linalg.norm(c)), 1e-8))
+            cents_arr = np.vstack(cents)
+            for i in range(n):
+                if by_turn[i] is None and i in pos_of:
+                    by_turn[i] = spks[int(np.argmax(cents_arr @ embeddings[pos_of[i]]))]
+    marked = [i for i in range(n) if by_turn[i] is not None]
+    if not marked:
+        return [0] * n
+    for i in range(n):  # no voice print and no turn: the speaker of the closest marked phrase
+        if by_turn[i] is None:
+            by_turn[i] = by_turn[min(marked, key=lambda m: abs(m - i))]
+    labels = np.array(by_turn, dtype=int)
+    if num_speakers_hint > 1 and len(set(labels.tolist())) > num_speakers_hint and embeddings is not None and len(valid_indices):
+        rows = np.array(valid_indices)
+        folded = _fold_least_heard(embeddings, durations, labels[rows], num_speakers_hint)
+        # the folded numbers are by first appearance among the phrases with a voice print: map back
+        remap: Dict[int, int] = {}
+        for old, new in zip(labels[rows].tolist(), folded.tolist()):
+            remap.setdefault(old, new)
+        heard = {int(v): float(np.sum(durations[labels[rows] == v])) for v in set(labels[rows].tolist())}
+        for v in set(labels.tolist()) - set(remap):  # a speaker without voice prints: the most heard one
+            remap[v] = remap[max(heard, key=heard.get)] if heard else 0
+        labels = np.array([remap[int(v)] for v in labels], dtype=int)
+    order: Dict[int, int] = {}
+    out = []
+    for v in labels.tolist():
+        order.setdefault(int(v), len(order))
+        out.append(order[int(v)])
+    return out
+
+
 def _fold_least_heard(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
     """Fewer groups than Auto found, as many as said: the group heard least is taken apart, each of its
     phrases going to the closest remaining voice (duration-weighted centroids), until k are left;
@@ -500,6 +603,30 @@ def diarize_and_merge_segments(
 
     fine_segments = _split_segments_by_word_pauses(raw_segments)
 
+    # Nemotron 3 Diarization, when chosen in the settings: who speaks when for the whole recording
+    # (app/nemotron_diar.py). ECAPA below still makes the voice prints. Any failure: ECAPA alone.
+    turns: Optional[List[Tuple[float, float, int]]] = None
+    if num_speakers_hint != 1:
+        from app import nemotron_diar
+
+        if nemotron_diar.usable():
+            if progress_callback:
+                progress_callback(70, "Разметка «кто когда говорит» (Nemotron)...")
+            try:
+                turns = nemotron_diar.turns(wav_path, device=device) or None
+                if turns:
+                    found = len({t[2] for t in turns})
+                    print(f"[diarizer] Nemotron: {found} speaker(s), {len(turns)} turns", flush=True)
+                    fine_segments = _split_by_turns(fine_segments, turns)
+                else:
+                    print("[diarizer] Nemotron marked no speech: ECAPA groups the voices", flush=True)
+            except Exception as e:
+                if type(e).__name__ == "JobCancelled":
+                    raise
+                print(f"[diarizer] Nemotron failed ({str(e).splitlines()[0][:200] if str(e) else type(e).__name__}): "
+                      "ECAPA groups the voices", flush=True)
+                turns = None
+
     if progress_callback:
         progress_callback(72, "Загрузка голосовой модели ECAPA-TDNN (без токенов)...")
 
@@ -543,7 +670,12 @@ def diarize_and_merge_segments(
 
     speaker_assignments = [0] * len(fine_segments)
 
-    if len(embeddings_list) >= 2:
+    if turns:
+        embs_arr = np.vstack(embeddings_list) if embeddings_list else None
+        durs_arr = np.array(durations_list, dtype=np.float32)
+        speaker_assignments = _labels_from_turns(fine_segments, valid_indices, embs_arr, durs_arr, turns,
+                                                 num_speakers_hint=num_speakers_hint)
+    elif len(embeddings_list) >= 2:
         embs_arr = np.vstack(embeddings_list)
         durs_arr = np.array(durations_list, dtype=np.float32)
         labels = _determine_clusters(embs_arr, durs_arr, num_speakers_hint=num_speakers_hint)

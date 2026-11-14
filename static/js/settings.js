@@ -197,6 +197,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     loadBackupInfo();
     loadOrphans();
     loadOnnxGpu();
+    loadNemotron();
     document.getElementById('calendar-status').textContent = '';
     await fillCallSettings(s);  // before the baseline: its lists are filled after a request
     fillWorkdaySettings(s);
@@ -1431,6 +1432,56 @@ async function removeOnnxGpu() {
   const data = await fetch('/api/onnx-gpu/remove', { method: 'POST' }).then(r => r.json()).catch(() => null);
   document.getElementById('set-onnx-gpu').checked = false;
   if (data) renderOnnxGpu(data);
+}
+
+// --- Nemotron 3 Diarization (app/nemotron_diar.py): who speaks when, downloaded on request ---
+let _nemotronTimer = null;
+
+function renderNemotron(st) {
+  const label = document.getElementById('nemotron-status');
+  if (!label) return;
+  document.getElementById('set-nemotron').checked = !!st.chosen;
+  document.getElementById('set-nemotron').disabled = !st.library && !st.chosen;  // nothing to run it with
+  label.className = 'text-[11.5px] ' + (st.error ? 'text-apple-amber' : st.installed && st.chosen ? 'text-apple-green' : 'text-apple-secondary');
+  label.textContent = st.installing ? t('nemotronInstalling')
+    : st.error ? serverText(st.error)
+    : !st.library ? t('nemotronNoLibrary')
+    : st.installed ? (st.chosen ? t('nemotronActive') : t('nemotronInstalled')).replace('{mb}', () => st.disk_mb)
+    : t('nemotronMissing');
+  document.getElementById('nemotron-install').classList.toggle('hidden', st.installed || st.installing || !st.library);
+  document.getElementById('nemotron-remove').classList.toggle('hidden', !st.installed || st.installing);
+  clearTimeout(_nemotronTimer);
+  if (st.installing) _nemotronTimer = setTimeout(loadNemotron, 2000);
+}
+
+async function loadNemotron() {
+  const st = await fetch('/api/nemotron').then(r => r.json()).catch(() => null);
+  if (st) renderNemotron(st);
+}
+
+async function installNemotron() {
+  const res = await fetch('/api/nemotron/install', { method: 'POST' });
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); return; }
+  renderNemotron(data);
+}
+
+// The switch: on downloads the model when it is not there yet, off goes back to ECAPA (the model stays)
+async function toggleNemotron() {
+  const on = document.getElementById('set-nemotron').checked;
+  const st = await fetch('/api/nemotron').then(r => r.json()).catch(() => null);
+  if (on && st && !st.installed && st.library) { installNemotron(); return; }
+  const res = await fetch('/api/nemotron/choose', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ on }) });
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); return; }
+  renderNemotron(data);
+}
+
+async function removeNemotron() {
+  if (!await askConfirm(t('nemotronRemoveConfirm'), true, t('cfDeleteFiles'))) return;
+  const data = await fetch('/api/nemotron/remove', { method: 'POST' }).then(r => r.json()).catch(() => null);
+  if (data) renderNemotron(data);
 }
 
 // --- The user's calendar (app/calendar_ics.py; "outlook": app/calendar_outlook.py) ---
