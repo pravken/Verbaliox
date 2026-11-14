@@ -3,6 +3,8 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "Скачивается более новая версия — установите её, когда она загрузится": "A newer version is being downloaded: install it once it is done",
+  "Архив обновления изменился после проверки — обновление отменено": "The update archive changed after it was checked: the update is cancelled",
   "Этот файл уже есть в медиатеке": "This file is already in the library",
   "Эти файлы уже есть в медиатеке": "These files are already in the library",
   "файл повреждён или это не звук и не видео": "the file is damaged, or it is not sound or video",
