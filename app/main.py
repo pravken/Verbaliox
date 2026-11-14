@@ -340,7 +340,10 @@ def api_get_meeting(meeting_id: int) -> Dict[str, Any]:
     m = get_meeting(meeting_id)
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
-    return {**m, "local_only_effective": is_local_only(m)}
+    path = m.get("media_path") or ""
+    # The file was moved or its disk is not there: the page offers «Указать файл…»
+    missing = bool(path) and not m.get("media_removed") and m.get("status") != "mixing" and not Path(path).is_file()
+    return {**m, "local_only_effective": is_local_only(m), "media_missing": missing}
 
 
 def _recordings_dir() -> Path:

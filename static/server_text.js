@@ -3,6 +3,7 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "Укажите путь к файлу": "Give the path to the file",
   "Скачивается более новая версия — установите её, когда она загрузится": "A newer version is being downloaded: install it once it is done",
   "Архив обновления изменился после проверки — обновление отменено": "The update archive changed after it was checked: the update is cancelled",
   "Этот файл уже есть в медиатеке": "This file is already in the library",
@@ -316,6 +317,7 @@ const SERVER_PATTERNS_EN = [
   ["{}: адрес в интернете должен начинаться с https://", "{0}: an internet address must start with https://"],
   ["{}: нужен адрес вида http(s)://сервер[:порт]", "{0}: an address like http(s)://server[:port] is needed"],
   ["Не удалось извлечь звук: {}", "Could not extract the sound: {0}"],
+  ["Длина файла {} мин {} с, а у записи {} мин {} с. Это тот же файл?", "The file is {0} min {1} s long, the recording {2} min {3} s. Is it the same file?"],
   ["Скачивание по ссылке… ({} из {})", "Downloading from the link… ({0} of {1})"],
   ["Ждёт скачивания ({} из {})", "Waiting to download ({0} of {1})"],
   ["Файл «{}» пустой", "The file «{0}» is empty"],

@@ -1187,6 +1187,16 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
     events.publish({"type": "list"})
 
 
+def relink_media(meeting_id: int, path: str) -> None:
+    """The recording's file is now at `path` (it was moved; «Указать файл…»)."""
+    with _db_lock:
+        conn = get_connection()
+        conn.execute("UPDATE meetings SET media_path = ?, filename = ? WHERE id = ?", (path, Path(path).name, meeting_id))
+        conn.commit()
+        conn.close()
+    events.publish({"type": "list"})
+
+
 _DUB_PATH_KEYS = ("path", "srt_path")
 
 
