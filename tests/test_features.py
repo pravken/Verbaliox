@@ -302,13 +302,65 @@ class OnnxAsrTest(unittest.TestCase):
 
 
 class ThinkingModelTest(unittest.TestCase):
+    def setUp(self):
+        from app import llm_text
+
+        llm_text._can_think.clear()
+        self.addCleanup(llm_text._can_think.clear)
+
     def test_qwen3_does_not_think_aloud(self):
+        from unittest import mock
+
+        from app import llm_text
         from app.llm_text import strip_think, thinking_off
 
-        self.assertEqual(thinking_off("qwen3:8b"), {"think": False})
-        self.assertEqual(thinking_off("qwen2.5:7b"), {})
+        with mock.patch.object(llm_text, "_ask_ollama", return_value=None):  # Ollama not running
+            self.assertEqual(thinking_off("qwen3:8b"), {"think": False})
+            self.assertEqual(thinking_off("qwen2.5:7b"), {})
         self.assertEqual(strip_think("<think>hmm, let me see</think>\nОтвет"), "Ответ")
         self.assertEqual(strip_think("<think>cut off in the middle"), "")
+
+    def test_what_ollama_says_decides_and_is_asked_once(self):
+        from unittest import mock
+
+        from app import llm_text
+        from app.llm_text import thinking_off
+
+        said = {"hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M": True, "my-tuned:latest": True, "qwen3-like:1b": False,
+                "gpt-oss:20b": True, "gemma4:e4b": True}
+        with mock.patch.object(llm_text, "_ask_ollama", side_effect=lambda m: said[m]) as ask:
+            self.assertEqual(thinking_off("hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M"), {"think": False})
+            self.assertEqual(thinking_off("my-tuned:latest"), {"think": False})  # any name that can think
+            self.assertEqual(thinking_off("qwen3-like:1b"), {})  # cannot think: nothing is sent
+            self.assertEqual(thinking_off("gpt-oss:20b"), {"think": "low"})  # cannot stop, thinks less
+            # gemma4 thinks while it analyses a meeting (twice the tasks), not while it translates
+            self.assertEqual(thinking_off("gemma4:e4b", analysis=True), {})
+            self.assertEqual(thinking_off("gemma4:e4b"), {"think": False})
+            thinking_off("my-tuned:latest")
+            self.assertEqual(ask.call_count, 5)
+
+    def test_capabilities_are_read_from_api_show(self):
+        from unittest import mock
+
+        from app import llm_text
+
+        class Resp:
+            status_code = 200
+
+            def __init__(self, caps):
+                self._caps = caps
+
+            def json(self):
+                return {"capabilities": self._caps}
+
+        with mock.patch("httpx.post", return_value=Resp(["completion", "thinking"])) as post:
+            self.assertTrue(llm_text._ask_ollama("qwen3:8b"))
+            self.assertEqual(post.call_args.kwargs["json"], {"model": "qwen3:8b"})
+            self.assertTrue(post.call_args.args[0].endswith("/api/show"))
+        with mock.patch("httpx.post", return_value=Resp(["completion"])):
+            self.assertFalse(llm_text._ask_ollama("qwen2.5:7b"))
+        with mock.patch("httpx.post", side_effect=OSError("refused")):
+            self.assertIsNone(llm_text._ask_ollama("qwen3:8b"))
 
 
 class AnalyticsTest(unittest.TestCase):

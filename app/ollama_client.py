@@ -846,7 +846,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
         payload["keep_alive"] = keep_alive  # Ollama frees the model after the same idle time
     from app.llm_text import strip_think, thinking_off
 
-    payload.update(thinking_off(model))
+    payload.update(thinking_off(model, analysis=True))
     from app import cancel_scope
 
     try:  # one model in memory at a time: the idle speech models and another analysis model go first
