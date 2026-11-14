@@ -25,6 +25,15 @@ _SYSTEM = (
     "«сделаю», «подготовлю к пятнице», «Иван, отправь отчёт», «договорились, что Пётр займётся». "
     "НЕ задачи: обсуждение и мнения, рассказ о том, что человек делает сейчас или уже сделал, идеи и предложения, "
     "с которыми не согласились, общие планы без конкретного действия, вопросы, пересказ фактов. "
+    "Особенно НЕ задачи — действия во время самой встречи, которые делаются тут же: показать или пошарить экран, "
+    "включить или выключить микрофон или камеру, «скину ссылку в чат», «сейчас открою», «дай я покажу», "
+    "«перезайду», «запишу встречу», «подожди секунду», «дайте слово Анне». Задача — то, что нужно сделать ПОСЛЕ встречи.\n"
+    "Примеры. «Сейчас пошарю экран, покажу отчёт» — не задача. «Скину ссылку в чат» — не задача. "
+    "«Я сейчас открою таблицу» — не задача. «Мы обсуждали, что можно бы сменить подрядчика» — не задача. "
+    "«Отчёт я уже отправил вчера» — не задача. "
+    "«Я подготовлю отчёт к пятнице» — задача (кто: говорящий, срок: пятница). "
+    "«Ольга, пришли договор юристам после встречи» — задача (кто: Ольга). "
+    "«Договорились, что маркетинг обновит презентацию до конца месяца» — задача (кто: маркетинг, kind: team).\n"
     "Одна задача — одно действие; одно и то же не повторяй. "
     "Если сомневаешься, задача ли это, — не включай. Не придумывай. Ответ — только строки JSON, по одному объекту "
     'на строку, без пояснений: {"who": "кто сделает", "kind": "кто это", "to": "для кого (или пусто)", '
@@ -38,13 +47,37 @@ _SYSTEM = (
 # and says whether someone really took it on or was given it
 _CHECK = (
     "Тебе дан список возможных задач из расшифровки встречи, у каждой — номер, слова из записи и реплики рядом. "
-    "Для каждой реши: это задача, то есть кто-то явно взялся сделать конкретное действие или ему это поручили "
-    "(«сделаю», «подготовлю к пятнице», «Иван, отправь», «договорились, что Пётр займётся»)? "
-    "НЕ задача: обсуждение, мнение, рассказ о том, что человек делает сейчас или уже сделал, предложение, "
+    "Для каждой реши: это задача, которую нужно сделать ПОСЛЕ встречи, то есть кто-то явно взялся сделать "
+    "конкретное действие или ему это поручили («сделаю», «подготовлю к пятнице», «Иван, отправь», «договорились, "
+    "что Пётр займётся»)? "
+    "НЕ задача: действие во время самой встречи (показать экран, включить микрофон, скинуть ссылку в чат, открыть "
+    "файл, «сейчас покажу»), особенно если по репликам рядом видно, что оно сделано тут же («вижу экран», «да, "
+    "пришло»); обсуждение, мнение, рассказ о том, что человек делает сейчас или уже сделал, предложение, "
     "с которым не согласились, вопрос, пересказ факта, общий план без конкретного действия. "
     "Ответ — по строке на задачу, в виде «номер: да» или «номер: нет», без пояснений."
 )
 VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment go with it
+
+
+# What is done during the meeting itself, at once: «пошарю экран», «скину ссылку в чат». Such a line
+# without a due date and without «после встречи» / «завтра» is not a task, whatever the model said
+_IN_MEETING = re.compile(
+    r"(экран|демонстрац|расшар|пошар|шарю|шарить|микрофон|камер[уаые]\b|\bзвук\b|слышно|видно мен|\bв чат|в чатик|"
+    r"перезайд|переподключ|запиш\w* (встреч|созвон)|запись встречи|секунд|минутк|"
+    r"share (my |the )?screen|screen ?shar|\bunmute|\bmute\b|\bcamera\b|in the chat|rejoin)", re.I)
+_LATER = re.compile(
+    r"(после (встречи|созвона|звонка)|\bпозже|\bпотом\b|\bзавтра|\bдо конца|\bк (понедельник|вторник|сред|четверг|пятниц|"
+    r"суббот|воскресен|концу|\d)|after the (meeting|call)|\blater\b|\btomorrow|\bby (monday|tuesday|wednesday|thursday|"
+    r"friday|the end|end of|\d))", re.I)
+
+
+def in_meeting_action(item: Dict[str, Any]) -> bool:
+    """An action of the meeting itself (share the screen, turn the microphone on, a link in the chat),
+    not a task for after it."""
+    if (item.get("due") or "").strip():
+        return False
+    text = f"{item.get('what') or ''} {item.get('quote') or ''}"
+    return bool(_IN_MEETING.search(text)) and not _LATER.search(text)
 
 
 def _norm_what(t: str) -> str:
@@ -166,6 +199,10 @@ def _init() -> None:
             )"""
         )
         conn.execute("CREATE INDEX IF NOT EXISTS commitments_meeting ON commitments (meeting_id)")
+        # Tasks of the model the user deleted: they do not come back, and the latest teach the model
+        conn.execute("""CREATE TABLE IF NOT EXISTS commitments_dismissed (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id INTEGER NOT NULL, who TEXT NOT NULL DEFAULT '',
+                what TEXT NOT NULL, quote TEXT NOT NULL DEFAULT '', at REAL, created_at TEXT NOT NULL)""")
         # The tasks of the Tasks page (added later: an older library gets the columns empty).
         # meeting_id 0 is a task added by hand without a recording.
         have = {r["name"] for r in conn.execute("PRAGMA table_info(commitments)").fetchall()}
@@ -348,15 +385,19 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     except Exception:
         roster, fix_name_typos = [], None
     head = ("Участники встречи (имена и фамилии написаны верно, пиши их так же): " + "; ".join(roster) + "\n\n") if roster else ""
+    system = _SYSTEM + _dismissed_examples(cloud=llm.is_cloud)
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
-        found += parse_answer(llm.chat(_SYSTEM, head + "Расшифровка:\n" + part))
+        found += parse_answer(llm.chat(system, head + "Расшифровка:\n" + part))
     if roster and fix_name_typos:  # a name still written with a letter wrong: as in the roster
         for x in found:
             for k in ("who", "to_whom", "what"):
                 if isinstance(x.get(k), str):
                     x[k] = fix_name_typos(x[k], roster)
-    items = prune([x for x in found if supported(x, m)])
+    items = prune([x for x in found if supported(x, m) and not in_meeting_action(x)])
     items = verify(items, m, llm)  # a second look, task by task, with the lines around it
+    items = [x for x in items if not in_meeting_action(x)]
+    dismissed = _dismissed(meeting_id)
+    items = [x for x in items if not _was_dismissed(x, dismissed)]  # the user deleted it: it does not come back
     _init()
     now = datetime.now().isoformat(timespec="seconds")
     day, speaking = _meeting_day(m), {n.casefold() for n in participants(m)}
@@ -555,9 +596,17 @@ def update(task_id: int, changes: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def delete(task_id: int) -> bool:
+    """A task deleted. One the model found is remembered: found again in a new search it is left out, and
+    the latest ones deleted are shown to the model as what is not a task."""
     _init()
     with _db_lock:
         conn = get_connection()
+        row = conn.execute("SELECT meeting_id, who, what, quote, at, source FROM commitments WHERE id = ?",
+                           (int(task_id),)).fetchone()
+        if row and row["source"] != "manual" and row["meeting_id"]:
+            conn.execute("INSERT INTO commitments_dismissed (meeting_id, who, what, quote, at, created_at) VALUES (?,?,?,?,?,?)",
+                         (row["meeting_id"], row["who"], row["what"], row["quote"], row["at"],
+                          datetime.now().isoformat(timespec="seconds")))
         n = conn.execute("DELETE FROM commitments WHERE id = ?", (int(task_id),)).rowcount
         conn.commit()
         conn.close()
@@ -737,6 +786,39 @@ def set_status(commitment_id: int, status: str) -> None:
                      (status, datetime.now().isoformat(timespec="seconds") if status == "done" else "", commitment_id))
         conn.commit()
         conn.close()
+
+
+DISMISSED_EXAMPLES = 8  # the latest deleted tasks shown to the model
+
+
+def _dismissed(meeting_id: int) -> List[Dict[str, Any]]:
+    _init()
+    return _rows("SELECT who, what, quote, at FROM commitments_dismissed WHERE meeting_id = ?", (meeting_id,))
+
+
+def _was_dismissed(item: Dict[str, Any], dismissed: List[Dict[str, Any]]) -> bool:
+    quote = (item.get("quote") or "").strip().casefold()
+    return any((quote and quote == (d["quote"] or "").strip().casefold())
+               or _norm_what(item.get("what")) == _norm_what(d["what"])
+               or _same_task(item, d) for d in dismissed)
+
+
+def _dismissed_examples(cloud: bool = False) -> str:
+    """The tasks the user deleted lately, as the model's examples of what is not a task here (for a cloud
+    model, none of a recording kept to local analysis)."""
+    _init()
+    rows = _rows("SELECT meeting_id, what FROM commitments_dismissed ORDER BY id DESC LIMIT ?", (DISMISSED_EXAMPLES * 3,))
+    if cloud:
+        from app.database import local_only_ids
+
+        private = local_only_ids()
+        rows = [r for r in rows if r["meeting_id"] not in private]
+    rows = rows[:DISMISSED_EXAMPLES]
+    whats = [r["what"].strip()[:120] for r in rows if (r["what"] or "").strip()]
+    if not whats:
+        return ""
+    return ("\nЭтот пользователь раньше удалял такие найденные задачи как НЕ задачи — похожее не включай: "
+            + "; ".join(f"«{w}»" for w in whats) + ".")
 
 
 def delete_for_meeting(meeting_id: int) -> int:
