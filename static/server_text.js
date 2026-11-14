@@ -3,6 +3,8 @@
 // message missing here is shown as it is. tests/test_static_ui.py checks that every message of
 // app/ is here.
 const SERVER_TEXT_EN = {
+  "Этот файл уже есть в медиатеке": "This file is already in the library",
+  "Эти файлы уже есть в медиатеке": "These files are already in the library",
   "файл повреждён или это не звук и не видео": "the file is damaged, or it is not sound or video",
   "файл не найден — его переместили или удалили?": "the file is not found — was it moved or deleted?",
   "в файле нет звуковой дорожки": "the file has no sound track",

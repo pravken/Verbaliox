@@ -1639,6 +1639,14 @@ def delete_orphan_files() -> Dict[str, int]:
     return {"files": files, "bytes": freed}
 
 
+def _other_meetings_use(meeting_id: int, path: str) -> bool:
+    with _db_lock:
+        conn = get_connection()
+        row = conn.execute("SELECT 1 FROM meetings WHERE id != ? AND media_path = ? LIMIT 1", (meeting_id, path)).fetchone()
+        conn.close()
+    return row is not None
+
+
 def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: bool = False,
                    with_note: bool = False) -> bool:
     """with_source: the media file used in place (added by its path) is deleted too; with_exports: the
@@ -1654,7 +1662,8 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
             Path(p_str).unlink(missing_ok=True)
         except OSError as e:
             print(f"[delete] {p_str}: {e}", flush=True)
-    if with_source and meeting.get("source") == "local" and meeting.get("media_path"):
+    if with_source and meeting.get("source") == "local" and meeting.get("media_path") \
+            and not _other_meetings_use(meeting_id, meeting["media_path"]):  # another recording of the same file keeps it
         try:
             Path(meeting["media_path"]).unlink(missing_ok=True)
         except OSError as e:
