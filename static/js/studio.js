@@ -2325,7 +2325,8 @@ async function studioVoiceFilterState(st) {
   if (!st || !note || !btn) return;
   const dl = st.download || {};
   note.textContent = dl.active ? t('voiceFilterDownloading').replace('{p}', () => String(dl.progress || 0))
-    : st.installed ? t('stVoiceFilterHint') : t('voiceFilterMissing').replace('{size}', () => String(st.size_mb));
+    : !st.installed ? t('voiceFilterMissing').replace('{size}', () => String(st.size_mb))
+    : ((state.system && state.system.settings) || {}).rec_voice_filter === 'false' ? t('stVoiceFilterOff') : t('stVoiceFilterHint');
   btn.classList.toggle('hidden', !!st.installed || !!dl.active || !st.can_download);
 }
 
