@@ -408,9 +408,17 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
             delete_meeting(meeting_id)
             return
         set_recording_media(meeting_id, str(done["dest"]), bool(done["has_video"]))
-        for p in done.get("cleanup") or []:  # registered: the parts can go
-            Path(p).unlink(missing_ok=True)
-        rename_recording_file(meeting_id)  # "2026-10-20 Запись 14-05.m4a"; renamed again once titled
+        from app.database import delete_file
+
+        # The recording has its file now: a part still held open (an antivirus, the capture thread) is
+        # deleted at the next start, and a failed rename leaves the file under its first name. Neither
+        # is a reason to mark the recording failed and keep it from transcription
+        for p in done.get("cleanup") or []:
+            delete_file(str(p))
+        try:
+            rename_recording_file(meeting_id)  # "2026-10-20 Запись 14-05.m4a"; renamed again once titled
+        except Exception:
+            traceback.print_exc()
         update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
         enqueue_meeting_job(meeting_id)
     except Exception as e:
