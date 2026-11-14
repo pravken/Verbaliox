@@ -1732,6 +1732,16 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tk-who:hover { background: rgba(255, 255, 255, 0.07); }
 /* a long assignee («Отдел маркетинга и продаж (…)») is cut, the task's text keeps its room */
 .tk-who { max-width: 10rem; overflow: hidden; }
+/* a narrow window (or the summary open beside the list): who, when and where on a line of their own */
+@media (max-width: 1180px) {
+  .tk-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 4px; }
+  .tk-row .tk-check { order: 0; }
+  .tk-row .tk-row-main { order: 1; flex: 1 1 calc(100% - 80px); min-width: 0; }
+  .tk-row .tk-more { order: 2; }
+  .tk-row .tk-who { order: 3; margin-left: 26px; justify-self: auto; }
+  .tk-row .tk-due { order: 4; }
+  .tk-row .tk-from { order: 5; }
+}
 .tk-row-main { min-width: 9rem; }
 .tk-who-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tk-who-name.tk-dim { color: var(--hc-dim, #8E8E93); }

@@ -17,7 +17,7 @@ const TK = {
   month: null,             // the first day of the month on the calendar (a Date)
   sel: null,               // the task whose card is open on the calendar
   day: null,               // the day chosen on the calendar (ISO)
-  rep: true,               // the Summary panel is open
+  rep: (window.innerWidth || 1300) >= 1240,  // the Summary panel is open; folded on a narrow window, the list needs the room
   repList: null,           // how it was in the list before the calendar folded it
   period: 'week',          // week | month | custom
   cFrom: '', cTo: '',
