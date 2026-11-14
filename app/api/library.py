@@ -1,5 +1,6 @@
 """The library: recordings, search, import, backup, comparison, calendar, the GPU build."""
 
+import os
 import re
 import shutil
 import traceback
@@ -484,9 +485,16 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
     # «Копировать файлы в папку программы» (Settings): a copy the app owns, like a page's upload;
     # otherwise the file stays where it is and the recording refers to it
     copy = (settings.get("import_copy") or "false").lower() == "true"
-    created = []
+    # A file already in the library by its path is not added again: two recordings of one file, and
+    # deleting one «with the file» broke the other
+    known = {} if copy else _library_paths()
+    created, existing = [], []
     for mf in media_files:
         source_path = mf.resolve()
+        same = known.get(os.path.normcase(str(source_path)))
+        if same:
+            existing.append(same)
+            continue
         if copy:
             safe_stem = _UNSAFE_NAME_RE.sub("_", mf.stem)[:120] or "recording"
             dest = UPLOADS_DIR / f"{uuid.uuid4().hex[:8]}_{safe_stem}{mf.suffix.lower()}"
@@ -520,7 +528,27 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
         enqueue_meeting_job(m["id"])
         created.append(m)
 
-    return {"created": created}
+    if not created and existing:
+        raise HTTPException(status_code=409, detail="Этот файл уже есть в медиатеке" if len(existing) == 1
+                            else "Эти файлы уже есть в медиатеке")
+    return {"created": created, "existing": existing}
+
+
+def _library_paths() -> Dict[str, int]:
+    """normcase(path) of every recording's file -> its id."""
+    from app.database import _db_lock, get_connection
+
+    with _db_lock:
+        conn = get_connection()
+        rows = conn.execute("SELECT id, media_path FROM meetings WHERE media_path != ''").fetchall()
+        conn.close()
+    out: Dict[str, int] = {}
+    for r in rows:
+        try:
+            out.setdefault(os.path.normcase(str(Path(r["media_path"]).resolve())), int(r["id"]))
+        except (OSError, ValueError):
+            continue
+    return out
 
 class MeetingTitlePayload(BaseModel):
     title: str
