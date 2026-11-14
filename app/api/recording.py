@@ -464,14 +464,19 @@ def _attach_recording_info(meeting_id: int, payload: RecordFinishPayload) -> Non
         teams_version = as_transcript([mk for mk in payload.speaker_marks if mk.get("text")])
         if teams_version:
             save_transcript_version(meeting_id, TEAMS, teams_version)
-    try:
-        from datetime import datetime
+    def by_calendar() -> None:
+        try:
+            from datetime import datetime
 
-        from app import calendar_ics
+            from app import calendar_ics
 
-        calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None)
-    except Exception as e:
-        print("[calendar]", e, flush=True)
+            calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None)
+        except Exception as e:
+            print("[calendar]", e, flush=True)
+
+    # Its name from the calendar comes a moment later: reading the calendar (a link, Outlook) takes up to
+    # a minute and a half, and the next recording (the next Teams meeting) must not wait for it
+    threading.Thread(target=by_calendar, daemon=True, name="record_calendar").start()
 
 class UiLangPayload(BaseModel):
     lang: str = "ru"
