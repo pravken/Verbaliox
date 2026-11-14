@@ -375,7 +375,33 @@ def _decode_to_disk(ffmpeg: str, path: Path, raw: Path, skip: float = 0.0) -> np
         raise RuntimeError((res.stderr or b"").decode("utf-8", "replace")[-300:])
     if raw.stat().st_size < 4:
         return np.zeros(0, dtype=np.float32)
-    return np.memmap(raw, dtype=np.float32, mode="r")
+    return _DiskTrack(raw)
+
+
+class _DiskTrack:
+    """A track of float32 samples in a file, read piece by piece: track[a:b] is a new array, never a view
+    of the file. A memory map was left open by its views (a loop variable, a frame of a traceback), and on
+    Windows its folder could not be deleted: the samples piled up in the recordings folder."""
+
+    def __init__(self, path: Path) -> None:
+        self._f = open(path, "rb")
+        self._n = path.stat().st_size // 4
+
+    def __len__(self) -> int:
+        return self._n
+
+    def __getitem__(self, key) -> np.ndarray:
+        if not isinstance(key, slice):
+            raise TypeError("a track is read by slices")
+        a, b, step = key.indices(self._n)
+        if b <= a:
+            return np.zeros(0, dtype=np.float32)
+        self._f.seek(a * 4)
+        out = np.frombuffer(self._f.read((b - a) * 4), dtype=np.float32).copy()
+        return out[::step] if step != 1 else out
+
+    def close(self) -> None:
+        self._f.close()
 
 
 CHUNK_SEC = 60  # what is worked on at a time: memory stays the same (~150 MB) for an hour or for eight
@@ -436,7 +462,9 @@ def clean_microphone(ffmpeg: str, page: Path, system: Path, system_skip: float, 
             system_out.unlink(missing_ok=True)
         return False
     finally:
-        del mic, ref  # the memory maps let go of their files before they are deleted (Windows)
+        for track in (mic, ref):
+            if isinstance(track, _DiskTrack):
+                track.close()  # its file let go before the folder is deleted (Windows)
         shutil.rmtree(tmp, ignore_errors=True)
 
 
