@@ -261,3 +261,46 @@ def finish_capture(capture_id: str) -> Optional[SystemCapture]:
     if cap:
         cap.stop()
     return cap
+
+
+def repair_rf64(path: Path) -> bool:
+    """A recording the app could not close (a crash, a power cut) has an RF64 header that still says
+    «no data yet»: FFmpeg then decodes 0 seconds. The sizes are set from the file's own length, so it is
+    read whole. True when something was set right."""
+    import struct
+
+    try:
+        size = path.stat().st_size
+        with open(path, "r+b") as f:
+            head = f.read(12)
+            if len(head) < 12 or head[:4] != b"RF64" or head[8:12] != b"WAVE":
+                return False
+            pos, ds64_at, data_at, block = 12, -1, -1, 4
+            while pos + 8 <= size:
+                f.seek(pos)
+                cid, csize = struct.unpack("<4sI", f.read(8))
+                if cid == b"ds64":
+                    ds64_at = pos + 8
+                elif cid == b"fmt ":
+                    f.seek(pos + 8 + 12)
+                    block = struct.unpack("<H", f.read(2))[0] or 4
+                elif cid == b"data":
+                    data_at = pos + 8
+                    break
+                pos += 8 + csize + (csize & 1)
+            if ds64_at < 0 or data_at < 0:
+                return False
+            data = size - data_at
+            data -= data % block
+            f.seek(ds64_at)
+            old = struct.unpack("<QQQ", f.read(24))
+            new = (size - 8, data, data // block)
+            if old == new:
+                return False
+            f.seek(ds64_at)
+            f.write(struct.pack("<QQQ", *new))
+        print(f"[system audio] {path.name}: header set from the file ({data / block / SR:.1f} s)", flush=True)
+        return True
+    except (OSError, struct.error) as e:
+        print(f"[system audio] {path.name}: header not repaired: {e}", flush=True)
+        return False

@@ -496,7 +496,12 @@ def recover_orphan_recordings() -> int:
             left.unlink(missing_ok=True)
         found += [(p, None) for p in rec.glob(".page_*.webm.part")]
         found += [(p, True) for p in rec.glob(".screen_*.mkv.part")]
-        found += [(p, False) for p in UPLOADS_DIR.glob("system_*.wav") if p.stat().st_size > 4096]
+        from app.system_audio import repair_rf64
+
+        for p in UPLOADS_DIR.glob("system_*.wav"):
+            if p.stat().st_size > 4096:
+                repair_rf64(p)  # left open by the crash: its header still says it is empty
+                found.append((p, False))
     except OSError:
         return 0
     n = 0
