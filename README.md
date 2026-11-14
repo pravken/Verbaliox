@@ -44,7 +44,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Export** to Word (`.docx`), Markdown, plain text, SRT subtitles, JSON and video with subtitles, all from one menu. A translated or dubbed export that does not exist yet is made first and then saved to the export folder by itself.
 - **Obsidian**: a note per meeting (properties, summary, overview, tasks as a checklist, transcript) named `{date} {title}`, saved by hand or automatically after processing (Settings → Export).
 - **Translate & dub (optional)**: translates a finished recording with Ollama and re-voices it in each speaker's cloned voice over the original background. See [Translate & dub](#translate-dub).
-- **Model comparison** (Settings → Comparison): every downloaded speech model recognizes a fragment of a recording you have corrected, and you see its error rate (WER), speed and memory; language models write the same protocol and you see how many points the transcript does not support.
+- **Model comparison** (Settings → Advanced → Model comparison): every downloaded speech model recognizes a fragment of a recording you have corrected, and you see its error rate (WER), speed and memory; language models write the same protocol and you see how many points the transcript does not support.
 - **Checked summaries**: each point of an overview gets the time it comes from, and points the transcript does not support are marked `[?]`. **My notes** taken during the meeting go into every summary; your own summary templates.
 - **Promises across meetings**: who promised what to whom and by when, collected after each summary, shown before the next meeting of the series, exported to Obsidian, Todoist (CSV) or Markdown, and a follow-up email draft.
 - **Calendar** (an `.ics` file or link, read only): a recording made during a meeting gets its title and participants; the Studio lists the next meetings with a brief.
@@ -144,7 +144,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | You download a speech model (Whisper, GigaAM, Parakeet with the Silero VAD) or a speaker model | Hugging Face (`huggingface.co`); for GigaAM and Parakeet the first time also PyPI (`onnx-asr`, checked by its hash) |
 | App start with an NVIDIA video card, once (Settings → Recognition, "GigaAM and Parakeet on the video card"; on by default) | PyPI: the GPU build of ONNX Runtime (`onnxruntime-gpu`, about 300 MB, checked by its hash) |
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
-| You set a calendar link (Settings → General) | That link, at most every 15 minutes, to read the calendar |
+| You set a calendar link (Settings → Recording → Calendar) | That link, at most every 15 minutes, to read the calendar |
 | You download an Ollama model | Ollama's model registry, via your local Ollama |
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
@@ -252,7 +252,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Экспорт** в Word (`.docx`), Markdown, текст, субтитры SRT, JSON и видео с субтитрами — всё в одном меню. Если нужного перевода или дубляжа ещё нет, он сначала выполняется, а файл затем сам сохраняется в папку экспорта.
 - **Obsidian**: заметка на каждую встречу (свойства, резюме, обзор, задачи чек-листом, расшифровка) с именем `{дата} {название}` — вручную или автоматически после обработки (Настройки → Экспорт).
 - **Перевод и дубляж (по желанию)**: готовая запись переводится через Ollama и озвучивается клонами голосов участников поверх исходного фона. Подробнее — в разделе [Перевод и дубляж](#дубляж).
-- **Сравнение моделей** («Настройки → Сравнение»): каждая скачанная модель распознавания расшифровывает фрагмент исправленной вами записи — видно долю ошибок (WER), скорость и память; языковые модели пишут один и тот же протокол — видно, сколько пунктов не подтверждает расшифровка.
+- **Сравнение моделей** («Настройки → Для опытных → Сравнение моделей»): каждая скачанная модель распознавания расшифровывает фрагмент исправленной вами записи — видно долю ошибок (WER), скорость и память; языковые модели пишут один и тот же протокол — видно, сколько пунктов не подтверждает расшифровка.
 - **Проверенные саммари**: у каждого пункта обзора есть время, откуда он взят, а пункты, которых нет в расшифровке, помечены `[?]`. **Мои заметки** во время встречи учитываются в каждом саммари; свои шаблоны саммари.
 - **Обещания между встречами**: кто, что, кому и к какому сроку пообещал — собирается после саммари, показывается перед следующей встречей серии, выгружается в Obsidian, Todoist (CSV) или Markdown; черновик письма по итогам.
 - **Календарь** (файл или ссылка `.ics`, только чтение): запись во время встречи получает её название и участников; в Студии видны ближайшие встречи со справкой.
@@ -351,7 +351,7 @@ start.bat
 | Вы скачиваете модель распознавания (Whisper, GigaAM, Parakeet вместе с Silero VAD) или модель спикеров | Hugging Face (`huggingface.co`); для GigaAM и Parakeet в первый раз ещё PyPI (`onnx-asr`, проверяется по хешу) |
 | Запуск приложения с видеокартой NVIDIA, один раз («Настройки → Распознавание», «GigaAM и Parakeet на видеокарте»; включено по умолчанию) | PyPI: сборка ONNX Runtime для видеокарты (`onnxruntime-gpu`, около 300 МБ, проверяется по хешу) |
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
-| Вы указали ссылку на календарь («Настройки → Общие») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь |
+| Вы указали ссылку на календарь («Настройки → Запись → Календарь») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь |
 | Вы скачиваете модель Ollama | Реестр моделей Ollama, через вашу локальную Ollama |
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |

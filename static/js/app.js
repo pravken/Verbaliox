@@ -36,7 +36,7 @@ async function checkForUpdates(force) {
   } else if (!force && info.available && !updateState.notified) {
     updateState.notified = true;
     showToast(t('updToastAvailable').replace('{v}', () => info.latest.version),
-      { label: t('updDetails'), onClick: () => openModal('settings', 'general') });
+      { label: t('updDetails'), onClick: () => openModal('settings', 'updates') });
   } else if (force && !info.available && !info.error) {
     showToast(t('updToastLatest'));
   }
