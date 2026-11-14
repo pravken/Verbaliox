@@ -27,12 +27,30 @@ class _Cancelled(Exception):
 
 
 def cancel(meeting_id: int) -> bool:
-    """Stops the download of this recording; False when none runs."""
+    """Stops the download of this recording (a playlist's video still waiting: it is not downloaded);
+    False when none runs."""
     ev = _cancel.get(meeting_id)
     if ev is None:
         return False
     ev.set()
+    if meeting_id in _waiting:  # said at once, not when its turn comes
+        from app.database import update_meeting_progress
+
+        update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Скачивание отменено", error_message="")
     return True
+
+
+_waiting: set = set()  # recordings of a playlist whose download has not begun yet
+
+
+def drop(meeting_id: int) -> None:
+    """The recording is being deleted: a playlist's video still waiting is only left out (the others
+    go on); a download running is stopped."""
+    if meeting_id in _waiting:
+        _waiting.discard(meeting_id)
+        _cancel.pop(meeting_id, None)
+        return
+    cancel(meeting_id)
 
 
 def ensure_package() -> None:
@@ -52,9 +70,12 @@ def valid_url(url: str) -> bool:
     return u.scheme in ("http", "https") and bool(u.netloc)
 
 
-def start(url: str, model_name: str, language: str, num_speakers: int, folder_id: Optional[int] = None) -> Dict[str, Any]:
+def start(url: str, model_name: str, language: str, num_speakers: int, folder_id: Optional[int] = None,
+          playlist: bool = False) -> Dict[str, Any]:
     """Creates the recording at once (shown as downloading) and downloads it in the background;
-    then it goes into the transcription queue."""
+    then it goes into the transcription queue. `playlist`: a link to a playlist or a channel brings
+    each of its videos as a recording of its own, in a new folder named after it (otherwise only
+    the first video is downloaded)."""
     from app.database import create_meeting, get_meeting, update_meeting_progress
 
     if not valid_url(url):
@@ -64,8 +85,49 @@ def start(url: str, model_name: str, language: str, num_speakers: int, folder_id
                        num_speakers_hint=num_speakers, source="import", folder_id=folder_id, owns_media=True,
                        title_is_default=True)
     update_meeting_progress(m["id"], status="downloading", progress=1, stage_text="Скачивание по ссылке…")
-    threading.Thread(target=_download, args=(m["id"], url), daemon=True, name=f"url_import_{m['id']}").start()
+    threading.Thread(target=_download, args=(m["id"], url, playlist), daemon=True, name=f"url_import_{m['id']}").start()
     return get_meeting(m["id"]) or m
+
+
+MAX_PLAYLIST = 200  # videos of one playlist taken at most
+
+
+def playlist_info(url: str) -> Optional[Dict[str, Any]]:
+    """{"title", "entries": [(url, title)]} when the link is a playlist or a channel of several videos,
+    else None. Only the list is read (no video is resolved): a few seconds even for a long one."""
+    ensure_package()
+    import yt_dlp
+
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist", "socket_timeout": 30,
+            "playlistend": MAX_PLAYLIST}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False) or {}
+    if info.get("_type") not in ("playlist", "multi_video"):
+        return None
+    entries = []
+    for e in info.get("entries") or []:
+        if not e:
+            continue
+        u = e.get("webpage_url") or e.get("url") or ""
+        if valid_url(u):
+            entries.append((u, str(e.get("title") or "").strip()[:300]))
+        if len(entries) >= MAX_PLAYLIST:
+            break
+    if len(entries) < 2:
+        return None
+    return {"title": str(info.get("title") or "").strip()[:120], "entries": entries}
+
+
+def probe(url: str) -> Dict[str, Any]:
+    """What the link is, asked before the import: {"playlist": bool, "title", "count"}."""
+    if not valid_url(url):
+        raise ValueError("Нужна ссылка вида https://…")
+    try:
+        info = playlist_info(url)
+    except Exception as e:  # the site said no to the list: the import itself will say why
+        print(f"[url] probe of {url[:120]}: {e}", flush=True)
+        info = None
+    return {"playlist": bool(info), "title": (info or {}).get("title", ""), "count": len((info or {}).get("entries", []))}
 
 
 def restart(meeting_id: int, url: str) -> bool:
@@ -89,14 +151,82 @@ def _drop_files(stem: str) -> None:
             pass
 
 
-def _download(meeting_id: int, url: str) -> None:
+def _download(meeting_id: int, url: str, playlist: bool = False) -> None:
+    from app.database import update_meeting_progress
+
+    stop = _cancel.setdefault(meeting_id, threading.Event())
+    stop.clear()
+    ids = [meeting_id]
+    try:
+        items = None
+        if playlist:
+            try:
+                items = playlist_info(url)
+            except Exception as e:
+                print(f"[url] not read as a playlist: {e}", flush=True)
+        if not items:
+            _download_one(meeting_id, url, stop)
+            return
+        ids = _make_playlist(meeting_id, items, stop)
+        total = len(ids)
+        for i, (mid, (entry_url, _title)) in enumerate(zip(ids, items["entries"])):
+            # Each video has its own cancel: «Отменить» or deleting one leaves the others
+            own = _cancel.get(mid) if i else stop
+            if i and (mid not in _waiting or own is None):  # deleted while it waited
+                continue
+            _waiting.discard(mid)
+            if own.is_set():
+                update_meeting_progress(mid, status="cancelled", progress=0, stage_text="Скачивание отменено",
+                                        error_message="")
+                _cancel.pop(mid, None)
+                continue
+            update_meeting_progress(mid, status="downloading", progress=1,
+                                    stage_text=f"Скачивание по ссылке… ({i + 1} из {total})")
+            try:
+                _download_one(mid, entry_url, own)
+            finally:
+                _cancel.pop(mid, None)  # done: «Повторить» of this one need not wait for the playlist
+    finally:
+        for mid in ids:
+            _waiting.discard(mid)
+        _cancel.pop(meeting_id, None)
+
+
+def _make_playlist(meeting_id: int, items: Dict[str, Any], stop: threading.Event) -> list:
+    """The folder of the playlist and a recording for each of its videos (the first is the one made
+    already), each with its own cancel. Their ids, in the playlist's order."""
+    from app.database import (create_folder, create_meeting, get_meeting, set_meeting_folder, set_meeting_processing,
+                              update_meeting_fields, update_meeting_progress)
+
+    first = get_meeting(meeting_id) or {}
+    folder = create_folder(items["title"] or urlparse(items["entries"][0][0]).netloc.removeprefix("www.") or "Плейлист")
+    set_meeting_folder(meeting_id, folder["id"])
+    ids = [meeting_id]
+    entries = items["entries"]
+    if entries[0][1]:
+        update_meeting_fields(meeting_id, title=entries[0][1], title_is_default=False)
+    for n, (entry_url, title) in enumerate(entries[1:], start=2):
+        m = create_meeting(title=title or f"{items['title'] or 'Видео'} {n}", filename=entry_url[:300], media_path="",
+                           language=first.get("language") or "auto", model_name=first.get("model_name") or "",
+                           num_speakers_hint=int(first.get("num_speakers_hint") or 0), source="import",
+                           folder_id=folder["id"], owns_media=True, title_is_default=not title)
+        if first.get("processing"):
+            set_meeting_processing(m["id"], first["processing"])
+        update_meeting_progress(m["id"], status="downloading", progress=0,
+                                stage_text=f"Ждёт скачивания ({n} из {len(entries)})")
+        _cancel[m["id"]] = threading.Event()
+        _waiting.add(m["id"])
+        ids.append(m["id"])
+    print(f"[url] playlist «{items['title']}»: {len(ids)} video(s) into folder {folder['id']}", flush=True)
+    return ids
+
+
+def _download_one(meeting_id: int, url: str, stop: threading.Event) -> None:
     from app.database import get_meeting, update_meeting_fields, update_meeting_progress
     from app.ffmpeg_manager import find_tool
     from app.transcriber import enqueue_meeting_job
 
     stem = uuid.uuid4().hex[:8]
-    stop = _cancel.setdefault(meeting_id, threading.Event())
-    stop.clear()
     try:
         ensure_package()
         import yt_dlp
@@ -121,6 +251,7 @@ def _download(meeting_id: int, url: str) -> None:
             "format": "bestaudio/best",
             "outtmpl": str(UPLOADS_DIR / f"{stem}_%(title).80B.%(ext)s"),
             "noplaylist": True,
+            "playlist_items": "1",  # a link to a whole playlist or channel: its first video only
             "quiet": True,
             "no_warnings": True,
             "progress_hooks": [hook],
@@ -154,7 +285,7 @@ def _download(meeting_id: int, url: str) -> None:
             return
         title = str((info or {}).get("title") or "").strip()[:300]
         date = str((info or {}).get("upload_date") or "")
-        if title:
+        if title and (get_meeting(meeting_id) or {}).get("title_is_default", True):  # a title from the playlist stays
             update_meeting_fields(meeting_id, title=title)
         from app.database import _db_lock, get_connection
 
@@ -175,5 +306,3 @@ def _download(meeting_id: int, url: str) -> None:
         traceback.print_exc()
         update_meeting_progress(meeting_id, status="failed", progress=0, stage_text="",
                                 error_message=f"Не удалось скачать по ссылке: {str(e)[:250]}")
-    finally:
-        _cancel.pop(meeting_id, None)

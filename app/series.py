@@ -218,3 +218,38 @@ def brief(series_id: Optional[int] = None, person: Optional[str] = None, model_n
                 "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
     return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "cloud": llm.is_cloud,
             "mode": "brief", "count": len(meetings), "excluded_local": excluded}
+
+
+def match_event(title: str, attendees: List[str], done: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """The series a calendar meeting continues (same title without its dates), or else a person of it
+    already met in the recordings: {"series_id", "person"} (either may be None)."""
+    if done is None:
+        done = sorted((r for r in list_meetings() if r.get("status") == "completed"),
+                      key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
+    key = title_key(title)
+    same = next((r for r in done if r.get("series_id") and len(key) >= 6 and title_key(r.get("title") or "") == key), None)
+    known = {n for r in done for n in people(r)}
+    person = next((a for a in attendees or [] if a.strip().lower() in known), None)
+    return {"series_id": same.get("series_id") if same else None, "person": person}
+
+
+def before_meeting(title: str, attendees: List[str], done: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
+    """What there is to know before a calendar meeting, without the analysis model: the series (or the
+    person) it continues, its last recording and the tasks still open. None when it continues nothing."""
+    from app import commitments
+
+    hit = match_event(title, attendees, done)
+    if hit["series_id"]:
+        rows = series_meetings(int(hit["series_id"]))
+        tasks = commitments.open_for_series(int(hit["series_id"]))
+    elif hit["person"]:
+        p = hit["person"].strip().lower()
+        rows = sorted((r for r in (done or list_meetings()) if r.get("status") == "completed" and p in people(r)), key=_when)
+        tasks = commitments.for_meetings([r["id"] for r in rows[-BRIEF_MEETINGS:]], status="open") if rows else []
+    else:
+        return None
+    if not rows:
+        return None
+    last = rows[-1]
+    return {**hit, "last": {"id": last["id"], "title": last.get("title") or "", "date": _when(last)[:10]},
+            "open_tasks": len(tasks)}

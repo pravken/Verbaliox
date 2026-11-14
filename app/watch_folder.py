@@ -83,6 +83,8 @@ def _key(p: Path) -> str:
     raw = str(p)
     key = _keys.get(raw)
     if key is None:
+        if len(_keys) > 50000:  # a big folder watched for months: the cache starts again, not grows forever
+            _keys.clear()
         key = _keys[raw] = str(p.resolve())
     return key
 

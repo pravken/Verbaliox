@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import HTTPException
+from fastapi import File, HTTPException, UploadFile
 from pydantic import BaseModel
 from app.database import edit_meeting, get_meeting, is_local_only, update_meeting_fields
 from app.ollama_client import generate_meeting_summary
@@ -443,6 +443,7 @@ def api_unmerge_segment(meeting_id: int, segment_id: int, payload: UnmergePayloa
 def api_clean_fillers(meeting_id: int) -> Dict[str, Any]:
     from app.transcriber import clean_meeting_transcript
 
+    _ensure_not_transcribing(meeting_id)
     try:
         return clean_meeting_transcript(meeting_id)
     except ValueError as e:
@@ -470,6 +471,7 @@ def api_restore_segments(meeting_id: int) -> Dict[str, Any]:
 
     if not get_meeting(meeting_id):
         raise HTTPException(status_code=404, detail="Встреча не найдена")
+    _ensure_not_transcribing(meeting_id)
     if not restore_segments_backup(meeting_id):
         raise HTTPException(status_code=400, detail="Нет сохранённой версии для восстановления")
     return get_meeting(meeting_id)
@@ -706,3 +708,24 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
 
         refresh_if_exported(meeting_id)
     return {"key": key, "summary": result_md, "summaries": summaries}
+
+
+@router.post("/api/meetings/{meeting_id}/teams-transcript")
+async def api_import_teams_transcript(meeting_id: int, file: UploadFile = File(...)) -> Dict[str, Any]:
+    """The transcript Teams saves after a meeting (.vtt): the «Субтитры Teams» version and the names it
+    gives the voices (app/teams_transcript.py)."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app import teams_transcript
+
+    if not await run_in_threadpool(get_meeting, meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    data = await file.read(teams_transcript.MAX_BYTES + 1)
+    if len(data) > teams_transcript.MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Файл расшифровки слишком большой")
+    text = data.decode("utf-8-sig", "replace")
+    try:
+        lines, named = await run_in_threadpool(teams_transcript.import_into, meeting_id, text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"lines": lines, "named": named}

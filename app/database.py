@@ -6,7 +6,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from app import events
 from app.hardware import get_hardware_info
@@ -1063,6 +1063,8 @@ def edit_meeting(meeting_id: int, mutate: Callable[[Dict[str, Any]], Iterable[st
             if not changed:
                 return m
             conn.commit()
+            if changed <= {"speakers"}:  # a rename or a colour: the recording read above, as it is now
+                return m
             row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
             return _deserialize_meeting(dict(row), conn)
         finally:
@@ -1182,6 +1184,16 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
             f"UPDATE meetings SET {', '.join(f'{k} = ?' for k, _ in items)} WHERE id = ?",
             tuple(v for _, v in items) + (meeting_id,),
         )
+        conn.commit()
+        conn.close()
+    events.publish({"type": "list"})
+
+
+def relink_media(meeting_id: int, path: str) -> None:
+    """The recording's file is now at `path` (it was moved; «Указать файл…»)."""
+    with _db_lock:
+        conn = get_connection()
+        conn.execute("UPDATE meetings SET media_path = ?, filename = ? WHERE id = ?", (path, Path(path).name, meeting_id))
         conn.commit()
         conn.close()
     events.publish({"type": "list"})
@@ -1412,48 +1424,68 @@ def meeting_briefs(ids: List[int]) -> Dict[int, Dict[str, Any]]:
     return {r["id"]: dict(r) for r in rows}
 
 
+# The participants of each recording as the list shows them (names, colours: no voice prints), kept by
+# the text they were read from: a library of thousands parsed megabytes of voice prints at every list
+_LIST_SPEAKERS: Dict[int, Tuple[int, Dict[str, Any]]] = {}
+
+
+def _list_speakers(meeting_id: int, raw: str) -> Dict[str, Any]:
+    key = hash(raw)
+    hit = _LIST_SPEAKERS.get(meeting_id)
+    if hit and hit[0] == key:
+        return hit[1]
+    try:
+        speakers = json.loads(raw or "{}")
+    except Exception:
+        speakers = {}
+    # without the voice prints (192 numbers each): the list went to the page with all of them every
+    # 30 s and after every event, megabytes for a large library; one recording's reading has them
+    if isinstance(speakers, dict):
+        speakers = {k: {f: v for f, v in sp.items() if f != "embedding"} if isinstance(sp, dict) else sp
+                    for k, sp in speakers.items()}
+    else:
+        speakers = {}
+    _LIST_SPEAKERS[meeting_id] = (key, speakers)
+    return speakers
+
+
 def list_meetings() -> List[Dict[str, Any]]:
-    with _db_lock:
+    with _db_lock:  # only the reading holds the lock; what is made of the rows is done after it
         conn = get_connection()
         try:
             rows = conn.execute(f"SELECT {_LIST_COLUMNS}{_LIST_LANGS_SQL} FROM meetings ORDER BY id DESC").fetchall()
         except sqlite3.OperationalError:  # SQLite without JSON functions
             rows = conn.execute(f"SELECT {_LIST_COLUMNS}, translations_json, dubs_json FROM meetings ORDER BY id DESC").fetchall()
         conn.close()
-        result = []
-        unmeasured = []
-        for r in rows:
-            d = dict(r)
-            if "translations_json" in d:
-                d["tr_langs"] = ",".join(_loads_dict(d.pop("translations_json")))
-                try:
-                    d["dub_langs"] = ",".join(str(x.get("lang")) for x in json.loads(d.pop("dubs_json") or "[]"))
-                except Exception:
-                    d["dub_langs"] = ""
-            d["translations_langs"] = [x for x in (d.pop("tr_langs") or "").split(",") if x]
-            d["dub_langs"] = [x for x in (d.pop("dub_langs") or "").split(",") if x and x != "None"]
-            d["has_transcript"] = bool(d["has_transcript"])
-            d["local_only"] = bool(d.get("local_only"))
-            d["has_summary"] = bool(d["has_summary"])
+    result = []
+    unmeasured = []
+    if len(_LIST_SPEAKERS) > 2 * len(rows) + 100:  # deleted recordings
+        _LIST_SPEAKERS.clear()
+    for r in rows:
+        d = dict(r)
+        if "translations_json" in d:
+            d["tr_langs"] = ",".join(_loads_dict(d.pop("translations_json")))
             try:
-                d["speakers"] = json.loads(d.pop("speakers_json", "{}") or "{}")
+                d["dub_langs"] = ",".join(str(x.get("lang")) for x in json.loads(d.pop("dubs_json") or "[]"))
             except Exception:
-                d["speakers"] = {}
-            # without the voice prints (192 numbers each): the list went to the page with all of them every
-            # 30 s and after every event, megabytes for a large library; one recording's reading has them
-            if isinstance(d["speakers"], dict):
-                d["speakers"] = {k: {f: v for f, v in sp.items() if f != "embedding"} if isinstance(sp, dict) else sp
-                                 for k, sp in d["speakers"].items()}
-            d["is_video"] = is_video(d)
-            d["exports"] = [p for p in _loads_list(d.pop("exports_json", None)) if isinstance(p, str)]
-            # Measured once and kept: the list must not touch every file (a network drive is slow)
-            if d.get("media_size") is None:
-                d["media_size"] = _file_size(d.get("media_path") or "")
-                if d["media_size"] is not None:
-                    unmeasured.append((d["media_size"], d["id"]))
-            d["size_bytes"] = d.pop("media_size") or 0
-            d.pop("media_path", None)
-            result.append(d)
+                d["dub_langs"] = ""
+        d["translations_langs"] = [x for x in (d.pop("tr_langs") or "").split(",") if x]
+        d["dub_langs"] = [x for x in (d.pop("dub_langs") or "").split(",") if x and x != "None"]
+        d["has_transcript"] = bool(d["has_transcript"])
+        d["local_only"] = bool(d.get("local_only"))
+        d["has_summary"] = bool(d["has_summary"])
+        d["speakers"] = {k: dict(v) if isinstance(v, dict) else v
+                         for k, v in _list_speakers(d["id"], d.pop("speakers_json", "{}") or "{}").items()}
+        d["is_video"] = is_video(d)
+        d["exports"] = [p for p in _loads_list(d.pop("exports_json", None)) if isinstance(p, str)]
+        # Measured once and kept: the list must not touch every file (a network drive is slow)
+        if d.get("media_size") is None:
+            d["media_size"] = _file_size(d.get("media_path") or "")
+            if d["media_size"] is not None:
+                unmeasured.append((d["media_size"], d["id"]))
+        d["size_bytes"] = d.pop("media_size") or 0
+        d.pop("media_path", None)
+        result.append(d)
     if unmeasured:
         with _db_lock:
             conn = get_connection()
@@ -1530,7 +1562,8 @@ def remove_media(meeting_id: int) -> bool:
 
 
 def expired_media_ids(days: int) -> List[int]:
-    """Completed recordings older than `days` that still keep their sound (retention setting)."""
+    """Completed recordings that still keep their sound, older than `days` both by when they were made and
+    by when they came into the app: an old file imported today keeps its sound for `days` too."""
     if days <= 0:
         return []
     from datetime import datetime, timedelta
@@ -1540,7 +1573,8 @@ def expired_media_ids(days: int) -> List[int]:
         conn = get_connection()
         rows = conn.execute(
             "SELECT id FROM meetings WHERE status = 'completed' AND owns_media = 1 AND COALESCE(media_removed, 0) = 0 "
-            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ?", (cutoff,)).fetchall()
+            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ? AND created_at < ?",
+            (cutoff, cutoff)).fetchall()
         conn.close()
     return [int(r["id"]) for r in rows]
 
@@ -1637,6 +1671,14 @@ def delete_orphan_files() -> Dict[str, int]:
     return {"files": files, "bytes": freed}
 
 
+def _other_meetings_use(meeting_id: int, path: str) -> bool:
+    with _db_lock:
+        conn = get_connection()
+        row = conn.execute("SELECT 1 FROM meetings WHERE id != ? AND media_path = ? LIMIT 1", (meeting_id, path)).fetchone()
+        conn.close()
+    return row is not None
+
+
 def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: bool = False,
                    with_note: bool = False) -> bool:
     """with_source: the media file used in place (added by its path) is deleted too; with_exports: the
@@ -1652,7 +1694,8 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
             Path(p_str).unlink(missing_ok=True)
         except OSError as e:
             print(f"[delete] {p_str}: {e}", flush=True)
-    if with_source and meeting.get("source") == "local" and meeting.get("media_path"):
+    if with_source and meeting.get("source") == "local" and meeting.get("media_path") \
+            and not _other_meetings_use(meeting_id, meeting["media_path"]):  # another recording of the same file keeps it
         try:
             Path(meeting["media_path"]).unlink(missing_ok=True)
         except OSError as e:
@@ -2087,8 +2130,19 @@ def delete_folder(folder_id: int) -> None:
         raise LookupError("Папка не найдена")
     if folder.get("system_key"):
         raise ValueError("Системную папку удалить нельзя")
+    # «Только локальный анализ» came from this folder (or one above it): what moves out keeps it, or the
+    # next cloud analysis would take recordings the user had kept away from it
+    folders = {f["id"]: f for f in list_folders()}
+    fid, seen, protected = folder_id, set(), False
+    while fid is not None and fid in folders and fid not in seen:
+        seen.add(fid)
+        protected = protected or bool(folders[fid].get("local_only"))
+        fid = folders[fid].get("parent_id")
     with _db_lock:
         conn = get_connection()
+        if protected:
+            conn.execute("UPDATE folders SET local_only = 1 WHERE parent_id = ?", (folder_id,))
+            conn.execute("UPDATE meetings SET local_only = 1 WHERE folder_id = ?", (folder_id,))
         conn.execute("UPDATE folders SET parent_id = ? WHERE parent_id = ?", (folder["parent_id"], folder_id))
         conn.execute("UPDATE meetings SET folder_id = ? WHERE folder_id = ?", (folder["parent_id"], folder_id))
         conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))

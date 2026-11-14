@@ -88,6 +88,9 @@ def _make(dest: Path, with_media: bool) -> Dict[str, Any]:
         try:
             src.backup(dst)
             dst.execute("DROP TABLE IF EXISTS secrets")  # cloud API keys stay on this computer
+            # So do the settings that are not restored from a copy anyway: among them the calendar's
+            # link, which at Outlook or Google is a secret address anyone holding it can read
+            dst.execute(f"DELETE FROM settings WHERE key IN ({','.join('?' * len(LOCAL_SETTINGS))})", LOCAL_SETTINGS)
             dst.commit()
             dst.execute("VACUUM")
         finally:

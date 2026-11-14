@@ -8,6 +8,7 @@ let _mediaRecorder = null;
 let _recStreams = [];
 let _recAudioCtx = null;
 let _recStartTime = 0;
+let _recBeatTimer = null;
 let _recTimerInterval = null;
 let _recAnimFrame = null;
 let _recWaveHistory = [];
@@ -158,7 +159,9 @@ const REC_SRC_ICONS = {
 const recSrc = { mic: { on: false, lv: 0, at: 0, used: false }, sys: { on: false, lv: 0, at: 0, used: false } };
 
 function recSourcesStart(mic, sys) {
-  for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: 0 });
+  for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: performance.now() });
+  recSrc.sys.warned = false;
+  recSrc.sys.heard = false;
   document.querySelectorAll('[data-rec-src]').forEach(box => {
     box.innerHTML = ['mic', 'sys'].filter(k => recSrc[k].used).map(k =>
       `<span class="rec-src-item" data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
@@ -181,10 +184,27 @@ function recSourcesUpdate(levels) {
     if (!s.used || db == null) continue;
     const amp = Math.max(0, Math.min(1, (db + 54) / 42));
     s.lv = Math.max(amp, s.lv * 0.86);
-    if (db > -44) s.at = now;
+    if (db > -44) { s.at = now; s.heard = true; }
     s.on = now - s.at < 700;
   }
+  recSilenceWatch(now);
   recSourcesRender();
+}
+
+// A call is on, and the computer's sound stays silent: the call plays on another device than the one
+// recorded, or the sound is off. Said at once, not found out after the meeting (once a recording)
+// Not a word from the others yet a minute into the call (the sound plays elsewhere), or five minutes of
+// silence later (a talk of one's own lasts that long only rarely): a long monologue is not an alarm
+const REC_SYS_SILENT_MS = 60000;
+const REC_SYS_SILENT_LATER_MS = 5 * 60000;
+function recSilenceWatch(now) {
+  const s = recSrc.sys;
+  if (!s.used || s.warned || !isRecording()) return;
+  const inCall = !!(state.callRecording || (typeof meetingFollow !== 'undefined' && meetingFollow.base));
+  if (inCall && now - s.at > (s.heard ? REC_SYS_SILENT_LATER_MS : REC_SYS_SILENT_MS)) {
+    s.warned = true;
+    showError(t('recSysSilent'));
+  }
 }
 
 function recSourcesRender() {
@@ -576,7 +596,8 @@ async function handleCallEvent(ev) {
 // saw one long call and the first recording went on through the second meeting ---
 const MEETING_SWITCH_MS = 8000;   // the new meeting's window has stayed this long: not a glance at it
 const MEETING_GONE_MS = 30000;    // no meeting window this long: the meeting is over
-const meetingFollow = { base: '', cand: '', candSince: 0, goneSince: 0, busy: false };
+const MEETING_ADOPT_MS = 15000;   // a recording follows the meeting whose window is there this soon after its start
+const meetingFollow = { base: '', cand: '', candSince: 0, goneSince: 0, busy: false, since: 0, off: false };
 
 function meetingFollowOn() {
   return String(((state.system && state.system.settings) || {}).meeting_follow || 'true') !== 'false';
@@ -585,16 +606,28 @@ function meetingFollowOn() {
 async function meetingFollowTick() {
   const mf = meetingFollow;
   if (!isRecording()) {
-    if (!mf.busy) Object.assign(mf, { base: '', cand: '', goneSince: 0 });
+    if (!mf.busy) Object.assign(mf, { base: '', cand: '', goneSince: 0, since: 0, off: false });
     return;
   }
-  if (mf.busy || !meetingFollowOn()) return;
+  if (mf.busy || mf.off || !meetingFollowOn()) return;
+  if (!mf.since) mf.since = Date.now();
   const st = await fetch('/api/teams/meeting').then(r => (r.ok ? r.json() : null)).catch(() => null);
-  if (!st || !isRecording() || mf.busy) return;
+  // Not sure it is a meeting (no UI Automation to look for its «Leave» button): nothing is done by itself
+  if (!st || st.verified === false || !isRecording() || mf.busy) return;
   const title = String(st.title || '');
   const now = Date.now();
-  if (!mf.base) {  // the meeting this recording is of, once its window is seen
-    if (!title) return;
+  if (!mf.base) {
+    // Only a recording of a Teams meeting follows it: one started by the call, or with the meeting's window
+    // open as it began. A recording of a meeting in the room or in another app is never stopped or cut
+    // because a Teams call came and went meanwhile
+    // a call of another app (Zoom) started it: a Teams window coming and going is not its meeting
+    const byTeams = /teams/i.test(String(state.callRecording || ''));
+    if (state.callRecording && !byTeams) { mf.off = true; return; }
+    if (!title) {
+      if (!byTeams && now - mf.since >= MEETING_ADOPT_MS) mf.off = true;
+      return;
+    }
+    if (!byTeams && now - mf.since >= MEETING_ADOPT_MS) { mf.off = true; return; }
     mf.base = title;
     const input = document.getElementById('record-title-input');
     if (input && !input.value.trim()) input.value = title;  // named after the meeting
@@ -611,7 +644,7 @@ async function meetingFollowTick() {
         state.callRecording = null;
         await stopAndTranscribeRecording();
       } finally {
-        Object.assign(mf, { base: '', cand: '', goneSince: 0, busy: false });
+        Object.assign(mf, { base: '', cand: '', goneSince: 0, busy: false, since: 0, off: false });
       }
     }
     return;
@@ -645,7 +678,7 @@ async function meetingSwitchTo(title) {
   } catch (e) {
     showToast(`${t('callRecordFailed')}: ${mediaErrorText(e)}`);
   } finally {
-    Object.assign(mf, { base: isRecording() ? title : '', cand: '', goneSince: 0, busy: false });
+    Object.assign(mf, { base: isRecording() ? title : '', cand: '', goneSince: 0, busy: false, since: Date.now(), off: false });
   }
 }
 
@@ -1904,6 +1937,8 @@ async function startLiveRecording() {
     renderStudioState();
     clearInterval(_recDiskTimer);
     _recDiskTimer = setInterval(checkRecordingDisk, 15000);
+    _recBeatTimer = setInterval(recordHeartbeat, 10000);
+    setTimeout(recordHeartbeat, 1500);
     clearInterval(_recTimerInterval);
     _recTimerInterval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - _recStartTime) / 1000);
@@ -2016,6 +2051,8 @@ function _cleanupRecordingResources() {
   }
   clearInterval(_recDiskTimer);
   _recDiskTimer = null;
+  clearInterval(_recBeatTimer);
+  _recBeatTimer = null;
   reportRecordingState(false);
   window._recMixedStream = null;
   clearInterval(_recSysTimer);
@@ -2112,27 +2149,53 @@ async function stopAndTranscribeRecording(opts) {
   }
 }
 
+// What the server is told of the recording: at «Стоп», and every 10 s while it goes on (the watchdog of
+// app/api/recording.py saves it with these notes if the page is gone before «Стоп»)
+function recordingInfo({ page, captureId, screenId, rawTitle, startedAt }) {
+  const ta = document.getElementById('studio-notes-input');
+  return {
+    title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
+    has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
+    notes: ta ? ta.value : '', started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
+    speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
+  };
+}
+
+function recordHeartbeat() {
+  if (!isRecording() || (!_recPage && !_recCaptureId && !_recScreenId)) return;
+  const rawTitle = (document.getElementById('record-title-input').value || t('recordDefaultTitle')).trim();
+  const body = recordingInfo({ page: _recPage, captureId: _recCaptureId, screenId: _recScreenId, rawTitle,
+    startedAt: _recStartTime ? _recStartTime / 1000 : 0 });
+  fetch('/api/record/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .catch(() => {});
+}
+
 async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
   _cleanupRecordingResources();
 
   // every chunk is on the server (waited for, but not for ever: a request that hangs)
   if (page) await Promise.race([page.upload, new Promise(res => setTimeout(res, 180000))]);
   if (page && page.failed) showToast(page.failed);
-  const res = await fetch('/api/record/finish', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
-      has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
-      notes: takeStudioNotes(), started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
-      speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    showError(data.detail);
-    return undefined;
-  }
+  const body = JSON.stringify(recordingInfo({ page, captureId, screenId, rawTitle, startedAt }));
+  // The notes go when the server has the recording: a failed answer keeps them, and «Сохранить ещё раз»
+  // sends the same again (the parts wait on the server; its watchdog saves them in 3 minutes otherwise)
+  const send = async () => {
+    const res = await fetch('/api/record/finish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      .catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok) {
+      showError(errorText(data, res), { label: t('recSaveAgain'), onClick: () => send().then(r => r && afterSaved(r)) });
+      return null;
+    }
+    takeStudioNotes();
+    return data;
+  };
+  const data = await send();
+  if (!data) return undefined;
+  return afterSaved(data, quiet);
+}
+
+async function afterSaved(data, quiet = false) {
   const created = data.created;
   await loadMeetingsList();
   prepareStudio();
@@ -2293,7 +2356,8 @@ async function studioVoiceFilterState(st) {
   if (!st || !note || !btn) return;
   const dl = st.download || {};
   note.textContent = dl.active ? t('voiceFilterDownloading').replace('{p}', () => String(dl.progress || 0))
-    : st.installed ? t('stVoiceFilterHint') : t('voiceFilterMissing').replace('{size}', () => String(st.size_mb));
+    : !st.installed ? t('voiceFilterMissing').replace('{size}', () => String(st.size_mb))
+    : ((state.system && state.system.settings) || {}).rec_voice_filter === 'false' ? t('stVoiceFilterOff') : t('stVoiceFilterHint');
   btn.classList.toggle('hidden', !!st.installed || !!dl.active || !st.can_download);
 }
 
@@ -2394,3 +2458,9 @@ async function studioMicTest() {
     setTimeout(() => { if (!_micTest && label) label.textContent = t('rdSasMicTest'); }, 4000);
   }
 }
+
+// The gear of the captions closes on a click elsewhere, as a menu does
+document.addEventListener('click', (e) => {
+  const more = document.getElementById('st-cap-more');
+  if (more && more.open && !more.contains(e.target)) more.removeAttribute('open');
+});

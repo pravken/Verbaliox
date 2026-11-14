@@ -223,6 +223,28 @@ function onExportedEvent(ev) {
 
 // --- Right-Click Context Menu on Sidebar Recording Items ---
 // The ••• button of the recording header: the menu of the recording that is open
+// The transcript Teams saves after a meeting (.vtt): a version of its own, and its names for the voices
+function ctxImportTeamsVtt() {
+  const id = state.contextMeetingId;
+  hideContextMenu();
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.vtt,text/vtt';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/meetings/${id}/teams-transcript`, { method: 'POST', body: fd });
+    const data = await readJson(res);
+    if (!res.ok) { showError(serverText(data.detail)); return; }
+    await loadMeetingsList();
+    if (state.activeMeeting && state.activeMeeting.id === id) await selectMeeting(id, false);
+    showToast(t('teamsVttDone').replace('{lines}', () => data.lines).replace('{named}', () => data.named), null, 'success');
+  });
+  input.click();
+}
+
 function openActiveRecordingMenu(e) {
   if (state.activeMeeting) openRecordingContextMenu(e, state.activeMeeting.id);
 }

@@ -164,11 +164,11 @@
             <span class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="rdSasMeetingFollowHint">Перешли в другую встречу — запись сохранится и начнётся новая; встреча закончилась — запись остановится</span></span>
           <input type="checkbox" id="st-meeting-follow" data-change="studioSetAuto" data-change-args='["meeting_follow", {"$": "checked"}]' role="switch" class="vs-switch" />
         </label>
-        <label class="st-toggle">
+        <!-- Decided by itself (on once the filter is downloaded); the switch is in Settings → Record → More -->
+        <div class="st-toggle">
           <span class="min-w-0 flex-1"><span class="block text-[13px] text-white" data-i18n="voiceFilterToggle">✦ ИИ-очистка голоса в микрофоне</span>
             <span id="st-voice-filter-note" class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="stVoiceFilterHint">Шум убирается из микрофона при сохранении записи</span></span>
-          <input type="checkbox" id="st-voice-filter" data-change="studioSetAuto" data-change-args='["rec_voice_filter", {"$": "checked"}]' role="switch" class="vs-switch" />
-        </label>
+        </div>
         <button type="button" id="st-voice-filter-download" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-click="studioInstallVoiceFilter" data-i18n="voiceFilterDownload">Скачать фильтр</button>
       </section>
 
@@ -247,6 +247,17 @@
           <input type="checkbox" id="live-captions-toggle" data-change="studioToggleCaptions" data-change-args='[{"$": "checked"}]' role="switch" class="vs-switch vs-sm" />
           <span data-i18n="liveCaptionsToggle">Субтитры в реальном времени</span>
         </label>
+        <label class="flex items-center gap-1.5 text-xs text-apple-secondary">
+          <span data-i18n="studioTranslateTo">Перевод</span>
+          <select id="live-translate-select" data-change="studioConfigure" data-i18n-title="tipLiveTranslate" title="Переводить субтитры на другой язык через локальную модель Ollama"
+            class="h-7 w-[150px] bg-apple-sidebar border apple-border rounded-lg px-2 text-[11.5px] text-white focus:outline-none"></select>
+        </label>
+        <!-- The rest of the captions' choices, under the gear: how the text comes, the language of the speech,
+             the quick languages, how the translation is shown, the size of the text, the models -->
+        <details id="st-cap-more" class="st-cap-more">
+          <summary class="ui-btn ui-btn-subtle h-7 !px-2 text-[12px]" data-i18n-title="tipStCapMore" title="Ещё настройки субтитров"
+            data-i18n-aria="tipStCapMore" aria-label="Ещё настройки субтитров">⚙</summary>
+          <div class="st-cap-pop">
         <label class="flex items-center gap-2 cursor-pointer text-xs text-apple-secondary" data-i18n-title="tipLiveDraft"
           title="Показывать фразу по мере произнесения, не дожидаясь паузы. Черновик может поправляться, пока фраза не закончится">
           <input type="checkbox" id="live-draft-toggle" data-change="studioConfigure" role="switch" class="vs-switch vs-sm" />
@@ -255,11 +266,6 @@
         <label class="flex items-center gap-1.5 text-xs text-apple-secondary">
           <span data-i18n="studioSpeechLang">Речь</span>
           <select id="studio-speech" data-change="studioConfigure" data-change-args='[true]' data-i18n-title="tipStudioSpeech" title="Язык речи; «Авто» определяет его по каждой фразе"
-            class="h-7 w-[150px] bg-apple-sidebar border apple-border rounded-lg px-2 text-[11.5px] text-white focus:outline-none"></select>
-        </label>
-        <label class="flex items-center gap-1.5 text-xs text-apple-secondary">
-          <span data-i18n="studioTranslateTo">Перевод</span>
-          <select id="live-translate-select" data-change="studioConfigure" data-i18n-title="tipLiveTranslate" title="Переводить субтитры на другой язык через локальную модель Ollama"
             class="h-7 w-[150px] bg-apple-sidebar border apple-border rounded-lg px-2 text-[11.5px] text-white focus:outline-none"></select>
         </label>
         <!-- Quick choices: two languages (right-click to change them) and "auto" between them -->
@@ -286,7 +292,7 @@
           <button data-click="studioFont" data-click-args='[2]' class="ui-btn ui-btn-subtle h-7 !px-2 text-[13px]" data-i18n-title="tipStudioFontLarger" title="Крупнее">A+</button>
         </div>
         <!-- The models writing the captions and the translation now; can be changed by hand -->
-        <div id="studio-models" class="hidden flex items-center gap-2 ml-auto">
+        <div id="studio-models" class="hidden flex items-center gap-2 flex-wrap">
           <label class="flex items-center gap-1 text-[11.5px] text-apple-tertiary">
             <span data-i18n="studioModelCaptions">Субтитры</span>
             <select id="studio-cap-model" data-change="studioSetCaptionModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioCapModel" title="Модель, которая пишет субтитры. «Авто» выбирает по языку речи"
@@ -298,6 +304,8 @@
               class="h-6 max-w-[170px] bg-apple-sidebar border apple-border rounded-md px-1.5 text-[11.5px] text-white focus:outline-none"></select>
           </label>
         </div>
+          </div>
+        </details>
         <span id="studio-status" class="text-[11.5px] text-apple-tertiary"></span>
       </div>
       <!-- Models in memory: shown here when the studio covers the whole window -->
@@ -553,6 +561,8 @@
               <span id="workspace-progress-pct" class="font-mono text-apple-blue">0%</span>
               <button id="workspace-error-more" data-click="showProcessingErrorDetails" data-i18n="errDetails"
                 class="hidden ui-btn ui-btn-subtle h-6 px-2 text-[11.5px]">Подробнее</button>
+              <button id="workspace-relink-btn" data-click="relinkActiveMedia" data-i18n="relinkBtn"
+                class="hidden ui-btn ui-btn-primary h-6 px-2 text-[11.5px]">Указать файл…</button>
               <button id="workspace-retry-btn" data-click="retryActiveMeeting" data-i18n="retryBtn"
                 class="hidden ui-btn ui-btn-primary h-6 px-2 text-[11.5px]">Повторить</button>
               <button id="workspace-cancel-btn" data-click="cancelActiveProcessing" data-i18n-title="tipCancelProcessing" title="Остановить обработку этой записи"

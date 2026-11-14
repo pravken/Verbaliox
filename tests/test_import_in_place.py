@@ -36,6 +36,18 @@ class ImportInPlaceTest(unittest.TestCase):
         self.assertEqual(Path(m["media_path"]), self.src.resolve())
         self.assertFalse(m["owns_media"])
 
+    def test_the_same_file_is_not_added_twice(self):
+        from fastapi import HTTPException
+
+        update_settings({"import_copy": "false"})
+        first = self._add()
+        with self.assertRaises(HTTPException) as err:
+            self._add()
+        self.assertEqual(err.exception.status_code, 409)
+        from app.database import delete_meeting
+
+        delete_meeting(first["id"])
+
     def test_with_the_setting_the_program_keeps_a_copy(self):
         update_settings({"import_copy": "true"})
         m = self._add()

@@ -36,7 +36,7 @@ async function checkForUpdates(force) {
   } else if (!force && info.available && !updateState.notified) {
     updateState.notified = true;
     showToast(t('updToastAvailable').replace('{v}', () => info.latest.version),
-      { label: t('updDetails'), onClick: () => openModal('settings', 'general') });
+      { label: t('updDetails'), onClick: () => openModal('settings', 'updates') });
   } else if (force && !info.available && !info.error) {
     showToast(t('updToastLatest'));
   }
@@ -88,7 +88,22 @@ async function installUpdate() {
   showToast(t('updInstalling'));
 }
 
+// A recording the page before this one did not finish (reloaded mid-recording): saved now, with its notes,
+// and said; once more a little later, when its last «still recording» is old enough to be sure
+async function saveOrphanRecordings() {
+  const res = await fetch('/api/record/orphans/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than: 12 }),
+  }).catch(() => null);
+  const data = res && res.ok ? await res.json().catch(() => null) : null;
+  if (data && data.saved) {
+    showToast(t('recOrphanSaved'), null, 'success');
+    if (typeof loadMeetingsList === 'function') loadMeetingsList();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(saveOrphanRecordings, 2000);
+  setTimeout(saveOrphanRecordings, 16000);
   state.autoScroll = true;
   loadSummaryTemplates();
   initLogoEasterEgg();
@@ -1026,8 +1041,18 @@ function renderMyNotesEditor(box) {
 // LLM output is derived from the recording's speech, so it is treated as untrusted HTML. No data-*
 // attributes either: the page's event dispatcher (core.js) calls the function a data-click / data-error
 // names — an image that fails to load would have run one without a click
+// Only what Markdown makes: no class or id (a block styled to cover the window or look like the app's own
+// button), no media, and links only to the web (a relative one or "//host" would take the window itself away)
+const MARKDOWN_TAGS = ['p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'del', 's', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'sup', 'sub'];
 function sanitizedMarkdown(md) {
-  return DOMPurify.sanitize(marked.parse(md || ''), { FORBID_TAGS: ['style', 'form', 'input'], FORBID_ATTR: ['style'], ALLOW_DATA_ATTR: false });
+  const html = DOMPurify.sanitize(marked.parse(md || ''), {
+    ALLOWED_TAGS: MARKDOWN_TAGS, ALLOWED_ATTR: ['href', 'title', 'start', 'align', 'colspan', 'rowspan'],
+    ALLOWED_URI_REGEXP: /^https?:\/\//i, ALLOW_DATA_ATTR: false,
+    // not addresses: DOMPurify would hold them to the URI rule above and drop them («3.» shown as «1.»)
+    ADD_URI_SAFE_ATTR: ['start', 'align', 'colspan', 'rowspan'],
+  });
+  return html;
 }
 
 function renderMarkdownWithTimestamps(box, md, durationSec) {

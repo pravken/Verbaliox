@@ -1,5 +1,6 @@
 """The library: recordings, search, import, backup, comparison, calendar, the GPU build."""
 
+import os
 import re
 import shutil
 import traceback
@@ -208,12 +209,8 @@ def api_calendar_upcoming(refresh: bool = False) -> Dict[str, Any]:
     items = calendar_ics.upcoming()
     done = sorted((r for r in list_meetings() if r.get("status") == "completed"),
                   key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
-    known = {n for r in done for n in series.people(r)}
     for it in items:
-        key = series.title_key(it["title"])
-        same = next((r for r in done if r.get("series_id") and len(key) >= 6 and series.title_key(r.get("title") or "") == key), None)
-        it["series_id"] = same.get("series_id") if same else None
-        it["person"] = next((a for a in it["attendees"] if a.strip().lower() in known), None)
+        it.update(series.match_event(it["title"], it["attendees"], done))
     from app import calendar_outlook
 
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
@@ -267,6 +264,9 @@ def api_bench(choices: bool = False) -> Dict[str, Any]:
 def api_bench_start(payload: BenchPayload) -> Dict[str, Any]:
     from app import bench
 
+    if payload.kind == "asr":  # only models of the catalog, as everywhere else
+        for name in payload.models:
+            _check_model(name)
     try:
         return bench.start(payload.kind, payload.meeting_id, payload.models, payload.clip_sec)
     except ValueError as e:
@@ -292,6 +292,14 @@ def api_disk() -> Dict[str, Any]:
 
 _UNSAFE_NAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
+def _check_model(name: str) -> None:
+    """A model the API was asked for by name must be one of the catalog (app/settings_schema.py)."""
+    from app.settings_schema import is_speech_model
+
+    if not is_speech_model(name):
+        raise HTTPException(status_code=400, detail="Неизвестная модель распознавания")
+
+
 @router.post("/api/meetings/upload")
 async def api_upload_meetings(
     files: List[UploadFile] = File(...),
@@ -305,10 +313,11 @@ async def api_upload_meetings(
     processing: str = Form(""),  # JSON: the sound and text steps chosen in the import window (database.PROCESSING_KEYS)
 ) -> Dict[str, Any]:
     chosen_processing = _processing_from_form(processing)
+    _check_model(model_name)
     settings = get_all_settings()
     chosen_model = model_name.strip() or speech_route.default_choice(settings)
     chosen_lang = language.strip() or settings.get("language", "auto")
-    chosen_speakers = num_speakers if num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
+    chosen_speakers = min(num_speakers, 20) if num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
     is_recording = source == "recording"
     target_dir = _recordings_dir() if is_recording else UPLOADS_DIR
 
@@ -316,6 +325,8 @@ async def api_upload_meetings(
         ext = Path(uf.filename or "recording.mp4").suffix.lower() or ".mp4"
         if ext not in SUPPORTED_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"Формат файла {ext} не поддерживается")
+        if uf.size == 0:  # nothing to transcribe: said now, not as a failed recording after the queue
+            raise HTTPException(status_code=400, detail=f"Файл «{uf.filename}» пустой")
     created = []
     for i, uf in enumerate(files):
         orig_name = uf.filename or "recording.mp4"
@@ -393,16 +404,37 @@ class UrlImportPayload(BaseModel):
     model_name: str = ""
     num_speakers: int = 0
     processing: Optional[Dict[str, bool]] = None
+    playlist: bool = False  # a playlist or a channel: every video, each a recording, in a folder of its own
+
+
+class UrlProbePayload(BaseModel):
+    url: str
+
+
+@router.post("/api/meetings/url/probe")
+def api_probe_url(payload: UrlProbePayload) -> Dict[str, Any]:
+    """Whether a link is a playlist (and how long), asked before its import."""
+    from app import url_import
+
+    try:
+        return url_import.probe(payload.url.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:  # yt-dlp could not be installed
+        raise HTTPException(status_code=503, detail=str(e)[:300])
+
 
 @router.post("/api/meetings/url")
 def api_import_url(payload: UrlImportPayload) -> Dict[str, Any]:
     """A video or podcast by its link (app/url_import.py): downloaded, then transcribed."""
     from app import url_import
 
+    _check_model(payload.model_name)
     settings = get_all_settings()
     try:
         m = url_import.start(payload.url.strip(), payload.model_name or speech_route.default_choice(settings),
-                             payload.language or "auto", int(payload.num_speakers or 0))
+                             payload.language or "auto", max(0, min(20, int(payload.num_speakers or 0))),
+                             playlist=payload.playlist)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     # The download takes a while: the choice is stored long before the transcription reads it
@@ -445,10 +477,11 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
     if not target.exists():
         raise HTTPException(status_code=400, detail=f"Путь не найден на диске: {raw_path}")
 
+    _check_model(payload.model_name)
     settings = get_all_settings()
     chosen_model = payload.model_name.strip() or speech_route.default_choice(settings)
     chosen_lang = payload.language.strip() or settings.get("language", "auto")
-    chosen_speakers = payload.num_speakers if payload.num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
+    chosen_speakers = min(payload.num_speakers, 20) if payload.num_speakers > 0 else as_int(settings.get("num_speakers"), 0)
 
     media_files: List[Path] = []
     if target.is_file():
@@ -471,9 +504,16 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
     # «Копировать файлы в папку программы» (Settings): a copy the app owns, like a page's upload;
     # otherwise the file stays where it is and the recording refers to it
     copy = (settings.get("import_copy") or "false").lower() == "true"
-    created = []
+    # A file already in the library by its path is not added again: two recordings of one file, and
+    # deleting one «with the file» broke the other
+    known = {} if copy else _library_paths()
+    created, existing = [], []
     for mf in media_files:
         source_path = mf.resolve()
+        same = known.get(os.path.normcase(str(source_path)))
+        if same:
+            existing.append(same)
+            continue
         if copy:
             safe_stem = _UNSAFE_NAME_RE.sub("_", mf.stem)[:120] or "recording"
             dest = UPLOADS_DIR / f"{uuid.uuid4().hex[:8]}_{safe_stem}{mf.suffix.lower()}"
@@ -507,7 +547,27 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
         enqueue_meeting_job(m["id"])
         created.append(m)
 
-    return {"created": created}
+    if not created and existing:
+        raise HTTPException(status_code=409, detail="Этот файл уже есть в медиатеке" if len(existing) == 1
+                            else "Эти файлы уже есть в медиатеке")
+    return {"created": created, "existing": existing}
+
+
+def _library_paths() -> Dict[str, int]:
+    """normcase(path) of every recording's file -> its id."""
+    from app.database import _db_lock, get_connection
+
+    with _db_lock:
+        conn = get_connection()
+        rows = conn.execute("SELECT id, media_path FROM meetings WHERE media_path != ''").fetchall()
+        conn.close()
+    out: Dict[str, int] = {}
+    for r in rows:
+        try:
+            out.setdefault(os.path.normcase(str(Path(r["media_path"]).resolve())), int(r["id"]))
+        except (OSError, ValueError):
+            continue
+    return out
 
 class MeetingTitlePayload(BaseModel):
     title: str
@@ -539,6 +599,8 @@ def api_generate_title(meeting_id: int) -> Dict[str, Any]:
 def api_rename_meeting(meeting_id: int, payload: MeetingTitlePayload) -> Dict[str, Any]:
     from app.obsidian import refresh_if_exported
 
+    if not get_meeting(meeting_id):  # deleted meanwhile (another window, the cleanup of a mix)
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Название не может быть пустым")
@@ -572,6 +634,72 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     )
     enqueue_meeting_job(meeting_id)
     return get_meeting(meeting_id)
+
+class RelinkPayload(BaseModel):
+    path: str = ""      # empty: the Windows file picker asks for it
+    force: bool = False  # the length differs from the recording's, and the user said it is the same file
+
+
+@router.post("/api/meetings/{meeting_id}/relink")
+def api_relink_media(meeting_id: int, payload: RelinkPayload) -> Any:
+    """«Указать файл…»: the recording's file moved (another folder, another disk); the user shows where it
+    is now. Its length must be the recording's (within 2 %), so another file is not put under its text.
+    A recording without a transcript goes to the queue."""
+    import sys
+
+    from app.audio_utils import get_media_duration
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    _ensure_not_processing(meeting_id)
+    raw = payload.path.strip().strip('"')
+    if not raw:
+        if sys.platform != "win32":
+            raise HTTPException(status_code=400, detail="Укажите путь к файлу")
+        from app import native_dialog
+        from app.paths import MEDIA_EXTENSIONS
+
+        patterns = ";".join(f"*{e}" for e in sorted(MEDIA_EXTENSIONS))
+        start = Path(m.get("media_path") or "").parent
+        raw = (native_dialog.run(["--mode", "open", "--dir", str(start if start.is_dir() else Path.home()),
+                                  "--filter", f"Видео и аудио|{patterns}|Все файлы|*.*", "--title", "Где теперь файл записи?"],
+                                 timeout=900) or "").strip()
+        if not raw:
+            return {"cancelled": True}
+    target = Path(raw)
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail=f"Путь не найден на диске: {raw}")
+    if target.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Формат файла {target.suffix} не поддерживается")
+    known = float(m.get("duration") or 0)
+    if known > 0 and not payload.force:
+        try:
+            got = float(get_media_duration(target) or 0)
+        except Exception:
+            got = 0.0
+        if got > 0 and abs(got - known) > max(3.0, known * 0.02):
+            from fastapi.responses import JSONResponse
+
+            # the path chosen goes back: «use it anyway» sends it again instead of opening the picker twice
+            return JSONResponse(status_code=409, content={
+                "detail": f"Длина файла {int(got // 60)} мин {int(got % 60)} с, а у записи {int(known // 60)} мин "
+                          f"{int(known % 60)} с. Это тот же файл?", "path": str(target)})
+    from app.database import relink_media
+
+    relink_media(meeting_id, str(target.resolve()))
+    print(f"[relink] meeting {meeting_id}: {target}", flush=True)
+    if not m.get("segments") and m.get("status") in ("failed", "cancelled", "cleared"):
+        update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание",
+                                error_message="")
+        enqueue_meeting_job(meeting_id)
+    elif m.get("status") == "failed":
+        update_meeting_progress(meeting_id, status="completed", progress=100, stage_text="", error_message="")
+    from app import events
+
+    events.publish({"type": "list"})
+    return api_get_meeting(meeting_id)
+
 
 @router.get("/api/meetings/{meeting_id}/precise-models")
 def api_precise_models(meeting_id: int) -> Dict[str, Any]:
@@ -609,13 +737,14 @@ def api_reconfigure_meeting(meeting_id: int, payload: MeetingReconfigurePayload)
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     _ensure_not_processing(meeting_id)
+    _check_model(payload.model_name)
 
     update_meeting_fields(
         meeting_id,
         model_name=payload.model_name.strip() or "large-v3-turbo",
         language=payload.language.strip() or "auto",
         language_choice=payload.language.strip() or "auto",
-        num_speakers_hint=max(0, int(payload.num_speakers_hint)),
+        num_speakers_hint=max(0, min(20, int(payload.num_speakers_hint))),
     )
     if payload.processing is not None:
         from app.database import set_meeting_processing
@@ -684,7 +813,10 @@ def api_cancel_meeting(meeting_id: int) -> Dict[str, Any]:
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     from app import url_import
+    from app.transcriber import cancel_waiting
 
+    if cancel_waiting(meeting_id):  # still waiting for its turn: out of the queue at once
+        return get_meeting(meeting_id)
     if not request_cancel(meeting_id) and not url_import.cancel(meeting_id):
         raise HTTPException(status_code=409, detail="Запись сейчас не обрабатывается")
     update_meeting_progress(meeting_id, stage_text="Отмена обработки...")
@@ -713,7 +845,9 @@ def api_reveal_meeting_file(meeting_id: int) -> Dict[str, Any]:
 @router.delete("/api/meetings/{meeting_id}")
 def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports: bool = False,
                        with_note: bool = False) -> Dict[str, Any]:
-    if is_job_active(meeting_id):
+    from app.transcriber import cancel_waiting
+
+    if is_job_active(meeting_id) and not cancel_waiting(meeting_id):  # a waiting one goes at once
         request_cancel(meeting_id)
         raise HTTPException(status_code=409, detail="Запись обрабатывается: обработка отменяется, удалите её через несколько секунд.")
     from app import app_status
@@ -722,7 +856,7 @@ def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports:
         raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся — удалите её через минуту.")
     from app import url_import
 
-    url_import.cancel(meeting_id)  # a download of it stops and its file is removed
+    url_import.drop(meeting_id)  # a download of it stops and its file is removed
     ok = delete_meeting(meeting_id, with_source=with_source, with_exports=with_exports, with_note=with_note)
     if not ok:
         raise HTTPException(status_code=404, detail="Встреча не найдена")

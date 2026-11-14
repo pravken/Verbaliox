@@ -104,12 +104,27 @@ function pageArg(a, el, ev) {
   }
 }
 
+// Only a function of the page's own scripts: never one of the browser's (fetch, open, …), even wrapped by
+// the page, so markup that should not be there (a hostile backup, say) cannot call them with its own arguments
+const PAGE_WRAPS_BROWSER = new Set(['fetch']);  // the page's wrappers of a browser function: still the browser's
+function pageFunction(name) {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name || '') || PAGE_WRAPS_BROWSER.has(name)) return null;
+  const fn = window[name];
+  if (window.BROWSER_VALUES && window.BROWSER_VALUES.has(name) && window.BROWSER_VALUES.get(name) === fn) return null;
+  if (typeof fn !== 'function' || /\[native code\]\s*\}$/.test(Function.prototype.toString.call(fn))) return null;
+  return fn;
+}
+
+function callPage(name, ...args) {
+  const fn = pageFunction(name);
+  if (!fn) { console.error(`no page function "${name}"`); return undefined; }
+  return fn(...args);
+}
+
 function runPageHandler(el, type, ev) {
   const name = el.getAttribute('data-' + type);
-  const fn = /^[A-Za-z_$][\w$]*$/.test(name || '') ? window[name] : null;
-  // Only a function of the page's own scripts: never one of the browser's (fetch, open, …), so markup
-  // that should not be there (a hostile backup, say) cannot call them with its own arguments
-  if (typeof fn !== 'function' || /\[native code\]\s*\}$/.test(Function.prototype.toString.call(fn))) {
+  const fn = pageFunction(name);
+  if (!fn) {
     console.error(`data-${type}: no page function "${name}"`);
     return;
   }
@@ -151,9 +166,9 @@ function pageCall(type, fn, args = []) {
 // Small steps the markup used to write inline. `name`: a page function, called with the rest
 function stopEvent(ev) { ev.stopPropagation(); }
 function preventEvent(ev) { ev.preventDefault(); }
-function stopThen(ev, name, ...args) { ev.stopPropagation(); window[name](...args); }
-function preventThen(ev, name, ...args) { ev.preventDefault(); window[name](...args); }
-function onEnter(ev, name, ...args) { if (ev.key === 'Enter') window[name](...args); }
+function stopThen(ev, name, ...args) { ev.stopPropagation(); callPage(name, ...args); }
+function preventThen(ev, name, ...args) { ev.preventDefault(); callPage(name, ...args); }
+function onEnter(ev, name, ...args) { if (ev.key === 'Enter') callPage(name, ...args); }
 function blurOnEnter(ev, el) { if (ev.key === 'Enter') el.blur(); }
 function selectOnFocus(el) { el.select(); }
 function clickElement(id) { document.getElementById(id).click(); }
@@ -161,7 +176,7 @@ function showFixed2(el, id) { document.getElementById(id).textContent = Number(e
 function removeElement(el) { el.remove(); }
 function openSupport() { openExternal(SUPPORT_URL); }
 // Several calls in turn: runAll(["hideTranslateMenu"], ["openTranslateModal"])
-function runAll(...calls) { for (const [name, ...args] of calls) window[name](...args); }
+function runAll(...calls) { for (const [name, ...args] of calls) callPage(name, ...args); }
 
 let state = {
   uiLang: localStorage.getItem('whisper_ui_lang') || 'ru',
@@ -608,14 +623,27 @@ function formatTime(sec) {
 }
 
 // --- Modals & Menus ---
-// Settings are split into tabs; the last one is remembered
-const SETTINGS_TABS = ['general', 'record', 'recognition', 'models', 'analysis', 'calendar', 'hotkeys', 'dictionary',
-  'export', 'privacy', 'updates', 'dub', 'bench', 'about'];
+// Settings are split into tabs; the last one is remembered. A tab holds one or more sections
+// ([data-stab]): the sections of the former tabs are listed in SETTINGS_SECTION_TAB, and their old
+// names (openModal('settings', 'hotkeys'), "settings:hotkeys" of a notification, #settings/models)
+// open the tab and scroll to the section
+const SETTINGS_TABS = ['general', 'record', 'recognition', 'analysis', 'export', 'privacy', 'advanced'];
+const SETTINGS_SECTION_TAB = {
+  updates: 'general', about: 'general',
+  hotkeys: 'record', calendar: 'record',
+  models: 'recognition', dictionary: 'recognition',
+  bench: 'advanced', dub: 'advanced',
+};
 const SETTINGS_TAB_ALIASES = { integrations: 'export', interface: 'general', ui: 'general', ai: 'analysis', dict: 'dictionary', recog: 'recognition' };
+function settingsTabOf(section) {
+  return SETTINGS_SECTION_TAB[section] || section;
+}
 function selectSettingsTab(name) {
   name = SETTINGS_TAB_ALIASES[name] || name;
+  const section = SETTINGS_SECTION_TAB[name] ? name : null;  // a section inside a tab: scrolled to
+  name = settingsTabOf(name);
   if (!SETTINGS_TABS.includes(name)) name = 'general';
-  document.querySelectorAll('#modal-settings [data-stab]').forEach(el => el.classList.toggle('hidden', el.dataset.stab !== name));
+  document.querySelectorAll('#modal-settings [data-stab]').forEach(el => el.classList.toggle('hidden', settingsTabOf(el.dataset.stab) !== name));
   SETTINGS_TABS.forEach(k => {
     const btn = document.getElementById(`stab-${k}`);
     if (!btn) return;
@@ -624,8 +652,17 @@ function selectSettingsTab(name) {
   });
   document.getElementById('modal-settings').dataset.tab = name;
   try { localStorage.setItem('verbaliox_settings_tab', name); } catch (e) {}
-  if (name === 'bench' && typeof loadBench === 'function') loadBench();
+  if (name === 'advanced' && typeof loadBench === 'function') loadBench();
   if (typeof onSettingsTabShown === 'function') onSettingsTabShown(name);  // static/js/settings.js
+  if (section) scrollToSettingsSection(section);
+}
+
+function scrollToSettingsSection(section) {
+  const el = document.querySelector(`#modal-settings [data-stab="${section}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'start' });
+  // once more after the layout: the page may have just been mounted or shown
+  requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
 }
 
 // Keyboard: an opened window takes the focus, Tab stays inside the top one, and the focus goes back

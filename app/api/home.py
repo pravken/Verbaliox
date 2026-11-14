@@ -129,10 +129,17 @@ def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, A
             t = t.astimezone().replace(tzinfo=None)
         if t and a <= t <= b:
             made.append((t, m))
+    from app import series
+
+    done = sorted((m for m in list_meetings() if m.get("status") == "completed"),
+                  key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
+    now = datetime.now()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
         hit = next((m for t, m in made if s.replace(second=0) <= t < e), None)
         it["recording"] = {"id": hit["id"], "status": hit.get("status"), "progress": hit.get("progress")} if hit else None
+        # A meeting ahead that continues a series: its last time and the tasks still open (the brief)
+        it["before"] = series.before_meeting(it["title"], it.get("attendees") or [], done) if e > now else None
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
             **calendar_ics.status()}
 
