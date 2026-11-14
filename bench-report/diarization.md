@@ -61,7 +61,7 @@ ECAPA на видеокарте, ONNX-кодировщики — на проце
 | Wespeaker/wespeaker-voxceleb-resnet34-LM | CC-BY-4.0 | f0c48c29 |
 | Wespeaker/wespeaker-voxceleb-resnet293-LM | CC-BY-4.0 | 6e6bffe5 |
 | Wespeaker/wespeaker-voxceleb-campplus-LM | Apache-2.0 | c5e01c6f |
-| pyannote/speaker-diarization-community-1 | CC-BY-4.0, доступ после согласия на HF | не мерилась: согласие должен дать владелец |
+| pyannote/speaker-diarization-community-1 | CC-BY-4.0; доступ после формы на HF (компания, назначение, согласие на рассылку pyannote) | не мерилась: владелец решил пропустить |
 | AMI Meeting Corpus (данные) | CC-BY-4.0 | — |
 
 OpenMDW-1.1 нет в списке разрешённых лицензий ТЗ (MIT, Apache-2.0, BSD, CC-BY), но ТЗ прямо просит проверить её для
@@ -71,7 +71,8 @@ Nemotron. Перед включением в программу — решени
 
 - Свои записи Teams с ручной разметкой (в т.ч. с наложениями и 6+ участниками) — нужна разметка владельца.
 - Узнавание человека между встречами (точность, EER) — на AMI нельзя.
-- pyannote community-1 — нужно согласие владельца с условиями на Hugging Face.
+- pyannote community-1 — пропущена по решению владельца: закрытый доступ через форму с согласием на рассылку, и её нельзя
+  отдавать пользователям без токена, как устроена программа.
 - Профили 10 и 6 ГБ отдельно не мерились: Nemotron и ECAPA занимают на видеокарте сотни мегабайт.
 
 Сырые данные: `bench-report/llm-profiles/diar-scores.json`. Скрипты: `tools/diar_bench.py`, `tools/nemotron_bench.py`,
