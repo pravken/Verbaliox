@@ -186,7 +186,11 @@ function renderAssistantHead() {
   if (title) title.textContent = chat && chat.items.length ? chatTitle(chat) : t('rdSasNewChat');
   const model = chat?.model || '';
   const label = document.getElementById('as-model-label');
-  if (label) label.textContent = assistantModelName(model);
+  // Nothing can answer: said once, by the bar under the head with its buttons; the model's chip only
+  // names the model and the «где работает» pill is hidden (they said the same thing twice more)
+  const offNow = assistantModelOff(model);
+  const tag = model || assistantSettings().ollama_model || '';
+  if (label) label.textContent = offNow && !assistantModelIsCloud(model) ? (tag ? formatModelName(tag) : t('rdSasNoModel')) : assistantModelName(model);
   const pill = document.getElementById('as-privacy');
   document.getElementById('as-model-btn')?.classList.toggle('an-model-off', assistantModelOff(model));
   document.getElementById('as-noai')?.classList.toggle('hidden', !assistantModelOff(model));
@@ -199,6 +203,7 @@ function renderAssistantHead() {
     pill.title = t(off ? 'anNeedModel' : cloud ? 'rdSasPillCloudHint' : 'rdSasPillLocalHint');
     if (off) { pill.dataset.click = 'openModal'; pill.dataset.clickArgs = '["settings", "analysis"]'; pill.setAttribute('role', 'button'); }
     else { delete pill.dataset.click; delete pill.dataset.clickArgs; pill.removeAttribute('role'); }
+    pill.style.display = offNow ? 'none' : '';  // (.as-pill sets display, so not the hidden class)
   }
 }
 
