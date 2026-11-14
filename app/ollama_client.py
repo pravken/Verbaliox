@@ -20,8 +20,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
     {
         "id": "gemma4:e4b",
         "name": "Gemma 4 E4B",
-        "badge": "9.5 GB · Apache",
-        "size": "9.5 GB",
+        "badge": "6.6 GB · Apache",
+        "size": "6.6 GB",
         "vram": "8+ GB VRAM",
         "license": "Apache",
         "desc_ru": "Рекомендуется для видеокарт с 8 ГБ и больше: в сравнении на настоящих встречах нашла больше всех задач (около половины против трети у Qwen3 8B), протокол часовой встречи — за полторы минуты",
@@ -36,8 +36,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
     {
         "id": "gemma4:e2b",
         "name": "Gemma 4 E2B",
-        "badge": "7.5 GB · Apache",
-        "size": "7.5 GB",
+        "badge": "4.6 GB · Apache",
+        "size": "4.6 GB",
         "vram": "4–8 GB / CPU",
         "license": "Apache",
         "desc_ru": "Рекомендуется для видеокарт до 8 ГБ и компьютеров без видеокарты: в сравнении находит задачи в 3–5 раз чаще, чем Qwen3.5 4B, протокол часовой встречи без видеокарты — около 5 минут",
