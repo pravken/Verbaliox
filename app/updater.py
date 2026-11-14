@@ -182,17 +182,27 @@ def auto_enabled() -> bool:
 def _auto_download(st: Dict[str, Any]) -> None:
     """Starts downloading a found update when automatic updates are on."""
     dl = st.get("download") or {}
-    if st.get("can_install") and st.get("auto") and not dl.get("active") and not dl.get("done"):
+    # An archive downloaded before a newer release came out is downloaded again: installing it would
+    # have put on the older version the window offered as the newer one
+    stale = dl.get("done") and dl.get("version") and (st.get("latest") or {}).get("version") != dl.get("version")
+    if st.get("can_install") and st.get("auto") and not dl.get("active") and (not dl.get("done") or stale):
         try:
             start_download()
         except RuntimeError:
             pass
 
 
+def _download_current() -> bool:
+    """The archive downloaded is of the release found last (call with _lock held)."""
+    dl, latest = _state["download"], _state["latest"] or {}
+    return bool(dl.get("done") and dl.get("path")) and (not dl.get("version") or not latest
+                                                       or dl.get("version") == latest.get("version"))
+
+
 def ready_to_install() -> bool:
     """A downloaded update that automatic updates would install now."""
     with _lock:
-        done = bool(_state["download"].get("done") and _state["download"].get("path"))
+        done = _download_current()
     return done and auto_enabled() and not is_git_checkout()
 
 
@@ -200,7 +210,7 @@ def install_on_exit() -> bool:
     """Called when the app closes: installs a downloaded update without starting the app again."""
     try:
         with _lock:
-            path = _state["download"].get("path") if _state["download"].get("done") else ""
+            path = _state["download"].get("path") if _download_current() else ""
         if not path or not auto_enabled() or is_git_checkout():
             return False
         launch_installer(restart=False)
@@ -288,7 +298,7 @@ def _download(latest: Dict[str, Any]) -> None:
             part.unlink(missing_ok=True)
             raise RuntimeError("Контрольная сумма архива не совпала — файл повреждён или подменён")
         part.replace(target)
-        _set(active=False, done=True, progress=100, path=str(target))
+        _set(active=False, done=True, progress=100, path=str(target), version=latest.get("version") or "", sha256=expected)
     except Exception as e:
         traceback.print_exc()
         _set(active=False, done=False, error=str(e)[:300])
@@ -320,11 +330,16 @@ def launch_installer(restart: bool = True, minimized: bool = False) -> None:
 
     with _lock:
         path = _state["download"].get("path")
+        sha = _state["download"].get("sha256") or ""
+        current = _download_current()
     if not path or not Path(path).is_file():
         raise RuntimeError("Архив обновления не скачан")
+    if not current:
+        raise RuntimeError("Скачивается более новая версия — установите её, когда она загрузится")
+    # The archive was checked when downloaded, possibly days ago: the updater checks it is still that one
     cmd = [sys.executable, "-m", "app.updater", "apply", "--zip", path, "--app-dir", str(APP_DIR),
            "--data-dir", str(DATA_DIR), "--pid", str(os.getpid())] + ([] if restart else ["--no-restart"]) \
-        + (["--restart-minimized"] if restart and minimized else [])
+        + (["--restart-minimized"] if restart and minimized else []) + (["--sha256", sha] if sha else [])
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen(cmd, cwd=str(APP_DIR), creationflags=flags, close_fds=True)
 
@@ -588,6 +603,7 @@ def _main(argv: List[str]) -> int:
     ap.add_argument("--pid", type=int, default=0)
     ap.add_argument("--no-restart", action="store_true")  # installed on exit: the user closed the app
     ap.add_argument("--restart-minimized", action="store_true")  # installed in the background: back in the tray
+    ap.add_argument("--sha256", default="")  # the archive's sum checked against the signed release
     a = ap.parse_args(argv)
     app_dir, data_dir = Path(a.app_dir), Path(a.data_dir)
 
@@ -601,6 +617,8 @@ def _main(argv: List[str]) -> int:
             if a.pid and not _wait_for_exit(a.pid):
                 # Replacing files under a running program would mix two versions
                 raise UpdateFailed("Verbaliox не закрылся за две минуты. Закройте программу и установите обновление снова.")
+            if a.sha256 and _sha256(Path(a.zip)) != a.sha256.lower():
+                raise UpdateFailed("Архив обновления изменился после проверки — обновление отменено")
             apply_update(Path(a.zip), app_dir, data_dir, ui.set)
             ui.set("Готово." if a.no_restart else "Готово. Запуск Verbaliox…")
         except Exception as e:
