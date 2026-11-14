@@ -2087,8 +2087,19 @@ def delete_folder(folder_id: int) -> None:
         raise LookupError("Папка не найдена")
     if folder.get("system_key"):
         raise ValueError("Системную папку удалить нельзя")
+    # «Только локальный анализ» came from this folder (or one above it): what moves out keeps it, or the
+    # next cloud analysis would take recordings the user had kept away from it
+    folders = {f["id"]: f for f in list_folders()}
+    fid, seen, protected = folder_id, set(), False
+    while fid is not None and fid in folders and fid not in seen:
+        seen.add(fid)
+        protected = protected or bool(folders[fid].get("local_only"))
+        fid = folders[fid].get("parent_id")
     with _db_lock:
         conn = get_connection()
+        if protected:
+            conn.execute("UPDATE folders SET local_only = 1 WHERE parent_id = ?", (folder_id,))
+            conn.execute("UPDATE meetings SET local_only = 1 WHERE folder_id = ?", (folder_id,))
         conn.execute("UPDATE folders SET parent_id = ? WHERE parent_id = ?", (folder["parent_id"], folder_id))
         conn.execute("UPDATE meetings SET folder_id = ? WHERE folder_id = ?", (folder["parent_id"], folder_id))
         conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
