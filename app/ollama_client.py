@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -19,6 +19,7 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
     # Measured on 9 real meetings at 10, 8 and 6 GB and without a GPU (bench-report/llm-profiles.md)
     {
         "id": "gemma4:e4b",
+        "min_ollama": "0.30.9",  # what the model asks of Ollama in its registry config
         "name": "Gemma 4 E4B",
         "badge": "6.6 GB · Apache",
         "size": "6.6 GB",
@@ -35,6 +36,7 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
     },
     {
         "id": "gemma4:e2b",
+        "min_ollama": "0.30.9",  # what the model asks of Ollama in its registry config
         "name": "Gemma 4 E2B",
         "badge": "4.6 GB · Apache",
         "size": "4.6 GB",
@@ -461,6 +463,28 @@ def _install_ollama_if_needed() -> bool:
     return False
 
 
+def _version_tuple(text: str) -> Tuple[int, ...]:
+    """'0.30.9' -> (0, 30, 9); '0.31.0-rc1' -> (0, 31, 0)"""
+    return tuple(int(n) for n in re.findall(r"\d+", str(text).split("-", 1)[0])[:3])
+
+
+def ollama_too_old(model_name: str, base_url: str) -> Optional[Tuple[str, str]]:
+    """(installed, needed) when the running Ollama is older than the model asks for; None when it is
+    new enough, the model asks for nothing, or the version is not known. An old Ollama refused gemma4
+    with an English message of its own, or a bare «412»."""
+    needed = next((m.get("min_ollama") for m in RECOMMENDED_LLM_MODELS if m["id"] == model_name), None)
+    if not needed:
+        return None
+    try:
+        r = httpx.get(f"{base_url.rstrip('/')}/api/version", timeout=5.0)
+        installed = str(r.json().get("version") or "")
+    except Exception:
+        return None
+    if not installed or not _version_tuple(installed):
+        return None
+    return (installed, needed) if _version_tuple(installed) < _version_tuple(needed) else None
+
+
 def start_model_pull(
     model_name: str,
     base_url: Optional[str] = None,
@@ -510,6 +534,12 @@ def start_model_pull(
                     raise RuntimeError("Ollama установлена, но локальный сервер ещё не ответил. Попробуйте через 5 секунд.")
 
             _append_log("Подключение к локальному серверу Ollama")
+            old = ollama_too_old(model_name, base_url)
+            if old:
+                raise RuntimeError(
+                    f"Для модели {pretty_name} нужна Ollama {old[1]} или новее, а установлена {old[0]}. "
+                    "Обновите Ollama (https://ollama.com/download) и нажмите «Скачать» ещё раз."
+                )
             _pull_state["progress"] = 8
 
             last_logged_status = ""

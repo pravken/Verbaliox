@@ -387,6 +387,25 @@ class DefaultAnalysisModelTest(unittest.TestCase):
         self.assertNotIn("вдвое больше", qwen35["desc_ru"])  # not confirmed by the measurement
 
 
+class OllamaVersionTest(unittest.TestCase):
+    def test_gemma4_asks_for_ollama_0_30_9(self):
+        from unittest import mock
+
+        from app import ollama_client as oc
+
+        def version(v):
+            return mock.patch.object(oc.httpx, "get", return_value=mock.Mock(json=lambda: {"version": v}))
+
+        with version("0.12.3"):
+            self.assertEqual(oc.ollama_too_old("gemma4:e4b", "http://127.0.0.1:11434"), ("0.12.3", "0.30.9"))
+            self.assertIsNone(oc.ollama_too_old("qwen3:8b", "http://127.0.0.1:11434"))  # asks for nothing
+        for v in ("0.30.9", "0.40.8", "1.0.0-rc2"):
+            with self.subTest(v=v), version(v):
+                self.assertIsNone(oc.ollama_too_old("gemma4:e2b", "http://127.0.0.1:11434"))
+        with mock.patch.object(oc.httpx, "get", side_effect=OSError("refused")):
+            self.assertIsNone(oc.ollama_too_old("gemma4:e2b", "http://127.0.0.1:11434"))  # not known: Ollama says
+
+
 class AnalyticsTest(unittest.TestCase):
     def test_talk_time_turns_interruptions(self):
         from app.analytics import conversation_analytics
