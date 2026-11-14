@@ -1,5 +1,6 @@
 import io
 import json
+import re
 from typing import Any, Dict, Tuple
 
 from docx import Document
@@ -203,7 +204,23 @@ def export_json(meeting: Dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+# Characters XML (and so Word) does not allow: a vertical tab or a form feed comes with text pasted from
+# Word or a PDF, and python-docx refused the whole export for one of them
+_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
+def _xml_safe(value: Any) -> Any:
+    if isinstance(value, str):
+        return _NOT_XML.sub(" ", value)
+    if isinstance(value, dict):
+        return {k: _xml_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_xml_safe(v) for v in value]
+    return value
+
+
 def export_docx(meeting: Dict[str, Any]) -> bytes:
+    meeting = _xml_safe(meeting)
     times, names = _shown(meeting)
     doc = Document()
 
