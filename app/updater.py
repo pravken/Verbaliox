@@ -194,7 +194,7 @@ def _auto_download(st: Dict[str, Any]) -> None:
 
 def _download_current() -> bool:
     """The archive downloaded is of the release found last (call with _lock held)."""
-    dl, latest = _state["download"], _state["latest"] or {}
+    dl, latest = _state.get("download") or {}, _state.get("latest") or {}
     return bool(dl.get("done") and dl.get("path")) and (not dl.get("version") or not latest
                                                        or dl.get("version") == latest.get("version"))
 
@@ -331,7 +331,8 @@ def launch_installer(restart: bool = True, minimized: bool = False) -> None:
     with _lock:
         path = _state["download"].get("path")
         sha = _state["download"].get("sha256") or ""
-        current = _download_current()
+        dl, latest = _state.get("download") or {}, _state.get("latest") or {}
+        current = not (dl.get("version") and latest.get("version") and dl["version"] != latest["version"])
     if not path or not Path(path).is_file():
         raise RuntimeError("Архив обновления не скачан")
     if not current:
