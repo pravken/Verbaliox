@@ -2698,9 +2698,9 @@ function settingsSectionChanges(tab) {
   }).length;
 }
 
-// The dot of a section that differs from the defaults, and the reset button of the section shown
+// The reset button of the section shown, when it differs from the defaults (no dot on the sections:
+// a blue dot read as a notification)
 function refreshSettingsChanged() {
-  SETTINGS_TABS.forEach(tab => document.getElementById(`stab-${tab}`)?.classList.toggle('sx-changed', settingsSectionChanges(tab) > 0));
   const sec = document.getElementById('modal-settings')?.dataset.tab;
   const btn = document.getElementById('settings-reset-btn');
   if (!btn) return;
