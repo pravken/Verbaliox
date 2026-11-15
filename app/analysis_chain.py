@@ -32,18 +32,23 @@ def enabled(settings: Optional[Dict[str, str]] = None) -> bool:
     return (settings.get("analysis_chain") or "false").lower() == "true"
 
 
-def task_lines(meeting_id: int) -> List[str]:
-    """The tasks of a recording as the protocol lists them: «Кто: что (срок: …)»."""
+def task_items(meeting_id: int) -> List[Dict[str, str]]:
+    """The tasks of a recording: {"line": «Кто: что (срок: …)» as the protocol lists them, "what": the task alone}."""
     from app import commitments
 
     out = []
     for t in commitments.for_meetings([meeting_id]):
-        if t.get("status") == "deleted" or not str(t.get("what") or "").strip():
+        what = str(t.get("what") or "").strip()
+        if t.get("status") == "deleted" or not what:
             continue
         who = (t.get("who") or "").strip()
         due = (t.get("due_date") or t.get("due") or "").strip()
-        out.append((f"{who}: " if who else "") + str(t["what"]).strip() + (f" (срок: {due})" if due else ""))
+        out.append({"line": (f"{who}: " if who else "") + what + (f" (срок: {due})" if due else ""), "what": what})
     return out
+
+
+def task_lines(meeting_id: int) -> List[str]:
+    return [x["line"] for x in task_items(meeting_id)]
 
 
 def replace_section(md: str, key: str, lines: List[str]) -> str:
@@ -69,14 +74,21 @@ def _norm(s: str) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", s.casefold()).split())
 
 
-def _listed(task: str, points: List[str]) -> bool:
-    """A task already among the protocol's next steps (written there in other words, perhaps)."""
-    what = _norm(task.split(":", 1)[1] if ":" in task else task)
-    if not what:
+def _stems(s: str) -> List[str]:
+    return [w[:5] for w in _norm(s).split() if len(w) >= 3]
+
+
+def _listed(what: str, points: List[str]) -> bool:
+    """A task (its «what», without who and due date) already among the protocol's next steps, written there
+    in other words perhaps («Ольга встретится с группой» for «встретиться с группой»)."""
+    norm, stems = _norm(what), set(_stems(what))
+    if not norm:
         return True
     for p in points:
         np = _norm(p)
-        if what in np or difflib.SequenceMatcher(a=what, b=np).ratio() >= 0.6:
+        if norm in np or difflib.SequenceMatcher(a=norm, b=np).ratio() >= 0.6:
+            return True
+        if stems and len(stems & set(_stems(p))) >= max(2, round(0.7 * len(stems))):
             return True
     return False
 
@@ -91,7 +103,7 @@ def sync_next_steps(meeting_id: int) -> int:
     if not isinstance(proto, str) or not proto.strip():
         return 0
     points = protocol_points(proto)["next"]
-    missing = [x for x in task_lines(meeting_id) if not _listed(x, points)]
+    missing = [x["line"] for x in task_items(meeting_id) if not _listed(x["what"], points)]
     if not missing:
         return 0
     merge_summaries(meeting_id, {"protocol": replace_section(proto, "next", points + missing)})
