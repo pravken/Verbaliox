@@ -24,7 +24,8 @@
   --line: rgba(255, 255, 255, 0.09);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-menu: 0 14px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-dialog: 0 30px 80px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
+  /* one soft shadow: a 30/80 px one at 60 % showed as steps (bands) round a dialog on the dark backdrop */
+  --shadow-dialog: 0 16px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   --dur-fast: 120ms;
   --dur: 180ms;
   --dur-slow: 300ms;
