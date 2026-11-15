@@ -77,13 +77,21 @@ def _same_as_mfu(x: Dict[str, Any], y: Dict[str, Any]) -> bool:
     """A task found in the transcript that is one of the MFU's: the same person (or nobody named on
     either side) and mostly the same words; worded differently in the MFU, so looser than _same_task.
     Only the word stems count: «отчёт по продажам» and «отчёт по закупкам» read alike letter by letter
-    but are two tasks (the Fable audit)."""
+    but are two tasks. When each side has a word the other lacks («продажам» / «закупкам») most words
+    must be shared; when one only adds words to the other, most of the shorter one's."""
     wx, wy = (x.get("who") or "").casefold().split(), (y.get("who") or "").casefold().split()
     if wx and wy and wx[0] != wy[0]:  # the first name is enough: «Иван» and «Иван Петров»
         return False
     a, b = _norm_what(x.get("what")), _norm_what(y.get("what"))
     sa, sb = {w[:5] for w in a.split() if len(w) > 2}, {w[:5] for w in b.split() if len(w) > 2}  # word stems
-    return a == b or (bool(sa and sb) and len(sa & sb) / min(len(sa), len(sb)) >= 0.6)
+    if a == b:
+        return True
+    if not (sa and sb):
+        return False
+    shared = len(sa & sb)
+    if sa - sb and sb - sa:  # both say something of their own
+        return shared / max(len(sa), len(sb)) >= 0.75
+    return shared / min(len(sa), len(sb)) >= 0.6
 
 
 VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment go with it
@@ -96,17 +104,26 @@ VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment g
 # - meeting control: share the screen, the microphone or camera on/off, a link «в чат», rejoin;
 # - or said as «right now» («сейчас», «секунду», «дайте я…») about what is shown in the meeting.
 # A due date or «после встречи» / «завтра» makes it a task whatever the words.
+# The chat of the meeting itself: «в чат», «в этот чат», not «в чат проекта» / «в чат поддержки»
+_MEETING_CHAT = (r"в (этот |наш )?чат(?![ \t]+(?!(и|а|сейчас|тогда|тоже)\b)[а-яёa-z])|в чат (встречи|созвона|звонка)\b|"
+                 r"in (the |this )?chat\b(?! (of|for|with)\b)")
 _CONTROL = re.compile(
     r"(пошар|расшар|\bшарю|\bшарить|покажу (свой |мой )?экран|включ\w* (свой |мой )?(микрофон|камер|звук)|"
-    r"выключ\w* (свой |мой )?(микрофон|камер|звук)|(скину|кину|скидываю|кидаю|брошу|закину)\b.{0,40}\bв чат|"
-    r"перезайд|переподключ|share (my |the |your )?screen|screen ?shar|\bunmute|\bmute (my|your)|"
-    r"turn (on|off) (my|the) (camera|mic)|(drop|post|paste|put) .{0,30}in the chat|\brejoin)", re.I)
+    r"выключ\w* (свой |мой )?(микрофон|камер|звук)|(скину|кину|скидываю|кидаю|брошу|закину|отправлю|пришлю)\b.{0,40}"
+    + _MEETING_CHAT + r"|перезайд|переподключ|share (my |the |your )?screen|screen ?shar|\bunmute\b|\bmute (my|your)\b|"
+    r"turn (on|off) (my|the) (camera|mic)|(drop|post|paste|put) .{0,30}in (the |this )?chat\b(?! (of|for|with)\b)|\brejoin)", re.I)
 _RIGHT_NOW = re.compile(
     r"(\bсейчас\b|\bщас\b|секунд|минутк|\bдай(те)? (я|покажу|открою)|\bдавай(те)? я\b|прямо тут|"
     r"right now|\blet me\b|one sec|give me a (sec|second|minute)|\bi'?ll just\b)", re.I)
+# What is shown or heard on the call: a document or a file alone is the subject of real tasks too
 _SHOWN = re.compile(
-    r"(экран|демонстрац|ссылк|\bчат|таблиц|документ|файл|слайд|презентац|открою|покажу|микрофон|камер|звук|"
-    r"слышно|видно|screen|link|chat|slide|doc|file|show|open|mic|camera|sound)", re.I)
+    r"(экран|демонстрац|\bоткро(ю|ем)\b|\bпокаж(у|ем)\b|\bслышно\b|\bвидно\b|микрофон|камер|\bзвук|"
+    r"\bscreen\b|\bshow\b|\bopen\b|\bmic\b|camera|\bhear (me|us)\b|\bsee (my|the) screen\b)", re.I)
+# Work on the product (a bug of its screen sharing or sound) and work handed to someone after the call
+_PRODUCT_WORK = re.compile(r"(почин|исправ|\bбаг|ошибк|передел|\bfix|\bbug|\brepair)", re.I)
+_HANDOFF = re.compile(
+    r"(отправ|пришл|пришлю|подготов|обнов|сдела|напиш|написать|соберу|разошл|созвон|договорюсь|"
+    r"после этого|\bsend\b|\bget back\b|\bprepare|\bupdate|\bwrite\b|\bfollow up|after that)", re.I)
 _LATER = re.compile(
     r"(после (встречи|созвона|звонка)|\bпозже|\bпотом\b|\bзавтра|\bдо конца|\bк (понедельник|вторник|сред|четверг|пятниц|"
     r"суббот|воскресен|концу|\d)|after the (meeting|call)|\blater\b|\btomorrow|\bby (monday|tuesday|wednesday|thursday|"
@@ -114,14 +131,16 @@ _LATER = re.compile(
 
 
 def in_meeting_action(item: Dict[str, Any]) -> bool:
-    """An action of the meeting itself (share the screen, turn the microphone on, a link in the chat),
-    not a task for after it."""
+    """An action of the meeting itself (share the screen, turn the microphone on, a link in this chat),
+    not a task for after it. In doubt a task stays: a spare card costs a click, a lost task costs more."""
     if (item.get("due") or "").strip():
         return False
     said = str(item.get("quote") or "").strip() or str(item.get("what") or "")
-    if _LATER.search(f"{said} {item.get('what') or ''}"):
+    if _LATER.search(f"{said} {item.get('what') or ''}") or _PRODUCT_WORK.search(said):
         return False
-    return bool(_CONTROL.search(said) or (_RIGHT_NOW.search(said) and _SHOWN.search(said)))
+    if _CONTROL.search(said):
+        return True
+    return bool(not _HANDOFF.search(said) and _RIGHT_NOW.search(said) and _SHOWN.search(said))
 
 
 def _norm_what(t: str) -> str:
@@ -448,7 +467,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         from_mfu = [{**x, "at": None, "source": MFU} for x in parse_answer(llm.chat(_SYSTEM_MFU, head + "MFU:\n" + mfu[:MFU_MAX_CHARS]))]
     if roster and fix_name_typos:  # a name still written with a letter wrong: as in the roster
         for x in found + from_mfu:
-            for k in ("who", "to_whom", "what"):
+            for k in ("who", "to", "what"):  # the keys of parse_answer
                 if isinstance(x.get(k), str):
                     x[k] = fix_name_typos(x[k], roster)
         from app.people import resolve_person
