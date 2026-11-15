@@ -351,3 +351,50 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
     listing = "Фичи:\n" + describe(f["id"] for f in features)  # with what each is about, when written
     ids = parse_names(llm.chat(_SUGGEST, listing + "\n\n" + text, short=True), features)
     return _keep_suggestions(meeting_id, ids)
+
+
+# --- The page of a feature: its meetings, the decisions written in their summaries, its tasks ---
+_DECISION_HEAD = re.compile(r"^\s{0,3}#{1,6}\s*.*(решени|договор|decision|agreed)", re.I)
+_ANY_HEAD = re.compile(r"^\s{0,3}#{1,6}\s")
+_BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
+DECISIONS_PER_MEETING = 12
+
+
+def decisions_of(summary_md: str) -> List[str]:
+    """The points under a «Решения» / «Договорённости» / «Decisions» heading of a summary."""
+    out: List[str] = []
+    inside = False
+    for line in str(summary_md or "").splitlines():
+        if _ANY_HEAD.match(line):
+            inside = bool(_DECISION_HEAD.match(line))
+            continue
+        m = _BULLET.match(line) if inside else None
+        if m:
+            out.append(m.group(1).strip())
+    return out[:DECISIONS_PER_MEETING]
+
+
+def overview(feature_id: int) -> Optional[Dict[str, Any]]:
+    """Everything of one feature: its meetings (newest first) with the decisions of their summaries,
+    and the tasks of those meetings. None when there is no such feature."""
+    from app import commitments
+    from app.database import _loads_dict
+
+    f = next((x for x in list_features() if x["id"] == int(feature_id)), None)
+    if not f:
+        return None
+    with _db_lock:
+        conn = _conn()
+        rows = conn.execute(
+            "SELECT m.id, m.title, m.recorded_at, m.created_at, m.duration, m.summaries_json FROM meetings m "
+            "JOIN meeting_features mf ON mf.meeting_id = m.id WHERE mf.feature_id = ?", (int(feature_id),)).fetchall()
+        conn.close()
+    meetings = []
+    for r in rows:
+        sums = _loads_dict(r["summaries_json"])
+        meetings.append({"id": r["id"], "title": r["title"] or "", "date": str(r["recorded_at"] or r["created_at"] or "")[:16],
+                         "duration": r["duration"] or 0, "tldr": str(sums.get("tldr") or "")[:400],
+                         "decisions": decisions_of(sums.get("protocol") or "")})
+    meetings.sort(key=lambda m: m["date"], reverse=True)
+    tasks = commitments.for_meetings([m["id"] for m in meetings]) if meetings else []
+    return {"feature": f, "meetings": meetings, "tasks": tasks}

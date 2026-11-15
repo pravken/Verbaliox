@@ -152,6 +152,22 @@ class FeatureTagsTest(unittest.TestCase):
         self.assertIn("Экран оплаты и возвраты", sent)
         self.assertIn("Stripe", sent)  # the glossary
 
+    def test_the_feature_page_gathers_meetings_decisions_and_tasks(self):
+        from app import commitments
+        from app.database import merge_summaries
+
+        pay = features.create_feature("Платежи")
+        mid = self._meeting("Синк платежей")
+        features.set_meeting_features(mid, [pay["id"]])
+        merge_summaries(mid, {"tldr": "Обсудили возвраты", "protocol": "## Итоги\n- что-то\n## Решения\n- Запускаем возвраты в декабре\n- Stripe остаётся\n## Риски\n- сроки"})
+        commitments.create("обновить экран оплаты", "Анна", "part", "", mid)
+        page = features.overview(pay["id"])
+        self.assertEqual([m["id"] for m in page["meetings"]], [mid])
+        self.assertEqual(page["meetings"][0]["decisions"], ["Запускаем возвраты в декабре", "Stripe остаётся"])
+        self.assertEqual([x["what"] for x in page["tasks"]], ["обновить экран оплаты"])
+        self.assertIsNone(features.overview(999999))
+        self.assertEqual(features.decisions_of("## Decisions\n1. Ship it\n## Next\n- x"), ["Ship it"])
+
     def test_answers_are_read_loosely(self):
         fs = [{"id": 1, "name": "Платежи"}, {"id": 2, "name": "Поиск"}]
         self.assertEqual(features.parse_names('Ответ: ["Поиск", "поиск", "Платежи"]', fs), [2, 1])

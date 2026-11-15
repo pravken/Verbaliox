@@ -315,6 +315,7 @@ function askScopeValid(scope) {
   if (scope.type === 'person') return !!personByName(scope.name);
   if (scope.type === 'series') return (state.series || []).some(s => s.id === scope.id);
   if (scope.type === 'meeting') return state.meetings.some(m => m.id === scope.id);
+  if (scope.type === 'feature') return !!featureById(scope.id);
   return true;
 }
 
@@ -330,6 +331,10 @@ function askScopeLabel(scope) {
   if (scope.type === 'series') {
     const s = (state.series || []).find(x => x.id === scope.id);
     return `${t('askScopeSeries')}: ${s ? s.name : ''} · ${t('askRecordingsCount').replace('{n}', () => s ? s.count : 0)}`;
+  }
+  if (scope.type === 'feature') {
+    const f = featureById(scope.id);
+    return `${t('ftDictTitle')}: ${f ? f.name : ''} · ${t('askRecordingsCount').replace('{n}', () => state.meetings.filter(m => (m.features || []).includes(scope.id)).length)}`;
   }
   if (scope.type === 'person') {
     const p = personByName(scope.name);
@@ -355,6 +360,7 @@ function askScopePayload(scope) {
   if (scope.type === 'person') return { meeting_ids: (personByName(scope.name) || { recordings: [] }).recordings.map(r => r.meeting_id) };
   if (scope.type === 'series') return { meeting_ids: state.meetings.filter(m => m.series_id === scope.id).map(m => m.id) };
   if (scope.type === 'meeting') return { meeting_ids: [scope.id] };
+  if (scope.type === 'feature') return { meeting_ids: state.meetings.filter(m => (m.features || []).includes(scope.id)).map(m => m.id) };
   return {};
 }
 

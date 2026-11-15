@@ -83,7 +83,8 @@ function drawFeaturePicker() {
   if (!m || !_ftAnchor) return;
   const on = new Set(m.features || []);
   const list = (state.features || []).map(f => `<button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
-      ${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span>${on.has(f.id) ? '<span class="tk-tick">✓</span>' : '<span class="tk-tick"></span>'}</button>`).join('');
+      ${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span>${on.has(f.id) ? '<span class="tk-tick">✓</span>' : '<span class="tk-tick"></span>'}
+      <span class="ft-open" role="button" tabindex="0" ${pageCall('click', 'openFeaturePageFromPick', [f.id, { $: 'event' }])} title="${escapeHtml(t('fpOpenTip'))}">↗</span></button>`).join('');
   const series = m.series_id ? `<label class="ft-series"><input type="checkbox" id="ft-for-series" ${pageCall('change', 'saveFeaturesForSeries')}>
       <span>${escapeHtml(t('ftForSeries'))}</span></label>` : '';
   tkOpenPop(`<div class="tk-pop-cap">${escapeHtml(t('ftPickTitle'))}</div>${list || `<div class="tk-pop-quote">${escapeHtml(t('ftNone'))}</div>`}
@@ -125,7 +126,7 @@ function taskFeatureChipsHtml(meetingId, ids) {
   const list = (ids || ((state.meetings || []).find(x => x.id === meetingId) || {}).features || []).map(featureById).filter(Boolean);
   if (!list.length) return '';
   const all = list.map(f => f.name).join(', ');
-  return `<span class="ft-compact">${featureChipHtml(list[0], { title: all })}${list.length > 1 ? `<span class="ft-more" title="${escapeHtml(all)}">+${list.length - 1}</span>` : ''}</span>`;
+  return `<span class="ft-compact" role="button" tabindex="0" ${pageCall('click', 'openFeaturePage', [list[0].id])}>${featureChipHtml(list[0], { title: all })}${list.length > 1 ? `<span class="ft-more" title="${escapeHtml(all)}">+${list.length - 1}</span>` : ''}</span>`;
 }
 
 // --- Словарь → Фичи: what each feature is. Every field has a use: keywords find it in a meeting's
@@ -155,7 +156,8 @@ async function renderDictFeatures() {
         ${field(f, 'keywords', 'ftKeywords', 'ftKeywordsHint', 0)}
         ${field(f, 'description', 'ftDescription', 'ftDescriptionHint', 2)}
         ${field(f, 'terms', 'ftTerms', 'ftTermsHint', 0)}
-        <div class="flex justify-end"><button class="ui-btn ui-btn-subtle h-7 px-3 text-[11.5px] hover:text-apple-red" ${pageCall('click', 'deleteDictFeature', [f.id])}>${escapeHtml(t('ftDelete'))}</button></div>
+        <div class="flex justify-between"><button class="ui-btn ui-btn-subtle h-7 px-3 text-[11.5px]" ${pageCall('click', 'openFeaturePage', [f.id])}>${escapeHtml(t('fpOpen'))} ↗</button>
+          <button class="ui-btn ui-btn-subtle h-7 px-3 text-[11.5px] hover:text-apple-red" ${pageCall('click', 'deleteDictFeature', [f.id])}>${escapeHtml(t('ftDelete'))}</button></div>
       </div></details>`).join('')
     : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('ftNone'))}</div>`;
 }
@@ -203,4 +205,75 @@ async function deleteDictFeature(id) {
   renderDictFeatures();
   renderMeetingFeatures();
   scheduleSidebarRender();
+}
+
+// --- The page of a feature: what it is, its meetings with their decisions, its open tasks, and the
+// assistant asked about it ---
+async function openFeaturePage(id) {
+  if (typeof tkClosePop === "function") tkClosePop();
+  const res = await fetch(`/api/features/${id}`);
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); return; }
+  document.getElementById('feature-page')?.remove();
+  const f = data.feature;
+  const tasks = data.tasks || [];
+  const open = tasks.filter(x => x.status !== 'done');
+  const over = open.filter(x => tkIsOver(x)).length;
+  const done = tasks.length - open.length;
+  const stat = (n, label, tone = '') => `<div class="fp-stat"><b class="${tone}">${n}</b><span>${escapeHtml(label)}</span></div>`;
+  const decisions = data.meetings.filter(m => m.decisions.length);
+  const wrap = document.createElement('div');
+  wrap.id = 'feature-page';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.innerHTML = `<div class="w-full max-w-3xl max-h-[88vh] flex flex-col bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
+      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-start justify-between gap-3">
+        <div class="min-w-0 space-y-1.5">${featureChipHtml(f)}
+          ${f.description ? `<p class="text-[12.5px] text-apple-label leading-snug">${escapeHtml(f.description)}</p>` : ''}
+          ${f.keywords ? `<p class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('ftKeywords'))}: ${escapeHtml(f.keywords)}</p>` : ''}</div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button class="an-btn an-btn-primary" ${pageCall('click', 'askAboutFeature', [f.id])}>✦ ${escapeHtml(t('fpAsk'))}</button>
+          <button class="an-btn" ${pageCall('click', 'editFeatureFromPage')}>${escapeHtml(t('fpEdit'))}</button>
+          <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <div class="fp-stats">${stat(data.meetings.length, t('fpMeetings'))}${stat(open.length, t('fpOpenCount'))}${stat(over, t('fpOverdue'), over ? 'tk-red' : '')}${stat(done, t('fpDone'), done ? 'tk-green' : '')}</div>
+        <section><h4 class="fp-h">${escapeHtml(t('fpDecisions'))}</h4>
+          ${decisions.length ? decisions.map(m => `<div class="fp-dec"><button class="fp-meet-link" ${pageCall('click', 'openMeetingFromFeature', [m.id])}>${escapeHtml(m.title || t('tkUntitled'))} · ${escapeHtml(tkShortDate(m.date.slice(0, 10)))}</button>
+              <ul>${m.decisions.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`).join('')
+            : `<p class="fp-empty">${escapeHtml(t('fpNoDecisions'))}</p>`}</section>
+        <section><h4 class="fp-h">${escapeHtml(t('fpOpenTasks'))}</h4>
+          ${open.length ? `<div class="an-tasks">${open.map(c => commitmentRowHtml(c, true)).join('')}</div>` : `<p class="fp-empty">${escapeHtml(t('fpNoTasks'))}</p>`}</section>
+        <section><h4 class="fp-h">${escapeHtml(t('fpMeetingsList'))}</h4>
+          ${data.meetings.length ? data.meetings.map(m => `<button class="fp-meet" ${pageCall('click', 'openMeetingFromFeature', [m.id])}>
+              <span class="fp-meet-title">${escapeHtml(m.title || t('tkUntitled'))}</span><span class="fp-meet-date">${escapeHtml(tkShortDate(m.date.slice(0, 10)))} · ${formatTime(m.duration)}</span>
+              ${m.tldr ? `<span class="fp-meet-tldr">${escapeHtml(m.tldr)}</span>` : ''}</button>`).join('')
+            : `<p class="fp-empty">${escapeHtml(t('fpNoMeetings'))}</p>`}</section>
+      </div>
+    </div>`;
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="close"]')) wrap.remove(); });
+  document.body.appendChild(wrap);
+}
+
+function openMeetingFromFeature(id) {
+  document.getElementById('feature-page')?.remove();
+  switchAppView('library');
+  openMeeting(id);
+}
+
+function askAboutFeature(id) {
+  document.getElementById('feature-page')?.remove();
+  openLibraryAsk(t('fpAskQuestion'), { type: 'feature', id });
+}
+
+function editFeatureFromPage() {
+  document.getElementById('feature-page')?.remove();
+  openModal('settings', 'dictionary');
+}
+
+function openFeaturePageFromPick(id, e) {
+  e.stopPropagation();
+  openFeaturePage(id);
 }
