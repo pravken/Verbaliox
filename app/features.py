@@ -49,7 +49,7 @@ def _conn():
 
 
 # Direction overrides and other invisible characters: a name that reads differently from what it is
-_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+_INVISIBLE = re.compile("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 
 
 def _clean(name: str) -> str:

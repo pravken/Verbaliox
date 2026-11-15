@@ -67,6 +67,8 @@ def api_create_feature(payload: FeaturePayload) -> Dict[str, Any]:
 def api_update_feature(feature_id: int, payload: FeaturePayload) -> List[Dict[str, Any]]:
     from app.features import list_features, update_feature
 
+    if feature_id not in {f["id"] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
     try:
         update_feature(feature_id, payload.name, payload.color, payload.description, payload.keywords, payload.terms)
     except ValueError as e:
@@ -80,6 +82,8 @@ def api_update_feature(feature_id: int, payload: FeaturePayload) -> List[Dict[st
 def api_delete_feature(feature_id: int) -> List[Dict[str, Any]]:
     from app.features import delete_feature, list_features
 
+    if feature_id not in {f["id"] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
     delete_feature(feature_id)
     from app import vocab
 
