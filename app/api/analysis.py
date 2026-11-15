@@ -901,7 +901,9 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
         if payload.template == "protocol" and not payload.custom_prompt.strip() and analysis_chain.enabled():
             # the analysis in steps: decisions, then tasks, then the protocol with both
             result_md = analysis_chain.run(meeting_id, payload.model or None, payload.lang or m.get("language") or "ru")
+            in_steps = True
         else:
+            in_steps = False
             result_md = generate_meeting_summary(
                 segments=segments,
                 speakers=speakers,
@@ -922,7 +924,8 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
     from app.grounding import maybe_ground
 
     key = "custom" if payload.custom_prompt.strip() else payload.template
-    result_md = maybe_ground(result_md, key, m)
+    if not in_steps:  # the analysis in steps checks its protocol before its lists go in
+        result_md = maybe_ground(result_md, key, m)
     summaries = merge_summaries(meeting_id, {key: result_md}, remove=("error",))
     if key != "custom":
         from app.obsidian import refresh_if_exported
