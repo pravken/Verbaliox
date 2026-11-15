@@ -865,7 +865,7 @@ class CutAnswerTest(unittest.TestCase):
         with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"), \
                 mock.patch("app.llm_text._ask_ollama", return_value=True):
             self.assertEqual(oc._ollama_chat("http://127.0.0.1:11434", "gemma4:e4b", "s", "u"), "целиком")
-        self.assertEqual([x["options"]["num_predict"] for x in sent], [oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_RETRY_ANSWER_TOKENS])
+        self.assertEqual([x["options"]["num_predict"] for x in sent], [oc.llm_max_answer_tokens(), oc.LLM_RETRY_ANSWER_TOKENS])
         self.assertNotIn("think", sent[0])  # gemma4 reasons over a summary
         sent.clear()
         answers = iter([{"message": {"content": "Название"}, "done_reason": "stop"}])
