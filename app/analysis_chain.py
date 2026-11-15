@@ -121,7 +121,7 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
         find_tasks: bool = True, stage: Optional[Callable[[str], None]] = None,
         **summary_kwargs: Any) -> str:
     """The protocol made in steps (see above). The tasks are saved on the way; the protocol is returned
-    for the caller to save, as a protocol made in one go would be."""
+    for the caller to save, already checked against the transcript (the caller does not check it again)."""
     from app import commitments
     from app.database import get_meeting, is_local_only
     from app.features import note_for as features_note_for
@@ -170,6 +170,12 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
             "перенеси только то, что ниже, без новых пунктов. Твоя главная работа — «Краткое содержание» "
             "(согласованное с этими итогами) и «Обсуждение по темам».\n\n" + "\n\n".join(given)) if given else ""
     protocol = generate_meeting_summary(template_key="protocol", context_note=note, **common)
+    # The model's text is checked against the transcript here, before the program's lists go in: a task
+    # written in Russian in an English protocol was marked «[?]» (bench-report/analysis-chain.md); the tasks
+    # are checked by their quotes, the decisions were checked in step 1's own text
+    from app.grounding import maybe_ground
+
+    protocol = maybe_ground(protocol, "protocol", m)
     protocol = replace_section(protocol, "decisions", found["decisions"])
     protocol = replace_section(protocol, "open", found["open"])
     return replace_section(protocol, "next", tasks)

@@ -86,15 +86,24 @@ class ChainTest(unittest.TestCase):
             commitments.create("позвонить в агентство", "Ольга", "part", "", meeting_id)
             return []
 
+        checked = []
+
+        def fake_ground(md, key, m):  # marks every point: only the model's own text may get it
+            checked.append(key)
+            return md.replace("\n- ", "\n- [?] ")
+
         with mock.patch("app.ollama_client.generate_meeting_summary", side_effect=fake_summary), \
-                mock.patch("app.commitments.extract", side_effect=fake_extract):
+                mock.patch("app.commitments.extract", side_effect=fake_extract), \
+                mock.patch("app.grounding.maybe_ground", side_effect=fake_ground):
             md = analysis_chain.run(self.mid)
+        self.assertEqual(checked, ["protocol"])
+        self.assertIn("- [?] обход [00:01]", md)  # the model's topics are checked
         self.assertEqual(calls, ["decisions", "tasks", "protocol"])
         p = protocol_points(md)
         self.assertEqual(p["decisions"], ["Провести обход [00:01]"])
         self.assertEqual(p["open"], ["Кто платит за баннеры"])
         self.assertEqual(p["next"], ["Ольга: позвонить в агентство"])
-        self.assertIn("## Обсуждение по темам\n- обход [00:01]", md)
+        self.assertIn("## Обсуждение по темам\n- [?] обход [00:01]", md)
 
     def test_on_by_default(self):
         self.assertTrue(analysis_chain.enabled({}))

@@ -2011,7 +2011,8 @@ def _process_meeting_job(meeting_id: int) -> None:
                         )
                     from app.grounding import ground_summary
 
-                    if settings.get("summary_grounding", "true").lower() == "true":
+                    # the analysis in steps checks its protocol itself, before the program's lists go in
+                    if settings.get("summary_grounding", "true").lower() == "true" and not analysis_chain.enabled(settings):
                         summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
                     summaries["protocol"] = summary_md
                     merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))
