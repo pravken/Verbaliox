@@ -658,6 +658,29 @@ def api_fix_summary_word(meeting_id: int, payload: SummaryFixPayload) -> Dict[st
         learned = learn([{"wrong": wrong, "right": right}])
     return {"summaries": summaries, "replaced": count, "learned": learned}
 
+@router.get("/api/meetings/{meeting_id}/analysis/suspects")
+def api_analysis_suspects(meeting_id: int) -> Dict[str, Any]:
+    """The words of the analysis the recognition was not sure of (underlined on the page)."""
+    from app.analysis_edits import suspects
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    return {"words": suspects(m)}
+
+@router.post("/api/meetings/{meeting_id}/analysis/check")
+def api_analysis_check(meeting_id: int) -> Dict[str, Any]:
+    """A model reads the analysis for words heard wrong: suggestions, nothing is changed."""
+    from app.analysis_edits import check_with_model
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    try:
+        return {"suggestions": check_with_model(m, local_only=is_local_only(m))}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 class DictionaryLearnPayload(BaseModel):
     pairs: List[Dict[str, str]] = []
 

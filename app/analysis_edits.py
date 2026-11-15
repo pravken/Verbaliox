@@ -193,3 +193,144 @@ def fix_with_dictionary(text: str) -> str:
         fixed = fix_text(body, rules) if body else body
         out.append(line[: len(line) - len(body)] + fixed if fixed != body else line)
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------- doubtful words of the analysis
+UNSURE_PROB = 0.45  # a word Whisper heard with less certainty than this is doubtful
+SUSPECTS_MAX = 60
+CHECK_TEXT_MAX = 6000
+CHECK_MAX = 20
+
+
+def analysis_text(meeting: Dict[str, Any]) -> str:
+    """The text of the analysis sections (Markdown ones; the chapters are a list with times)."""
+    out = []
+    for key, value in (meeting.get("summaries") or {}).items():
+        if key in ("error", "chapters") or not isinstance(value, str) or not value.strip():
+            continue
+        out.append(value)
+    return "\n\n".join(out)
+
+
+def _found(text: str, word: str) -> bool:
+    return bool(word) and re.search(_boundary(word), text, re.I | re.U) is not None
+
+
+def _clean_word(text: str) -> str:
+    return re.sub(r"^[^\w]+|[^\w]+$", "", " ".join(str(text or "").split()), flags=re.U)
+
+
+def suspects(meeting: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The words of the analysis the recognition was not sure of: a place the models of a merged
+    transcript heard differently (with what the others heard) or a word Whisper was unsure of.
+    [{"word": "кубер", "options": ["Kubernetes"], "source": "dispute"|"unsure", "start": 12.3}]"""
+    text = analysis_text(meeting)
+    if not text:
+        return []
+    out: List[Dict[str, Any]] = []
+    seen = set()
+
+    def add(word: str, options: List[str], source: str, start: Any) -> None:
+        word = _clean_word(word)
+        key = word.casefold()
+        if not word or key in seen or not _has_letters(word) or not _found(text, word):
+            return
+        seen.add(key)
+        opts = []
+        for o in options:
+            o = _clean_word(o)
+            if o and o.casefold() != key and o not in opts:
+                opts.append(o)
+        out.append({"word": word, "options": opts[:4], "source": source, "start": float(start or 0)})
+
+    for seg in meeting.get("segments") or []:
+        words = seg.get("words") or []
+        for i, w in enumerate(words):
+            if len(out) >= SUSPECTS_MAX:
+                return out
+            if w.get("alts"):
+                span = max(1, int(w.get("span") or 1))
+                shown = " ".join(str(x.get("word") or "").strip() for x in words[i:i + span])
+                add(shown, [a.get("text") or "" for a in w["alts"]], "dispute", w.get("start"))
+            elif isinstance(w.get("prob"), (int, float)) and w["prob"] < UNSURE_PROB:
+                word = _clean_word(w.get("word"))
+                if sum(ch.isalpha() for ch in word) >= 3:
+                    add(word, [], "unsure", w.get("start"))
+    return out
+
+
+_CHECK_SYSTEM = (
+    "Ты корректор. Тебе дан текст анализа встречи, составленный по автоматической расшифровке речи. "
+    "Распознавание речи иногда пишет слова неверно: искажает термины, названия продуктов и сервисов, имена "
+    "и фамилии, склеивает или разрывает слова. Найди в тексте только такие слова и опечатки. Не меняй стиль, "
+    "формулировки, падежи и порядок слов; обычные правильные слова не трогай. Пиши правильное написание так, "
+    "как его пишут в работе (латиницей для продуктов и сервисов, если так принято). "
+    "Ответь только JSON-массивом без пояснений вокруг: "
+    '[{"wrong": "как написано в тексте", "right": "как правильно", "reason": "коротко, почему"}]. '
+    "Если исправлять нечего, ответь []."
+)
+
+
+def _parse_check(answer: str, text: str) -> List[Dict[str, str]]:
+    raw = str(answer or "")
+    a, b = raw.find("["), raw.rfind("]")
+    if a < 0 or b <= a:
+        return []
+    try:
+        items = json.loads(raw[a:b + 1])
+    except ValueError:
+        return []
+    out: List[Dict[str, str]] = []
+    seen = set()
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        wrong, right = _clean_word(it.get("wrong")), _clean_word(it.get("right"))
+        if not wrong or not right or wrong.casefold() == right.casefold() or wrong.casefold() in seen:
+            continue
+        if len(wrong.split()) > PHRASE_MAX_WORDS or len(right.split()) > PHRASE_MAX_WORDS or not _found(text, wrong):
+            continue  # a word the text does not have is the model's invention
+        seen.add(wrong.casefold())
+        out.append({"wrong": wrong, "right": right, "reason": " ".join(str(it.get("reason") or "").split())[:160]})
+        if len(out) >= CHECK_MAX:
+            break
+    return out
+
+
+def check_with_model(meeting: Dict[str, Any], local_only: bool = False) -> List[Dict[str, str]]:
+    """A small model reads the analysis for words heard wrong. Uses the small installed model of live
+    translation when the analysis runs locally (seconds instead of a minute), else the analysis model."""
+    from app import llm
+
+    text = analysis_text(meeting)[:CHECK_TEXT_MAX]
+    if not text.strip():
+        return []
+    model = None
+    if not llm.uses_cloud() or local_only:
+        try:
+            from app.live_translate import model_choices
+
+            model = model_choices().get("fast")
+        except Exception:
+            model = None
+    tgt = llm.target(model, local_only=local_only)
+    parts = []
+    try:
+        from app.people import meeting_roster
+
+        names = meeting_roster(meeting)
+        if names:
+            parts.append("Участники встречи (так пишутся их имена):\n" + "\n".join(f"- {n}" for n in names[:40]))
+    except Exception:
+        pass
+    try:
+        from app.database import list_dictionary
+
+        terms = [d["term"] for d in list_dictionary(active_only=True)][:120]
+        if terms:
+            parts.append("Термины из словаря пользователя (пишутся именно так): " + ", ".join(terms))
+    except Exception:
+        pass
+    parts.append(f"Текст:\n```\n{text}\n```")
+    answer = tgt.chat(_CHECK_SYSTEM, "\n\n".join(parts), short=True)
+    return _parse_check(answer, text)
