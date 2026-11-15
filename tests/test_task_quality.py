@@ -203,5 +203,14 @@ class DirectoryNamesTest(unittest.TestCase):
         self.assertIn("Ольга Смирнова", [p["name"] for p in _directory()])  # offered when a task is given
 
 
+@unittest.skipIf(commitments is None, "app dependencies not installed")
+class KindAsNameTest(unittest.TestCase):
+    def test_a_kind_code_in_place_of_the_name_is_nobody(self):
+        """The Tasks page grouped tasks under «team» and «none»: the model wrote the kind as the person."""
+        items = commitments.parse_answer('{"who": "team", "kind": "team", "what": "подготовить рекламу"}\n'
+                                         '{"who": "none", "what": "подписать документы"}')
+        self.assertEqual([(x["who"], x["kind"]) for x in items], [("", "none"), ("", "none")])
+
+
 if __name__ == "__main__":
     unittest.main()

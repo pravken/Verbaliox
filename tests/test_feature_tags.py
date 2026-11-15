@@ -171,6 +171,9 @@ class FeatureTagsTest(unittest.TestCase):
         from app.ollama_client import SUMMARY_TEMPLATES
 
         self.assertIn("## Решения", SUMMARY_TEMPLATES["protocol"])  # the standard protocol has them to show
+        proto = SUMMARY_TEMPLATES["protocol"]
+        heads = ["## Краткое содержание", "## Решения", "## Открытые вопросы", "## Следующие шаги", "## Обсуждение по темам"]
+        self.assertEqual(sorted(heads, key=proto.index), heads)  # the result first, then the talk by topic
 
     def test_lists_split_on_lines_and_keep_whole_items(self):
         f = features.create_feature("Списки")

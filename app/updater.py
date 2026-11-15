@@ -327,6 +327,22 @@ def quit_soon(delay: float = 0.8) -> None:
     threading.Thread(target=_quit, daemon=True, name="update_quit").start()
 
 
+def launch_git_update() -> None:
+    """A git clone (is_git_checkout): update.bat in a console window of its own — git pull of its branch,
+    the changed packages, then it offers to start the app again. It waits a few seconds for the app,
+    which quits right after this, to be gone (update.bat waits for a key while Verbaliox.exe runs)."""
+    from app.paths import APP_DIR
+
+    if sys.platform != "win32":
+        raise RuntimeError("Обновление через git из программы работает только в Windows")
+    script = APP_DIR / "update.bat"
+    if not is_git_checkout() or not script.is_file():
+        raise RuntimeError("Это не клон git с update.bat: обновите программу из «Настройки → Общие → Обновления»")
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen(f'cmd.exe /c "timeout /t 3 /nobreak >nul & call "{script}""', cwd=str(APP_DIR),
+                     creationflags=flags, close_fds=True)
+
+
 def launch_installer(restart: bool = True, minimized: bool = False) -> None:
     """Starts the updater for the downloaded archive; the caller then quits the app. minimized: the
     app comes back in the tray, without its window (installed in the background, run.py)."""
