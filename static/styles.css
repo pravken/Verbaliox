@@ -1878,6 +1878,23 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   background: #15161A; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); box-shadow: var(--shadow-dialog);
 }
 .settings-page > .sx-shell { max-width: 1180px; }
+/* A narrow window (800 px with the library beside it): the sections become a column of icons, so the
+   settings keep their width; the fields of a row go one under another (the PC check of 0.8.7-beta.2:
+   the dictionary's word field was one letter wide) */
+.sx-shell { container-type: inline-size; container-name: sx; }
+.sx-main { container-type: inline-size; container-name: sxmain; }
+@container sx (max-width: 720px) {
+  .sx-shell .sx-nav { width: 56px; padding: 14px 6px 10px; }
+  .sx-nav > div:first-child, .sx-nav .sx-search, .sx-nav .sx-foot { display: none; }
+  .sx-shell .sx-nav-btn { justify-content: center; position: relative; }
+  .sx-nav-btn > span.flex-1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sx-shell .sx-nav-dot { position: absolute; top: 4px; right: 4px; }
+  .sx-shell .sx-inner { padding: 12px 16px 24px; }
+}
+@container sxmain (max-width: 560px) {
+  .sx-fields-row { flex-wrap: wrap; }
+  .sx-fields-row > input { flex: 1 1 100%; width: auto; }
+}
 .sx-close { position: absolute; top: 14px; right: 14px; z-index: 10; display: inline-flex; align-items: center; gap: 7px; height: 28px;
   padding: 0 10px 0 12px; border-radius: 14px; background: #26272B; color: var(--hc-dim, #AEAEB2); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   font-size: 12px; font-weight: 500; transition: background-color var(--dur-fast), color var(--dur-fast); }
