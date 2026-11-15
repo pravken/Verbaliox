@@ -54,8 +54,9 @@ async function saveMeetingFeatures(ids, forSeries = false) {
     body: JSON.stringify({ ids, for_series: forSeries }) });
   const data = await readJson(res);
   if (!res.ok) { showError(data.detail); return; }
+  await loadFeatures();  // a feature just made is known before the header draws its chip
   applyMeetingFeatures(m, data);
-  loadFeatures().then(() => { if (document.getElementById('tk-pop')) drawFeaturePicker(); });
+  if (document.getElementById('tk-pop')) drawFeaturePicker();
 }
 
 async function acceptFeatureSuggestion(id) {
@@ -81,6 +82,12 @@ function openFeaturePicker(e) {
 function drawFeaturePicker() {
   const m = state.activeMeeting;
   if (!m || !_ftAnchor) return;
+  // the header's chips were drawn anew (a feature added or taken off): the picker stays by them, not at
+  // the top left corner where a button no longer on the page puts it
+  if (!_ftAnchor.isConnected) {
+    _ftAnchor = [...document.querySelectorAll('#meeting-features [data-click="openFeaturePicker"]')].find(b => b.offsetParent) || null;
+    if (!_ftAnchor) { if (typeof tkClosePop === 'function') tkClosePop(); return; }
+  }
   const on = new Set(m.features || []);
   // the page link is a button of its own beside the item, not inside it (a button in a button: no keyboard)
   const list = (state.features || []).map(f => `<div class="ft-pick-row"><button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
