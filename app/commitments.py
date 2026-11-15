@@ -458,7 +458,10 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
     if not m or not m.get("segments"):
         raise ValueError("Нет текста записи")
     llm = target(model_name, local_only=is_local_only(m))
-    lines = build_transcript_lines(m["segments"], m.get("speakers") or {})
+    from app.ollama_client import speakers_in_language
+
+    # «Speaker 2» in an English meeting, as its overview calls them (tasks said «Участник 2»: an audit)
+    lines = build_transcript_lines(m["segments"], speakers_in_language(m.get("speakers") or {}, m.get("language")))
     found: List[Dict[str, Any]] = []
     # Part by part, so the end of a long meeting is read too (it was cut to what fits the model before);
     # the parts overlap by a few lines, so a promise on a border is seen whole
