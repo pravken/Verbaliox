@@ -382,7 +382,7 @@ def _run_pending_exports(meeting_id: int) -> None:
 # A job on a finished recording (dub, translation, cut, subtitles) gives it back the status it had:
 # a cancelled or failed recording with half a transcript must not become "completed" (the retention
 # setting deletes the sound of completed recordings)
-FINISHED_STATUSES = ("completed", "failed", "cancelled", "cleared")
+FINISHED_STATUSES = ("completed", "failed", "cancelled", "cleared", "added")
 
 
 def _status_to_return(meeting_id: int) -> str:

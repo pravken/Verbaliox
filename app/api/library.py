@@ -403,7 +403,7 @@ async def api_upload_meetings(
             title_is_default=True,
         )
         _keep_processing(m["id"], chosen_processing)
-        enqueue_meeting_job(m["id"])
+        _queue_or_keep(m["id"], chosen_processing)
         created.append(m)
 
     return {"created": created}
@@ -429,6 +429,15 @@ def _keep_processing(meeting_id: int, processing: Optional[Dict[str, Any]]) -> N
         from app.database import set_meeting_processing
 
         set_meeting_processing(meeting_id, processing)
+
+
+def _queue_or_keep(meeting_id: int, processing: Optional[Dict[str, Any]]) -> None:
+    """Into the recognition queue, or — «Только добавить» in the import window — in the library as it is,
+    with «Распознать» on it (status «added»)."""
+    if processing and str(processing.get("transcribe", True)).lower() in ("false", "0"):
+        update_meeting_progress(meeting_id, status="added", progress=0, stage_text="", error_message="")
+        return
+    enqueue_meeting_job(meeting_id)
 
 class UrlImportPayload(BaseModel):
     url: str
@@ -576,7 +585,7 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
             title_is_default=True,
         )
         _keep_processing(m["id"], payload.processing)
-        enqueue_meeting_job(m["id"])
+        _queue_or_keep(m["id"], payload.processing)
         created.append(m)
 
     if not created and existing:

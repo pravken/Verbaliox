@@ -423,7 +423,9 @@ async function transcribeWithPickedModel() {
 function updateProcessingBanner(m) {
   const isBusy = !DONE_STATUSES.includes(m.status);
   const banner = document.getElementById('workspace-processing-banner');
-  banner.classList.toggle('hidden', !isBusy && !['failed', 'cancelled', 'cleared'].includes(m.status));
+  banner.classList.toggle('hidden', !isBusy && !['failed', 'cancelled', 'cleared', 'added'].includes(m.status));
+  // added without recognition: the button starts it, it does not «repeat» it
+  document.getElementById('workspace-retry-btn').textContent = t(m.status === 'added' ? 'impGo' : 'retryBtn');
   // the mix of a stopped recording is not a job that can be cancelled
   document.getElementById('workspace-cancel-btn').classList.toggle('hidden', !isBusy || m.status === 'mixing');
   document.getElementById('workspace-retry-btn').classList.toggle('hidden', isBusy);
@@ -444,7 +446,7 @@ function updateProcessingBanner(m) {
     const failed = m.status === 'failed';
     // the reason in words; the server's technical text (an exception, a path) only behind «Подробнее»
     const err = humanError(m.error_message || '');
-    document.getElementById('workspace-stage-text').textContent = m.status === 'cleared' ? t(Object.keys(m.summaries || {}).length ? 'statusNoText' : 'statusCleared')
+    document.getElementById('workspace-stage-text').textContent = m.status === 'added' ? t('statusAdded') : m.status === 'cleared' ? t(Object.keys(m.summaries || {}).length ? 'statusNoText' : 'statusCleared')
       : (failed ? t('statusFailed') : t('statusCancelled')) + (m.error_message ? `: ${err.short}` : m.stage_text ? `: ${serverText(m.stage_text)}` : '');
     document.getElementById('workspace-stage-text').title = m.error_message ? err.short : '';
     document.getElementById('workspace-stage-text').classList.toggle('truncate', !failed);  // a reason is read in full
@@ -1619,6 +1621,7 @@ function renderTranscriptNow() {
     const m = state.activeMeeting || {};
     const why = segments.length ? 'emptyTxFiltered'
       // the only transcript deleted with «Очистить»: the analysis made from it stays
+      : m.status === 'added' ? 'emptyTxAdded'
       : m.status === 'cleared' ? (Object.keys(m.summaries || {}).length ? 'emptyTxAnalysisKept' : 'emptyTxCleared')
       : ['failed', 'cancelled'].includes(m.status) ? 'emptyTxFailed'
       : DONE_STATUSES.includes(m.status) ? 'emptyTxNoSpeech' : 'emptyTxProcessing';
