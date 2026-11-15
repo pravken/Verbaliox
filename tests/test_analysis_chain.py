@@ -52,6 +52,20 @@ class ChainTest(unittest.TestCase):
         steps = protocol_points(get_meeting(self.mid)["summaries"]["protocol"])["next"]
         self.assertEqual(steps, ["Ольга: позвонить в агентство", "Игорь: заказать баннеры (срок: 2026-12-01)"])
 
+    def test_a_task_without_a_person_but_with_a_due_date_is_added_once(self):
+        # «(срок: …)» has a colon: the task was cut there, never found, and added again on every sync
+        merge_summaries(self.mid, {"protocol": PROTOCOL})
+        commitments.create("доложить о ситуации", "", "", "2026-11-16", self.mid)
+        self.assertEqual(analysis_chain.sync_next_steps(self.mid), 1)
+        self.assertEqual(analysis_chain.sync_next_steps(self.mid), 0)
+        steps = protocol_points(get_meeting(self.mid)["summaries"]["protocol"])["next"]
+        self.assertEqual(steps.count("доложить о ситуации (срок: 2026-11-16)"), 1)
+
+    def test_a_step_retold_in_other_words_is_the_same_task(self):
+        self.assertTrue(analysis_chain._listed("встретиться с рабочей группой по проекту",
+                                               ["Ольга встретится с рабочей группой по проекту [10:08]"]))
+        self.assertFalse(analysis_chain._listed("заказать баннеры", ["Ольга: позвонить в агентство"]))
+
     def test_the_steps_run_in_order_and_the_protocol_holds_their_lists(self):
         calls = []
         decisions = "## Решения\n- Провести обход [00:01]\n\n## Открытые вопросы\n- Кто платит за баннеры"

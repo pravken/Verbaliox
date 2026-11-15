@@ -201,16 +201,16 @@ def _reset_analysis(meeting_id: int) -> None:
 def _agreement(meeting_id: int, protocol: str) -> Dict[str, Any]:
     """How the protocol and the tasks of a recording disagree: tasks missing from «Следующие шаги»,
     next steps that are no task, and the «Решения» points with their check against the transcript."""
-    from app.analysis_chain import _listed, task_lines
+    from app.analysis_chain import _listed, task_items
     from app.grounding import UNVERIFIED_MARK
     from app.meeting_context import protocol_points
 
-    tasks = task_lines(meeting_id)
+    items = task_items(meeting_id)
+    tasks = [x["line"] for x in items]
     pts = protocol_points(protocol)
-    # A step is looked up among the tasks without its time marks: _listed splits «who: what» at the first
-    # colon, and «[10:08]» of a step without a person would be split there
+    # A step is looked up among the tasks without its time marks
     bare = lambda p: re.sub(r"\s*\[\d{1,2}:\d{2}(?::\d{2})?(?:[–-]\d{1,2}:\d{2}(?::\d{2})?)?\]|\s*\[\?\]", "", p)
-    return {"tasks_not_in_next": [t for t in tasks if not _listed(t, pts["next"])],
+    return {"tasks_not_in_next": [x["line"] for x in items if not _listed(x["what"], pts["next"])],
             "next_not_tasks": [p for p in pts["next"] if not _listed(bare(p), tasks)],
             "decisions": pts["decisions"], "open": pts["open"],
             "decisions_unverified": sum(1 for d in pts["decisions"] if UNVERIFIED_MARK in d)}
