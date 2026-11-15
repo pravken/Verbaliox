@@ -1797,7 +1797,8 @@ def clear_results(meeting_id: int) -> bool:
 # What is done to a recording when it is transcribed, chosen per recording above the text (the
 # "Recognition" row); what a recording has not chosen comes from the settings
 # (fillers are no longer taken out of the text: «Без запинок» is a view, so there is no switch for them)
-PROCESSING_KEYS = ("denoise", "loudnorm", "leveling", "vad", "diarization", "summary", "ensemble")
+PROCESSING_KEYS = ("denoise", "loudnorm", "leveling", "vad", "diarization", "summary", "ensemble",
+                   "transcribe")  # transcribe: false — the import window's «add without recognition»
 
 
 def effective_processing(stored: Optional[Dict[str, Any]], settings: Optional[Dict[str, str]] = None) -> Dict[str, bool]:

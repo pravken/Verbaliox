@@ -945,14 +945,14 @@ function commitmentRowHtml(c, withMeeting, hasMfu = false) {
   // who and the due date open the same pickers as on the Tasks page: the people, the calendar
   const dueText = c.due_date ? tkDueText(c) : c.due || t('tkNoDue');
   const due = `<button class="tk-due ${c.due_date ? tkDueTone(c) : c.due ? '' : 'an-task-nodue'}" ${pageCall('click', 'openCardDue', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(dueText)}</button>`;
-  const to = c.to_whom ? `<span class="an-task-to">→ ${escapeHtml(c.to_whom)}</span>` : '';
+  const to = c.to_whom ? `<span class="an-task-to" title="${escapeHtml(t('anToTip'))}">${escapeHtml(t('anToCap'))} ${escapeHtml(c.to_whom)}</span>` : '';
   const where = withMeeting ? `<span class="an-task-where">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</span>` : '';
   return `<div class="an-task${done ? ' an-task-done' : ''}">
       <input type="checkbox" ${done ? 'checked' : ''} data-cid="${c.id}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="tk-check" aria-label="${escapeHtml(t('tkDone'))}" />
       <div class="an-task-main">
         <div class="an-task-what">${escapeHtml(c.what)}</div>
         <div class="an-task-meta">
-          <button class="an-task-who" ${pageCall('click', 'openCardAssign', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></button>${to}${at}${where}
+          <button class="an-task-who" ${pageCall('click', 'openCardAssign', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true"><span class="an-task-who-cap">${escapeHtml(t('anWhoCap'))}</span>${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></button>${to}${at}${where}
         </div>
       </div>
       <div class="an-task-side">${due}<div class="an-task-tags">${taskFeatureChipsHtml(c.meeting_id, withMeeting ? null : (state.activeMeeting || {}).features)}${src}</div></div>
@@ -1947,6 +1947,8 @@ function openTextMenuAt(items, x, y, opts) {
   const clean = items.filter((it, i, a) => !it.sep || (i > 0 && !a[i - 1].sep && i < a.length - 1));
   menu.innerHTML = clean.map((it, i) => it.sep
     ? '<div class="my-1 h-px bg-white/10"></div>'
+    : it.info  // a line that only says something (who chose a disputed word), not an action
+    ? `<div class="tm-info">${escapeHtml(it.label)}</div>`
     : `<button class="macos-menu-item gap-6" data-i="${i}" ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
       + `<span class="tm-key">${escapeHtml(it.key || '')}</span></button>`).join('');
   // Keeps the selection: a click in the menu must not clear it before the action reads it

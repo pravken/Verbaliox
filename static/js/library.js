@@ -790,7 +790,7 @@ function meetingRowHtml(m, depth) {
     ? `<img src="/api/meetings/${m.id}/thumb" loading="lazy" alt="" draggable="false" data-error="removeElement" data-error-args='[{"$": "el"}]'
         class="w-12 h-[27px] rounded object-cover bg-black/60 shrink-0 border border-white/10" />`
     : '';
-  const status = m.status === 'failed' ? t('statusFailed') : m.status === 'cancelled' ? t('statusCancelled') : m.status === 'cleared' ? t('statusClearedShort')
+  const status = m.status === 'failed' ? t('statusFailed') : m.status === 'cancelled' ? t('statusCancelled') : m.status === 'cleared' ? t('statusClearedShort') : m.status === 'added' ? t('statusAddedShort')
     : [spkCount ? `${spkCount} ${t('spkShort')}` : '', m.language && m.language !== 'auto' ? m.language.toUpperCase() : ''].filter(Boolean).join(' · ');
   return `
     <div data-click="libRowClick" data-click-args='[{"$": "event"}, ${m.id}]' data-mid="${m.id}" tabindex="0" role="button"
@@ -1095,10 +1095,13 @@ function libFilterLabel(group, id) {
   return id === 'mixed' ? t('langMixed') : langName(id);
 }
 
-function libFilterMenuHtml() {
+// which: 'feature' — the features' own menu (its button beside the funnel); else the funnel's: type,
+// source, state, what is ready, language (the features were one more group there and the menu grew long)
+function libFilterMenuHtml(which = 'rest') {
   const f = libFilters();
   const features = (state.features || []).length ? [...(state.features || []).map(x => String(x.id)), 'none'] : [];
-  const groups = [['feature', features], ...Object.keys(LIB_FILTERS).map(g => [g, Object.keys(LIB_FILTERS[g])]), ['lang', libLangOptions()]];
+  const groups = which === 'feature' ? [['feature', features]]
+    : [...Object.keys(LIB_FILTERS).map(g => [g, Object.keys(LIB_FILTERS[g])]), ['lang', libLangOptions()]];
   let html = '';
   for (const [g, ids] of groups) {
     if (!ids.length) continue;
@@ -1112,6 +1115,7 @@ function libFilterMenuHtml() {
         + `<span class="text-[11px] opacity-70 font-mono">${n}</span></button>`;
     }
   }
+  if (which === 'feature' && !features.length) html = `<div class="px-2.5 py-2 text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('libFeatureNone'))}</div>`;
   if (libFilterCount()) {
     html += `<div class="my-1 h-px bg-white/10"></div><button class="macos-menu-item" data-reset="1"><span>${escapeHtml(t('libFilterResetAll'))}</span><span></span></button>`;
   }
@@ -1119,17 +1123,18 @@ function libFilterMenuHtml() {
 }
 
 // The menu stays open while options are ticked: it closes on a click outside, Esc or the funnel
-function openLibFilterMenu(e) {
+function openLibFilterMenu(e, which = 'rest') {
   e.preventDefault();
   e.stopPropagation();
   const had = document.getElementById('lib-filter-menu');
   closeLibFilterMenu();
-  if (had) return;
+  if (had && had.dataset.which === which) return;
   const menu = document.createElement('div');
   menu.id = 'lib-filter-menu';
   menu.setAttribute('role', 'menu');
   menu.className = 'fixed w-56 macos-menu z-50';
-  menu.innerHTML = libFilterMenuHtml();
+  menu.dataset.which = which;
+  menu.innerHTML = libFilterMenuHtml(which);
   menu.addEventListener('click', (ev) => {
     ev.stopPropagation();
     const b = ev.target.closest('button');
@@ -1153,6 +1158,7 @@ function openLibFilterMenu(e) {
 function closeLibFilterMenu() {
   document.getElementById('lib-filter-menu')?.remove();
   document.getElementById('lib-filter-btn')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('lib-feature-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 document.addEventListener('click', closeLibFilterMenu);
@@ -1162,7 +1168,7 @@ function applyLibFilters() {
   const f = libFilters();
   try { localStorage.setItem(LIB_FILTER_KEY, JSON.stringify(Object.fromEntries(Object.entries(f).map(([g, s]) => [g, [...s]])))); } catch (e) {}
   const menu = document.getElementById('lib-filter-menu');
-  if (menu) menu.innerHTML = libFilterMenuHtml();
+  if (menu) menu.innerHTML = libFilterMenuHtml(menu.dataset.which);
   renderLibFilterUi();
   renderMeetingsSidebar();
 }
@@ -1180,9 +1186,13 @@ function resetLibFilters() {
 // The funnel's count and the active filters as chips under the search
 function renderLibFilterUi() {
   const n = libFilterCount();
-  document.getElementById('lib-filter-btn')?.classList.toggle('on', n > 0);
+  const nf = libFilters().feature.size, nr = n - nf;  // each button counts its own
+  document.getElementById('lib-filter-btn')?.classList.toggle('on', nr > 0);
   const count = document.getElementById('lib-filter-count');
-  if (count) { count.textContent = n; count.classList.toggle('hidden', !n); }
+  if (count) { count.textContent = nr; count.classList.toggle('hidden', !nr); }
+  document.getElementById('lib-feature-btn')?.classList.toggle('on', nf > 0);
+  const fcount = document.getElementById('lib-feature-count');
+  if (fcount) { fcount.textContent = nf; fcount.classList.toggle('hidden', !nf); }
   const box = document.getElementById('lib-filter-chips');
   if (!box) return;
   box.classList.toggle('hidden', !n);

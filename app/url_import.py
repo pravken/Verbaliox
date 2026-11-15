@@ -295,8 +295,13 @@ def _download_one(meeting_id: int, url: str, stop: threading.Event) -> None:
                          (str(path), path.name, f"{date[:4]}-{date[4:6]}-{date[6:8]} 12:00:00" if len(date) == 8 else "", meeting_id))
             conn.commit()
             conn.close()
-        update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
-        enqueue_meeting_job(meeting_id)
+        from app.database import get_meeting
+
+        if (get_meeting(meeting_id) or {}).get("processing", {}).get("transcribe") is False:
+            update_meeting_progress(meeting_id, status="added", progress=0, stage_text="")  # «Только добавить»
+        else:
+            update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
+            enqueue_meeting_job(meeting_id)
     except Exception as e:
         _drop_files(stem)
         if stop.is_set() or isinstance(e, _Cancelled) or isinstance(getattr(e, "exc_info", [None, None])[1], _Cancelled):
