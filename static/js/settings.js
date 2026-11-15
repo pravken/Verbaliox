@@ -2433,7 +2433,7 @@ function renderEnsembleModels(s = (state.system && state.system.settings) || {})
     return `<span class="ens-item"><label class="flex items-center gap-1.5 text-xs ${m.installed ? 'text-apple-label cursor-pointer' : 'text-apple-tertiary'}">
       <input type="checkbox" id="set-ens-${escapeHtml(m.id)}" value="${escapeHtml(m.id)}" ${picked.has(m.id) ? 'checked' : ''} ${m.installed ? '' : 'disabled'}
         class="rounded bg-apple-sidebar border-white/20 text-apple-blue" />
-      <span>${escapeHtml(m.name || m.id)}</span></label>${tail}</span>`;
+      <span>${escapeHtml(m.name || m.id)}</span></label>${tail || '<span></span>'}</span>`;
   }).join('');
   syncEnsembleBox();
   if (ticked) scheduleSettingsSave();  // a model downloaded from here joins the precise mode

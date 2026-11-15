@@ -2785,7 +2785,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .frw-later:hover { color: #F5F5F7; }
 
 /* The precise mode's models (settings.js: renderEnsembleModels): «Скачать» beside a model not downloaded */
-.ens-item { display: inline-flex; align-items: center; gap: 6px; }
+.ens-list { display: flex; flex-direction: column; gap: 2px; max-width: 460px; }
+/* a line per model, the status in its own column at the right: «Скачать» turning into «скачивается» moves nothing */
+.ens-item { display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: center; gap: 10px; min-height: 28px;
+            padding: 2px 8px; border-radius: 8px; }
+.ens-item:hover { background: rgba(255, 255, 255, 0.03); }
+.ens-item > :last-child { justify-self: end; }
 .ens-dl { height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; color: #64B5FF; background: rgba(10, 132, 255, 0.12);
           border: 1px solid rgba(10, 132, 255, 0.35); white-space: nowrap; }
 .ens-dl:hover { background: rgba(10, 132, 255, 0.22); color: #F5F5F7; }
