@@ -63,6 +63,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
 ru.DesktopIcon=Значок на рабочем столе
+ru.FullRemove=Удалить Verbaliox полностью
+en.FullRemove=Remove Verbaliox completely
 en.DesktopIcon=Desktop icon
 ru.RunAfter=Запустить Verbaliox (дальше программа предложит установить свои компоненты)
 en.RunAfter=Start Verbaliox (it then offers to install its components)
@@ -84,6 +86,8 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 [Icons]
 Name: "{autoprograms}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+; Everything the program made, the shared tools asked about (uninstall.ps1)
+Name: "{autoprograms}\{cm:FullRemove}"; Filename: "{app}\uninstall.bat"
 
 [Run]
 Filename: "{app}\Verbaliox.exe"; Description: "{cm:RunAfter}"; Flags: nowait postinstall skipifsilent
@@ -247,6 +251,9 @@ begin
     if RegQueryStringValue(HKCU, 'Environment', 'OLLAMA_MODELS', V) and (Pos(Norm(ExpandConstant('{app}')), Norm(V)) = 1) then
       RegDeleteValue(HKCU, 'Environment', 'OLLAMA_MODELS');
     DelTree(ExpandConstant('{localappdata}\Verbaliox'), True, True, True);
-    RemoveDir(ExpandConstant('{app}'));
+    // the old name's folder and a migration left halfway, files an update added after the install
+    DelTree(ExpandConstant('{localappdata}\VerbaScribe'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\Verbaliox.migrating'), True, True, True);
+    DelTree(ExpandConstant('{app}'), True, True, True);
   end;
 end;

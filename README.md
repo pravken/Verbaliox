@@ -161,6 +161,15 @@ The user interface, fonts and scripts are served locally. The built-in server li
 
 Recordings, extracted audio, the database and exports are kept in `%LOCALAPPDATA%\Verbaliox` (shown in Settings). Set the `VERBALIOX_DATA_DIR` environment variable to use another folder. Speech models stay in the program's `models` folder (`VERBALIOX_MODELS_DIR` overrides it). Earlier versions kept data in the program's `data` folder; it is moved automatically on the first start (copied, verified, then removed, with a `MOVED.txt` note left behind). Files you added by disk path are never moved.
 
+### Removing the program
+
+`uninstall.bat` in the program folder (or «Remove Verbaliox completely» in the Start menu of an installed copy) removes the program and everything it made, for a portable folder and an installed copy alike:
+- the program folder with its Python environments and models;
+- the data folder (recordings kept by the program, transcripts, settings, saved API keys, logs), the folders of the old name VerbaScribe;
+- «Start with Windows», the installer's entry in Installed apps, the shortcuts, `OLLAMA_MODELS` when it points to the program's models, temporary files.
+
+It closes the program first and asks before deleting. Ollama, uv and Python 3.11 that the setup may have installed are asked about separately (other programs may use them). A recordings folder chosen in Settings outside the data folder, files imported without a copy, exports and Obsidian notes are never deleted. `uninstall.bat -KeepData` keeps the recordings and settings; `-Yes` asks nothing (and keeps the shared tools).
+
 ### Licenses
 
 Verbaliox's own code is released under the [MIT License](LICENSE). Models and libraries keep their own licenses; check them yourself before commercial use:
@@ -372,6 +381,15 @@ start.bat
 ### Где хранятся данные
 
 Записи, извлечённый звук, база и экспорт лежат в `%LOCALAPPDATA%\Verbaliox` (путь виден в настройках). Другую папку можно задать переменной окружения `VERBALIOX_DATA_DIR`. Модели распознавания остаются в папке программы `models` (переопределяется `VERBALIOX_MODELS_DIR`). Раньше данные хранились в папке программы `data`; при первом запуске она переносится автоматически (копирование, проверка, затем удаление; на старом месте остаётся `MOVED.txt`). Файлы, добавленные по пути на диске, не переносятся.
+
+### Удаление программы
+
+`uninstall.bat` в папке программы (или «Удалить Verbaliox полностью» в меню «Пуск» установленной копии) удаляет программу и всё, что она создала. Подходит и для переносной папки, и для установленной копии:
+- папку программы со средами Python и моделями;
+- папку данных (записи, сохранённые программой, расшифровки, настройки, сохранённые ключи API, журналы) и папки старого названия VerbaScribe;
+- автозапуск с Windows, запись установщика в «Установленных приложениях», ярлыки, `OLLAMA_MODELS`, если она указывает на модели программы, временные файлы.
+
+Сначала он закрывает программу и спрашивает подтверждение. Про Ollama, uv и Python 3.11, которые могла поставить настройка, спрашивает отдельно: ими могут пользоваться другие программы. Не удаляются папка записей, выбранная в настройках вне папки данных, файлы, импортированные без копирования, экспорт и заметки Obsidian. `uninstall.bat -KeepData` оставляет записи и настройки; `-Yes` ничего не спрашивает (и не трогает общие инструменты).
 
 ### Лицензии
 
