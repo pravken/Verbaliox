@@ -2584,6 +2584,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .an-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--fs-caption); line-height: 1.35; color: var(--hc-dim, #8E8E93); }
 .an-task-who { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px 2px 2px; margin-left: -2px; border: 0; border-radius: 12px; background: transparent; color: #E5E5EA; font-size: inherit; cursor: pointer; }
 .an-task-who:hover { background: rgba(255, 255, 255, 0.07); }
+/* «Исполнитель»: the name under a task is who does it, not who wrote it */
+.an-task-who-cap { color: var(--hc-dim, #8E8E93); font-size: var(--fs-label, 11px); margin-left: 4px; }
 .an-task-to { color: var(--hc-dim, #8E8E93); }
 .an-task-at { padding: 0; border: 0; background: transparent; font-family: var(--font-mono); font-size: var(--fs-caption); color: #64B5FF; cursor: pointer; }
 .an-task-at:hover { text-decoration: underline; }
