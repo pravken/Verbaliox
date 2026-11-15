@@ -56,6 +56,36 @@ _CHECK = (
     "с которым не согласились, вопрос, пересказ факта, общий план без конкретного действия. "
     "Ответ — по строке на задачу, в виде «номер: да» или «номер: нет», без пояснений."
 )
+# The organizer's meeting follow-up (MFU), pasted into the recording: a list people agreed on, so every
+# action in it is a task, taken as written; the transcript only adds the moment it was said
+_SYSTEM_MFU = (
+    "Тебе дан MFU — итоги встречи, которые написал её организатор. Выпиши из него все задачи: кто что должен "
+    "сделать после встречи. Это согласованный людьми список: возьми каждый пункт-действие, ничего не пропускай "
+    "и ничего не добавляй от себя. Решения, выводы и сведения без действия — не задачи. "
+    "Ответ — только строки JSON, по одному объекту на строку, без пояснений: "
+    '{"who": "кто сделает", "kind": "кто это", "to": "для кого (или пусто)", "what": "что сделать, коротко", '
+    '"due": "срок словами из текста или пусто", "quote": "дословные слова пункта из MFU"}. '
+    "kind — одно из: part (участник встречи), ext (человек, которого только назвали), team (отдел или группа), "
+    "org (другая компания), none (исполнитель не назван, тогда who пусто). "
+    "Имена — как в MFU. Если задач нет, ответь пустой строкой."
+)
+MFU_MAX_CHARS = 20000
+MFU = "mfu"  # the source of a task taken from the MFU
+
+
+def _same_as_mfu(x: Dict[str, Any], y: Dict[str, Any]) -> bool:
+    """A task found in the transcript that is one of the MFU's: the same person (or nobody named on
+    either side) and mostly the same words; worded differently in the MFU, so looser than _same_task."""
+    from difflib import SequenceMatcher
+
+    wx, wy = (x.get("who") or "").casefold().split(), (y.get("who") or "").casefold().split()
+    if wx and wy and wx[0] != wy[0]:  # the first name is enough: «Иван» and «Иван Петров»
+        return False
+    a, b = _norm_what(x.get("what")), _norm_what(y.get("what"))
+    sa, sb = {w[:5] for w in a.split() if len(w) > 2}, {w[:5] for w in b.split() if len(w) > 2}  # word stems
+    return a == b or (bool(sa and sb) and len(sa & sb) / min(len(sa), len(sb)) >= 0.6) or SequenceMatcher(None, a, b).ratio() >= 0.75
+
+
 VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment go with it
 
 
@@ -388,8 +418,12 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
         found += parse_answer(llm.chat(system, head + "Расшифровка:\n" + part))
+    mfu = (m.get("mfu") or "").strip()
+    from_mfu: List[Dict[str, Any]] = []
+    if mfu:  # the organizer's list: its tasks as written, none checked against the transcript
+        from_mfu = [{**x, "at": None, "source": MFU} for x in parse_answer(llm.chat(_SYSTEM_MFU, head + "MFU:\n" + mfu[:MFU_MAX_CHARS]))]
     if roster and fix_name_typos:  # a name still written with a letter wrong: as in the roster
-        for x in found:
+        for x in found + from_mfu:
             for k in ("who", "to_whom", "what"):
                 if isinstance(x.get(k), str):
                     x[k] = fix_name_typos(x[k], roster)
@@ -398,6 +432,16 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     items = [x for x in items if not in_meeting_action(x)]
     dismissed = _dismissed(meeting_id)
     items = [x for x in items if not _was_dismissed(x, dismissed)]  # the user deleted it: it does not come back
+    if from_mfu:
+        from_mfu = prune([x for x in from_mfu if not _was_dismissed(x, dismissed)])
+        rest = []
+        for x in items:  # said in the meeting and in the MFU: the MFU's task, with the moment it was said
+            twin = next((y for y in from_mfu if _same_as_mfu(x, y)), None)
+            if twin is None:
+                rest.append(x)
+            elif twin.get("at") is None:
+                twin["at"] = x.get("at")
+        items = from_mfu + rest
     _init()
     now = datetime.now().isoformat(timespec="seconds")
     day, speaking = _meeting_day(m), {n.casefold() for n in participants(m)}
@@ -433,9 +477,9 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
             due_date = parse_due(x["due"], day)
             conn.execute(
                 "INSERT INTO commitments (meeting_id, who, to_whom, what, due, at, status, created_at, who_kind, quote,"
-                " due_date, source) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'ai')",
+                " due_date, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (meeting_id, x["who"], x["to"], x["what"], x["due"], x["at"], status, now, kind, x["quote"],
-                 due_date.isoformat() if due_date else ""))
+                 due_date.isoformat() if due_date else "", x.get("source") or "ai"))
         conn.commit()
         conn.close()
     return for_meetings([meeting_id])

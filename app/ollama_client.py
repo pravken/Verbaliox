@@ -684,6 +684,7 @@ SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
 LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
+MFU_SUMMARY_CHARS = 6000     # the organizer's follow-up in every summary request (as much as the notes)
 LARGE_CONTEXT_VRAM_GB = 7.5   # an "8 GB" card reports a little under 8
 CONTEXT_SCALE: Optional[float] = None  # set by tools/llm_bench.py --ctx; None: chosen by the card
 
@@ -1031,8 +1032,10 @@ def generate_meeting_summary(
     progress: Optional[Callable[[int, int], None]] = None,
     part_notes: Optional[Dict[str, Any]] = None,
     participants: Optional[List[str]] = None,
+    mfu: str = "",
 ) -> str:
-    """participants: who was in the meeting, their names written right (app/people.meeting_roster):
+    """mfu: the organizer's meeting follow-up the user pasted: the decisions and tasks agreed on;
+    participants: who was in the meeting, their names written right (app/people.meeting_roster):
     the model writes them so, and a name it still misspells is put right in its answer;
     template_prompt: the instruction of a template the user made (Settings → Analysis);
     user_notes: what the user wrote during the meeting, taken into account by every summary;
@@ -1073,6 +1076,13 @@ def generate_meeting_summary(
         )
     elif template_key == "notes" and not custom_prompt.strip():
         raise RuntimeError("У записи нет ваших заметок: напишите их во вкладке «Мои заметки» или во время записи в студии")
+    mfu_text = (mfu or "").strip()[:MFU_SUMMARY_CHARS]
+    if mfu_text:
+        instruction += (
+            "\n\nMFU — итоги встречи, которые написал её организатор и разослал участникам. Решения, задачи, сроки "
+            "и ответственных бери из MFU: это согласованный людьми текст. Расшифровку используй для подробностей и "
+            "таймкодов; где она расходится с MFU, верь MFU:\n```text\n" + mfu_text + "\n```"
+        )
 
     roster = [p for p in (participants or []) if str(p).strip()][:40]
     roster_note = (
@@ -1086,7 +1096,7 @@ def generate_meeting_summary(
     single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
-    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]))
+    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text))
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
         chunks = _chunk_lines(lines, chunk_max_chars() if not llm.is_cloud else llm.max_chars // 2)

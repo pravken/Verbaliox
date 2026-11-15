@@ -223,6 +223,7 @@ function analysisSections() {
     ...(tpls.length ? [{ label: t('anGrpTemplates'), items: tpls }] : []),
     { label: t('anGrpMine'), items: [
       { key: 'mynotes', label: t('notesTitle'), about: t('tipSumMyNotes'), page: true, make: false, mine: true },
+      { key: 'mfu', label: t('mfuTitle'), about: t('tipSumMfu'), page: true, make: false, mine: true },
       { key: 'notes', label: t('sumNotes'), about: t('tipSumNotes'), page: true, make: true },
     ] },
   ];
@@ -244,6 +245,7 @@ function anHasContent(key) {
   const m = state.activeMeeting;
   if (!m) return false;
   if (key === 'mynotes') return !!(m.user_notes || '').trim();
+  if (key === 'mfu') return !!(m.mfu || '').trim();
   if (key === 'commitments') return !!(state.anCommit && state.anCommit.id === m.id && state.anCommit.n > 0);
   return !!((m.summaries || {})[key] || '').trim();
 }
@@ -425,25 +427,30 @@ async function clearSummaryTab(key) {
       if (tab === 'chapters') renderChaptersBar();
       renderSummaryPanel();
     };
-    const notes = m.user_notes;
+    const notes = m.user_notes, mfu = m.mfu;
     const section = (m.summaries || {})[tab];
     deleteWithUndo({
       message: t('clearTabDoneToast').replace('{tab}', () => label),
       hide: () => {
         if (tab === 'mynotes') m.user_notes = '';
+        else if (tab === 'mfu') m.mfu = '';
         else { const rest = { ...(m.summaries || {}) }; delete rest[tab]; m.summaries = rest; }
         redraw();
       },
       restore: () => {
         if (tab === 'mynotes') m.user_notes = notes;
+        else if (tab === 'mfu') m.mfu = mfu;
         else m.summaries = { ...(m.summaries || {}), [tab]: section };
         redraw();
       },
       commit: async (keepalive) => {
         const res = tab === 'mynotes'
           ? await fetch(`/api/meetings/${m.id}/notes`, { method: 'PATCH', keepalive, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: '' }) })
+          : tab === 'mfu'
+          ? await fetch(`/api/meetings/${m.id}/mfu`, { method: 'PUT', keepalive, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '' }) })
           : await fetch(`/api/meetings/${m.id}/summaries?key=${encodeURIComponent(tab)}`, { method: 'DELETE', keepalive });
-        if (res.ok && !keepalive && tab !== 'mynotes' && state.activeMeeting && state.activeMeeting.id === m.id) {
+        if (res.ok && !keepalive && tab === 'mfu') refreshTasksAfterMfu(m);
+        if (res.ok && !keepalive && tab !== 'mynotes' && tab !== 'mfu' && state.activeMeeting && state.activeMeeting.id === m.id) {
           state.activeMeeting.summaries = (await readJson(res)).summaries || {};
           redraw();
         }
@@ -482,6 +489,11 @@ function renderSummaryPanel() {
     // a section finished in the background re-renders the panel: the notes being typed keep their caret
     const ed = document.getElementById('my-notes-input');
     if (!(ed && box.contains(ed) && document.activeElement === ed)) renderMyNotesEditor(box);
+    return;
+  }
+  if (tab === 'mfu') {
+    const ed = document.getElementById('mfu-input');
+    if (!(ed && box.contains(ed) && document.activeElement === ed)) renderMfuEditor(box);
     return;
   }
   if (tab === 'commitments') { renderCommitments(box); return; }
@@ -541,7 +553,7 @@ function renderAnalysisHead() {
   const title = document.getElementById('an-title');
   if (title) title.textContent = it.label;
   const sub = document.getElementById('an-sub');
-  if (sub) sub.textContent = tab === 'mynotes' ? t('anNotesSub') : busy ? t('anMaking') : '';
+  if (sub) sub.textContent = tab === 'mynotes' ? t('anNotesSub') : tab === 'mfu' ? t('mfuSub') : busy ? t('anMaking') : '';
   const sel = document.getElementById('summary-llm-select');
   const name = document.getElementById('an-model-name');
   const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
@@ -610,6 +622,10 @@ function renderAnalysisOverview(box) {
   consider('followup', t('anLetter'), () => card('followup', t('anLetter'), md('followup'), { open: true, clamp: true }), {});
   if (m.series_id) consider('since_last', t('sumSinceLast'), () => card('since_last', t('sumSinceLast'), md('since_last'), { open: true, clamp: true }), {});
   consider('notes', t('sumNotes'), () => card('notes', t('sumNotes'), md('notes'), { open: true, clamp: true }), {});
+  if ((m.mfu || '').trim()) {
+    const lines = String(m.mfu).split('\n').map(s => s.trim()).filter(Boolean).slice(0, 6);
+    cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { mine: true, open: true }));
+  }
   if (!off.includes('mynotes')) {
     const lines = String(m.user_notes || '').split('\n').map(s => s.trim()).filter(Boolean).slice(0, 6);
     cards.push(card('mynotes', t('notesTitle'), lines.length ? lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join('')
@@ -913,13 +929,16 @@ function openTemplatesEditor() {
 }
 
 // --- Commitments (app/commitments.py): who promised what to whom, by when ---
-function commitmentRowHtml(c, withMeeting) {
+function commitmentRowHtml(c, withMeeting, hasMfu = false) {
+  // With the organizer's MFU: its tasks say so, and those found only in the talk say they are not in it
+  const mark = c.source === 'mfu' ? ` <span class="an-chip-sm" title="${escapeHtml(t('mfuTaskTip'))}">${escapeHtml(t('mfuTask'))}</span>`
+    : hasMfu && c.source === 'ai' ? ` <span class="an-chip-sm text-apple-amber" title="${escapeHtml(t('mfuNotInTip'))}">${escapeHtml(t('mfuNotIn'))}</span>` : '';
   const who = escapeHtml(c.who || '—') + (c.to_whom ? ` <span class="text-apple-tertiary">→ ${escapeHtml(c.to_whom)}</span>` : '');
   const ts = c.at != null ? ` <button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="font-mono text-[11.5px] text-apple-blue hover:underline">[${formatTime(c.at)}]</button>` : '';
   const where = withMeeting ? `<div class="text-[11px] text-apple-tertiary mt-0.5">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</div>` : '';
   return `<label class="flex items-start gap-2.5 py-2 border-b border-white/5 cursor-pointer ${c.status === 'done' ? 'opacity-50' : ''}">
       <input type="checkbox" ${c.status === 'done' ? 'checked' : ''} data-cid="${c.id}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="mt-0.5 rounded bg-apple-sidebar border-white/20 text-apple-blue" />
-      <span class="min-w-0 text-[13px] text-apple-label leading-snug"><span class="font-medium text-white">${who}</span>: ${escapeHtml(c.what)}${c.due ? ` <span class="text-apple-amber text-[11.5px]">(${escapeHtml(c.due)})</span>` : ''}${ts}${where}</span>
+      <span class="min-w-0 text-[13px] text-apple-label leading-snug"><span class="font-medium text-white">${who}</span>: ${escapeHtml(c.what)}${c.due ? ` <span class="text-apple-amber text-[11.5px]">(${escapeHtml(c.due)})</span>` : ''}${ts}${mark}${where}</span>
     </label>`;
 }
 
@@ -935,7 +954,7 @@ async function renderCommitments(box) {
     renderAnalysisHead();
   }
   box.innerHTML = anIsBusy('commitments') ? anMakingHtml()
-    : items.length ? `<div class="an-list">${items.map(c => commitmentRowHtml(c, false)).join('')}</div>${commitmentExportBar(m.id)}`
+    : items.length ? `<div class="an-list">${items.map(c => commitmentRowHtml(c, false, !!(m.mfu || '').trim())).join('')}</div>${commitmentExportBar(m.id)}`
     : anEmptyHtml('commitments');
 }
 
@@ -1011,6 +1030,47 @@ function aiAvailable() {
   const st = state.llm;
   const cloud = st && st.consent && st.providers && st.providers[st.provider] && st.providers[st.provider].key && st.providers[st.provider].key.saved;
   return state.lastOllama === undefined || ollamaModels > 0 || !!cloud;  // not loaded yet: assume yes
+}
+
+// --- The organizer's meeting follow-up (MFU), pasted by hand: saved by its button, which also makes the
+// tasks again (once per change, not per keystroke); every summary takes it in as the agreed text ---
+function renderMfuEditor(box) {
+  const m = state.activeMeeting;
+  box.innerHTML = `<div class="space-y-2">
+      <p class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('mfuHint'))}</p>
+      <textarea id="mfu-input" rows="9" placeholder="${escapeHtml(t('mfuPh'))}"
+        class="w-full bg-apple-sidebar border apple-border rounded-xl px-4 py-3 text-[13px] leading-relaxed text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue resize-y"></textarea>
+      <div class="flex items-center gap-3">
+        <button id="mfu-save" data-click="saveMfu" class="an-btn an-btn-primary">${escapeHtml(t('mfuSave'))}</button>
+        <span id="mfu-status" class="text-[11px] text-apple-tertiary"></span>
+      </div>
+    </div>`;
+  const ta = document.getElementById('mfu-input');
+  ta.value = m.mfu || '';
+  ta.oninput = () => { document.getElementById('mfu-status').textContent = ta.value.trim() !== (m.mfu || '').trim() ? t('mfuUnsaved') : ''; };
+}
+
+async function saveMfu() {
+  const m = state.activeMeeting;
+  const ta = document.getElementById('mfu-input');
+  if (!m || !ta) return;
+  const text = ta.value.trim();
+  const st = document.getElementById('mfu-status');
+  const res = await fetch(`/api/meetings/${m.id}/mfu`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!res.ok) { if (st) st.textContent = serverText((await readJson(res)).detail || t('errorGeneric')); return; }
+  const changed = text !== (m.mfu || '').trim();
+  m.mfu = text;
+  setClearSummaryVisible(!!text);
+  renderAnalysisNav();
+  if (st) st.textContent = t('notesSaved');
+  if (changed) refreshTasksAfterMfu(m);
+}
+
+// The tasks made again with the MFU (or without it, once cleared): the summaries use it the next time they are made
+function refreshTasksAfterMfu(m) {
+  if (!aiAvailable()) { showToast(t('mfuNoModel')); return; }
+  showToast(t('mfuTasksUpdating'));
+  createAnalysisSection('commitments');
 }
 
 // --- My notes of a recording: plain text, saved as it is typed; every summary takes it in ---
@@ -1205,6 +1265,7 @@ function anSectionText(key) {
   if (!m) return '';
   const sums = m.summaries || {};
   if (key === 'mynotes') return m.user_notes || '';
+  if (key === 'mfu') return m.mfu || '';
   if (key === 'protocol') return [sums.tldr, sums.protocol, sums.chapters].filter(x => (x || '').trim()).join('\n\n');
   return sums[key] || '';
 }

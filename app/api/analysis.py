@@ -622,6 +622,20 @@ def api_save_notes(meeting_id: int, payload: NotesPayload) -> Dict[str, Any]:
     update_meeting_fields(meeting_id, user_notes=payload.notes[:50000])
     return {"ok": True}
 
+class MfuPayload(BaseModel):
+    text: str = ""
+
+@router.put("/api/meetings/{meeting_id}/mfu")
+def api_save_mfu(meeting_id: int, payload: MfuPayload) -> Dict[str, Any]:
+    """The organizer's meeting follow-up (MFU), pasted by the user. Saved on its own; the page then asks
+    for the tasks again (POST .../commitments), so a list is made once per change, not per keystroke."""
+    from app.database import update_meeting_fields
+
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    update_meeting_fields(meeting_id, mfu=payload.text.strip()[:50000])
+    return {"ok": True}
+
 class TemplatesPayload(BaseModel):
     templates: List[Dict[str, Any]]
 
@@ -690,7 +704,7 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             model_name=payload.model or None,
             answer_lang=payload.lang or m.get("language") or "ru",
             local_only=is_local_only(m),
-            user_notes=m.get("user_notes") or "",
+            user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "",
             template_prompt=template_prompt,
             participants=_roster(m),
         )
