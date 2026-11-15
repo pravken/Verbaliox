@@ -209,6 +209,24 @@ def api_update_install() -> Dict[str, Any]:
     updater.quit_soon()
     return {"ok": True}
 
+@router.post("/api/update/git")
+def api_update_git() -> Dict[str, Any]:
+    """A git clone: update.bat updates it in a console window, and the app quits for it."""
+    from app import app_status, updater
+    from app.transcriber import running_job_kind
+
+    if running_job_kind():
+        raise HTTPException(status_code=409, detail="Дождитесь окончания текущей задачи")
+    st = app_status.snapshot()
+    if st["recording"] or st["state"] != "idle":
+        raise HTTPException(status_code=409, detail=f"Дождитесь окончания: {st['text']}")
+    try:
+        updater.launch_git_update()
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    updater.quit_soon()
+    return {"ok": True}
+
 @router.post("/api/meetings/{meeting_id}/dub")
 def api_start_dub(meeting_id: int, payload: DubRequestPayload) -> Dict[str, Any]:
     from app.dubbing import DUB_LANGUAGES, dub_environment_status

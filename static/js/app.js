@@ -20,8 +20,17 @@ function renderUpdateStatus() {
   else if (info.error) msg += ' ' + t('updCheckFailed').replace('{why}', () => info.error);
   else if (info.checked_at) msg += ' ' + t('updLatest');
   text.textContent = msg;
-  btn.classList.toggle('hidden', !info.can_install || !!dl.active);
-  btn.textContent = dl.done ? t('updateRestartBtn') : t('updateInstallBtn');
+  // a git clone: «Обновить через git» runs update.bat (git pull and the packages), the app restarts
+  const viaGit = !!(info.available && info.git_checkout);
+  btn.classList.toggle('hidden', !(info.can_install || viaGit) || !!dl.active);
+  btn.textContent = viaGit ? t('updateGitBtn') : dl.done ? t('updateRestartBtn') : t('updateInstallBtn');
+}
+
+async function updateViaGit() {
+  if (!(await askConfirm(t('updGitConfirm'), false, t('updateGitBtn')))) return;
+  const r = await fetch('/api/update/git', { method: 'POST' });
+  if (!r.ok) { showError(serverText((await readJson(r)).detail)); return; }
+  showToast(t('updGitStarted'), null, 'status');
 }
 
 async function checkForUpdates(force) {
@@ -64,6 +73,7 @@ async function followUpdateDownload() {
 
 async function installUpdate() {
   const info = updateState.info;
+  if (info && info.available && info.git_checkout) { await updateViaGit(); return; }
   if (!info || !info.can_install) return;
   if (!(info.download || {}).done) {
     if (updateState.polling) return;
