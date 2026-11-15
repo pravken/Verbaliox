@@ -286,7 +286,7 @@ def run(args) -> None:
     if args.cpu:
         _force_options["num_gpu"] = 0
     if args.max_answer:
-        ollama_client.LLM_MAX_ANSWER_TOKENS = args.max_answer
+        ollama_client.LLM_MAX_ANSWER_TOKENS = ollama_client.LLM_MAX_ANSWER_TOKENS_LARGE = args.max_answer
     if args.num_gpu is not None:
         _force_options["num_gpu"] = args.num_gpu
     base = _ollama_base()

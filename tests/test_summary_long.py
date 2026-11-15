@@ -126,4 +126,6 @@ class ContextByCardTest(unittest.TestCase):
                 self.assertEqual(ollama_client.single_pass_max_chars(), ollama_client.SINGLE_PASS_MAX_CHARS * scale)
                 self.assertEqual(ollama_client.chunk_max_chars(), ollama_client.CHUNK_MAX_CHARS * scale)
                 self.assertLess(ollama_client.LLM_MAX_ANSWER_TOKENS, ollama_client.llm_num_ctx())
+                # more room for an answer with 32k: an hour's part notes and the protocol were cut at 3072
+                self.assertEqual(ollama_client.llm_max_answer_tokens(), 6144 if ctx == 32768 else 3072)
 
