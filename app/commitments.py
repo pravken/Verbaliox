@@ -428,7 +428,9 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         roster = meeting_roster(m)
     except Exception:
         roster, fix_name_typos = [], None
-    head = ("Участники встречи (имена и фамилии написаны верно, пиши их так же): " + "; ".join(roster) + "\n\n") if roster else ""
+    head = ("Участники встречи (имена и фамилии написаны верно, пиши их так же): " + "; ".join(roster) + ". "
+            "В разговоре их могут звать коротко или иначе («Макс» — Максим, «Саша» — Александр, по фамилии, "
+            "латиницей или кириллицей); в who пиши имя из этого списка, если ясно, о ком речь.\n\n") if roster else ""
     try:  # the meeting's feature and the dictionary's terms (Словарь, Словарь → Фичи)
         from app import vocab
         from app.features import describe
@@ -449,6 +451,12 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
             for k in ("who", "to_whom", "what"):
                 if isinstance(x.get(k), str):
                     x[k] = fix_name_typos(x[k], roster)
+        from app.people import resolve_person
+
+        for x in found + from_mfu:  # «Макс» said in the meeting is «Maksim Pravko» of Teams (one fit only)
+            for k in ("who", "to"):
+                if isinstance(x.get(k), str) and x[k].strip():
+                    x[k] = resolve_person(x[k], roster)
     items = prune([x for x in found if supported(x, m) and not in_meeting_action(x)])
     items = verify(items, m, llm)  # a second look, task by task, with the lines around it
     items = [x for x in items if not in_meeting_action(x)]

@@ -623,3 +623,64 @@ def fix_name_typos(text: str, roster: List[str]) -> str:
         return (name if not end else name_stem + end) if word[1:].islower() or not word[1:].isupper() else word
 
     return _WORD_RE.sub(fix, text)
+
+
+# --- Who a task is for, as the roster writes them: «Макс» said in the meeting is «Maksim Pravko» of
+# the Teams captions or the invitation; a surname alone, a short name, a Latin or Cyrillic spelling and
+# a letter wrong all find the participant ---
+# Short names said in a meeting and the full names they stand for (Russian and English)
+_SHORT_NAMES = {
+    "макс": ["максим"], "максик": ["максим"], "саша": ["александр", "александра"], "шура": ["александр", "александра"],
+    "дима": ["дмитрий"], "митя": ["дмитрий"], "миша": ["михаил"], "женя": ["евгений", "евгения"],
+    "лёша": ["алексей"], "леша": ["алексей"], "алёша": ["алексей"], "алеша": ["алексей"], "серёжа": ["сергей"],
+    "сережа": ["сергей"], "серёга": ["сергей"], "серега": ["сергей"], "коля": ["николай"], "вова": ["владимир"],
+    "володя": ["владимир"], "петя": ["пётр", "петр"], "ваня": ["иван"], "катя": ["екатерина"], "маша": ["мария"],
+    "настя": ["анастасия"], "лена": ["елена"], "оля": ["ольга"], "таня": ["татьяна"], "наташа": ["наталья", "наталия"],
+    "юля": ["юлия"], "света": ["светлана"], "ира": ["ирина"], "аня": ["анна"], "даша": ["дарья"], "костя": ["константин"],
+    "андрюша": ["андрей"], "паша": ["павел"], "гоша": ["георгий"], "жора": ["георгий"], "слава": ["вячеслав", "ярослав", "станислав"],
+    "витя": ["виктор"], "толя": ["анатолий"], "рома": ["роман"], "стас": ["станислав"], "влад": ["владислав", "владимир"],
+    "гена": ["геннадий"], "лиза": ["елизавета"], "вика": ["виктория"], "ксюша": ["ксения"], "галя": ["галина"],
+    "люба": ["любовь"], "надя": ["надежда"], "тёма": ["артём", "артем"], "тема": ["артём", "артем"], "игорёк": ["игорь"],
+    "миля": ["эмилия"], "кирюша": ["кирилл"], "никита": ["никита"], "лёва": ["лев"], "боря": ["борис"], "гриша": ["григорий"],
+    "max": ["maxim", "maksim", "maximilian"], "alex": ["alexander", "alexandra", "alexey", "aleksei"], "mike": ["michael"],
+    "kate": ["katherine", "catherine", "ekaterina"], "dan": ["daniel"], "nick": ["nicholas", "nikolai"], "tom": ["thomas"],
+    "bob": ["robert"], "rob": ["robert"], "bill": ["william"], "will": ["william"], "jim": ["james"], "liz": ["elizabeth"],
+    "sam": ["samuel", "samantha"], "ben": ["benjamin"], "chris": ["christopher", "christina"], "andy": ["andrew"],
+    "dima": ["dmitry", "dmitrii"], "sasha": ["alexander", "aleksandr"], "misha": ["mikhail"], "vova": ["vladimir"],
+}
+
+
+def _name_keys(word: str) -> List[str]:
+    """The sound keys a spoken word may stand for: its own and its full names'."""
+    from app.vocab import sound_key
+
+    w = word.lower().strip(".,:;!?«»\"'")
+    keys = [sound_key(w)]
+    for full in _SHORT_NAMES.get(w, []) + _SHORT_NAMES.get(w.replace("ё", "е"), []):
+        keys.append(sound_key(full))
+    return [k for k in dict.fromkeys(keys) if k]
+
+
+def resolve_person(who: str, roster: List[str]) -> str:
+    """The roster's name for a task's person when exactly one participant fits: by a full or short name,
+    by the surname, in Latin or Cyrillic, a letter or two wrong; who as said when none or several fit."""
+    from app.vocab import sound_key
+
+    words = [w for w in _WORD_RE.findall(who or "") if len(w) >= 2]
+    if not words or not roster:
+        return who
+    names = [entry.split(" — ")[0].strip() for entry in roster if entry.strip()]
+    hits = []
+    for name in names:
+        parts = [sound_key(w) for w in _WORD_RE.findall(name) if len(w) >= 2]
+        if not parts:
+            continue
+        ok = False
+        for w in words:
+            for k in _name_keys(_stem(w)[0]) + _name_keys(w):
+                if any(k == p or (len(p) >= 5 and len(k) >= 5 and _dist(k, p) <= (1 if len(p) < 8 else 2)) for p in parts):
+                    ok = True
+        if ok:
+            hits.append(name)
+    hits = list(dict.fromkeys(hits))
+    return hits[0] if len(hits) == 1 else who

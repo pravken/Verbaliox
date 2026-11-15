@@ -136,5 +136,21 @@ class MfuTest(unittest.TestCase):
         self.assertIn("MFU", system + user)
 
 
+@unittest.skipIf(commitments is None, "app dependencies not installed")
+class PersonNamesTest(unittest.TestCase):
+    """«Макс будет делать» is the task of «Maksim Pravko» of the Teams captions (the owner's case)."""
+
+    def test_short_latin_and_misspelt_names_find_the_participant(self):
+        from app.people import resolve_person
+
+        roster = ["Maksim Pravko", "Анна Петрова — дизайнер", "Aleksandr Ivanov", "Александра Смирнова", "Дмитрий Яцукевич"]
+        for said, who in [("Макс", "Maksim Pravko"), ("Максим", "Maksim Pravko"), ("Правко", "Maksim Pravko"),
+                          ("Max", "Maksim Pravko"), ("Аня", "Анна Петрова"), ("Петрова", "Анна Петрова"),
+                          ("Дима", "Дмитрий Яцукевич"), ("Яцкевич", "Дмитрий Яцукевич"), ("Иванов", "Aleksandr Ivanov")]:
+            self.assertEqual(resolve_person(said, roster), who, said)
+        for said in ("Саша", "Олег", "маркетинг"):  # two fit, or nobody: as said
+            self.assertEqual(resolve_person(said, roster), said)
+
+
 if __name__ == "__main__":
     unittest.main()
