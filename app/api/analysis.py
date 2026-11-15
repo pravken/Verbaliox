@@ -772,6 +772,7 @@ def _roster(m: Dict[str, Any]) -> List[str]:
 def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dict[str, Any]:
     from app.diarizer import unload_diarizer
     from app.features import note_for as features_note_for
+    from app.meeting_context import note_for_summary as meeting_context_note
     from app.hardware import clear_vram
 
     m = get_meeting(meeting_id)
@@ -809,6 +810,7 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             answer_lang=payload.lang or m.get("language") or "ru",
             local_only=is_local_only(m),
             user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
+            context_note=meeting_context_note(m, payload.template),
             template_prompt=template_prompt,
             participants=_roster(m),
         )

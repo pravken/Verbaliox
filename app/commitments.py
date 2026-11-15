@@ -469,6 +469,10 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         about = describe(m.get("features") or [])
         glossary = vocab.glossary_note(already=about)
         head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (glossary + "\n\n" if glossary else "")
+        from app.meeting_context import note_for_tasks
+
+        hints = note_for_tasks(m)  # the protocol's decisions and next steps: one context for every tab
+        head += (hints + "\n\n") if hints else ""
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))

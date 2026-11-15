@@ -1070,6 +1070,7 @@ def generate_meeting_summary(
     participants: Optional[List[str]] = None,
     mfu: str = "",
     features_note: str = "",
+    context_note: str = "",
 ) -> str:
     """mfu: the organizer's meeting follow-up the user pasted: the decisions and tasks agreed on;
     participants: who was in the meeting, their names written right (app/people.meeting_roster):
@@ -1113,6 +1114,9 @@ def generate_meeting_summary(
         )
     elif template_key == "notes" and not custom_prompt.strip():
         raise RuntimeError("У записи нет ваших заметок: напишите их во вкладке «Мои заметки» или во время записи в студии")
+    context_note = (context_note or "").strip()[:3000]
+    if context_note:  # what the other tabs of this recording found (app/meeting_context.py): one story in all
+        instruction += "\n\n" + context_note
     if (features_note or "").strip():  # Словарь → Фичи: what the meeting's feature is, its words
         instruction += "\n\nВстреча относится к фиче (что это и как в ней называются вещи):\n" + features_note.strip()[:2000]
     try:
@@ -1146,7 +1150,7 @@ def generate_meeting_summary(
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
     # and so do the feature's note and the glossary (the PC check of 0.8.7-beta.2: room was left, but the
     # budget did not know of them)
-    added = len((features_note or "").strip()[:2000]) + len(glossary)
+    added = len((features_note or "").strip()[:2000]) + len(glossary) + len(context_note)
     whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text) - added)
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
