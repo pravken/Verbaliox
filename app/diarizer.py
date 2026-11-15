@@ -1,4 +1,5 @@
 import inspect
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -281,9 +282,27 @@ def _turn_speaker(start: float, end: float, turns: List[Tuple[float, float, int]
     return spk if sec >= min_share * span else None
 
 
+# A piece cut off at a change of speaker shorter than this stays with its neighbour: with overlapping
+# speech a phrase was cut into one- and two-word scraps between people (AMI EN2002b: 151 phrases became
+# 426, 146 of them of 1-2 words; a Russian interview's question split mid-name). A short answer of its
+# own («да», «угу», «okay») is still cut out: that is who said it.
+MIN_PIECE_SEC = 1.0
+MIN_PIECE_WORDS = 3
+_BACKCHANNEL = re.compile(
+    r"^(да|ага|угу|ну|нет|ок|окей|хорошо|понял[аи]?|ясно|верно|точно|конечно|согласен|согласна|спасибо|"
+    r"yes|yeah|yep|no|nope|ok|okay|right|sure|exactly|mhm|uh-huh|thanks|good|great)$", re.I)
+
+
+def _is_backchannel(words: List[Dict[str, Any]]) -> bool:
+    tokens = [re.sub(r"[^\w-]+", "", str(w.get("word") or "")).lower() for w in words]
+    tokens = [t for t in tokens if t]
+    return 0 < len(tokens) <= 3 and all(_BACKCHANNEL.match(t) for t in tokens)
+
+
 def _split_by_turns(segments: List[Dict[str, Any]], turns: List[Tuple[float, float, int]]) -> List[Dict[str, Any]]:
     """A phrase whose words Nemotron gives to two people is cut where the speaker changes (a quick
-    «да» of another person inside someone's phrase); a word nobody covers stays with the one before."""
+    «да» of another person inside someone's phrase); a word nobody covers stays with the one before,
+    and a piece too short to be a turn of its own stays with its neighbour."""
     out: List[Dict[str, Any]] = []
     for seg in segments:
         words = seg.get("words") or []
@@ -294,17 +313,39 @@ def _split_by_turns(segments: List[Dict[str, Any]], turns: List[Tuple[float, flo
         last = next((o for o in owners if o is not None), None)
         for i, o in enumerate(owners):
             owners[i] = last = (o if o is not None else last)
-        if len(set(owners)) <= 1:
+        runs: List[List[Any]] = []  # [owner, words]
+        for w, o in zip(words, owners):
+            if runs and runs[-1][0] == o:
+                runs[-1][1].append(w)
+            else:
+                runs.append([o, [w]])
+        changed = True
+        while changed and len(runs) > 1:
+            changed = False
+            for i, (o, ws) in enumerate(runs):
+                dur = float(ws[-1]["end"]) - float(ws[0]["start"])
+                if (dur >= MIN_PIECE_SEC and len(ws) >= MIN_PIECE_WORDS) or _is_backchannel(ws):
+                    continue
+                j = i - 1 if i > 0 else i + 1  # into the piece before it (the first: into the next)
+                if j < i:
+                    runs[j][1].extend(ws)
+                else:
+                    runs[j][1][:0] = ws
+                del runs[i]
+                merged: List[List[Any]] = []
+                for r in runs:  # neighbours of one speaker again: one piece
+                    if merged and merged[-1][0] == r[0]:
+                        merged[-1][1].extend(r[1])
+                    else:
+                        merged.append(r)
+                runs = merged
+                changed = True
+                break
+        if len(runs) == 1:
             out.append(seg)
             continue
         extra = {k: v for k, v in seg.items() if k not in ("start", "end", "text", "words", "id", "speaker")}
-        run = [words[0]]
-        for w, prev_o, o in zip(words[1:], owners[:-1], owners[1:]):
-            if o != prev_o:
-                out.append(_words_piece(extra, run))
-                run = []
-            run.append(w)
-        out.append(_words_piece(extra, run))
+        out.extend(_words_piece(extra, ws) for _, ws in runs)
     return [p for p in out if str(p.get("text") or "").strip() or not p.get("words")]
 
 
