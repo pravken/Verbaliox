@@ -1651,6 +1651,7 @@ const MODEL_METERS = {
   'large-v3-turbo': { wer: { ru: 3.97, en: 5.82 }, acc: { ru: 4, en: 4.5 }, speed: { cpu: [1.5, ''], gpu: [4.5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
   'parakeet-v3': { wer: { ru: 5.48, en: 7.78 }, acc: { ru: 2.5, en: 3 }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
   'gemma4:e4b': { quality: 5, speed: { cpu: [2, ''], gpu: [3.5, ''] }, load: [3], ram: 6, vram: 5 },
+  // no longer offered (gemma4:e4b is better on every count), still rated for those who have them
   'qwen3:14b': { quality: 4, est: true, speed: { cpu: [1, ''], gpu: [1, ''] }, load: [5], ram: 12, vram: 12 },
   'qwen3:8b': { quality: 3.5, speed: { cpu: [1.5, ''], gpu: [2, ''] }, load: [3], ram: 10, vram: 10 },
   'gemma4:e2b': { quality: 3, speed: { cpu: [4, ''], gpu: [4.5, ''] }, load: [2], ram: 4, vram: 3 },

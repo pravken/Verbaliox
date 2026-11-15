@@ -382,7 +382,11 @@ class DefaultAnalysisModelTest(unittest.TestCase):
                 self.assertEqual(hardware.get_hardware_info()["recommended_ollama_model"], model)
         ids = [m["id"] for m in RECOMMENDED_LLM_MODELS]
         self.assertEqual(ids[:2], ["gemma4:e4b", "gemma4:e2b"])
-        self.assertIn("qwen3:8b", ids)  # kept for those used to it
+        # gemma4:e4b finds more, faster, in less memory: no longer offered, still named for those who have them
+        for gone in ("qwen3:8b", "qwen3:14b"):
+            self.assertNotIn(gone, ids)
+        from app.ollama_client import format_llm_model_name
+        self.assertEqual(format_llm_model_name("qwen3:8b"), "Qwen3 8B")
         qwen35 = next(m for m in RECOMMENDED_LLM_MODELS if m["id"] == "qwen3.5:4b")
         self.assertNotIn("вдвое больше", qwen35["desc_ru"])  # not confirmed by the measurement
 

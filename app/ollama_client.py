@@ -68,38 +68,6 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "cpu_ok": True,
     },
     {
-        "id": "qwen3:8b",
-        "name": "Qwen3 8B",
-        "badge": "5.2 GB · Apache",
-        "size": "5.2 GB",
-        "vram": "10+ GB VRAM",
-        "license": "Apache",
-        "desc_ru": "Alibaba Qwen3 8B. В замерах на реальных встречах уступает Gemma 4 E4B: находит меньше задач и пишет протокол в 2–4 раза дольше при большей нагрузке на видеокарту. Нужна видеокарта от 10 ГБ.",
-        "desc_en": "Alibaba Qwen3 8B. On real meetings it trails Gemma 4 E4B: fewer tasks found and a protocol 2–4 times slower, with a heavier load on the GPU. Needs a card with 10 GB or more.",
-        "good_ru": "Связный анализ всего разговора, хороший русский",
-        "good_en": "Coherent analysis of the whole conversation, good Russian",
-        "weak_ru": "Требуется видеокарта с 10 ГБ памяти, занимает её почти целиком; без неё работает медленно",
-        "weak_en": "Requires a GPU with 10 GB of memory and takes almost all of it; slow without one",
-        "min_vram_gb": 10,  # 0: fine without a GPU too
-        "cpu_ok": False,
-    },
-    {
-        "id": "qwen3:14b",
-        "name": "Qwen3 14B",
-        "badge": "9.3 GB · Apache",
-        "size": "9.3 GB",
-        "vram": "12–24 GB VRAM",
-        "license": "Apache",
-        "desc_ru": "Alibaba Qwen3 14B — самая крупная модель в списке, но в замерах программы не участвовала: её качество оценено по размеру, а не измерено. Медленнее остальных, нужна видеокарта от 12 ГБ. Для протоколов надёжнее выбрать Gemma 4 E4B.",
-        "desc_en": "Alibaba Qwen3 14B, the largest model on the list, but it was not in the app's measurements: its quality is an estimate from its size, not a measurement. Slower than the rest, needs a card with 12 GB or more. For summaries Gemma 4 E4B is the safer choice.",
-        "good_ru": "Самая крупная модель в списке: в расчёте на сложные вопросы и длинные записи (в замерах не участвовала)",
-        "good_en": "The largest model on the list: meant for hard questions and long recordings (not in the measurements)",
-        "weak_ru": "Требуется видеокарта с 12 ГБ памяти; работает медленнее остальных, без видеокарты не рекомендуется",
-        "weak_en": "Requires a GPU with 12 GB of memory; slower than the others, not recommended without a GPU",
-        "min_vram_gb": 12,  # 0: fine without a GPU too
-        "cpu_ok": False,
-    },
-    {
         "id": "qwen2.5:1.5b",
         "name": "Qwen Lite",
         "badge": "1 GB · Apache",
@@ -124,7 +92,8 @@ _LLM_DISPLAY_NAMES: Dict[str, str] = {
     "qwen3:14b": "Qwen3 14B",
     "qwen3:4b": "Qwen3 4B",
     "qwen3.5:4b": "Qwen3.5 4B",
-    # no longer offered (bench-report/report.md), named still for those who have them
+    # no longer offered (bench-report/report.md), named still for those who have them; qwen3:8b and
+    # qwen3:14b: gemma4:e4b finds more, faster, in less memory (bench-report/llm-profiles.md; 14b not measured)
     "qwen2.5:7b": "Qwen 7B Standard",
     "qwen2.5:14b": "Qwen 14B Pro",
     "mistral:7b": "Mistral 7B",
