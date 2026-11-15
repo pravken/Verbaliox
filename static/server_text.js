@@ -6,6 +6,7 @@ const SERVER_TEXT_EN = {
   "Сведение дорожек: очистка голоса…": "Mixing the tracks: cleaning the voice…",
   "Название фичи пустое": "The feature name is empty",
   "Фича не найдена": "The feature was not found",
+  "Поиск задач и договорённостей...": "Finding the tasks and agreements...",
   "Этот раздел не правится": "This section cannot be edited",
   "Раздел ещё не создан": "The section has not been made yet",
   "Пустой текст: чтобы убрать раздел, удалите его": "The text is empty: to remove the section, delete it",

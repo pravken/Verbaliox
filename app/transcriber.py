@@ -1971,6 +1971,17 @@ def _process_meeting_job(meeting_id: int) -> None:
                         roster = meeting_roster({**(get_meeting(meeting_id) or {}), "speakers": speakers_meta})
                     except Exception:
                         roster = []
+                    # The tasks first: they are checked against the transcript (a quote for each), and the
+                    # protocol is then told them, so its «Следующие шаги» are the same tasks
+                    if settings.get("auto_commitments", "true").lower() == "true":
+                        try:
+                            from app import commitments
+
+                            update_meeting_progress(meeting_id, stage_text="Поиск задач и договорённостей...")
+                            commitments.extract(meeting_id)
+                        except Exception as c_err:
+                            print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
+                        update_meeting_progress(meeting_id, stage_text=f"Формирование обзора записи ({where})...")
                     summary_md = generate_meeting_summary(
                         progress=lambda done, total: update_meeting_progress(
                             meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
@@ -2004,13 +2015,6 @@ def _process_meeting_job(meeting_id: int) -> None:
                             merge_summaries(meeting_id, {"chapters": chapters_md})
                         except Exception as ch_err:
                             print(f"[chapters] meeting {meeting_id}: {ch_err}", flush=True)
-                    if settings.get("auto_commitments", "true").lower() == "true":
-                        try:
-                            from app import commitments
-
-                            commitments.extract(meeting_id)
-                        except Exception as c_err:
-                            print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
                 except Exception as sum_err:
                     if not _cancel_wanted(meeting_id):  # a cancel broke the request off: not an error
                         summaries["error"] = str(sum_err)
