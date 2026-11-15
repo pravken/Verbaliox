@@ -149,7 +149,9 @@ async function renderDictFeatures() {
       <div class="ft-card-body">
         <label class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftName'))}</span>
           <input type="text" maxlength="60" class="ft-input" value="${escapeHtml(f.name)}" title="${escapeHtml(t('ftName'))}" ${pageCall('change', 'saveDictFeature', [f.id, 'name', { $: 'value' }])}></label>
-        <div class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftColor'))}</span><span class="ft-swatches">${sw(f)}</span></div>
+        <div class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftColor'))}</span><span class="ft-swatches">${sw(f)}
+          <input type="color" class="ft-color-any" value="${escapeHtml(/^#[0-9A-Fa-f]{6}$/.test(f.color || '') ? f.color : '#64B5FF')}" title="${escapeHtml(t('ftColorAny'))}" aria-label="${escapeHtml(t('ftColorAny'))}"
+            ${pageCall('change', 'saveDictFeature', [f.id, 'color', { $: 'value' }])}></span></div>
         ${field(f, 'keywords', 'ftKeywords', 'ftKeywordsHint', 0)}
         ${field(f, 'description', 'ftDescription', 'ftDescriptionHint', 2)}
         ${field(f, 'terms', 'ftTerms', 'ftTermsHint', 0)}

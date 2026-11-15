@@ -2621,3 +2621,5 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .tk-more-rows { align-self: flex-start; margin: 4px 0 0 14px; padding: 4px 12px; border: 1px dashed var(--hc-line, rgba(255, 255, 255, 0.2)); border-radius: 14px; background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); cursor: pointer; }
 .tk-more-rows:hover { color: #F5F5F7; }
 .tk-who { justify-self: start; width: 10rem; }  /* the person at the same place on every row (CLAUDE.md) */
+.ft-color-any { width: 26px; height: 20px; padding: 0; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.2)); border-radius: 6px; background: transparent; cursor: pointer; }
+.ft-swatches { align-items: center; flex-wrap: wrap; }
