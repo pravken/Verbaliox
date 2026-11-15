@@ -2783,3 +2783,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .frw-foot { display: flex; align-items: center; gap: 8px; padding: 18px 24px 22px; }
 .frw-later { margin-right: auto; padding: 0; font-size: 13px; color: #8E8E93; }
 .frw-later:hover { color: #F5F5F7; }
+
+/* The precise mode's models (settings.js: renderEnsembleModels): «Скачать» beside a model not downloaded */
+.ens-item { display: inline-flex; align-items: center; gap: 6px; }
+.ens-dl { height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; color: #64B5FF; background: rgba(10, 132, 255, 0.12);
+          border: 1px solid rgba(10, 132, 255, 0.35); white-space: nowrap; }
+.ens-dl:hover { background: rgba(10, 132, 255, 0.22); color: #F5F5F7; }
+.ens-dl.is-busy { color: #8E8E93; background: none; border-color: transparent; padding: 0; }
