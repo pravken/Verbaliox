@@ -27,8 +27,8 @@ ONNX_MODELS: Dict[str, Dict[str, Any]] = {
         "license": "MIT",
         "vram_gb": 1.5,  # on the GPU (app/onnx_gpu.py)
         "languages": ["ru"],
-        "desc_ru": "Новая модель Сбера для русского языка: сразу пишет со знаками препинания и заглавными буквами, числа цифрами. Только русский; на видеокарте NVIDIA, без неё — на процессоре.",
-        "desc_en": "Sber's new model for Russian: writes with punctuation and capital letters, numbers as digits. Russian only; on an NVIDIA video card, otherwise on the CPU.",
+        "desc_ru": "Модель Сбера (Conformer, ONNX), обученная на русской речи. Сразу расставляет пунктуацию и регистр, числа пишет цифрами. WER на FLEURS: 3,8 % — на уровне Whisper Pro. Быстрая и на процессоре (≈30× реального времени), на видеокарте ≈50×. Только русский язык.",
+        "desc_en": "Sber's model (Conformer, ONNX) trained on Russian speech. Writes punctuation and capital letters itself, numbers as digits. WER on FLEURS: 3.8%, on par with Whisper Pro. Fast on the CPU too (≈30× real time), ≈50× on a GPU. Russian only.",
     },
     "parakeet-v3": {
         "onnx_name": "nemo-parakeet-tdt-0.6b-v3",
@@ -38,8 +38,8 @@ ONNX_MODELS: Dict[str, Dict[str, Any]] = {
         "vram_gb": 3.0,
         "languages": ["en", "ru", "de", "fr", "es", "it", "pt", "nl", "pl", "uk", "cs", "sk", "bg", "hr", "da",
                       "fi", "el", "hu", "lv", "lt", "mt", "ro", "sl", "sv", "et"],
-        "desc_ru": "Очень быстрая модель NVIDIA для 25 европейских языков, включая русский и английский, с расстановкой знаков препинания.",
-        "desc_en": "A very fast NVIDIA model for 25 European languages including English and Russian, with punctuation.",
+        "desc_ru": "NVIDIA Parakeet TDT 0.6B v3 (FastConformer, ONNX): 25 европейских языков, включая русский и английский, с пунктуацией и регистром. WER на FLEURS: 5,5 % — русский, 7,8 % — английский. Быстрая на процессоре (≈23× реального времени), на видеокарте 56–72×.",
+        "desc_en": "NVIDIA Parakeet TDT 0.6B v3 (FastConformer, ONNX): 25 European languages including Russian and English, with punctuation and capitals. WER on FLEURS: 5.5% Russian, 7.8% English. Fast on the CPU (≈23× real time), 56–72× on a GPU.",
     },
 }
 VAD_NAME = "silero"
