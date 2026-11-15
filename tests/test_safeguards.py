@@ -824,9 +824,10 @@ class OllamaAnswerLengthTest(unittest.TestCase):
         with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"), \
                 mock.patch("app.hardware._gpu_probe", return_value=("RTX 3080", 10.0, 9.0)):
             self.assertEqual(oc._ollama_chat("http://127.0.0.1:11434", "qwen2.5:1.5b", "s", "u"), "ответ")
-        self.assertEqual(sent["options"]["num_predict"], oc.LLM_MAX_ANSWER_TOKENS)
+        self.assertEqual(sent["options"]["num_predict"], oc.LLM_MAX_ANSWER_TOKENS_LARGE)  # room with 32k
         self.assertEqual(sent["options"]["num_ctx"], 32768)  # a card of 10 GB reads 32k at once
         self.assertLess(oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_NUM_CTX)
+        self.assertLess(oc.LLM_MAX_ANSWER_TOKENS_LARGE, oc.LLM_RETRY_ANSWER_TOKENS)  # a cut answer still gets more
 
 
 class CutAnswerTest(unittest.TestCase):
