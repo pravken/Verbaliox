@@ -2778,7 +2778,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (!el?.id || !el.closest?.('#modal-settings')) return;
   if (!el.id.startsWith('set-') && !SETTINGS_AUTOSAVE_EXTRA.has(el.id)) return;
-  if (el.id === 'set-workday-start' || el.id === 'set-workday-end') syncWorkdayHint();
+  if (el.id === 'set-workday-start' || el.id === 'set-workday-end' || el.id === 'set-meetings-autorecord') syncWorkdayHint();
   scheduleSettingsSave();
   refreshSettingsChanged();
 });
@@ -2829,8 +2829,10 @@ function syncWorkdayHint() {
   const ask = document.getElementById('set-meetings-ask-inperson');
   const all = document.getElementById('set-meetings-autorecord');
   if (ask && all) {
-    ask.disabled = !all.checked;
-    ask.closest('label').style.opacity = all.checked ? '' : '0.45';
+    // it can be set at any time (it was locked while the recording of all meetings was off, and looked
+    // stuck): only a note says it waits for that switch
+    ask.disabled = false;
+    document.getElementById('ask-inperson-off')?.classList.toggle('hidden', all.checked);
   }
 }
 
