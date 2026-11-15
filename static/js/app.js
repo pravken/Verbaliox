@@ -1947,6 +1947,8 @@ function openTextMenuAt(items, x, y, opts) {
   const clean = items.filter((it, i, a) => !it.sep || (i > 0 && !a[i - 1].sep && i < a.length - 1));
   menu.innerHTML = clean.map((it, i) => it.sep
     ? '<div class="my-1 h-px bg-white/10"></div>'
+    : it.info  // a line that only says something (who chose a disputed word), not an action
+    ? `<div class="tm-info">${escapeHtml(it.label)}</div>`
     : `<button class="macos-menu-item gap-6" data-i="${i}" ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
       + `<span class="tm-key">${escapeHtml(it.key || '')}</span></button>`).join('');
   // Keeps the selection: a click in the menu must not clear it before the action reads it
