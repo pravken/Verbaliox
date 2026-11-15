@@ -2704,3 +2704,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check::before { wid
 html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:checked { background: #30D158; border-color: #30D158; }
 html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked { background: #FF453A; border-color: #FF453A; }
 @media (prefers-reduced-motion: reduce) { html input[type="checkbox"]:not(.vs-switch):not(.sr-only), html input[type="checkbox"]:not(.vs-switch):not(.sr-only)::before { transition: none; } }
+
+/* A line of a menu that says something, not an action: who chose a disputed word */
+.tm-info { padding: 6px 10px 4px; font-size: var(--fs-label, 11.5px); line-height: 1.4; color: var(--hc-dim, #8E8E93); white-space: normal; }

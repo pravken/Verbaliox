@@ -282,8 +282,12 @@ function openWordAlts(e, segId, wi) {
     run: () => chooseWordAlt(segId, wi, a.text),
   }));
   items.push({ sep: true }, { label: t('ctxPlayFromHere'), key: formatTime(Number(w.start)), run: () => seekPlayer(Number(w.start)) });
+  // who picked the variant shown: the analysis model by meaning, or the most accurate model
+  const by = w.by === 'llm' ? t('altByLlm')
+    : w.by === 'rank' ? t('altByRank').replace('{model}', () => formatModelName(w.by_model || '')) : '';
+  if (by) items.unshift({ info: true, label: by }, { sep: true });
   const r = e.target.getBoundingClientRect();
-  openTextMenuAt(items, r.left, r.bottom + 4);
+  openTextMenuAt(items, r.left, r.bottom + 4, { maxWidth: 360 });
 }
 
 async function chooseWordAlt(segId, wi, text) {
