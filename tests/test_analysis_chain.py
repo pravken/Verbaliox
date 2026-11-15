@@ -96,9 +96,9 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(p["next"], ["Ольга: позвонить в агентство"])
         self.assertIn("## Обсуждение по темам\n- обход [00:01]", md)
 
-    def test_off_by_default(self):
-        self.assertFalse(analysis_chain.enabled({}))
-        self.assertTrue(analysis_chain.enabled({"analysis_chain": "true"}))
+    def test_on_by_default(self):
+        self.assertTrue(analysis_chain.enabled({}))
+        self.assertFalse(analysis_chain.enabled({"analysis_chain": "false"}))
 
 
 if __name__ == "__main__":
