@@ -934,7 +934,7 @@ function openTemplatesEditor() {
 function commitmentRowHtml(c, withMeeting, hasMfu = false) {
   const done = c.status === 'done';
   // The «MFU» tag, lit like the CPU / GPU marks, on the tasks of the organizer's follow-up; the others
-  // of a recording with an MFU keep its place empty, so the tags line up
+  // of a recording with an MFU show an empty box in its place, so the tags line up
   const inMfu = c.source === 'mfu';
   const src = inMfu ? `<span class="an-task-tag an-task-tag-on" title="${escapeHtml(t('mfuTaskTip'))}">MFU</span>`
     : hasMfu ? '<span class="an-task-tag an-task-slot" aria-hidden="true">MFU</span>' : '';
