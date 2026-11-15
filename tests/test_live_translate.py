@@ -43,3 +43,19 @@ class PhraseLanguageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(collapse_repeats is None, "app dependencies not installed")
+class FastModelTest(unittest.TestCase):
+    def test_the_fast_model_is_a_measured_one_free_for_commercial_use(self):
+        """bench-report/translation.md: gemma4:e2b; qwen2.5:3b, llama3.2 and gemma2 are not free for commercial use."""
+        from unittest import mock
+
+        from app import live_translate
+
+        for bad in ("qwen2.5:3b", "llama3.2:3b", "gemma2:2b"):
+            self.assertNotIn(bad, live_translate.FAST_MODEL_HINTS)
+        with mock.patch.object(live_translate, "installed_models", return_value=["gemma4:e4b", "gemma4:e2b", "qwen2.5:1.5b"]), \
+                mock.patch("app.database.get_all_settings", return_value={"ollama_model": "gemma4:e4b"}):
+            self.assertEqual(live_translate.model_choices(), {"quality": "gemma4:e4b", "fast": "gemma4:e2b",
+                                                              "installed": ["gemma4:e4b", "gemma4:e2b", "qwen2.5:1.5b"]})

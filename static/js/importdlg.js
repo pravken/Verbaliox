@@ -11,8 +11,8 @@ const IMP_SOUND = [
   ['leveling', 'impLeveling', 'impLevelingHint', 'onnx'],
   ['vad', 'impVad', 'impVadHint', 'whisper'],
 ];
-const IMP_AFTER = [['diarization', 'impDiarization', 'impDiarizationHint'], ['summary', 'impSummary', 'impSummaryHint'],
-  ['ensemble', 'impEnsemble', 'impEnsembleHint']];
+const IMP_AFTER = [['diarization', 'impDiarization', 'impDiarizationHint'], ['summary', 'impSummary', 'impSummaryHint']];
+const IMP_ENSEMBLE = ['ensemble', 'impEnsemble', 'impEnsembleHint', ''];  // shown under the model, always
 
 function impSettings() { return (state.system && state.system.settings) || {}; }
 
@@ -29,6 +29,7 @@ function impDefaults() {
     denoise: sound('proc_denoise'), loudnorm: sound('proc_loudnorm'), leveling: impOn('proc_leveling', s),
     vad: impOn('vad_filter', s), diarization: impOn('diarization_enabled', s), summary: impOn('auto_summary', s),
     ensemble: String(s.asr_ensemble) === 'true',  // off unless chosen (Settings → Recognition)
+    transcribe: true,  // off: «Только добавить» — the files go to the library without recognition
   };
 }
 
@@ -325,6 +326,9 @@ function renderImport() {
   };
   document.getElementById('imp-sound').innerHTML = IMP_SOUND.map(card).join('');
   document.getElementById('imp-after').innerHTML = IMP_AFTER.map(([k, l, h]) => card([k, l, h, ''])).join('');
+  document.getElementById('imp-ensemble').innerHTML = card(IMP_ENSEMBLE) + impAddOnlyHtml(imp);
+  // only added: the recognition's choices do not apply, the button says what it does
+  document.querySelector('#modal-import .imp-card').classList.toggle('imp-add-only', !imp.proc.transcribe);
   const def = impDefaults();
   const asSettings = IMP_SOUND.every(([k]) => imp.proc[k] === def[k]) && IMP_AFTER.every(([k]) => imp.proc[k] === def[k]);
   document.getElementById('imp-reset').classList.toggle('hidden', IMP_SOUND.every(([k]) => imp.proc[k] === def[k]));
@@ -336,8 +340,23 @@ function renderImport() {
   moreBtn.setAttribute('aria-expanded', String(!!imp.moreOpen));
 
   const go = document.getElementById('imp-go');
-  go.textContent = items.length ? `${t('impGo')} ${plural(items.length, t('impItemsForms'))}` : t('impGo');
+  const verb = t(imp.proc.transcribe ? 'impGo' : 'impAddOnlyGo');
+  go.textContent = items.length ? `${verb} ${plural(items.length, t('impItemsForms'))}` : verb;
   go.disabled = !items.length;
+}
+
+// «Только добавить, без распознавания»: a switch, on when the files only go to the library
+function impAddOnlyHtml(imp) {
+  const on = !imp.proc.transcribe;
+  return `<label class="imp-opt${on ? ' imp-opt-on' : ''} mt-2">
+      <span class="min-w-0 flex-1 flex flex-col gap-0.5"><span class="imp-opt-label">${escapeHtml(t('impAddOnly'))}</span><span class="imp-opt-hint">${escapeHtml(t('impAddOnlyHint'))}</span></span>
+      <input type="checkbox" role="switch" class="vs-switch" ${on ? 'checked' : ''} ${pageCall('change', 'impToggleAddOnly', [{ $: 'checked' }])} />
+    </label>`;
+}
+
+function impToggleAddOnly(on) {
+  state.imp.proc.transcribe = !on;
+  renderImport();
 }
 
 function impToggleMore() {
@@ -380,7 +399,7 @@ async function impAskPlaylist(url) {
 // library in the background with their progress in a notice (a large video takes a while to copy)
 async function impSubmit() {
   const imp = state.imp;
-  if (!imp.items.length || !requireRecognitionModel()) return;
+  if (!imp.items.length || (imp.proc.transcribe && !requireRecognitionModel())) return;  // only added: no model needed
   const model = document.getElementById('upload-model').value;
   const language = document.getElementById('upload-language').value;
   const speakers = Number(document.getElementById('upload-speakers').value || 0);
@@ -445,7 +464,7 @@ async function impSubmit() {
     } else {
       await loadMeetingsList();
     }
-    showToast(t('impQueued').replace('{n}', () => plural(made.length, t('impItemsForms'))), null, 'success');
+    showToast(t(processing.transcribe === false ? 'impAddedOnly' : 'impQueued').replace('{n}', () => plural(made.length, t('impItemsForms'))), null, 'success');
   };
   if (created.length) await show(created);
   if (files.length) uploadInBackground(files, { source: 'import', model, language, speakers, processing }, show);

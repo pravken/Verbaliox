@@ -115,6 +115,13 @@
           placeholder="Поиск по всем записям…"
           class="w-full h-7 bg-white/5 focus:bg-apple-card border border-transparent focus:border-apple-blue/60 rounded-lg pl-8 pr-6 text-xs text-white placeholder-apple-tertiary focus:outline-none transition" />
       </div>
+      <!-- The features: a button of their own (they were the first group of the funnel's long menu) -->
+      <button id="lib-feature-btn" data-click="openLibFilterMenu" data-click-args='[{"$": "event"}, "feature"]'
+        data-i18n-title="tipLibFeature" title="Показать только записи нужной фичи"
+        class="lib-filter-btn" aria-haspopup="true" aria-expanded="false">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linejoin="round" d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1 1 0 0 1 0 1.4l-7.3 7.3a1 1 0 0 1-1.4 0z"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/></svg>
+        <span id="lib-feature-count" class="lib-filter-count hidden"></span>
+      </button>
       <!-- Filters of the library: type, source, state, what is ready, language (library.js, LIB_FILTERS) -->
       <button id="lib-filter-btn" data-click="openLibFilterMenu" data-click-args='[{"$": "event"}]'
         data-i18n-title="tipLibFilter" title="Показать только записи нужного типа, источника, состояния или языка"

@@ -29,12 +29,13 @@ function renderMeetingFeatures() {
   const guesses = (m.feature_suggestions || []).map(featureById).filter(Boolean);
   // two at most next to the title, «+N» for the rest (the header has no room for more)
   const shown = own.slice(0, 2), more = own.length - shown.length;
-  box.innerHTML = shown.map(f => `<button class="ft-chip-btn" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
+  // «Фича:» says what the chips are (a coloured chip alone read as any tag)
+  box.innerHTML = `<span class="ft-label">${escapeHtml(t('ftLabel'))}</span>` + shown.map(f => `<button class="ft-chip-btn" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
     + (more > 0 ? `<button class="ft-chip-btn ft-more" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(own.map(f => f.name).join(', '))}">+${more}</button>` : '')
     + guesses.map(f => `<span class="ft-suggest">${featureChipHtml(f, { suggested: true, title: t('ftSuggestedTip') })}
         <button class="ft-yes" ${pageCall('click', 'acceptFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftAccept'))}" aria-label="${escapeHtml(t('ftAccept'))}">✓</button>
         <button class="ft-no" ${pageCall('click', 'declineFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftDecline'))}" aria-label="${escapeHtml(t('ftDecline'))}">✕</button></span>`).join('')
-    + (own.length ? '' : `<button class="ft-add" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftAddTip'))}">+ ${escapeHtml(t('ftFeature'))}</button>`);
+    + (own.length ? '' : `<button class="ft-add" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftAddTip'))}">+ ${escapeHtml(t('ftAddShort'))}</button>`);
 }
 
 function applyMeetingFeatures(m, data) {
@@ -54,8 +55,9 @@ async function saveMeetingFeatures(ids, forSeries = false) {
     body: JSON.stringify({ ids, for_series: forSeries }) });
   const data = await readJson(res);
   if (!res.ok) { showError(data.detail); return; }
+  await loadFeatures();  // a feature just made is known before the header draws its chip
   applyMeetingFeatures(m, data);
-  loadFeatures().then(() => { if (document.getElementById('tk-pop')) drawFeaturePicker(); });
+  if (document.getElementById('tk-pop')) drawFeaturePicker();
 }
 
 async function acceptFeatureSuggestion(id) {
@@ -81,6 +83,12 @@ function openFeaturePicker(e) {
 function drawFeaturePicker() {
   const m = state.activeMeeting;
   if (!m || !_ftAnchor) return;
+  // the header's chips were drawn anew (a feature added or taken off): the picker stays by them, not at
+  // the top left corner where a button no longer on the page puts it
+  if (!_ftAnchor.isConnected) {
+    _ftAnchor = [...document.querySelectorAll('#meeting-features [data-click="openFeaturePicker"]')].find(b => b.offsetParent) || null;
+    if (!_ftAnchor) { if (typeof tkClosePop === 'function') tkClosePop(); return; }
+  }
   const on = new Set(m.features || []);
   // the page link is a button of its own beside the item, not inside it (a button in a button: no keyboard)
   const list = (state.features || []).map(f => `<div class="ft-pick-row"><button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
