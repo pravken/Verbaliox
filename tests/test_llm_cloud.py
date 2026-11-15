@@ -73,7 +73,7 @@ class CloudLlmTest(unittest.TestCase):
             return llm.target().chat(system, user)
 
     def test_anthropic_request_and_answer(self):
-        _use("anthropic", "claude-sonnet-5-5")
+        _use("anthropic", "claude-sonnet-9")
         fake = _Fake((200, {"content": [{"type": "text", "text": "Ответ"}], "stop_reason": "end_turn"}))
         self.assertEqual(self._chat(fake), "Ответ")
         req = fake.requests[0]
@@ -83,7 +83,7 @@ class CloudLlmTest(unittest.TestCase):
         body = json.loads(req.content)
         self.assertEqual(body["system"], "sys")
         self.assertEqual(body["messages"], [{"role": "user", "content": "usr"}])
-        self.assertEqual(body["model"], "claude-sonnet-5-5")
+        self.assertEqual(body["model"], "claude-sonnet-9")
 
     def test_openai_and_compatible_services(self):
         _use("openai", "gpt-x")
@@ -114,7 +114,7 @@ class CloudLlmTest(unittest.TestCase):
         self.assertEqual(len(fake.requests), 2)
 
     def test_current_claude_models_get_no_temperature_and_room_to_reason(self):
-        _use("anthropic", "claude-opus-5-5")
+        _use("anthropic", "claude-opus-9")
         fake = _Fake((200, {"content": [{"type": "thinking", "thinking": ""}, {"type": "text", "text": "ok"}], "stop_reason": "end_turn"}))
         self.assertEqual(self._chat(fake), "ok")
         body = json.loads(fake.requests[0].content)
@@ -122,7 +122,7 @@ class CloudLlmTest(unittest.TestCase):
         self.assertGreaterEqual(body["max_tokens"], 16000)
 
     def test_a_refusal_or_a_cut_answer_is_an_error_not_an_answer(self):
-        _use("anthropic", "claude-sonnet-5-5")
+        _use("anthropic", "claude-sonnet-9")
         with self.assertRaises(llm.LlmError) as ctx:
             self._chat(_Fake((200, {"content": [], "stop_reason": "refusal", "stop_details": {"category": "cyber"}})))
         self.assertIn("отказалась отвечать на этот текст (cyber)", str(ctx.exception))
@@ -157,11 +157,48 @@ class CloudLlmTest(unittest.TestCase):
     def test_a_retired_model_is_replaced_by_one_the_key_has(self):
         _use("anthropic", "claude-old-1")
         gone = {"type": "error", "error": {"type": "not_found_error", "message": "model: claude-old-1"}}
-        fake = _Fake((404, gone), (200, {"data": [{"id": "claude-sonnet-5-5"}, {"id": "claude-haiku-5-5"}]}),
+        fake = _Fake((404, gone), (200, {"data": [{"id": "claude-sonnet-9"}, {"id": "claude-haiku-9"}]}),
                      (200, {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn"}))
         self.assertEqual(self._chat(fake), "ok")
-        self.assertEqual(json.loads(fake.requests[2].content)["model"], "claude-sonnet-5-5")
-        self.assertEqual(llm.cloud_model("anthropic"), "claude-sonnet-5-5")  # kept for the next time
+        self.assertEqual(json.loads(fake.requests[2].content)["model"], "claude-sonnet-9")
+        self.assertEqual(llm.cloud_model("anthropic"), "claude-sonnet-9")  # kept for the next time
+
+    def test_a_retired_model_keeps_its_family_and_the_log_names_the_model_used(self):
+        from app.database import _db_lock  # noqa: F401 - the log table lives in the same database
+
+        _use("anthropic", "claude-haiku-old")
+        llm.clear_cloud_log()
+        gone = {"type": "error", "error": {"type": "not_found_error", "message": "model: claude-haiku-old"}}
+        fake = _Fake((404, gone), (200, {"data": [{"id": "claude-sonnet-9"}, {"id": "claude-haiku-9"}, {"id": "claude-opus-9"}]}),
+                     (200, {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn"}))
+        with mock.patch("app.llm.httpx.Client", side_effect=fake.client), mock.patch("app.llm.time.sleep"):
+            tgt = llm.target()
+            tgt.chat("s", "u")
+        self.assertEqual(tgt.model, "claude-haiku-9")  # a cheap model stays a cheap one
+        self.assertEqual([r["model"] for r in llm.cloud_log()], ["claude-haiku-9", "claude-haiku-old"])  # both sends
+
+    def test_a_filtered_answer_is_an_error(self):
+        _use("openai", "gpt-x")
+        with self.assertRaises(llm.LlmError):
+            self._chat(_Fake((200, {"choices": [{"message": {"content": "Часть"}, "finish_reason": "content_filter"}]})))
+        _use("gemini", "gemini-x")
+        with self.assertRaises(llm.LlmError) as ctx:
+            self._chat(_Fake((200, {"candidates": [{"content": {"parts": [{"text": "Часть"}]}, "finishReason": "SAFETY"}]})))
+        self.assertIn("SAFETY", str(ctx.exception))
+
+    def test_an_answer_cut_off_mid_way_is_not_asked_again(self):
+        _use("anthropic")
+        calls = []
+
+        def broken(request):
+            calls.append(request)
+            raise httpx.RemoteProtocolError("peer closed connection", request=request)
+
+        with mock.patch("app.llm.httpx.Client", side_effect=lambda **kw: _RealClient(transport=httpx.MockTransport(broken), **kw)), \
+                mock.patch("app.llm.time.sleep"):
+            with self.assertRaises(llm.LlmError):
+                llm.target().chat("s", "u")
+        self.assertEqual(len(calls), 1)  # it may have reached the service and be paid: not sent twice
 
     def test_a_timeout_is_not_asked_again(self):
         _use("anthropic")
