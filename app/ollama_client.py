@@ -701,6 +701,9 @@ SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
 LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
+# With a 32k context: the note of a part of an hour-long recording (3800–4600 tokens) and the protocol in steps
+# (3600–5300) were cut at 3072 and asked again, 15–30 s each (bench-report/analysis-chain.md)
+LLM_MAX_ANSWER_TOKENS_LARGE = 6144
 MFU_SUMMARY_CHARS = 6000     # the organizer's follow-up in every summary request (as much as the notes)
 LARGE_CONTEXT_VRAM_GB = 7.5   # an "8 GB" card reports a little under 8
 CONTEXT_SCALE: Optional[float] = None  # set by tools/llm_bench.py --ctx; None: chosen by the card
@@ -724,6 +727,12 @@ def llm_context_scale() -> float:
 
 def llm_num_ctx() -> int:
     return int(LLM_NUM_CTX * llm_context_scale())
+
+
+def llm_max_answer_tokens() -> int:
+    """The answer limit: more room with the 32k context of a card of 8 GB and more (16k keeps its room
+    for the transcript)."""
+    return LLM_MAX_ANSWER_TOKENS_LARGE if llm_num_ctx() >= 32768 else LLM_MAX_ANSWER_TOKENS
 
 
 def single_pass_max_chars() -> int:
@@ -800,7 +809,9 @@ SUMMARY_TEMPLATES: Dict[str, str] = {
         "(О чём договорились или что решили — по пунктам, с таймкодами `[ММ:СС]`. Решение — то, что участники "
         "этой встречи постановили сделать, изменить или выбрать; только решённое в разговоре, а не предложенное "
         "или обсуждённое. Не включай регламент встречи, правила, условия договоров, сроки и цифры из докладов "
-        "и другие факты о положении дел, вежливые реплики («готов ответить на вопросы»). Если решений не было, "
+        "и другие факты о положении дел, инструкции и описание того, как что-то устроено или делается («при "
+        "смене размера править оба файла»), призывы и вежливые реплики («готов ответить на вопросы»). Встреча "
+        "может быть на любом языке: правило то же. Если решений не было, "
         "напиши одной строкой без пункта: «Решений не принималось»)\n\n"
         "## Открытые вопросы\n"
         "(Что осталось нерешённым, спорным или отложено и к чему нужно вернуться — по пунктам, с таймкодами. "
@@ -989,7 +1000,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
             "num_ctx": llm_num_ctx(),
             # An answer stops at this length: a small model caught in a loop (the same lines again and
             # again) wrote until the whole context was full, for many minutes on a processor
-            "num_predict": LLM_MAX_ANSWER_TOKENS,
+            "num_predict": llm_max_answer_tokens(),
         },
     }
     keep_alive = idle_unload.ollama_keep_alive()
