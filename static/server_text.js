@@ -12,6 +12,7 @@ const SERVER_TEXT_EN = {
   "Поиск задач и договорённостей...": "Finding the tasks and agreements...",
   "Этот раздел не правится": "This section cannot be edited",
   "Раздел ещё не создан": "The section has not been made yet",
+  "Раздел изменился, пока вы его правили: откройте его заново": "The section changed while you were editing it: open it again",
   "Пустой текст: чтобы убрать раздел, удалите его": "The text is empty: to remove the section, delete it",
   "Укажите, что и на что исправить": "Give the word to correct and the right one",
   "Обновление через git из программы работает только в Windows": "Updating via git from the app works on Windows only",

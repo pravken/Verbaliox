@@ -29,7 +29,7 @@ def _boundary(text: str) -> str:
 def _cased(sample: str, right: str) -> str:
     """The right word in the case of the one it replaces: «кубер»→«Kubernetes» stays as typed; an
     upper-cased first letter of a sentence is kept."""
-    if sample[:1].isupper() and right[:1].islower():
+    if sample[:1].isupper() and right == right.lower():  # «iPhone», «macOS» keep their own case
         return right[:1].upper() + right[1:]
     return right
 
@@ -114,34 +114,54 @@ def _has_letters(s: str) -> bool:
 
 def word_changes(old: str, new: str) -> List[Dict[str, str]]:
     """The words a hand edit replaced by others: [{"wrong": "кубернетис", "right": "Kubernetes"}].
-    A rewritten sentence is not a typo: only short replacements (up to 4 words each side) count."""
-    a, b = _words(old), _words(new)
+    A rewritten sentence is not a typo: only short replacements (up to 4 words each side) count. The lines
+    are compared first and only the changed ones word by word (a long section diffed word by word at once
+    took seconds: found by an audit)."""
     out: List[Dict[str, str]] = []
     seen = set()
-    sm = difflib.SequenceMatcher(a=[w.casefold() for w in a], b=[w.casefold() for w in b], autojunk=False)
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+    old_lines, new_lines = str(old or "").splitlines(), str(new or "").splitlines()
+    by_line = difflib.SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
+    for tag, i1, i2, j1, j2 in by_line.get_opcodes():
         if tag != "replace":
             continue
-        if not (1 <= i2 - i1 <= PHRASE_MAX_WORDS and 1 <= j2 - j1 <= PHRASE_MAX_WORDS):
-            continue
-        wrong, right = " ".join(a[i1:i2]), " ".join(b[j1:j2])
-        if not (_has_letters(wrong) and _has_letters(right)) or wrong.casefold() == right.casefold():
-            continue
-        # «обсудили» → «согласовали» is a reworded thought, not a word heard wrong: the two must look
-        # alike, or the right one must be a name or a term (Latin letters, a capital not of a sentence start)
-        alike = difflib.SequenceMatcher(a=wrong.casefold(), b=right.casefold()).ratio() >= 0.5
-        termish = (any("a" <= ch.lower() <= "z" for ch in right) or any(ch.isupper() for ch in right[1:])
-                   or (right[:1].isupper() and not wrong[:1].isupper()))
-        if not (alike or termish):
-            continue
-        key = (wrong.casefold(), right)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"wrong": wrong, "right": right})
-        if len(out) >= CHANGES_MAX:
-            break
+        a, b = _words("\n".join(old_lines[i1:i2])), _words("\n".join(new_lines[j1:j2]))
+        sm = difflib.SequenceMatcher(a=[w.casefold() for w in a], b=[w.casefold() for w in b], autojunk=False)
+        for wtag, x1, x2, y1, y2 in sm.get_opcodes():
+            if wtag != "replace":
+                continue
+            if not (1 <= x2 - x1 <= PHRASE_MAX_WORDS and 1 <= y2 - y1 <= PHRASE_MAX_WORDS):
+                continue
+            wrong, right = " ".join(a[x1:x2]), " ".join(b[y1:y2])
+            if not (_has_letters(wrong) and _has_letters(right)) or wrong.casefold() == right.casefold():
+                continue
+            # «обсудили» → «согласовали» is a reworded thought, not a word heard wrong: the two must look
+            # alike, or the right one must be a name or a term (Latin letters, a capital not of a sentence start)
+            alike = difflib.SequenceMatcher(a=wrong.casefold(), b=right.casefold()).ratio() >= 0.5
+            termish = (any("a" <= ch.lower() <= "z" for ch in right) or any(ch.isupper() for ch in right[1:])
+                       or (right[:1].isupper() and not wrong[:1].isupper()))
+            if not (alike or termish) or not learnable(wrong):
+                continue
+            key = (wrong.casefold(), right)
+            if key in seen:
+                continue
+            seen.add(key)
+            # «принял» → «приняли» is grammar, not a word heard wrong: offered, but not ticked (an exact
+            # variant would change every «принял» after it); a term or a name is ticked
+            out.append({"wrong": wrong, "right": right, "sure": termish})
+            if len(out) >= CHANGES_MAX:
+                return out
     return out
+
+
+_SPEAKER_LABEL = re.compile(r"^(участник|speaker|спикер|говорящий)[ _]?\d+$|^speaker_\d+$", re.I)
+
+
+def learnable(wrong: str) -> bool:
+    """Whether a wrong spelling may become a dictionary variant: not a speaker's label («Участник 2» renamed
+    by hand would rename someone else in the next meeting), no digits, no comma (variants are comma
+    separated: «Ромашка, Москва» would make «Москва» one on its own). Found by the audits."""
+    w = " ".join(str(wrong or "").split())
+    return bool(w) and not _SPEAKER_LABEL.match(w) and not any(ch.isdigit() for ch in w) and "," not in w and ";" not in w
 
 
 def learn(pairs: List[Dict[str, str]]) -> List[str]:
@@ -158,6 +178,8 @@ def learn(pairs: List[Dict[str, str]]) -> List[str]:
         if not wrong or not right or wrong.casefold() == right.casefold():
             continue
         if len(right.split()) > PHRASE_MAX_WORDS or len(wrong.split()) > PHRASE_MAX_WORDS:
+            continue
+        if not learnable(wrong):
             continue
         have = known.get(right.casefold())
         variants = split_variants((have or {}).get("variants") or "")
@@ -189,9 +211,13 @@ def fix_with_dictionary(text: str) -> str:
         return text
     out = []
     for line in text.split("\n"):
-        body = line.lstrip()
+        body = line.strip()
         fixed = fix_text(body, rules) if body else body
-        out.append(line[: len(line) - len(body)] + fixed if fixed != body else line)
+        if fixed == body:
+            out.append(line)
+            continue
+        lead, tail = line[: len(line) - len(line.lstrip())], line[len(line.rstrip()):]
+        out.append(lead + fixed + tail)  # a Markdown line break («  » at the end) stays
     return "\n".join(out)
 
 
@@ -229,19 +255,33 @@ def suspects(meeting: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
     out: List[Dict[str, Any]] = []
     seen = set()
+    # the analysis's words once: a word not among them is not searched for (a regex per unsure word over the
+    # whole analysis took seconds on a long recording: found by the audits)
+    vocabulary = {w.casefold() for w in _WORD.findall(text)}
 
     def add(word: str, options: List[str], source: str, start: Any) -> None:
         word = _clean_word(word)
         key = word.casefold()
-        if not word or key in seen or not _has_letters(word) or not _found(text, word):
+        if not word or key in seen:
             return
-        seen.add(key)
+        seen.add(key)  # a miss too: the same word is not looked for again
+        if not _has_letters(word) or any(w.casefold() not in vocabulary for w in _WORD.findall(word)) \
+                or not _found(text, word):
+            return
         opts = []
         for o in options:
             o = _clean_word(o)
             if o and o.casefold() != key and o not in opts:
                 opts.append(o)
         out.append({"word": word, "options": opts[:4], "source": source, "start": float(start or 0)})
+
+    # A word Whisper was surely sure of elsewhere in the recording is not doubtful in one place: «проект»
+    # heard unsurely once was underlined everywhere (found by an audit)
+    sure = set()
+    for seg in meeting.get("segments") or []:
+        for w in seg.get("words") or []:
+            if isinstance(w.get("prob"), (int, float)) and w["prob"] >= 0.8 and not w.get("alts"):
+                sure.add(_clean_word(w.get("word")).casefold())
 
     for seg in meeting.get("segments") or []:
         words = seg.get("words") or []
@@ -254,7 +294,7 @@ def suspects(meeting: Dict[str, Any]) -> List[Dict[str, Any]]:
                 add(shown, [a.get("text") or "" for a in w["alts"]], "dispute", w.get("start"))
             elif isinstance(w.get("prob"), (int, float)) and w["prob"] < UNSURE_PROB:
                 word = _clean_word(w.get("word"))
-                if sum(ch.isalpha() for ch in word) >= 3:
+                if sum(ch.isalpha() for ch in word) >= 3 and word.casefold() not in sure:
                     add(word, [], "unsure", w.get("start"))
     return out
 

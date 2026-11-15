@@ -327,7 +327,8 @@ class AutoChaptersTest(unittest.TestCase):
         update_settings({"analysis_chain": "true"})
         made, m = self._templates(900.0)
         self.assertEqual(made, ["decisions", "protocol", "chapters"])
-        self.assertIn("## Решения", m["summaries"]["protocol"])
+        # step 1 found nothing it could read and the task search is off: the model's protocol stays as written
+        self.assertEqual(m["summaries"]["protocol"], "## Итоги")
 
     def test_long_meeting_gets_chapters(self):
         made, m = self._templates(900.0)

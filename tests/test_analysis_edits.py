@@ -46,7 +46,16 @@ class WordChangesTest(unittest.TestCase):
         old = "Решили перенести сервис в кубернетис, Ирина проверит жиру до пятницы."
         new = "Решили перенести сервис в Kubernetes, Ирина проверит Jira до пятницы."
         self.assertEqual(analysis_edits.word_changes(old, new),
-                         [{"wrong": "кубернетис", "right": "Kubernetes"}, {"wrong": "жиру", "right": "Jira"}])
+                         [{"wrong": "кубернетис", "right": "Kubernetes", "sure": True},
+                          {"wrong": "жиру", "right": "Jira", "sure": True}])
+
+    def test_grammar_is_offered_unticked_and_speaker_labels_never(self):
+        self.assertEqual(analysis_edits.word_changes("Иван принял решение", "Иван приняли решение"),
+                         [{"wrong": "принял", "right": "приняли", "sure": False}])
+        self.assertEqual(analysis_edits.word_changes("Участник 2 предложил", "Ольга предложил"), [])
+        self.assertFalse(analysis_edits.learnable("Участник 2"))
+        self.assertFalse(analysis_edits.learnable("Ромашка, Москва"))
+        self.assertTrue(analysis_edits.learnable("кубернетис"))
 
     def test_a_reworded_thought_and_case_alone_are_not(self):
         self.assertEqual(analysis_edits.word_changes("Обсудили бюджет", "Согласовали бюджет"), [])
@@ -111,10 +120,19 @@ class ApiTest(unittest.TestCase):
     def test_a_hand_edit_is_saved_and_its_words_offered(self):
         r = self.c.put(f"/api/meetings/{self.mid}/summaries/tldr", json={"text": "Сервис переезжает в Kubernetes."})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["suggest"], [{"wrong": "кубернетис", "right": "Kubernetes"}])
+        self.assertEqual(r.json()["suggest"], [{"wrong": "кубернетис", "right": "Kubernetes", "sure": True}])
         self.assertEqual(get_meeting(self.mid)["summaries"]["tldr"], "Сервис переезжает в Kubernetes.")
         r = self.c.post("/api/dictionary/learn", json={"pairs": r.json()["suggest"]})
         self.assertEqual(r.json()["learned"], ["Kubernetes"])
+
+    def test_an_edit_of_a_section_changed_meanwhile_is_refused(self):
+        r = self.c.put(f"/api/meetings/{self.mid}/summaries/tldr",
+                       json={"text": "Моя правка.", "base": "Текст, который был раньше."})
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(get_meeting(self.mid)["summaries"]["tldr"], "Сервис переезжает в кубернетис.")
+        r = self.c.put(f"/api/meetings/{self.mid}/summaries/tldr",
+                       json={"text": "Моя правка.", "base": "Сервис переезжает в кубернетис."})
+        self.assertEqual(r.status_code, 200)
 
     def test_an_empty_or_missing_section_is_refused(self):
         self.assertEqual(self.c.put(f"/api/meetings/{self.mid}/summaries/tldr", json={"text": "  "}).status_code, 400)

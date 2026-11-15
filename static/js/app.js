@@ -1847,7 +1847,8 @@ function textMenuItems(e) {
     if (text.length <= 60 && text.split(' ').length <= 5) {
       // a word of the analysis written wrong: put right in the analysis, and the dictionary learns it
       if (area && area.closest('#summary-content') && state.activeMeeting && !nodeEl(selection.anchorNode)?.closest?.('.an-edit, textarea, input')) {
-        items.push({ label: t('ctxFixInAnalysis').replace('{word}', () => text), run: () => openWordFixDialog(text) });
+        const card = nodeEl(selection.anchorNode)?.closest?.('[data-md]');
+        items.push({ label: t('ctxFixInAnalysis').replace('{word}', () => text), run: () => openWordFixDialog(text, card ? card.dataset.md : null) });
       }
       items.push({ label: t('ctxAddToDictionary'), run: () => addToDictionary(text) });
     }
@@ -1980,7 +1981,7 @@ function anTrimWord(text) {
 }
 
 // «Исправить …»: the right spelling for every section of this recording; the dictionary remembers it
-function openWordFixDialog(selected) {
+function openWordFixDialog(selected, section) {
   const wrong = anTrimWord(selected);
   const m = state.activeMeeting;
   if (!wrong || !m) return;
@@ -2027,12 +2028,13 @@ function openWordFixDialog(selected) {
     const right = anTrimWord(input.value);
     if (!right || right === wrong) { input.focus(); return; }
     const tab = state.activeSummaryTab;
-    const key = form.elements.all.checked ? null : (tab === 'protocol' ? null : tab);
+    // one section: the one the word was selected in (a card of the overview has its own)
+    const key = form.elements.all.checked ? null : (section || (tab === 'protocol' ? 'protocol' : tab));
     const res = await fetch(`/api/meetings/${m.id}/summaries/fix`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ wrong, right, key, learn: learnBox.checked }),
     }).catch(() => null);
-    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
     const data = await res.json();
     done();
     if (state.activeMeeting && state.activeMeeting.id === m.id) {
@@ -2086,9 +2088,9 @@ function editAnalysisSection(key) {
     if (text === old.trim()) { close(); return; }
     if (!text) { showError(t('anEditEmpty')); return; }
     const res = await fetch(`/api/meetings/${m.id}/summaries/${encodeURIComponent(key)}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, base: old }),
     }).catch(() => null);
-    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
     const data = await res.json();
     if (state.activeMeeting && state.activeMeeting.id === m.id) state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
     close();
@@ -2116,7 +2118,7 @@ function offerDictionaryWords(pairs) {
       <div class="text-sm font-semibold text-white">${escapeHtml(t('learnTitle'))}</div>
       <p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('learnText'))}</p>
       <div class="space-y-1.5 max-h-[50vh] overflow-y-auto">${pairs.map((p, i) => `<label class="flex items-center gap-2 text-sm text-white">
-          <input type="checkbox" data-i="${i}" checked>
+          <input type="checkbox" data-i="${i}" ${p.sure === false ? '' : 'checked'}>
           <span class="break-words"><s class="opacity-60">${escapeHtml(p.wrong)}</s> → <b>${escapeHtml(p.right)}</b></span></label>`).join('')}</div>
       <div class="flex justify-end gap-2">
         <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('learnSkip'))}</button>
@@ -2133,7 +2135,7 @@ function offerDictionaryWords(pairs) {
     const res = await fetch('/api/dictionary/learn', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: chosen }),
     }).catch(() => null);
-    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
     const data = await res.json();
     loadDictionary();
     showToast(t('learnDone').replace('{n}', () => String((data.learned || []).length)));
@@ -2148,7 +2150,13 @@ function offerDictionaryWords(pairs) {
 // and what the check by a model found. A click offers the other spellings, the correction dialog,
 // listening to the place, or «Верно» (not underlined again in this recording).
 function anSumsSig(m) {
-  return Object.entries(m.summaries || {}).map(([k, v]) => `${k}:${String(v || '').length}`).join('|');
+  // the text itself, hashed: a same-length correction kept the old underlines (an audit)
+  let h = 0;
+  for (const [k, v] of Object.entries(m.summaries || {})) {
+    const s = `${k}:${typeof v === 'string' ? v : JSON.stringify(v)}|`;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return String(h);
 }
 
 function analysisTextShown() {
@@ -2250,7 +2258,7 @@ function openSuspectMenu(el) {
   for (const o of x.options || []) {
     items.push({ label: t('anSuspectUse').replace('{word}', () => o), run: () => fixWordAt(shown, o) });
   }
-  items.push({ label: t('anSuspectOther'), run: () => openWordFixDialog(shown) });
+  items.push({ label: t('anSuspectOther'), run: () => openWordFixDialog(shown, el.closest('[data-md]')?.dataset.md || null) });
   if (x.start) items.push({ label: t('ctxPlayFromHere'), key: formatTime(x.start), run: () => seekPlayer(x.start) });
   items.push({ sep: true }, {
     label: t('anSuspectOk'), run: () => { anIgnore(m.id, x.word); markSuspects(document.getElementById('summary-content')); },
@@ -2263,17 +2271,27 @@ function openSuspectMenu(el) {
 async function fixWordAt(wrong, right) {
   const m = state.activeMeeting;
   if (!m) return;
+  // the dictionary is not taught by one click: «мы» → «вы» would change every «мы» after it (an audit);
+  // the toast offers it
   const res = await fetch(`/api/meetings/${m.id}/summaries/fix`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wrong, right, learn: true }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wrong, right, learn: false }),
   }).catch(() => null);
-  if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+  if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
   const data = await res.json();
   if (state.activeMeeting && state.activeMeeting.id === m.id) {
     state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
     renderSummaryPanel();
   }
-  if (data.learned && data.learned.length) loadDictionary();
-  showToast(t('fixWordDone').replace('{n}', () => String(data.replaced || 0)) + (data.learned && data.learned.length ? ` · ${t('fixWordLearned')}` : ''));
+  showToast(t('fixWordDone').replace('{n}', () => String(data.replaced || 0)), {
+    label: t('fixWordRemember'),
+    onClick: async () => {
+      const r = await fetch('/api/dictionary/learn', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: [{ wrong, right }] }),
+      }).catch(() => null);
+      const learned = r && r.ok ? (await r.json()).learned || [] : [];
+      if (learned.length) { loadDictionary(); showToast(t('fixWordLearned')); }
+    },
+  });
 }
 
 // «Проверить слова»: a small model reads the analysis; what it finds is underlined like the rest
@@ -2285,7 +2303,7 @@ async function checkAnalysisWords() {
   showToast(t('anCheckRunning'));
   try {
     const res = await fetch(`/api/meetings/${m.id}/analysis/check`, { method: 'POST' }).catch(() => null);
-    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
     const items = (await res.json()).suggestions || [];
     state.anCheck = { id: m.id, items };
     if (state.activeMeeting && state.activeMeeting.id === m.id) markSuspects(document.getElementById('summary-content'));
