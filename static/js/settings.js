@@ -1958,6 +1958,13 @@ function renderLlmSettings() {
       `apple-segment-btn ${(k === 'cloud') === cloud ? 'apple-segment-active' : 'text-apple-secondary hover:text-white'}`;
   }
   document.getElementById('llm-cloud-panel').classList.toggle('hidden', !cloud && !state.llmShowCloud);
+  // With a cloud model the local ones stay: translation, live subtitles and dubbing always use Ollama
+  for (const [id, key] of [['ollama-section-title', 'ollamaSectionTitle'], ['ollama-section-desc', 'ollamaSectionDesc']]) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.dataset.i18n = cloud ? key + 'Cloud' : key;
+    el.textContent = t(el.dataset.i18n);
+  }
   const sel = document.getElementById('set-llm-provider');
   if (!state.llmProviderEdited) sel.value = st.provider;
   renderLlmProvider(true);
