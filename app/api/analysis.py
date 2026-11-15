@@ -35,7 +35,77 @@ def api_meeting_series(meeting_id: int, payload: SeriesAssignPayload) -> Dict[st
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     sid = create_series(payload.new_name) if payload.new_name else payload.series_id
     update_meeting_fields(meeting_id, series_id=sid)
+    from app.features import apply_series_rule
+
+    apply_series_rule(meeting_id)  # the features the series is about, when the meeting has none
     return api_get_meeting(meeting_id)
+
+# --- Features (app/features.py): a tag across the library; a meeting's tasks belong to its features ---
+class FeaturePayload(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+@router.get("/api/features")
+def api_features() -> List[Dict[str, Any]]:
+    from app.features import list_features
+
+    return list_features()
+
+@router.post("/api/features")
+def api_create_feature(payload: FeaturePayload) -> Dict[str, Any]:
+    from app.features import create_feature
+
+    try:
+        return create_feature(payload.name or "", payload.color or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.patch("/api/features/{feature_id}")
+def api_update_feature(feature_id: int, payload: FeaturePayload) -> List[Dict[str, Any]]:
+    from app.features import list_features, update_feature
+
+    try:
+        update_feature(feature_id, payload.name, payload.color)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return list_features()
+
+@router.delete("/api/features/{feature_id}")
+def api_delete_feature(feature_id: int) -> List[Dict[str, Any]]:
+    from app.features import delete_feature, list_features
+
+    delete_feature(feature_id)
+    return list_features()
+
+class MeetingFeaturesPayload(BaseModel):
+    ids: List[int] = []
+    for_series: bool = False  # the same features for every new meeting of its series
+
+@router.put("/api/meetings/{meeting_id}/features")
+def api_meeting_features(meeting_id: int, payload: MeetingFeaturesPayload) -> Dict[str, Any]:
+    from app.features import set_meeting_features
+
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    set_meeting_features(meeting_id, payload.ids, payload.for_series)
+    m = get_meeting(meeting_id) or {}
+    return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
+
+@router.post("/api/meetings/{meeting_id}/feature-suggestions/{feature_id}")
+def api_accept_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
+    from app.features import accept_suggestion
+
+    accept_suggestion(meeting_id, feature_id)
+    m = get_meeting(meeting_id) or {}
+    return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
+
+@router.delete("/api/meetings/{meeting_id}/feature-suggestions/{feature_id}")
+def api_decline_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
+    from app.features import decline_suggestion
+
+    decline_suggestion(meeting_id, feature_id)
+    m = get_meeting(meeting_id) or {}
+    return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
 
 class SeriesRenamePayload(BaseModel):
     name: str

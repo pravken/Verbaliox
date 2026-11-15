@@ -3,6 +3,7 @@ import os
 import re
 import sqlite3
 import threading
+import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -159,6 +160,7 @@ def init_db() -> None:
             "language": "auto",
             "diarization_enabled": "true",
             "diarizer_engine": "ecapa",  # "nemotron": Nemotron 3 Diarization, downloaded on request (app/nemotron_diar.py)
+            "feature_suggest": "true",  # the analysis model suggests a recording's features (app/features.py)
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "ollama_url": "http://localhost:11434",
@@ -1396,7 +1398,15 @@ def get_meeting(meeting_id: int) -> Optional[Dict[str, Any]]:
         row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
         m = _deserialize_meeting(dict(row), conn) if row else None
         conn.close()
-        return m
+    if m is not None:
+        try:
+            from app.features import feature_map, suggestion_map
+
+            m["features"] = feature_map([meeting_id]).get(meeting_id, [])
+            m["feature_suggestions"] = suggestion_map([meeting_id]).get(meeting_id, [])
+        except Exception:
+            traceback.print_exc()
+    return m
 
 
 _LIST_COLUMNS = """id, title, filename, media_path, duration, status, progress, stage_text,
@@ -1488,6 +1498,15 @@ def list_meetings() -> List[Dict[str, Any]]:
         d["size_bytes"] = d.pop("media_size") or 0
         d.pop("media_path", None)
         result.append(d)
+    try:  # the features each recording is about, and the model's suggestions (app/features.py)
+        from app.features import feature_map, suggestion_map
+
+        tags, guesses = feature_map(), suggestion_map()
+        for d in result:
+            d["features"] = tags.get(d["id"], [])
+            d["feature_suggestions"] = guesses.get(d["id"], [])
+    except Exception:
+        traceback.print_exc()
     if unmeasured:
         with _db_lock:
             conn = get_connection()
