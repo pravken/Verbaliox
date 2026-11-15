@@ -75,15 +75,15 @@ MFU = "mfu"  # the source of a task taken from the MFU
 
 def _same_as_mfu(x: Dict[str, Any], y: Dict[str, Any]) -> bool:
     """A task found in the transcript that is one of the MFU's: the same person (or nobody named on
-    either side) and mostly the same words; worded differently in the MFU, so looser than _same_task."""
-    from difflib import SequenceMatcher
-
+    either side) and mostly the same words; worded differently in the MFU, so looser than _same_task.
+    Only the word stems count: «отчёт по продажам» and «отчёт по закупкам» read alike letter by letter
+    but are two tasks (the Fable audit)."""
     wx, wy = (x.get("who") or "").casefold().split(), (y.get("who") or "").casefold().split()
     if wx and wy and wx[0] != wy[0]:  # the first name is enough: «Иван» and «Иван Петров»
         return False
     a, b = _norm_what(x.get("what")), _norm_what(y.get("what"))
     sa, sb = {w[:5] for w in a.split() if len(w) > 2}, {w[:5] for w in b.split() if len(w) > 2}  # word stems
-    return a == b or (bool(sa and sb) and len(sa & sb) / min(len(sa), len(sb)) >= 0.6) or SequenceMatcher(None, a, b).ratio() >= 0.75
+    return a == b or (bool(sa and sb) and len(sa & sb) / min(len(sa), len(sb)) >= 0.6)
 
 
 VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment go with it

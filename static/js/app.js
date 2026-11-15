@@ -492,8 +492,10 @@ function renderSummaryPanel() {
     return;
   }
   if (tab === 'mfu') {
+    // the editor of the same recording keeps its caret; another recording's is drawn again (a text typed
+    // for one recording was saved into the next one: the Fable audit)
     const ed = document.getElementById('mfu-input');
-    if (!(ed && box.contains(ed) && document.activeElement === ed)) renderMfuEditor(box);
+    if (!(ed && box.contains(ed) && document.activeElement === ed && ed.dataset.mid === String(m.id))) renderMfuEditor(box);
     return;
   }
   if (tab === 'commitments') { renderCommitments(box); return; }
@@ -1071,20 +1073,37 @@ function renderMfuEditor(box) {
       </div>
     </div>`;
   const ta = document.getElementById('mfu-input');
-  ta.value = m.mfu || '';
-  ta.oninput = () => { document.getElementById('mfu-status').textContent = ta.value.trim() !== (m.mfu || '').trim() ? t('mfuUnsaved') : ''; };
+  ta.dataset.mid = String(m.id);
+  // a text not saved yet stays with its recording while the page is open (leaving the tab lost it)
+  state.mfuDrafts = state.mfuDrafts || {};
+  ta.value = state.mfuDrafts[m.id] ?? (m.mfu || '');
+  const status = () => {
+    const changed = ta.value.trim() !== (m.mfu || '').trim();
+    const long = ta.value.length > MFU_READ_CHARS;
+    const st = document.getElementById('mfu-status');
+    st.className = 'text-[11px] ' + (long ? 'text-apple-amber' : 'text-apple-tertiary');
+    st.textContent = [changed ? t('mfuUnsaved') : '', long ? t('mfuTooLong').replace('{n}', () => MFU_READ_CHARS) : ''].filter(Boolean).join(' · ');
+  };
+  ta.oninput = () => {
+    if (ta.value.trim() !== (m.mfu || '').trim()) state.mfuDrafts[m.id] = ta.value; else delete state.mfuDrafts[m.id];
+    status();
+  };
+  status();
 }
 
+const MFU_READ_CHARS = 6000;  // what every summary reads of it (app/ollama_client.MFU_SUMMARY_CHARS)
+
 async function saveMfu() {
-  const m = state.activeMeeting;
   const ta = document.getElementById('mfu-input');
-  if (!m || !ta) return;
+  const m = state.activeMeeting;
+  if (!m || !ta || ta.dataset.mid !== String(m.id)) return;  // the editor of another recording
   const text = ta.value.trim();
   const st = document.getElementById('mfu-status');
   const res = await fetch(`/api/meetings/${m.id}/mfu`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
   if (!res.ok) { if (st) st.textContent = serverText((await readJson(res)).detail || t('errorGeneric')); return; }
   const changed = text !== (m.mfu || '').trim();
   m.mfu = text;
+  if (state.mfuDrafts) delete state.mfuDrafts[m.id];
   setClearSummaryVisible(!!text);
   renderAnalysisNav();
   if (st) st.textContent = t('notesSaved');

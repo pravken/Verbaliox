@@ -107,6 +107,11 @@ class MfuTest(unittest.TestCase):
         self.assertEqual(got["созвониться с подрядчиком"]["source"], "ai")  # heard only in the talk
         self.assertIn("Пётр — договор", self.mfu_seen)
 
+    def test_two_reports_are_two_tasks(self):
+        same = commitments._same_as_mfu
+        self.assertFalse(same({"who": "Анна", "what": "отчёт по продажам"}, {"who": "Анна", "what": "отчёт по закупкам"}))
+        self.assertTrue(same({"who": "Анна", "what": "подготовить отчёт"}, {"who": "Анна Петрова", "what": "подготовить отчёт по продажам"}))
+
     def test_without_an_mfu_nothing_changes(self):
         init_db()
         m = create_meeting("Планёрка 2", "q.m4a", "/tmp/q.m4a")
