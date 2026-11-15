@@ -455,7 +455,8 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         from app.features import describe
 
         about = describe(m.get("features") or [])
-        head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (vocab.glossary_note() + "\n\n" if vocab.glossary_note() else "")
+        glossary = vocab.glossary_note(already=about)
+        head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (glossary + "\n\n" if glossary else "")
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))

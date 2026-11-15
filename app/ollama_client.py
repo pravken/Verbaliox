@@ -1111,7 +1111,7 @@ def generate_meeting_summary(
     try:
         from app import vocab
 
-        glossary = vocab.glossary_note()
+        glossary = vocab.glossary_note(already=(features_note or "")[:2000])
     except Exception:
         glossary = ""
     if glossary:
@@ -1137,7 +1137,10 @@ def generate_meeting_summary(
     single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
-    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text))
+    # and so do the feature's note and the glossary (the PC check of 0.8.7-beta.2: room was left, but the
+    # budget did not know of them)
+    added = len((features_note or "").strip()[:2000]) + len(glossary)
+    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text) - added)
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
         chunks = _chunk_lines(lines, chunk_max_chars() if not llm.is_cloud else llm.max_chars // 2)
