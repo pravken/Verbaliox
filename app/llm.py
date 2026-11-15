@@ -53,12 +53,17 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
 }
 
 CLOUD_MAX_CHARS = 300_000     # one request: about 100k tokens of Russian text
-TIMEOUT_SEC = 300.0
+# The whole answer comes at once, so this is how long the longest one may take: a long protocol of a
+# reasoning model (Claude Opus, Gemini Pro) writes for several minutes
+TIMEOUT_SEC = 600.0
 RETRIES = 2                   # rate limit or a server error: try again after a pause
+ANTHROPIC_MAX_TOKENS = 16000  # the answer and the model's reasoning together; more needs a streamed answer
 
 
 class LlmError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int = 0):
+        super().__init__(message)
+        self.status = status  # the HTTP status of the service's refusal, 0 when there was none
 
 
 def _settings() -> Dict[str, str]:
@@ -244,7 +249,23 @@ def _cloud_target(settings: Dict[str, str]) -> Target:
     if not model:
         raise LlmError("Не указана модель облачного сервиса в «Настройки → Анализ».")
     fn = {"anthropic": _anthropic_chat, "gemini": _gemini_chat}.get(provider, _openai_chat)
-    return Target(provider, model, CLOUD_MAX_CHARS, lambda system, user: fn(base, key, model, system, user, provider))
+    chosen = {"model": model}
+
+    def chat(system: str, user: str) -> str:
+        try:
+            return fn(base, key, chosen["model"], system, user, provider)
+        except LlmError as e:
+            # The service retired the chosen model: take the default of the ones the key can use, once
+            if e.status != 404 or provider == "openai_compat":
+                raise
+            picked = ensure_model(provider)
+            if not picked["changed"]:
+                raise
+            print(f"[llm] {provider}: {chosen['model']} is gone, using {picked['model']}", flush=True)
+            chosen["model"] = picked["model"]
+            return fn(base, key, chosen["model"], system, user, provider)
+
+    return Target(provider, model, CLOUD_MAX_CHARS, chat)
 
 
 def _post(url: str, headers: Dict[str, str], payload: Dict[str, Any], provider: str) -> Dict[str, Any]:
@@ -258,16 +279,24 @@ def _post(url: str, headers: Dict[str, str], payload: Dict[str, Any], provider: 
     for attempt in range(RETRIES + 1):
         try:
             resp = cancel_scope.call(request)  # a cancelled job does not wait for the answer
+        except httpx.TimeoutException as e:
+            if isinstance(e, (httpx.ConnectTimeout, httpx.PoolTimeout)):  # never reached the service: try again
+                last = LlmError(f"{PROVIDERS[provider]['name']}: нет соединения ({type(e).__name__}). Проверьте интернет и прокси.")
+                time.sleep(2 * (attempt + 1))
+                continue
+            # The service took the whole time: asking again would wait as long and may be paid again
+            raise LlmError(f"{PROVIDERS[provider]['name']}: сервис не ответил за {int(TIMEOUT_SEC // 60)} мин. "
+                           "Попробуйте модель побыстрее или запись покороче.")
         except httpx.HTTPError as e:
             last = LlmError(f"{PROVIDERS[provider]['name']}: нет соединения ({type(e).__name__}). Проверьте интернет и прокси.")
             time.sleep(2 * (attempt + 1))
             continue
         if resp.status_code in (429, 500, 502, 503, 504, 529) and attempt < RETRIES:
-            last = LlmError(_error_text(provider, resp))
+            last = LlmError(_error_text(provider, resp), resp.status_code)
             time.sleep(float(resp.headers.get("retry-after") or 0) or 3 * (attempt + 1))
             continue
         if resp.status_code >= 400:
-            raise LlmError(_error_text(provider, resp))
+            raise LlmError(_error_text(provider, resp), resp.status_code)
         return resp.json()
     raise last or LlmError("Сервис не ответил")
 
@@ -294,32 +323,68 @@ def _error_text(provider: str, resp: httpx.Response) -> str:
     return f"{name}: {reason} (HTTP {resp.status_code}){': ' + detail[:300] if detail else ''}"
 
 
+# Models that take only their own temperature (OpenAI's reasoning models: o1, o3, o4, gpt-5): asked
+# without one once a service refused it, for the rest of the run
+_NO_TEMPERATURE: set = set()
+
+
+def _cut(provider: str) -> LlmError:
+    """The answer stopped at the length limit: a cut protocol or a broken list of tasks must not pass for
+    a whole one."""
+    return LlmError(f"{PROVIDERS[provider]['name']}: ответ модели обрезан по лимиту длины. "
+                    "Выберите модель с большим лимитом ответа или запись покороче.")
+
+
+def _empty(reason: Optional[str]) -> LlmError:
+    return LlmError(f"Модель вернула пустой ответ ({reason})") if reason else LlmError("Модель вернула пустой ответ")
+
+
 def _openai_chat(base: str, key: str, model: str, system: str, user: str, provider: str = "openai") -> str:
-    data = _post(
-        f"{base}/chat/completions",
-        {"Authorization": f"Bearer {key}"},
-        {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-         "temperature": 0.2},
-        provider,
-    )
+    payload: Dict[str, Any] = {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    if (base, model) not in _NO_TEMPERATURE:
+        payload["temperature"] = 0.2
+    try:
+        data = _post(f"{base}/chat/completions", {"Authorization": f"Bearer {key}"}, payload, provider)
+    except LlmError as e:
+        if e.status != 400 or "temperature" not in str(e) or "temperature" not in payload:
+            raise
+        _NO_TEMPERATURE.add((base, model))
+        payload.pop("temperature")
+        data = _post(f"{base}/chat/completions", {"Authorization": f"Bearer {key}"}, payload, provider)
     choices = data.get("choices") or []
-    text = ((choices[0].get("message") or {}).get("content") if choices else "") or ""
-    if not text.strip():
-        raise LlmError("Модель вернула пустой ответ")
-    return text.strip()
+    choice = choices[0] if choices else {}
+    from app.llm_text import strip_think
+
+    # a reasoning model of a compatible service (DeepSeek R1, Qwen3 in LM Studio) may write its reasoning first
+    text = strip_think((choice.get("message") or {}).get("content") or "")
+    reason = choice.get("finish_reason")
+    if reason == "length":
+        raise _cut(provider)
+    if not text:
+        raise _empty(reason if reason == "content_filter" else None)
+    return text
 
 
 def _anthropic_chat(base: str, key: str, model: str, system: str, user: str, provider: str = "anthropic") -> str:
+    # No temperature: the current Claude models refuse any but their own (HTTP 400). The limit holds
+    # the model's reasoning too, which current models always do before they answer.
     data = _post(
         f"{base}/messages",
         {"x-api-key": key, "anthropic-version": "2023-06-01"},
-        {"model": model, "max_tokens": 8192, "system": system, "temperature": 0.2,
+        {"model": model, "max_tokens": ANTHROPIC_MAX_TOKENS, "system": system,
          "messages": [{"role": "user", "content": user}]},
         "anthropic",
     )
+    stop = data.get("stop_reason")
+    if stop == "refusal":
+        category = (data.get("stop_details") or {}).get("category")
+        detail = f" ({category})" if category else ""
+        raise LlmError(f"{PROVIDERS[provider]['name']}: модель отказалась отвечать на этот текст{detail}. Попробуйте другую модель.")
+    if stop == "max_tokens":
+        raise _cut(provider)
     text = "".join(b.get("text") or "" for b in data.get("content") or [] if b.get("type") == "text")
     if not text.strip():
-        raise LlmError("Модель вернула пустой ответ" + (f" ({data.get('stop_reason')})" if data.get("stop_reason") else ""))
+        raise _empty(stop)
     return text.strip()
 
 
@@ -334,10 +399,12 @@ def _gemini_chat(base: str, key: str, model: str, system: str, user: str, provid
     )
     cands = data.get("candidates") or []
     parts = ((cands[0].get("content") or {}).get("parts") if cands else None) or []
-    text = "".join(p.get("text") or "" for p in parts)
+    text = "".join(p.get("text") or "" for p in parts if not p.get("thought"))
+    reason = (cands[0].get("finishReason") if cands else None) or (data.get("promptFeedback") or {}).get("blockReason")
+    if reason == "MAX_TOKENS":
+        raise _cut(provider)
     if not text.strip():
-        reason = (cands[0].get("finishReason") if cands else None) or (data.get("promptFeedback") or {}).get("blockReason")
-        raise LlmError("Модель вернула пустой ответ" + (f" ({reason})" if reason else ""))
+        raise _empty(reason)
     return text.strip()
 
 
