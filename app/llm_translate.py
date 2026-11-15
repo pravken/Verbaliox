@@ -144,7 +144,7 @@ def resolve_ollama(preferred_model: Optional[str] = None) -> Tuple[str, str]:
     """Starts Ollama if needed and returns (base_url, model); the preferred model wins if installed."""
     settings = get_all_settings()
     base_url = (settings.get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
-    model = preferred_model or settings.get("ollama_model") or "qwen3.5:4b"
+    model = preferred_model or settings.get("ollama_model") or "gemma4:e2b"
     ensure_ollama_running(base_url)
     st = get_ollama_status(base_url)
     usable = st.get("chat_models", st["models"])
