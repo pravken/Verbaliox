@@ -2681,3 +2681,25 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .vr-chip:hover .vr-timer { display: none; }
 .vr-timer-ico { width: 10px; height: 10px; }
 @media (prefers-reduced-motion: reduce) { .vr-act { transition: none; } }
+
+/* Checkboxes in the dark theme: a dark box with a light edge, filled when ticked (the system's white
+   box stood out on every task card); a task's box ticks green, a «delete too» box red */
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only) {
+  -webkit-appearance: none; appearance: none; width: 16px; height: 16px; flex: none; box-sizing: border-box;
+  display: inline-grid; place-content: center; border-radius: 5px; border: 1.5px solid rgba(255, 255, 255, 0.3);
+  background: #1C1C1F; background-image: none; color: inherit; cursor: pointer; vertical-align: middle;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only)::before {
+  content: ""; width: 9px; height: 9px; background: #FFFFFF; transform: scale(0); transition: transform 0.12s ease;
+  clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 22%, 85% 8%, 39% 69%);
+}
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only):hover { border-color: rgba(255, 255, 255, 0.5); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: #0A84FF; border-color: #0A84FF; background-image: none; }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked::before { transform: scale(1); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only):disabled { opacity: 0.4; cursor: default; }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check { width: 18px; height: 18px; border-radius: 6px; }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check::before { width: 10px; height: 10px; }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:checked { background: #30D158; border-color: #30D158; }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked { background: #FF453A; border-color: #FF453A; }
+@media (prefers-reduced-motion: reduce) { html input[type="checkbox"]:not(.vs-switch):not(.sr-only), html input[type="checkbox"]:not(.vs-switch):not(.sr-only)::before { transition: none; } }
