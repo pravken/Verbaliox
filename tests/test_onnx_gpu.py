@@ -44,6 +44,42 @@ class OnnxGpuTest(unittest.TestCase):
             if saved is not None:
                 sys.modules["onnxruntime"] = saved
 
+    def test_a_rename_refused_by_the_antivirus_is_tried_again_or_the_build_used_from_new(self):
+        # «[WinError 5] Access is denied: ...onnxruntime-gpu.new -> ...onnxruntime-gpu» right after the install
+        new = self.tmp / "onnxruntime-gpu.new"
+        _fake_build(new)
+        real = Path.rename
+        calls = []
+
+        def flaky(src, dst):
+            calls.append(src)
+            if len(calls) < 3:
+                raise PermissionError(5, "Access is denied")
+            return real(src, dst)
+
+        with mock.patch.object(Path, "rename", flaky), mock.patch("time.sleep"):
+            onnx_gpu._finish_pending()
+        self.assertTrue(onnx_gpu._complete(self.target))
+        self.assertEqual(len(calls), 3)
+
+        # still held after every try: the build runs from NEW, nothing is reported as a failure
+        import shutil
+
+        shutil.rmtree(self.target)
+        _fake_build(new)
+        saved = sys.modules.pop("onnxruntime", None)
+        try:
+            with mock.patch.object(Path, "rename", side_effect=PermissionError(5, "Access is denied")), mock.patch("time.sleep"):
+                self.assertTrue(onnx_gpu.activate())
+            self.assertEqual(sys.path[0], str(new))
+            with mock.patch.object(onnx_gpu, "cuda_available", return_value=True), \
+                    mock.patch.object(onnx_gpu, "nvidia_present", return_value=True):  # no import of the fake build
+                self.assertFalse(onnx_gpu.status()["restart_needed"])
+        finally:
+            sys.path.remove(str(new))
+            if saved is not None:
+                sys.modules["onnxruntime"] = saved
+
     def test_install_goes_to_its_own_folder(self):
         def fake_run(cmd):
             _fake_build(Path(cmd[cmd.index("--target") + 1]))
