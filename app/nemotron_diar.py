@@ -134,7 +134,12 @@ def _load(device: str):
 
     path = str(model_dir())
     processor = AutoProcessor.from_pretrained(path)
-    model = AutoModelForAudioFrameClassification.from_pretrained(path).to(device).eval()
+    import torch
+
+    # bf16 on the video card: 55 minutes in 3.0 s instead of 3.6 s, 530 MB instead of 800 MB, the same
+    # speakers on 99.7-99.9 % of the speech (the PC check of 0.8.7-beta.2); the processor stays in fp32
+    dtype = torch.bfloat16 if device == "cuda" else torch.float32
+    model = AutoModelForAudioFrameClassification.from_pretrained(path, dtype=dtype).to(device).eval()
     with _lock:
         _model.update(processor=processor, model=model, device=device)
     return processor, model

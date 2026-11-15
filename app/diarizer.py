@@ -28,6 +28,7 @@ SPEAKER_COLORS = [
 MIN_SPEAKER_SECONDS = 4.0
 MIN_SPEAKER_SHARE = 0.03
 MAX_MIN_SPEAKER_SECONDS = 20.0
+SCRAPS_FROM_SECONDS = 120.0  # Nemotron's tiny groups are set aside only in recordings this long or longer
 
 _ecapa_model = None
 _ecapa_device = None
@@ -390,11 +391,13 @@ def _labels_from_turns(
         if by_turn[i] is None:
             by_turn[i] = by_turn[min(marked, key=lambda m: abs(m - i))]
     labels = np.array(by_turn, dtype=int)
-    if num_speakers_hint > 1 and len(set(labels.tolist())) > num_speakers_hint and embeddings is not None and len(valid_indices):
+    keep = _groups_to_keep(labels[np.array(valid_indices, dtype=int)] if len(valid_indices) else labels[:0],
+                           durations, num_speakers_hint)
+    if keep and len(set(labels.tolist())) > keep and embeddings is not None and len(valid_indices):
         rows = np.array(valid_indices)
         # each phrase of a group taken apart goes to its closest voice (they were all put on the voice of
         # the group's first phrase before: found by an audit); the groups kept keep their numbers
-        labels[rows] = _fold_least_heard(embeddings, durations, labels[rows], num_speakers_hint, renumber=False)
+        labels[rows] = _fold_least_heard(embeddings, durations, labels[rows], keep, renumber=False)
         kept = set(labels[rows].tolist())
         sure = [i for i in range(n) if int(labels[i]) in kept]
         for i in range(n):  # a phrase without a voice print of a group taken apart: its closest neighbour's
@@ -406,6 +409,23 @@ def _labels_from_turns(
         order.setdefault(int(v), len(order))
         out.append(order[int(v)])
     return out
+
+
+def _groups_to_keep(labels: np.ndarray, durations: np.ndarray, num_speakers_hint: int = 0) -> int:
+    """How many of Nemotron's groups are people: a group heard less than ECAPA's least person (4 s, 3 % of
+    the speech, at most 20 s) is a scrap — a laugh, a cough, one voice split off. On a 44-minute talk of
+    two Nemotron found five in Auto, two of them 12-15 s (the PC check of 0.8.7-beta.2). A count said
+    is the most there are."""
+    groups = sorted(set(labels.tolist()))
+    total = float(np.sum(durations)) if len(durations) == len(labels) else 0.0
+    if len(groups) < 2 or total < SCRAPS_FROM_SECONDS:  # a short recording: a few seconds may be a person
+        return min(len(groups), num_speakers_hint) if num_speakers_hint > 1 else len(groups)
+    least = min(MAX_MIN_SPEAKER_SECONDS, max(MIN_SPEAKER_SECONDS, MIN_SPEAKER_SHARE * total))
+    people = sum(1 for g in groups if float(np.sum(durations[labels == g])) >= least)
+    keep = max(1, people)
+    if num_speakers_hint > 1:
+        keep = max(min(keep, num_speakers_hint), min(2, num_speakers_hint, len(groups)))
+    return keep
 
 
 def _fold_least_heard(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int,
