@@ -6,6 +6,8 @@ const SERVER_TEXT_EN = {
   "Сведение дорожек: очистка голоса…": "Mixing the tracks: cleaning the voice…",
   "Название фичи пустое": "The feature name is empty",
   "Фича не найдена": "The feature was not found",
+  "Обновление через git из программы работает только в Windows": "Updating via git from the app works on Windows only",
+  "Это не клон git с update.bat: обновите программу из «Настройки → Общие → Обновления»": "This is not a git clone with update.bat: update the app in Settings → General → Updates",
   "Фича с таким названием уже есть": "A feature with this name already exists",
   "Разметка «кто когда говорит» (Nemotron)...": "Marking who speaks when (Nemotron)...",
   "Для Nemotron нужна библиотека transformers: обновите программу до последней версии": "Nemotron needs the transformers library: update the app to the latest version",

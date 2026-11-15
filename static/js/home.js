@@ -186,7 +186,16 @@ function renderHomeMeetings() {
   let a = d.from.getTime(), b = d.to.getTime();
   const inDay = home.events.filter(e => e.e.getTime() > a - (d.fit ? 3 * 3600e3 : 0) && e.s.getTime() < b + (d.fit ? 3 * 3600e3 : 0));
   const shown = inDay.filter(e => d.fit || (e.e.getTime() > a && e.s.getTime() < b));
-  if (d.fit) for (const e of shown) { a = Math.min(a, Math.floor(e.s.getTime() / 3600e3) * 3600e3); b = Math.max(b, Math.ceil(e.e.getTime() / 3600e3) * 3600e3); }
+  // the working day chosen stays the view: a meeting a little past its edges stretches it by two hours at
+  // most, and an all-day or long event (a reminder, a day off) does not (one from 00:00 showed the night)
+  const reach = 2 * 3600e3;
+  if (d.fit) {
+    for (const e of shown) {
+      if (e.all_day || e.e.getTime() - e.s.getTime() >= 6 * 3600e3) continue;
+      a = Math.max(d.from.getTime() - reach, Math.min(a, Math.floor(e.s.getTime() / 3600e3) * 3600e3));
+      b = Math.min(d.to.getTime() + reach, Math.max(b, Math.ceil(e.e.getTime() / 3600e3) * 3600e3));
+    }
+  }
   const meetings = shown.filter(e => e.e.getTime() > a && e.s.getTime() < b);
   const count = document.getElementById('hm-mt-count');
   count.textContent = String(meetings.length);
