@@ -933,11 +933,12 @@ function openTemplatesEditor() {
 // due date as a chip coloured by how near it is, the moment in the recording and where the task came from
 function commitmentRowHtml(c, withMeeting, hasMfu = false) {
   const done = c.status === 'done';
-  // The «MFU» tag, lit like the CPU / GPU marks, on the tasks of the organizer's follow-up; the others
-  // of a recording with an MFU show an empty box in its place, so the tags line up
-  const inMfu = c.source === 'mfu';
-  const src = inMfu ? `<span class="an-task-tag an-task-tag-on" title="${escapeHtml(t('mfuTaskTip'))}">MFU</span>`
-    : hasMfu ? '<span class="an-task-tag an-task-slot" aria-hidden="true">MFU</span>' : '';
+  // Where the task came from, as a tag at the same place on every card: MFU lit (the organizer's
+  // follow-up), LLM outlined (the model found it in the talk), ✎ (added by hand)
+  const srcKind = c.source === 'mfu' ? 'mfu' : c.source === 'manual' ? 'manual' : 'llm';
+  const srcLabel = { mfu: 'MFU', llm: 'LLM', manual: '✎' }[srcKind];
+  const srcTip = { mfu: 'mfuTaskTip', llm: 'srcLlmTip', manual: 'srcManualTip' }[srcKind];
+  const src = `<span class="an-task-tag an-task-src-${srcKind}${srcKind === 'mfu' ? ' an-task-tag-on' : ''}" title="${escapeHtml(t(srcTip))}">${srcLabel}</span>`;
   const at = c.at != null ? `<button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="an-task-at" title="${escapeHtml(t('tkOpenAt'))}">▶ ${formatTime(c.at)}</button>` : '';
   // who and the due date open the same pickers as on the Tasks page: the people, the calendar
   const dueText = c.due_date ? tkDueText(c) : c.due || t('tkNoDue');
