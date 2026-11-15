@@ -472,7 +472,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
                     x[k] = fix_name_typos(x[k], roster)
         from app.people import resolve_person
 
-        for x in found + from_mfu:  # «Макс» said in the meeting is «Maksim Pravko» of Teams (one fit only)
+        for x in found + from_mfu:  # «Макс» said in the meeting is the participant «Maksim Orlov» of Teams (one fit only)
             for k in ("who", "to"):
                 if isinstance(x.get(k), str) and x[k].strip():
                     x[k] = resolve_person(x[k], roster)

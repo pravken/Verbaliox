@@ -52,7 +52,7 @@ class TeamsCaptionsTest(unittest.TestCase):
         r = tc.Reader()
         r.started_at = time.time()
         r._seeded = True  # the recording ran already: the lines on screen are its own
-        e, m = "Echo", "Maksim Pravko"
+        e, m = "Echo", "Maksim Orlov"
         for shown in ([(e, "Затем прослушать его."), (m, "1345")], [(e, "Затем прослушать его."), (m, "123456")],
                       [(e, "Затем прослушать его."), (m, "13456789 10")], [(m, "13456789 10"), (e, "90")]):
             r._take(shown)

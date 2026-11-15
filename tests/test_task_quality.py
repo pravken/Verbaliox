@@ -151,14 +151,14 @@ class MfuTest(unittest.TestCase):
 
 @unittest.skipIf(commitments is None, "app dependencies not installed")
 class PersonNamesTest(unittest.TestCase):
-    """«Макс будет делать» is the task of «Maksim Pravko» of the Teams captions (the owner's case)."""
+    """«Макс будет делать» is the task of «Maksim Orlov» of the Teams captions."""
 
     def test_short_latin_and_misspelt_names_find_the_participant(self):
         from app.people import resolve_person
 
-        roster = ["Maksim Pravko", "Анна Петрова — дизайнер", "Aleksandr Ivanov", "Александра Смирнова", "Дмитрий Яцукевич"]
-        for said, who in [("Макс", "Maksim Pravko"), ("Максим", "Maksim Pravko"), ("Правко", "Maksim Pravko"),
-                          ("Max", "Maksim Pravko"), ("Аня", "Анна Петрова"), ("Петрова", "Анна Петрова"),
+        roster = ["Maksim Orlov", "Анна Петрова — дизайнер", "Aleksandr Ivanov", "Александра Смирнова", "Дмитрий Яцукевич"]
+        for said, who in [("Макс", "Maksim Orlov"), ("Максим", "Maksim Orlov"), ("Орлов", "Maksim Orlov"),
+                          ("Max", "Maksim Orlov"), ("Аня", "Анна Петрова"), ("Петрова", "Анна Петрова"),
                           ("Дима", "Дмитрий Яцукевич"), ("Яцкевич", "Дмитрий Яцукевич"), ("Иванов", "Aleksandr Ivanov")]:
             self.assertEqual(resolve_person(said, roster), who, said)
         for said in ("Саша", "Олег", "маркетинг"):  # two fit, or nobody: as said
@@ -168,7 +168,7 @@ class PersonNamesTest(unittest.TestCase):
         """The recheck: one shared word gave a task to someone else."""
         from app.people import resolve_person
 
-        roster = ["Maksim Pravko — PM", "Анна Сидорова", "Иван Петров", "Мария Иванова", "Александра Белова"]
+        roster = ["Maksim Orlov — PM", "Анна Сидорова", "Иван Петров", "Мария Иванова", "Александра Белова"]
         for said in ("Марина", "Анна Каренина", "Иван и Олег", "Иван Петрович Сидоренко", "Максимов", "Иван Иванов",
                      "Белов", "Петрова", "команда Анны", "Иванов"):
             self.assertEqual(resolve_person(said, roster), said, said)
