@@ -30,6 +30,17 @@ class ImportInPlaceTest(unittest.TestCase):
             out = library.api_add_local_path(library.LocalPathPayload(path=str(self.src)))
         return get_meeting(out["created"][0]["id"])
 
+    def test_only_added_waits_in_the_library_until_asked(self):
+        """«Только добавить, без распознавания»: no job; «Распознать» (retry) queues it."""
+        with mock.patch.object(library, "enqueue_meeting_job") as job:
+            out = library.api_add_local_path(library.LocalPathPayload(path=str(self.src), processing={"transcribe": False}))
+            mid = out["created"][0]["id"]
+            job.assert_not_called()
+            self.assertEqual(get_meeting(mid)["status"], "added")
+            library.api_retry_meeting(mid)
+            job.assert_called_once_with(mid)
+        self.assertEqual(get_meeting(mid)["status"], "queued")
+
     def test_by_default_the_file_stays_where_it_is(self):
         update_settings({"import_copy": "false"})
         m = self._add()

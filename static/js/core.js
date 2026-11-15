@@ -2,7 +2,7 @@
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 // Verbaliox UI logic. Depends on vendor/marked.min.js, vendor/purify.min.js and i18n.js.
-const DONE_STATUSES = ['completed', 'failed', 'cancelled', 'cleared'];
+const DONE_STATUSES = ['completed', 'failed', 'cancelled', 'cleared', 'added'];  // added: imported without recognition
 // The page opened, so the locked page (app/main.py) may again try one fresh address next time
 try { sessionStorage.removeItem('vs_relocked'); } catch (e) { /* storage off */ }
 
