@@ -2410,18 +2410,42 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   startOllamaPollingLoop(model);
 }
 
-// The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog,
-// the ones not downloaded shown but not offered
+// The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog; one not
+// downloaded has its «Скачать» right there (it was only marked «не скачана»: asked by the user) and is ticked
+// once it is downloaded
+const ensPending = new Set();
 function renderEnsembleModels(s = (state.system && state.system.settings) || {}) {
   const box = document.getElementById('set-ensemble-models');
   if (!box) return;
   const picked = new Set(String(s.asr_ensemble_models || '').split(',').map(x => x.trim()).filter(Boolean));
   const list = ((state.system && state.system.models && state.system.models.whisper_catalog) || []);
-  box.innerHTML = list.map(m => `<label class="flex items-center gap-1.5 text-xs ${m.installed ? 'text-apple-label cursor-pointer' : 'text-apple-tertiary'}">
+  const downloading = new Map(modelDownloadsNow().map(d => [d.id, d.pct]));
+  let ticked = false;
+  for (const m of list) {
+    if (m.installed && ensPending.has(m.id)) { ensPending.delete(m.id); picked.add(m.id); ticked = true; }
+  }
+  box.innerHTML = list.map(m => {
+    const tail = m.installed ? ''
+      : downloading.has(m.id) || ensPending.has(m.id)
+        ? `<span class="ens-dl is-busy">${escapeHtml(t('ensDownloading'))}${downloading.get(m.id) ? ` · ${downloading.get(m.id)}%` : ''}</span>`
+        : `<button type="button" class="ens-dl" data-click="downloadEnsembleModel" data-click-args='${escapeHtml(JSON.stringify([m.id]))}'
+            title="${escapeHtml(t('tipDownloadModel'))}">↓ ${escapeHtml(t('ensDownload'))}${m.size ? ` · ${escapeHtml(wizardSizeText(wizardSizeMb(m)))}` : ''}</button>`;
+    return `<span class="ens-item"><label class="flex items-center gap-1.5 text-xs ${m.installed ? 'text-apple-label cursor-pointer' : 'text-apple-tertiary'}">
       <input type="checkbox" id="set-ens-${escapeHtml(m.id)}" value="${escapeHtml(m.id)}" ${picked.has(m.id) ? 'checked' : ''} ${m.installed ? '' : 'disabled'}
         class="rounded bg-apple-sidebar border-white/20 text-apple-blue" />
-      <span>${escapeHtml(m.name || m.id)}</span>${m.installed ? '' : `<span class="text-[11px]">· ${escapeHtml(t('ensNotDownloaded'))}</span>`}</label>`).join('');
+      <span>${escapeHtml(m.name || m.id)}</span></label>${tail}</span>`;
+  }).join('');
   syncEnsembleBox();
+  if (ticked) scheduleSettingsSave();  // a model downloaded from here joins the precise mode
+}
+
+// «Скачать» beside a model of the precise mode: downloaded in the background, without changing the main model
+async function downloadEnsembleModel(id) {
+  const m = ((state.system && state.system.models && state.system.models.whisper_catalog) || []).find(x => x.id === id);
+  if (!m) return;
+  ensPending.add(id);
+  renderEnsembleModels();
+  if (m.engine === 'onnx') await startOnnxModelDownload(id); else await startWhisperModelDownload(id, true);
 }
 
 function syncEnsembleBox() {
