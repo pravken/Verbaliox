@@ -151,7 +151,7 @@ class MfuTest(unittest.TestCase):
 
 @unittest.skipIf(commitments is None, "app dependencies not installed")
 class PersonNamesTest(unittest.TestCase):
-    """«Макс будет делать» is the task of «Maksim Orlov» of the Teams captions (the owner's case)."""
+    """«Макс будет делать» is the task of «Maksim Orlov» of the Teams captions."""
 
     def test_short_latin_and_misspelt_names_find_the_participant(self):
         from app.people import resolve_person
@@ -175,6 +175,32 @@ class PersonNamesTest(unittest.TestCase):
         for said, who in [("Ивановой", "Мария Иванова"), ("Петрову", "Иван Петров"), ("Maria Ivanova", "Мария Иванова"),
                           ("Белова", "Александра Белова")]:
             self.assertEqual(resolve_person(said, roster), who, said)
+
+
+@unittest.skipIf(commitments is None, "app dependencies not installed")
+class DirectoryNamesTest(unittest.TestCase):
+    """A task can go to anyone of the people directory, and a variant merged there finds its person."""
+
+    def test_a_merged_variant_is_the_directory_name_and_the_tasks_page_lists_the_directory(self):
+        from app import people
+
+        init_db()
+        people.init_table()
+        people.add("Ольга Смирнова")
+        people.merge(["Ольга Смирнова", "Лёля"])
+        self.assertEqual(people.canonical("Лёля"), "Ольга Смирнова")
+        m = create_meeting("Планёрка 3", "q.m4a", "/tmp/q.m4a")
+        save_meeting_results(m["id"], speakers={"S1": {"name": "Анна"}}, segments=[
+            {"id": 0, "start": 20, "end": 25, "speaker": "S1", "text": "Лёля сделает макет до пятницы"}])
+        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm.chat.return_value = ('{"who": "Лёля", "what": "сделать макет", "due": "до пятницы", "time": "00:20", '
+                                 '"quote": "Лёля сделает макет до пятницы"}')
+        with mock.patch("app.llm.target", return_value=llm):
+            items = commitments.extract(m["id"])
+        self.assertEqual([x["who"] for x in items], ["Ольга Смирнова"])
+        from app.api.tasks import _directory
+
+        self.assertIn("Ольга Смирнова", [p["name"] for p in _directory()])  # offered when a task is given
 
 
 if __name__ == "__main__":

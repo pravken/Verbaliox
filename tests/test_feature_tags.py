@@ -178,7 +178,13 @@ class FeatureTagsTest(unittest.TestCase):
         f = next(x for x in features.list_features() if x["id"] == f["id"])
         self.assertEqual(f["keywords"], "payments, эквайринг")
         self.assertTrue(all(len(t) >= 5 for t in features.split_list(f["terms"])))  # no «te» of a cut «term57»
-        self.assertLessEqual(len(f["terms"]), features.LIST_MAX)
+        self.assertEqual(len(features.split_list(f["terms"])), 80)  # a hundred or so fit (40 did before)
+        self.assertLessEqual(len(f["terms"]), features.TERMS_MAX)
+        from app import vocab
+
+        vocab.invalidate()
+        note = vocab.glossary_note(already=features.describe([f["id"]]))
+        self.assertNotIn("term7,", note)  # in the request with the meeting's feature already: not twice
 
     def test_answers_are_read_loosely(self):
         fs = [{"id": 1, "name": "Платежи"}, {"id": 2, "name": "Поиск"}]

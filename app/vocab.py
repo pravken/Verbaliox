@@ -302,10 +302,13 @@ def hotwords() -> str:
 GLOSSARY_MAX_TERMS = 80
 
 
-def glossary_note() -> str:
+def glossary_note(already: str = "") -> str:
     """The dictionary's terms for a model's request: written exactly so and not translated. Recognition
-    may still have heard one wrong; the model then knows how it is spelled."""
-    terms = [t.strip() for t in hotwords().split(", ") if t.strip()][:GLOSSARY_MAX_TERMS]
+    may still have heard one wrong; the model then knows how it is spelled. `already`: text the request
+    has anyway (the meeting's feature with its terms): its terms are not repeated, so the room goes to
+    the others (the glossary held the terms of every feature, the meeting's ones not first)."""
+    seen = (already or "").casefold()
+    terms = [t.strip() for t in hotwords().split(", ") if t.strip() and t.strip().casefold() not in seen][:GLOSSARY_MAX_TERMS]
     if not terms:
         return ""
     return ("Словарь терминов (имена, названия, термины): пиши их точно так, не переводи и не склоняй "

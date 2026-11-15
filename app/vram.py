@@ -176,10 +176,18 @@ def ollama_loaded() -> List[Dict[str, Any]]:
     """Models Ollama keeps in memory. Never starts Ollama."""
     models = _ollama_ps() or []
     return [
-        {"name": m.get("name") or m.get("model") or "?", "size_vram_gb": round((m.get("size_vram") or 0) / 2**30, 1),
+        {"name": m.get("name") or m.get("model") or "?", "size_vram_gb": round(_shown_size(m) / 2**30, 1),
          "expires_at": m.get("expires_at")}
         for m in models
     ]
+
+
+def _shown_size(m: Dict[str, Any]) -> float:
+    """The memory a loaded model takes. Ollama says 0.5 GB on the card for gemma4 that takes ~5 GB there
+    (the PC check of 0.8.7-beta.2): a card share under half of the model's whole size is not believed and
+    the whole size is shown."""
+    vram, whole = float(m.get("size_vram") or 0), float(m.get("size") or 0)
+    return whole if whole and vram < whole / 2 else vram
 
 
 # How long Ollama gets to let a model go by itself before its runner is stopped: with the video card

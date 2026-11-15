@@ -455,7 +455,8 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         from app.features import describe
 
         about = describe(m.get("features") or [])
-        head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (vocab.glossary_note() + "\n\n" if vocab.glossary_note() else "")
+        glossary = vocab.glossary_note(already=about)
+        head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (glossary + "\n\n" if glossary else "")
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
@@ -472,10 +473,19 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
                     x[k] = fix_name_typos(x[k], roster)
         from app.people import resolve_person
 
-        for x in found + from_mfu:  # «Макс» said in the meeting is «Maksim Orlov» of Teams (one fit only)
+        for x in found + from_mfu:  # «Макс» said in the meeting is the participant «Maksim Orlov» of Teams (one fit only)
             for k in ("who", "to"):
                 if isinstance(x.get(k), str) and x[k].strip():
                     x[k] = resolve_person(x[k], roster)
+    try:  # a variant of a name merged in the people directory («Макс» added to someone): the directory's name
+        from app.people import canonical
+
+        for x in found + from_mfu:
+            for k in ("who", "to"):
+                if isinstance(x.get(k), str) and x[k].strip():
+                    x[k] = canonical(x[k].strip())
+    except Exception as e:
+        print(f"[commitments] directory names: {e}", flush=True)
     items = prune([x for x in found if supported(x, m) and not in_meeting_action(x)])
     items = verify(items, m, llm)  # a second look, task by task, with the lines around it
     items = [x for x in items if not in_meeting_action(x)]
