@@ -36,6 +36,28 @@ class TurnsOnTranscriptTest(unittest.TestCase):
         whole = {"start": 0.5, "end": 4.0, "text": " одно", "words": _words((0.5, 1.0, " одно"), (1.0, 4.0, " целое"))}
         self.assertEqual(diarizer._split_by_turns([whole], self.TURNS), [whole])
 
+    def test_scraps_stay_with_their_neighbour(self):
+        """With overlapping speech one or two words went to another person («Take | notes today.»)."""
+        turns = [(0.0, 0.5, 1), (0.5, 4.0, 0)]
+        seg = {"start": 0.1, "end": 3.8, "text": " Take notes today please",
+               "words": _words((0.1, 0.4, " Take"), (0.6, 1.0, " notes"), (1.0, 1.5, " today"), (1.6, 3.8, " please"))}
+        self.assertEqual(diarizer._split_by_turns([seg], turns), [seg])
+        # a question cut mid-name: «о Ксении | Собчак» stays one piece
+        turns = [(0.0, 3.0, 0), (3.0, 3.6, 1), (3.6, 6.0, 0)]
+        seg = {"start": 0.0, "end": 5.9, "text": " сразу подумали о Ксении Собчак и всё",
+               "words": _words((0.0, 0.6, " сразу"), (0.6, 1.4, " подумали"), (1.4, 2.0, " о"), (2.2, 2.9, " Ксении"),
+                               (3.1, 3.5, " Собчак"), (3.7, 4.5, " и"), (4.6, 5.9, " всё"))}
+        self.assertEqual(len(diarizer._split_by_turns([seg], turns)), 1)
+
+    def test_a_short_answer_of_its_own_is_still_cut_out(self):
+        turns = [(0.0, 3.0, 0), (3.1, 3.5, 1), (3.6, 7.0, 0)]
+        seg = {"start": 0.0, "end": 7.0, "text": " давай так и сделаем угу а потом посмотрим отчёт",
+               "words": _words((0.0, 0.5, " давай"), (0.5, 1.0, " так"), (1.0, 1.4, " и"), (1.4, 2.9, " сделаем"),
+                               (3.15, 3.45, " угу"), (3.7, 4.2, " а"), (4.2, 5.0, " потом"), (5.0, 6.0, " посмотрим"),
+                               (6.0, 7.0, " отчёт"))}
+        out = diarizer._split_by_turns([seg], turns)
+        self.assertEqual([p["text"] for p in out], ["давай так и сделаем", "угу", "а потом посмотрим отчёт"])
+
     def test_unmarked_phrases_go_to_the_closest_voice(self):
         rng = np.random.default_rng(1)
         a, b = rng.normal(size=192), rng.normal(size=192)
