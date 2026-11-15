@@ -83,6 +83,12 @@ class PlainAnswerTest(unittest.TestCase):
         Target("openai", "gpt-x", 1000, lambda s, u: seen.append("cloud") or "ok", logs_itself=True).chat("s", "u", plain=True)
         self.assertEqual(seen, [{"plain": True}, "cloud"])
 
+    def test_unnamed_speakers_are_called_in_the_answer_language(self):
+        sp = {"S1": {"name": "Участник 1"}, "S2": {"name": "Ольга"}}
+        en = ollama_client.speakers_in_language(sp, "en")
+        self.assertEqual((en["S1"]["name"], en["S2"]["name"]), ("Speaker 1", "Ольга"))
+        self.assertIs(ollama_client.speakers_in_language(sp, "ru"), sp)
+
 
 if __name__ == "__main__":
     unittest.main()
