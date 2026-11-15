@@ -43,8 +43,12 @@ def _conn():
     return conn
 
 
+# Direction overrides and other invisible characters: a name that reads differently from what it is
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+
+
 def _clean(name: str) -> str:
-    return re.sub(r"\s+", " ", str(name or "")).strip()[:NAME_MAX]
+    return re.sub(r"\s+", " ", _INVISIBLE.sub("", str(name or ""))).strip()[:NAME_MAX]
 
 
 def _by_name(conn, name: str) -> Optional[Dict[str, Any]]:
@@ -115,13 +119,23 @@ def delete_feature(feature_id: int) -> None:
         conn.close()
 
 
-def feature_map(meeting_ids: Optional[Iterable[int]] = None) -> Dict[int, List[int]]:
-    """{meeting id: [feature ids]} of the given recordings (all of them when None), one query."""
+def _pairs(table: str, meeting_ids: Optional[Iterable[int]]):
+    """(meeting_id, feature_id) rows of a table, of the given recordings only when they are few."""
+    wanted = None if meeting_ids is None else sorted({int(i) for i in meeting_ids})
     with _db_lock:
         conn = _conn()
-        rows = conn.execute("SELECT meeting_id, feature_id FROM meeting_features ORDER BY rowid").fetchall()
+        if wanted is not None and len(wanted) <= 500:  # SQLite's limit on parameters
+            rows = conn.execute(f"SELECT meeting_id, feature_id FROM {table} WHERE meeting_id IN ({','.join('?' * len(wanted))}) "
+                                "ORDER BY rowid", wanted).fetchall() if wanted else []
+        else:
+            rows = conn.execute(f"SELECT meeting_id, feature_id FROM {table} ORDER BY rowid").fetchall()
         conn.close()
-    wanted = None if meeting_ids is None else {int(i) for i in meeting_ids}
+    return rows, (None if wanted is None else set(wanted))
+
+
+def feature_map(meeting_ids: Optional[Iterable[int]] = None) -> Dict[int, List[int]]:
+    """{meeting id: [feature ids]} of the given recordings (all of them when None), one query."""
+    rows, wanted = _pairs("meeting_features", meeting_ids)
     out: Dict[int, List[int]] = {}
     for r in rows:
         if wanted is None or r["meeting_id"] in wanted:
@@ -130,11 +144,7 @@ def feature_map(meeting_ids: Optional[Iterable[int]] = None) -> Dict[int, List[i
 
 
 def suggestion_map(meeting_ids: Optional[Iterable[int]] = None) -> Dict[int, List[int]]:
-    with _db_lock:
-        conn = _conn()
-        rows = conn.execute("SELECT meeting_id, feature_id FROM feature_suggestions").fetchall()
-        conn.close()
-    wanted = None if meeting_ids is None else {int(i) for i in meeting_ids}
+    rows, wanted = _pairs("feature_suggestions", meeting_ids)
     out: Dict[int, List[int]] = {}
     for r in rows:
         if wanted is None or r["meeting_id"] in wanted:
@@ -151,7 +161,8 @@ def set_meeting_features(meeting_id: int, feature_ids: List[int], for_series: bo
         ids = [int(f) for f in dict.fromkeys(feature_ids) if int(f) in known]
         conn.execute("DELETE FROM meeting_features WHERE meeting_id = ?", (meeting_id,))
         conn.executemany("INSERT INTO meeting_features (meeting_id, feature_id) VALUES (?, ?)", [(meeting_id, f) for f in ids])
-        conn.execute("DELETE FROM feature_suggestions WHERE meeting_id = ?", (meeting_id,))
+        # a suggestion of a feature now chosen is settled; the others stay to be answered
+        conn.executemany("DELETE FROM feature_suggestions WHERE meeting_id = ? AND feature_id = ?", [(meeting_id, f) for f in ids])
         if for_series:
             row = conn.execute("SELECT series_id FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
             if row and row["series_id"]:

@@ -93,7 +93,10 @@ def api_meeting_features(meeting_id: int, payload: MeetingFeaturesPayload) -> Di
 
 @router.post("/api/meetings/{meeting_id}/feature-suggestions/{feature_id}")
 def api_accept_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
-    from app.features import accept_suggestion
+    from app.features import accept_suggestion, list_features
+
+    if not get_meeting(meeting_id) or feature_id not in {f['id'] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
 
     accept_suggestion(meeting_id, feature_id)
     m = get_meeting(meeting_id) or {}
@@ -101,7 +104,10 @@ def api_accept_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
 
 @router.delete("/api/meetings/{meeting_id}/feature-suggestions/{feature_id}")
 def api_decline_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
-    from app.features import decline_suggestion
+    from app.features import decline_suggestion, list_features
+
+    if not get_meeting(meeting_id) or feature_id not in {f['id'] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
 
     decline_suggestion(meeting_id, feature_id)
     m = get_meeting(meeting_id) or {}
