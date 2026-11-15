@@ -258,7 +258,8 @@ def _app_analysis(m: Dict[str, Any], mid: str, chain: bool) -> Dict[str, Any]:
     steps = {a[0]: {"sec": round(b[1] - a[1], 1), "requests": b[2] - a[2]} for a, b in zip(marks[1:], marks[2:])}
     if chain:  # the moment before the decisions step: the opening of the run itself
         steps["decisions"]["sec"] = round(steps["decisions"]["sec"] + marks[1][1] - marks[0][1], 1)
-    protocol = ground_summary(protocol, m["segments"], m.get("speakers") or {})
+    if not chain:  # the analysis in steps checks its protocol itself, before the program's lists go in
+        protocol = ground_summary(protocol, m["segments"], m.get("speakers") or {})
     before = _agreement(meeting_id, protocol)
     merge_summaries(meeting_id, {"protocol": protocol})
     added = analysis_chain.sync_next_steps(meeting_id)
