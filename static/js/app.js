@@ -933,13 +933,15 @@ function openTemplatesEditor() {
 // due date as a chip coloured by how near it is, the moment in the recording and where the task came from
 function commitmentRowHtml(c, withMeeting, hasMfu = false) {
   const done = c.status === 'done';
-  // One «MFU» tag on every task of a recording with an MFU, like the CPU / GPU marks: lit when the task
-  // is in the organizer's follow-up, outlined and dim when it is not (heard only in the talk, or added by hand)
+  // The «MFU» tag, lit like the CPU / GPU marks, on the tasks of the organizer's follow-up; the others
+  // of a recording with an MFU keep its place empty, so the tags line up
   const inMfu = c.source === 'mfu';
-  const src = hasMfu ? `<span class="an-task-tag${inMfu ? ' an-task-tag-on' : ''}" title="${escapeHtml(t(inMfu ? 'mfuTaskTip' : c.source === 'manual' ? 'mfuManualTip' : 'mfuNotInTip'))}">MFU</span>` : '';
+  const src = inMfu ? `<span class="an-task-tag an-task-tag-on" title="${escapeHtml(t('mfuTaskTip'))}">MFU</span>`
+    : hasMfu ? '<span class="an-task-tag an-task-slot" aria-hidden="true">MFU</span>' : '';
   const at = c.at != null ? `<button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="an-task-at" title="${escapeHtml(t('tkOpenAt'))}">▶ ${formatTime(c.at)}</button>` : '';
-  const due = c.due_date ? `<span class="tk-due ${tkDueTone(c)}">${escapeHtml(tkDueText(c))}</span>`
-    : c.due ? `<span class="tk-due">${escapeHtml(c.due)}</span>` : `<span class="tk-due an-task-nodue">${escapeHtml(t('tkNoDue'))}</span>`;
+  // who and the due date open the same pickers as on the Tasks page: the people, the calendar
+  const dueText = c.due_date ? tkDueText(c) : c.due || t('tkNoDue');
+  const due = `<button class="tk-due ${c.due_date ? tkDueTone(c) : c.due ? '' : 'an-task-nodue'}" ${pageCall('click', 'openCardDue', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(dueText)}</button>`;
   const to = c.to_whom ? `<span class="an-task-to">→ ${escapeHtml(c.to_whom)}</span>` : '';
   const where = withMeeting ? `<span class="an-task-where">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</span>` : '';
   return `<div class="an-task${done ? ' an-task-done' : ''}">
@@ -947,12 +949,22 @@ function commitmentRowHtml(c, withMeeting, hasMfu = false) {
       <div class="an-task-main">
         <div class="an-task-what">${escapeHtml(c.what)}</div>
         <div class="an-task-meta">
-          <span class="an-task-who">${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></span>${to}${at}${where}
+          <button class="an-task-who" ${pageCall('click', 'openCardAssign', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></button>${to}${at}${where}
         </div>
       </div>
       <div class="an-task-side">${due}${src}</div>
     </div>`;
 }
+
+// The pickers of the Tasks page (tasks.js) over a recording's task card: the task list is loaded first
+async function tkPickerFor(id, e, open) {
+  e.stopPropagation();
+  const anchor = e.currentTarget;
+  if (!tkTask(id)) await loadTasks();
+  if (tkTask(id)) open(id, { stopPropagation() {}, currentTarget: anchor });
+}
+function openCardAssign(id, e) { return tkPickerFor(id, e, openTaskAssign); }
+function openCardDue(id, e) { return tkPickerFor(id, e, openTaskDue); }
 
 async function renderCommitments(box) {
   const m = state.activeMeeting;
