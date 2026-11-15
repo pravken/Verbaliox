@@ -2618,3 +2618,5 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .ft-swatches { display: flex; gap: 6px; }
 .ft-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; background: var(--ft); cursor: pointer; padding: 0; }
 .ft-swatch-on { border-color: #FFFFFF; }
+.tk-more-rows { align-self: flex-start; margin: 4px 0 0 14px; padding: 4px 12px; border: 1px dashed var(--hc-line, rgba(255, 255, 255, 0.2)); border-radius: 14px; background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); cursor: pointer; }
+.tk-more-rows:hover { color: #F5F5F7; }

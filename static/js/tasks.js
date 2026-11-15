@@ -298,10 +298,24 @@ function renderTasksList() {
     box.innerHTML = `<div class="tk-empty">${escapeHtml(t('tkNothing'))}</div>`;
     return;
   }
-  box.innerHTML = tkGroups(items).map(g => {
-    const all = TK.data.tasks.filter(x => TK.by === 'person' ? (x.who || '').toLocaleLowerCase() === g.key
-      : TK.by === 'record' ? String(x.meeting_id) === g.key : g.items.includes(x));
-    const done = all.filter(tkIsDone).length;
+  // Each group's open / done counts in one pass over all the tasks (the filter per group was quadratic:
+  // 1–2 s per click on 12 thousand tasks, found by the audits); by person and by recording they count
+  // the hidden ones too, by due date and by feature what is shown
+  const totals = new Map();
+  if (TK.by === 'person' || TK.by === 'record') {
+    for (const x of TK.data.tasks) {
+      const key = TK.by === 'person' ? (x.who || '').toLocaleLowerCase() : String(x.meeting_id);
+      const c = totals.get(key) || totals.set(key, { all: 0, done: 0 }).get(key);
+      c.all += 1;
+      if (tkIsDone(x)) c.done += 1;
+    }
+  }
+  const groups = tkGroups(items);
+  _tkGroupRows = Math.max(10, Math.floor(TK_PAGE_ROWS / Math.max(1, groups.length)));
+  box.innerHTML = groups.map(g => {
+    const c = totals.get(g.key) || { all: g.items.length, done: g.items.filter(tkIsDone).length };
+    const all = { length: c.all };
+    const done = c.done;
     const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' || TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
     const kind = g.person && tkKindLabel(g.kind) ? `<span class="tk-kind" title="${escapeHtml(tkKindTitle(g.kind))}">${escapeHtml(tkKindLabel(g.kind))}</span>` : '';
     const me = g.person && g.key && tkIsMe(g.key) ? `<span class="tk-kind tk-kind-me">${escapeHtml(t('tkItsMe'))}</span>` : '';
@@ -311,9 +325,25 @@ function renderTasksList() {
       <div class="tk-group-head">${head}<span class="tk-group-title">${escapeHtml(g.title)}</span>${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
-      ${g.items.map(tkRowHtml).join('')}
+      ${tkGroupRowsHtml(g)}
     </section>`;
   }).join('');
+}
+
+// A group draws its first TK_GROUP_ROWS tasks and «ещё N»: a page of thousands of rows took seconds
+const TK_PAGE_ROWS = 600;  // rows for the whole list, shared among its groups (at least 10 each)
+let _tkGroupRows = 150;
+function tkGroupRowsHtml(g) {
+  TK.open = TK.open || new Set();
+  const all = TK.open.has(g.key) || g.items.length <= _tkGroupRows + 5;
+  const shown = all ? g.items : g.items.slice(0, _tkGroupRows);
+  return shown.map(tkRowHtml).join('') + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
+}
+
+function showAllInTaskGroup(key) {
+  TK.open = TK.open || new Set();
+  TK.open.add(key);
+  renderTasksList();
 }
 
 function tkRowHtml(x) {
