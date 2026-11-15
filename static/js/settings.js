@@ -328,6 +328,8 @@ function renderVram(data) {
     document.getElementById('vram-text').textContent = '';
   }
 
+  const idle = data.idle || {};
+  const unloadMin = idle.minutes && idle.unload_in_sec != null ? Math.max(1, Math.ceil(idle.unload_in_sec / 60)) : 0;
   const chipHtml = (c, i) => {
     const actionable = vram.busy || c.loading ? false : (c.loaded ? c.can_unload : c.can_preload);
     const cls = c.loading
@@ -335,14 +337,18 @@ function renderVram(data) {
       : c.loaded
       ? (c.kind === 'dub' ? 'bg-apple-amber/15 text-apple-amber border-apple-amber/30' : 'bg-apple-green/15 text-apple-green border-apple-green/30')
       : 'bg-transparent text-apple-tertiary border-white/15 border-dashed';
+    // what a click does, said on hover: «Выгрузить ×» (the chip turns red) or «Запустить ▷»
     const icon = c.loaded
-      ? (actionable ? '<span class="opacity-60 group-hover:opacity-100">×</span>' : '')
-      : (actionable ? `<span class="opacity-70 group-hover:opacity-100">${MODEL_START_ICON}</span>` : '');
+      ? (actionable ? `<span class="vr-act">${escapeHtml(t('mpActUnload'))}</span><span class="opacity-60 group-hover:opacity-100">×</span>` : '')
+      : (actionable ? `<span class="vr-act">${escapeHtml(t('mpActStart'))}</span><span class="opacity-70 group-hover:opacity-100">${MODEL_START_ICON}</span>` : '');
+    // when the app frees it by itself (Settings → General, «выгружать через N минут»)
+    const timer = c.loaded && c.kind !== 'dub' && unloadMin
+      ? `<span class="vr-timer" title="${escapeHtml(t('tipUnloadsIn').replace('{min}', () => unloadMin))}">${MODEL_TIMER_ICON}${unloadMin} ${escapeHtml(t('unitMinShort'))}</span>` : '';
     return `<button data-i="${i}" data-click="vramChipClick" data-click-args='[{"$": "data", "k": "i"}]' ${actionable || c.kind === 'dub' ? '' : 'disabled'}
       title="${escapeHtml(vramChipTitle(c))}"
-      class="group max-w-full inline-flex items-center gap-1 px-1.5 h-5 rounded-full border text-[11px] font-medium transition ${cls} ${actionable ? 'hover:bg-white/10' : 'cursor-default'}">
+      class="group vr-chip ${actionable ? (c.loaded ? 'vr-chip-unload' : 'vr-chip-start') : ''} max-w-full inline-flex items-center gap-1 px-1.5 h-5 rounded-full border text-[11px] font-medium transition ${cls} ${actionable ? 'hover:bg-white/10' : 'cursor-default'}">
       <span class="w-1.5 h-1.5 rounded-full shrink-0 ${c.loaded || c.loading ? 'bg-current' : 'border border-current'}"></span>
-      <span class="truncate">${c.default ? '★ ' : ''}${escapeHtml(vramChipLabel(c))}</span>${icon}</button>`;
+      <span class="truncate">${c.default ? '★ ' : ''}${escapeHtml(vramChipLabel(c))}</span>${timer}${icon}</button>`;
   };
   // Split by where each model runs (or will), then by what it is for; the ones at work first.
   // Without a video card all are on the processor
@@ -382,6 +388,7 @@ function renderVram(data) {
   renderIdleStatus(data.idle);
 }
 
+const MODEL_TIMER_ICON = '<svg class="vr-timer-ico" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6.5" r="4.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 4.3v2.4l1.5 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
 const MODEL_START_ICON = '<svg class="mp-start" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 1.6 8.2 5 2.5 8.4z"/></svg>';
 const AI_MARK = '<svg class="tb-ai" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>';
 
@@ -505,6 +512,7 @@ function renderModelsPop() {
       <span><i class="mp-lg-dot mp-lg-idle"></i>${escapeHtml(t('mpLgIdle'))}</span>
       <span>${MODEL_START_ICON}${escapeHtml(t('mpLgStart'))}</span>
       <span><b class="mp-lg-x">×</b>${escapeHtml(t('mpLgStop'))}</span>
+      <span>${MODEL_TIMER_ICON}${escapeHtml(t('mpLgTimer'))}</span>
     </div>`;
   placeModelsPop();
 }
