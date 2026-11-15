@@ -2666,3 +2666,14 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .ft-open:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.08); }
 .ft-compact { cursor: pointer; }
 @media (max-width: 640px) { .fp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* The models panel: a chip says on hover what a click does, the loaded one turns red to «Выгрузить»;
+   the minutes until the app frees it by itself */
+.vr-act { max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; transition: max-width 0.18s ease, opacity 0.18s ease; }
+.vr-chip:hover .vr-act, .vr-chip:focus-visible .vr-act { max-width: 90px; opacity: 1; }
+.vr-chip.vr-chip-unload:hover, .vr-chip.vr-chip-unload:focus-visible { color: #FF6961; border-color: rgba(255, 105, 97, 0.5); background: rgba(255, 105, 97, 0.12); }
+.vr-chip.vr-chip-start:hover, .vr-chip.vr-chip-start:focus-visible { color: #64B5FF; border-color: rgba(100, 181, 255, 0.5); border-style: solid; }
+.vr-timer { display: inline-flex; align-items: center; gap: 2px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.vr-chip:hover .vr-timer { display: none; }
+.vr-timer-ico { width: 10px; height: 10px; }
+@media (prefers-reduced-motion: reduce) { .vr-act { transition: none; } }
