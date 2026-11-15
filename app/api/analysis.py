@@ -603,6 +603,71 @@ def api_delete_summary(meeting_id: int, key: str) -> Dict[str, Any]:
     refresh_if_exported(meeting_id)
     return get_meeting(meeting_id)
 
+class SummaryTextPayload(BaseModel):
+    text: str
+
+@router.put("/api/meetings/{meeting_id}/summaries/{key}")
+def api_edit_summary(meeting_id: int, key: str, payload: SummaryTextPayload) -> Dict[str, Any]:
+    """A section of the analysis edited by hand. Returns the summaries and the words the edit replaced,
+    which the page offers for the dictionary."""
+    from app.analysis_edits import word_changes
+    from app.database import merge_summaries
+    from app.obsidian import refresh_if_exported
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if key == "error":
+        raise HTTPException(status_code=400, detail="Этот раздел не правится")
+    old = (m.get("summaries") or {}).get(key)
+    if not isinstance(old, str) or not old.strip():
+        raise HTTPException(status_code=404, detail="Раздел ещё не создан")
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Пустой текст: чтобы убрать раздел, удалите его")
+    summaries = merge_summaries(meeting_id, {key: text})
+    refresh_if_exported(meeting_id)
+    return {"summaries": summaries, "suggest": word_changes(old, text)}
+
+class SummaryFixPayload(BaseModel):
+    wrong: str
+    right: str
+    key: Optional[str] = None  # one section; None: every section of the recording
+    learn: bool = True  # the right spelling goes to the dictionary with the wrong one as its variant
+
+@router.post("/api/meetings/{meeting_id}/summaries/fix")
+def api_fix_summary_word(meeting_id: int, payload: SummaryFixPayload) -> Dict[str, Any]:
+    """A word or term written wrong in the analysis, put right in every section (or one)."""
+    from app.analysis_edits import PHRASE_MAX_WORDS, learn, replace_in_summaries
+    from app.database import merge_summaries
+    from app.obsidian import refresh_if_exported
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    wrong, right = " ".join(payload.wrong.split()), " ".join(payload.right.split())
+    if not wrong or not right:
+        raise HTTPException(status_code=400, detail="Укажите, что и на что исправить")
+    changed, count = replace_in_summaries(m.get("summaries") or {}, wrong, right,
+                                          [payload.key] if payload.key else None)
+    summaries = merge_summaries(meeting_id, changed) if changed else (m.get("summaries") or {})
+    if changed:
+        refresh_if_exported(meeting_id)
+    learned: List[str] = []
+    if payload.learn and len(wrong.split()) <= PHRASE_MAX_WORDS and len(right.split()) <= PHRASE_MAX_WORDS:
+        learned = learn([{"wrong": wrong, "right": right}])
+    return {"summaries": summaries, "replaced": count, "learned": learned}
+
+class DictionaryLearnPayload(BaseModel):
+    pairs: List[Dict[str, str]] = []
+
+@router.post("/api/dictionary/learn")
+def api_dictionary_learn(payload: DictionaryLearnPayload) -> Dict[str, Any]:
+    """Corrections made by hand: each right spelling becomes a term with the wrong one as its variant."""
+    from app.analysis_edits import learn
+
+    return {"learned": learn(payload.pairs[:50])}
+
 @router.delete("/api/meetings/{meeting_id}/commitments")
 def api_delete_meeting_commitments(meeting_id: int) -> Dict[str, Any]:
     from app import commitments
