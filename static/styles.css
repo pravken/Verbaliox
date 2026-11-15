@@ -811,6 +811,9 @@ html :is(button, a[href], select, summary, [tabindex], [role="button"], [role="t
   [role="menuitem"], [role="option"], input[type="checkbox"], input[type="radio"], input[type="range"]):not(.rp-scrub):focus-visible {
   outline: 2px solid #0A84FF; outline-offset: 1px; }
 html :is(div[role="button"], .segment-row):not(.rp-scrub):focus-visible { outline-offset: -2px; }
+/* A list's ring inside its border: lists sit at the edge of scrolled boxes (the import window), which
+   cut a ring drawn outside */
+html select:focus-visible { outline-offset: -2px; }
 
 /* --- A line of the transcript: «Изменить» stays in sight (paler until the line is pointed at or
    focused), a double click on the text opens the editor; the speaker's pencil renames in place --- */
