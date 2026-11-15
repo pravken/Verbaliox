@@ -122,5 +122,52 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.c.put(f"/api/meetings/{self.mid}/summaries/error", json={"text": "x"}).status_code, 400)
 
 
+@unittest.skipIf(analysis_edits is None, "app dependencies not installed")
+class SuspectsTest(unittest.TestCase):
+    MEETING = {
+        "summaries": {"protocol": "## Решения\n- Перенести сервис в кубер\n- Обсудили бюджет", "error": "x"},
+        "segments": [{"id": 0, "start": 0, "end": 5, "text": "переносим в кубер и бюджет", "words": [
+            {"word": " переносим", "start": 0, "end": 1, "prob": 0.95},
+            {"word": " в", "start": 1, "end": 1.2, "prob": 0.99},
+            {"word": " кубер", "start": 1.2, "end": 2, "prob": 1.0,
+             "alts": [{"text": "кубер", "models": ["gigaam"]}, {"text": "Kubernetes", "models": ["whisper"]}]},
+            {"word": " и", "start": 2, "end": 2.1, "prob": 0.99},
+            {"word": " бюджет", "start": 2.1, "end": 3, "prob": 0.3},
+            {"word": " переносим", "start": 3, "end": 4, "prob": 0.2}]}],
+    }
+
+    def test_disputed_and_unsure_words_found_in_the_analysis(self):
+        found = analysis_edits.suspects(self.MEETING)
+        self.assertEqual([(x["word"], x["options"], x["source"]) for x in found],
+                         [("кубер", ["Kubernetes"], "dispute"), ("бюджет", [], "unsure")])
+        self.assertEqual(found[0]["start"], 1.2)  # «переносим» is unsure too but the analysis does not have it
+
+    def test_the_model_answer_keeps_only_words_of_the_text(self):
+        answer = ('Вот: [{"wrong": "кубер", "right": "Kubernetes", "reason": "продукт"}, '
+                  '{"wrong": "Жира", "right": "Jira"}, {"wrong": "бюджет", "right": "Бюджет"}, "x"]')
+        self.assertEqual(analysis_edits._parse_check(answer, "Перенести в кубер, обсудили бюджет"),
+                         [{"wrong": "кубер", "right": "Kubernetes", "reason": "продукт"}])
+        self.assertEqual(analysis_edits._parse_check("не знаю", "текст"), [])
+
+    def test_the_check_asks_the_fast_local_model(self):
+        from unittest import mock
+
+        seen = {}
+
+        class Fake:
+            def chat(self, system, user, short=False):
+                seen.update(user=user, short=short)
+                return '[{"wrong": "кубер", "right": "Kubernetes"}]'
+
+        with mock.patch("app.llm.uses_cloud", return_value=False), \
+                mock.patch("app.live_translate.model_choices", return_value={"fast": "gemma4:e2b"}), \
+                mock.patch("app.llm.target", return_value=Fake()) as tgt:
+            out = analysis_edits.check_with_model(self.MEETING)
+        self.assertEqual(tgt.call_args[0][0], "gemma4:e2b")
+        self.assertTrue(seen["short"])
+        self.assertIn("Перенести сервис в кубер", seen["user"])
+        self.assertEqual(out, [{"wrong": "кубер", "right": "Kubernetes", "reason": ""}])
+
+
 if __name__ == "__main__":
     unittest.main()

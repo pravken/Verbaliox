@@ -1444,6 +1444,11 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .an-dots { width: 30px; height: 30px; border-radius: 15px; color: var(--hc-dim, #AEAEB2); display: inline-flex; align-items: center; justify-content: center; }
 .an-dots svg { width: 15px; height: 15px; fill: currentColor; }
 .an-body { min-height: 120px; }
+/* A doubtful word of the analysis (app.js: markSuspects): the recognition was unsure, or a model doubts it */
+.an-suspect { text-decoration: underline wavy rgba(255, 159, 10, 0.85); text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: pointer; border-radius: 3px; }
+.an-suspect:hover, .an-suspect:focus-visible { background: rgba(255, 159, 10, 0.14); outline: none; }
+.an-suspect-model { text-decoration-color: rgba(10, 132, 255, 0.9); }
+.an-suspect-model:hover, .an-suspect-model:focus-visible { background: rgba(10, 132, 255, 0.14); }
 /* «Править»: the section's Markdown in a field (app.js: editAnalysisSection) */
 .an-edit { display: flex; flex-direction: column; gap: 8px; }
 .an-edit-input { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
