@@ -69,6 +69,15 @@ _SYSTEM_MFU = (
     "org (другая компания), none (исполнитель не назван, тогда who пусто). "
     "Имена — как в MFU. Если задач нет, ответь пустой строкой."
 )
+def language_note(lang: Optional[str]) -> str:
+    """A meeting in English gets its tasks in English: Russian tasks stood in its English protocol
+    (bench-report/analysis-chain.md). Russian and an unknown language: as the prompt says."""
+    if not str(lang or "").lower().startswith("en"):
+        return ""
+    return ("Встреча на английском: поле what пиши по-английски, как это сказали на встрече; "
+            "имена — как в расшифровке.\n\n")
+
+
 MFU_MAX_CHARS = 20000
 MFU = "mfu"  # the source of a task taken from the MFU
 
@@ -473,6 +482,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
         # added the protocol's points that are not tasks — precision 0.70 against 0.81, the same recall
         # (bench-report/analysis-chain.md, «Перемер задач»). The protocol takes the tasks instead.
         head += (hints + "\n\n") if hints else ""
+        head += language_note(m.get("language"))
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))

@@ -53,5 +53,17 @@ class MeetingContextTest(unittest.TestCase):
         self.assertNotIn("В четверг провести обход этажа", sent)
         self.assertIn("В четверг проведём обход этажа", sent)  # the transcript itself
 
+    def test_an_english_meeting_gets_its_tasks_in_english(self):
+        from app.database import update_meeting_fields
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm.chat.return_value = ""
+        with mock.patch("app.llm.target", return_value=llm):
+            commitments.extract(self.mid)
+            self.assertNotIn("по-английски", llm.chat.call_args_list[0][0][1])
+            update_meeting_fields(self.mid, language="en")
+            commitments.extract(self.mid)
+        self.assertIn("what пиши по-английски", llm.chat.call_args_list[-1][0][1])
+
 if __name__ == "__main__":
     unittest.main()
