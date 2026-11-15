@@ -200,7 +200,7 @@ function renderTasksBar() {
   tkSeg('tk-views', [['list', t('tkViewList'), TK_ICON_LIST], ['cal', t('tkViewCal'), TK_ICON_CAL]], TK.view, 'setTasksView');
   const groups = document.getElementById('tk-groups');
   groups.classList.toggle('hidden', TK.view === 'cal');
-  tkSeg('tk-groups', [['person', t('tkByPerson')], ['due', t('tkByDue')], ['record', t('tkByRecord')]], TK.by, 'setTasksGroup');
+  tkSeg('tk-groups', [['person', t('tkByPerson')], ['due', t('tkByDue')], ['feature', t('tkByFeature')], ['record', t('tkByRecord')]], TK.by, 'setTasksGroup');
   const base = TK.data.tasks.filter(tkMatchesPeopleAndSearch);
   const filters = [['open', t('tkFOpen')], ['mine', t('tkFMine')], ['over', t('tkFOver')], ['done', t('tkFDone')], ['all', t('tkFAll')]];
   document.getElementById('tk-filters').innerHTML = filters.map(([key, label]) => {
@@ -262,6 +262,12 @@ function tkGroups(items) {
       add(key, () => ({ title, color, order: buckets.findIndex(b => b[0] === key) })).items.push(x);
     }
     groups.sort((a, b) => a.order - b.order);
+  } else if (TK.by === 'feature') {
+    for (const x of items) {
+      const f = featureById((x.features || [])[0]);
+      add(f ? `f${f.id}` : 'none', () => ({ title: f ? f.name : t('ftNoFeature'), color: f ? f.color : '#636366', order: f ? 0 : 1 })).items.push(x);
+    }
+    groups.sort((a, b) => a.order - b.order || _libCollator.compare(a.title, b.title));
   } else if (TK.by === 'record') {
     for (const x of items) {
       add(String(x.meeting_id), () => ({ title: x.meeting_id ? x.meeting_title || t('tkUntitled') : t('tkNoRecord'),
@@ -296,7 +302,7 @@ function renderTasksList() {
     const all = TK.data.tasks.filter(x => TK.by === 'person' ? (x.who || '').toLocaleLowerCase() === g.key
       : TK.by === 'record' ? String(x.meeting_id) === g.key : g.items.includes(x));
     const done = all.filter(tkIsDone).length;
-    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
+    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' || TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
     const kind = g.person && tkKindLabel(g.kind) ? `<span class="tk-kind" title="${escapeHtml(tkKindTitle(g.kind))}">${escapeHtml(tkKindLabel(g.kind))}</span>` : '';
     const me = g.person && g.key && tkIsMe(g.key) ? `<span class="tk-kind tk-kind-me">${escapeHtml(t('tkItsMe'))}</span>` : '';
     const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);
@@ -318,7 +324,7 @@ function tkRowHtml(x) {
   const kind = x.who && tkKindLabel(x.who_kind) ? `<span class="tk-kind">${escapeHtml(tkKindLabel(x.who_kind))}</span>` : '';
   return `<div class="tk-row${done ? ' tk-done' : ''}" data-tid="${x.id}">
     <input type="checkbox" ${done ? 'checked' : ''} class="tk-check" ${pageCall('change', 'toggleTaskDone', [x.id, { $: 'checked' }])} aria-label="${escapeHtml(t('tkDone'))}">
-    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span>${rec}</span>
+    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span><span class="tk-row-src">${rec}${TK.by === 'feature' ? '' : taskFeatureChipsHtml(x.meeting_id, x.features)}</span></span>
     <button class="tk-who" ${pageCall('click', 'openTaskAssign', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">
       ${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-who-name${x.who ? '' : ' tk-dim'}">${escapeHtml(tkWhoName(x))}</span>${kind}</button>
     <button class="tk-due ${tkDueTone(x)}" ${pageCall('click', 'openTaskDue', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(tkDueText(x))}</button>

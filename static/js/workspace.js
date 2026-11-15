@@ -49,6 +49,7 @@ async function selectMeeting(id, reloadPlayer = true) {
   renderAudioTrackSwitch();
   renderFillerButton();
   renderSeriesUi();
+  renderMeetingFeatures();
   if (prevId !== m.id || state.activeWorkspaceTab === 'summary') renderAnalysisEstimate();
 
   if (reloadPlayer || prevId !== m.id) {
