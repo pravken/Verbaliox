@@ -2602,4 +2602,6 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .tk-row-src .ft-chip { max-width: 140px; }
 /* the side column has two rows on every card: the due date, then the feature and the MFU place (the MFU at the edge) */
 .an-task-tags { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 20px; }
-.an-task-tag.an-task-slot { color: transparent; background: transparent; box-shadow: none; border-color: var(--hc-line, rgba(255, 255, 255, 0.14)); }  /* an empty box: not in the MFU */
+.an-task-src-llm, .an-task-src-manual { min-width: 38px; text-align: center; }
+.an-task-tag-on { min-width: 38px; text-align: center; }
+.an-task-src-manual { font-size: 13px; font-family: inherit; }
