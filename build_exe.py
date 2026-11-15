@@ -476,6 +476,54 @@ class VerbalioxLauncher
         Application.Run(splash);
     }
 }
+// A check box drawn in the window's dark colours: the system one stayed a white square on the dark card
+// and looked like a fault (reported by the user)
+class DarkCheck : CheckBox
+{
+    public System.Drawing.Color Fill = System.Drawing.Color.FromArgb(44, 44, 46);
+    public System.Drawing.Color Edge = System.Drawing.Color.FromArgb(120, 120, 128);
+    public System.Drawing.Color On = System.Drawing.Color.FromArgb(10, 132, 255);
+
+    public DarkCheck()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        Cursor = Cursors.Hand;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        System.Drawing.Graphics g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Parent != null ? Parent.BackColor : Fill);
+        System.Drawing.RectangleF r = new System.Drawing.RectangleF(1.5f, 1.5f, Width - 4f, Height - 4f);
+        using (System.Drawing.Drawing2D.GraphicsPath path = new System.Drawing.Drawing2D.GraphicsPath())
+        {
+            float d = 8f;
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            System.Drawing.Color fill = Checked ? (Enabled ? On : Edge) : Fill;
+            using (System.Drawing.SolidBrush b = new System.Drawing.SolidBrush(fill)) g.FillPath(b, path);
+            if (!Checked)
+                using (System.Drawing.Pen pen = new System.Drawing.Pen(Edge, 1.5f)) g.DrawPath(pen, path);
+        }
+        if (Checked)
+        {
+            using (System.Drawing.Pen pen = new System.Drawing.Pen(System.Drawing.Color.White, 2f))
+            {
+                g.DrawLines(pen, new System.Drawing.PointF[] {
+                    new System.Drawing.PointF(r.X + r.Width * 0.24f, r.Y + r.Height * 0.52f),
+                    new System.Drawing.PointF(r.X + r.Width * 0.43f, r.Y + r.Height * 0.72f),
+                    new System.Drawing.PointF(r.X + r.Width * 0.78f, r.Y + r.Height * 0.30f) });
+            }
+        }
+        if (Focused && ShowFocusCues)
+            using (System.Drawing.Pen pen = new System.Drawing.Pen(On, 1f)) g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+    }
+}
+
 // The first start: what the program needs, with what each part is for, confirmed by the user and
 // installed in this window (setup.bat runs hidden, its lines go to the log under "Details").
 // C# 5 (csc of .NET Framework 4): no string interpolation, no ?. operator.
@@ -537,11 +585,12 @@ class SetupWindow
         int x = 16;
         if (optional)
         {
-            r.Check = new CheckBox();
+            r.Check = new DarkCheck();
             r.Check.SetBounds(14, 12, 18, 18);
             r.Check.BackColor = Card;
             r.Box.Controls.Add(r.Check);
             x = 40;
+
         }
         else
         {
@@ -551,11 +600,22 @@ class SetupWindow
         }
         r.Title = NewLabel(title, 10f, true, System.Drawing.Color.White, x, 9, 250, 22);
         r.Box.Controls.Add(r.Title);
+
         r.Right = NewLabel(right, 9f, false, Text2, 290, 11, 248, 20);
         r.Right.TextAlign = System.Drawing.ContentAlignment.TopRight;
         r.Box.Controls.Add(r.Right);
         r.Purpose = NewLabel(purpose, 9f, false, Text2, x, 31, 552 - x - 14, 30);
         r.Box.Controls.Add(r.Purpose);
+        if (optional)
+        {
+            // the whole row ticks it, not only the small square
+            CheckBox check = r.Check;
+            EventHandler toggle = delegate { if (check.Enabled) { check.Checked = !check.Checked; check.Focus(); } };
+            r.Box.Cursor = Cursors.Hand;
+            r.Box.Click += toggle;
+            foreach (Control c in r.Box.Controls)
+                if (c != check) { c.Cursor = Cursors.Hand; c.Click += toggle; }
+        }
         form.Controls.Add(r.Box);
         return r;
     }
@@ -634,7 +694,7 @@ class SetupWindow
         }
         gpu.Right.ForeColor = gpuColor; gpu.Dot.ForeColor = gpuColor;
         // Local analysis is offered ticked with a working NVIDIA card (it is slow on the processor)
-        if (!ollamaInstalled && !ollamaTouched && !running && ollama.Check.Enabled) ollama.Check.Checked = nv != null && gpuColor == Green;
+        if (ollama.Check != null && !ollamaTouched && !running && ollama.Check.Enabled) ollama.Check.Checked = nv != null && gpuColor == Green;
         if (nv == null || gpuColor == Amber)
         {
             gpu.Right.Cursor = Cursors.Hand;
@@ -713,13 +773,24 @@ class SetupWindow
         if (ff != null) { ffmpeg.Right.ForeColor = Green; ffmpeg.Dot.ForeColor = Green; }
 
         ollamaInstalled = OllamaPath() != null;
+        // Found: nothing to choose, a green dot like FFmpeg's (a check box that could not be changed looked
+        // like a fault); missing: a check box, the row says what ticking it does
         ollama = AddRow(320, "Ollama",
-            T("ИИ-анализ на компьютере: обзоры и задачи. Можно поставить позже", "AI analysis on this computer: summaries and tasks. Can be added later"),
-            ollamaInstalled ? T("уже есть ✓", "found ✓") : T("≈ 1 ГБ · по желанию", "≈ 1 GB · optional"), true);
-        ollama.Check.Checked = false;  // ticked once the video card is found (ShowGpu), unless the user chose
-        ollama.Check.Click += delegate { ollamaTouched = true; };
-        ollama.Check.Enabled = !ollamaInstalled;
-        if (ollamaInstalled) ollama.Right.ForeColor = Green;
+            ollamaInstalled
+                ? T("ИИ-анализ на компьютере: обзоры и задачи", "AI analysis on this computer: summaries and tasks")
+                : T("ИИ-анализ на компьютере: обзоры и задачи. Отметьте, чтобы установить; можно и позже",
+                    "AI analysis on this computer: summaries and tasks. Tick to install it; it can be added later"),
+            ollamaInstalled ? T("уже есть ✓", "found ✓") : T("≈ 1 ГБ · по желанию", "≈ 1 GB · optional"), !ollamaInstalled);
+        if (ollama.Check != null)
+        {
+            ollama.Check.Checked = false;  // ticked once the video card is found (ShowGpu), unless the user chose
+            ollama.Box.Click += delegate { ollamaTouched = true; };
+            foreach (Control c in ollama.Box.Controls) c.Click += delegate { ollamaTouched = true; };
+        }
+        else
+        {
+            ollama.Right.ForeColor = Green; ollama.Dot.ForeColor = Green;
+        }
 
         form.Controls.Add(NewLabel(T("Модели распознавания вы выберете после запуска, в окне программы.", "You choose the speech models after the start, in the program window."),
             9f, false, Text2, 24, 394, 552, 20));
@@ -850,7 +921,7 @@ class SetupWindow
         primary.Text = update ? T("Обновление…", "Updating…") : T("Установка…", "Installing…");
         secondary.Text = T("Журнал", "Log");
         details.Visible = true;
-        ollama.Check.Enabled = false;
+        if (ollama.Check != null) ollama.Check.Enabled = false;
         track.Visible = true;
         started = DateTime.Now;
         anim.Start();
@@ -874,7 +945,7 @@ class SetupWindow
                                        "The program environment could not be installed. Check the internet and press Retry; the log has the details.")); return; }
                 envDone = true;
                 SetState(env, 2, T("готово ✓", "done ✓"));
-                if (ollama.Check.Checked && !ollamaInstalled) InstallOllama(); else Finish();
+                if (ollama.Check != null && ollama.Check.Checked && !ollamaInstalled) InstallOllama(); else Finish();
             });
         });
     }
