@@ -1385,7 +1385,7 @@ def apply_speaker_marks(speakers: Dict[str, Dict[str, Any]], segments: List[Dict
 
 # --- The precise mode: other models recognize the recording too, and the versions are merged ---
 ENSEMBLE_CANDIDATES = ("gigaam-v3", "large-v3", "parakeet-v3", "large-v3-turbo")
-ENSEMBLE_MAX_MODELS = 3  # with the main one: each model is one more pass over the whole recording
+ENSEMBLE_MAX_MODELS = 4  # with the main one, every speech model (the user asked for all of them): each is one more pass
 ENSEMBLE_ALWAYS = "large-v3"  # Whisper Pro
 
 

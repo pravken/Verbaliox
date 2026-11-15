@@ -909,6 +909,12 @@ function openLlmPicker() {
   draw();
 }
 
+// The first start in two short steps (the old window had the sets, the models, their purposes and a
+// comparison table on one screen: too much text, reported by the user): the AI analysis, then what
+// downloads, with the precise mode (every speech model) as a switch. The language is not asked: the
+// recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
+// Settings → Recognition to choose the models
+const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
 function openFirstRunWizard(data) {
   document.getElementById('first-run-wizard')?.remove();
   const wrap = document.createElement('div');
@@ -920,122 +926,88 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '', ensemble: false };
+  const st = { step: 0, preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false };
   const item = id => catalog.find(i => i.id === id);
-  const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
-  const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
-  // A model: its name and size on one line, what it is for under them (long purposes wrap evenly)
-  const modelText = id => `<span class="block min-w-0 flex-1">
-      <span class="flex items-baseline justify-between gap-3"><span class="text-white font-medium">${escapeHtml(formatModelName(id))}</span>
-        <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></span>
-      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span></span>`;
-  const modelLine = id => `<div class="flex text-[11.5px] pt-1.5 mt-1.5 border-t border-white/5">${modelText(id)}</div>`;
-  const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
-      <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
+  const allSpeech = ENSEMBLE_ALL.filter(id => item(id));
+  const models = () => picks.presets.find(p => p.id === st.preset).models;
+  const speech = () => (st.ensemble ? [...new Set([...models(), ...allSpeech])] : models());
   const llmItem = llmCatalog.find(m => m.id === picks.llm) || { size: '' };
-  // The precise mode always has Whisper Pro among its models: downloaded with the set when it is on
-  const ENS_MODEL = 'large-v3';
-  const downloads = () => {
-    const ids = models();
-    return st.ensemble && models().length >= 2 && !ids.includes(ENS_MODEL) && item(ENS_MODEL) ? [...ids, ENS_MODEL] : ids;
-  };
-  const plan = () => {
-    const list = downloads().filter(id => !item(id)?.installed);
-    const rows = list.map(id => ({ name: formatModelName(id), mb: wizardSizeMb(item(id)) }));
-    if (!(data.ffmpeg || {}).available) rows.unshift({ name: 'FFmpeg', mb: ((data.ffmpeg || {}).download_info || {}).size_mb || 0 });
-    if (st.ai === 'local') rows.push({ name: formatModelName(picks.llm), mb: wizardSizeMb(llmItem) });
-    return rows;
-  };
+  const badge = text => `<span class="frw-badge">${escapeHtml(text)}</span>`;
+  const option = (key, on, icon, title, desc, rec) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="frw-opt${on ? ' is-on' : ''}">
+      <span class="frw-ico" aria-hidden="true">${icon}</span>
+      <span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(title)}${rec ? badge(t('frRecommended')) : ''}</span>
+        <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
+      <span class="frw-radio" aria-hidden="true"></span></button>`;
+  const ICON_PC = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+  const ICON_CLOUD = '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.3 4.5 4.5 0 0 0 7 18z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg>';
+  const sizeOf = ids => ids.filter(id => !item(id)?.installed).reduce((a, id) => a + wizardSizeMb(item(id)), 0);
+  const ffmpegMb = () => ((data.ffmpeg || {}).available ? 0 : (((data.ffmpeg || {}).download_info || {}).size_mb || 0));
+  const llmMb = () => (st.ai === 'local' ? wizardSizeMb(llmItem) : 0);
   const draw = () => {
-    let body = '';
+    let title, sub, body, extra = '';
     if (st.step === 0) {
-      const cards = picks.presets.map(p => {
-        const on = st.preset === p.id;
-        const title = escapeHtml(t(`frPreset_${p.id}`)) + (p.id === picks.rec ? tag(t('frRecommended')) : '');
-        let inner = `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t(`frPreset_${p.id}_desc`))}</div>`;
-        if (p.models) inner += p.models.map(modelLine).join('');
-        return choice(`preset:${p.id}`, on, title, inner);
-      }).join('');
-      // The models side by side under the sets; for an own choice they are ticked right in it
-      const compare = `<div class="text-xs text-white font-medium pt-1">${escapeHtml(t(st.preset === 'custom' ? 'frPickModels' : 'mcTitle'))}</div>
-        ${modelCompareTable(catalog.map(i => ({ ...i, size: wizardSizeText(wizardSizeMb(i)) })), st.preset === 'custom' ? { check: st.custom } : {})}`;
-      body = `<p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('frIntro'))}</p>
-        <div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</span></div>
-        <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frPresetQ'))}</div>
-        <div class="space-y-2" role="radiogroup">${cards}</div>${compare}
-        <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNote'))}</p>`;
-    } else if (st.step === 1) {
-      const local = escapeHtml(t('frAiLocal')) + (picks.gpu ? tag(t('frRecommended')) : '');
-      body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frLlmQ'))}</div>
-        <p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiDesc'))}</p>
-        <div class="space-y-2" role="radiogroup">
-          ${choice('ai:none', st.ai === 'none', escapeHtml(t('frLlmSkip')) + (picks.gpu ? '' : tag(t('frRecommended'))), `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frLlmSkipDesc'))}</div>`)}
-          ${choice('ai:local', st.ai === 'local', local, `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml((picks.gpu ? t('frAiLocalDesc') : t('frAiLocalCpu')).replace('{model}', () => formatModelName(picks.llm)).replace('{size}', () => llmItem.size || ''))}</div>
-            ${(data.ollama || {}).installed ? '' : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frLlmNoOllama'))}</div>`}`)}
-          ${choice('ai:cloud', st.ai === 'cloud', escapeHtml(t('frAiCloud')), `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudDesc'))}</div>`)}
+      title = t('frwAiQ');
+      sub = t('frwAiSub');
+      extra = `<div class="frw-hw">${escapeHtml(t('frHardware'))}: ${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</div>`;
+      const local = t('frwAiLocalD').replace('{model}', () => formatModelName(picks.llm)).replace('{size}', () => (wizardSizeMb(llmItem) ? wizardSizeText(wizardSizeMb(llmItem)) : ''));
+      body = `<div class="frw-opts" role="radiogroup">
+          ${option('ai:local', st.ai === 'local', ICON_PC, t('frwAiLocal'), (data.ollama || {}).installed ? local : `${local} · ${t('frwWithOllama')}`, picks.gpu)}
+          ${option('ai:cloud', st.ai === 'cloud', ICON_CLOUD, t('frwAiCloud'), t('frwAiCloudD'), false)}
+          ${option('ai:none', st.ai === 'none', ICON_PAUSE, t('frwAiNone'), t('frwAiNoneD'), !picks.gpu)}
         </div>`;
     } else {
-      const rows = plan();
-      const total = rows.reduce((a, r) => a + (r.mb || 0), 0);
-      const roles = wizardRoles(models(), st.main);
-      const others = models().filter(m => m !== 'gigaam-v3');
-      // Several besides GigaAM: which one is the main model is asked, not guessed
-      const mainQ = others.length > 1 ? `<div class="text-[11.5px] text-apple-label leading-snug">${escapeHtml(t('frMainQ'))}</div>
-        <div class="space-y-2" role="radiogroup">${others.map(id => choice(`main:${id}`, id === roles.main, escapeHtml(formatModelName(id)),
-          `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</div>`)).join('')}</div>` : '';
-      body = `${mainQ}<div class="text-xs text-white font-medium">${escapeHtml(t('frSummaryQ'))}</div>
-        <div class="rounded-xl bg-apple-sidebar border border-white/10 p-3 space-y-1.5">
-          ${rows.length ? rows.map(r => `<div class="flex items-baseline justify-between gap-2 text-[11.5px]"><span class="text-white">${escapeHtml(r.name)}</span><span class="font-mono text-apple-tertiary">${escapeHtml(r.mb ? wizardSizeText(r.mb) : '')}</span></div>`).join('')
-            : `<div class="text-[11.5px] text-apple-secondary">${escapeHtml(t('frNothingToDownload'))}</div>`}
-          ${rows.length ? `<div class="flex items-baseline justify-between gap-2 text-[11.5px] border-t border-white/10 pt-1.5"><span class="text-apple-secondary">${escapeHtml(t('frTotal'))}</span><span class="font-mono text-white">${escapeHtml(wizardSizeText(total))}</span></div>` : ''}
+      title = t('frwSumQ');
+      sub = t('frwSumSub');
+      const ids = speech();
+      const total = sizeOf(ids) + ffmpegMb() + llmMb();
+      const aiTitle = { local: t('frwAiLocal'), cloud: t('frwAiCloud'), none: t('frwAiNone') }[st.ai];
+      const row = (k, v, d, size, strong) => `<div class="frw-row"><span class="frw-k">${escapeHtml(k)}</span>
+          <span class="frw-v">${escapeHtml(v)}${d ? `<span class="frw-d">${escapeHtml(d)}</span>` : ''}</span>
+          <span class="frw-size${strong ? ' is-total' : ''}">${escapeHtml(size)}</span></div>`;
+      const speechSize = sizeOf(ids) + ffmpegMb();
+      body = `<div class="frw-sum">
+          ${row(t('frwSpeech'), t(st.preset === 'multi' ? 'frwMulti' : 'frwRuen'),
+            ids.map(formatModelName).concat(ffmpegMb() ? ['FFmpeg'] : []).join(' · '), speechSize ? wizardSizeText(speechSize) : t('llmPickInstalled'))}
+          ${row(t('frwAi'), aiTitle, st.ai === 'local' ? formatModelName(picks.llm) : '', llmMb() ? wizardSizeText(llmMb()) : '')}
+          ${row(t('frwTotal'), '', '', total ? wizardSizeText(total) : t('frwNothing'), true)}
         </div>
-        ${roles.ru ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frRouteNote').replace('{ru}', () => formatModelName(roles.ru)).replace('{main}', () => formatModelName(roles.main)))}</p>` : ''}
-        ${st.ai === 'cloud' ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudNext'))}</p>` : ''}
-        ${models().length >= 2 ? `<label class="vs-row cursor-pointer text-xs text-apple-label rounded-xl border border-white/10 p-3">
-            <span><span class="text-white font-medium">${escapeHtml(t('ensToggle'))}</span>
-              <span class="fr-ens-best">${tag(t('frEnsBest'))}</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5">${escapeHtml(t('frEnsHint'))}</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
-        <p class="text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('frBackground'))}</p>`;
+        ${allSpeech.length > 1 ? `<label class="frw-toggle">
+          <span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwPrecise'))}${badge(t('frwPreciseBadge'))}</span>
+            <span class="frw-opt-desc">${escapeHtml(t('frwPreciseD').replace('{n}', () => String(allSpeech.length)))}</span></span>
+          <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
+        <p class="frw-after frw-note">${escapeHtml(t('frwProgress'))}</p>`;
     }
-    const canNext = st.step !== 0 || models().length > 0;
-    wrap.innerHTML = `<div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card flex flex-col" id="first-run-dialog">
-      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-center justify-between">
-        <div class="text-sm font-semibold text-white">${escapeHtml(t('frTitle'))}</div>
-        <div class="text-[11.5px] text-apple-tertiary font-mono">${st.step + 1} / 3</div>
-      </div>
-      <div class="px-5 py-4 space-y-3 overflow-y-auto">${body}</div>
-      <div class="px-5 py-3 border-t apple-border flex items-center gap-2">
-        <button data-a="later" class="ui-btn ui-btn-subtle mr-auto">${escapeHtml(t('frLater'))}</button>
+    const dots = [0, 1].map(i => `<span class="frw-dot${i === st.step ? ' is-on' : ''}"></span>`).join('');
+    wrap.innerHTML = `<div class="frw" id="first-run-dialog">
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${st.step + 1} / 2">${dots}</span></div>
+      <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
+      <div class="frw-body">${body}</div>
+      <div class="frw-foot">
+        <button data-a="later" class="frw-later">${escapeHtml(t('frLater'))}</button>
         ${st.step > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
-        <button data-a="next" class="ui-btn ui-btn-primary" ${canNext ? '' : 'disabled'}>${escapeHtml(st.step < 2 ? t('frNext') : t('frStart'))}</button>
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < 1 ? t('frNext') : t('frStart'))}</button>
       </div></div>`;
     wrap.querySelector('#first-run-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;  // the page is zoomed: vh would not fit
   };
   draw();
   wrap.addEventListener('click', async e => {
     const ens = e.target.closest('input[data-ens]');
-    if (ens) { st.ensemble = ens.checked; draw(); return; }  // Whisper Pro joins the list to download
-    const box = e.target.closest('input[data-model]');
-    if (box) {
-      if (box.checked) st.custom.add(box.dataset.model); else st.custom.delete(box.dataset.model);
-      draw();
-      return;
-    }
+    if (ens) { st.ensemble = ens.checked; draw(); return; }  // every speech model joins the list to download
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.pick) {
       const [kind, value] = b.dataset.pick.split(':');
-      if (kind === 'preset') st.preset = value; else if (kind === 'main') st.main = value; else st.ai = value;
+      st.ai = value;
       draw();
       return;
     }
     if (b.dataset.a === 'later') { wrap.remove(); openModal('settings', 'recognition'); return; }
     if (b.dataset.a === 'back') { st.step--; draw(); return; }
-    if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
+    if (b.dataset.a === 'next' && st.step < 1) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks, st.main, st.ensemble && models().length >= 2, downloads());
+      await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech());
     }
   });
   document.body.appendChild(wrap);
@@ -1048,7 +1020,10 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
     language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
-  if (ensemble === true) settings.asr_ensemble = 'true';  // the precise mode for every new recording
+  if (ensemble === true) {  // the precise mode for every new recording, with every speech model downloaded
+    settings.asr_ensemble = 'true';
+    settings.asr_ensemble_models = (Array.isArray(toDownload) ? toDownload : chosen).filter(id => ENSEMBLE_ALL.includes(id)).join(',');
+  }
   // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
   // here, the server would refuse the whole request and every choice of the wizard would be lost
   if (ai === 'local') settings.llm_provider = 'ollama';
@@ -2444,9 +2419,9 @@ function syncEnsembleBox() {
   const on = document.getElementById('set-asr-ensemble')?.checked;
   document.getElementById('set-ensemble-box')?.classList.toggle('hidden', !on);
 }
-// Turned on with nothing ticked: GigaAM v3, Whisper Pro and Parakeet TDT v3 are ticked (the downloaded
-// ones), so the choice is in sight; the settings save right after (the change handler below)
-const ENSEMBLE_DEFAULT = ['gigaam-v3', 'large-v3', 'parakeet-v3'];
+// Turned on with nothing ticked: every speech model is ticked (the downloaded ones), so the choice is in
+// sight; the settings save right after (the change handler below)
+const ENSEMBLE_DEFAULT = ENSEMBLE_ALL;
 document.addEventListener('change', (e) => {
   if (e.target?.id !== 'set-asr-ensemble') return;
   const boxes = [...document.querySelectorAll('#set-ensemble-models input')];
