@@ -1974,15 +1974,25 @@ def _process_meeting_job(meeting_id: int) -> None:
                     from app import analysis_chain
 
                     auto_tasks = settings.get("auto_commitments", "true").lower() == "true"
-                    if analysis_chain.enabled(settings):
-                        # In steps: the decisions, the tasks with them, the protocol with both (its result
-                        # sections are those lists word for word)
-                        summary_md = analysis_chain.run(
-                            meeting_id, None, detected_lang, find_tasks=auto_tasks,
-                            stage=lambda text: update_meeting_progress(meeting_id, stage_text=text),
-                            part_notes=part_notes,
-                        )
-                    else:
+                    summary_md = None
+                    in_steps = analysis_chain.enabled(settings)
+                    if in_steps:
+                        # In steps: the decisions, the tasks, the protocol with both (its result sections are
+                        # those lists word for word)
+                        try:
+                            summary_md = analysis_chain.run(
+                                meeting_id, None, detected_lang, find_tasks=auto_tasks,
+                                stage=lambda text: update_meeting_progress(meeting_id, stage_text=text),
+                                part_notes=part_notes,
+                            )
+                        except Exception as chain_err:
+                            if _cancel_wanted(meeting_id):
+                                raise
+                            # a step failed (a timeout, the context): the protocol in one go instead, so the
+                            # recording still gets its overview (found by an audit)
+                            print(f"[analysis_chain] meeting {meeting_id}: {chain_err}; the protocol in one go", flush=True)
+                            in_steps = False
+                    if summary_md is None:
                         # The tasks first: they are checked against the transcript (a quote for each), and the
                         # protocol is then told them, so its «Следующие шаги» are the same tasks
                         if settings.get("auto_commitments", "true").lower() == "true":
@@ -2012,7 +2022,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                     from app.grounding import ground_summary
 
                     # the analysis in steps checks its protocol itself, before the program's lists go in
-                    if settings.get("summary_grounding", "true").lower() == "true" and not analysis_chain.enabled(settings):
+                    if settings.get("summary_grounding", "true").lower() == "true" and not in_steps:
                         summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
                     summaries["protocol"] = summary_md
                     merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))

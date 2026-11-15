@@ -35,6 +35,41 @@ class ReplaceSectionTest(unittest.TestCase):
 
 
 @unittest.skipIf(analysis_chain is None, "app dependencies not installed")
+class AuditCasesTest(unittest.TestCase):
+    def test_a_topic_named_like_a_section_is_not_taken_for_it(self):
+        md = "## Обсуждение по темам\n### Решение проблемы с кэшем\n- текст\n### Бюджет\n- про бюджет"
+        out = analysis_chain.replace_section(md, "decisions", ["Перейти на новый кэш"])
+        self.assertIn("### Решение проблемы с кэшем\n- текст\n### Бюджет\n- про бюджет", out)
+        self.assertLess(out.index("## Решения"), out.index("## Обсуждение по темам"))
+
+    def test_the_title_is_not_taken_for_the_decisions(self):
+        md = "# Протокол: решение по договору\nВступление.\n\n## Решения\n- Старое\n\n## Обсуждение по темам\n- x"
+        out = analysis_chain.replace_section(md, "decisions", ["Новое"])
+        self.assertIn("# Протокол: решение по договору\nВступление.", out)
+        self.assertIn("## Решения\n- Новое\n", out)
+
+    def test_step_one_points_under_sub_headings_are_read(self):
+        md = "## Решения\n**Бюджет**\n- Утвердили бюджет\n### Сроки\n- Сдвинули релиз\n  - на неделю\n## Открытые вопросы\n- Кто платит"
+        self.assertEqual(analysis_chain.section_points(md, "decisions"), ["Утвердили бюджет", "Сдвинули релиз"])
+
+    def test_an_english_protocol_gets_english_words(self):
+        out = analysis_chain.replace_section("## Summary\nx\n\n## Discussion\n- y", "open", [], "en")
+        self.assertIn("## Open questions\nNo open questions", out)
+
+    def test_a_protocol_without_the_section_is_left_as_it_is(self):
+        md = "## Entscheidungen\n- A\n\n## Nächste Schritte\n- B"
+        self.assertEqual(analysis_chain.append_to_section(md, "next", ["C"]), md)
+
+    def test_appending_keeps_what_the_section_had(self):
+        md = "## Следующие шаги\nДоговорились так:\n- Ольга: позвонить\n  - уточнить цену\n\n## Обсуждение по темам\n- x"
+        out = analysis_chain.append_to_section(md, "next", ["Игорь: заказать баннеры"])
+        self.assertIn("Договорились так:\n- Ольга: позвонить\n  - уточнить цену\n- Игорь: заказать баннеры\n\n## Обсуждение", out)
+        none = analysis_chain.append_to_section("## Следующие шаги\nСледующие шаги не назывались\n", "next", ["Игорь: x"])
+        self.assertNotIn("не назывались", none)
+        self.assertIn("- Игорь: x", none)
+
+
+@unittest.skipIf(analysis_chain is None, "app dependencies not installed")
 class ChainTest(unittest.TestCase):
     def setUp(self):
         init_db()
@@ -66,6 +101,26 @@ class ChainTest(unittest.TestCase):
                                                ["Ольга встретится с рабочей группой по проекту [10:08]"]))
         self.assertFalse(analysis_chain._listed("заказать баннеры", ["Ольга: позвонить в агентство"]))
 
+    def test_steps_grouped_by_person_are_not_added_again(self):
+        merge_summaries(self.mid, {"protocol": "## Следующие шаги\n### Ольга\n- позвонить в агентство\n\n## Обсуждение по темам\n- x"})
+        commitments.create("позвонить в агентство", "Ольга", "part", "", self.mid)
+        self.assertEqual(analysis_chain.sync_next_steps(self.mid), 0)
+        self.assertIn("### Ольга\n- позвонить в агентство", get_meeting(self.mid)["summaries"]["protocol"])
+
+    def test_another_language_keeps_the_models_sections(self):
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, language="de")
+        german = "## Entscheidungen\n- A\n\n## Nächste Schritte\n- B\n\n## Diskussion\n- C"
+
+        def fake_summary(template_key, **_):
+            return "## Entscheidungen\n- A" if template_key == "decisions" else german
+
+        with mock.patch("app.ollama_client.generate_meeting_summary", side_effect=fake_summary), \
+                mock.patch("app.commitments.extract", return_value=[]), \
+                mock.patch("app.grounding.maybe_ground", side_effect=lambda md, k, m: md):
+            self.assertEqual(analysis_chain.run(self.mid), german)
+
     def test_the_steps_run_in_order_and_the_protocol_holds_their_lists(self):
         calls = []
         decisions = "## Решения\n- Провести обход [00:01]\n\n## Открытые вопросы\n- Кто платит за баннеры"
@@ -88,15 +143,15 @@ class ChainTest(unittest.TestCase):
 
         checked = []
 
-        def fake_ground(md, key, m):  # marks every point: only the model's own text may get it
-            checked.append(key)
-            return md.replace("\n- ", "\n- [?] ")
+        def fake_ground(md, key, m):  # marks the protocol's points: only the model's own text may keep a mark
+            checked.append("protocol" if "Обсуждение" in md else "decisions")
+            return md.replace("\n- ", "\n- [?] ") if "Обсуждение" in md else md
 
         with mock.patch("app.ollama_client.generate_meeting_summary", side_effect=fake_summary), \
                 mock.patch("app.commitments.extract", side_effect=fake_extract), \
                 mock.patch("app.grounding.maybe_ground", side_effect=fake_ground):
             md = analysis_chain.run(self.mid)
-        self.assertEqual(checked, ["protocol"])
+        self.assertEqual(checked, ["decisions", "protocol"])  # step 1's points are checked too
         self.assertIn("- [?] обход [00:01]", md)  # the model's topics are checked
         self.assertEqual(calls, ["decisions", "tasks", "protocol"])
         p = protocol_points(md)
@@ -104,6 +159,21 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(p["open"], ["Кто платит за баннеры"])
         self.assertEqual(p["next"], ["Ольга: позвонить в агентство"])
         self.assertIn("## Обсуждение по темам\n- [?] обход [00:01]", md)
+
+    def test_without_the_task_search_the_models_steps_and_decisions_stay(self):
+        def fake_summary(template_key, context_note="", **_):
+            if template_key == "decisions":
+                return "Решили провести обход."  # no headings, no points: nothing to put in place
+            return ("## Решения\n- Провести обход [00:01]\n\n## Следующие шаги\n- Ольга: позвонить в агентство\n\n"
+                    "## Обсуждение по темам\n- обход [00:01]")
+
+        with mock.patch("app.ollama_client.generate_meeting_summary", side_effect=fake_summary), \
+                mock.patch("app.grounding.maybe_ground", side_effect=lambda md, k, m: md):
+            md = analysis_chain.run(self.mid, find_tasks=False)
+        p = protocol_points(md)
+        self.assertEqual(p["decisions"], ["Провести обход [00:01]"])
+        self.assertEqual(p["next"], ["Ольга: позвонить в агентство"])
+        self.assertNotIn("не назывались", md)
 
     def test_on_by_default(self):
         self.assertTrue(analysis_chain.enabled({}))

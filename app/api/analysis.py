@@ -605,13 +605,13 @@ def api_delete_summary(meeting_id: int, key: str) -> Dict[str, Any]:
 
 class SummaryTextPayload(BaseModel):
     text: str
+    base: Optional[str] = None  # the text the editor opened with: a section changed meanwhile is not overwritten
 
 @router.put("/api/meetings/{meeting_id}/summaries/{key}")
 def api_edit_summary(meeting_id: int, key: str, payload: SummaryTextPayload) -> Dict[str, Any]:
     """A section of the analysis edited by hand. Returns the summaries and the words the edit replaced,
     which the page offers for the dictionary."""
     from app.analysis_edits import word_changes
-    from app.database import merge_summaries
     from app.obsidian import refresh_if_exported
 
     m = get_meeting(meeting_id)
@@ -625,7 +625,20 @@ def api_edit_summary(meeting_id: int, key: str, payload: SummaryTextPayload) -> 
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Пустой текст: чтобы убрать раздел, удалите его")
-    summaries = merge_summaries(meeting_id, {key: text})
+    from app.database import change_summaries
+
+    stale = {"yes": False}
+
+    def change(current: Dict[str, Any]) -> Dict[str, Any]:
+        # «Пересоздать» or a task found meanwhile changed the section: the edit would overwrite it (an audit)
+        if payload.base is not None and (current.get(key) or "").strip() != payload.base.strip():
+            stale["yes"] = True
+            return {}
+        return {key: text}
+
+    summaries = change_summaries(meeting_id, change)
+    if stale["yes"]:
+        raise HTTPException(status_code=409, detail="Раздел изменился, пока вы его правили: откройте его заново")
     refresh_if_exported(meeting_id)
     return {"summaries": summaries, "suggest": word_changes(old, text)}
 
@@ -639,7 +652,6 @@ class SummaryFixPayload(BaseModel):
 def api_fix_summary_word(meeting_id: int, payload: SummaryFixPayload) -> Dict[str, Any]:
     """A word or term written wrong in the analysis, put right in every section (or one)."""
     from app.analysis_edits import PHRASE_MAX_WORDS, learn, replace_in_summaries
-    from app.database import merge_summaries
     from app.obsidian import refresh_if_exported
 
     m = get_meeting(meeting_id)
@@ -648,9 +660,17 @@ def api_fix_summary_word(meeting_id: int, payload: SummaryFixPayload) -> Dict[st
     wrong, right = " ".join(payload.wrong.split()), " ".join(payload.right.split())
     if not wrong or not right:
         raise HTTPException(status_code=400, detail="Укажите, что и на что исправить")
-    changed, count = replace_in_summaries(m.get("summaries") or {}, wrong, right,
-                                          [payload.key] if payload.key else None)
-    summaries = merge_summaries(meeting_id, changed) if changed else (m.get("summaries") or {})
+    from app.database import change_summaries
+
+    counted = {"n": 0}
+
+    def change(current: Dict[str, Any]) -> Dict[str, Any]:  # on the summaries as they are now, under the lock
+        updates, counted["n"] = replace_in_summaries(current, wrong, right, [payload.key] if payload.key else None)
+        return updates
+
+    summaries = change_summaries(meeting_id, change)
+    count = counted["n"]
+    changed = count > 0
     if changed:
         refresh_if_exported(meeting_id)
     learned: List[str] = []
@@ -682,7 +702,7 @@ def api_analysis_check(meeting_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
 
 class DictionaryLearnPayload(BaseModel):
-    pairs: List[Dict[str, str]] = []
+    pairs: List[Dict[str, Any]] = []  # {"wrong", "right"} (and "sure" as the edit gave it)
 
 @router.post("/api/dictionary/learn")
 def api_dictionary_learn(payload: DictionaryLearnPayload) -> Dict[str, Any]:
@@ -900,7 +920,13 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
 
         if payload.template == "protocol" and not payload.custom_prompt.strip() and analysis_chain.enabled():
             # the analysis in steps: decisions, then tasks, then the protocol with both
-            result_md = analysis_chain.run(meeting_id, payload.model or None, payload.lang or m.get("language") or "ru")
+            from app import commitments
+
+            # «Пересоздать» the overview: the tasks the recording has stay (ticked off, edited) and the protocol
+            # takes them; they are found only when there are none yet (found by an audit)
+            has_tasks = any(t.get("status") != "deleted" for t in commitments.for_meetings([meeting_id]))
+            result_md = analysis_chain.run(meeting_id, payload.model or None, payload.lang or m.get("language") or "ru",
+                                           find_tasks=not has_tasks)
             in_steps = True
         else:
             in_steps = False
