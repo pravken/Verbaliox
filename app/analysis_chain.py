@@ -3,7 +3,7 @@ The analysis of a recording in steps, so its parts cannot disagree (Настро
 on by default since the measurement in bench-report/analysis-chain.md):
 
 1. the decisions and the open questions, read from the transcript alone;
-2. the tasks (commitments.extract), with those decisions as hints;
+2. the tasks (commitments.extract), read from the whole transcript (the decisions as hints narrowed the search);
 3. the protocol, told both; its «Решения», «Открытые вопросы» and «Следующие шаги» are then written from
    steps 1 and 2 by the program, not by the model, so they are the same lists word for word.
 
@@ -125,7 +125,6 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
     from app import commitments
     from app.database import get_meeting, is_local_only
     from app.features import note_for as features_note_for
-    from app.meeting_context import note_for_tasks
     from app.ollama_client import generate_meeting_summary
 
     say = stage or (lambda _text: None)
@@ -152,7 +151,9 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
     if find_tasks:
         say("Анализ по шагам: задачи...")
         try:  # without the tasks the protocol is still made (its next steps: the tasks found before)
-            commitments.extract(meeting_id, model_name, hints=note_for_tasks({}, protocol_md=decisions_md))
+            # No hints: the decisions given as hints narrowed the search to them (recall 0.20 against 0.39
+            # without, bench-report/analysis-chain.md, «Перемер после правок»)
+            commitments.extract(meeting_id, model_name, hints="")
         except Exception as e:
             print(f"[analysis_chain] tasks of meeting {meeting_id}: {e}", flush=True)
     tasks = task_lines(meeting_id)
