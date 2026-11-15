@@ -721,7 +721,7 @@ function updateWhisperModelsUI(models) {
   renderTxModelBar();
 
   if (catalogBox && whisperList.length > 0) {
-    catalogBox.innerHTML = modelCompareTable(whisperList.map(i => ({ ...i, size: modelSizeLabel(i) })), { mark: activeModel }) + whisperList.map(item => {
+    catalogBox.innerHTML = whisperList.map(item => {
       const isSelected = item.id === activeModel;
       const desc = state.uiLang === 'en' ? item.desc_en : item.desc_ru;
       const isDownloadingThis = (st.active && st.model_id === item.id) || (item.engine === 'onnx' && item.downloading);
@@ -761,21 +761,25 @@ function updateWhisperModelsUI(models) {
       }
 
       return `
-        <div class="sx-model-card p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+        <div class="mc-card sx-model-card p-3 rounded-xl border transition ${
           isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
         }">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center flex-wrap gap-2">
-              <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
-              <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
-              ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center flex-wrap gap-2">
+                <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
+                <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
+                <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+                ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
+                ${modelInfoButton(item.id)}
+              </div>
+              ${modelMetersLine(item.id)}
             </div>
-            ${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label mt-1">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
-            <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
-            ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}
+            <div class="shrink-0">${actionHtml}</div>
           </div>
-          <div class="shrink-0">${actionHtml}</div>
+          ${modelInfoBlock(item.id, `${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
+            <p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(desc)}</p>
+            ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}`)}
         </div>
       `;
     }).join('');
@@ -1232,19 +1236,23 @@ function updateOllamaUI(ollama) {
       }
 
       return `
-        <div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+        <div class="mc-card p-3 rounded-xl border transition ${
           isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
         }">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center flex-wrap gap-2">
-              <span class="text-xs font-semibold text-white">${escapeHtml(pretty)}</span>
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
-              <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center flex-wrap gap-2">
+                <span class="text-xs font-semibold text-white">${escapeHtml(pretty)}</span>
+                <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
+                <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+                ${modelInfoButton(item.id)}
+              </div>
+              ${modelMetersLine(item.id)}
             </div>
-            <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
-            ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}
+            <div class="shrink-0">${actionHtml}</div>
           </div>
-          <div class="shrink-0">${actionHtml}</div>
+          ${modelInfoBlock(item.id, `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(desc)}</p>
+            ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
         </div>
       `;
     }).join('');
@@ -1711,6 +1719,38 @@ function modelCompareTable(items, opts = {}) {
   return `<div class="mc-wrap"><table class="mc-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+// A model card's measures on one line, the same dots as the comparison (accuracy or quality, speed, load);
+// the real numbers are in the tooltips
+function modelMetersLine(id) {
+  const m = MODEL_METERS[id];
+  if (!m) return '';
+  const cell = html => html.replace(/^<td/, '<span').replace(/<\/td>$/, '</span>');
+  const part = (label, html) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${cell(html)}</span>`;
+  const quality = m.acc
+    ? part(`${t('mmAccuracy')} ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
+    : part(t('mmQuality'), `<td title="${escapeHtml(t('mmQualityTip'))}">${meterDots(m.quality)}</td>`);
+  return `<div class="mm-line">${quality}${part(t('mmSpeed'), meterSpeedCell(m))}${part(t('mmLoad'), meterLoadCell(m))}</div>`;
+}
+
+// What a model is, under «i» of its card (the cards showed long texts and folders: asked by the user to
+// keep only the badges and the measures in sight)
+const modelInfoOpen = new Set();
+function modelInfoButton(id) {
+  const on = modelInfoOpen.has(id);
+  return `<button type="button" class="mc-info${on ? ' is-on' : ''}" data-click="toggleModelInfo" data-click-args='${escapeHtml(JSON.stringify([id, { $: 'el' }]))}'
+    aria-expanded="${on}" title="${escapeHtml(t('mcInfoTip'))}" aria-label="${escapeHtml(t('mcInfoTip'))}">i</button>`;
+}
+function modelInfoBlock(id, html) {
+  return html ? `<div class="mc-more${modelInfoOpen.has(id) ? '' : ' hidden'}">${html}</div>` : '';
+}
+function toggleModelInfo(id, el) {
+  if (modelInfoOpen.has(id)) modelInfoOpen.delete(id); else modelInfoOpen.add(id);
+  const card = el && el.closest('.mc-card');
+  card?.querySelector('.mc-more')?.classList.toggle('hidden', !modelInfoOpen.has(id));
+  el?.classList.toggle('is-on', modelInfoOpen.has(id));
+  el?.setAttribute('aria-expanded', String(modelInfoOpen.has(id)));
+}
+
 // What each speech model is for, said where a model is chosen
 function modelPurpose(id) {
   return { 'gigaam-v3': t('mpGigaam'), 'parakeet-v3': t('mpParakeet'), 'large-v3-turbo': t('mpTurbo'),
@@ -1819,17 +1859,20 @@ function renderSemanticModelCard() {
           <button data-id="${escapeHtml((ollama.models || []).find(n => n === model || n.startsWith(model + ':')) || model)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
             class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button></div>`
       : `<button data-click="pullSemanticModel" class="ui-btn ui-btn-primary">${SVG_ICONS.download}<span>${escapeHtml(t('semanticDownload'))} (1.2 GB)</span></button>`;
-  box.innerHTML = `<div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${installed ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'}">
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center flex-wrap gap-2">
-        <span class="text-xs font-semibold text-white">BGE-M3</span>
-        <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">1.2 GB · MIT</span>
-        <span class="text-[11px] text-apple-tertiary">${installed ? '✓ ' + escapeHtml(t('semanticInstalled')) : '1+ GB VRAM / CPU'}</span>
+  box.innerHTML = `<div class="mc-card p-3 rounded-xl border transition ${installed ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'}">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center flex-wrap gap-2">
+          <span class="text-xs font-semibold text-white">BGE-M3</span>
+          <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">1.2 GB · MIT</span>
+          <span class="text-[11px] text-apple-tertiary">${installed ? '✓ ' + escapeHtml(t('semanticInstalled')) : '1+ GB VRAM / CPU'}</span>
+          ${modelInfoButton('bge-m3')}
+        </div>
       </div>
-      <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(t('semanticModelDesc'))}</p>
-      ${installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}
+      <div class="shrink-0">${action}</div>
     </div>
-    <div class="shrink-0">${action}</div>
+    ${modelInfoBlock('bge-m3', `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('semanticModelDesc'))}</p>
+      ${installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
   </div>`;
 }
 
