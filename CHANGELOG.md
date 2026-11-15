@@ -24,7 +24,17 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   speakers said in advance is kept better.
 - **Cloud analysis works with the current models**: Claude, the new OpenAI models and Gemini get
   requests they accept; a cut, filtered or refused answer is said instead of saved; a retired model is
-  replaced by one of its family; every send is in the privacy log.
+  replaced by one of its family; every send is in the privacy log. Gemini on a free key may not finish
+  the protocol of an hour's meeting in the 10 minutes the app waits.
+- **A task can go to anyone of «Everyone»** (the people directory), not only to the meeting's people;
+  typing narrows the list. A name variant merged in the directory («Лёля» to «Ольга Смирнова») finds
+  its person in the tasks the model finds.
+- **Nemotron**: in Auto a group of scraps (a few seconds in a long recording) is no longer a person;
+  on the video card it runs in bf16, faster and in less memory.
+- **Settings fit a narrow window**: the sections become a column of icons, the fields go one under another.
+- **The glossary** holds about a hundred terms a feature and does not repeat the meeting's feature
+  terms; the transcript's room counts the feature's note and the glossary. The Models panel shows the
+  real size of a loaded Gemma 4.
 
 - **Settings in 7 tabs instead of 14**: the former tabs are sections (Updates and About in General,
   Hotkeys and Calendar in Recording, Speech models and Dictionary in Recognition, Model comparison and
@@ -431,6 +441,17 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Облачный анализ работает с текущими моделями**: Claude, новые модели OpenAI и Gemini получают
   запросы, которые принимают; обрезанный, отфильтрованный или отклонённый ответ показывается ошибкой, а не
   сохраняется; снятая модель заменяется моделью того же семейства; каждая отправка видна в журнале.
+  Gemini на бесплатном ключе может не успеть написать протокол часовой встречи за 10 минут, которые
+  ждёт программа.
+- **Задачу можно отдать любому из «Все люди»** (справочник людей), а не только участникам встречи;
+  ввод имени сужает список. Вариант имени, объединённый в справочнике («Лёля» с «Ольга Смирнова»),
+  находит своего человека в задачах, которые нашла модель.
+- **Nemotron**: в «Авто» группа обрывков (несколько секунд в длинной записи) больше не считается
+  участником; на видеокарте работает в bf16 — быстрее и с меньшим расходом памяти.
+- **Настройки помещаются в узкое окно**: разделы становятся колонкой значков, поля — одно под другим.
+- **Глоссарий** вмещает около сотни терминов на фичу и не повторяет термины фичи этой встречи; место
+  для расшифровки учитывает описание фичи и глоссарий. Панель «Модели» показывает настоящий размер
+  загруженной Gemma 4.
 
 - **Настройки — 7 вкладок вместо 14**: бывшие вкладки стали разделами (Обновления и О программе — в
   Общих, Горячие клавиши и Календарь — в Записи, Модели речи и Словарь — в Распознавании, Сравнение моделей
