@@ -25,6 +25,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - The «Next steps» tab, which repeated the tasks, is gone (kept where one was made).
 - Settings: «Ask before in-person meetings» can always be switched; a note says it works with recording
   all meetings.
+- **Ollama no longer stays in memory after the app closes**: the Ollama the app started ends with it (on a
+  crash too); an Ollama you started yourself keeps running but lets go of the models.
+- **Remove everything**: `uninstall.bat` in the program folder («Remove Verbaliox completely» in the Start
+  menu) removes the program, its data, models, autostart, shortcuts and temporary files, for a portable
+  folder and an installed copy alike. Ollama, uv and Python are asked about separately; folders you chose
+  (recordings elsewhere, exports, Obsidian) stay.
 
 ## 0.8.10 — English
 
@@ -500,6 +506,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Вкладка «Следующие шаги», повторявшая задачи, убрана (остаётся там, где уже создана).
 - Настройки: «Перед очными встречами спрашивать» переключается всегда; подпись говорит, что он действует
   вместе с записью всех встреч.
+- **Ollama больше не остаётся в памяти после закрытия программы**: запущенный программой Ollama
+  завершается вместе с ней (и при сбое); Ollama, запущенный вами, продолжает работать, но выгружает модели.
+- **Удаление всего**: `uninstall.bat` в папке программы («Удалить Verbaliox полностью» в меню «Пуск»)
+  удаляет программу, данные, модели, автозапуск, ярлыки и временные файлы — и у переносной, и у
+  установленной копии. Про Ollama, uv и Python спрашивает отдельно; выбранные вами папки (записи в другом
+  месте, экспорт, Obsidian) остаются.
 
 ## 0.8.10
 
