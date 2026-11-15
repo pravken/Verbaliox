@@ -477,6 +477,12 @@ function toggleModelsDownloads() {
   renderModelsPop();
 }
 
+// The legend of the marks, under «i» (it took the bottom of the panel each time: asked by the user)
+function toggleModelsLegend() {
+  modelsPop.legend = !modelsPop.legend;
+  renderModelsPop();
+}
+
 function renderModelsPop() {
   const pop = document.getElementById('models-pop');
   if (!pop || !modelsPop.open) return;
@@ -502,20 +508,22 @@ function renderModelsPop() {
   const anyLoaded = (vram.chips || []).some(c => c.loaded && c.kind !== 'dub');
   pop.innerHTML = `<div class="mp-head"><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
       ${anyLoaded ? `<button data-click="unloadAllModelsNow" class="mp-unload" title="${escapeHtml(t('tipUnloadAll'))}" ${vram.busy ? 'disabled' : ''}>${escapeHtml(t('mpUnloadAll'))}</button>` : ''}
+      <button data-click="toggleModelsLegend" class="mp-close mp-info${modelsPop.legend ? ' is-on' : ''}" aria-expanded="${!!modelsPop.legend}"
+        aria-label="${escapeHtml(t('mpLegendTip'))}" title="${escapeHtml(t('mpLegendTip'))}">i</button>
       <button data-click="closeModelsPop" class="mp-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button></div>
-    ${vram.data?.gpu ? section('gpu', parts.gpu) : ''}${section('cpu', parts.cpu)}
-    ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">
-        <span class="mp-dl-title">${AI_MARK}${escapeHtml(t('mpDownloadable').replace('{n}', () => dl.length))}</span>
-        <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
-      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
-    <div class="mp-legend">
+    ${modelsPop.legend ? `<div class="mp-legend">
       <span><i class="mp-lg-dot mp-lg-on"></i>${escapeHtml(t('mpLgOn'))}</span>
       <span><i class="mp-lg-dot mp-lg-loading"></i>${escapeHtml(t('mpLgLoading'))}</span>
       <span><i class="mp-lg-dot mp-lg-idle"></i>${escapeHtml(t('mpLgIdle'))}</span>
       <span>${MODEL_START_ICON}${escapeHtml(t('mpLgStart'))}</span>
       <span><b class="mp-lg-x">×</b>${escapeHtml(t('mpLgStop'))}</span>
       <span>${MODEL_TIMER_ICON}${escapeHtml(t('mpLgTimer'))}</span>
-    </div>`;
+    </div>` : ''}
+    ${vram.data?.gpu ? section('gpu', parts.gpu) : ''}${section('cpu', parts.cpu)}
+    ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">
+        <span class="mp-dl-title">${AI_MARK}${escapeHtml(t('mpDownloadable').replace('{n}', () => dl.length))}</span>
+        <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
+      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}`;
   placeModelsPop();
 }
 
