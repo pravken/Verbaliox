@@ -2553,3 +2553,24 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .st-cap-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: max-content; max-width: min(560px, 80vw);
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px;
   background: #1C1D21; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
+
+/* Tasks of a recording as cards (app.js commitmentRowHtml): the task first, then who, when and from where */
+.an-tasks { display: flex; flex-direction: column; gap: 8px; }
+.an-task { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
+.an-task:hover { background: rgba(255, 255, 255, 0.06); }
+.an-task .tk-check { margin-top: 1px; }
+.an-task-main { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.an-task-what { font-size: var(--fs-body); line-height: 1.4; font-weight: 500; color: #F5F5F7; overflow-wrap: anywhere; }
+.an-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--fs-caption); line-height: 1.35; color: var(--hc-dim, #8E8E93); }
+.an-task-who { display: inline-flex; align-items: center; gap: 6px; color: #E5E5EA; }
+.an-task-to { color: var(--hc-dim, #8E8E93); }
+.an-task-at { padding: 0; border: 0; background: transparent; font-family: var(--font-mono); font-size: var(--fs-caption); color: #64B5FF; cursor: pointer; }
+.an-task-at:hover { text-decoration: underline; }
+.an-task-badge { padding: 1px 8px; border-radius: 6px; font-size: var(--fs-caption); line-height: 1.35; }
+.an-task-mfu { background: rgba(191, 90, 242, 0.16); color: #D9A8FF; }
+.an-task-talk { background: rgba(255, 159, 10, 0.13); color: #FFB340; }
+.an-task-where { color: var(--hc-dim, #8E8E93); }
+.an-task .tk-due { margin-top: 1px; cursor: default; }
+.an-task-done { opacity: 0.55; }
+.an-task-done .an-task-what { text-decoration: line-through; color: var(--hc-dim, #8E8E93); }
+.an-task-what::first-letter { text-transform: uppercase; }

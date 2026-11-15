@@ -929,17 +929,27 @@ function openTemplatesEditor() {
 }
 
 // --- Commitments (app/commitments.py): who promised what to whom, by when ---
+// A task of a recording as a card: what to do first, then who (an avatar, as on the Tasks page), the
+// due date as a chip coloured by how near it is, the moment in the recording and where the task came from
 function commitmentRowHtml(c, withMeeting, hasMfu = false) {
-  // With the organizer's MFU: its tasks say so, and those found only in the talk say they are not in it
-  const mark = c.source === 'mfu' ? ` <span class="an-chip-sm" title="${escapeHtml(t('mfuTaskTip'))}">${escapeHtml(t('mfuTask'))}</span>`
-    : hasMfu && c.source === 'ai' ? ` <span class="an-chip-sm text-apple-amber" title="${escapeHtml(t('mfuNotInTip'))}">${escapeHtml(t('mfuNotIn'))}</span>` : '';
-  const who = escapeHtml(c.who || '—') + (c.to_whom ? ` <span class="text-apple-tertiary">→ ${escapeHtml(c.to_whom)}</span>` : '');
-  const ts = c.at != null ? ` <button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="font-mono text-[11.5px] text-apple-blue hover:underline">[${formatTime(c.at)}]</button>` : '';
-  const where = withMeeting ? `<div class="text-[11px] text-apple-tertiary mt-0.5">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</div>` : '';
-  return `<label class="flex items-start gap-2.5 py-2 border-b border-white/5 cursor-pointer ${c.status === 'done' ? 'opacity-50' : ''}">
-      <input type="checkbox" ${c.status === 'done' ? 'checked' : ''} data-cid="${c.id}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="mt-0.5 rounded bg-apple-sidebar border-white/20 text-apple-blue" />
-      <span class="min-w-0 text-[13px] text-apple-label leading-snug"><span class="font-medium text-white">${who}</span>: ${escapeHtml(c.what)}${c.due ? ` <span class="text-apple-amber text-[11.5px]">(${escapeHtml(c.due)})</span>` : ''}${ts}${mark}${where}</span>
-    </label>`;
+  const done = c.status === 'done';
+  const src = c.source === 'mfu' ? `<span class="an-task-badge an-task-mfu" title="${escapeHtml(t('mfuTaskTip'))}">${escapeHtml(t('mfuTask'))}</span>`
+    : hasMfu && c.source === 'ai' ? `<span class="an-task-badge an-task-talk" title="${escapeHtml(t('mfuNotInTip'))}">${escapeHtml(t('mfuNotIn'))}</span>` : '';
+  const at = c.at != null ? `<button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="an-task-at" title="${escapeHtml(t('tkOpenAt'))}">▶ ${formatTime(c.at)}</button>` : '';
+  const due = c.due_date ? `<span class="tk-due ${tkDueTone(c)}">${escapeHtml(tkDueText(c))}</span>`
+    : c.due ? `<span class="tk-due">${escapeHtml(c.due)}</span>` : '';
+  const to = c.to_whom ? `<span class="an-task-to">→ ${escapeHtml(c.to_whom)}</span>` : '';
+  const where = withMeeting ? `<span class="an-task-where">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</span>` : '';
+  return `<div class="an-task${done ? ' an-task-done' : ''}">
+      <input type="checkbox" ${done ? 'checked' : ''} data-cid="${c.id}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="tk-check" aria-label="${escapeHtml(t('tkDone'))}" />
+      <div class="an-task-main">
+        <div class="an-task-what">${escapeHtml(c.what)}</div>
+        <div class="an-task-meta">
+          <span class="an-task-who">${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></span>${to}${at}${src}${where}
+        </div>
+      </div>
+      ${due}
+    </div>`;
 }
 
 async function renderCommitments(box) {
@@ -954,7 +964,7 @@ async function renderCommitments(box) {
     renderAnalysisHead();
   }
   box.innerHTML = anIsBusy('commitments') ? anMakingHtml()
-    : items.length ? `<div class="an-list">${items.map(c => commitmentRowHtml(c, false, !!(m.mfu || '').trim())).join('')}</div>${commitmentExportBar(m.id)}`
+    : items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, false, !!(m.mfu || '').trim())).join('')}</div>${commitmentExportBar(m.id)}`
     : anEmptyHtml('commitments');
 }
 
@@ -982,7 +992,7 @@ async function toggleCommitment(input) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: input.checked ? 'done' : 'open' }),
   });
   if (!res.ok) { input.checked = !input.checked; showError((await readJson(res)).detail); return; }
-  input.closest('label')?.classList.toggle('opacity-50', input.checked);
+  input.closest('.an-task')?.classList.toggle('an-task-done', input.checked);
 }
 
 async function openCommitmentPlace(btn) {
@@ -1006,7 +1016,7 @@ async function openOpenCommitments() {
           <p class="text-[11.5px] text-apple-secondary mt-1">${escapeHtml(t('openCommitmentsDesc'))}</p></div>
         <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
       </div>
-      <div class="flex-1 overflow-y-auto px-5 py-2">${items.length ? items.map(c => commitmentRowHtml(c, true)).join('') + commitmentExportBar(null)
+      <div class="flex-1 overflow-y-auto px-5 py-2">${items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, true)).join('')}</div>` + commitmentExportBar(null)
         : `<div class="py-10 text-center text-xs text-apple-tertiary">${escapeHtml(t('commitmentsNoneOpen'))}</div>`}</div>
     </div>`;
   wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="close"]')) wrap.remove(); });
