@@ -11,8 +11,8 @@ const IMP_SOUND = [
   ['leveling', 'impLeveling', 'impLevelingHint', 'onnx'],
   ['vad', 'impVad', 'impVadHint', 'whisper'],
 ];
-const IMP_AFTER = [['diarization', 'impDiarization', 'impDiarizationHint'], ['summary', 'impSummary', 'impSummaryHint'],
-  ['ensemble', 'impEnsemble', 'impEnsembleHint']];
+const IMP_AFTER = [['diarization', 'impDiarization', 'impDiarizationHint'], ['summary', 'impSummary', 'impSummaryHint']];
+const IMP_ENSEMBLE = ['ensemble', 'impEnsemble', 'impEnsembleHint', ''];  // shown under the model, always
 
 function impSettings() { return (state.system && state.system.settings) || {}; }
 
@@ -325,6 +325,7 @@ function renderImport() {
   };
   document.getElementById('imp-sound').innerHTML = IMP_SOUND.map(card).join('');
   document.getElementById('imp-after').innerHTML = IMP_AFTER.map(([k, l, h]) => card([k, l, h, ''])).join('');
+  document.getElementById('imp-ensemble').innerHTML = card(IMP_ENSEMBLE);
   const def = impDefaults();
   const asSettings = IMP_SOUND.every(([k]) => imp.proc[k] === def[k]) && IMP_AFTER.every(([k]) => imp.proc[k] === def[k]);
   document.getElementById('imp-reset').classList.toggle('hidden', IMP_SOUND.every(([k]) => imp.proc[k] === def[k]));
