@@ -270,6 +270,13 @@ def _load() -> None:
     from app.database import get_all_settings, list_dictionary
 
     items = list_dictionary(active_only=True)
+    try:  # the terms of the features (Словарь → Фичи) are words to write right too
+        from app.features import all_terms
+
+        known = {str(it.get("term") or "").casefold() for it in items}
+        items = items + [{"term": t, "variants": ""} for t in all_terms() if t.casefold() not in known]
+    except Exception as e:
+        print(f"[vocab] feature terms not loaded: {e}", flush=True)
     fuzzy = (get_all_settings().get("dictionary_fuzzy") or "true").lower() == "true"
     _cache.update(at=time.time(), rules=Rules(items, fuzzy=fuzzy),
                   hotwords=", ".join(it["term"] for it in items))
@@ -290,3 +297,17 @@ def current() -> Optional[Rules]:
 def hotwords() -> str:
     current()
     return _cache["hotwords"]
+
+
+GLOSSARY_MAX_TERMS = 80
+
+
+def glossary_note() -> str:
+    """The dictionary's terms for a model's request: written exactly so and not translated. Recognition
+    may still have heard one wrong; the model then knows how it is spelled."""
+    terms = [t.strip() for t in hotwords().split(", ") if t.strip()][:GLOSSARY_MAX_TERMS]
+    if not terms:
+        return ""
+    return ("Словарь терминов (имена, названия, термины): пиши их точно так, не переводи и не склоняй "
+            "латиницу; если в расшифровке слово искажено, но явно означает один из них, пиши как в словаре: "
+            + ", ".join(terms) + ".")

@@ -1,0 +1,46 @@
+{
+ "ecapa": {
+  "eer_mean": 0.046,
+  "eer_per_meeting": [
+   0.0,
+   0.08,
+   0.027,
+   0.077
+  ],
+  "cos_same_median": 0.67,
+  "cos_diff_median": 0.111
+ },
+ "resnet34-LM": {
+  "eer_mean": 0.055,
+  "eer_per_meeting": [
+   0.0,
+   0.134,
+   0.008,
+   0.077
+  ],
+  "cos_same_median": 0.737,
+  "cos_diff_median": 0.118
+ },
+ "campplus-LM": {
+  "eer_mean": 0.462,
+  "eer_per_meeting": [
+   0.475,
+   0.468,
+   0.404,
+   0.5
+  ],
+  "cos_same_median": 0.308,
+  "cos_diff_median": 0.175
+ },
+ "campplus-LM no-CMN": {
+  "eer_mean": 0.454,
+  "eer_per_meeting": [
+   0.481,
+   0.411,
+   0.424,
+   0.5
+  ],
+  "cos_same_median": 0.318,
+  "cos_diff_median": 0.192
+ }
+}

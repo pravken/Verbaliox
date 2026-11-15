@@ -176,7 +176,7 @@ def get_hardware_info() -> Dict[str, Any]:
         "recommended_device": "cpu",
         "recommended_compute_type": "int8",
         "recommended_whisper_model": "large-v3-turbo",
-        "recommended_ollama_model": "qwen3.5:4b",
+        "recommended_ollama_model": "gemma4:e2b",
         "tier": "cpu",
         "tier_description": "Работа на процессоре: быстрее всего GigaAM v3 (русский) и Parakeet; Whisper Turbo — в режиме int8",
     }
@@ -191,11 +191,13 @@ def get_hardware_info() -> Dict[str, Any]:
             info["vram_free_gb"] = free_gb
             info["recommended_device"] = "cuda"
 
+            # The analysis model by the card (bench-report/llm-profiles.md): gemma4:e4b with GigaAM fits
+            # an 8 GB card (it reports a little under 8); below that, and without a GPU, gemma4:e2b
+            info["recommended_ollama_model"] = "gemma4:e4b" if total_gb >= 7.5 else "gemma4:e2b"
             if total_gb >= 10.0:
                 info["tier"] = "high_vram"
                 info["recommended_compute_type"] = "float16"
                 info["recommended_whisper_model"] = "large-v3"
-                info["recommended_ollama_model"] = "qwen3:8b"
                 info["tier_description"] = (
                     f"Максимальная производительность ({name}, {total_gb} ГБ VRAM). "
                     "Доступны самые точные модели large-v3 и large-v3-turbo в режиме float16."
@@ -204,7 +206,6 @@ def get_hardware_info() -> Dict[str, Any]:
                 info["tier"] = "mid_vram"
                 info["recommended_compute_type"] = "int8_float16"
                 info["recommended_whisper_model"] = "large-v3-turbo"
-                info["recommended_ollama_model"] = "qwen3.5:4b"
                 info["tier_description"] = (
                     f"Средний объём видеопамяти ({name}, {total_gb} ГБ VRAM). "
                     "Рекомендуется модель large-v3-turbo в гибридном режиме int8_float16."
@@ -213,7 +214,6 @@ def get_hardware_info() -> Dict[str, Any]:
                 info["tier"] = "low_vram"
                 info["recommended_compute_type"] = "int8"
                 info["recommended_whisper_model"] = "large-v3-turbo"
-                info["recommended_ollama_model"] = "qwen3.5:4b"
                 info["tier_description"] = (
                     f"Компактный режим видеопамяти ({name}, {total_gb} ГБ VRAM). "
                     "Модели загружаются по очереди в сжатом формате int8."

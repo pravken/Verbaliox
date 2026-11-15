@@ -124,6 +124,7 @@ function tkWhoName(task) { return task.who || t('tkNobody'); }
 
 function tkSourceText(task) {
   if (task.source === 'manual') return t('tkSrcManual');
+  if (task.source === 'mfu') return 'MFU';
   return t('tkSrcAi');
 }
 
@@ -199,7 +200,7 @@ function renderTasksBar() {
   tkSeg('tk-views', [['list', t('tkViewList'), TK_ICON_LIST], ['cal', t('tkViewCal'), TK_ICON_CAL]], TK.view, 'setTasksView');
   const groups = document.getElementById('tk-groups');
   groups.classList.toggle('hidden', TK.view === 'cal');
-  tkSeg('tk-groups', [['person', t('tkByPerson')], ['due', t('tkByDue')], ['record', t('tkByRecord')]], TK.by, 'setTasksGroup');
+  tkSeg('tk-groups', [['person', t('tkByPerson')], ['due', t('tkByDue')], ['feature', t('tkByFeature')], ['record', t('tkByRecord')]], TK.by, 'setTasksGroup');
   const base = TK.data.tasks.filter(tkMatchesPeopleAndSearch);
   const filters = [['open', t('tkFOpen')], ['mine', t('tkFMine')], ['over', t('tkFOver')], ['done', t('tkFDone')], ['all', t('tkFAll')]];
   document.getElementById('tk-filters').innerHTML = filters.map(([key, label]) => {
@@ -235,7 +236,7 @@ function setTasksView(view) {
   renderTasks();
 }
 
-function setTasksGroup(by) { TK.by = by; renderTasks(); }
+function setTasksGroup(by) { TK.by = by; TK.open = new Set(); renderTasks(); }  // a group opened in full belongs to its grouping
 function setTasksFilter(f) { TK.filter = f; TK.keep.clear(); renderTasks(); }
 function onTasksSearch(value) { TK.q = value; TK.keep.clear(); renderTasks(); }
 function clearTasksPeople() { TK.people = []; TK.report = null; renderTasks(); }
@@ -261,6 +262,12 @@ function tkGroups(items) {
       add(key, () => ({ title, color, order: buckets.findIndex(b => b[0] === key) })).items.push(x);
     }
     groups.sort((a, b) => a.order - b.order);
+  } else if (TK.by === 'feature') {
+    for (const x of items) {
+      const f = featureById((x.features || [])[0]);
+      add(f ? `f${f.id}` : 'none', () => ({ title: f ? f.name : t('ftNoFeature'), color: f ? f.color : '#636366', order: f ? 0 : 1, featureId: f ? f.id : 0 })).items.push(x);
+    }
+    groups.sort((a, b) => a.order - b.order || _libCollator.compare(a.title, b.title));
   } else if (TK.by === 'record') {
     for (const x of items) {
       add(String(x.meeting_id), () => ({ title: x.meeting_id ? x.meeting_title || t('tkUntitled') : t('tkNoRecord'),
@@ -291,22 +298,52 @@ function renderTasksList() {
     box.innerHTML = `<div class="tk-empty">${escapeHtml(t('tkNothing'))}</div>`;
     return;
   }
-  box.innerHTML = tkGroups(items).map(g => {
-    const all = TK.data.tasks.filter(x => TK.by === 'person' ? (x.who || '').toLocaleLowerCase() === g.key
-      : TK.by === 'record' ? String(x.meeting_id) === g.key : g.items.includes(x));
-    const done = all.filter(tkIsDone).length;
-    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
+  // Each group's open / done counts in one pass over all the tasks (the filter per group was quadratic:
+  // 1–2 s per click on 12 thousand tasks, found by the audits); by person and by recording they count
+  // the hidden ones too, by due date and by feature what is shown
+  const totals = new Map();
+  if (TK.by === 'person' || TK.by === 'record') {
+    for (const x of TK.data.tasks) {
+      const key = TK.by === 'person' ? (x.who || '').toLocaleLowerCase() : String(x.meeting_id);
+      const c = totals.get(key) || totals.set(key, { all: 0, done: 0 }).get(key);
+      c.all += 1;
+      if (tkIsDone(x)) c.done += 1;
+    }
+  }
+  const groups = tkGroups(items);
+  _tkGroupRows = Math.max(10, Math.floor(TK_PAGE_ROWS / Math.max(1, groups.length)));
+  box.innerHTML = groups.map(g => {
+    const c = totals.get(g.key) || { all: g.items.length, done: g.items.filter(tkIsDone).length };
+    const all = { length: c.all };
+    const done = c.done;
+    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' || TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
     const kind = g.person && tkKindLabel(g.kind) ? `<span class="tk-kind" title="${escapeHtml(tkKindTitle(g.kind))}">${escapeHtml(tkKindLabel(g.kind))}</span>` : '';
     const me = g.person && g.key && tkIsMe(g.key) ? `<span class="tk-kind tk-kind-me">${escapeHtml(t('tkItsMe'))}</span>` : '';
     const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
     return `<section class="tk-group">
-      <div class="tk-group-head">${head}<span class="tk-group-title">${escapeHtml(g.title)}</span>${kind}${me}
+      <div class="tk-group-head">${head}${g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>` : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`}${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
-      ${g.items.map(tkRowHtml).join('')}
+      ${tkGroupRowsHtml(g)}
     </section>`;
   }).join('');
+}
+
+// A group draws its first TK_GROUP_ROWS tasks and «ещё N»: a page of thousands of rows took seconds
+const TK_PAGE_ROWS = 600;  // rows for the whole list, shared among its groups (at least 10 each)
+let _tkGroupRows = 150;
+function tkGroupRowsHtml(g) {
+  TK.open = TK.open || new Set();
+  const all = TK.open.has(g.key) || g.items.length <= _tkGroupRows + 5;
+  const shown = all ? g.items : g.items.slice(0, _tkGroupRows);
+  return shown.map(tkRowHtml).join('') + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
+}
+
+function showAllInTaskGroup(key) {
+  TK.open = TK.open || new Set();
+  TK.open.add(key);
+  renderTasksList();
 }
 
 function tkRowHtml(x) {
@@ -317,7 +354,7 @@ function tkRowHtml(x) {
   const kind = x.who && tkKindLabel(x.who_kind) ? `<span class="tk-kind">${escapeHtml(tkKindLabel(x.who_kind))}</span>` : '';
   return `<div class="tk-row${done ? ' tk-done' : ''}" data-tid="${x.id}">
     <input type="checkbox" ${done ? 'checked' : ''} class="tk-check" ${pageCall('change', 'toggleTaskDone', [x.id, { $: 'checked' }])} aria-label="${escapeHtml(t('tkDone'))}">
-    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span>${rec}</span>
+    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span><span class="tk-row-src">${rec}${TK.by === 'feature' ? '' : taskFeatureChipsHtml(x.meeting_id, x.features)}</span></span>
     <button class="tk-who" ${pageCall('click', 'openTaskAssign', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">
       ${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-who-name${x.who ? '' : ' tk-dim'}">${escapeHtml(tkWhoName(x))}</span>${kind}</button>
     <button class="tk-due ${tkDueTone(x)}" ${pageCall('click', 'openTaskDue', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(tkDueText(x))}</button>
@@ -338,6 +375,9 @@ async function tkPatch(id, changes) {
   const task = await res.json();
   const i = TK.data.tasks.findIndex(x => x.id === id);
   if (i >= 0) TK.data.tasks[i] = task;
+  // changed from a recording's task card: the card shows it at once
+  if (state.activeMeeting && state.activeSummaryTab === 'commitments' && typeof renderSummaryPanel === 'function') renderSummaryPanel();
+  if (typeof refreshFeaturePage === 'function') refreshFeaturePage();
   return task;
 }
 

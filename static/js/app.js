@@ -223,6 +223,7 @@ function analysisSections() {
     ...(tpls.length ? [{ label: t('anGrpTemplates'), items: tpls }] : []),
     { label: t('anGrpMine'), items: [
       { key: 'mynotes', label: t('notesTitle'), about: t('tipSumMyNotes'), page: true, make: false, mine: true },
+      { key: 'mfu', label: t('mfuTitle'), about: t('tipSumMfu'), page: true, make: false, mine: true },
       { key: 'notes', label: t('sumNotes'), about: t('tipSumNotes'), page: true, make: true },
     ] },
   ];
@@ -244,6 +245,7 @@ function anHasContent(key) {
   const m = state.activeMeeting;
   if (!m) return false;
   if (key === 'mynotes') return !!(m.user_notes || '').trim();
+  if (key === 'mfu') return !!(m.mfu || '').trim();
   if (key === 'commitments') return !!(state.anCommit && state.anCommit.id === m.id && state.anCommit.n > 0);
   return !!((m.summaries || {})[key] || '').trim();
 }
@@ -425,25 +427,30 @@ async function clearSummaryTab(key) {
       if (tab === 'chapters') renderChaptersBar();
       renderSummaryPanel();
     };
-    const notes = m.user_notes;
+    const notes = m.user_notes, mfu = m.mfu;
     const section = (m.summaries || {})[tab];
     deleteWithUndo({
       message: t('clearTabDoneToast').replace('{tab}', () => label),
       hide: () => {
         if (tab === 'mynotes') m.user_notes = '';
+        else if (tab === 'mfu') m.mfu = '';
         else { const rest = { ...(m.summaries || {}) }; delete rest[tab]; m.summaries = rest; }
         redraw();
       },
       restore: () => {
         if (tab === 'mynotes') m.user_notes = notes;
+        else if (tab === 'mfu') m.mfu = mfu;
         else m.summaries = { ...(m.summaries || {}), [tab]: section };
         redraw();
       },
       commit: async (keepalive) => {
         const res = tab === 'mynotes'
           ? await fetch(`/api/meetings/${m.id}/notes`, { method: 'PATCH', keepalive, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: '' }) })
+          : tab === 'mfu'
+          ? await fetch(`/api/meetings/${m.id}/mfu`, { method: 'PUT', keepalive, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '' }) })
           : await fetch(`/api/meetings/${m.id}/summaries?key=${encodeURIComponent(tab)}`, { method: 'DELETE', keepalive });
-        if (res.ok && !keepalive && tab !== 'mynotes' && state.activeMeeting && state.activeMeeting.id === m.id) {
+        if (res.ok && !keepalive && tab === 'mfu') refreshTasksAfterMfu(m);
+        if (res.ok && !keepalive && tab !== 'mynotes' && tab !== 'mfu' && state.activeMeeting && state.activeMeeting.id === m.id) {
           state.activeMeeting.summaries = (await readJson(res)).summaries || {};
           redraw();
         }
@@ -482,6 +489,13 @@ function renderSummaryPanel() {
     // a section finished in the background re-renders the panel: the notes being typed keep their caret
     const ed = document.getElementById('my-notes-input');
     if (!(ed && box.contains(ed) && document.activeElement === ed)) renderMyNotesEditor(box);
+    return;
+  }
+  if (tab === 'mfu') {
+    // the editor of the same recording keeps its caret; another recording's is drawn again (a text typed
+    // for one recording was saved into the next one: found by an audit)
+    const ed = document.getElementById('mfu-input');
+    if (!(ed && box.contains(ed) && document.activeElement === ed && ed.dataset.mid === String(m.id))) renderMfuEditor(box);
     return;
   }
   if (tab === 'commitments') { renderCommitments(box); return; }
@@ -541,7 +555,7 @@ function renderAnalysisHead() {
   const title = document.getElementById('an-title');
   if (title) title.textContent = it.label;
   const sub = document.getElementById('an-sub');
-  if (sub) sub.textContent = tab === 'mynotes' ? t('anNotesSub') : busy ? t('anMaking') : '';
+  if (sub) sub.textContent = tab === 'mynotes' ? t('anNotesSub') : tab === 'mfu' ? t('mfuSub') : busy ? t('anMaking') : '';
   const sel = document.getElementById('summary-llm-select');
   const name = document.getElementById('an-model-name');
   const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
@@ -610,6 +624,10 @@ function renderAnalysisOverview(box) {
   consider('followup', t('anLetter'), () => card('followup', t('anLetter'), md('followup'), { open: true, clamp: true }), {});
   if (m.series_id) consider('since_last', t('sumSinceLast'), () => card('since_last', t('sumSinceLast'), md('since_last'), { open: true, clamp: true }), {});
   consider('notes', t('sumNotes'), () => card('notes', t('sumNotes'), md('notes'), { open: true, clamp: true }), {});
+  if ((m.mfu || '').trim()) {
+    const lines = String(m.mfu).split('\n').map(s => s.trim()).filter(Boolean).slice(0, 6);
+    cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { mine: true, open: true }));
+  }
   if (!off.includes('mynotes')) {
     const lines = String(m.user_notes || '').split('\n').map(s => s.trim()).filter(Boolean).slice(0, 6);
     cards.push(card('mynotes', t('notesTitle'), lines.length ? lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join('')
@@ -913,15 +931,43 @@ function openTemplatesEditor() {
 }
 
 // --- Commitments (app/commitments.py): who promised what to whom, by when ---
-function commitmentRowHtml(c, withMeeting) {
-  const who = escapeHtml(c.who || '—') + (c.to_whom ? ` <span class="text-apple-tertiary">→ ${escapeHtml(c.to_whom)}</span>` : '');
-  const ts = c.at != null ? ` <button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="font-mono text-[11.5px] text-apple-blue hover:underline">[${formatTime(c.at)}]</button>` : '';
-  const where = withMeeting ? `<div class="text-[11px] text-apple-tertiary mt-0.5">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</div>` : '';
-  return `<label class="flex items-start gap-2.5 py-2 border-b border-white/5 cursor-pointer ${c.status === 'done' ? 'opacity-50' : ''}">
-      <input type="checkbox" ${c.status === 'done' ? 'checked' : ''} data-cid="${c.id}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="mt-0.5 rounded bg-apple-sidebar border-white/20 text-apple-blue" />
-      <span class="min-w-0 text-[13px] text-apple-label leading-snug"><span class="font-medium text-white">${who}</span>: ${escapeHtml(c.what)}${c.due ? ` <span class="text-apple-amber text-[11.5px]">(${escapeHtml(c.due)})</span>` : ''}${ts}${where}</span>
-    </label>`;
+// A task of a recording as a card: what to do first, then who (an avatar, as on the Tasks page), the
+// due date as a chip coloured by how near it is, the moment in the recording and where the task came from
+function commitmentRowHtml(c, withMeeting, hasMfu = false) {
+  const done = c.status === 'done';
+  // Where the task came from, as a tag at the same place on every card: MFU lit (the organizer's
+  // follow-up), LLM outlined (the model found it in the talk), ✎ (added by hand)
+  const srcKind = c.source === 'mfu' ? 'mfu' : c.source === 'manual' ? 'manual' : 'llm';
+  const srcLabel = { mfu: 'MFU', llm: 'LLM', manual: '✎' }[srcKind];
+  const srcTip = { mfu: 'mfuTaskTip', llm: 'srcLlmTip', manual: 'srcManualTip' }[srcKind];
+  const src = `<span class="an-task-tag an-task-src-${srcKind}${srcKind === 'mfu' ? ' an-task-tag-on' : ''}" title="${escapeHtml(t(srcTip))}">${srcLabel}</span>`;
+  const at = c.at != null ? `<button data-mid="${c.meeting_id}" data-at="${c.at}" data-click="openCommitmentPlace" data-click-args='[{"$": "el"}]' class="an-task-at" title="${escapeHtml(t('tkOpenAt'))}">▶ ${formatTime(c.at)}</button>` : '';
+  // who and the due date open the same pickers as on the Tasks page: the people, the calendar
+  const dueText = c.due_date ? tkDueText(c) : c.due || t('tkNoDue');
+  const due = `<button class="tk-due ${c.due_date ? tkDueTone(c) : c.due ? '' : 'an-task-nodue'}" ${pageCall('click', 'openCardDue', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(dueText)}</button>`;
+  const to = c.to_whom ? `<span class="an-task-to">→ ${escapeHtml(c.to_whom)}</span>` : '';
+  const where = withMeeting ? `<span class="an-task-where">${escapeHtml(c.meeting_title || '')} · ${escapeHtml(c.meeting_date || '')}</span>` : '';
+  return `<div class="an-task${done ? ' an-task-done' : ''}">
+      <input type="checkbox" ${done ? 'checked' : ''} data-cid="${c.id}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="tk-check" aria-label="${escapeHtml(t('tkDone'))}" />
+      <div class="an-task-main">
+        <div class="an-task-what">${escapeHtml(c.what)}</div>
+        <div class="an-task-meta">
+          <button class="an-task-who" ${pageCall('click', 'openCardAssign', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></button>${to}${at}${where}
+        </div>
+      </div>
+      <div class="an-task-side">${due}<div class="an-task-tags">${taskFeatureChipsHtml(c.meeting_id, withMeeting ? null : (state.activeMeeting || {}).features)}${src}</div></div>
+    </div>`;
 }
+
+// The pickers of the Tasks page (tasks.js) over a recording's task card: the task list is loaded first
+async function tkPickerFor(id, e, open) {
+  e.stopPropagation();
+  const anchor = e.currentTarget;
+  if (!tkTask(id)) await loadTasks();
+  if (tkTask(id)) open(id, { stopPropagation() {}, currentTarget: anchor });
+}
+function openCardAssign(id, e) { return tkPickerFor(id, e, openTaskAssign); }
+function openCardDue(id, e) { return tkPickerFor(id, e, openTaskDue); }
 
 async function renderCommitments(box) {
   const m = state.activeMeeting;
@@ -935,7 +981,7 @@ async function renderCommitments(box) {
     renderAnalysisHead();
   }
   box.innerHTML = anIsBusy('commitments') ? anMakingHtml()
-    : items.length ? `<div class="an-list">${items.map(c => commitmentRowHtml(c, false)).join('')}</div>${commitmentExportBar(m.id)}`
+    : items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, false, !!(m.mfu || '').trim())).join('')}</div>${commitmentExportBar(m.id)}`
     : anEmptyHtml('commitments');
 }
 
@@ -963,7 +1009,8 @@ async function toggleCommitment(input) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: input.checked ? 'done' : 'open' }),
   });
   if (!res.ok) { input.checked = !input.checked; showError((await readJson(res)).detail); return; }
-  input.closest('label')?.classList.toggle('opacity-50', input.checked);
+  input.closest('.an-task')?.classList.toggle('an-task-done', input.checked);
+  if (typeof refreshFeaturePage === 'function') refreshFeaturePage();
 }
 
 async function openCommitmentPlace(btn) {
@@ -987,7 +1034,7 @@ async function openOpenCommitments() {
           <p class="text-[11.5px] text-apple-secondary mt-1">${escapeHtml(t('openCommitmentsDesc'))}</p></div>
         <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
       </div>
-      <div class="flex-1 overflow-y-auto px-5 py-2">${items.length ? items.map(c => commitmentRowHtml(c, true)).join('') + commitmentExportBar(null)
+      <div class="flex-1 overflow-y-auto px-5 py-2">${items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, true)).join('')}</div>` + commitmentExportBar(null)
         : `<div class="py-10 text-center text-xs text-apple-tertiary">${escapeHtml(t('commitmentsNoneOpen'))}</div>`}</div>
     </div>`;
   wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="close"]')) wrap.remove(); });
@@ -1011,6 +1058,64 @@ function aiAvailable() {
   const st = state.llm;
   const cloud = st && st.consent && st.providers && st.providers[st.provider] && st.providers[st.provider].key && st.providers[st.provider].key.saved;
   return state.lastOllama === undefined || ollamaModels > 0 || !!cloud;  // not loaded yet: assume yes
+}
+
+// --- The organizer's meeting follow-up (MFU), pasted by hand: saved by its button, which also makes the
+// tasks again (once per change, not per keystroke); every summary takes it in as the agreed text ---
+function renderMfuEditor(box) {
+  const m = state.activeMeeting;
+  box.innerHTML = `<div class="space-y-2">
+      <p class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('mfuHint'))}</p>
+      <textarea id="mfu-input" rows="9" placeholder="${escapeHtml(t('mfuPh'))}"
+        class="w-full bg-apple-sidebar border apple-border rounded-xl px-4 py-3 text-[13px] leading-relaxed text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue resize-y"></textarea>
+      <div class="flex items-center gap-3">
+        <button id="mfu-save" data-click="saveMfu" class="an-btn an-btn-primary">${escapeHtml(t('mfuSave'))}</button>
+        <span id="mfu-status" class="text-[11px] text-apple-tertiary"></span>
+      </div>
+    </div>`;
+  const ta = document.getElementById('mfu-input');
+  ta.dataset.mid = String(m.id);
+  // a text not saved yet stays with its recording while the page is open (leaving the tab lost it)
+  state.mfuDrafts = state.mfuDrafts || {};
+  ta.value = state.mfuDrafts[m.id] ?? (m.mfu || '');
+  const status = () => {
+    const changed = ta.value.trim() !== (m.mfu || '').trim();
+    const long = ta.value.length > MFU_READ_CHARS;
+    const st = document.getElementById('mfu-status');
+    st.className = 'text-[11px] ' + (long ? 'text-apple-amber' : 'text-apple-tertiary');
+    st.textContent = [changed ? t('mfuUnsaved') : '', long ? t('mfuTooLong').replace('{n}', () => MFU_READ_CHARS) : ''].filter(Boolean).join(' · ');
+  };
+  ta.oninput = () => {
+    if (ta.value.trim() !== (m.mfu || '').trim()) state.mfuDrafts[m.id] = ta.value; else delete state.mfuDrafts[m.id];
+    status();
+  };
+  status();
+}
+
+const MFU_READ_CHARS = 6000;  // what every summary reads of it (app/ollama_client.MFU_SUMMARY_CHARS)
+
+async function saveMfu() {
+  const ta = document.getElementById('mfu-input');
+  const m = state.activeMeeting;
+  if (!m || !ta || ta.dataset.mid !== String(m.id)) return;  // the editor of another recording
+  const text = ta.value.trim();
+  const st = document.getElementById('mfu-status');
+  const res = await fetch(`/api/meetings/${m.id}/mfu`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!res.ok) { if (st) st.textContent = serverText((await readJson(res)).detail || t('errorGeneric')); return; }
+  const changed = text !== (m.mfu || '').trim();
+  m.mfu = text;
+  if (state.mfuDrafts) delete state.mfuDrafts[m.id];
+  setClearSummaryVisible(!!text);
+  renderAnalysisNav();
+  if (st) st.textContent = t('notesSaved');
+  if (changed) refreshTasksAfterMfu(m);
+}
+
+// The tasks made again with the MFU (or without it, once cleared): the summaries use it the next time they are made
+function refreshTasksAfterMfu(m) {
+  if (!aiAvailable()) { showToast(t('mfuNoModel')); return; }
+  showToast(t('mfuTasksUpdating'));
+  createAnalysisSection('commitments');
 }
 
 // --- My notes of a recording: plain text, saved as it is typed; every summary takes it in ---
@@ -1205,6 +1310,7 @@ function anSectionText(key) {
   if (!m) return '';
   const sums = m.summaries || {};
   if (key === 'mynotes') return m.user_notes || '';
+  if (key === 'mfu') return m.mfu || '';
   if (key === 'protocol') return [sums.tldr, sums.protocol, sums.chapters].filter(x => (x || '').trim()).join('\n\n');
   return sums[key] || '';
 }

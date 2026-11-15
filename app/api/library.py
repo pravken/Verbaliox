@@ -239,6 +239,38 @@ def api_onnx_gpu_remove() -> Dict[str, Any]:
     update_settings({"onnx_gpu": "false"})
     return onnx_gpu.status()
 
+# --- Nemotron 3 Diarization: who speaks when (app/nemotron_diar.py) ---
+@router.get("/api/nemotron")
+def api_nemotron() -> Dict[str, Any]:
+    from app import nemotron_diar
+
+    return nemotron_diar.status()
+
+@router.post("/api/nemotron/install")
+def api_nemotron_install() -> Dict[str, Any]:
+    from app import nemotron_diar
+
+    update_settings({"diarizer_engine": "nemotron"})  # used as soon as it is downloaded
+    return nemotron_diar.install_async()
+
+class NemotronChoice(BaseModel):
+    on: bool
+
+@router.post("/api/nemotron/choose")
+def api_nemotron_choose(payload: NemotronChoice) -> Dict[str, Any]:
+    from app import nemotron_diar
+
+    update_settings({"diarizer_engine": "nemotron" if payload.on else "ecapa"})
+    return nemotron_diar.status()
+
+@router.post("/api/nemotron/remove")
+def api_nemotron_remove() -> Dict[str, Any]:
+    from app import nemotron_diar
+
+    nemotron_diar.remove()
+    update_settings({"diarizer_engine": "ecapa"})
+    return nemotron_diar.status()
+
 # --- Model comparison on the user's recordings (app/bench.py) ---
 class BenchPayload(BaseModel):
     kind: str = "asr"          # asr | llm

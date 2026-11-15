@@ -22,10 +22,10 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Speech recognition** with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and Silero VAD. Models: `large-v3-turbo`, `large-v3`; GigaAM v3 and Parakeet TDT v3 on ONNX Runtime; recordings that mix languages are recognized phrase by phrase. Compute precision (`float16`, `int8_float16`, `int8`) is chosen from available VRAM, with fallback to CPU.
 - **A model per language:** Russian speech can have a model of its own (GigaAM), other languages the main one; with the language left to detection, the first minute decides.
 - **Several models, one text.** Each model's transcript of a recording is kept; the dropdown above the text switches between them. "Merge versions" makes one text from them: where the models agree, their word; the places they heard differently are chosen by the analysis model (only among the variants) and stay underlined, a click shows every model's variant.
-- **Speaker separation** by clustering SpeechBrain ECAPA-TDNN voice embeddings. Works without tokens. Accuracy drops with overlapping speech, very short replies, or similar voices, so check the result and fix speakers where needed.
+- **Speaker separation** by clustering SpeechBrain ECAPA-TDNN voice embeddings. Works without tokens. Optionally (Settings → Recognition), **NVIDIA Nemotron 3 Diarization** marks who speaks when across the whole recording, up to 8 speakers; it is downloaded on request and mixed people up about three times less often on test meetings. Accuracy drops with overlapping speech, very short replies, or similar voices, so check the result and fix speakers where needed.
 - **Optional audio cleanup** before recognition: FFmpeg filters for noise reduction, click removal and loudness leveling. A simple voice filter is also available in the player.
 - **Filler-word removal** ("uh", "um", "э-э", "ммм"…). The original text is kept and can be restored.
-- **Local summaries and Q&A** via Ollama (by default Qwen3.5 4B, or Qwen3 8B on GPUs with 10 GB and more), or optionally a **cloud model over its API** (OpenAI, Claude, Gemini, OpenAI-compatible) with your key; long recordings then fit in one request. Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
+- **Local summaries and Q&A** via Ollama (by default Gemma 4 E4B on GPUs with 8 GB and more, Gemma 4 E2B on smaller GPUs and without one), or optionally a **cloud model over its API** (OpenAI, Claude, Gemini, OpenAI-compatible) with your key; long recordings then fit in one request. Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
 - **Transcript editor and player**: click a word to jump to it, edit segments, merge them, rename speakers, waveform, playback speed.
 - **Recording** from a microphone, system audio, or both, with saved presets for one-click starts. System audio is captured directly (WASAPI loopback), without a screen-share prompt.
 - **Three parts of the app**: the **Library** (recordings, transcripts, analysis), the **Studio** (recording with live captions and real-time translation that is typed in without flicker; can fill the whole window) and **Ask** (questions about one recording, a folder or the whole library).
@@ -173,6 +173,10 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (ONNX export by istupakov) | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/): credit "Parakeet TDT 0.6B v3 by NVIDIA" |
 | BGE-M3 embeddings (BAAI) | MIT |
 | SpeechBrain ECAPA-TDNN (`spkrec-ecapa-voxceleb`) | Apache 2.0 |
+| [NVIDIA Nemotron 3 Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization) (rev. 52a43267, optional download; its folder keeps the license text and notices) | [OpenMDW-1.1](https://huggingface.co/nvidia/Nemotron-3-Diarization): commercial use allowed; keep the license text and notices when redistributing. Credit: "Nemotron 3 Diarization by NVIDIA" |
+| Hugging Face Transformers (runs Nemotron) | Apache 2.0 |
+| safetensors / regex / typer, rich, markdown-it-py, mdurl / shellingham / Pygments (Transformers dependencies) | Apache 2.0 / Apache 2.0 AND CNRI-Python / MIT / ISC / BSD-2-Clause |
+| Gemma 4 E4B / E2B ([google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) rev. 4ecc2ba6, [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) rev. 4adf1574; Ollama `gemma4:e4b` dc35e8d9c606, `gemma4:e2b` b37049369adf) | Apache 2.0 |
 | Qwen3.5 4B, Qwen3 8B / 14B, Qwen 2.5 1.5B | Apache 2.0 |
 | Ollama, FastAPI, pywebview | MIT / BSD-3 |
 | ONNX Runtime, CTranslate2, pythonnet | MIT |
@@ -194,7 +198,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Inter, JetBrains Mono fonts | SIL Open Font License |
 | Inno Setup (builds `Verbaliox-Installer.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
-Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). If you download other models through Ollama, check their terms.
+Not every Qwen 2.5 size is Apache 2.0 (the 3B and 72B models use a different license). Only Gemma 4 is Apache 2.0: earlier Gemma versions (Gemma 3 and older) use Google's own terms of use. If you download other models through Ollama, check their terms.
 
 ### Support
 
@@ -231,10 +235,10 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Распознавание речи**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) и Silero VAD. Модели `large-v3-turbo`, `large-v3`, а также GigaAM v3 и Parakeet TDT v3 на ONNX Runtime; записи на нескольких языках распознаются пофразово. Точность вычислений (`float16`, `int8_float16`, `int8`) подбирается под объём видеопамяти, при необходимости работа переходит на CPU.
 - **Модель под язык:** для русской речи можно выбрать отдельную модель (GigaAM), для остальных языков работает основная; если язык не указан, его определяет первая минута записи.
 - **Несколько моделей — один текст.** Расшифровка каждой модели хранится отдельно, список над текстом переключает между ними. «Свести версии» собирает из них один текст: где модели согласны — их слово, места, которые они услышали по-разному, выбирает модель анализа (только из вариантов). Такие места остаются подчёркнутыми, щелчок показывает вариант каждой модели.
-- **Разделение по спикерам**: кластеризация голосовых эмбеддингов SpeechBrain ECAPA-TDNN, без токенов. Точность снижается при перебиваниях, очень коротких репликах и похожих голосах, поэтому результат стоит проверять и при необходимости поправлять спикеров вручную.
+- **Разделение по спикерам**: кластеризация голосовых эмбеддингов SpeechBrain ECAPA-TDNN, без токенов. По желанию («Настройки → Распознавание») — **NVIDIA Nemotron 3 Diarization**: размечает, кто когда говорит, по всей записи сразу, до 8 участников; скачивается по запросу, на тестовых совещаниях путала людей примерно втрое реже. Точность снижается при перебиваниях, очень коротких репликах и похожих голосах, поэтому результат стоит проверять и при необходимости поправлять спикеров вручную.
 - **Очистка звука перед распознаванием** (по желанию): фильтры FFmpeg для шумоподавления, удаления щелчков и выравнивания громкости. В плеере также есть простой голосовой фильтр.
 - **Удаление слов-паразитов** («э-э», «ммм», «uh», «um»…). Исходный текст сохраняется, его можно вернуть.
-- **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Qwen3.5 4B, на видеокартах от 10 ГБ — Qwen3 8B) или, по желанию, **облачной моделью по API** (OpenAI, Claude, Gemini, OpenAI-совместимые) с вашим ключом; длинные записи тогда обрабатываются одним запросом. Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
+- **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Gemma 4 E4B на видеокартах от 8 ГБ, Gemma 4 E2B на меньших и без видеокарты) или, по желанию, **облачной моделью по API** (OpenAI, Claude, Gemini, OpenAI-совместимые) с вашим ключом; длинные записи тогда обрабатываются одним запросом. Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
 - **Редактор расшифровки и плеер**: клик по слову перематывает к нему, реплики можно править и склеивать, спикеров — переименовывать; есть звуковая дорожка и выбор скорости.
 - **Запись** с микрофона, системного звука или обоих источников, с пресетами для запуска в один клик. Системный звук захватывается напрямую (WASAPI loopback), без запроса на показ экрана.
 - **Три раздела программы**: **Медиатека** (записи, расшифровки, анализ), **Студия** (запись с живыми субтитрами и переводом в реальном времени, текст печатается без мерцания; можно развернуть на всё окно) и **Вопросы** (к одной записи, к папке или ко всей медиатеке).
@@ -371,7 +375,7 @@ start.bat
 
 ### Лицензии
 
-Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
+Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Под Apache 2.0 только Gemma 4: у прежних версий Gemma (Gemma 3 и старше) собственные условия Google. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
 
 ### Поддержать проект
 

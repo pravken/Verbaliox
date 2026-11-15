@@ -8,6 +8,24 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.8.7 — English
 
+- **Features**: tag a meeting with the feature it is about (one or a few). A series can tag its new
+  meetings by itself; the meeting's Teams title and the analysis model suggest a feature (✓ / ✕). The
+  library and the Tasks page filter and group by feature; a feature's page gathers its meetings, their
+  decisions and its open tasks, with the assistant on them. Settings → Dictionary → Features: a colour,
+  a description, keywords and terms (they help recognition and the models).
+- **The organizer's MFU**: paste the follow-up from the Teams chat into a recording; its tasks are taken
+  as written and the protocol leans on it. Each task card shows where it came from: MFU, LLM or ✎.
+- **Tasks as cards**: the person and the due date open their pickers; «Макс» said in the meeting is
+  «Maksim Orlov» of Teams, a misspelt name is the participant's.
+- **Gemma 4** is the default analysis model (E4B on 8 GB cards and more, E2B below), reading 32k of
+  context at once on 8 GB cards; it shares the card with speech recognition. The app says when Ollama
+  needs updating for it.
+- **Nemotron 3 Diarization** (NVIDIA, OpenMDW-1.1) as a choice for telling speakers apart; a number of
+  speakers said in advance is kept better.
+- **Cloud analysis works with the current models**: Claude, the new OpenAI models and Gemini get
+  requests they accept; a cut, filtered or refused answer is said instead of saved; a retired model is
+  replaced by one of its family; every send is in the privacy log.
+
 - **Settings in 7 tabs instead of 14**: the former tabs are sections (Updates and About in General,
   Hotkeys and Calendar in Recording, Speech models and Dictionary in Recognition, Model comparison and
   Dubbing in Advanced). Old links open the right section.
@@ -395,6 +413,24 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
 
 ## 0.8.7
+
+- **Фичи**: встрече можно указать фичу, к которой она относится (одну или несколько). Серия может
+  ставить фичу своим новым встречам сама; название встречи в Teams и модель анализа подсказывают фичу
+  (✓ / ✕). Медиатека и страница «Задачи» фильтруют и группируют по фичам; страница фичи собирает её
+  встречи, их решения и открытые задачи, с ассистентом по ним. Настройки → Словарь → Фичи: цвет,
+  описание, ключевые слова и термины (они помогают распознаванию и моделям).
+- **MFU организатора**: итоги из чата Teams вставляются в запись; задачи из них берутся как написано, а
+  протокол на них опирается. На каждой карточке задачи видно, откуда она: MFU, LLM или ✎.
+- **Задачи — карточками**: исполнитель и срок открывают свои списки; «Макс», сказанный на встрече, — это
+  «Maksim Orlov» из Teams, имя с опечаткой — имя участника.
+- **Gemma 4** — модель анализа по умолчанию (E4B для видеокарт от 8 ГБ, E2B — для меньших), на 8 ГБ
+  читает 32k контекста за раз и делит видеокарту с распознаванием. Программа скажет, если для неё нужно
+  обновить Ollama.
+- **Nemotron 3 Diarization** (NVIDIA, OpenMDW-1.1) — на выбор для разделения участников; заданное заранее
+  число участников соблюдается лучше.
+- **Облачный анализ работает с текущими моделями**: Claude, новые модели OpenAI и Gemini получают
+  запросы, которые принимают; обрезанный, отфильтрованный или отклонённый ответ показывается ошибкой, а не
+  сохраняется; снятая модель заменяется моделью того же семейства; каждая отправка видна в журнале.
 
 - **Настройки — 7 вкладок вместо 14**: бывшие вкладки стали разделами (Обновления и О программе — в
   Общих, Горячие клавиши и Календарь — в Записи, Модели речи и Словарь — в Распознавании, Сравнение моделей
