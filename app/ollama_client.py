@@ -662,6 +662,23 @@ def build_transcript_lines(
     return lines
 
 
+_UNNAMED_RU = re.compile(r"^Участник[ _]?(\d+)$", re.I)
+
+
+def speakers_in_language(speakers: Dict[str, Dict[str, Any]], answer_lang: Optional[str]) -> Dict[str, Dict[str, Any]]:
+    """The unnamed speakers as the answer's language calls them: «Участник 2» is «Speaker 2» for an English
+    overview (an English protocol mixed «Участник» and «Participant», and once wrote «Uчастник» with a
+    Latin U, bench-report/analysis-chain.md). Named speakers stay as they are."""
+    if not str(answer_lang or "").lower().startswith("en"):
+        return speakers
+    out = {}
+    for key, sp in (speakers or {}).items():
+        name = str((sp or {}).get("name") or "") if isinstance(sp, dict) else ""
+        m = _UNNAMED_RU.match(name.strip())
+        out[key] = {**sp, "name": f"Speaker {m.group(1)}"} if m else sp
+    return out
+
+
 def _chunk_lines(lines: List[str], max_chars: int) -> List[str]:
     chunks: List[str] = []
     current: List[str] = []
@@ -1099,7 +1116,7 @@ def generate_meeting_summary(
 
     # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
     llm = target(model_name, local_only=local_only)
-    lines = build_transcript_lines(segments, speakers)
+    lines = build_transcript_lines(segments, speakers_in_language(speakers, answer_lang))
     transcript_text = "\n".join(lines)
     if not transcript_text.strip():
         raise RuntimeError("Транскрипт пуст, нечего анализировать.")
