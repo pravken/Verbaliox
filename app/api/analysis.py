@@ -118,8 +118,10 @@ def api_meeting_features(meeting_id: int, payload: MeetingFeaturesPayload) -> Di
 def api_accept_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
     from app.features import accept_suggestion, list_features
 
-    if not get_meeting(meeting_id) or feature_id not in {f['id'] for f in list_features()}:
+    if not get_meeting(meeting_id):
         raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if feature_id not in {f['id'] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
 
     accept_suggestion(meeting_id, feature_id)
     m = get_meeting(meeting_id) or {}
@@ -129,8 +131,10 @@ def api_accept_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
 def api_decline_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
     from app.features import decline_suggestion, list_features
 
-    if not get_meeting(meeting_id) or feature_id not in {f['id'] for f in list_features()}:
+    if not get_meeting(meeting_id):
         raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if feature_id not in {f['id'] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
 
     decline_suggestion(meeting_id, feature_id)
     m = get_meeting(meeting_id) or {}

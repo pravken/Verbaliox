@@ -763,6 +763,9 @@ SUMMARY_TEMPLATES: Dict[str, str] = {
         "(Перечисли по пунктам с таймкодами `[ММ:СС]`, о чём именно говорили спикеры и какие оценки/мнения они высказали)\n\n"
         "## Упомянутые имена, объекты и детали\n"
         "(Какие имена, предметы, места или конкретные факты прозвучали в речи)\n\n"
+        "## Решения\n"
+        "(О чём договорились или что решили — по пунктам, с таймкодами `[ММ:СС]`. Если решений не было, "
+        "напиши одной строкой без пункта: «Решений не принималось»)\n\n"
         "## Итог\n"
         "(Краткое резюме сказанного в 1–2 предложениях строго по тексту)"
     ),
@@ -920,6 +923,13 @@ def _analysis_leave() -> None:
 LLM_RETRY_ANSWER_TOKENS = 8192  # once, when an answer was cut at LLM_MAX_ANSWER_TOKENS
 
 
+def _goes_round(text: str) -> bool:
+    """A model repeating itself: of the last 12 lines, half or more were already written."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    tail = lines[-12:]
+    return len(tail) >= 6 and len(tail) - len(set(tail)) >= len(tail) // 2
+
+
 def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False) -> str:
     """short: a short answer (a title, «да / нет» checks, a feature's name): the model does not reason
     first, which is most of the time of such an answer."""
@@ -968,12 +978,18 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
             data = resp.json()
             # Cut at the answer limit (a model that reasons spends part of it thinking: gemma4's summaries
             # lost their end in 6 of 9 recordings): asked once more with room to finish, not saved cut
-            if data.get("done_reason") == "length" and payload["options"]["num_predict"] < LLM_RETRY_ANSWER_TOKENS:
+            # Not for a short answer (a title, a yes or no) and not for a model gone round in circles: more room
+            # would only give it more of the same lines
+            first = str((data.get("message") or {}).get("content") or "")
+            if (data.get("done_reason") == "length" and payload["options"]["num_predict"] < LLM_RETRY_ANSWER_TOKENS
+                    and not short and not _goes_round(first)):
                 print(f"[ollama] {model}: the answer was cut at {payload['options']['num_predict']} tokens, asked again", flush=True)
                 payload["options"]["num_predict"] = LLM_RETRY_ANSWER_TOKENS
                 resp = client.post(f"{base_url}/api/chat", json=payload)
                 raise_for_ollama(resp)
                 data = resp.json()
+            if data.get("done_reason") == "length":
+                print(f"[ollama] {model}: the answer is cut at {payload['options']['num_predict']} tokens", flush=True)
             msg = data.get("message") or {}
             return strip_think(str(msg.get("content") or data.get("response") or ""))
 

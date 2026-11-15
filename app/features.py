@@ -100,12 +100,17 @@ LIST_MAX = 400  # keywords, terms: comma-separated
 
 def _clean_list(text: Optional[str]) -> str:
     """«возвраты, эквайринг ,payments» -> «возвраты, эквайринг, payments» (each once, in order)."""
-    items = []
-    for x in re.split(r"[,;\n]", _INVISIBLE.sub("", str(text or ""))):
-        x = " ".join(x.split())[:NAME_MAX]
-        if x and x.casefold() not in {i.casefold() for i in items}:
-            items.append(x)
-    return ", ".join(items)[:LIST_MAX]
+    items: List[str] = []
+    size = 0
+    for x in re.split(r"[,;\n]", str(text or "")):  # split first: a line break separates too
+        x = " ".join(_INVISIBLE.sub("", x).split())[:NAME_MAX]
+        if not x or x.casefold() in {i.casefold() for i in items}:
+            continue
+        size += len(x) + (2 if items else 0)
+        if size > LIST_MAX:  # whole items only: a cut one would reach recognition and the glossary
+            break
+        items.append(x)
+    return ", ".join(items)
 
 
 def split_list(text: Optional[str]) -> List[str]:
@@ -354,8 +359,8 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
 
 
 # --- The page of a feature: its meetings, the decisions written in their summaries, its tasks ---
-_DECISION_HEAD = re.compile(r"^\s{0,3}#{1,6}\s*.*(решени|договор|decision|agreed)", re.I)
-_ANY_HEAD = re.compile(r"^\s{0,3}#{1,6}\s")
+_DECISION_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s*|\*\*).*(решени|договор|decision|agreed)", re.I)
+_ANY_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s|\*\*[^*]+\*\*:?\s*$)")  # «## Решения» or a line «**Решения**»
 _BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
 DECISIONS_PER_MEETING = 12
 

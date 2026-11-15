@@ -236,7 +236,7 @@ function setTasksView(view) {
   renderTasks();
 }
 
-function setTasksGroup(by) { TK.by = by; renderTasks(); }
+function setTasksGroup(by) { TK.by = by; TK.open = new Set(); renderTasks(); }  // a group opened in full belongs to its grouping
 function setTasksFilter(f) { TK.filter = f; TK.keep.clear(); renderTasks(); }
 function onTasksSearch(value) { TK.q = value; TK.keep.clear(); renderTasks(); }
 function clearTasksPeople() { TK.people = []; TK.report = null; renderTasks(); }
@@ -377,6 +377,7 @@ async function tkPatch(id, changes) {
   if (i >= 0) TK.data.tasks[i] = task;
   // changed from a recording's task card: the card shows it at once
   if (state.activeMeeting && state.activeSummaryTab === 'commitments' && typeof renderSummaryPanel === 'function') renderSummaryPanel();
+  if (typeof refreshFeaturePage === 'function') refreshFeaturePage();
   return task;
 }
 

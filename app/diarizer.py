@@ -393,7 +393,7 @@ def _labels_from_turns(
     if num_speakers_hint > 1 and len(set(labels.tolist())) > num_speakers_hint and embeddings is not None and len(valid_indices):
         rows = np.array(valid_indices)
         # each phrase of a group taken apart goes to its closest voice (they were all put on the voice of
-        # the group's first phrase before: found by the Fable audit); the groups kept keep their numbers
+        # the group's first phrase before: found by an audit); the groups kept keep their numbers
         labels[rows] = _fold_least_heard(embeddings, durations, labels[rows], num_speakers_hint, renumber=False)
         kept = set(labels[rows].tolist())
         sure = [i for i in range(n) if int(labels[i]) in kept]
