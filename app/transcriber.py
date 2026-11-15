@@ -1226,6 +1226,15 @@ def _after_transcription(
         series.auto_assign(meeting_id)
     except Exception as e:
         print(f"[series] meeting {meeting_id}: {e}", flush=True)
+    try:  # its features: the series' own (set by the user), else the analysis model's suggestion (app/features.py)
+        from app import features, llm as llm_targets
+        from app.database import is_local_only as _local_only
+
+        if not features.apply_series_rule(meeting_id) and settings.get("feature_suggest", "true").lower() == "true" \
+                and features.list_features() and llm_targets.available(settings, local_only=_local_only(get_meeting(meeting_id) or {})):
+            features.suggest(meeting_id)
+    except Exception as e:
+        print(f"[features] meeting {meeting_id}: {e}", flush=True)
     if obsidian.auto_export_enabled(settings):
         update_meeting_progress(meeting_id, progress=97, stage_text="Сохранение заметки в Obsidian...")
         try:
