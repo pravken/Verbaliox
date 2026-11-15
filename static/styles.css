@@ -1769,6 +1769,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tk-pop-quote { padding: 6px 8px 8px; margin-bottom: 4px; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); border-bottom: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
 .tk-pop-cap { padding: 8px 8px 3px; font-size: var(--fs-label); line-height: 1.35; font-weight: 600; letter-spacing: 0.04em; color: var(--hc-dim, #8E8E93); }
 .tk-pop-cap:empty { padding: 4px 0; margin: 2px 6px; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
+.tk-pop-item[hidden], .tk-pop-group[hidden] { display: none; }
 .tk-pop-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #F5F5F7; text-align: left; font-size: var(--fs-ui); cursor: pointer; box-sizing: border-box; }
 .tk-pop-item:hover { background: rgba(255, 255, 255, 0.08); }
 .tk-pop-item input[type="checkbox"] { margin: 0; accent-color: #0A84FF; }

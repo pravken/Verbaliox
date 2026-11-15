@@ -476,6 +476,15 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
             for k in ("who", "to"):
                 if isinstance(x.get(k), str) and x[k].strip():
                     x[k] = resolve_person(x[k], roster)
+    try:  # a variant of a name merged in the people directory («Макс» added to someone): the directory's name
+        from app.people import canonical
+
+        for x in found + from_mfu:
+            for k in ("who", "to"):
+                if isinstance(x.get(k), str) and x[k].strip():
+                    x[k] = canonical(x[k].strip())
+    except Exception as e:
+        print(f"[commitments] directory names: {e}", flush=True)
     items = prune([x for x in found if supported(x, m) and not in_meeting_action(x)])
     items = verify(items, m, llm)  # a second look, task by task, with the lines around it
     items = [x for x in items if not in_meeting_action(x)]

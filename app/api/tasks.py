@@ -40,8 +40,23 @@ def api_tasks() -> Dict[str, Any]:
     tags = feature_map(t["meeting_id"] for t in tasks)  # a task belongs to the features of its meeting
     for t in tasks:
         t["features"] = tags.get(t["meeting_id"], [])
-    return {"tasks": tasks, "people": commitments.people(tasks, briefs), "meetings": _meetings(briefs),
-            "today": date.today().isoformat()}
+    return {"tasks": tasks, "people": commitments.people(tasks, briefs), "directory": _directory(),
+            "meetings": _meetings(briefs), "today": date.today().isoformat()}
+
+
+def _directory() -> List[Dict[str, Any]]:
+    """Everyone of the people directory («Все люди»: the speakers of every recording, the calendar's
+    invitees, the names added by hand), for giving a task to someone who was not in its meeting."""
+    from app.people import directory
+    from app.voice_profiles import is_default_name
+
+    try:
+        rows = directory()
+    except Exception as e:  # the picker still has the meeting's people
+        print(f"[tasks] directory: {e}", flush=True)
+        return []
+    return [{"name": d["name"], "kind": "team" if d.get("kind") == "dept" else "ext", "role": d.get("role") or ""}
+            for d in rows if d.get("name") and not is_default_name(d["name"])]
 
 
 class TaskPayload(BaseModel):
