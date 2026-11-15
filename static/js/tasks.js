@@ -265,7 +265,7 @@ function tkGroups(items) {
   } else if (TK.by === 'feature') {
     for (const x of items) {
       const f = featureById((x.features || [])[0]);
-      add(f ? `f${f.id}` : 'none', () => ({ title: f ? f.name : t('ftNoFeature'), color: f ? f.color : '#636366', order: f ? 0 : 1 })).items.push(x);
+      add(f ? `f${f.id}` : 'none', () => ({ title: f ? f.name : t('ftNoFeature'), color: f ? f.color : '#636366', order: f ? 0 : 1, featureId: f ? f.id : 0 })).items.push(x);
     }
     groups.sort((a, b) => a.order - b.order || _libCollator.compare(a.title, b.title));
   } else if (TK.by === 'record') {
@@ -322,7 +322,7 @@ function renderTasksList() {
     const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
     return `<section class="tk-group">
-      <div class="tk-group-head">${head}<span class="tk-group-title">${escapeHtml(g.title)}</span>${kind}${me}
+      <div class="tk-group-head">${head}${g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>` : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`}${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
       ${tkGroupRowsHtml(g)}

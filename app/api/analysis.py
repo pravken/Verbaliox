@@ -63,6 +63,16 @@ def api_create_feature(payload: FeaturePayload) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.get("/api/features/{feature_id}")
+def api_feature_page(feature_id: int) -> Dict[str, Any]:
+    """The page of a feature: its meetings with their decisions, and their tasks."""
+    from app.features import overview
+
+    data = overview(feature_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
+    return data
+
 @router.patch("/api/features/{feature_id}")
 def api_update_feature(feature_id: int, payload: FeaturePayload) -> List[Dict[str, Any]]:
     from app.features import list_features, update_feature
