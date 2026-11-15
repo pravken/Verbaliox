@@ -113,6 +113,71 @@ class CloudLlmTest(unittest.TestCase):
         self.assertEqual(self._chat(fake), "ok")
         self.assertEqual(len(fake.requests), 2)
 
+    def test_current_claude_models_get_no_temperature_and_room_to_reason(self):
+        _use("anthropic", "claude-opus-5-5")
+        fake = _Fake((200, {"content": [{"type": "thinking", "thinking": ""}, {"type": "text", "text": "ok"}], "stop_reason": "end_turn"}))
+        self.assertEqual(self._chat(fake), "ok")
+        body = json.loads(fake.requests[0].content)
+        self.assertNotIn("temperature", body)  # refused by Claude Opus 5.5, Sonnet 5.5 and Haiku 5.5 (HTTP 400)
+        self.assertGreaterEqual(body["max_tokens"], 16000)
+
+    def test_a_refusal_or_a_cut_answer_is_an_error_not_an_answer(self):
+        _use("anthropic", "claude-sonnet-5-5")
+        with self.assertRaises(llm.LlmError) as ctx:
+            self._chat(_Fake((200, {"content": [], "stop_reason": "refusal", "stop_details": {"category": "cyber"}})))
+        self.assertIn("отказалась отвечать на этот текст (cyber)", str(ctx.exception))
+        with self.assertRaises(llm.LlmError) as ctx:
+            self._chat(_Fake((200, {"content": [{"type": "text", "text": "[{\"what\": \"обнов"}], "stop_reason": "max_tokens"})))
+        self.assertIn("обрезан", str(ctx.exception))
+        _use("openai", "gpt-x")
+        with self.assertRaises(llm.LlmError):
+            self._chat(_Fake((200, {"choices": [{"message": {"content": "## Обз"}, "finish_reason": "length"}]})))
+        _use("gemini", "gemini-x")
+        with self.assertRaises(llm.LlmError):
+            self._chat(_Fake((200, {"candidates": [{"content": {"parts": [{"text": "## Обз"}]}, "finishReason": "MAX_TOKENS"}]})))
+
+    def test_a_model_that_takes_no_temperature_is_asked_again_without_it(self):
+        _use("openai", "gpt-5-mini")
+        llm._NO_TEMPERATURE.clear()
+        refusal = {"error": {"message": "Unsupported value: 'temperature' does not support 0.2 with this model."}}
+        fake = _Fake((400, refusal), (200, {"choices": [{"message": {"content": "ok"}}]}))
+        self.assertEqual(self._chat(fake), "ok")
+        self.assertIn("temperature", json.loads(fake.requests[0].content))
+        self.assertNotIn("temperature", json.loads(fake.requests[1].content))
+        fake = _Fake((200, {"choices": [{"message": {"content": "ok"}}]}))
+        self._chat(fake)  # remembered: one request
+        self.assertNotIn("temperature", json.loads(fake.requests[0].content))
+        llm._NO_TEMPERATURE.clear()
+
+    def test_reasoning_of_a_compatible_service_is_dropped(self):
+        _use("openai_compat", "qwen3", llm_base_url_openai_compat="http://127.0.0.1:1234/v1")
+        fake = _Fake((200, {"choices": [{"message": {"content": "<think>hm</think>\nОтвет"}, "finish_reason": "stop"}]}))
+        self.assertEqual(self._chat(fake), "Ответ")
+
+    def test_a_retired_model_is_replaced_by_one_the_key_has(self):
+        _use("anthropic", "claude-old-1")
+        gone = {"type": "error", "error": {"type": "not_found_error", "message": "model: claude-old-1"}}
+        fake = _Fake((404, gone), (200, {"data": [{"id": "claude-sonnet-5-5"}, {"id": "claude-haiku-5-5"}]}),
+                     (200, {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn"}))
+        self.assertEqual(self._chat(fake), "ok")
+        self.assertEqual(json.loads(fake.requests[2].content)["model"], "claude-sonnet-5-5")
+        self.assertEqual(llm.cloud_model("anthropic"), "claude-sonnet-5-5")  # kept for the next time
+
+    def test_a_timeout_is_not_asked_again(self):
+        _use("anthropic")
+        calls = []
+
+        def slow(request):
+            calls.append(request)
+            raise httpx.ReadTimeout("slow", request=request)
+
+        with mock.patch("app.llm.httpx.Client", side_effect=lambda **kw: _RealClient(transport=httpx.MockTransport(slow), **kw)), \
+                mock.patch("app.llm.time.sleep"):
+            with self.assertRaises(llm.LlmError) as ctx:
+                llm.target().chat("s", "u")
+        self.assertEqual(len(calls), 1)  # a second wait as long, and maybe paid again, would help nobody
+        self.assertIn("не ответил", str(ctx.exception))
+
     def test_missing_key_and_availability(self):
         update_settings({"llm_provider": "cloud", "llm_cloud_provider": "anthropic"})
         self.assertFalse(llm.available())
