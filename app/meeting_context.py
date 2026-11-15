@@ -4,8 +4,9 @@ the next one, so the protocol, the tasks, the short summary and the follow-up em
 
 - for a summary (any tab): the tasks found in this recording (who, what, due);
 - for a tab other than the protocol: the protocol's «Решения», «Открытые вопросы» and «Следующие шаги»;
-- for the tasks (commitments.extract): the protocol's decisions and next steps, as hints to check against
-  the transcript like the organizer's MFU — a decision that is an action becomes a task.
+- the tasks themselves are found in the transcript alone: the protocol's points as hints narrowed the search
+  or brought in points that are not tasks (bench-report/analysis-chain.md); the protocol takes the tasks
+  instead (app/analysis_chain).
 
 Without a protocol or tasks yet the note is empty and nothing changes.
 """
@@ -76,18 +77,3 @@ def note_for_summary(meeting: Dict[str, Any], template_key: str) -> str:
         if proto:
             parts.append("Протокол этой встречи (по той же расшифровке) отметил:\n" + proto)
     return "\n\n".join(parts)[:CONTEXT_MAX_CHARS]
-
-
-def note_for_tasks(meeting: Dict[str, Any], protocol_md: str = "") -> str:
-    """The protocol's decisions and next steps, as hints for finding the tasks ('' without a protocol).
-    protocol_md: another text with those sections (the decisions of the analysis in steps, app/analysis_chain)."""
-    source = {"summaries": {"protocol": protocol_md}} if protocol_md else meeting
-    proto = _protocol_note(source, keys=("decisions", "next"))
-    if not proto:
-        return ""
-    # Said as an addition: a list read as «the tasks are these» narrowed the search to it (bench-report/analysis-chain.md)
-    return ("Сначала найди задачи по всей расшифровке, как обычно: список ниже их не заменяет и не ограничивает. "
-            "Затем проверь и его: протокол этой встречи (составлен по той же расшифровке) отметил решения и "
-            "следующие шаги. Если из пункта следует конкретное действие, которое кто-то должен сделать, и его ещё "
-            "нет среди найденных, выпиши его задачей — только если оно действительно прозвучало в расшифровке, с "
-            "цитатой из неё:\n" + proto)[:CONTEXT_MAX_CHARS]

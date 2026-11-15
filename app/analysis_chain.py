@@ -153,7 +153,7 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
         try:  # without the tasks the protocol is still made (its next steps: the tasks found before)
             # No hints: the decisions given as hints narrowed the search to them (recall 0.20 against 0.39
             # without, bench-report/analysis-chain.md, «Перемер после правок»)
-            commitments.extract(meeting_id, model_name, hints="")
+            commitments.extract(meeting_id, model_name)
         except Exception as e:
             print(f"[analysis_chain] tasks of meeting {meeting_id}: {e}", flush=True)
     tasks = task_lines(meeting_id)

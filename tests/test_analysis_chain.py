@@ -82,7 +82,7 @@ class ChainTest(unittest.TestCase):
 
         def fake_extract(meeting_id, model_name=None, hints=None):
             calls.append("tasks")
-            self.assertEqual(hints, "")  # the whole transcript: the decisions as hints narrowed the search
+            self.assertIsNone(hints)  # the whole transcript: the decisions as hints narrowed the search
             commitments.create("позвонить в агентство", "Ольга", "part", "", meeting_id)
             return []
 

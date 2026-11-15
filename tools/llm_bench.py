@@ -190,7 +190,7 @@ def _schema_check(m: Dict[str, Any], mid: str, base: str) -> Dict[str, Any]:
 
 def _reset_analysis(meeting_id: int) -> None:
     """The recording as just transcribed: no tasks and no protocol in the copy, so the tasks are not told
-    an earlier protocol's decisions (note_for_tasks) and the protocol not earlier tasks."""
+    an earlier protocol's decisions (once given as hints) and the protocol not earlier tasks."""
     from app.database import get_connection
 
     with get_connection() as conn:

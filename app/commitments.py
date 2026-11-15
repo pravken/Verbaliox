@@ -440,8 +440,7 @@ def supported(item: Dict[str, Any], m: Dict[str, Any]) -> bool:
 
 def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[str] = None) -> List[Dict[str, Any]]:
     """Finds the promises of a recording (again: the earlier list of this recording is replaced,
-    keeping what was ticked off). hints: the decisions to check against the transcript (the analysis in
-    steps gives its own; else the protocol's are used)."""
+    keeping what was ticked off). hints: more to tell the model (none by default)."""
     from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import build_transcript_lines
@@ -470,10 +469,10 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
         about = describe(m.get("features") or [])
         glossary = vocab.glossary_note(already=about)
         head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (glossary + "\n\n" if glossary else "")
-        from app.meeting_context import note_for_tasks
-
-        note = hints if hints is not None else note_for_tasks(m)  # the decisions: one context for every tab
-        head += (note + "\n\n") if note else ""
+        # No protocol points by default: as hints they first narrowed the search, then (said as an addition)
+        # added the protocol's points that are not tasks — precision 0.70 against 0.81, the same recall
+        # (bench-report/analysis-chain.md, «Перемер задач»). The protocol takes the tasks instead.
+        head += (hints + "\n\n") if hints else ""
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
