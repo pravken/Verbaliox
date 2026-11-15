@@ -392,15 +392,14 @@ def _labels_from_turns(
     labels = np.array(by_turn, dtype=int)
     if num_speakers_hint > 1 and len(set(labels.tolist())) > num_speakers_hint and embeddings is not None and len(valid_indices):
         rows = np.array(valid_indices)
-        folded = _fold_least_heard(embeddings, durations, labels[rows], num_speakers_hint)
-        # the folded numbers are by first appearance among the phrases with a voice print: map back
-        remap: Dict[int, int] = {}
-        for old, new in zip(labels[rows].tolist(), folded.tolist()):
-            remap.setdefault(old, new)
-        heard = {int(v): float(np.sum(durations[labels[rows] == v])) for v in set(labels[rows].tolist())}
-        for v in set(labels.tolist()) - set(remap):  # a speaker without voice prints: the most heard one
-            remap[v] = remap[max(heard, key=heard.get)] if heard else 0
-        labels = np.array([remap[int(v)] for v in labels], dtype=int)
+        # each phrase of a group taken apart goes to its closest voice (they were all put on the voice of
+        # the group's first phrase before: found by the Fable audit); the groups kept keep their numbers
+        labels[rows] = _fold_least_heard(embeddings, durations, labels[rows], num_speakers_hint, renumber=False)
+        kept = set(labels[rows].tolist())
+        sure = [i for i in range(n) if int(labels[i]) in kept]
+        for i in range(n):  # a phrase without a voice print of a group taken apart: its closest neighbour's
+            if int(labels[i]) not in kept and sure:
+                labels[i] = labels[min(sure, key=lambda j: abs(j - i))]
     order: Dict[int, int] = {}
     out = []
     for v in labels.tolist():
@@ -409,7 +408,8 @@ def _labels_from_turns(
     return out
 
 
-def _fold_least_heard(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+def _fold_least_heard(embeddings: np.ndarray, durations: np.ndarray, labels: np.ndarray, k: int,
+                      renumber: bool = True) -> np.ndarray:
     """Fewer groups than Auto found, as many as said: the group heard least is taken apart, each of its
     phrases going to the closest remaining voice (duration-weighted centroids), until k are left;
     renumbered in the order they first speak. The extra group Auto finds is a small one (scraps of
@@ -434,6 +434,8 @@ def _fold_least_heard(embeddings: np.ndarray, durations: np.ndarray, labels: np.
         idx = np.where(labels == least)[0]
         nearest = np.argmax(embeddings[idx] @ cents.T, axis=1)
         labels[idx] = np.array(rest)[nearest]
+    if not renumber:  # the groups keep their own numbers (the ones taken apart are gone)
+        return labels
     order: Dict[int, int] = {}
     out = np.zeros(len(labels), dtype=int)
     for i, lbl in enumerate(labels):

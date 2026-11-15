@@ -85,6 +85,21 @@ class TurnsOnTranscriptTest(unittest.TestCase):
         self.assertEqual(labels, [0, 1, 0, 0])
 
 
+    def test_a_group_taken_apart_goes_phrase_by_phrase(self):
+        """Nemotron heard 3, 2 were said: the third one's phrases go each to its closest voice."""
+        rng = np.random.default_rng(4)
+        a, b = rng.normal(size=192), rng.normal(size=192)
+        unit = lambda v: v / np.linalg.norm(v)  # noqa: E731
+        turns = [(0, 10, 0), (10, 20, 1), (20, 21, 2), (21, 22, 2), (22, 32, 0)]
+        segs = [{"start": 1, "end": 9}, {"start": 11, "end": 19}, {"start": 20, "end": 21}, {"start": 21, "end": 22},
+                {"start": 23, "end": 31}]
+        embs = np.vstack([unit(a), unit(b), unit(b + rng.normal(size=192) * 0.1), unit(a + rng.normal(size=192) * 0.1),
+                          unit(a)]).astype(np.float32)
+        durs = np.array([8, 8, 1, 1, 8], dtype=np.float32)
+        labels = diarizer._labels_from_turns(segs, [0, 1, 2, 3, 4], embs, durs, turns, num_speakers_hint=2)
+        self.assertEqual(labels, [0, 1, 1, 0, 0])  # the third group's two phrases: one to each voice
+
+
 @unittest.skipIf(diarizer is None, "numpy/torch not installed")
 class NemotronChoiceTest(unittest.TestCase):
     def test_used_only_when_chosen_downloaded_and_the_library_is_there(self):
