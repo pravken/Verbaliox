@@ -339,6 +339,8 @@ async function tkPatch(id, changes) {
   const task = await res.json();
   const i = TK.data.tasks.findIndex(x => x.id === id);
   if (i >= 0) TK.data.tasks[i] = task;
+  // changed from a recording's task card: the card shows it at once
+  if (state.activeMeeting && state.activeSummaryTab === 'commitments' && typeof renderSummaryPanel === 'function') renderSummaryPanel();
   return task;
 }
 
