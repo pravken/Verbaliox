@@ -2431,6 +2431,8 @@ th.mc-size { font-family: inherit; }
 .mm-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
 .mm-dots i.on { background: #0A84FF; }
 .mm-load i.on { background: #FFB340; }
+.mm-dots i.half { background: linear-gradient(90deg, #0A84FF 50%, rgba(255, 255, 255, 0.14) 50%); }
+.mm-load i.half { background: linear-gradient(90deg, #FFB340 50%, rgba(255, 255, 255, 0.14) 50%); }
 .mc-no .mm-x, .mm-x { color: #FF453A; font-weight: 700; font-size: 12px; line-height: 1; }
 
 /* The calendar of a week or a month (home.js openCalendarView) */
@@ -2802,7 +2804,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .mm-lbl { font-size: 11px; color: var(--hc-dim, #8E8E93); }
 .mm-line .mc-sub { display: inline; margin: 0 0 0 4px; font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
 .mm-val { font-variant-numeric: tabular-nums; }
-.mm-est { font-style: italic; }
 /* A card that opens on a click says so under the cursor: a lighter edge and tint, the «i» lights up */
 .mc-card:has(.mc-info) { cursor: pointer; transition: box-shadow 0.15s ease; }
 .mc-card:has(.mc-info):hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 0 0 999px rgba(255, 255, 255, 0.025); }

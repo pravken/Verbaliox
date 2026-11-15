@@ -1637,44 +1637,29 @@ function modelSizeLabel(item) {
   return item.size || (item.size_mb >= 1000 ? (item.size_mb / 1024).toFixed(1) + ' GB' : (item.size_mb || '') + ' MB');
 }
 
-// --- Model meters: accuracy, speed and load in five dots, with the measured number beside them.
-// Speech (bench-report/gpu-report.md, FLEURS after loudness normalization, RTX 3090): word error rate per language;
-// the dots count against the best model in that language, so a gap of a few tenths does not hide behind
-// five equal dots. Speed follows this computer: with an NVIDIA card the GPU figures, without one the CPU ones.
-// Analysis (bench-report/llm-profiles.md, 9 recordings with a checked task list): the share of the
-// reference tasks found, and the time of the summary of an hour-long meeting. A model left out of those
-// measurements has an estimate from its size, said as such. Memory: ram on the processor, vram on the card.
+// --- Model meters: accuracy (or quality), speed and load in dots, half a dot a step, so that no two models
+// share a score in one list: a tie hid what one model gains over another. Speech (bench-report/gpu-report.md,
+// FLEURS after loudness normalization, RTX 3090): the order follows the word error rate per language, shown
+// beside the dots as accuracy; speed follows this computer (the GPU figures with an NVIDIA card, else the CPU
+// ones). Analysis (bench-report/llm-profiles.md, 9 recordings with a checked task list): the order of the
+// tasks found and of the time for an hour-long meeting; numbers are not shown (a share of tasks reads as
+// a pass mark). A model left out of those measurements is placed by its size. Memory: ram on the
+// processor, vram on the card.
 const MODEL_METERS = {
-  'gigaam-v3': { wer: { ru: 3.53 }, speed: { cpu: [4, '30'], gpu: [5, '50'] }, load: [1], ram: 1.4, vram: 2.5 },
-  'parakeet-v3': { wer: { ru: 5.48, en: 7.78 }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
-  'large-v3-turbo': { wer: { ru: 3.97, en: 5.82 }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
-  'large-v3': { wer: { ru: 3.84, en: 5.65 }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
-  // hour: seconds for the summary of an hour-long meeting; null: not measured (dots from the size)
-  'gemma4:e4b': { recall: 0.51, hour: { gpu: 88, cpu: 660 }, load: [3], ram: 6, vram: 5 },
-  'gemma4:e2b': { recall: 0.30, hour: { gpu: 50, cpu: 312 }, load: [2], ram: 4, vram: 3 },
-  'qwen3:8b': { recall: 0.32, hour: { gpu: 334, cpu: null }, est: { cpu: 1 }, load: [3], ram: 10, vram: 10 },
-  'qwen3.5:4b': { recall: 0.17, hour: { gpu: 72, cpu: 600 }, load: [2], ram: 5, vram: 5 },
-  'qwen3:14b': { recall: null, est: { quality: 3, gpu: 1, cpu: 1 }, load: [5], ram: 12, vram: 12 },
-  'qwen2.5:1.5b': { recall: null, est: { quality: 1, gpu: 5, cpu: 4 }, load: [1], ram: 2, vram: 2 },
+  'gigaam-v3': { wer: { ru: 3.53 }, acc: { ru: 5 }, speed: { cpu: [5, '30'], gpu: [4, '50'] }, load: [1], ram: 1.4, vram: 2.5 },
+  'large-v3': { wer: { ru: 3.84, en: 5.65 }, acc: { ru: 4.5, en: 5 }, speed: { cpu: [1, ''], gpu: [2.5, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
+  'large-v3-turbo': { wer: { ru: 3.97, en: 5.82 }, acc: { ru: 4, en: 4.5 }, speed: { cpu: [1.5, ''], gpu: [4.5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
+  'parakeet-v3': { wer: { ru: 5.48, en: 7.78 }, acc: { ru: 2.5, en: 3 }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
+  'gemma4:e4b': { quality: 5, speed: { cpu: [2, ''], gpu: [3.5, ''] }, load: [3], ram: 6, vram: 5 },
+  'qwen3:14b': { quality: 4, est: true, speed: { cpu: [1, ''], gpu: [1, ''] }, load: [5], ram: 12, vram: 12 },
+  'qwen3:8b': { quality: 3.5, speed: { cpu: [1.5, ''], gpu: [2, ''] }, load: [3], ram: 10, vram: 10 },
+  'gemma4:e2b': { quality: 3, speed: { cpu: [4, ''], gpu: [4.5, ''] }, load: [2], ram: 4, vram: 3 },
+  'qwen3.5:4b': { quality: 2, speed: { cpu: [3, ''], gpu: [4, ''] }, load: [2], ram: 5, vram: 5 },
+  'qwen2.5:1.5b': { quality: 1, est: true, speed: { cpu: [5, ''], gpu: [5, ''] }, load: [1], ram: 2, vram: 2 },
 };
 
-// Accuracy dots against the best model in the language: within 5% of its errors — five, then four up to 15%,
-// three up to 40%, two up to 80%
-function werDots(wer, lang) {
-  const best = Math.min(...Object.values(MODEL_METERS).map(m => (m.wer && m.wer[lang]) || Infinity));
-  const r = wer / best;
-  return r <= 1.05 ? 5 : r <= 1.15 ? 4 : r <= 1.4 ? 3 : r <= 1.8 ? 2 : 1;
-}
-// Quality dots: the share of tasks found against the best model's share
-function recallDots(recall) {
-  const best = Math.max(...Object.values(MODEL_METERS).map(m => m.recall || 0));
-  return Math.max(1, Math.round(5 * recall / best));
-}
-// Speed of a summary of an hour-long meeting: up to a minute — five, two — four, four — three, seven — two
-function hourDots(sec) { return sec <= 60 ? 5 : sec <= 120 ? 4 : sec <= 240 ? 3 : sec <= 420 ? 2 : 1; }
-
 function meterDots(n, cls) {
-  return `<span class="mm-dots ${cls || ''}" aria-hidden="true">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+  return `<span class="mm-dots ${cls || ''}" aria-hidden="true">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : i - 0.5 <= n ? 'half' : ''}"></i>`).join('')}</span>`;
 }
 
 function hasFastGpu() {
@@ -1693,47 +1678,26 @@ function meterAccCell(m, lang) {
     const tip = t('mmNoLangTip').replace('{lang}', () => name);
     return `<td class="mc-no" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}"><span class="mm-x" aria-hidden="true">✕</span></td>`;
   }
-  const n = werDots(wer, lang);
+  const n = m.acc[lang];
   const acc = meterNum((100 - wer).toFixed(1));
   const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => meterNum(wer.toFixed(1)));
-  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5, ${acc}%. ${tip}`)}">${meterDots(n)}${meterVal(acc + '%')}</td>`;
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${meterNum(n)}/5, ${acc}%. ${tip}`)}">${meterDots(n)}${meterVal(acc + '%')}</td>`;
 }
 
-// Analysis quality: the share of the reference tasks a model found
+// Analysis quality: the order of the models in the comparison on real recordings
 function meterQualityCell(m) {
-  if (m.recall == null) {
-    const n = (m.est && m.est.quality) || 1;
-    return `<td title="${escapeHtml(t('mmQualityEstTip'))}" aria-label="${escapeHtml(`${n}/5. ${t('mmQualityEstTip')}`)}">${meterDots(n)}${meterVal(t('mmEstimate'), 'mm-est')}</td>`;
-  }
-  const n = recallDots(m.recall);
-  const pct = Math.round(m.recall * 100);
-  const tip = t('mmQualityTip').replace('{n}', () => pct);
-  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5. ${tip}`)}">${meterDots(n)}${meterVal(t('mmTasksFound').replace('{n}', () => pct))}</td>`;
+  const tip = t(m.est ? 'mmQualityEstTip' : 'mmQualityTip');
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${meterNum(m.quality)}/5. ${tip}`)}">${meterDots(m.quality)}</td>`;
 }
 
 function meterSpeedCell(m) {
   const gpu = hasFastGpu();
+  const [n, x] = m.speed[gpu ? 'gpu' : 'cpu'];
   const where = t(gpu ? 'mmOnGpu' : 'mmOnCpu');
-  let n, val = '', tip;
-  if (m.speed) {
-    const [d, x] = m.speed[gpu ? 'gpu' : 'cpu'];
-    n = d;
-    tip = x ? t('mmSpeedTip').replace('{x}', () => x).replace('{where}', () => where) : n <= 1 ? t('mmCpuSlow') : where;
-    if (x) val = '×' + x.split('–')[0];
-  } else {
-    const sec = m.hour && m.hour[gpu ? 'gpu' : 'cpu'];
-    if (sec) {
-      n = hourDots(sec);
-      const min = sec < 90 ? `${sec} ${t('mmSec')}` : `${meterNum((sec / 60).toFixed(sec < 600 ? 1 : 0))} ${t('mmMin')}`;
-      tip = t('mmHourTip').replace('{t}', () => min).replace('{where}', () => where);
-      val = '≈' + min;
-    } else {
-      n = (m.est && m.est[gpu ? 'gpu' : 'cpu']) || 1;
-      tip = t('mmSpeedEstTip');
-    }
-  }
-  const slow = n <= 1 && !val ? meterVal(t('mcSlow'), 'mm-warn') : '';
-  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5. ${tip}`)}">${meterDots(n)}${val ? meterVal(val) : ''}${slow}</td>`;
+  const tip = x ? t('mmSpeedTip').replace('{x}', () => x).replace('{where}', () => where)
+    : n < 2 && !m.quality ? t('mmCpuSlow') : m.quality ? t(m.est ? 'mmSpeedEstTip' : 'mmSpeedLlmTip').replace('{where}', () => where) : where;
+  const val = x ? meterVal('×' + x.split('–')[0]) : n < 2 ? meterVal(t('mcSlow'), 'mm-warn') : '';
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${meterNum(n)}/5. ${tip}`)}">${meterDots(n)}${val}</td>`;
 }
 
 function meterLoadCell(m) {
@@ -1749,7 +1713,7 @@ function meterLoadCell(m) {
 function modelCompareTable(items, opts = {}) {
   const rows = items.filter(i => MODEL_METERS[i.id]);
   if (!rows.length) return '';
-  const llm = !MODEL_METERS[rows[0].id].wer;
+  const llm = !!MODEL_METERS[rows[0].id].quality;
   // Speech: «Accuracy» over its two languages (a second header row), the rest span both rows
   const span = llm ? '' : ' rowspan="2"';
   const head = [opts.check ? `<th class="mc-check"${span}></th>` : '', `<th class="mc-name"${span}>${escapeHtml(t('mcModel'))}</th>`,
@@ -1775,7 +1739,7 @@ function modelMetersLine(id) {
   if (!m) return '';
   const cell = html => html.replace(/^<td/, '<span').replace(/<\/td>$/, '</span>');
   const part = (label, html) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${cell(html)}</span>`;
-  const quality = m.wer
+  const quality = !m.quality
     ? part(`${t('mmAccuracy')} ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
     : part(t('mmQuality'), meterQualityCell(m));
   return `<div class="mm-line">${quality}${part(t('mmSpeed'), meterSpeedCell(m))}${part(t('mmLoad'), meterLoadCell(m))}</div>`;
