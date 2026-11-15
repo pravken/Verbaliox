@@ -9,8 +9,9 @@ It is a choice in the settings (diarizer_engine = "nemotron"), downloaded on req
 computes the voice prints (voice profiles across recordings) and places the phrases Nemotron leaves
 unmarked; any failure of Nemotron falls back to ECAPA's clustering (app/diarizer.py).
 
-The license (OpenMDW-1.1) asks to keep its text and the notices: the downloaded folder keeps the
-repository's LICENSE, and README and the About window name the model and its license.
+The license (OpenMDW-1.1) asks to keep its text and the notices: the downloaded folder keeps the model
+card (README.md) and the license text (licenses/OpenMDW-1.1.txt), and README and the About window
+name the model and its license.
 """
 
 import shutil
@@ -21,8 +22,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.database import MODELS_DIR, get_all_settings
 
 REPO = "nvidia/Nemotron-3-Diarization"
-# A fixed commit, as the PC measurement used: a changed repository reaches no one until this changes
-REVISION = "52a4326727"
+# A fixed commit, as the PC measurement used (52a43267): a changed repository reaches no one until this changes
+REVISION = "52a432672732425e4c19765b9fec9b5810e6f4ba"
+# What transformers needs (378 MB) and the model card with its notices; not the .nemo and .gguf
+# copies of the same model (290 MB) nor the demo videos
+FILES = ["config.json", "processor_config.json", "model.safetensors", "README.md"]
+LICENSE_TEXT = Path(__file__).resolve().parent.parent / "licenses" / "OpenMDW-1.1.txt"
 LICENSE = "OpenMDW-1.1"
 MAX_SPEAKERS = 8
 COMPLETE_MARK = ".complete"
@@ -87,7 +92,9 @@ def install_async() -> Dict[str, Any]:
             d = model_dir()
             d.mkdir(parents=True, exist_ok=True)
             print(f"[nemotron] downloading {REPO}@{REVISION}", flush=True)
-            snapshot_download(REPO, revision=REVISION, local_dir=str(d))
+            snapshot_download(REPO, revision=REVISION, local_dir=str(d), allow_patterns=FILES)
+            if LICENSE_TEXT.exists():  # the repository has no license file: its text kept with the model
+                shutil.copyfile(LICENSE_TEXT, d / "LICENSE-OpenMDW-1.1.txt")
             (d / COMPLETE_MARK).write_text(f"{REPO}@{REVISION}", encoding="utf-8")
         except Exception as e:
             print(f"[nemotron] not downloaded: {e}", flush=True)
