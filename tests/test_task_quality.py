@@ -151,7 +151,7 @@ class MfuTest(unittest.TestCase):
 
 @unittest.skipIf(commitments is None, "app dependencies not installed")
 class PersonNamesTest(unittest.TestCase):
-    """«Макс будет делать» is the task of «Maksim Orlov» of the Teams captions (the owner's case)."""
+    """«Макс будет делать» is the task of «Maksim Orlov» of the Teams captions."""
 
     def test_short_latin_and_misspelt_names_find_the_participant(self):
         from app.people import resolve_person

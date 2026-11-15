@@ -15,8 +15,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   a description, keywords and terms (they help recognition and the models).
 - **The organizer's MFU**: paste the follow-up from the Teams chat into a recording; its tasks are taken
   as written and the protocol leans on it. Each task card shows where it came from: MFU, LLM or ✎.
-- **Tasks as cards**: the person and the due date open their pickers; «Макс» said in the meeting is
-  «Maksim Orlov» of Teams, a misspelt name is the participant's.
+- **Tasks as cards**: the person and the due date open their pickers; a short name said in the meeting
+  («Макс», «Дима») finds the participant written in full in Teams, a misspelt name is the participant's.
 - **Gemma 4** is the default analysis model (E4B on 8 GB cards and more, E2B below), reading 32k of
   context at once on 8 GB cards; it shares the card with speech recognition. The app says when Ollama
   needs updating for it.
@@ -421,8 +421,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   описание, ключевые слова и термины (они помогают распознаванию и моделям).
 - **MFU организатора**: итоги из чата Teams вставляются в запись; задачи из них берутся как написано, а
   протокол на них опирается. На каждой карточке задачи видно, откуда она: MFU, LLM или ✎.
-- **Задачи — карточками**: исполнитель и срок открывают свои списки; «Макс», сказанный на встрече, — это
-  «Maksim Orlov» из Teams, имя с опечаткой — имя участника.
+- **Задачи — карточками**: исполнитель и срок открывают свои списки; краткое имя, сказанное на встрече
+  («Макс», «Дима»), находит участника, записанного в Teams полностью; имя с опечаткой — имя участника.
 - **Gemma 4** — модель анализа по умолчанию (E4B для видеокарт от 8 ГБ, E2B — для меньших), на 8 ГБ
   читает 32k контекста за раз и делит видеокарту с распознаванием. Программа скажет, если для неё нужно
   обновить Ollama.
