@@ -81,7 +81,10 @@ def serbian_to_latin(text: str) -> str:
     return "".join(_SR_BACK.get(ch, ch) for ch in text)
 
 
-FAST_MODEL_HINTS = ("qwen2.5:1.5b", "qwen2.5:3b", "llama3.2:3b", "gemma2:2b")
+# The fast model of live captions, first found among the installed ones. Measured en<->ru
+# (bench-report/translation.md): gemma4:e2b is near e4b in quality at ~0.4 s a phrase. Only models free
+# for commercial use: qwen2.5:3b (Qwen Research licence), llama3.2 and gemma2 (their own terms) are out.
+FAST_MODEL_HINTS = ("gemma4:e2b", "qwen3.5:2b", "qwen2.5:1.5b")
 
 
 def _base_url() -> str:
