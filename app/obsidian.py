@@ -185,11 +185,13 @@ def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[
             from app.grounding import maybe_ground
             from app.features import note_for as features_note_for
             from app.people import meeting_roster
+            from app.meeting_context import note_for_summary as meeting_context_note
 
             summaries[key] = maybe_ground(generate_meeting_summary(
                 segments=m["segments"], speakers=m.get("speakers") or {}, template_key=key,
                 answer_lang=m.get("language") or "ru",
                 local_only=is_local_only(m), user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
+                context_note=meeting_context_note({**m, "summaries": summaries}, key),
                 participants=meeting_roster(m),
             ), key, m)
             changed = True
