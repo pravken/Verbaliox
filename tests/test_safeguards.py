@@ -727,7 +727,7 @@ class TaskPruneTest(unittest.TestCase):
         asked = []
 
         class Llm:
-            def chat(self, system, user):
+            def chat(self, system, user, short=False):
                 asked.append(user)
                 return "1: да\n2: нет\n3: нет"
 
@@ -735,7 +735,7 @@ class TaskPruneTest(unittest.TestCase):
         self.assertIn("я отправлю отчёт завтра", asked[0])  # the lines around the moment go with it
 
         class Mute:
-            def chat(self, system, user):
+            def chat(self, system, user, short=False):
                 return "не знаю"
 
         self.assertEqual(len(verify(items, m, Mute())), 3)  # no readable answer: the first pass stands
@@ -780,7 +780,7 @@ class TaskPartsTest(unittest.TestCase):
         class Llm:
             max_chars = 11000
 
-            def chat(self, system, user):
+            def chat(self, system, user, short=False):
                 asked.append(user)
                 return ""
 
@@ -827,6 +827,51 @@ class OllamaAnswerLengthTest(unittest.TestCase):
         self.assertEqual(sent["options"]["num_predict"], oc.LLM_MAX_ANSWER_TOKENS)
         self.assertEqual(sent["options"]["num_ctx"], 32768)  # a card of 10 GB reads 32k at once
         self.assertLess(oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_NUM_CTX)
+
+
+class CutAnswerTest(unittest.TestCase):
+    def test_a_cut_answer_is_asked_again_with_room_and_short_ones_do_not_reason(self):
+        from app import ollama_client as oc
+
+        sent = []
+
+        class Resp:
+            status_code = 200
+
+            def __init__(self, data):
+                self._d = data
+
+            def json(self):
+                return self._d
+
+        answers = iter([{"message": {"content": "оборв"}, "done_reason": "length"},
+                        {"message": {"content": "целиком"}, "done_reason": "stop"}])
+
+        class Client:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def post(self, url, json=None):
+                sent.append({**json, "options": dict(json["options"])})
+                return Resp(next(answers))
+
+        with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"), \
+                mock.patch("app.llm_text._ask_ollama", return_value=True):
+            self.assertEqual(oc._ollama_chat("http://127.0.0.1:11434", "gemma4:e4b", "s", "u"), "целиком")
+        self.assertEqual([x["options"]["num_predict"] for x in sent], [oc.LLM_MAX_ANSWER_TOKENS, oc.LLM_RETRY_ANSWER_TOKENS])
+        self.assertNotIn("think", sent[0])  # gemma4 reasons over a summary
+        sent.clear()
+        answers = iter([{"message": {"content": "Название"}, "done_reason": "stop"}])
+        with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"), \
+                mock.patch("app.llm_text._ask_ollama", return_value=True):
+            oc._ollama_chat("http://127.0.0.1:11434", "gemma4:e4b", "s", "u", short=True)
+        self.assertEqual(sent[0]["think"], False)  # a title: no reasoning first
 
 
 class EditsDuringMergeTest(unittest.TestCase):

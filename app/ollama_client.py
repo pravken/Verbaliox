@@ -917,7 +917,12 @@ def _analysis_leave() -> None:
             del _analysis_ended[t]
 
 
-def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
+LLM_RETRY_ANSWER_TOKENS = 8192  # once, when an answer was cut at LLM_MAX_ANSWER_TOKENS
+
+
+def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False) -> str:
+    """short: a short answer (a title, «да / нет» checks, a feature's name): the model does not reason
+    first, which is most of the time of such an answer."""
     from app import idle_unload
 
     idle_unload.touch(model)
@@ -956,11 +961,19 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
 
     def request() -> str:
         # asked here, once the answer counts as being written: Ollama is asked what the model can do
-        payload.update(thinking_off(model, analysis=True, base_url=base_url))
+        payload.update(thinking_off(model, analysis=not short, base_url=base_url))
         with httpx.Client(timeout=600.0) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
             raise_for_ollama(resp)
             data = resp.json()
+            # Cut at the answer limit (a model that reasons spends part of it thinking: gemma4's summaries
+            # lost their end in 6 of 9 recordings): asked once more with room to finish, not saved cut
+            if data.get("done_reason") == "length" and payload["options"]["num_predict"] < LLM_RETRY_ANSWER_TOKENS:
+                print(f"[ollama] {model}: the answer was cut at {payload['options']['num_predict']} tokens, asked again", flush=True)
+                payload["options"]["num_predict"] = LLM_RETRY_ANSWER_TOKENS
+                resp = client.post(f"{base_url}/api/chat", json=payload)
+                raise_for_ollama(resp)
+                data = resp.json()
             msg = data.get("message") or {}
             return strip_think(str(msg.get("content") or data.get("response") or ""))
 
@@ -1199,7 +1212,7 @@ def generate_meeting_title(
         f"Отвечай {lang}. Выведи только название: 3–8 слов, без кавычек, без точки в конце, без даты, "
         "без слов «Встреча», «Запись», «Обсуждение» в начале, если можно обойтись без них."
     )
-    raw = llm.chat(system, f"Расшифровка:\n{text}\n\nНазвание:")
+    raw = llm.chat(system, f"Расшифровка:\n{text}\n\nНазвание:", short=True)
     title = clean_title(raw, answer_lang)
     if len(title) < 3:
         raise RuntimeError("Модель не дала названия")

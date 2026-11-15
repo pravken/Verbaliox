@@ -205,7 +205,7 @@ def verify(items: List[Dict[str, Any]], m: Dict[str, Any], llm: Any, batch: int 
             blocks.append(f"{i}.{when} {x['who'] or 'кто-то'}: {x['what']}\nСлова: «{x['quote']}»"
                           + (f"\nРядом:\n{_context(x, lines)}" if x.get("at") is not None else ""))
         try:
-            answer = llm.chat(_CHECK, "\n\n".join(blocks))
+            answer = llm.chat(_CHECK, "\n\n".join(blocks), short=True)
         except Exception:
             kept.extend(part)
             continue

@@ -349,5 +349,5 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
             + body)[:SUGGEST_TEXT_CHARS]
     llm = target(model_name, local_only=is_local_only(m))
     listing = "Фичи:\n" + describe(f["id"] for f in features)  # with what each is about, when written
-    ids = parse_names(llm.chat(_SUGGEST, listing + "\n\n" + text), features)
+    ids = parse_names(llm.chat(_SUGGEST, listing + "\n\n" + text, short=True), features)
     return _keep_suggestions(meeting_id, ids)
