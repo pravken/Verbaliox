@@ -661,26 +661,57 @@ def _name_keys(word: str) -> List[str]:
     return [k for k in dict.fromkeys(keys) if k]
 
 
-def resolve_person(who: str, roster: List[str]) -> str:
-    """The roster's name for a task's person when exactly one participant fits: by a full or short name,
-    by the surname, in Latin or Cyrillic, a letter or two wrong; who as said when none or several fit."""
+_SEVERAL_RE = re.compile(r"(\s(и|или|and|or)\s|[,/&+;])", re.I)
+_MALE_OBLIQUE = ("ому", "ему", "ом", "ем", "у", "ю", "е")  # Иванову, Петром: the name itself plus an ending
+_FEMALE_OBLIQUE = ("ой", "ей", "у", "ю")                    # Ивановой, Марию: the -а/-я of the name changed
+
+
+def _word_fits(word: str, part: str) -> bool:
+    """Whether a word said for a person is this part of a participant's name: the same (in any script, or
+    a short name of it), the same in another case, or one letter off in a long word (a surname)."""
     from app.vocab import sound_key
 
-    words = [w for w in _WORD_RE.findall(who or "") if len(w) >= 2]
+    w, p = word.lower(), part.lower()
+    pk = sound_key(p)
+    if pk in _name_keys(w):
+        return True
+    for end in _MALE_OBLIQUE:  # a man's name in another case: the name is the word without its ending
+        if w.endswith(end) and len(w) - len(end) >= 3 and sound_key(w[: -len(end)]) == pk:
+            return True
+    for end in _FEMALE_OBLIQUE:  # a woman's: the name ends in -а/-я where the word has the ending
+        if w.endswith(end) and len(w) - len(end) >= 3 and pk in (sound_key(w[: -len(end)] + "а"), sound_key(w[: -len(end)] + "я")):
+            return True
+    # A misspelt surname or long name: the same first and last letter (so «Александра» is not «Александр»,
+    # «Максимов» not «Максим»), a letter off, two in a word of 9 letters or more
+    wk = sound_key(w)
+    return (len(wk) >= 6 and len(pk) >= 6 and wk[0] == pk[0] and wk[-1] == pk[-1]
+            and _dist(wk, pk) <= (1 if len(pk) < 9 else 2))
+
+
+def resolve_person(who: str, roster: List[str]) -> str:
+    """The roster's name for a task's person when exactly one participant fits every word said: by a full
+    or short name, by the surname, in Latin or Cyrillic, in another case, a surname a letter off. Who
+    stays as said when nobody or several fit, when it names several people («Иван и Олег»), or when a
+    word fits no part of the name («Анна Каренина» is not «Анна Сидорова»)."""
+    said = re.sub(r"\([^)]*\)", " ", who or "")
+    if _SEVERAL_RE.search(f" {said} "):
+        return who
+    words = [w for w in _WORD_RE.findall(said) if len(w) >= 2]
     if not words or not roster:
         return who
     names = [entry.split(" — ")[0].strip() for entry in roster if entry.strip()]
     hits = []
     for name in names:
-        parts = [sound_key(w) for w in _WORD_RE.findall(name) if len(w) >= 2]
-        if not parts:
+        parts = [w for w in _WORD_RE.findall(name) if len(w) >= 2]
+        if not parts or len(words) > len(parts):
             continue
-        ok = False
+        free = list(parts)
         for w in words:
-            for k in _name_keys(_stem(w)[0]) + _name_keys(w):
-                if any(k == p or (len(p) >= 5 and len(k) >= 5 and _dist(k, p) <= (1 if len(p) < 8 else 2)) for p in parts):
-                    ok = True
-        if ok:
+            fit = next((p for p in free if _word_fits(w, p)), None)
+            if fit is None:
+                break
+            free.remove(fit)
+        else:
             hits.append(name)
     hits = list(dict.fromkeys(hits))
     return hits[0] if len(hits) == 1 else who

@@ -37,6 +37,17 @@ class InMeetingTest(unittest.TestCase):
         for what, quote in [("открыть таблицу", "секунду, сейчас открою таблицу"), ("показать слайд", "дайте я покажу слайд")]:
             self.assertTrue(commitments.in_meeting_action({"what": what, "quote": quote, "due": ""}), what)
 
+    def test_now_with_a_document_is_still_a_task(self):
+        """The recheck: «сейчас» and a document, a file or a chat of a project are not meeting control."""
+        for quote in ["Я сейчас отправлю документ клиенту", "Сейчас подготовлю слайды для презентации",
+                      "сейчас обновлю таблицу бюджета и пришлю всем", "let me check the doc and get back to you",
+                      "I'll just send the file to legal", "надо починить расшаривание экрана в приложении, я возьму",
+                      "I will fix the unmute button bug", "я скину договор в чат проекта",
+                      "скину ссылку на макет в чат команды", "сейчас главное — сделать слайды для клиента"]:
+            self.assertFalse(commitments.in_meeting_action({"what": quote, "quote": quote, "due": ""}), quote)
+        for quote in ["скину в чат и покажу", "давайте я сейчас отправлю ссылку в чат", "I'll drop the link in the chat"]:
+            self.assertTrue(commitments.in_meeting_action({"what": quote, "quote": quote, "due": ""}), quote)
+
 
 @unittest.skipIf(commitments is None, "app dependencies not installed")
 class DismissedTest(unittest.TestCase):
@@ -111,6 +122,8 @@ class MfuTest(unittest.TestCase):
         same = commitments._same_as_mfu
         self.assertFalse(same({"who": "Анна", "what": "отчёт по продажам"}, {"who": "Анна", "what": "отчёт по закупкам"}))
         self.assertTrue(same({"who": "Анна", "what": "подготовить отчёт"}, {"who": "Анна Петрова", "what": "подготовить отчёт по продажам"}))
+        self.assertFalse(same({"who": "Анна", "what": "подготовить отчёт по продажам"}, {"who": "Анна", "what": "подготовить отчёт по закупкам"}))
+        self.assertFalse(same({"who": "", "what": "обновить документацию API"}, {"who": "", "what": "обновить документацию SDK"}))
 
     def test_without_an_mfu_nothing_changes(self):
         init_db()
@@ -150,6 +163,18 @@ class PersonNamesTest(unittest.TestCase):
             self.assertEqual(resolve_person(said, roster), who, said)
         for said in ("Саша", "Олег", "маркетинг"):  # two fit, or nobody: as said
             self.assertEqual(resolve_person(said, roster), said)
+
+    def test_every_word_said_must_fit_the_participant(self):
+        """The recheck: one shared word gave a task to someone else."""
+        from app.people import resolve_person
+
+        roster = ["Maksim Pravko — PM", "Анна Сидорова", "Иван Петров", "Мария Иванова", "Александра Белова"]
+        for said in ("Марина", "Анна Каренина", "Иван и Олег", "Иван Петрович Сидоренко", "Максимов", "Иван Иванов",
+                     "Белов", "Петрова", "команда Анны", "Иванов"):
+            self.assertEqual(resolve_person(said, roster), said, said)
+        for said, who in [("Ивановой", "Мария Иванова"), ("Петрову", "Иван Петров"), ("Maria Ivanova", "Мария Иванова"),
+                          ("Белова", "Александра Белова")]:
+            self.assertEqual(resolve_person(said, roster), who, said)
 
 
 if __name__ == "__main__":
