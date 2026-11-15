@@ -625,7 +625,7 @@ def fix_name_typos(text: str, roster: List[str]) -> str:
     return _WORD_RE.sub(fix, text)
 
 
-# --- Who a task is for, as the roster writes them: «Макс» said in the meeting is «Maksim Pravko» of
+# --- Who a task is for, as the roster writes them: «Макс» said in the meeting is «Maksim Orlov» of
 # the Teams captions or the invitation; a surname alone, a short name, a Latin or Cyrillic spelling and
 # a letter wrong all find the participant ---
 # Short names said in a meeting and the full names they stand for (Russian and English)

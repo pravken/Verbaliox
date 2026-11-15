@@ -95,10 +95,11 @@ def create_feature(name: str, color: str = "") -> Dict[str, Any]:
 
 
 DESCRIPTION_MAX = 400
-LIST_MAX = 400  # keywords, terms: comma-separated
+LIST_MAX = 400  # keywords: comma-separated
+TERMS_MAX = 1200  # terms: about a hundred (400 characters held 40, the PC check of 0.8.7-beta.2)
 
 
-def _clean_list(text: Optional[str]) -> str:
+def _clean_list(text: Optional[str], limit: int = LIST_MAX) -> str:
     """«возвраты, эквайринг ,payments» -> «возвраты, эквайринг, payments» (each once, in order)."""
     items: List[str] = []
     size = 0
@@ -107,7 +108,7 @@ def _clean_list(text: Optional[str]) -> str:
         if not x or x.casefold() in {i.casefold() for i in items}:
             continue
         size += len(x) + (2 if items else 0)
-        if size > LIST_MAX:  # whole items only: a cut one would reach recognition and the glossary
+        if size > limit:  # whole items only: a cut one would reach recognition and the glossary
             break
         items.append(x)
     return ", ".join(items)
@@ -139,7 +140,7 @@ def update_feature(feature_id: int, name: Optional[str] = None, color: Optional[
         if keywords is not None:
             conn.execute("UPDATE features SET keywords = ? WHERE id = ?", (_clean_list(keywords), feature_id))
         if terms is not None:
-            conn.execute("UPDATE features SET terms = ? WHERE id = ?", (_clean_list(terms), feature_id))
+            conn.execute("UPDATE features SET terms = ? WHERE id = ?", (_clean_list(terms, TERMS_MAX), feature_id))
         conn.commit()
         conn.close()
 

@@ -143,7 +143,7 @@ async function renderDictFeatures() {
   const sw = f => FT_COLORS.map(c => `<button class="ft-swatch${(f.color || '').toUpperCase() === c ? ' ft-swatch-on' : ''}" style="--ft:${c}"
       ${pageCall('click', 'saveDictFeature', [f.id, 'color', c])} aria-label="${escapeHtml(c)}" title="${escapeHtml(t('ftColor'))}"></button>`).join('');
   const field = (f, key, label, hint, rows) => `<label class="ft-field"><span class="ft-field-label">${escapeHtml(t(label))}</span>
-      ${rows ? `<textarea rows="${rows}" maxlength="400"` : '<input type="text" maxlength="400"'} class="ft-input" placeholder="${escapeHtml(t(hint))}" title="${escapeHtml(t(hint))}"
+      ${rows ? `<textarea rows="${rows}" maxlength="400"` : `<input type="text" maxlength="${key === 'terms' ? 1200 : 400}"`} class="ft-input" placeholder="${escapeHtml(t(hint))}" title="${escapeHtml(t(hint))}"
         ${pageCall('change', 'saveDictFeature', [f.id, key, { $: 'value' }])}${rows ? `>${escapeHtml(f[key] || '')}</textarea>` : ` value="${escapeHtml(f[key] || '')}">`}</label>`;
   box.innerHTML = list.length ? list.map(f => `<details class="ft-card">
       <summary class="ft-card-head">${featureChipHtml(f)}<span class="tk-grow"></span>

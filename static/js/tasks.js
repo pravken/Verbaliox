@@ -435,9 +435,12 @@ function tkAssignOptions(x) {
   const seen = new Set(parts.map(n => n.toLocaleLowerCase()));
   const groups = [[t('tkGParts'), parts.map(name => ({ name, kind: 'part' }))]];
   const others = TK.data.people.filter(p => !seen.has(p.name.toLocaleLowerCase()));
+  others.forEach(p => seen.add(p.name.toLocaleLowerCase()));
   groups.push([t('tkGPeople'), others.filter(p => p.kind === 'part' || p.kind === 'ext')]);
   groups.push([t('tkGTeams'), others.filter(p => p.kind === 'team')]);
   groups.push([t('tkGOrgs'), others.filter(p => p.kind === 'org')]);
+  // the rest of the people directory: someone who was not in this meeting nor has tasks yet
+  groups.push([t('tkGDirectory'), (TK.data.directory || []).filter(p => !seen.has(p.name.toLocaleLowerCase()))]);
   return groups.filter(([, list]) => list.length);
 }
 
@@ -448,15 +451,15 @@ function openTaskAssign(id, e) {
   const quote = x.quote ? `<div class="tk-pop-quote">${escapeHtml(t('tkInRecord'))} «${escapeHtml(x.quote)}»${x.at != null ? ` <span class="tk-mono">${tkClock(x.at)}</span>` : ''}</div>` : '';
   const opt = (name, kind) => {
     const on = (x.who || '').toLocaleLowerCase() === (name || '').toLocaleLowerCase();
-    return `<button class="tk-pop-item" role="menuitemradio" aria-checked="${on}" ${pageCall('click', 'assignTask', [id, name, kind])}>
+    return `<button class="tk-pop-item" data-who="${escapeHtml((name || '').toLocaleLowerCase())}" role="menuitemradio" aria-checked="${on}" ${pageCall('click', 'assignTask', [id, name, kind])}>
       ${tkAvatar(name, kind, 20)}<span class="tk-grow">${escapeHtml(name || t('tkNobody'))}</span>${on ? '<span class="tk-tick">✓</span>' : ''}</button>`;
   };
   const html = quote + tkAssignOptions(x).map(([title, list]) =>
-    `<div class="tk-pop-cap">${escapeHtml(title)}</div>${list.map(p => opt(p.name, p.kind)).join('')}`).join('')
+    `<div class="tk-pop-group"><div class="tk-pop-cap">${escapeHtml(title)}</div>${list.map(p => opt(p.name, p.kind)).join('')}</div>`).join('')
     + `<div class="tk-pop-cap"></div>${opt('', 'none')}`
     + `<div class="tk-pop-add">
         <div class="tk-row2"><input id="tk-pop-name" class="tk-input" type="text" data-i18n-placeholder="tkTypeWho" placeholder="${escapeHtml(t('tkTypeWho'))}" title="${escapeHtml(t('tkAssignTitle'))}"
-          ${pageCall('keydown', 'onAssignKey', [id, { $: 'event' }])}>
+          ${pageCall('keydown', 'onAssignKey', [id, { $: 'event' }])} ${pageCall('input', 'filterAssign', [{ $: 'event' }])}>
         <button class="tk-btn tk-btn-primary tk-btn-sm" ${pageCall('click', 'assignTyped', [id])}>${escapeHtml(t('tkAssignBtn'))}</button></div>
         <div class="tk-row2" role="radiogroup">${tkKindChips('tk-pop-kind', 'ext')}<span class="tk-hint">${escapeHtml(t('tkRemembered'))}</span></div>
       </div>`;
@@ -485,11 +488,25 @@ function onAssignKey(id, e) {
   if (e.key === 'Enter') { e.preventDefault(); assignTyped(id); }
 }
 
+// Typing narrows the list to the names that have the typed letters (a big directory stays usable)
+function filterAssign(e) {
+  const q = (e.target.value || '').trim().toLocaleLowerCase();
+  document.querySelectorAll('#tk-pop .tk-pop-group').forEach(g => {
+    let shown = 0;
+    g.querySelectorAll('.tk-pop-item[data-who]').forEach(b => {
+      const hit = !q || b.dataset.who.includes(q);
+      b.hidden = !hit;
+      shown += hit ? 1 : 0;
+    });
+    g.hidden = !shown;
+  });
+}
+
 function assignTyped(id) {
   const name = (document.getElementById('tk-pop-name')?.value || '').trim();
   if (!name) return;
   const kind = document.querySelector('#tk-pop .tk-mini.tk-on')?.dataset.kind || 'ext';
-  const known = TK.data.people.find(p => p.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+  const known = [...TK.data.people, ...(TK.data.directory || [])].find(p => p.name.toLocaleLowerCase() === name.toLocaleLowerCase());
   assignTask(id, known ? known.name : name, known ? known.kind : kind);
 }
 
