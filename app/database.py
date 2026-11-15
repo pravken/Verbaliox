@@ -207,6 +207,7 @@ def init_db() -> None:
             "file_name_template": "{date} {title}",  # recordings and exports (app/naming.py)
             "date_folders": "off",  # off | day | month | year_month: folders by date (app/naming.py)
             "summary_templates": "[]",  # the user's own summary templates, JSON (summary_templates())
+            "analysis_chain": "true",  # the protocol in steps: decisions, tasks, then the protocol (app/analysis_chain.py)
             "summary_grounding": "true",  # summaries checked against the transcript (app/grounding.py)
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
             "dictionary_fuzzy": "true",  # dictionary terms replace words that sound like them (app/vocab.py)
@@ -1115,6 +1116,28 @@ def merge_summaries(meeting_id: int, updates: Dict[str, Any], remove: tuple = ()
         conn.commit()
         conn.close()
     return current
+
+
+def change_summaries(meeting_id: int, change) -> Dict[str, Any]:
+    """Like merge_summaries, with the updates worked out from the summaries as they are at that moment
+    (change: summaries → {key: new text}), under the lock: a section another job saved meanwhile is not
+    overwritten by a change made from an older read. Returns all summaries."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT summaries_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+            if row is None:
+                return {}
+            current = _loads_dict(row[0])
+            updates = change(dict(current)) or {}
+            if updates:
+                current.update(updates)
+                conn.execute("UPDATE meetings SET summaries_json = ? WHERE id = ?",
+                             (json.dumps(current, ensure_ascii=False), meeting_id))
+                conn.commit()
+            return current
+        finally:
+            conn.close()
 
 
 def save_segments_backup(meeting_id: int, segments: List[Dict[str, Any]]) -> None:

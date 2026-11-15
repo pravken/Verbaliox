@@ -128,6 +128,12 @@ def stop_all() -> None:
                 pass
     except Exception:
         pass
+    try:  # an Ollama the user started stays, without the models the app loaded into it
+        from app.ollama_client import release_on_exit
+
+        release_on_exit()
+    except Exception:
+        pass
     with _lock:
         procs = list(_procs)
     for proc in procs:

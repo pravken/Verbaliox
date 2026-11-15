@@ -225,7 +225,8 @@ function analysisSections() {
       ...((sums.custom || '').trim() || anIsBusy('custom') ? [{ key: 'custom', label: t('anAnswer'), about: '', page: true, make: false }] : []),
     ] },
     { label: t('anGrpWork'), items: [
-      { key: 'tasks', label: t('sumTasks'), about: t('tipSumTasks'), page: true, make: true },
+      // «Следующие шаги» repeated the tasks: only a recording that has one made keeps it
+      ...((sums.tasks || '').trim() || anIsBusy('tasks') ? [{ key: 'tasks', label: t('sumTasks'), about: t('tipSumTasks'), page: true, make: true }] : []),
       { key: 'commitments', label: t('sumCommitments'), about: t('tipSumCommitments'), page: true, make: true },
       { key: 'followup', label: t('anLetter'), about: t('tipSumFollowup'), page: true, make: true },
       ...(m.series_id ? [{ key: 'since_last', label: t('sumSinceLast'), about: t('tipSumSinceLast'), page: true, make: true }] : []),
@@ -492,9 +493,12 @@ function renderSummaryPanel() {
   if (!known) tab = state.activeSummaryTab = 'protocol';  // a template that is gone, "since last time" off a series
   if (!state.anCommit || state.anCommit.id !== m.id) { state.anCommit = { id: m.id, n: 0 }; refreshCommitmentCount(); }
   setClearSummaryVisible(tab !== 'protocol' && anHasContent(tab));
+  if (state.anEdit && (state.anEdit.id !== m.id || state.anEdit.tab !== tab)) state.anEdit = null;  // another section opened
   renderAnalysisNav();
   renderAnalysisHead();
-  if (tab === 'protocol') { renderAnalysisOverview(box); return; }
+  if (state.anEdit && box.querySelector('.an-edit')) return;  // a section finished in the background keeps the text being edited
+  state.anEdit = null;
+  if (tab === 'protocol') { renderAnalysisOverview(box); markSuspects(box); return; }
   if (tab === 'mynotes') {
     // a section finished in the background re-renders the panel: the notes being typed keep their caret
     const ed = document.getElementById('my-notes-input');
@@ -516,10 +520,12 @@ function renderSummaryPanel() {
   if (tab === 'custom' && state.anQuestion && state.anQuestion.id === m.id) {
     box.innerHTML = `<div class="an-question">${escapeHtml(state.anQuestion.text)}</div><div class="markdown-body an-md"></div>`;
     renderMarkdownWithTimestamps(box.querySelector('.an-md'), md, m.duration);
+    markSuspects(box);
     return;
   }
   box.innerHTML = '<div class="markdown-body an-md"></div>';
   renderMarkdownWithTimestamps(box.firstElementChild, md, m.duration);
+  markSuspects(box);
   if (tab === 'followup') {
     const bar = document.createElement('div');
     bar.className = 'an-bar';
@@ -587,6 +593,11 @@ function renderAnalysisHead() {
   const shown = overview ? anHasContent('protocol') : has;
   document.getElementById('an-copy-btn')?.classList.toggle('hidden', !shown || tab === 'commitments');
   document.getElementById('an-exp-btn')?.classList.toggle('hidden', !shown && tab !== 'commitments');
+  const edit = document.getElementById('an-edit-btn');
+  if (edit) {
+    const key = overview ? 'protocol' : tab;
+    edit.classList.toggle('hidden', !anEditable(key) || busy || anIsBusy(key) || !!state.anEdit);
+  }
 }
 
 // Overview: the summary and the cards of the other sections («Настроить»); what is not made yet below
@@ -600,6 +611,7 @@ function renderAnalysisOverview(box) {
         ${opts.mine ? '<span class="an-dot an-dot-mine"></span>' : ''}${escapeHtml(title.toUpperCase())}
         ${opts.count ? `<span class="an-cnt">${opts.count}</span>` : ''}${opts.tag ? `<span class="an-tag">${escapeHtml(opts.tag)}</span>` : ''}
         <span class="flex-1"></span>
+        ${opts.edit ? `<button class="an-more" ${pageCall('click', 'editAnalysisSection', [key])} title="${escapeHtml(t('anEditTip'))}" aria-label="${escapeHtml(t('anEdit'))}">✎</button>` : ''}
         ${opts.regen && ai ? `<button class="an-more" ${pageCall('click', 'createAnalysisSection', [key])} title="${escapeHtml(t('anRegen'))}">↻</button>` : ''}
         ${opts.open ? `<button class="an-more" ${pageCall('click', 'selectSummaryTab', [key])}>${escapeHtml(t('anOpen'))} →</button>` : ''}
       </div>
@@ -615,9 +627,9 @@ function renderAnalysisOverview(box) {
     if (off.includes(key)) return;
     cards.push(render());
   };
-  consider('tldr', t('anShort'), () => card('tldr', t('anShort'), md('tldr'), { wide: true, ai: true, regen: true }), {});
+  consider('tldr', t('anShort'), () => card('tldr', t('anShort'), md('tldr'), { wide: true, ai: true, regen: true, edit: true }), {});
   if (anIsBusy('protocol')) cards.push(busyCard('protocol', t('anResults')));
-  else if (anHasContent('protocol')) cards.push(card('protocol', t('anResults'), md('protocol'), { wide: true, regen: false }));
+  else if (anHasContent('protocol')) cards.push(card('protocol', t('anResults'), md('protocol'), { wide: true, regen: false, edit: true }));
   else missing.unshift({ key: 'protocol', title: t('anResults'), about: t('anAboutProtocol') });
   consider('chapters', t('sumChapters'), () => {
     const chs = parseChapters(sums.chapters);
@@ -625,7 +637,7 @@ function renderAnalysisOverview(box) {
         <span class="an-row-text"><b>${escapeHtml(c.title)}</b>${c.desc ? `<span class="an-row-sub">${escapeHtml(c.desc)}</span>` : ''}</span></div>`).join('') : md('chapters');
     return card('chapters', t('sumChapters'), body, { count: chs.length, regen: true });
   }, {});
-  consider('tasks', t('sumTasks'), () => card('tasks', t('sumTasks'), md('tasks'), { count: anListCount('tasks'), open: true, clamp: true }), {});
+  consider('tasks', t('sumTasks'), () => card('tasks', t('sumTasks'), md('tasks'), { count: anListCount('tasks'), open: true, clamp: true }), { make: false });
   consider('commitments', t('sumCommitments'), () => card('commitments', t('sumCommitments'), `<div class="an-row-sub">${escapeHtml(t('anCommitCount').replace('{n}', () => String(anListCount('commitments'))))}</div>`, { count: anListCount('commitments'), open: true }), {});
   (state.summaryTemplates || []).forEach(x => {
     const key = `tpl:${x.id}`;
@@ -687,6 +699,12 @@ function openAnalysisMenu(kind, el) {
     const items = [];
     if (tpl) items.push({ label: t('anEditTemplate'), run: () => openTemplateDialog(tpl) });
     items.push({ label: t('anAllTemplates'), run: () => openTemplatesEditor() });
+    if (analysisTextShown()) items.push({ label: t('anCheckWords'), disabled: !aiAvailable() || !!state.anChecking, run: () => checkAnalysisWords() });
+    if (tab !== 'protocol' && anEditable(tab)) items.push({ sep: true }, { label: t('anEdit'), run: () => editAnalysisSection(tab) });
+    if (tab === 'protocol') {
+      const keys = ['protocol', 'tldr'].filter(anEditable);
+      if (keys.length) items.push({ sep: true }, ...keys.map(key => ({ label: `${t('anEdit')}: ${key === 'protocol' ? t('anResults') : t('anShort')}`, run: () => editAnalysisSection(key) })));
+    }
     if (tab !== 'protocol' && state.anCanClear) items.push({ sep: true }, { label: t('anClearSection'), run: () => clearSummaryTab(tab) });
     if (tab === 'protocol') {
       for (const key of ['protocol', 'tldr', 'chapters']) if (anHasContent(key)) items.push({ label: `${t('anClearSection')}: ${anSectionInfo(key).label}`, run: () => clearSummaryTab(key) });
@@ -698,7 +716,7 @@ function openAnalysisMenu(kind, el) {
 // «Настроить»: which cards the overview shows (made ones; the others are offered below it)
 function openOverviewConfig(el) {
   document.getElementById('an-cfg-pop')?.remove();
-  const keys = [['tldr', t('anShort')], ['chapters', t('sumChapters')], ['tasks', t('sumTasks')], ['commitments', t('sumCommitments')],
+  const keys = [['tldr', t('anShort')], ['chapters', t('sumChapters')], ...(anHasContent('tasks') ? [['tasks', t('sumTasks')]] : []), ['commitments', t('sumCommitments')],
     ['followup', t('anLetter')], ...(state.activeMeeting && state.activeMeeting.series_id ? [['since_last', t('sumSinceLast')]] : []),
     ['notes', t('sumNotes')], ['mynotes', t('notesTitle')],
     ...(state.summaryTemplates || []).map(x => [`tpl:${x.id}`, x.name])];
@@ -858,14 +876,19 @@ async function createAnalysisSection(key, ev) {
     const data = await readJson(res);
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
     if (data.summaries) m.summaries = data.summaries;
-    if (key === 'commitments') state.anCommit = { id: m.id, n: Array.isArray(data) ? data.length : (data.items || []).length || 0 };
+    if (key === 'commitments') {
+      state.anCommit = { id: m.id, n: Array.isArray(data) ? data.length : (data.items || []).length || 0 };
+      // a task found now was added to the overview's «Следующие шаги» (app/analysis_chain.sync_next_steps)
+      const fresh = await fetch(`/api/meetings/${m.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+      if (fresh && fresh.summaries) m.summaries = fresh.summaries;
+    }
     if (key === 'chapters' && state.activeMeeting === m) renderChaptersBar();
   } catch (e) {
     showToast(`${anSectionInfo(key).label}: ${serverText(e.message)}`);
   } finally {
     state.anBusy.delete(busy);
     if (state.activeMeeting === m) {
-      if (key === 'commitments') await refreshCommitmentCount();
+      if (key === 'commitments' || key === 'protocol') await refreshCommitmentCount();  // the analysis in steps finds the tasks too
       renderSummaryPanel();
     }
   }
@@ -1822,6 +1845,11 @@ function textMenuItems(e) {
     if (short) items.push({ label: t('ctxFindAll'), run: () => findEverywhere(text) });
     items.push({ label: t('ctxAskAssistant'), run: () => askAbout(text) });
     if (text.length <= 60 && text.split(' ').length <= 5) {
+      // a word of the analysis written wrong: put right in the analysis, and the dictionary learns it
+      if (area && area.closest('#summary-content') && state.activeMeeting && !nodeEl(selection.anchorNode)?.closest?.('.an-edit, textarea, input')) {
+        const card = nodeEl(selection.anchorNode)?.closest?.('[data-md]');
+        items.push({ label: t('ctxFixInAnalysis').replace('{word}', () => text), run: () => openWordFixDialog(text, card ? card.dataset.md : null) });
+      }
       items.push({ label: t('ctxAddToDictionary'), run: () => addToDictionary(text) });
     }
   } else if (segRow) {
@@ -1937,6 +1965,364 @@ async function addToDictionary(text) {
     loadDictionary();
   }
 }
+
+// --- Hand corrections of the analysis (app/analysis_edits.py) ---
+// A section a person may edit: Markdown made by the model (the chapters are a list with times, the notes,
+// MFU and tasks have editors of their own)
+const AN_NOT_EDITABLE = new Set(['chapters', 'mynotes', 'mfu', 'commitments', 'error']);
+function anEditable(key) {
+  const m = state.activeMeeting;
+  const v = m && (m.summaries || {})[key];
+  return !AN_NOT_EDITABLE.has(key) && typeof v === 'string' && !!v.trim();
+}
+
+function anTrimWord(text) {
+  return String(text || '').replace(/\s+/g, ' ').replace(/^[\s.,!?;:«»"'()*_#\-]+|[\s.,!?;:«»"'()*_#\-]+$/g, '');
+}
+
+// «Исправить …»: the right spelling for every section of this recording; the dictionary remembers it
+function openWordFixDialog(selected, section) {
+  const wrong = anTrimWord(selected);
+  const m = state.activeMeeting;
+  if (!wrong || !m) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
+      <div class="text-sm font-semibold text-white">${escapeHtml(t('fixWordTitle'))}</div>
+      <div class="space-y-1">
+        <div class="text-xs text-apple-secondary">${escapeHtml(t('fixWordWas'))}</div>
+        <div class="text-sm text-white break-words"><s class="opacity-70">${escapeHtml(wrong)}</s></div>
+      </div>
+      <label class="block space-y-1">
+        <span class="block text-xs text-apple-secondary">${escapeHtml(t('fixWordRight'))}</span>
+        <input type="text" name="right" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+      </label>
+      <label class="flex items-start gap-2 text-xs text-apple-label"><input type="checkbox" name="all" checked class="mt-0.5">
+        <span>${escapeHtml(t('fixWordAll'))}</span></label>
+      <label class="flex items-start gap-2 text-xs text-apple-label"><input type="checkbox" name="learn" checked class="mt-0.5">
+        <span><span>${escapeHtml(t('fixWordLearn'))}</span><span class="block text-apple-secondary mt-0.5" data-hint></span></span></label>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('fixWordOk'))}</button>
+      </div></form>`;
+  const form = wrap.querySelector('form');
+  const input = form.elements.right;
+  const hint = wrap.querySelector('[data-hint]');
+  const learnBox = form.elements.learn;
+  const tooLong = wrong.split(' ').length > 4;
+  if (tooLong) { learnBox.checked = false; learnBox.disabled = true; }
+  const sayHint = () => {
+    const right = anTrimWord(input.value);
+    hint.textContent = tooLong ? t('fixWordLong') : right && right !== wrong
+      ? t('fixWordHint').replace('{wrong}', () => wrong).replace('{right}', () => right) : '';
+  };
+  input.value = wrong;
+  input.addEventListener('input', sayHint);
+  const done = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(); } };
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="no"]')) done(); });
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const right = anTrimWord(input.value);
+    if (!right || right === wrong) { input.focus(); return; }
+    const tab = state.activeSummaryTab;
+    // one section: the one the word was selected in (a card of the overview has its own)
+    const key = form.elements.all.checked ? null : (section || (tab === 'protocol' ? 'protocol' : tab));
+    const res = await fetch(`/api/meetings/${m.id}/summaries/fix`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wrong, right, key, learn: learnBox.checked }),
+    }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
+    const data = await res.json();
+    done();
+    if (state.activeMeeting && state.activeMeeting.id === m.id) {
+      state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
+      renderSummaryPanel();
+    }
+    if (data.learned && data.learned.length) loadDictionary();
+    showToast((data.replaced ? t('fixWordDone').replace('{n}', () => String(data.replaced)) : t('fixWordNone'))
+      + (data.learned && data.learned.length ? ` · ${t('fixWordLearned')}` : ''));
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  sayHint();
+  input.focus();
+  input.select();
+}
+
+// «Править»: the section's Markdown in a field; after saving, the words replaced are offered to the dictionary
+function editAnalysisSection(key) {
+  const m = state.activeMeeting;
+  const tab = state.activeSummaryTab;
+  if (!m) return;
+  key = typeof key === 'string' ? key : (tab === 'protocol' ? 'protocol' : tab);
+  if (!anEditable(key) || anIsBusy(key)) return;
+  const box = document.getElementById('summary-content');
+  const host = tab === 'protocol' ? box?.querySelector(`[data-card="${CSS.escape(key)}"] .an-cardb`) : box;
+  if (!host) return;
+  const old = m.summaries[key];
+  state.anEdit = { id: m.id, tab, key };
+  host.classList.remove('an-clamp');
+  host.innerHTML = `<div class="an-edit">
+      <textarea class="an-edit-input w-full bg-apple-sidebar border apple-border rounded-xl px-4 py-3 text-[13px] leading-relaxed text-white focus:outline-none focus:border-apple-blue resize-y" spellcheck="true" aria-label="${escapeHtml(t('anEdit'))}"></textarea>
+      <div class="an-edit-bar">
+        <span class="an-edit-hint">${escapeHtml(t('anEditHint'))}</span>
+        <button type="button" class="an-btn" data-a="cancel">${escapeHtml(t('cancel'))}</button>
+        <button type="button" class="an-btn an-btn-primary" data-a="save">${escapeHtml(t('save'))}</button>
+      </div></div>`;
+  const ta = host.querySelector('textarea');
+  ta.value = old;
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 4, Math.max(160, window.innerHeight * 0.7))}px`; };
+  ta.addEventListener('input', fit);
+  const scroller = document.getElementById('an-main');
+  const scrolled = scroller ? scroller.scrollTop : 0;
+  const close = () => {
+    state.anEdit = null;
+    renderSummaryPanel();
+    if (scroller) scroller.scrollTop = scrolled;  // back where the section was read
+  };
+  const save = async () => {
+    const text = ta.value.trim();
+    if (text === old.trim()) { close(); return; }
+    if (!text) { showError(t('anEditEmpty')); return; }
+    const res = await fetch(`/api/meetings/${m.id}/summaries/${encodeURIComponent(key)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, base: old }),
+    }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
+    const data = await res.json();
+    if (state.activeMeeting && state.activeMeeting.id === m.id) state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
+    close();
+    showToast(t('anEditSaved'));
+    if ((data.suggest || []).length) offerDictionaryWords(data.suggest);
+  };
+  host.querySelector('[data-a="cancel"]').addEventListener('click', close);
+  host.querySelector('[data-a="save"]').addEventListener('click', save);
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  renderAnalysisHead();
+  fit();
+  ta.focus();
+}
+
+// The words a hand edit replaced: which of them the dictionary should learn (all ticked)
+function offerDictionaryWords(pairs) {
+  const wrap = document.createElement('div');
+  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
+      <div class="text-sm font-semibold text-white">${escapeHtml(t('learnTitle'))}</div>
+      <p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('learnText'))}</p>
+      <div class="space-y-1.5 max-h-[50vh] overflow-y-auto">${pairs.map((p, i) => `<label class="flex items-center gap-2 text-sm text-white">
+          <input type="checkbox" data-i="${i}" ${p.sure === false ? '' : 'checked'}>
+          <span class="break-words"><s class="opacity-60">${escapeHtml(p.wrong)}</s> → <b>${escapeHtml(p.right)}</b></span></label>`).join('')}</div>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('learnSkip'))}</button>
+        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('learnOk'))}</button>
+      </div></form>`;
+  const done = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(); } };
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="no"]')) done(); });
+  wrap.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const chosen = [...wrap.querySelectorAll('input[data-i]:checked')].map(x => pairs[Number(x.dataset.i)]);
+    done();
+    if (!chosen.length) return;
+    const res = await fetch('/api/dictionary/learn', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: chosen }),
+    }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
+    const data = await res.json();
+    loadDictionary();
+    showToast(t('learnDone').replace('{n}', () => String((data.learned || []).length)));
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  wrap.querySelector('button[type="submit"]').focus();
+}
+
+// --- Doubtful words of the analysis (app/analysis_edits.py: suspects, check_with_model) ---
+// Underlined: where the models of a merged transcript heard differently, a word Whisper was unsure of,
+// and what the check by a model found. A click offers the other spellings, the correction dialog,
+// listening to the place, or «Верно» (not underlined again in this recording).
+function anSumsSig(m) {
+  // the text itself, hashed: a same-length correction kept the old underlines (an audit)
+  let h = 0;
+  for (const [k, v] of Object.entries(m.summaries || {})) {
+    const s = `${k}:${typeof v === 'string' ? v : JSON.stringify(v)}|`;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+
+function analysisTextShown() {
+  const m = state.activeMeeting;
+  return !!m && Object.entries(m.summaries || {}).some(([k, v]) => !AN_NOT_EDITABLE.has(k) && typeof v === 'string' && v.trim());
+}
+
+function anIgnored(mid) {
+  try { return new Set(JSON.parse(localStorage.getItem(`vx-an-ok-${mid}`) || '[]')); } catch { return new Set(); }
+}
+function anIgnore(mid, word) {
+  const set = anIgnored(mid);
+  set.add(word.toLowerCase());
+  try { localStorage.setItem(`vx-an-ok-${mid}`, JSON.stringify([...set].slice(-300))); } catch { /* per viewer only */ }
+}
+
+async function loadSuspects(m) {
+  const sig = anSumsSig(m);
+  const cur = state.anSuspects;
+  if (cur && cur.id === m.id && (cur.sig === sig || cur.loading)) return;
+  state.anSuspects = { id: m.id, sig, words: cur && cur.id === m.id ? cur.words : [], loading: true };
+  const data = await fetch(`/api/meetings/${m.id}/analysis/suspects`).then(r => (r.ok ? r.json() : { words: [] })).catch(() => ({ words: [] }));
+  if (!state.anSuspects || state.anSuspects.id !== m.id) return;
+  state.anSuspects = { id: m.id, sig, words: data.words || [], loading: false };
+  if (state.activeMeeting && state.activeMeeting.id === m.id) markSuspects(document.getElementById('summary-content'));
+}
+
+function anSuspectList(m) {
+  const list = [];
+  if (state.anSuspects && state.anSuspects.id === m.id) list.push(...state.anSuspects.words);
+  if (state.anCheck && state.anCheck.id === m.id) {
+    for (const x of state.anCheck.items) list.push({ word: x.wrong, options: [x.right], source: 'model', reason: x.reason, start: 0 });
+  }
+  const ok = anIgnored(m.id);
+  const seen = new Set();
+  return list.filter(x => {
+    const k = String(x.word || '').toLowerCase();
+    if (!k || ok.has(k) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function markSuspects(box) {
+  const m = state.activeMeeting;
+  if (!m || !box) return;
+  loadSuspects(m);
+  const list = anSuspectList(m);
+  box.querySelectorAll('.an-suspect').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
+  box.querySelectorAll('.an-md').forEach(el => el.normalize());
+  if (!list.length) return;
+  const esc = w => w.split(/\s+/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+  // the longest first: «Claude Code» before «Claude»
+  const order = list.map((x, i) => [x, i]).sort((a, b) => b[0].word.length - a[0].word.length);
+  const rx = new RegExp(`(?<![\\p{L}\\p{N}_-])(${order.map(([x]) => esc(x.word)).join('|')})(?![\\p{L}\\p{N}_-])`, 'giu');
+  const byWord = new Map(list.map((x, i) => [x.word.toLowerCase().replace(/\s+/g, ' '), i]));
+  box.querySelectorAll('.an-md').forEach(md => {
+    if (md.closest('.an-edit')) return;
+    const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      rx.lastIndex = 0;
+      if (!rx.test(text)) continue;
+      rx.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const hit of text.matchAll(rx)) {
+        const i = byWord.get(hit[0].toLowerCase().replace(/\s+/g, ' '));
+        if (i === undefined) continue;
+        frag.append(text.slice(last, hit.index));
+        const span = document.createElement('span');
+        span.className = `an-suspect an-suspect-${list[i].source}`;
+        span.dataset.i = String(i);
+        span.tabIndex = 0;
+        span.title = t('anSuspectTip');
+        span.textContent = hit[0];
+        frag.append(span);
+        last = hit.index + hit[0].length;
+      }
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  });
+  state.anSuspectShown = list;
+}
+
+function openSuspectMenu(el) {
+  const m = state.activeMeeting;
+  const x = (state.anSuspectShown || [])[Number(el.dataset.i)];
+  if (!m || !x) return;
+  const shown = el.textContent;
+  const why = x.source === 'dispute' ? t('anSuspectDispute') : x.source === 'unsure' ? t('anSuspectUnsure')
+    : `${t('anSuspectModel')}${x.reason ? `: ${x.reason}` : ''}`;
+  const items = [{ info: true, label: why }, { sep: true }];
+  for (const o of x.options || []) {
+    items.push({ label: t('anSuspectUse').replace('{word}', () => o), run: () => fixWordAt(shown, o) });
+  }
+  items.push({ label: t('anSuspectOther'), run: () => openWordFixDialog(shown, el.closest('[data-md]')?.dataset.md || null) });
+  if (x.start) items.push({ label: t('ctxPlayFromHere'), key: formatTime(x.start), run: () => seekPlayer(x.start) });
+  items.push({ sep: true }, {
+    label: t('anSuspectOk'), run: () => { anIgnore(m.id, x.word); markSuspects(document.getElementById('summary-content')); },
+  });
+  const r = el.getBoundingClientRect();
+  openTextMenuAt(items, r.left, r.bottom + 4, { maxWidth: 380 });
+}
+
+// One click: the other spelling in every section, and the dictionary learns it
+async function fixWordAt(wrong, right) {
+  const m = state.activeMeeting;
+  if (!m) return;
+  // the dictionary is not taught by one click: «мы» → «вы» would change every «мы» after it (an audit);
+  // the toast offers it
+  const res = await fetch(`/api/meetings/${m.id}/summaries/fix`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wrong, right, learn: false }),
+  }).catch(() => null);
+  if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
+  const data = await res.json();
+  if (state.activeMeeting && state.activeMeeting.id === m.id) {
+    state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
+    renderSummaryPanel();
+  }
+  showToast(t('fixWordDone').replace('{n}', () => String(data.replaced || 0)), {
+    label: t('fixWordRemember'),
+    onClick: async () => {
+      const r = await fetch('/api/dictionary/learn', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: [{ wrong, right }] }),
+      }).catch(() => null);
+      const learned = r && r.ok ? (await r.json()).learned || [] : [];
+      if (learned.length) { loadDictionary(); showToast(t('fixWordLearned')); }
+    },
+  });
+}
+
+// «Проверить слова»: a small model reads the analysis; what it finds is underlined like the rest
+async function checkAnalysisWords() {
+  const m = state.activeMeeting;
+  if (!m || state.anChecking) return;
+  if (!aiAvailable()) { showToast(t('anNeedModel')); return; }
+  state.anChecking = true;
+  showToast(t('anCheckRunning'));
+  try {
+    const res = await fetch(`/api/meetings/${m.id}/analysis/check`, { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
+    const items = (await res.json()).suggestions || [];
+    state.anCheck = { id: m.id, items };
+    if (state.activeMeeting && state.activeMeeting.id === m.id) markSuspects(document.getElementById('summary-content'));
+    showToast(items.length ? t('anCheckFound').replace('{n}', () => String(items.length)) : t('anCheckNone'));
+  } finally {
+    state.anChecking = false;
+  }
+}
+
+document.getElementById('summary-content')?.addEventListener('click', (e) => {
+  const el = e.target.closest && e.target.closest('.an-suspect');
+  if (!el) return;
+  e.stopPropagation();  // the click would close the menu it opens
+  openSuspectMenu(el);
+});
+document.getElementById('summary-content')?.addEventListener('keydown', (e) => {
+  const el = e.target.closest && e.target.closest('.an-suspect');
+  if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openSuspectMenu(el); }
+});
 
 document.addEventListener('contextmenu', (e) => {
   closeTextMenu();

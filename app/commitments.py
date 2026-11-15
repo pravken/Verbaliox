@@ -69,6 +69,15 @@ _SYSTEM_MFU = (
     "org (другая компания), none (исполнитель не назван, тогда who пусто). "
     "Имена — как в MFU. Если задач нет, ответь пустой строкой."
 )
+def language_note(lang: Optional[str]) -> str:
+    """A meeting in English gets its tasks in English: Russian tasks stood in its English protocol
+    (bench-report/analysis-chain.md). Russian and an unknown language: as the prompt says."""
+    if not str(lang or "").lower().startswith("en"):
+        return ""
+    return ("Встреча на английском: поле what пиши по-английски, как это сказали на встрече; "
+            "имена — как в расшифровке.\n\n")
+
+
 MFU_MAX_CHARS = 20000
 MFU = "mfu"  # the source of a task taken from the MFU
 
@@ -438,9 +447,9 @@ def supported(item: Dict[str, Any], m: Dict[str, Any]) -> bool:
     return UNVERIFIED_MARK not in ground_summary(line, m.get("segments") or [], m.get("speakers") or {})
 
 
-def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str, Any]]:
+def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[str] = None) -> List[Dict[str, Any]]:
     """Finds the promises of a recording (again: the earlier list of this recording is replaced,
-    keeping what was ticked off)."""
+    keeping what was ticked off). hints: more to tell the model (none by default)."""
     from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import build_transcript_lines
@@ -449,7 +458,10 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     if not m or not m.get("segments"):
         raise ValueError("Нет текста записи")
     llm = target(model_name, local_only=is_local_only(m))
-    lines = build_transcript_lines(m["segments"], m.get("speakers") or {})
+    from app.ollama_client import speakers_in_language
+
+    # «Speaker 2» in an English meeting, as its overview calls them (tasks said «Участник 2»: an audit)
+    lines = build_transcript_lines(m["segments"], speakers_in_language(m.get("speakers") or {}, m.get("language")))
     found: List[Dict[str, Any]] = []
     # Part by part, so the end of a long meeting is read too (it was cut to what fits the model before);
     # the parts overlap by a few lines, so a promise on a border is seen whole
@@ -469,10 +481,11 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         about = describe(m.get("features") or [])
         glossary = vocab.glossary_note(already=about)
         head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (glossary + "\n\n" if glossary else "")
-        from app.meeting_context import note_for_tasks
-
-        hints = note_for_tasks(m)  # the protocol's decisions and next steps: one context for every tab
+        # No protocol points by default: as hints they first narrowed the search, then (said as an addition)
+        # added the protocol's points that are not tasks — precision 0.70 against 0.81, the same recall
+        # (bench-report/analysis-chain.md, «Перемер задач»). The protocol takes the tasks instead.
         head += (hints + "\n\n") if hints else ""
+        head += language_note(m.get("language"))
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))

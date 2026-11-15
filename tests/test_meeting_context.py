@@ -42,16 +42,28 @@ class MeetingContextTest(unittest.TestCase):
         self.assertNotIn("Протокол этой встречи", proto)  # the protocol is not told itself
         self.assertEqual(meeting_context.note_for_summary(m, "chapters"), "")
 
-    def test_the_search_for_tasks_is_told_the_decisions(self):
+    def test_the_search_for_tasks_reads_the_transcript_alone(self):
+        # the protocol's points as hints narrowed the search or brought in points that are not tasks
         merge_summaries(self.mid, {"protocol": PROTOCOL})
         llm = mock.Mock(is_cloud=False, max_chars=100000)
         llm.chat.return_value = '{"who": "Ольга", "what": "провести обход этажа", "due": "в четверг", "time": "00:00", "quote": "В четверг проведём обход этажа"}'
         with mock.patch("app.llm.target", return_value=llm):
             commitments.extract(self.mid)
         sent = llm.chat.call_args_list[0][0][1]
-        self.assertIn("В четверг провести обход этажа", sent)
-        self.assertNotIn("Кто платит за баннеры", sent)  # open questions are not tasks
+        self.assertNotIn("В четверг провести обход этажа", sent)
+        self.assertIn("В четверг проведём обход этажа", sent)  # the transcript itself
 
+    def test_an_english_meeting_gets_its_tasks_in_english(self):
+        from app.database import update_meeting_fields
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm.chat.return_value = ""
+        with mock.patch("app.llm.target", return_value=llm):
+            commitments.extract(self.mid)
+            self.assertNotIn("по-английски", llm.chat.call_args_list[0][0][1])
+            update_meeting_fields(self.mid, language="en")
+            commitments.extract(self.mid)
+        self.assertIn("what пиши по-английски", llm.chat.call_args_list[-1][0][1])
 
 if __name__ == "__main__":
     unittest.main()

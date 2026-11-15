@@ -1971,27 +1971,65 @@ def _process_meeting_job(meeting_id: int) -> None:
                         roster = meeting_roster({**(get_meeting(meeting_id) or {}), "speakers": speakers_meta})
                     except Exception:
                         roster = []
-                    summary_md = generate_meeting_summary(
-                        progress=lambda done, total: update_meeting_progress(
-                            meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
-                        segments=merged_segments,
-                        speakers=speakers_meta,
-                        template_key="protocol",
-                        user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
-                        mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
-                        features_note=features_note_for(get_meeting(meeting_id) or {}),
-                        context_note=meeting_context_note(get_meeting(meeting_id) or {}, "protocol"),
-                        answer_lang=detected_lang,
-                        local_only=local_only,
-                        part_notes=part_notes,
-                        participants=roster,
-                    )
+                    from app import analysis_chain
+
+                    auto_tasks = settings.get("auto_commitments", "true").lower() == "true"
+                    summary_md = None
+                    in_steps = analysis_chain.enabled(settings)
+                    if in_steps:
+                        # In steps: the decisions, the tasks, the protocol with both (its result sections are
+                        # those lists word for word)
+                        try:
+                            summary_md = analysis_chain.run(
+                                meeting_id, None, detected_lang, find_tasks=auto_tasks,
+                                stage=lambda text: update_meeting_progress(meeting_id, stage_text=text),
+                                part_notes=part_notes,
+                            )
+                        except Exception as chain_err:
+                            if _cancel_wanted(meeting_id):
+                                raise
+                            # a step failed (a timeout, the context): the protocol in one go instead, so the
+                            # recording still gets its overview (found by an audit)
+                            print(f"[analysis_chain] meeting {meeting_id}: {chain_err}; the protocol in one go", flush=True)
+                            in_steps = False
+                    if summary_md is None:
+                        # The tasks first: they are checked against the transcript (a quote for each), and the
+                        # protocol is then told them, so its «Следующие шаги» are the same tasks
+                        if settings.get("auto_commitments", "true").lower() == "true":
+                            try:
+                                from app import commitments
+
+                                update_meeting_progress(meeting_id, stage_text="Поиск задач и договорённостей...")
+                                commitments.extract(meeting_id)
+                            except Exception as c_err:
+                                print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
+                            update_meeting_progress(meeting_id, stage_text=f"Формирование обзора записи ({where})...")
+                        summary_md = generate_meeting_summary(
+                            progress=lambda done, total: update_meeting_progress(
+                                meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
+                            segments=merged_segments,
+                            speakers=speakers_meta,
+                            template_key="protocol",
+                            user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
+                            mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
+                            features_note=features_note_for(get_meeting(meeting_id) or {}),
+                            context_note=meeting_context_note(get_meeting(meeting_id) or {}, "protocol"),
+                            answer_lang=detected_lang,
+                            local_only=local_only,
+                            part_notes=part_notes,
+                            participants=roster,
+                        )
                     from app.grounding import ground_summary
 
-                    if settings.get("summary_grounding", "true").lower() == "true":
+                    # the analysis in steps checks its protocol itself, before the program's lists go in
+                    if settings.get("summary_grounding", "true").lower() == "true" and not in_steps:
                         summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
                     summaries["protocol"] = summary_md
                     merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))
+                    try:  # a task the protocol did not list is added to its «Следующие шаги»
+                        analysis_chain.sync_next_steps(meeting_id)
+                    except Exception as sync_err:
+                        print(f"[analysis_chain] meeting {meeting_id}: {sync_err}", flush=True)
                     # The topics above the timeline: worth it for a meeting long enough to have several
                     if settings.get("auto_chapters", "true").lower() == "true" and total_len >= AUTO_CHAPTERS_MIN_SEC:
                         try:
@@ -2004,13 +2042,6 @@ def _process_meeting_job(meeting_id: int) -> None:
                             merge_summaries(meeting_id, {"chapters": chapters_md})
                         except Exception as ch_err:
                             print(f"[chapters] meeting {meeting_id}: {ch_err}", flush=True)
-                    if settings.get("auto_commitments", "true").lower() == "true":
-                        try:
-                            from app import commitments
-
-                            commitments.extract(meeting_id)
-                        except Exception as c_err:
-                            print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
                 except Exception as sum_err:
                     if not _cancel_wanted(meeting_id):  # a cancel broke the request off: not an error
                         summaries["error"] = str(sum_err)
