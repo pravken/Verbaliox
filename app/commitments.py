@@ -244,6 +244,9 @@ _KIND_WORDS = {"participant": "part", "speaker": "part", "outside": "ext", "ment
                "department": "team", "group": "team", "company": "org", "external": "org"}
 
 
+_KIND_NAMES_FIXED: List[bool] = []
+
+
 def _init() -> None:
     with _db_lock:
         conn = get_connection()
@@ -274,6 +277,12 @@ def _init() -> None:
                             ("edited", "INTEGER NOT NULL DEFAULT 0"), ("updated_at", "TEXT NOT NULL DEFAULT ''")):
             if column not in have:
                 conn.execute(f"ALTER TABLE commitments ADD COLUMN {column} {ddl}")
+        # tasks the model gave to «team» or «none» (a kind's code written as the person) are on nobody;
+        # once a run
+        if not _KIND_NAMES_FIXED:
+            _KIND_NAMES_FIXED.append(True)
+            conn.execute("UPDATE commitments SET who = '', who_kind = 'none' WHERE lower(who) IN ('team', 'none') "
+                         "AND source != 'manual' AND edited = 0")
         conn.commit()
         conn.close()
 
@@ -405,6 +414,9 @@ def parse_answer(answer: str) -> List[Dict[str, Any]]:
         if not what:
             continue
         who = str(obj.get("who") or "").strip()[:80]
+        # a small model sometimes writes the kind's code («team», «none») where the name goes: nobody named
+        if who.casefold() in ("team", "none", "part", "ext", "org", "null", "nobody", "unknown", "n/a", "-", "—"):
+            who = ""
         found.append({
             "who": who,
             "kind": norm_kind(obj.get("kind")) if who else "none",
