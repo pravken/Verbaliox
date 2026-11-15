@@ -124,7 +124,7 @@ function tkWhoName(task) { return task.who || t('tkNobody'); }
 
 function tkSourceText(task) {
   if (task.source === 'manual') return t('tkSrcManual');
-  if (task.source === 'mfu') return t('mfuTask');
+  if (task.source === 'mfu') return 'MFU';
   return t('tkSrcAi');
 }
 

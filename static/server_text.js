@@ -5,6 +5,7 @@
 const SERVER_TEXT_EN = {
   "Сведение дорожек: очистка голоса…": "Mixing the tracks: cleaning the voice…",
   "Название фичи пустое": "The feature name is empty",
+  "Фича не найдена": "The feature was not found",
   "Фича с таким названием уже есть": "A feature with this name already exists",
   "Разметка «кто когда говорит» (Nemotron)...": "Marking who speaks when (Nemotron)...",
   "Для Nemotron нужна библиотека transformers: обновите программу до последней версии": "Nemotron needs the transformers library: update the app to the latest version",
