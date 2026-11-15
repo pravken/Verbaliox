@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -16,6 +16,41 @@ from app.audio_utils import format_timestamp
 from app.database import get_all_settings, update_settings
 
 RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
+    # Measured on 9 real meetings at 10, 8 and 6 GB and without a GPU (bench-report/llm-profiles.md)
+    {
+        "id": "gemma4:e4b",
+        "min_ollama": "0.30.9",  # what the model asks of Ollama in its registry config
+        "name": "Gemma 4 E4B",
+        "badge": "6.6 GB · Apache",
+        "size": "6.6 GB",
+        "vram": "8+ GB VRAM",
+        "license": "Apache",
+        "desc_ru": "Рекомендуется для видеокарт с 8 ГБ и больше: в сравнении на настоящих встречах нашла больше всех задач (около половины против трети у Qwen3 8B), протокол часовой встречи — за полторы минуты",
+        "desc_en": "Recommended for GPUs with 8 GB or more: on real meetings it found the most tasks (about half, against a third for Qwen3 8B); an hour's protocol in a minute and a half",
+        "good_ru": "Задачи и решения встречи, протоколы на русском и английском почти без выдуманных чисел; в памяти около 5 ГБ, помещается вместе с распознаванием речи",
+        "good_en": "Tasks and decisions of a meeting, summaries in Russian and English with almost no made-up numbers; about 5 GB in memory, fits next to speech recognition",
+        "weak_ru": "Находит не все задачи и иногда добавляет лишние — проверяйте список; длинный протокол иногда обрывается в конце; без видеокарты протокол часа — около 11 минут",
+        "weak_en": "Does not find every task and sometimes adds extra ones, so check the list; a long protocol is sometimes cut at the end; without a GPU an hour's protocol takes about 11 minutes",
+        "min_vram_gb": 8,  # 0: fine without a GPU too
+        "cpu_ok": False,
+    },
+    {
+        "id": "gemma4:e2b",
+        "min_ollama": "0.30.9",  # what the model asks of Ollama in its registry config
+        "name": "Gemma 4 E2B",
+        "badge": "4.6 GB · Apache",
+        "size": "4.6 GB",
+        "vram": "4–8 GB / CPU",
+        "license": "Apache",
+        "desc_ru": "Рекомендуется для видеокарт до 8 ГБ и компьютеров без видеокарты: в сравнении находит задачи в 3–5 раз чаще, чем Qwen3.5 4B, протокол часовой встречи без видеокарты — около 5 минут",
+        "desc_en": "Recommended for GPUs under 8 GB and computers without one: on real meetings it found tasks 3–5 times as often as Qwen3.5 4B; an hour's protocol without a GPU in about 5 minutes",
+        "good_ru": "Лёгкая: около 3 ГБ видеопамяти; протоколы на русском и английском без выдуманных чисел; лучший выбор для ноутбуков",
+        "good_en": "Light: about 3 GB of video memory; summaries in Russian and English without made-up numbers; the best choice for laptops",
+        "weak_ru": "Находит меньше задач, чем Gemma 4 E4B (на 6 ГБ — около трети), — проверяйте список",
+        "weak_en": "Finds fewer tasks than Gemma 4 E4B (about a third on 6 GB), so check the list",
+        "min_vram_gb": 4,  # 0: fine without a GPU too
+        "cpu_ok": True,
+    },
     {
         "id": "qwen3.5:4b",
         "name": "Qwen3.5 4B",
@@ -23,8 +58,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "size": "3.4 GB",
         "vram": "4–6 GB / CPU",
         "license": "Apache",
-        "desc_ru": "Рекомендуется: в сравнении на реальных записях не хуже моделей вдвое больше, а памяти нужно меньше всех; подходит и для ноутбуков",
-        "desc_en": "Recommended: on real recordings as good as models twice its size, with the least memory; fine for laptops too",
+        "desc_ru": "Прежняя модель по умолчанию: быстрая и лёгкая, но в сравнении на настоящих встречах находит заметно меньше задач, чем Gemma 4",
+        "desc_en": "The former default: fast and light, but on real meetings it found far fewer tasks than Gemma 4",
         "good_ru": "Протоколы, задачи и ответы по записям на русском и английском; быстрая работа, в том числе без видеокарты",
         "good_en": "Summaries, tasks and answers for Russian and English recordings; fast, including without a GPU",
         "weak_ru": "На длинных записях и сложных вопросах возможны пропуски деталей; без видеокарты ответ формируется дольше",
@@ -39,12 +74,12 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "size": "5.2 GB",
         "vram": "10+ GB VRAM",
         "license": "Apache",
-        "desc_ru": "Новое поколение Qwen: лучше русский, длинные тексты и точность, та же свободная лицензия",
-        "desc_en": "The new Qwen generation: better Russian, long texts and accuracy, same free license",
-        "good_ru": "Более высокая точность на длинных встречах, связность анализа всего разговора",
-        "good_en": "Higher accuracy on long meetings, coherent analysis of the whole conversation",
-        "weak_ru": "Требуется видеокарта с 10 ГБ памяти; без неё работает медленно",
-        "weak_en": "Requires a GPU with 10 GB of memory; slow without one",
+        "desc_ru": "Для тех, кто к ней привык; в сравнении на настоящих встречах Gemma 4 E4B находит больше задач и пишет протокол в 2–4 раза быстрее",
+        "desc_en": "For those used to it; on real meetings Gemma 4 E4B found more tasks and wrote the protocol 2–4 times as fast",
+        "good_ru": "Связный анализ всего разговора, хороший русский",
+        "good_en": "Coherent analysis of the whole conversation, good Russian",
+        "weak_ru": "Требуется видеокарта с 10 ГБ памяти, занимает её почти целиком; без неё работает медленно",
+        "weak_en": "Requires a GPU with 10 GB of memory and takes almost all of it; slow without one",
         "min_vram_gb": 10,  # 0: fine without a GPU too
         "cpu_ok": False,
     },
@@ -83,6 +118,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
 ]
 
 _LLM_DISPLAY_NAMES: Dict[str, str] = {
+    "gemma4:e4b": "Gemma 4 E4B",
+    "gemma4:e2b": "Gemma 4 E2B",
     "qwen3:8b": "Qwen3 8B",
     "qwen3:14b": "Qwen3 14B",
     "qwen3:4b": "Qwen3 4B",
@@ -426,6 +463,28 @@ def _install_ollama_if_needed() -> bool:
     return False
 
 
+def _version_tuple(text: str) -> Tuple[int, ...]:
+    """'0.30.9' -> (0, 30, 9); '0.31.0-rc1' -> (0, 31, 0)"""
+    return tuple(int(n) for n in re.findall(r"\d+", str(text).split("-", 1)[0])[:3])
+
+
+def ollama_too_old(model_name: str, base_url: str) -> Optional[Tuple[str, str]]:
+    """(installed, needed) when the running Ollama is older than the model asks for; None when it is
+    new enough, the model asks for nothing, or the version is not known. An old Ollama refused gemma4
+    with an English message of its own, or a bare «412»."""
+    needed = next((m.get("min_ollama") for m in RECOMMENDED_LLM_MODELS if m["id"] == model_name), None)
+    if not needed:
+        return None
+    try:
+        r = httpx.get(f"{base_url.rstrip('/')}/api/version", timeout=5.0)
+        installed = str(r.json().get("version") or "")
+    except Exception:
+        return None
+    if not installed or not _version_tuple(installed):
+        return None
+    return (installed, needed) if _version_tuple(installed) < _version_tuple(needed) else None
+
+
 def start_model_pull(
     model_name: str,
     base_url: Optional[str] = None,
@@ -475,6 +534,12 @@ def start_model_pull(
                     raise RuntimeError("Ollama установлена, но локальный сервер ещё не ответил. Попробуйте через 5 секунд.")
 
             _append_log("Подключение к локальному серверу Ollama")
+            old = ollama_too_old(model_name, base_url)
+            if old:
+                raise RuntimeError(
+                    f"Для модели {pretty_name} нужна Ollama {old[1]} или новее, а установлена {old[0]}. "
+                    "Обновите Ollama (https://ollama.com/download) и нажмите «Скачать» ещё раз."
+                )
             _pull_state["progress"] = 8
 
             last_logged_status = ""
@@ -614,10 +679,42 @@ def _chunk_lines(lines: List[str], max_chars: int) -> List[str]:
 
 # A transcript up to this size is analysed in one request (fits num_ctx together with the prompt).
 # Longer recordings are summarised chunk by chunk first, so nothing in the middle is dropped.
+# These are the sizes for a card under 8 GB and for the processor; see llm_context_scale.
 SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
 LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
+MFU_SUMMARY_CHARS = 6000     # the organizer's follow-up in every summary request (as much as the notes)
+LARGE_CONTEXT_VRAM_GB = 7.5   # an "8 GB" card reports a little under 8
+CONTEXT_SCALE: Optional[float] = None  # set by tools/llm_bench.py --ctx; None: chosen by the card
+
+
+def llm_context_scale() -> float:
+    """2 on a card of 8 GB and more: the context doubles to 32k and a recording is read in bigger
+    parts (an hour in 3 parts instead of 5). Measured on the PC (bench-report/llm-profiles.md): the
+    protocol is ready 1.5-2 times sooner, no worse, for 0.3-0.5 GB more. A 6 GB card and the
+    processor keep 16k: there the longer context costs memory and time the model does not have."""
+    if CONTEXT_SCALE is not None:
+        return CONTEXT_SCALE
+    try:
+        from app.hardware import _gpu_probe
+
+        gpu = _gpu_probe()
+    except Exception:
+        gpu = None
+    return 2.0 if gpu and float(gpu[1] or 0) >= LARGE_CONTEXT_VRAM_GB else 1.0
+
+
+def llm_num_ctx() -> int:
+    return int(LLM_NUM_CTX * llm_context_scale())
+
+
+def single_pass_max_chars() -> int:
+    return int(SINGLE_PASS_MAX_CHARS * llm_context_scale())
+
+
+def chunk_max_chars() -> int:
+    return int(CHUNK_MAX_CHARS * llm_context_scale())
 
 _LANG_PHRASES: Dict[str, str] = {
     "ru": "на русском языке",
@@ -666,6 +763,9 @@ SUMMARY_TEMPLATES: Dict[str, str] = {
         "(Перечисли по пунктам с таймкодами `[ММ:СС]`, о чём именно говорили спикеры и какие оценки/мнения они высказали)\n\n"
         "## Упомянутые имена, объекты и детали\n"
         "(Какие имена, предметы, места или конкретные факты прозвучали в речи)\n\n"
+        "## Решения\n"
+        "(О чём договорились или что решили — по пунктам, с таймкодами `[ММ:СС]`. Если решений не было, "
+        "напиши одной строкой без пункта: «Решений не принималось»)\n\n"
         "## Итог\n"
         "(Краткое резюме сказанного в 1–2 предложениях строго по тексту)"
     ),
@@ -820,7 +920,19 @@ def _analysis_leave() -> None:
             del _analysis_ended[t]
 
 
-def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
+LLM_RETRY_ANSWER_TOKENS = 8192  # once, when an answer was cut at LLM_MAX_ANSWER_TOKENS
+
+
+def _goes_round(text: str) -> bool:
+    """A model repeating itself: of the last 12 lines, half or more were already written."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    tail = lines[-12:]
+    return len(tail) >= 6 and len(tail) - len(set(tail)) >= len(tail) // 2
+
+
+def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False) -> str:
+    """short: a short answer (a title, «да / нет» checks, a feature's name): the model does not reason
+    first, which is most of the time of such an answer."""
     from app import idle_unload
 
     idle_unload.touch(model)
@@ -835,7 +947,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
             "temperature": 0.1,
             "top_p": 0.85,
             "repeat_penalty": 1.15,
-            "num_ctx": LLM_NUM_CTX,
+            "num_ctx": llm_num_ctx(),
             # An answer stops at this length: a small model caught in a loop (the same lines again and
             # again) wrote until the whole context was full, for many minutes on a processor
             "num_predict": LLM_MAX_ANSWER_TOKENS,
@@ -845,14 +957,12 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
     if keep_alive:
         payload["keep_alive"] = keep_alive  # Ollama frees the model after the same idle time
     from app.llm_text import strip_think, thinking_off
-
-    payload.update(thinking_off(model))
     from app import cancel_scope
 
     try:  # one model in memory at a time: the idle speech models and another analysis model go first
         from app.vram import ollama_release_others, release_idle_speech_models
 
-        gone = release_idle_speech_models()
+        gone = release_idle_speech_models(model)
         if gone:
             print(f"[ollama] unloaded before {model}: {', '.join(gone)}", flush=True)
         ollama_release_others(keep=model)
@@ -860,10 +970,26 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str) -> str:
         print(f"[ollama] others not unloaded: {e}", flush=True)
 
     def request() -> str:
+        # asked here, once the answer counts as being written: Ollama is asked what the model can do
+        payload.update(thinking_off(model, analysis=not short, base_url=base_url))
         with httpx.Client(timeout=600.0) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
             raise_for_ollama(resp)
             data = resp.json()
+            # Cut at the answer limit (a model that reasons spends part of it thinking: gemma4's summaries
+            # lost their end in 6 of 9 recordings): asked once more with room to finish, not saved cut
+            # Not for a short answer (a title, a yes or no) and not for a model gone round in circles: more room
+            # would only give it more of the same lines
+            first = str((data.get("message") or {}).get("content") or "")
+            if (data.get("done_reason") == "length" and payload["options"]["num_predict"] < LLM_RETRY_ANSWER_TOKENS
+                    and not short and not _goes_round(first)):
+                print(f"[ollama] {model}: the answer was cut at {payload['options']['num_predict']} tokens, asked again", flush=True)
+                payload["options"]["num_predict"] = LLM_RETRY_ANSWER_TOKENS
+                resp = client.post(f"{base_url}/api/chat", json=payload)
+                raise_for_ollama(resp)
+                data = resp.json()
+            if data.get("done_reason") == "length":
+                print(f"[ollama] {model}: the answer is cut at {payload['options']['num_predict']} tokens", flush=True)
             msg = data.get("message") or {}
             return strip_think(str(msg.get("content") or data.get("response") or ""))
 
@@ -935,8 +1061,11 @@ def generate_meeting_summary(
     progress: Optional[Callable[[int, int], None]] = None,
     part_notes: Optional[Dict[str, Any]] = None,
     participants: Optional[List[str]] = None,
+    mfu: str = "",
+    features_note: str = "",
 ) -> str:
-    """participants: who was in the meeting, their names written right (app/people.meeting_roster):
+    """mfu: the organizer's meeting follow-up the user pasted: the decisions and tasks agreed on;
+    participants: who was in the meeting, their names written right (app/people.meeting_roster):
     the model writes them so, and a name it still misspells is put right in its answer;
     template_prompt: the instruction of a template the user made (Settings → Analysis);
     user_notes: what the user wrote during the meeting, taken into account by every summary;
@@ -977,23 +1106,41 @@ def generate_meeting_summary(
         )
     elif template_key == "notes" and not custom_prompt.strip():
         raise RuntimeError("У записи нет ваших заметок: напишите их во вкладке «Мои заметки» или во время записи в студии")
+    if (features_note or "").strip():  # Словарь → Фичи: what the meeting's feature is, its words
+        instruction += "\n\nВстреча относится к фиче (что это и как в ней называются вещи):\n" + features_note.strip()[:2000]
+    try:
+        from app import vocab
+
+        glossary = vocab.glossary_note()
+    except Exception:
+        glossary = ""
+    if glossary:
+        instruction += "\n\n" + glossary
+    mfu_text = (mfu or "").strip()[:MFU_SUMMARY_CHARS]
+    if mfu_text:
+        instruction += (
+            "\n\nMFU — итоги встречи, которые написал её организатор и разослал участникам. Решения, задачи, сроки "
+            "и ответственных бери из MFU: это согласованный людьми текст. Расшифровку используй для подробностей и "
+            "таймкодов; где она расходится с MFU, верь MFU:\n<mfu>\n" + mfu_text.replace("</mfu>", "") + "\n</mfu>"
+        )
 
     roster = [p for p in (participants or []) if str(p).strip()][:40]
     roster_note = (
         "Участники этой встречи — их имена и фамилии написаны верно: " + "; ".join(roster) + ". "
-        "Когда речь о ком-то из них (в том числе когда распознавание исказило имя), пиши имя и фамилию "
+        "Когда речь о ком-то из них (в том числе когда распознавание исказило имя, а в разговоре человека зовут "
+        "коротко или иначе: «Макс» — Максим, «Саша» — Александр, по фамилии, латиницей или кириллицей), пиши имя и фамилию "
         "точно как в этом списке, буква в букву. Не придумывай фамилии, отчества и должности, которых нет "
         "ни в этом списке, ни в расшифровке; если не ясно, о ком речь, пиши имя так, как оно сказано."
     ) if roster else ""
 
     source_label = "Вот точная расшифровка аудио/видеозаписи"
-    single_pass_max = SINGLE_PASS_MAX_CHARS if not llm.is_cloud else llm.max_chars
+    single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
-    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]))
+    whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text))
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
-        chunks = _chunk_lines(lines, CHUNK_MAX_CHARS if not llm.is_cloud else llm.max_chars // 2)
+        chunks = _chunk_lines(lines, chunk_max_chars() if not llm.is_cloud else llm.max_chars // 2)
         focus = (
             f"Особенно подробно выпиши всё, что относится к вопросу: {custom_prompt.strip()}\n"
             if custom_prompt.strip()
@@ -1082,7 +1229,7 @@ def generate_meeting_title(
         f"Отвечай {lang}. Выведи только название: 3–8 слов, без кавычек, без точки в конце, без даты, "
         "без слов «Встреча», «Запись», «Обсуждение» в начале, если можно обойтись без них."
     )
-    raw = llm.chat(system, f"Расшифровка:\n{text}\n\nНазвание:")
+    raw = llm.chat(system, f"Расшифровка:\n{text}\n\nНазвание:", short=True)
     title = clean_title(raw, answer_lang)
     if len(title) < 3:
         raise RuntimeError("Модель не дала названия")

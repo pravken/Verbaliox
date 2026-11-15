@@ -35,6 +35,11 @@ def api_tasks() -> Dict[str, Any]:
 
     tasks = commitments.all_tasks()
     briefs = commitments.meeting_briefs(t["meeting_id"] for t in tasks)
+    from app.features import feature_map
+
+    tags = feature_map(t["meeting_id"] for t in tasks)  # a task belongs to the features of its meeting
+    for t in tasks:
+        t["features"] = tags.get(t["meeting_id"], [])
     return {"tasks": tasks, "people": commitments.people(tasks, briefs), "meetings": _meetings(briefs),
             "today": date.today().isoformat()}
 

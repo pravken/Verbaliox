@@ -101,6 +101,52 @@ class DetermineClustersTest(unittest.TestCase):
         labels = _determine_clusters(embs, durs, num_speakers_hint=10)
         self.assertEqual(len(set(labels.tolist())), 2)
 
+    def test_a_count_said_gives_what_auto_finds_within_it(self):
+        # «4 said» grouped worse than Auto: within 2..4 the best-scoring split was often three groups
+        embs, durs, truth = self._meeting([90, 60, 35, 20])
+        auto = _determine_clusters(embs, durs)
+        said = _determine_clusters(embs, durs, num_speakers_hint=4)
+        self.assertEqual(len(set(said.tolist())), 4)
+        self.assertEqual(said.tolist(), auto.tolist())
+        self.assertGreater(self._agrees(said, truth), 0.95)
+
+    def test_more_voices_than_said_the_least_heard_is_taken_apart(self):
+        """AMI with 4 said: Auto found 5, the fifth a little group of scraps; joined whole to the closest
+        group, two real people were put together (wrong person 3 % -> 11 % of the time)."""
+        from app.diarizer import _fold_least_heard
+
+        common = self.rng.normal(size=192)
+        a_base = common + self.rng.normal(size=192) * 0.9
+        bases = [a_base, a_base + self.rng.normal(size=192) * 0.5,  # two alike voices, both talk a lot
+                 common + self.rng.normal(size=192) * 0.9, common + self.rng.normal(size=192) * 0.9]
+        embs, truth, labels = [], [], []
+        for v, n in enumerate((60, 50, 40, 30)):
+            embs.append(_voice(self.rng, bases[v], n, 0.3))
+            truth += [v] * n
+            labels += [v] * n
+        scraps = [0, 2, 3, 3, 1, 2]  # whose scraps the fifth group really holds
+        for v in scraps:
+            embs.append(_voice(self.rng, bases[v] + common * 0.8, 1, 0.3))
+            truth.append(v)
+            labels.append(4)
+        embs = np.vstack(embs).astype(np.float32)
+        durs = np.r_[np.full(180, 5.0), np.full(len(scraps), 1.0)].astype(np.float32)
+        truth, labels = np.array(truth), np.array(labels)
+        out = _fold_least_heard(embs, durs, labels, 4)
+        self.assertEqual(len(set(out.tolist())), 4)
+        for v in range(4):  # each real voice is one speaker and no two share one
+            self.assertEqual(len(set(out[truth == v][:30].tolist())), 1)
+        self.assertEqual(len({int(out[truth == v][0]) for v in range(4)}), 4)
+        self.assertGreater(self._agrees(out, truth), 0.9)  # the scraps went to their people
+
+    def test_more_voices_than_said_each_voice_stays_whole(self):
+        embs, durs, truth = self._meeting([80, 60, 40, 30, 25])
+        labels = _determine_clusters(embs, durs, num_speakers_hint=4)
+        self.assertEqual(len(set(labels.tolist())), 4)
+        for v in range(5):  # the least heard voice goes into others; the rest stay whole
+            if v != 4:
+                self.assertEqual(len(set(labels[truth == v].tolist())), 1)
+
     def test_one_voice_of_a_call_stays_one_speaker(self):
         embs, durs, _ = self._meeting([200], outliers=6, spread=1.1)
         self.assertEqual(set(_determine_clusters(embs, durs).tolist()), {0})

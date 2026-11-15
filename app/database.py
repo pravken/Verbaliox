@@ -3,6 +3,7 @@ import os
 import re
 import sqlite3
 import threading
+import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -158,6 +159,8 @@ def init_db() -> None:
             "compute_type": hw["recommended_compute_type"],
             "language": "auto",
             "diarization_enabled": "true",
+            "diarizer_engine": "ecapa",  # "nemotron": Nemotron 3 Diarization, downloaded on request (app/nemotron_diar.py)
+            "feature_suggest": "true",  # the analysis model suggests a recording's features (app/features.py)
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "ollama_url": "http://localhost:11434",
@@ -336,6 +339,7 @@ _MEETING_EXTRA_COLUMNS = {
     "pending_exports_json": "TEXT DEFAULT '[]'",
     "exports_json": "TEXT DEFAULT '[]'",  # files saved by exports (Save as), deleted with the recording on request
     "user_notes": "TEXT DEFAULT ''",  # the user's own notes of the meeting (studio or "My notes" tab)
+    "mfu": "TEXT DEFAULT ''",  # the organizer's meeting follow-up, pasted by the user: tasks and summary lean on it
     "media_removed": "INTEGER DEFAULT 0",  # 1: the sound was deleted for privacy, the transcript kept
     "transcript_verified": "INTEGER DEFAULT 0",  # 1: the user checked and corrected it: a reference for app/bench.py
     "has_video": "INTEGER DEFAULT NULL",  # NULL: told from the file extension (see is_video)
@@ -1172,7 +1176,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 
 
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
-    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
+    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes", "mfu",
                "transcript_verified", "audio_path", "transcript_made_with",
                "local_only", "series_id"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
@@ -1394,7 +1398,15 @@ def get_meeting(meeting_id: int) -> Optional[Dict[str, Any]]:
         row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
         m = _deserialize_meeting(dict(row), conn) if row else None
         conn.close()
-        return m
+    if m is not None:
+        try:
+            from app.features import feature_map, suggestion_map
+
+            m["features"] = feature_map([meeting_id]).get(meeting_id, [])
+            m["feature_suggestions"] = suggestion_map([meeting_id]).get(meeting_id, [])
+        except Exception:
+            traceback.print_exc()
+    return m
 
 
 _LIST_COLUMNS = """id, title, filename, media_path, duration, status, progress, stage_text,
@@ -1486,6 +1498,15 @@ def list_meetings() -> List[Dict[str, Any]]:
         d["size_bytes"] = d.pop("media_size") or 0
         d.pop("media_path", None)
         result.append(d)
+    try:  # the features each recording is about, and the model's suggestions (app/features.py)
+        from app.features import feature_map, suggestion_map
+
+        tags, guesses = feature_map(), suggestion_map()
+        for d in result:
+            d["features"] = tags.get(d["id"], [])
+            d["feature_suggestions"] = guesses.get(d["id"], [])
+    except Exception:
+        traceback.print_exc()
     if unmeasured:
         with _db_lock:
             conn = get_connection()
@@ -1723,10 +1744,13 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
         conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))
-        try:
-            conn.execute("DELETE FROM commitments WHERE meeting_id = ?", (meeting_id,))
-        except sqlite3.OperationalError:
-            pass  # no commitments table yet (app/commitments.py creates it on first use)
+        # its tasks, the tasks deleted from it (they were examples for the model: a recording kept to
+        # local analysis must not leave them behind) and its feature tags (app/features.py)
+        for table in ("commitments", "commitments_dismissed", "meeting_features", "feature_suggestions", "feature_declined"):
+            try:
+                conn.execute(f"DELETE FROM {table} WHERE meeting_id = ?", (meeting_id,))
+            except sqlite3.OperationalError:
+                pass  # the table is made on first use of its module
         conn.commit()
         conn.close()
     events.publish({"type": "list"})

@@ -173,6 +173,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-summary-grounding').checked = s.summary_grounding !== 'false';
     document.getElementById('set-auto-commitments').checked = s.auto_commitments !== 'false';
     document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
+    document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
     loadWatchFolder();
     document.getElementById('set-semantic').checked = s.semantic_search === 'true';
@@ -197,6 +198,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     loadBackupInfo();
     loadOrphans();
     loadOnnxGpu();
+    loadNemotron();
     document.getElementById('calendar-status').textContent = '';
     await fillCallSettings(s);  // before the baseline: its lists are filled after a request
     fillWorkdaySettings(s);
@@ -551,6 +553,8 @@ const MODEL_DISPLAY_NAMES = {
   'parakeet-v3': 'Parakeet TDT v3',
   'large-v3-turbo': 'Whisper Turbo',
   'large-v3': 'Whisper Pro',
+  'gemma4:e4b': 'Gemma 4 E4B',
+  'gemma4:e2b': 'Gemma 4 E2B',
   'qwen3:8b': 'Qwen3 8B',
   'qwen3:14b': 'Qwen3 14B',
   'qwen3.5:4b': 'Qwen3.5 4B',
@@ -782,7 +786,7 @@ function firstRunPicks(data, lang) {
   const hw = data.hardware || {};
   const gpu = !!(hw.cuda_available && Number(hw.vram_total_gb || 0) >= 4);
   const vram = Number(hw.vram_total_gb || 0);
-  const llm = vram >= 10 ? 'qwen3:8b' : 'qwen3.5:4b';  // bench-report/report.md
+  const llm = gpu && vram >= 7.5 ? 'gemma4:e4b' : 'gemma4:e2b';  // bench-report/llm-profiles.md
   // Outside Russian: Whisper Turbo with a GPU (99 languages), Parakeet without one (fast on the CPU)
   const other = gpu ? 'large-v3-turbo' : 'parakeet-v3';
   const presets = [
@@ -1431,6 +1435,56 @@ async function removeOnnxGpu() {
   if (data) renderOnnxGpu(data);
 }
 
+// --- Nemotron 3 Diarization (app/nemotron_diar.py): who speaks when, downloaded on request ---
+let _nemotronTimer = null;
+
+function renderNemotron(st) {
+  const label = document.getElementById('nemotron-status');
+  if (!label) return;
+  document.getElementById('set-nemotron').checked = !!st.chosen;
+  document.getElementById('set-nemotron').disabled = !st.library && !st.chosen;  // nothing to run it with
+  label.className = 'text-[11.5px] ' + (st.error ? 'text-apple-amber' : st.installed && st.chosen ? 'text-apple-green' : 'text-apple-secondary');
+  label.textContent = st.installing ? t('nemotronInstalling')
+    : st.error ? serverText(st.error)
+    : !st.library ? t('nemotronNoLibrary')
+    : st.installed ? (st.chosen ? t('nemotronActive') : t('nemotronInstalled')).replace('{mb}', () => st.disk_mb)
+    : t('nemotronMissing');
+  document.getElementById('nemotron-install').classList.toggle('hidden', st.installed || st.installing || !st.library);
+  document.getElementById('nemotron-remove').classList.toggle('hidden', !st.installed || st.installing);
+  clearTimeout(_nemotronTimer);
+  if (st.installing) _nemotronTimer = setTimeout(loadNemotron, 2000);
+}
+
+async function loadNemotron() {
+  const st = await fetch('/api/nemotron').then(r => r.json()).catch(() => null);
+  if (st) renderNemotron(st);
+}
+
+async function installNemotron() {
+  const res = await fetch('/api/nemotron/install', { method: 'POST' });
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); return; }
+  renderNemotron(data);
+}
+
+// The switch: on downloads the model when it is not there yet, off goes back to ECAPA (the model stays)
+async function toggleNemotron() {
+  const on = document.getElementById('set-nemotron').checked;
+  const st = await fetch('/api/nemotron').then(r => r.json()).catch(() => null);
+  if (on && st && !st.installed && st.library) { installNemotron(); return; }
+  const res = await fetch('/api/nemotron/choose', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ on }) });
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); return; }
+  renderNemotron(data);
+}
+
+async function removeNemotron() {
+  if (!await askConfirm(t('nemotronRemoveConfirm'), true, t('cfDeleteFiles'))) return;
+  const data = await fetch('/api/nemotron/remove', { method: 'POST' }).then(r => r.json()).catch(() => null);
+  if (data) renderNemotron(data);
+}
+
 // --- The user's calendar (app/calendar_ics.py; "outlook": app/calendar_outlook.py) ---
 async function loadCalendarSource() {
   const st = await fetch('/api/calendar/upcoming').then(r => r.json()).catch(() => null);
@@ -1591,11 +1645,13 @@ const MODEL_METERS = {
   'parakeet-v3': { acc: { ru: [4, 5.5], en: [4, 7.8] }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
   'large-v3-turbo': { acc: { ru: [5, 4.0], en: [5, 5.8] }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
   'large-v3': { acc: { ru: [5, 3.8], en: [5, 5.7] }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
-  // Analysis: quality from the comparison on real recordings (bench-report/report.md, «Анализ») and
+  // Analysis: quality from the comparisons on real recordings (bench-report/llm-profiles.md, report.md) and
   // the model size; speed and memory from the size of each model
   'qwen2.5:1.5b': { quality: 2, speed: { cpu: [4, ''], gpu: [5, ''] }, load: [1], ram: 2, vram: 2 },
-  'qwen3.5:4b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 5, vram: 5 },
-  'qwen3:8b': { quality: 4, speed: { cpu: [1, ''], gpu: [4, ''] }, load: [3], ram: 10, vram: 10 },
+  'gemma4:e4b': { quality: 5, speed: { cpu: [2, ''], gpu: [5, ''] }, load: [3], ram: 6, vram: 5 },
+  'gemma4:e2b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 4, vram: 3 },
+  'qwen3.5:4b': { quality: 3, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 5, vram: 5 },
+  'qwen3:8b': { quality: 3, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [3], ram: 10, vram: 10 },
   'qwen3:14b': { quality: 5, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [5], ram: 12, vram: 12 },
 };
 
@@ -2215,6 +2271,7 @@ function settingsFormValues() {
     summary_grounding: String(document.getElementById('set-summary-grounding').checked),
     auto_commitments: String(document.getElementById('set-auto-commitments').checked),
     dictionary_fuzzy: String(document.getElementById('set-dict-fuzzy').checked),
+    feature_suggest: String(document.getElementById('set-feature-suggest').checked),
     semantic_search: String(document.getElementById('set-semantic').checked),
     semantic_model: document.getElementById('set-semantic-model').value.trim() || 'bge-m3',
     idle_unload_minutes: document.getElementById('set-idle-unload').value,
@@ -2598,7 +2655,7 @@ const SETTINGS_RESET = {
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
-  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check']],
+  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check'], ['set-feature-suggest', 'feature_suggest', 'check']],
   export: [['set-file-name-template', 'file_name_template', 'value'], ['set-date-folders', 'date_folders', 'value']],
   privacy: [['set-delete-media-after', 'delete_media_after', 'check'], ['set-media-retention', 'media_retention_days', 'value']],
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
@@ -2607,7 +2664,7 @@ const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
-  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true',
+  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',
@@ -2654,6 +2711,7 @@ function refreshSettingsChanged() {
 
 function onSettingsTabShown(name) {
   if (state.settingsQuery) clearSettingsSearch(true);
+  if (name === settingsTabOf('dictionary')) renderDictFeatures();  // the dictionary is a section of its tab
   const main = document.getElementById('settings-main');
   if (main) main.scrollTop = 0;
   refreshSettingsChanged();

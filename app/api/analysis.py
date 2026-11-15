@@ -35,7 +35,110 @@ def api_meeting_series(meeting_id: int, payload: SeriesAssignPayload) -> Dict[st
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     sid = create_series(payload.new_name) if payload.new_name else payload.series_id
     update_meeting_fields(meeting_id, series_id=sid)
+    from app.features import apply_series_rule
+
+    apply_series_rule(meeting_id)  # the features the series is about, when the meeting has none
     return api_get_meeting(meeting_id)
+
+# --- Features (app/features.py): a tag across the library; a meeting's tasks belong to its features ---
+class FeaturePayload(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    description: Optional[str] = None  # Словарь → Фичи: what it is about, for the models
+    keywords: Optional[str] = None     # words of a meeting's title, comma-separated
+    terms: Optional[str] = None        # names to write right: recognition and the models' glossary
+
+@router.get("/api/features")
+def api_features() -> List[Dict[str, Any]]:
+    from app.features import list_features
+
+    return list_features()
+
+@router.post("/api/features")
+def api_create_feature(payload: FeaturePayload) -> Dict[str, Any]:
+    from app.features import create_feature
+
+    try:
+        return create_feature(payload.name or "", payload.color or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/api/features/{feature_id}")
+def api_feature_page(feature_id: int) -> Dict[str, Any]:
+    """The page of a feature: its meetings with their decisions, and their tasks."""
+    from app.features import overview
+
+    data = overview(feature_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
+    return data
+
+@router.patch("/api/features/{feature_id}")
+def api_update_feature(feature_id: int, payload: FeaturePayload) -> List[Dict[str, Any]]:
+    from app.features import list_features, update_feature
+
+    if feature_id not in {f["id"] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
+    try:
+        update_feature(feature_id, payload.name, payload.color, payload.description, payload.keywords, payload.terms)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    from app import vocab
+
+    vocab.invalidate()  # its terms join recognition at once
+    return list_features()
+
+@router.delete("/api/features/{feature_id}")
+def api_delete_feature(feature_id: int) -> List[Dict[str, Any]]:
+    from app.features import delete_feature, list_features
+
+    if feature_id not in {f["id"] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
+    delete_feature(feature_id)
+    from app import vocab
+
+    vocab.invalidate()
+    return list_features()
+
+class MeetingFeaturesPayload(BaseModel):
+    ids: List[int] = []
+    for_series: bool = False  # the same features for every new meeting of its series
+
+@router.put("/api/meetings/{meeting_id}/features")
+def api_meeting_features(meeting_id: int, payload: MeetingFeaturesPayload) -> Dict[str, Any]:
+    from app.features import set_meeting_features
+
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    set_meeting_features(meeting_id, payload.ids, payload.for_series)
+    m = get_meeting(meeting_id) or {}
+    return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
+
+@router.post("/api/meetings/{meeting_id}/feature-suggestions/{feature_id}")
+def api_accept_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
+    from app.features import accept_suggestion, list_features
+
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if feature_id not in {f['id'] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
+
+    accept_suggestion(meeting_id, feature_id)
+    m = get_meeting(meeting_id) or {}
+    return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
+
+@router.delete("/api/meetings/{meeting_id}/feature-suggestions/{feature_id}")
+def api_decline_feature(meeting_id: int, feature_id: int) -> Dict[str, Any]:
+    from app.features import decline_suggestion, list_features
+
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if feature_id not in {f['id'] for f in list_features()}:
+        raise HTTPException(status_code=404, detail="Фича не найдена")
+
+    decline_suggestion(meeting_id, feature_id)
+    m = get_meeting(meeting_id) or {}
+    return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
 
 class SeriesRenamePayload(BaseModel):
     name: str
@@ -622,6 +725,20 @@ def api_save_notes(meeting_id: int, payload: NotesPayload) -> Dict[str, Any]:
     update_meeting_fields(meeting_id, user_notes=payload.notes[:50000])
     return {"ok": True}
 
+class MfuPayload(BaseModel):
+    text: str = ""
+
+@router.put("/api/meetings/{meeting_id}/mfu")
+def api_save_mfu(meeting_id: int, payload: MfuPayload) -> Dict[str, Any]:
+    """The organizer's meeting follow-up (MFU), pasted by the user. Saved on its own; the page then asks
+    for the tasks again (POST .../commitments), so a list is made once per change, not per keystroke."""
+    from app.database import update_meeting_fields
+
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    update_meeting_fields(meeting_id, mfu=payload.text.strip()[:50000])
+    return {"ok": True}
+
 class TemplatesPayload(BaseModel):
     templates: List[Dict[str, Any]]
 
@@ -654,6 +771,7 @@ def _roster(m: Dict[str, Any]) -> List[str]:
 @router.post("/api/meetings/{meeting_id}/summary")
 def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dict[str, Any]:
     from app.diarizer import unload_diarizer
+    from app.features import note_for as features_note_for
     from app.hardware import clear_vram
 
     m = get_meeting(meeting_id)
@@ -690,7 +808,7 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             model_name=payload.model or None,
             answer_lang=payload.lang or m.get("language") or "ru",
             local_only=is_local_only(m),
-            user_notes=m.get("user_notes") or "",
+            user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
             template_prompt=template_prompt,
             participants=_roster(m),
         )

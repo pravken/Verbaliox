@@ -1226,6 +1226,19 @@ def _after_transcription(
         series.auto_assign(meeting_id)
     except Exception as e:
         print(f"[series] meeting {meeting_id}: {e}", flush=True)
+    try:  # its features: the series' own (set by the user), else the analysis model's suggestion (app/features.py)
+        from app import features, llm as llm_targets
+        from app.database import is_local_only as _local_only
+
+        # the series' own features; else the meeting's title (a Teams meeting is often named after its
+        # feature); else the analysis model's guess. The last two only suggest, for ✓ / ✕
+        suggest_on = settings.get("feature_suggest", "true").lower() == "true"
+        if not features.apply_series_rule(meeting_id) and suggest_on and not features.suggest_by_title(meeting_id) \
+                and features.list_features() \
+                and llm_targets.available(settings, local_only=_local_only(get_meeting(meeting_id) or {})):
+            features.suggest(meeting_id)
+    except Exception as e:
+        print(f"[features] meeting {meeting_id}: {e}", flush=True)
     if obsidian.auto_export_enabled(settings):
         update_meeting_progress(meeting_id, progress=97, stage_text="Сохранение заметки в Obsidian...")
         try:
@@ -1282,14 +1295,15 @@ def _release_speech_models() -> None:
     clear_vram()
 
 
-def _release_analysis_models() -> None:
+def _release_analysis_models(need_gb: float = 3.0) -> None:
     """The analysis models Ollama holds go before a speech model loads (not while live captions run),
     and so does the Whisper the caption worker keeps for two minutes after a recording: with them still
-    in the video memory GigaAM / Parakeet went to the processor for the whole recording."""
+    in the video memory GigaAM / Parakeet went to the processor for the whole recording. A model that
+    shares a card of 8 GB and more with `need_gb` of speech models stays (app/vram.room_for_speech)."""
     try:
-        from app.vram import ollama_loaded, ollama_release_others
+        from app.vram import ollama_loaded, ollama_release_others, room_for_speech
 
-        asked = set(ollama_release_others())
+        asked = set() if room_for_speech(need_gb) else set(ollama_release_others())
         # Ollama frees the memory a while after it is asked: waited for (a second was often too short)
         deadline = time.time() + 6.0
         while asked and time.time() < deadline and asked & {m["name"] for m in ollama_loaded()}:
@@ -1602,7 +1616,10 @@ def _process_meeting_job(meeting_id: int) -> None:
         extract_audio_16k_mono(media_path, wav_path, denoise=denoise, loudnorm=loudnorm,
                                check_cancel=lambda: _check_cancel(meeting_id))
         duration = get_media_duration(wav_path) or get_media_duration(media_path)
-        _release_analysis_models()  # the speech model gets the memory an analysis model held
+        # the speech model gets the memory an analysis model held (GigaAM / Parakeet with the speaker
+        # model take about 3 GB, Whisper more)
+        _release_analysis_models(max(_JOB_VRAM_GB.get(str(meeting.get("model_name") or ""), 3.0),
+                                     _JOB_VRAM_GB.get(str(settings.get("whisper_model") or ""), 3.0)))
 
         update_meeting_progress(
             meeting_id,
@@ -1931,6 +1948,7 @@ def _process_meeting_job(meeting_id: int) -> None:
             from app import llm
 
             from app.database import is_local_only
+            from app.features import note_for as features_note_for
 
             local_only = is_local_only(get_meeting(meeting_id))
             if llm.available(settings, local_only=local_only):
@@ -1959,6 +1977,8 @@ def _process_meeting_job(meeting_id: int) -> None:
                         speakers=speakers_meta,
                         template_key="protocol",
                         user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
+                        mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
+                        features_note=features_note_for(get_meeting(meeting_id) or {}),
                         answer_lang=detected_lang,
                         local_only=local_only,
                         part_notes=part_notes,

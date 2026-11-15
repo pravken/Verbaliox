@@ -114,7 +114,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, keep_alive: 
                 "stream": False,
                 "keep_alive": keep_alive,
                 "options": {"temperature": 0.2, "top_p": 0.9, "num_ctx": 8192},
-                **thinking_off(model),
+                **thinking_off(model, base_url=base_url),
             },
         )
         raise_for_ollama(resp)
