@@ -6,6 +6,32 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.11 — English
+
+- **The analysis in steps** (on by default, Settings → AI analysis): the decisions and open questions
+  first, then the tasks from the whole transcript, then the protocol. Its decisions, open questions and
+  next steps are those lists word for word, so the overview and the tasks always agree. A task found later
+  (the tasks found again on their own) is added to the protocol's next steps. Measured on 8 reference
+  recordings: as many tasks found and more of them right, no disagreement, about 12 s more on an hour.
+- **Correct the analysis by hand**: select a word → «Correct…» puts it right in every section of the
+  recording; «Edit» opens a section as Markdown. The right spelling goes to the dictionary with the wrong
+  one as its variant, so recognition and the next analyses write it right.
+- **Doubtful words are underlined** in the analysis: where the recognition models heard differently or
+  Whisper was unsure. A click offers the other spelling, the place in the recording or «Correct as it is».
+  «Check the words with a model» (⋯) has a small local model look for terms and names heard wrong.
+- **Faster and whole on long recordings**: the notes of a long recording's parts are written without
+  reasoning, and with a card of 8 GB or more an answer has twice the room — no answer cut and asked again.
+- An English meeting gets its tasks in English and calls unnamed speakers «Speaker N».
+- The «Next steps» tab, which repeated the tasks, is gone (kept where one was made).
+- Settings: «Ask before in-person meetings» can always be switched; a note says it works with recording
+  all meetings.
+- **Ollama no longer stays in memory after the app closes**: the Ollama the app started ends with it (on a
+  crash too); an Ollama you started yourself keeps running but lets go of the models.
+- **Remove everything**: `uninstall.bat` in the program folder («Remove Verbaliox completely» in the Start
+  menu) removes the program, its data, models, autostart, shortcuts and temporary files, for a portable
+  folder and an installed copy alike. Ollama, uv and Python are asked about separately; folders you chose
+  (recordings elsewhere, exports, Obsidian) stay.
+
 ## 0.8.10 — English
 
 - **One context for every tab of a recording's analysis**: the tasks are told the protocol's decisions and
@@ -460,6 +486,32 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.11
+
+- **Анализ по шагам** (включён по умолчанию, «Настройки → ИИ-анализ»): сначала решения и открытые вопросы,
+  потом задачи по всей расшифровке, потом протокол. Его «Решения», «Открытые вопросы» и «Следующие шаги» —
+  те же списки слово в слово, поэтому обзор и задачи всегда сходятся. Задача, найденная позже (пересчёт
+  задач), дописывается в «Следующие шаги». Замер на 8 эталонных записях: задач находится столько же и
+  точнее, расхождений нет, на часовую запись около 12 с дольше.
+- **Правка анализа вручную**: выделите слово → «Исправить…» — оно исправится во всех разделах записи;
+  «Править» открывает раздел как Markdown. Правильное написание попадает в словарь, а прежнее — его
+  вариантом: распознавание и следующие анализы пишут его верно.
+- **Сомнительные слова подчёркнуты** в анализе: где модели распознавания расслышали по-разному или Whisper
+  не уверен. По клику — другое написание, место в записи или «Верно». «Проверить слова моделью» (⋯) — маленькая
+  локальная модель ищет искажённые термины и имена.
+- **Длинные записи быстрее и без обрывов**: конспекты частей пишутся без рассуждений, а на видеокарте от 8 ГБ
+  у ответа вдвое больше места — ответы больше не обрываются и не переспрашиваются.
+- Английская встреча получает задачи по-английски, а безымянные участники в обзоре — «Speaker N».
+- Вкладка «Следующие шаги», повторявшая задачи, убрана (остаётся там, где уже создана).
+- Настройки: «Перед очными встречами спрашивать» переключается всегда; подпись говорит, что он действует
+  вместе с записью всех встреч.
+- **Ollama больше не остаётся в памяти после закрытия программы**: запущенный программой Ollama
+  завершается вместе с ней (и при сбое); Ollama, запущенный вами, продолжает работать, но выгружает модели.
+- **Удаление всего**: `uninstall.bat` в папке программы («Удалить Verbaliox полностью» в меню «Пуск»)
+  удаляет программу, данные, модели, автозапуск, ярлыки и временные файлы — и у переносной, и у
+  установленной копии. Про Ollama, uv и Python спрашивает отдельно; выбранные вами папки (записи в другом
+  месте, экспорт, Obsidian) остаются.
 
 ## 0.8.10
 

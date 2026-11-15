@@ -603,6 +603,114 @@ def api_delete_summary(meeting_id: int, key: str) -> Dict[str, Any]:
     refresh_if_exported(meeting_id)
     return get_meeting(meeting_id)
 
+class SummaryTextPayload(BaseModel):
+    text: str
+    base: Optional[str] = None  # the text the editor opened with: a section changed meanwhile is not overwritten
+
+@router.put("/api/meetings/{meeting_id}/summaries/{key}")
+def api_edit_summary(meeting_id: int, key: str, payload: SummaryTextPayload) -> Dict[str, Any]:
+    """A section of the analysis edited by hand. Returns the summaries and the words the edit replaced,
+    which the page offers for the dictionary."""
+    from app.analysis_edits import word_changes
+    from app.obsidian import refresh_if_exported
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    if key == "error":
+        raise HTTPException(status_code=400, detail="Этот раздел не правится")
+    old = (m.get("summaries") or {}).get(key)
+    if not isinstance(old, str) or not old.strip():
+        raise HTTPException(status_code=404, detail="Раздел ещё не создан")
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Пустой текст: чтобы убрать раздел, удалите его")
+    from app.database import change_summaries
+
+    stale = {"yes": False}
+
+    def change(current: Dict[str, Any]) -> Dict[str, Any]:
+        # «Пересоздать» or a task found meanwhile changed the section: the edit would overwrite it (an audit)
+        if payload.base is not None and (current.get(key) or "").strip() != payload.base.strip():
+            stale["yes"] = True
+            return {}
+        return {key: text}
+
+    summaries = change_summaries(meeting_id, change)
+    if stale["yes"]:
+        raise HTTPException(status_code=409, detail="Раздел изменился, пока вы его правили: откройте его заново")
+    refresh_if_exported(meeting_id)
+    return {"summaries": summaries, "suggest": word_changes(old, text)}
+
+class SummaryFixPayload(BaseModel):
+    wrong: str
+    right: str
+    key: Optional[str] = None  # one section; None: every section of the recording
+    learn: bool = True  # the right spelling goes to the dictionary with the wrong one as its variant
+
+@router.post("/api/meetings/{meeting_id}/summaries/fix")
+def api_fix_summary_word(meeting_id: int, payload: SummaryFixPayload) -> Dict[str, Any]:
+    """A word or term written wrong in the analysis, put right in every section (or one)."""
+    from app.analysis_edits import PHRASE_MAX_WORDS, learn, replace_in_summaries
+    from app.obsidian import refresh_if_exported
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    wrong, right = " ".join(payload.wrong.split()), " ".join(payload.right.split())
+    if not wrong or not right:
+        raise HTTPException(status_code=400, detail="Укажите, что и на что исправить")
+    from app.database import change_summaries
+
+    counted = {"n": 0}
+
+    def change(current: Dict[str, Any]) -> Dict[str, Any]:  # on the summaries as they are now, under the lock
+        updates, counted["n"] = replace_in_summaries(current, wrong, right, [payload.key] if payload.key else None)
+        return updates
+
+    summaries = change_summaries(meeting_id, change)
+    count = counted["n"]
+    changed = count > 0
+    if changed:
+        refresh_if_exported(meeting_id)
+    learned: List[str] = []
+    if payload.learn and len(wrong.split()) <= PHRASE_MAX_WORDS and len(right.split()) <= PHRASE_MAX_WORDS:
+        learned = learn([{"wrong": wrong, "right": right}])
+    return {"summaries": summaries, "replaced": count, "learned": learned}
+
+@router.get("/api/meetings/{meeting_id}/analysis/suspects")
+def api_analysis_suspects(meeting_id: int) -> Dict[str, Any]:
+    """The words of the analysis the recognition was not sure of (underlined on the page)."""
+    from app.analysis_edits import suspects
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    return {"words": suspects(m)}
+
+@router.post("/api/meetings/{meeting_id}/analysis/check")
+def api_analysis_check(meeting_id: int) -> Dict[str, Any]:
+    """A model reads the analysis for words heard wrong: suggestions, nothing is changed."""
+    from app.analysis_edits import check_with_model
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    try:
+        return {"suggestions": check_with_model(m, local_only=is_local_only(m))}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+class DictionaryLearnPayload(BaseModel):
+    pairs: List[Dict[str, Any]] = []  # {"wrong", "right"} (and "sure" as the edit gave it)
+
+@router.post("/api/dictionary/learn")
+def api_dictionary_learn(payload: DictionaryLearnPayload) -> Dict[str, Any]:
+    """Corrections made by hand: each right spelling becomes a term with the wrong one as its variant."""
+    from app.analysis_edits import learn
+
+    return {"learned": learn(payload.pairs[:50])}
+
 @router.delete("/api/meetings/{meeting_id}/commitments")
 def api_delete_meeting_commitments(meeting_id: int) -> Dict[str, Any]:
     from app import commitments
@@ -649,11 +757,18 @@ def api_extract_commitments(meeting_id: int, payload: CommitmentExtractPayload) 
     from app import commitments
 
     try:
-        return commitments.extract(meeting_id, payload.model or None)
+        items = commitments.extract(meeting_id, payload.model or None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e)[:300])
+    from app.analysis_chain import sync_next_steps
+
+    try:  # a task found now is in the overview's «Следующие шаги» too
+        sync_next_steps(meeting_id)
+    except Exception as e:
+        print(f"[analysis_chain] next steps: {e}", flush=True)
+    return items
 
 @router.get("/api/meetings/{meeting_id}/commitments")
 def api_meeting_commitments(meeting_id: int) -> List[Dict[str, Any]]:
@@ -801,19 +916,33 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             raise HTTPException(status_code=404, detail="Шаблон не найден")
         template_prompt = tpl["prompt"]
     try:
-        result_md = generate_meeting_summary(
-            segments=segments,
-            speakers=speakers,
-            template_key=payload.template,
-            custom_prompt=payload.custom_prompt,
-            model_name=payload.model or None,
-            answer_lang=payload.lang or m.get("language") or "ru",
-            local_only=is_local_only(m),
-            user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
-            context_note=meeting_context_note(m, payload.template),
-            template_prompt=template_prompt,
-            participants=_roster(m),
-        )
+        from app import analysis_chain
+
+        if payload.template == "protocol" and not payload.custom_prompt.strip() and analysis_chain.enabled():
+            # the analysis in steps: decisions, then tasks, then the protocol with both
+            from app import commitments
+
+            # «Пересоздать» the overview: the tasks the recording has stay (ticked off, edited) and the protocol
+            # takes them; they are found only when there are none yet (found by an audit)
+            has_tasks = any(t.get("status") != "deleted" for t in commitments.for_meetings([meeting_id]))
+            result_md = analysis_chain.run(meeting_id, payload.model or None, payload.lang or m.get("language") or "ru",
+                                           find_tasks=not has_tasks)
+            in_steps = True
+        else:
+            in_steps = False
+            result_md = generate_meeting_summary(
+                segments=segments,
+                speakers=speakers,
+                template_key=payload.template,
+                custom_prompt=payload.custom_prompt,
+                model_name=payload.model or None,
+                answer_lang=payload.lang or m.get("language") or "ru",
+                local_only=is_local_only(m),
+                user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
+                context_note=meeting_context_note(m, payload.template),
+                template_prompt=template_prompt,
+                participants=_roster(m),
+            )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -821,7 +950,8 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
     from app.grounding import maybe_ground
 
     key = "custom" if payload.custom_prompt.strip() else payload.template
-    result_md = maybe_ground(result_md, key, m)
+    if not in_steps:  # the analysis in steps checks its protocol before its lists go in
+        result_md = maybe_ground(result_md, key, m)
     summaries = merge_summaries(meeting_id, {key: result_md}, remove=("error",))
     if key != "custom":
         from app.obsidian import refresh_if_exported

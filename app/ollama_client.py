@@ -219,6 +219,34 @@ def _is_ollama_port_open(host: Optional[str] = None, port: Optional[int] = None)
         return False
 
 
+_started_serve: Optional["subprocess.Popen"] = None  # the `ollama serve` the app started itself
+
+
+def release_on_exit(timeout: float = 1.5) -> List[str]:
+    """When the app closes: an Ollama the user started (not ours, which ends with the app) is left running,
+    but lets go of the models it keeps in memory. Quick and never raises. Returns the models asked to go."""
+    if _started_serve is not None and _started_serve.poll() is None:
+        return []  # ours: ended with the app (app/shutdown.py)
+    try:
+        from app.database import get_all_settings
+
+        base = (get_all_settings().get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
+        host, port = _ollama_address(base)
+        if host != "127.0.0.1" or not _is_ollama_port_open(host, port):
+            return []  # another computer's Ollama is not ours to empty
+        with httpx.Client(timeout=timeout) as client:
+            names = [m.get("name") or m.get("model") for m in client.get(f"{base}/api/ps").json().get("models") or []]
+            for name in [n for n in names if n]:
+                try:
+                    client.post(f"{base}/api/generate", json={"model": name, "keep_alive": 0})
+                except httpx.HTTPError:
+                    pass
+        return [n for n in names if n]
+    except Exception as e:
+        print(f"[ollama] models not let go on exit: {e}", flush=True)
+        return []
+
+
 def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: bool = True) -> bool:
     host, port = _ollama_address(base_url)
     if _is_ollama_port_open(host, port):
@@ -237,13 +265,20 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
             env = {**os.environ}
             env.setdefault("OLLAMA_MAX_LOADED_MODELS", "1")
             env.setdefault("OLLAMA_NUM_PARALLEL", "1")
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [exe, "serve"],
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
             )
+            # Ours: it ends with the app, its runners and the model in memory too (it stayed after the app
+            # was closed: reported by the user); bound to the app's job, it ends on a crash as well
+            from app.shutdown import track
+
+            track(proc)
+            global _started_serve
+            _started_serve = proc
             for _ in range(80):  # a cold start (first run, slow disk) can take many seconds
                 time.sleep(0.25)
                 if _is_ollama_port_open(host, port):
@@ -662,6 +697,23 @@ def build_transcript_lines(
     return lines
 
 
+_UNNAMED_RU = re.compile(r"^Участник[ _]?(\d+)$", re.I)
+
+
+def speakers_in_language(speakers: Dict[str, Dict[str, Any]], answer_lang: Optional[str]) -> Dict[str, Dict[str, Any]]:
+    """The unnamed speakers as the answer's language calls them: «Участник 2» is «Speaker 2» for an English
+    overview (an English protocol mixed «Участник» and «Participant», and once wrote «Uчастник» with a
+    Latin U, bench-report/analysis-chain.md). Named speakers stay as they are."""
+    if not str(answer_lang or "").lower().startswith("en"):
+        return speakers
+    out = {}
+    for key, sp in (speakers or {}).items():
+        name = str((sp or {}).get("name") or "") if isinstance(sp, dict) else ""
+        m = _UNNAMED_RU.match(name.strip())
+        out[key] = {**sp, "name": f"Speaker {m.group(1)}"} if m else sp
+    return out
+
+
 def _chunk_lines(lines: List[str], max_chars: int) -> List[str]:
     chunks: List[str] = []
     current: List[str] = []
@@ -684,6 +736,9 @@ SINGLE_PASS_MAX_CHARS = 20000
 CHUNK_MAX_CHARS = 14000
 LLM_NUM_CTX = 16384
 LLM_MAX_ANSWER_TOKENS = 3072  # the longest overview or chapters run to ~1500 tokens
+# With a 32k context: the note of a part of an hour-long recording (3800–4600 tokens) and the protocol in steps
+# (3600–5300) were cut at 3072 and asked again, 15–30 s each (bench-report/analysis-chain.md)
+LLM_MAX_ANSWER_TOKENS_LARGE = 6144
 MFU_SUMMARY_CHARS = 6000     # the organizer's follow-up in every summary request (as much as the notes)
 LARGE_CONTEXT_VRAM_GB = 7.5   # an "8 GB" card reports a little under 8
 CONTEXT_SCALE: Optional[float] = None  # set by tools/llm_bench.py --ctx; None: chosen by the card
@@ -707,6 +762,12 @@ def llm_context_scale() -> float:
 
 def llm_num_ctx() -> int:
     return int(LLM_NUM_CTX * llm_context_scale())
+
+
+def llm_max_answer_tokens() -> int:
+    """The answer limit: more room with the 32k context of a card of 8 GB and more (16k keeps its room
+    for the transcript)."""
+    return LLM_MAX_ANSWER_TOKENS_LARGE if llm_num_ctx() >= 32768 else LLM_MAX_ANSWER_TOKENS
 
 
 def single_pass_max_chars() -> int:
@@ -775,6 +836,22 @@ SUMMARY_TEMPLATES: Dict[str, str] = {
         "что сказали и какие мнения прозвучали, с таймкодами `[ММ:СС]`)\n\n"
         "## Упомянутые имена, объекты и детали\n"
         "(Какие имена, предметы, места, цифры или конкретные факты прозвучали в речи)"
+    ),
+    # The first step of the analysis in steps (app/analysis_chain.py): the result alone, the protocol is later
+    "decisions": (
+        "Выпиши {lang} итоги приведённой ниже расшифровки в формате Markdown (без эмодзи), только два раздела:\n\n"
+        "## Решения\n"
+        "(О чём договорились или что решили — по пунктам, с таймкодами `[ММ:СС]`. Решение — то, что участники "
+        "этой встречи постановили сделать, изменить или выбрать; только решённое в разговоре, а не предложенное "
+        "или обсуждённое. Не включай регламент встречи, правила, условия договоров, сроки и цифры из докладов "
+        "и другие факты о положении дел, инструкции и описание того, как что-то устроено или делается («при "
+        "смене размера править оба файла»), призывы и вежливые реплики («готов ответить на вопросы»). Встреча "
+        "может быть на любом языке: правило то же. Если решений не было, "
+        "напиши одной строкой без пункта: «Решений не принималось»)\n\n"
+        "## Открытые вопросы\n"
+        "(Что осталось нерешённым, спорным или отложено и к чему нужно вернуться — по пунктам, с таймкодами. "
+        "Если таких нет, напиши одной строкой без пункта: «Открытых вопросов нет»)\n\n"
+        "Больше ничего не пиши: ни вступления, ни других разделов."
     ),
     "tasks": (
         "Проанализируй приведённую ниже расшифровку и выпиши {lang} только те задачи, планы или действия, которые реально упоминаются в тексте.\n\n"
@@ -937,9 +1014,10 @@ def _goes_round(text: str) -> bool:
     return len(tail) >= 6 and len(tail) - len(set(tail)) >= len(tail) // 2
 
 
-def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False) -> str:
+def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False, plain: bool = False) -> str:
     """short: a short answer (a title, «да / нет» checks, a feature's name): the model does not reason
-    first, which is most of the time of such an answer."""
+    first, which is most of the time of such an answer. plain: a long answer without reasoning (the notes
+    of a part of a long recording): no thinking either, but a cut answer is still asked again."""
     from app import idle_unload
 
     idle_unload.touch(model)
@@ -957,7 +1035,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
             "num_ctx": llm_num_ctx(),
             # An answer stops at this length: a small model caught in a loop (the same lines again and
             # again) wrote until the whole context was full, for many minutes on a processor
-            "num_predict": LLM_MAX_ANSWER_TOKENS,
+            "num_predict": llm_max_answer_tokens(),
         },
     }
     keep_alive = idle_unload.ollama_keep_alive()
@@ -978,7 +1056,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
 
     def request() -> str:
         # asked here, once the answer counts as being written: Ollama is asked what the model can do
-        payload.update(thinking_off(model, analysis=not short, base_url=base_url))
+        payload.update(thinking_off(model, analysis=not (short or plain), base_url=base_url))
         with httpx.Client(timeout=600.0) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
             raise_for_ollama(resp)
@@ -1084,7 +1162,7 @@ def generate_meeting_summary(
 
     # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
     llm = target(model_name, local_only=local_only)
-    lines = build_transcript_lines(segments, speakers)
+    lines = build_transcript_lines(segments, speakers_in_language(speakers, answer_lang))
     transcript_text = "\n".join(lines)
     if not transcript_text.strip():
         raise RuntimeError("Транскрипт пуст, нечего анализировать.")
@@ -1170,12 +1248,13 @@ def generate_meeting_summary(
             if progress:
                 progress(idx, len(chunks))
             notes.append(
-                llm.chat(
+                llm.chat(  # a retelling: gemma4's reasoning cut these at the answer limit, 2–3 retries an hour
                     system_prompt,
                     f"Это фрагмент {idx} из {len(chunks)} расшифровки длинной записи:\n```text\n{chunk}\n```\n\n"
                     f"Составь {lang} подробный конспект этого фрагмента списком: кто что сказал, факты, мнения, "
                     f"решения, задачи и сроки — каждый пункт с таймкодом `[ММ:СС]`. {focus}"
                     "Пиши только то, что есть в тексте фрагмента." + (f"\n\n{roster_note}" if roster_note else ""),
+                    plain=True,
                 )
             )
         if reuse and chunks:
@@ -1203,7 +1282,9 @@ def generate_meeting_summary(
         from app.people import fix_name_typos
 
         answer = fix_name_typos(answer, roster)
-    return answer
+    from app.analysis_edits import fix_with_dictionary
+
+    return fix_with_dictionary(answer)  # a word corrected by hand once stays corrected
 
 
 # --- A title for a recording, from its content ---
