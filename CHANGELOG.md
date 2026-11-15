@@ -6,6 +6,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.10 — English
+
+- **One context for every tab of a recording's analysis**: the tasks are told the protocol's decisions and
+  next steps (a decision that is an action becomes a task, when it was said in the transcript); the
+  protocol and the other tabs (the short summary, the follow-up email, your notes, your templates) are
+  told the tasks found, and the other tabs the protocol's decisions, open questions and next steps.
+  Already analysed recordings change after «Recreate».
+
 ## 0.8.9 — English
 
 - **Update a git clone from the app**: «Update via git» in Settings → General → Updates runs update.bat
@@ -452,6 +460,14 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.10
+
+- **Общий контекст у всех вкладок анализа записи**: поиск задач получает из протокола решения и следующие
+  шаги (решение-действие становится задачей, если прозвучало в расшифровке); протокол и остальные вкладки
+  (короткая выжимка, письмо по итогам, «Мои заметки», свои шаблоны) получают найденные задачи, а остальные
+  вкладки — ещё и решения, открытые вопросы и следующие шаги протокола. Уже разобранные записи меняются
+  после «Пересоздать».
 
 ## 0.8.9
 
