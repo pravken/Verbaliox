@@ -6,6 +6,17 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.9 — English
+
+- **Update a git clone from the app**: «Update via git» in Settings → General → Updates runs update.bat
+  (the new version and the packages it needs) and the app closes for it, then starts again.
+- **The protocol puts the result first**: summary, decisions, the new «Open questions», next steps, then
+  the discussion grouped by topic and the details mentioned.
+- **Today** keeps the working day you chose: an all-day or long event no longer shows the night from 00:00;
+  a meeting a little past the edges stretches it by two hours at most.
+- **Tasks page**: rows wrap by the list's own width (with the summary open beside it the text ran under the
+  assignee); tasks the model gave to «team» or «none» are on nobody.
+
 ## 0.8.8 — English
 
 - **Import without recognition**: «Only add, without recognition» in the import window puts the files
@@ -441,6 +452,17 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.9
+
+- **Обновление клона git из программы**: «Обновить через git» в Настройки → Общие → Обновления запускает
+  update.bat (новая версия и нужные пакеты), программа закрывается на время обновления и запускается снова.
+- **Протокол — сначала результат**: краткое содержание, решения, новые «Открытые вопросы», следующие шаги,
+  затем обсуждение по темам и упомянутые детали.
+- **«Сегодня»** держит выбранный рабочий день: событие на весь день или долгое больше не показывает ночь с
+  00:00; встреча чуть за краями растягивает день не больше чем на два часа.
+- **Страница «Задачи»**: строки переносятся по ширине самого списка (при открытой сводке текст заходил под
+  исполнителя); задачи, которые модель отдала «team» или «none», — без исполнителя.
 
 ## 0.8.8
 
