@@ -127,3 +127,78 @@ function taskFeatureChipsHtml(meetingId, ids) {
   const all = list.map(f => f.name).join(', ');
   return `<span class="ft-compact">${featureChipHtml(list[0], { title: all })}${list.length > 1 ? `<span class="ft-more" title="${escapeHtml(all)}">+${list.length - 1}</span>` : ''}</span>`;
 }
+
+// --- Словарь → Фичи: what each feature is. Every field has a use: keywords find it in a meeting's
+// title, the description tells the models what it is, the terms are written right by recognition
+// and by the models; none is required ---
+const FT_COLORS = ['#64B5FF', '#BF5AF2', '#30D158', '#FF9F0A', '#FF6482', '#5AC8FA', '#FFD60A', '#AC8E68'];
+
+async function renderDictFeatures() {
+  const box = document.getElementById('ft-dict-list');
+  if (!box) return;
+  await loadFeatures();
+  const list = state.features || [];
+  const sw = f => FT_COLORS.map(c => `<button class="ft-swatch${(f.color || '').toUpperCase() === c ? ' ft-swatch-on' : ''}" style="--ft:${c}"
+      ${pageCall('click', 'saveDictFeature', [f.id, 'color', c])} aria-label="${escapeHtml(c)}" title="${escapeHtml(t('ftColor'))}"></button>`).join('');
+  const field = (f, key, label, hint, rows) => `<label class="ft-field"><span class="ft-field-label">${escapeHtml(t(label))}</span>
+      ${rows ? `<textarea rows="${rows}" maxlength="400"` : '<input type="text" maxlength="400"'} class="ft-input" placeholder="${escapeHtml(t(hint))}" title="${escapeHtml(t(hint))}"
+        ${pageCall('change', 'saveDictFeature', [f.id, key, { $: 'value' }])}${rows ? `>${escapeHtml(f[key] || '')}</textarea>` : ` value="${escapeHtml(f[key] || '')}">`}</label>`;
+  box.innerHTML = list.length ? list.map(f => `<details class="ft-card">
+      <summary class="ft-card-head">${featureChipHtml(f)}<span class="tk-grow"></span>
+        <span class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('ftRecordings').replace('{n}', () => f.count || 0))}</span></summary>
+      <div class="ft-card-body">
+        <label class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftName'))}</span>
+          <input type="text" maxlength="60" class="ft-input" value="${escapeHtml(f.name)}" title="${escapeHtml(t('ftName'))}" ${pageCall('change', 'saveDictFeature', [f.id, 'name', { $: 'value' }])}></label>
+        <div class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftColor'))}</span><span class="ft-swatches">${sw(f)}</span></div>
+        ${field(f, 'keywords', 'ftKeywords', 'ftKeywordsHint', 0)}
+        ${field(f, 'description', 'ftDescription', 'ftDescriptionHint', 2)}
+        ${field(f, 'terms', 'ftTerms', 'ftTermsHint', 0)}
+        <div class="flex justify-end"><button class="ui-btn ui-btn-subtle h-7 px-3 text-[11.5px] hover:text-apple-red" ${pageCall('click', 'deleteDictFeature', [f.id])}>${escapeHtml(t('ftDelete'))}</button></div>
+      </div></details>`).join('')
+    : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('ftNone'))}</div>`;
+}
+
+async function saveDictFeature(id, key, value) {
+  const res = await fetch(`/api/features/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); renderDictFeatures(); return; }
+  state.features = data;
+  if (key === 'name' || key === 'color') {
+    const open = [...document.querySelectorAll('#ft-dict-list details[open]')].map(d => [...d.parentNode.children].indexOf(d));
+    await renderDictFeatures();
+    const cards = document.querySelectorAll('#ft-dict-list details');
+    open.forEach(i => cards[i]?.setAttribute('open', ''));
+    renderMeetingFeatures();
+    scheduleSidebarRender();
+  }
+}
+
+async function addDictFeature() {
+  const input = document.getElementById('ft-dict-new');
+  const name = (input?.value || '').trim();
+  if (!name) { input?.focus(); return; }
+  const res = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  const data = await readJson(res);
+  if (!res.ok) { showError(data.detail); return; }
+  input.value = '';
+  await renderDictFeatures();
+  const cards = [...document.querySelectorAll('#ft-dict-list details')];
+  const i = (state.features || []).findIndex(f => f.id === data.id);
+  if (cards[i]) cards[i].open = true;
+}
+
+async function deleteDictFeature(id) {
+  const f = featureById(id);
+  if (!f || !await askConfirm(t('ftDeleteConfirm').replace('{name}', () => f.name), true, t('ftDelete'))) return;
+  const res = await fetch(`/api/features/${id}`, { method: 'DELETE' });
+  if (!res.ok) { showError((await readJson(res)).detail); return; }
+  state.features = await readJson(res);
+  for (const m of [state.activeMeeting, ...(state.meetings || [])]) {
+    if (!m) continue;
+    m.features = (m.features || []).filter(x => x !== id);
+    m.feature_suggestions = (m.feature_suggestions || []).filter(x => x !== id);
+  }
+  renderDictFeatures();
+  renderMeetingFeatures();
+  scheduleSidebarRender();
+}

@@ -2605,3 +2605,16 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .an-task-src-llm, .an-task-src-manual { min-width: 38px; text-align: center; }
 .an-task-tag-on { min-width: 38px; text-align: center; }
 .an-task-src-manual { font-size: 13px; font-family: inherit; }
+/* Словарь → Фичи */
+.ft-card { border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
+.ft-card-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; list-style: none; }
+.ft-card-head::-webkit-details-marker { display: none; }
+.ft-card[open] .ft-card-head { border-bottom: 1px solid var(--hc-line, rgba(255, 255, 255, 0.06)); }
+.ft-card-body { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; }
+.ft-field { display: flex; flex-direction: column; gap: 4px; }
+.ft-field-label { font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); }
+.ft-input { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.12)); background: rgba(0, 0, 0, 0.25); color: #F5F5F7; font-size: 12px; resize: vertical; }
+.ft-input:focus { outline: none; border-color: #0A84FF; }
+.ft-swatches { display: flex; gap: 6px; }
+.ft-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; background: var(--ft); cursor: pointer; padding: 0; }
+.ft-swatch-on { border-color: #FFFFFF; }

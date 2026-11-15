@@ -70,7 +70,7 @@ class FeatureTagsTest(unittest.TestCase):
         m = get_meeting(mid)
         self.assertEqual(m["features"], [])  # nothing put on the meeting yet
         self.assertEqual(m["feature_suggestions"], [pay["id"]])
-        self.assertIn("Платежи; Поиск", llm.chat.call_args[0][1])
+        self.assertIn("- Платежи\n- Поиск", llm.chat.call_args[0][1])
         features.decline_suggestion(mid, pay["id"])
         with mock.patch("app.llm.target", return_value=llm):
             self.assertEqual(features.suggest(mid), [])  # turned down: not suggested again
@@ -117,6 +117,40 @@ class FeatureTagsTest(unittest.TestCase):
     def test_invisible_characters_are_dropped_from_names(self):
         f = features.create_feature("Пла\u202eтежи\u200b")
         self.assertEqual(f["name"], "Платежи")
+
+    def test_the_meetings_title_suggests_its_feature(self):
+        pay, search = features.create_feature("Платежи"), features.create_feature("Поиск")
+        features.update_feature(search["id"], keywords="search,  выдача ; поиск")
+        mid = self._meeting("Синк: Выдача и ранжирование")
+        self.assertEqual(features.suggest_by_title(mid), [search["id"]])  # by a keyword, any case
+        self.assertEqual(get_meeting(mid)["features"], [])  # only a suggestion
+        other = self._meeting("Платежи: ретро")
+        self.assertEqual(features.suggest_by_title(other), [pay["id"]])
+        self.assertEqual(features.suggest_by_title(self._meeting("Поисковик для HR")), [])  # whole words only
+        f = next(x for x in features.list_features() if x["id"] == search["id"])
+        self.assertEqual(f["keywords"], "search, выдача, поиск")  # cleaned, each once
+
+    def test_what_a_feature_is_reaches_the_models_and_recognition(self):
+        pay = features.create_feature("Платежи")
+        features.update_feature(pay["id"], description="Экран оплаты и возвраты", keywords="эквайринг",
+                                terms="Stripe, PayGate")
+        note = features.describe([pay["id"]])
+        self.assertIn("Платежи: Экран оплаты и возвраты; ключевые слова: эквайринг; термины: Stripe, PayGate", note)
+        from app import vocab
+
+        vocab.invalidate()
+        self.assertIn("Stripe", vocab.hotwords())  # Whisper's hint and the corrections
+        self.assertIn("PayGate", vocab.glossary_note())
+        from app import ollama_client
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm.chat.return_value = "обзор"
+        segs = [{"start": 0, "end": 5, "speaker": "S1", "text": "обсудили страйп"}]
+        with mock.patch("app.llm.target", return_value=llm):
+            ollama_client.generate_meeting_summary(segs, {}, "protocol", features_note=note)
+        sent = " ".join(llm.chat.call_args[0])
+        self.assertIn("Экран оплаты и возвраты", sent)
+        self.assertIn("Stripe", sent)  # the glossary
 
     def test_answers_are_read_loosely(self):
         fs = [{"id": 1, "name": "Платежи"}, {"id": 2, "name": "Поиск"}]

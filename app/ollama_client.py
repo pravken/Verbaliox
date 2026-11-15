@@ -1033,6 +1033,7 @@ def generate_meeting_summary(
     part_notes: Optional[Dict[str, Any]] = None,
     participants: Optional[List[str]] = None,
     mfu: str = "",
+    features_note: str = "",
 ) -> str:
     """mfu: the organizer's meeting follow-up the user pasted: the decisions and tasks agreed on;
     participants: who was in the meeting, their names written right (app/people.meeting_roster):
@@ -1076,6 +1077,16 @@ def generate_meeting_summary(
         )
     elif template_key == "notes" and not custom_prompt.strip():
         raise RuntimeError("У записи нет ваших заметок: напишите их во вкладке «Мои заметки» или во время записи в студии")
+    if (features_note or "").strip():  # Словарь → Фичи: what the meeting's feature is, its words
+        instruction += "\n\nВстреча относится к фиче (что это и как в ней называются вещи):\n" + features_note.strip()[:2000]
+    try:
+        from app import vocab
+
+        glossary = vocab.glossary_note()
+    except Exception:
+        glossary = ""
+    if glossary:
+        instruction += "\n\n" + glossary
     mfu_text = (mfu or "").strip()[:MFU_SUMMARY_CHARS]
     if mfu_text:
         instruction += (

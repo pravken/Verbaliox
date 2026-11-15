@@ -173,6 +173,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-summary-grounding').checked = s.summary_grounding !== 'false';
     document.getElementById('set-auto-commitments').checked = s.auto_commitments !== 'false';
     document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
+    document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
     loadWatchFolder();
     document.getElementById('set-semantic').checked = s.semantic_search === 'true';
@@ -2270,6 +2271,7 @@ function settingsFormValues() {
     summary_grounding: String(document.getElementById('set-summary-grounding').checked),
     auto_commitments: String(document.getElementById('set-auto-commitments').checked),
     dictionary_fuzzy: String(document.getElementById('set-dict-fuzzy').checked),
+    feature_suggest: String(document.getElementById('set-feature-suggest').checked),
     semantic_search: String(document.getElementById('set-semantic').checked),
     semantic_model: document.getElementById('set-semantic-model').value.trim() || 'bge-m3',
     idle_unload_minutes: document.getElementById('set-idle-unload').value,
@@ -2653,7 +2655,7 @@ const SETTINGS_RESET = {
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
-  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check']],
+  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check'], ['set-feature-suggest', 'feature_suggest', 'check']],
   export: [['set-file-name-template', 'file_name_template', 'value'], ['set-date-folders', 'date_folders', 'value']],
   privacy: [['set-delete-media-after', 'delete_media_after', 'check'], ['set-media-retention', 'media_retention_days', 'value']],
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
@@ -2662,7 +2664,7 @@ const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
-  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true',
+  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',
@@ -2709,6 +2711,7 @@ function refreshSettingsChanged() {
 
 function onSettingsTabShown(name) {
   if (state.settingsQuery) clearSettingsSearch(true);
+  if (name === settingsTabOf('dictionary')) renderDictFeatures();  // the dictionary is a section of its tab
   const main = document.getElementById('settings-main');
   if (main) main.scrollTop = 0;
   refreshSettingsChanged();

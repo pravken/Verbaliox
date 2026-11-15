@@ -1230,8 +1230,12 @@ def _after_transcription(
         from app import features, llm as llm_targets
         from app.database import is_local_only as _local_only
 
-        if not features.apply_series_rule(meeting_id) and settings.get("feature_suggest", "true").lower() == "true" \
-                and features.list_features() and llm_targets.available(settings, local_only=_local_only(get_meeting(meeting_id) or {})):
+        # the series' own features; else the meeting's title (a Teams meeting is often named after its
+        # feature); else the analysis model's guess. The last two only suggest, for ✓ / ✕
+        suggest_on = settings.get("feature_suggest", "true").lower() == "true"
+        if not features.apply_series_rule(meeting_id) and suggest_on and not features.suggest_by_title(meeting_id) \
+                and features.list_features() \
+                and llm_targets.available(settings, local_only=_local_only(get_meeting(meeting_id) or {})):
             features.suggest(meeting_id)
     except Exception as e:
         print(f"[features] meeting {meeting_id}: {e}", flush=True)
@@ -1944,6 +1948,7 @@ def _process_meeting_job(meeting_id: int) -> None:
             from app import llm
 
             from app.database import is_local_only
+            from app.features import note_for as features_note_for
 
             local_only = is_local_only(get_meeting(meeting_id))
             if llm.available(settings, local_only=local_only):
@@ -1973,6 +1978,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                         template_key="protocol",
                         user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
                         mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
+                        features_note=features_note_for(get_meeting(meeting_id) or {}),
                         answer_lang=detected_lang,
                         local_only=local_only,
                         part_notes=part_notes,
