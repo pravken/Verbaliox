@@ -27,8 +27,8 @@ ONNX_MODELS: Dict[str, Dict[str, Any]] = {
         "license": "MIT",
         "vram_gb": 1.5,  # on the GPU (app/onnx_gpu.py)
         "languages": ["ru"],
-        "desc_ru": "Модель Сбера (Conformer, ONNX), обученная на русской речи. Сразу расставляет пунктуацию и регистр, числа пишет цифрами. WER на FLEURS: 3,8 % — на уровне Whisper Pro. Быстрая и на процессоре (≈30× реального времени), на видеокарте ≈50×. Только русский язык.",
-        "desc_en": "Sber's model (Conformer, ONNX) trained on Russian speech. Writes punctuation and capital letters itself, numbers as digits. WER on FLEURS: 3.8%, on par with Whisper Pro. Fast on the CPU too (≈30× real time), ≈50× on a GPU. Russian only.",
+        "desc_ru": "Модель Сбера (Conformer, ONNX), обученная на русской речи. Сразу расставляет пунктуацию и регистр, числа пишет цифрами. WER на FLEURS: 3,5 % — лучший результат для русского среди моделей программы (у Whisper Pro 3,8 %). Быстрая и на процессоре (≈30× реального времени), на видеокарте ≈50×. Только русский язык.",
+        "desc_en": "Sber's model (Conformer, ONNX) trained on Russian speech. Writes punctuation and capital letters itself, numbers as digits. WER on FLEURS: 3.5%, the best for Russian among the app's models (Whisper Pro: 3.8%). Fast on the CPU too (≈30× real time), ≈50× on a GPU. Russian only.",
     },
     "parakeet-v3": {
         "onnx_name": "nemo-parakeet-tdt-0.6b-v3",
