@@ -85,6 +85,19 @@ class TurnsOnTranscriptTest(unittest.TestCase):
         self.assertEqual(labels, [0, 1, 0, 0])
 
 
+    def test_in_auto_a_group_of_scraps_is_no_person(self):
+        """The PC check: on 44 minutes of two people Nemotron found five, two of them 12-15 s."""
+        rng = np.random.default_rng(5)
+        a, b = rng.normal(size=192), rng.normal(size=192)
+        unit = lambda v: v / np.linalg.norm(v)  # noqa: E731
+        turns = [(0, 300, 0), (300, 600, 1), (600, 612, 2), (612, 900, 0)]
+        segs = [{"start": 1, "end": 299}, {"start": 301, "end": 599}, {"start": 600, "end": 612}, {"start": 613, "end": 899}]
+        embs = np.vstack([unit(a), unit(b), unit(b + rng.normal(size=192) * 0.2), unit(a)]).astype(np.float32)
+        durs = np.array([298, 298, 12, 286], dtype=np.float32)
+        self.assertEqual(diarizer._labels_from_turns(segs, [0, 1, 2, 3], embs, durs, turns), [0, 1, 1, 0])
+        short = np.array([8, 8, 3, 8], dtype=np.float32)  # a short recording: a few seconds may be a person
+        self.assertEqual(len(set(diarizer._labels_from_turns(segs, [0, 1, 2, 3], embs, short, turns))), 3)
+
     def test_a_group_taken_apart_goes_phrase_by_phrase(self):
         """Nemotron heard 3, 2 were said: the third one's phrases go each to its closest voice."""
         rng = np.random.default_rng(4)
