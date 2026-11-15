@@ -338,7 +338,8 @@ function renderVram(data) {
       : c.loaded
       ? (c.kind === 'dub' ? 'bg-apple-amber/15 text-apple-amber border-apple-amber/30' : 'bg-apple-green/15 text-apple-green border-apple-green/30')
       : 'bg-transparent text-apple-tertiary border-white/15 border-dashed';
-    // what a click does, said on hover: «Выгрузить ×» (the chip turns red) or «Запустить ▷»
+    // what a click does, said on hover over the name, the chip keeping its width: «Выгрузить ×» (the chip
+    // turns red) or «Запустить ▷» (it widened on hover, the chips moved under the cursor and flickered)
     const icon = c.loaded
       ? (actionable ? `<span class="vr-act">${escapeHtml(t('mpActUnload'))}</span><span class="opacity-60 group-hover:opacity-100">×</span>` : '')
       : (actionable ? `<span class="vr-act">${escapeHtml(t('mpActStart'))}</span><span class="opacity-70 group-hover:opacity-100">${MODEL_START_ICON}</span>` : '');
@@ -349,7 +350,7 @@ function renderVram(data) {
       title="${escapeHtml(vramChipTitle(c))}"
       class="group vr-chip ${actionable ? (c.loaded ? 'vr-chip-unload' : 'vr-chip-start') : ''} max-w-full inline-flex items-center gap-1 px-1.5 h-5 rounded-full border text-[11px] font-medium transition ${cls} ${actionable ? 'hover:bg-white/10' : 'cursor-default'}">
       <span class="w-1.5 h-1.5 rounded-full shrink-0 ${c.loaded || c.loading ? 'bg-current' : 'border border-current'}"></span>
-      <span class="truncate">${c.default ? '★ ' : ''}${escapeHtml(vramChipLabel(c))}</span>${timer}${icon}</button>`;
+      <span class="truncate vr-label">${c.default ? '★ ' : ''}${escapeHtml(vramChipLabel(c))}</span>${timer}${icon}</button>`;
   };
   // Split by where each model runs (or will), then by what it is for; the ones at work first.
   // Without a video card all are on the processor
@@ -485,7 +486,7 @@ function renderModelsPop() {
     const items = list.filter(([c]) => (MODEL_GROUP[c.kind] || 'speech') === g);
     if (!items.length) return '';
     return `<div class="mp-group"><div class="mp-group-title">${AI_MARK}${escapeHtml(t(g === 'ai' ? 'mpGroupAi' : 'mpGroupSpeech'))}</div>
-      <div class="flex flex-wrap gap-1">${items.map(([c, i]) => chipHtml(c, i)).join('')}</div></div>`;
+      <div class="mp-chip-list">${items.map(([c, i]) => chipHtml(c, i)).join('')}</div></div>`;
   }).join('');
   const section = (where, list) => {
     const on = list.filter(([c]) => c.loaded || c.loading).length;

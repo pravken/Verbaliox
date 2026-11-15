@@ -2687,14 +2687,27 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* The models panel: a chip says on hover what a click does, the loaded one turns red to «Выгрузить»;
    the minutes until the app frees it by itself */
-.vr-act { max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; transition: max-width 0.18s ease, opacity 0.18s ease; }
-.vr-chip:hover .vr-act, .vr-chip:focus-visible .vr-act { max-width: 90px; opacity: 1; }
+/* The action is laid over the name, not added beside it: a chip that widened on hover moved the chips after it
+   and out from under the cursor, and they flickered (reported by the user) */
+.vr-chip { position: relative; }
+.vr-act { position: absolute; inset: 0; padding: 0 18px 0 6px; display: flex; align-items: center; justify-content: center;
+          overflow: hidden; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+.vr-chip:hover .vr-act, .vr-chip:focus-visible .vr-act { opacity: 1; }
+.vr-label, .vr-timer { transition: opacity 0.15s ease; }
+.vr-chip:hover:not(:disabled) .vr-label, .vr-chip:focus-visible .vr-label { opacity: 0; }
 .vr-chip.vr-chip-unload:hover, .vr-chip.vr-chip-unload:focus-visible { color: #FF6961; border-color: rgba(255, 105, 97, 0.5); background: rgba(255, 105, 97, 0.12); }
 .vr-chip.vr-chip-start:hover, .vr-chip.vr-chip-start:focus-visible { color: #64B5FF; border-color: rgba(100, 181, 255, 0.5); border-style: solid; }
+/* In the models panel each model is a line of its own (asked by the user): the action is said at the
+   right of the line, the name stays */
+.mp-chip-list { display: flex; flex-direction: column; gap: 4px; }
+.mp-chip-list .vr-chip { width: 100%; height: 26px; padding: 0 9px; gap: 6px; border-radius: 8px; }
+.mp-chip-list .vr-label { flex: 1 1 auto; text-align: left; }
+.mp-chip-list .vr-act { position: static; inset: auto; padding: 0; flex: none; justify-content: flex-end; }
+.mp-chip-list .vr-chip:hover:not(:disabled) .vr-label, .mp-chip-list .vr-chip:focus-visible .vr-label { opacity: 1; }
 .vr-timer { display: inline-flex; align-items: center; gap: 2px; opacity: 0.75; font-variant-numeric: tabular-nums; }
-.vr-chip:hover .vr-timer { display: none; }
+.vr-chip:hover .vr-timer { opacity: 0; }
 .vr-timer-ico { width: 10px; height: 10px; }
-@media (prefers-reduced-motion: reduce) { .vr-act { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .vr-act, .vr-label, .vr-timer { transition: none; } }
 
 /* Checkboxes in the dark theme: a dark box with a light edge, filled when ticked (the system's white
    box stood out on every task card); a task's box ticks green, a «delete too» box red */
