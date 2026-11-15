@@ -1949,6 +1949,7 @@ def _process_meeting_job(meeting_id: int) -> None:
 
             from app.database import is_local_only
             from app.features import note_for as features_note_for
+            from app.meeting_context import note_for_summary as meeting_context_note
 
             local_only = is_local_only(get_meeting(meeting_id))
             if llm.available(settings, local_only=local_only):
@@ -1979,6 +1980,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                         user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
                         mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
                         features_note=features_note_for(get_meeting(meeting_id) or {}),
+                        context_note=meeting_context_note(get_meeting(meeting_id) or {}, "protocol"),
                         answer_lang=detected_lang,
                         local_only=local_only,
                         part_notes=part_notes,
