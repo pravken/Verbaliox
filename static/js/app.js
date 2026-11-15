@@ -952,7 +952,7 @@ function commitmentRowHtml(c, withMeeting, hasMfu = false) {
           <button class="an-task-who" ${pageCall('click', 'openCardAssign', [c.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">${tkAvatar(c.who, c.who_kind, 20)}<span>${escapeHtml(tkWhoName(c))}</span></button>${to}${at}${where}
         </div>
       </div>
-      <div class="an-task-side">${due}${src}</div>
+      <div class="an-task-side">${due}${src}${taskFeatureChipsHtml(c.meeting_id, withMeeting ? null : (state.activeMeeting || {}).features)}</div>
     </div>`;
 }
 

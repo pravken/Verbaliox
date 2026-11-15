@@ -3,7 +3,7 @@
 
 // --- Meetings List, Global Search & Sidebar ---
 async function loadMeetingsList() {
-  const [res] = await Promise.all([fetch('/api/meetings'), loadFolders()]);
+  const [res] = await Promise.all([fetch('/api/meetings'), loadFolders(), loadFeatures()]);
   const list = await readJson(res);
   if (!res.ok || !Array.isArray(list)) return;  // the list shown stays (a lost session reloads the page)
   state.meetings = list;
@@ -845,7 +845,7 @@ function libPrefs() {
 }
 
 // Recordings grouped by the day (or month) they were recorded, like folders that can be folded
-const LIB_GROUPS = ['none', 'day', 'month'];
+const LIB_GROUPS = ['none', 'day', 'month', 'feature'];
 
 // The name shown in the library: the title, or the file name made from the template
 function libTitle(m) {
@@ -853,11 +853,13 @@ function libTitle(m) {
 }
 
 function libDateKey(m, group) {
+  if (group === 'feature') return String((m.features || [])[0] || '');  // its first feature
   const d = String(m.recorded_at || m.created_at || '').slice(0, 10);
   return group === 'month' ? d.slice(0, 7) : d;
 }
 
 function libDateLabel(key, group) {
+  if (group === 'feature') return key ? (featureById(key) || {}).name || '—' : t('ftNoFeature');
   const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
   const d = new Date(`${group === 'month' ? key + '-01' : key}T12:00:00`);
   if (isNaN(d)) return key || '—';
@@ -1045,7 +1047,7 @@ const LIB_FILTERS = {
     dub: m => !!(m.dub_langs || []).length,
   },
 };
-const LIB_FILTER_GROUPS = [...Object.keys(LIB_FILTERS), 'lang'];
+const LIB_FILTER_GROUPS = [...Object.keys(LIB_FILTERS), 'lang', 'feature'];
 const LIB_FILTER_KEY = 'verbaliox_library_filters';
 let _libFilters = null;
 
@@ -1063,6 +1065,7 @@ function libFilterCount() {
 
 function libFilterTest(group, id, m) {
   if (group === 'lang') return (m.language || '') === id;
+  if (group === 'feature') return id === 'none' ? !(m.features || []).length : (m.features || []).map(String).includes(id);
   const test = LIB_FILTERS[group] && LIB_FILTERS[group][id];
   return !!(test && test(m));
 }
@@ -1081,13 +1084,15 @@ function libLangOptions() {
 }
 
 function libFilterLabel(group, id) {
+  if (group === 'feature') return id === 'none' ? t('ftNoFeature') : (featureById(id) || {}).name || '—';
   if (group !== 'lang') return t(`libFlt_${group}_${id}`);
   return id === 'mixed' ? t('langMixed') : langName(id);
 }
 
 function libFilterMenuHtml() {
   const f = libFilters();
-  const groups = [...Object.keys(LIB_FILTERS).map(g => [g, Object.keys(LIB_FILTERS[g])]), ['lang', libLangOptions()]];
+  const features = (state.features || []).length ? [...(state.features || []).map(x => String(x.id)), 'none'] : [];
+  const groups = [['feature', features], ...Object.keys(LIB_FILTERS).map(g => [g, Object.keys(LIB_FILTERS[g])]), ['lang', libLangOptions()]];
   let html = '';
   for (const [g, ids] of groups) {
     if (!ids.length) continue;
@@ -1570,7 +1575,11 @@ function renderMeetingsSidebar() {
         if (!buckets.has(k)) buckets.set(k, []);
         buckets.get(k).push(m);
       }
-      for (const [k, ms] of buckets) {
+      // by feature: the features by name, the recordings without one last
+      const entries = prefs.group === 'feature'
+        ? [...buckets].sort(([a], [b]) => (!a) - (!b) || _libCollator.compare(libDateLabel(a, 'feature'), libDateLabel(b, 'feature')))
+        : buckets;
+      for (const [k, ms] of entries) {
         const id = `${groupKey}:${k}`;
         dateIds.push(id);
         const open = !datesCollapsed.has(id);
