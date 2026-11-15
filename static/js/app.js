@@ -492,8 +492,11 @@ function renderSummaryPanel() {
   if (!known) tab = state.activeSummaryTab = 'protocol';  // a template that is gone, "since last time" off a series
   if (!state.anCommit || state.anCommit.id !== m.id) { state.anCommit = { id: m.id, n: 0 }; refreshCommitmentCount(); }
   setClearSummaryVisible(tab !== 'protocol' && anHasContent(tab));
+  if (state.anEdit && (state.anEdit.id !== m.id || state.anEdit.tab !== tab)) state.anEdit = null;  // another section opened
   renderAnalysisNav();
   renderAnalysisHead();
+  if (state.anEdit && box.querySelector('.an-edit')) return;  // a section finished in the background keeps the text being edited
+  state.anEdit = null;
   if (tab === 'protocol') { renderAnalysisOverview(box); return; }
   if (tab === 'mynotes') {
     // a section finished in the background re-renders the panel: the notes being typed keep their caret
@@ -587,6 +590,11 @@ function renderAnalysisHead() {
   const shown = overview ? anHasContent('protocol') : has;
   document.getElementById('an-copy-btn')?.classList.toggle('hidden', !shown || tab === 'commitments');
   document.getElementById('an-exp-btn')?.classList.toggle('hidden', !shown && tab !== 'commitments');
+  const edit = document.getElementById('an-edit-btn');
+  if (edit) {
+    const key = overview ? 'protocol' : tab;
+    edit.classList.toggle('hidden', !anEditable(key) || busy || anIsBusy(key) || !!state.anEdit);
+  }
 }
 
 // Overview: the summary and the cards of the other sections («Настроить»); what is not made yet below
@@ -600,6 +608,7 @@ function renderAnalysisOverview(box) {
         ${opts.mine ? '<span class="an-dot an-dot-mine"></span>' : ''}${escapeHtml(title.toUpperCase())}
         ${opts.count ? `<span class="an-cnt">${opts.count}</span>` : ''}${opts.tag ? `<span class="an-tag">${escapeHtml(opts.tag)}</span>` : ''}
         <span class="flex-1"></span>
+        ${opts.edit ? `<button class="an-more" ${pageCall('click', 'editAnalysisSection', [key])} title="${escapeHtml(t('anEditTip'))}" aria-label="${escapeHtml(t('anEdit'))}">✎</button>` : ''}
         ${opts.regen && ai ? `<button class="an-more" ${pageCall('click', 'createAnalysisSection', [key])} title="${escapeHtml(t('anRegen'))}">↻</button>` : ''}
         ${opts.open ? `<button class="an-more" ${pageCall('click', 'selectSummaryTab', [key])}>${escapeHtml(t('anOpen'))} →</button>` : ''}
       </div>
@@ -615,9 +624,9 @@ function renderAnalysisOverview(box) {
     if (off.includes(key)) return;
     cards.push(render());
   };
-  consider('tldr', t('anShort'), () => card('tldr', t('anShort'), md('tldr'), { wide: true, ai: true, regen: true }), {});
+  consider('tldr', t('anShort'), () => card('tldr', t('anShort'), md('tldr'), { wide: true, ai: true, regen: true, edit: true }), {});
   if (anIsBusy('protocol')) cards.push(busyCard('protocol', t('anResults')));
-  else if (anHasContent('protocol')) cards.push(card('protocol', t('anResults'), md('protocol'), { wide: true, regen: false }));
+  else if (anHasContent('protocol')) cards.push(card('protocol', t('anResults'), md('protocol'), { wide: true, regen: false, edit: true }));
   else missing.unshift({ key: 'protocol', title: t('anResults'), about: t('anAboutProtocol') });
   consider('chapters', t('sumChapters'), () => {
     const chs = parseChapters(sums.chapters);
@@ -687,6 +696,11 @@ function openAnalysisMenu(kind, el) {
     const items = [];
     if (tpl) items.push({ label: t('anEditTemplate'), run: () => openTemplateDialog(tpl) });
     items.push({ label: t('anAllTemplates'), run: () => openTemplatesEditor() });
+    if (tab !== 'protocol' && anEditable(tab)) items.push({ sep: true }, { label: t('anEdit'), run: () => editAnalysisSection(tab) });
+    if (tab === 'protocol') {
+      const keys = ['protocol', 'tldr'].filter(anEditable);
+      if (keys.length) items.push({ sep: true }, ...keys.map(key => ({ label: `${t('anEdit')}: ${key === 'protocol' ? t('anResults') : t('anShort')}`, run: () => editAnalysisSection(key) })));
+    }
     if (tab !== 'protocol' && state.anCanClear) items.push({ sep: true }, { label: t('anClearSection'), run: () => clearSummaryTab(tab) });
     if (tab === 'protocol') {
       for (const key of ['protocol', 'tldr', 'chapters']) if (anHasContent(key)) items.push({ label: `${t('anClearSection')}: ${anSectionInfo(key).label}`, run: () => clearSummaryTab(key) });
@@ -1822,6 +1836,10 @@ function textMenuItems(e) {
     if (short) items.push({ label: t('ctxFindAll'), run: () => findEverywhere(text) });
     items.push({ label: t('ctxAskAssistant'), run: () => askAbout(text) });
     if (text.length <= 60 && text.split(' ').length <= 5) {
+      // a word of the analysis written wrong: put right in the analysis, and the dictionary learns it
+      if (area && area.closest('#summary-content') && state.activeMeeting && !nodeEl(selection.anchorNode)?.closest?.('.an-edit, textarea, input')) {
+        items.push({ label: t('ctxFixInAnalysis').replace('{word}', () => text), run: () => openWordFixDialog(text) });
+      }
       items.push({ label: t('ctxAddToDictionary'), run: () => addToDictionary(text) });
     }
   } else if (segRow) {
@@ -1936,6 +1954,184 @@ async function addToDictionary(text) {
     showToast(t('ctxAddedToDictionary').replace('{term}', () => term));
     loadDictionary();
   }
+}
+
+// --- Hand corrections of the analysis (app/analysis_edits.py) ---
+// A section a person may edit: Markdown made by the model (the chapters are a list with times, the notes,
+// MFU and tasks have editors of their own)
+const AN_NOT_EDITABLE = new Set(['chapters', 'mynotes', 'mfu', 'commitments', 'error']);
+function anEditable(key) {
+  const m = state.activeMeeting;
+  const v = m && (m.summaries || {})[key];
+  return !AN_NOT_EDITABLE.has(key) && typeof v === 'string' && !!v.trim();
+}
+
+function anTrimWord(text) {
+  return String(text || '').replace(/\s+/g, ' ').replace(/^[\s.,!?;:«»"'()*_#\-]+|[\s.,!?;:«»"'()*_#\-]+$/g, '');
+}
+
+// «Исправить …»: the right spelling for every section of this recording; the dictionary remembers it
+function openWordFixDialog(selected) {
+  const wrong = anTrimWord(selected);
+  const m = state.activeMeeting;
+  if (!wrong || !m) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
+      <div class="text-sm font-semibold text-white">${escapeHtml(t('fixWordTitle'))}</div>
+      <div class="space-y-1">
+        <div class="text-xs text-apple-secondary">${escapeHtml(t('fixWordWas'))}</div>
+        <div class="text-sm text-white break-words"><s class="opacity-70">${escapeHtml(wrong)}</s></div>
+      </div>
+      <label class="block space-y-1">
+        <span class="block text-xs text-apple-secondary">${escapeHtml(t('fixWordRight'))}</span>
+        <input type="text" name="right" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+      </label>
+      <label class="flex items-start gap-2 text-xs text-apple-label"><input type="checkbox" name="all" checked class="mt-0.5">
+        <span>${escapeHtml(t('fixWordAll'))}</span></label>
+      <label class="flex items-start gap-2 text-xs text-apple-label"><input type="checkbox" name="learn" checked class="mt-0.5">
+        <span><span>${escapeHtml(t('fixWordLearn'))}</span><span class="block text-apple-secondary mt-0.5" data-hint></span></span></label>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('fixWordOk'))}</button>
+      </div></form>`;
+  const form = wrap.querySelector('form');
+  const input = form.elements.right;
+  const hint = wrap.querySelector('[data-hint]');
+  const learnBox = form.elements.learn;
+  const tooLong = wrong.split(' ').length > 4;
+  if (tooLong) { learnBox.checked = false; learnBox.disabled = true; }
+  const sayHint = () => {
+    const right = anTrimWord(input.value);
+    hint.textContent = tooLong ? t('fixWordLong') : right && right !== wrong
+      ? t('fixWordHint').replace('{wrong}', () => wrong).replace('{right}', () => right) : '';
+  };
+  input.value = wrong;
+  input.addEventListener('input', sayHint);
+  const done = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(); } };
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="no"]')) done(); });
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const right = anTrimWord(input.value);
+    if (!right || right === wrong) { input.focus(); return; }
+    const tab = state.activeSummaryTab;
+    const key = form.elements.all.checked ? null : (tab === 'protocol' ? null : tab);
+    const res = await fetch(`/api/meetings/${m.id}/summaries/fix`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wrong, right, key, learn: learnBox.checked }),
+    }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    const data = await res.json();
+    done();
+    if (state.activeMeeting && state.activeMeeting.id === m.id) {
+      state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
+      renderSummaryPanel();
+    }
+    if (data.learned && data.learned.length) loadDictionary();
+    showToast((data.replaced ? t('fixWordDone').replace('{n}', () => String(data.replaced)) : t('fixWordNone'))
+      + (data.learned && data.learned.length ? ` · ${t('fixWordLearned')}` : ''));
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  sayHint();
+  input.focus();
+  input.select();
+}
+
+// «Править»: the section's Markdown in a field; after saving, the words replaced are offered to the dictionary
+function editAnalysisSection(key) {
+  const m = state.activeMeeting;
+  const tab = state.activeSummaryTab;
+  if (!m) return;
+  key = typeof key === 'string' ? key : (tab === 'protocol' ? 'protocol' : tab);
+  if (!anEditable(key) || anIsBusy(key)) return;
+  const box = document.getElementById('summary-content');
+  const host = tab === 'protocol' ? box?.querySelector(`[data-card="${CSS.escape(key)}"] .an-cardb`) : box;
+  if (!host) return;
+  const old = m.summaries[key];
+  state.anEdit = { id: m.id, tab, key };
+  host.classList.remove('an-clamp');
+  host.innerHTML = `<div class="an-edit">
+      <textarea class="an-edit-input w-full bg-apple-sidebar border apple-border rounded-xl px-4 py-3 text-[13px] leading-relaxed text-white focus:outline-none focus:border-apple-blue resize-y" spellcheck="true" aria-label="${escapeHtml(t('anEdit'))}"></textarea>
+      <div class="an-edit-bar">
+        <span class="an-edit-hint">${escapeHtml(t('anEditHint'))}</span>
+        <button type="button" class="an-btn" data-a="cancel">${escapeHtml(t('cancel'))}</button>
+        <button type="button" class="an-btn an-btn-primary" data-a="save">${escapeHtml(t('save'))}</button>
+      </div></div>`;
+  const ta = host.querySelector('textarea');
+  ta.value = old;
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 4, Math.max(160, window.innerHeight * 0.7))}px`; };
+  ta.addEventListener('input', fit);
+  const scroller = document.getElementById('an-main');
+  const scrolled = scroller ? scroller.scrollTop : 0;
+  const close = () => {
+    state.anEdit = null;
+    renderSummaryPanel();
+    if (scroller) scroller.scrollTop = scrolled;  // back where the section was read
+  };
+  const save = async () => {
+    const text = ta.value.trim();
+    if (text === old.trim()) { close(); return; }
+    if (!text) { showError(t('anEditEmpty')); return; }
+    const res = await fetch(`/api/meetings/${m.id}/summaries/${encodeURIComponent(key)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+    }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    const data = await res.json();
+    if (state.activeMeeting && state.activeMeeting.id === m.id) state.activeMeeting.summaries = data.summaries || state.activeMeeting.summaries;
+    close();
+    showToast(t('anEditSaved'));
+    if ((data.suggest || []).length) offerDictionaryWords(data.suggest);
+  };
+  host.querySelector('[data-a="cancel"]').addEventListener('click', close);
+  host.querySelector('[data-a="save"]').addEventListener('click', save);
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  renderAnalysisHead();
+  fit();
+  ta.focus();
+}
+
+// The words a hand edit replaced: which of them the dictionary should learn (all ticked)
+function offerDictionaryWords(pairs) {
+  const wrap = document.createElement('div');
+  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
+      <div class="text-sm font-semibold text-white">${escapeHtml(t('learnTitle'))}</div>
+      <p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('learnText'))}</p>
+      <div class="space-y-1.5 max-h-[50vh] overflow-y-auto">${pairs.map((p, i) => `<label class="flex items-center gap-2 text-sm text-white">
+          <input type="checkbox" data-i="${i}" checked>
+          <span class="break-words"><s class="opacity-60">${escapeHtml(p.wrong)}</s> → <b>${escapeHtml(p.right)}</b></span></label>`).join('')}</div>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('learnSkip'))}</button>
+        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('learnOk'))}</button>
+      </div></form>`;
+  const done = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(); } };
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="no"]')) done(); });
+  wrap.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const chosen = [...wrap.querySelectorAll('input[data-i]:checked')].map(x => pairs[Number(x.dataset.i)]);
+    done();
+    if (!chosen.length) return;
+    const res = await fetch('/api/dictionary/learn', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairs: chosen }),
+    }).catch(() => null);
+    if (!res || !res.ok) { showError(res ? (await readJson(res)).detail : t('errNoNetwork')); return; }
+    const data = await res.json();
+    loadDictionary();
+    showToast(t('learnDone').replace('{n}', () => String((data.learned || []).length)));
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  wrap.querySelector('button[type="submit"]').focus();
 }
 
 document.addEventListener('contextmenu', (e) => {

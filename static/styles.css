@@ -1444,6 +1444,11 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .an-dots { width: 30px; height: 30px; border-radius: 15px; color: var(--hc-dim, #AEAEB2); display: inline-flex; align-items: center; justify-content: center; }
 .an-dots svg { width: 15px; height: 15px; fill: currentColor; }
 .an-body { min-height: 120px; }
+/* «Править»: the section's Markdown in a field (app.js: editAnalysisSection) */
+.an-edit { display: flex; flex-direction: column; gap: 8px; }
+.an-edit-input { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+.an-edit-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.an-edit-hint { flex: 1 1 220px; min-width: 0; font-size: 11.5px; color: var(--hc-dim, #8E8E93); }
 .an-md { font-size: var(--fs-body); line-height: 1.6; color: #E5E5EA; }
 .an-bar { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
 .an-question { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: rgba(10, 132, 255, 0.12); color: #CFE6FF; font-size: var(--fs-body); }

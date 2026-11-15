@@ -1203,7 +1203,9 @@ def generate_meeting_summary(
         from app.people import fix_name_typos
 
         answer = fix_name_typos(answer, roster)
-    return answer
+    from app.analysis_edits import fix_with_dictionary
+
+    return fix_with_dictionary(answer)  # a word corrected by hand once stays corrected
 
 
 # --- A title for a recording, from its content ---
