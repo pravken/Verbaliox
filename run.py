@@ -194,6 +194,9 @@ def app_url(host: str, port: int) -> str:
 SERVER_STATE = {"error": ""}
 
 
+SERVER_AFTER_WINDOW_SEC = 8.0  # the longest the server waits for the window's WebView2 to be ready
+
+
 def start_server_in_thread(host: str, port: int) -> threading.Thread:
     import uvicorn
 
@@ -989,8 +992,25 @@ def main() -> None:
             import webview
 
             if not already_running:
-                print("Starting Verbaliox local AI server...")
-                server_thread = start_server_in_thread(args.host, args.port)
+                # The database before the tray and «Start with Windows», which read the settings: the server
+                # made it a moment later, and the first start said «no such table: settings» (no tray icon)
+                try:
+                    from app.database import init_db
+
+                    init_db()
+                except Exception as e:
+                    print(f"[db] {e}", file=sys.stderr)
+            server_lock = threading.Lock()
+
+            def _start_server() -> None:
+                # Once the window's WebView2 is up (see _on_gui_ready): the server loads torch, CUDA and
+                # ONNX Runtime libraries and changes where DLLs are found; done while WebView2 made its first
+                # profile, the first start ended in an access violation inside WebView2 (a user's log)
+                nonlocal server_thread
+                with server_lock:
+                    if server_thread is None and not already_running:
+                        print("Starting Verbaliox local AI server...")
+                        server_thread = start_server_in_thread(args.host, args.port)
 
             webview.settings["ALLOW_DOWNLOADS"] = True
             # The app's page once the server answers; until then a loading screen (see open_app_when_ready)
@@ -1049,10 +1069,17 @@ def main() -> None:
             from app.applog import LOG_FILE
 
             def _on_gui_ready() -> None:
+                apply_native_window_icon_and_hide_console()
                 if not already_running:
+                    # the loading screen shown means WebView2 is ready; a hidden window (started with
+                    # Windows) may not load it: the server starts after a few seconds anyway
+                    try:
+                        window.events.loaded.wait(SERVER_AFTER_WINDOW_SEC)
+                    except Exception:
+                        time.sleep(1.0)
+                    _start_server()
                     threading.Thread(target=open_app_when_ready, args=(window, args.host, args.port, str(LOG_FILE)),
                                      daemon=True, name="open_app").start()
-                apply_native_window_icon_and_hide_console()
 
             webview.start(func=_on_gui_ready, icon=icon_arg,
                           private_mode=False, storage_path=str(DATA_DIR / "webview"))
