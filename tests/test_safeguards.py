@@ -880,6 +880,12 @@ class CutAnswerTest(unittest.TestCase):
             oc._ollama_chat("http://127.0.0.1:11434", "gemma4:e4b", "s", "u")
         self.assertEqual(len(sent), 1)  # gone round in circles: more room would give more of the same
 
+    def test_a_loaded_model_shows_its_size_when_ollama_says_too_little(self):
+        from app.vram import _shown_size
+
+        self.assertEqual(_shown_size({"size": 5.4e9, "size_vram": 0.5e9}), 5.4e9)  # gemma4 on the PC
+        self.assertEqual(_shown_size({"size": 5.4e9, "size_vram": 5.0e9}), 5.0e9)
+
     def test_reasoning_without_its_opening_tag_is_dropped(self):
         from app.llm_text import strip_think
 
