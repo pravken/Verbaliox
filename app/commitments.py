@@ -415,6 +415,14 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
     except Exception:
         roster, fix_name_typos = [], None
     head = ("Участники встречи (имена и фамилии написаны верно, пиши их так же): " + "; ".join(roster) + "\n\n") if roster else ""
+    try:  # the meeting's feature and the dictionary's terms (Словарь, Словарь → Фичи)
+        from app import vocab
+        from app.features import describe
+
+        about = describe(m.get("features") or [])
+        head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (vocab.glossary_note() + "\n\n" if vocab.glossary_note() else "")
+    except Exception as e:
+        print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
         found += parse_answer(llm.chat(system, head + "Расшифровка:\n" + part))

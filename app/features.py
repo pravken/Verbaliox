@@ -26,6 +26,11 @@ def _init(conn) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS features (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL)""")
+    # what a feature is about (Словарь → Фичи): each field has a use, none is required
+    have = {r["name"] for r in conn.execute("PRAGMA table_info(features)").fetchall()}
+    for column in ("description", "keywords", "terms"):
+        if column not in have:
+            conn.execute(f"ALTER TABLE features ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE TABLE IF NOT EXISTS meeting_features (meeting_id INTEGER NOT NULL, feature_id INTEGER NOT NULL, "
                  "PRIMARY KEY (meeting_id, feature_id))")
     conn.execute("CREATE TABLE IF NOT EXISTS series_features (series_id INTEGER NOT NULL, feature_id INTEGER NOT NULL, "
@@ -61,7 +66,7 @@ def list_features() -> List[Dict[str, Any]]:
     with _db_lock:
         conn = _conn()
         rows = conn.execute(
-            "SELECT f.id, f.name, f.color, COUNT(m.id) AS count FROM features f "
+            "SELECT f.id, f.name, f.color, f.description, f.keywords, f.terms, COUNT(m.id) AS count FROM features f "
             "LEFT JOIN meeting_features mf ON mf.feature_id = f.id LEFT JOIN meetings m ON m.id = mf.meeting_id "
             "GROUP BY f.id ORDER BY f.name COLLATE NOCASE").fetchall()
         conn.close()
@@ -89,7 +94,26 @@ def create_feature(name: str, color: str = "") -> Dict[str, Any]:
     return {"id": fid, "name": name, "color": color}
 
 
-def update_feature(feature_id: int, name: Optional[str] = None, color: Optional[str] = None) -> None:
+DESCRIPTION_MAX = 400
+LIST_MAX = 400  # keywords, terms: comma-separated
+
+
+def _clean_list(text: Optional[str]) -> str:
+    """«возвраты, эквайринг ,payments» -> «возвраты, эквайринг, payments» (each once, in order)."""
+    items = []
+    for x in re.split(r"[,;\n]", _INVISIBLE.sub("", str(text or ""))):
+        x = " ".join(x.split())[:NAME_MAX]
+        if x and x.casefold() not in {i.casefold() for i in items}:
+            items.append(x)
+    return ", ".join(items)[:LIST_MAX]
+
+
+def split_list(text: Optional[str]) -> List[str]:
+    return [x.strip() for x in str(text or "").split(",") if x.strip()]
+
+
+def update_feature(feature_id: int, name: Optional[str] = None, color: Optional[str] = None,
+                   description: Optional[str] = None, keywords: Optional[str] = None, terms: Optional[str] = None) -> None:
     with _db_lock:
         conn = _conn()
         if name is not None:
@@ -104,6 +128,13 @@ def update_feature(feature_id: int, name: Optional[str] = None, color: Optional[
             conn.execute("UPDATE features SET name = ? WHERE id = ?", (name, feature_id))
         if color is not None and re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
             conn.execute("UPDATE features SET color = ? WHERE id = ?", (color, feature_id))
+        if description is not None:
+            text = " ".join(_INVISIBLE.sub("", description).split())[:DESCRIPTION_MAX]
+            conn.execute("UPDATE features SET description = ? WHERE id = ?", (text, feature_id))
+        if keywords is not None:
+            conn.execute("UPDATE features SET keywords = ? WHERE id = ?", (_clean_list(keywords), feature_id))
+        if terms is not None:
+            conn.execute("UPDATE features SET terms = ? WHERE id = ?", (_clean_list(terms), feature_id))
         conn.commit()
         conn.close()
 
@@ -207,6 +238,72 @@ def accept_suggestion(meeting_id: int, feature_id: int) -> List[int]:
     return set_meeting_features(meeting_id, ids + [feature_id])
 
 
+def _mentions(text: str, phrase: str) -> bool:
+    """The phrase as whole words of the text, any letter case («Платежи» in «Синк: платежи и возвраты»)."""
+    phrase = phrase.strip()
+    if len(phrase) < 2:
+        return False
+    return re.search(r"(?<!\w)" + re.escape(phrase.casefold()) + r"(?!\w)", text.casefold()) is not None
+
+
+def suggest_by_title(meeting_id: int) -> List[int]:
+    """The features whose name or a keyword is in the meeting's title (a Teams meeting is often named
+    after its feature): kept as suggestions, for ✓ / ✕ like the model's. Not for a meeting that has
+    features; one the user turned down for it is not suggested again."""
+    m = get_meeting(meeting_id)
+    if not m or feature_map([meeting_id]).get(meeting_id):
+        return []
+    title = str(m.get("title") or "")
+    ids = [f["id"] for f in list_features()
+           if any(_mentions(title, p) for p in [f["name"], *split_list(f.get("keywords"))])]
+    return _keep_suggestions(meeting_id, ids)
+
+
+def _keep_suggestions(meeting_id: int, ids: List[int]) -> List[int]:
+    with _db_lock:
+        conn = _conn()
+        declined = {r[0] for r in conn.execute("SELECT feature_id FROM feature_declined WHERE meeting_id = ?", (meeting_id,)).fetchall()}
+        ids = [f for f in ids if f not in declined]
+        conn.execute("DELETE FROM feature_suggestions WHERE meeting_id = ?", (meeting_id,))
+        conn.executemany("INSERT INTO feature_suggestions (meeting_id, feature_id) VALUES (?, ?)", [(meeting_id, f) for f in ids])
+        conn.commit()
+        conn.close()
+    return ids
+
+
+def describe(feature_ids: Iterable[int]) -> str:
+    """What the given features are, for a model's request: name, description, keywords and terms."""
+    by_id = {f["id"]: f for f in list_features()}
+    lines = []
+    for fid in feature_ids:
+        f = by_id.get(int(fid))
+        if not f:
+            continue
+        extra = [x for x in (f.get("description") or "",
+                             ("ключевые слова: " + f["keywords"]) if f.get("keywords") else "",
+                             ("термины: " + f["terms"]) if f.get("terms") else "") if x]
+        lines.append(f"- {f['name']}" + (": " + "; ".join(extra) if extra else ""))
+    return "\n".join(lines)
+
+
+def note_for(meeting: Dict[str, Any]) -> str:
+    """describe() of a recording's own features ('' when it has none)."""
+    try:
+        return describe(meeting.get("features") or [])
+    except Exception:
+        return ""
+
+
+def all_terms() -> List[str]:
+    """The terms of every feature (for recognition and the models' glossary)."""
+    out: List[str] = []
+    for f in list_features():
+        for t in split_list(f.get("terms")):
+            if t.casefold() not in {x.casefold() for x in out}:
+                out.append(t)
+    return out
+
+
 _SUGGEST = (
     "Тебе дан список фич продукта и материалы встречи. Выбери из списка фичи, которым посвящена встреча: обычно "
     "одну, реже две-три. Только если о фиче на встрече действительно говорили по существу; не выбирай по одному "
@@ -251,14 +348,6 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
     text = (f"Название встречи: {m.get('title') or ''}\n\n" + (f"MFU:\n{m['mfu']}\n\n" if (m.get("mfu") or "").strip() else "")
             + body)[:SUGGEST_TEXT_CHARS]
     llm = target(model_name, local_only=is_local_only(m))
-    listing = "Фичи: " + "; ".join(f["name"] for f in features)
+    listing = "Фичи:\n" + describe(f["id"] for f in features)  # with what each is about, when written
     ids = parse_names(llm.chat(_SUGGEST, listing + "\n\n" + text), features)
-    with _db_lock:
-        conn = _conn()
-        declined = {r[0] for r in conn.execute("SELECT feature_id FROM feature_declined WHERE meeting_id = ?", (meeting_id,)).fetchall()}
-        ids = [f for f in ids if f not in declined]
-        conn.execute("DELETE FROM feature_suggestions WHERE meeting_id = ?", (meeting_id,))
-        conn.executemany("INSERT INTO feature_suggestions (meeting_id, feature_id) VALUES (?, ?)", [(meeting_id, f) for f in ids])
-        conn.commit()
-        conn.close()
-    return ids
+    return _keep_suggestions(meeting_id, ids)

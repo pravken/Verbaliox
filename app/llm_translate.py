@@ -104,11 +104,22 @@ def parse_numbered_lines(answer: str, count: int) -> List[Optional[str]]:
     return out
 
 
+def _terms_note() -> str:
+    """The dictionary's names and terms stay as they are written (Словарь, Словарь → Фичи)."""
+    try:
+        from app import vocab
+
+        terms = [t.strip() for t in vocab.hotwords().split(", ") if t.strip()][:vocab.GLOSSARY_MAX_TERMS]
+    except Exception:
+        terms = []
+    return (" Keep these names and terms exactly as written, do not translate them: " + ", ".join(terms) + ".") if terms else ""
+
+
 def translate_batch(
     base_url: str, model: str, texts: List[str], src: str, tgt: str, style: str = "dub",
     check_cancel: Optional[Callable[[], None]] = None,
 ) -> List[Optional[str]]:
-    system = _SYSTEM_PROMPTS[style].format(src=src, tgt=tgt)
+    system = _SYSTEM_PROMPTS[style].format(src=src, tgt=tgt) + _terms_note()
     # Line breaks inside one text would break the numbering
     user = "\n".join(f"{i + 1}. {' '.join(t.split())}" for i, t in enumerate(texts))
     return parse_numbered_lines(ollama_chat(base_url, model, system, user, check_cancel=check_cancel), len(texts))
@@ -125,6 +136,7 @@ def translate_single(
         )
     else:
         system = f"Translate the user's {src} text into {tgt}. Output only the translation, nothing else."
+    system += _terms_note()
     return ollama_chat(base_url, model, system, text, check_cancel=check_cancel).strip().strip('"«»`')
 
 

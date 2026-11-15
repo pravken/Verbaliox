@@ -686,7 +686,7 @@
         <div class="settings-card">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="rdSasDictTitle">Слова и названия</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="rdSasDictDesc">Имена, термины и названия, которые нужно писать правильно. Whisper получает их как подсказку при распознавании; для всех моделей (и в субтитрах, и в диктовке) после распознавания слово заменяется по вариантам и по похожему звучанию. Уже расшифрованные записи не меняются.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="rdSasDictDesc">Имена, термины и названия, которые нужно писать правильно. Whisper получает их как подсказку при распознавании; для всех моделей (и в субтитрах, и в диктовке) после распознавания слово заменяется по вариантам и по похожему звучанию. Модели анализа и перевода тоже получают этот список: пишут слова так же и не переводят их. Уже расшифрованные записи не меняются.</p>
           </div>
           <div class="flex items-center gap-2">
             <input id="settings-dict-term" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]' data-input="checkSettingsDictTerm"
@@ -710,6 +710,25 @@
             <span><span data-i18n="dictFuzzyToggle">Исправлять похожие по звучанию слова</span>
               <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="dictFuzzyHint">После распознавания слово, которое звучит как слово из словаря, заменяется им: «klot» и «клод» станут «Claude», «в кубернетисе» — «в Kubernetes». Короткие слова (до 4 звуков) исправляются только по вариантам.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-dict-fuzzy" checked />
+          </label>
+        </div>
+        <!-- What each feature is (static/js/features.js): every field has a use, none is required -->
+        <div class="settings-card">
+          <div class="min-w-0">
+            <h4 class="text-[13px] font-semibold text-white" data-i18n="ftDictTitle">Фичи</h4>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="ftDictDesc">Что это за фичи и как о них говорят.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="ft-dict-new" type="text" maxlength="60" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addDictFeature"]'
+              data-i18n-placeholder="ftNewPh" placeholder="Новая фича…" data-i18n-title="ftNewPh" title="Новая фича…"
+              class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
+            <button data-click="addDictFeature" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px]" data-i18n="ftCreate">Создать</button>
+          </div>
+          <div id="ft-dict-list" class="space-y-2"></div>
+          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
+            <span><span data-i18n="ftSuggestToggle">Предлагать фичу новой записи</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="ftSuggestHint">По названию встречи, а если в нём фичи нет — моделью анализа. Предложение появляется у названия записи с ✓ / ✕, само ничего не ставится.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-feature-suggest" checked />
           </label>
         </div>
         </div>

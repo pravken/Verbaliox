@@ -44,6 +44,9 @@ def api_meeting_series(meeting_id: int, payload: SeriesAssignPayload) -> Dict[st
 class FeaturePayload(BaseModel):
     name: Optional[str] = None
     color: Optional[str] = None
+    description: Optional[str] = None  # Словарь → Фичи: what it is about, for the models
+    keywords: Optional[str] = None     # words of a meeting's title, comma-separated
+    terms: Optional[str] = None        # names to write right: recognition and the models' glossary
 
 @router.get("/api/features")
 def api_features() -> List[Dict[str, Any]]:
@@ -65,9 +68,12 @@ def api_update_feature(feature_id: int, payload: FeaturePayload) -> List[Dict[st
     from app.features import list_features, update_feature
 
     try:
-        update_feature(feature_id, payload.name, payload.color)
+        update_feature(feature_id, payload.name, payload.color, payload.description, payload.keywords, payload.terms)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    from app import vocab
+
+    vocab.invalidate()  # its terms join recognition at once
     return list_features()
 
 @router.delete("/api/features/{feature_id}")
@@ -75,6 +81,9 @@ def api_delete_feature(feature_id: int) -> List[Dict[str, Any]]:
     from app.features import delete_feature, list_features
 
     delete_feature(feature_id)
+    from app import vocab
+
+    vocab.invalidate()
     return list_features()
 
 class MeetingFeaturesPayload(BaseModel):
@@ -744,6 +753,7 @@ def _roster(m: Dict[str, Any]) -> List[str]:
 @router.post("/api/meetings/{meeting_id}/summary")
 def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dict[str, Any]:
     from app.diarizer import unload_diarizer
+    from app.features import note_for as features_note_for
     from app.hardware import clear_vram
 
     m = get_meeting(meeting_id)
@@ -780,7 +790,7 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             model_name=payload.model or None,
             answer_lang=payload.lang or m.get("language") or "ru",
             local_only=is_local_only(m),
-            user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "",
+            user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
             template_prompt=template_prompt,
             participants=_roster(m),
         )
