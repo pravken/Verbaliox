@@ -6,6 +6,26 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.8 — English
+
+- **Import without recognition**: «Only add, without recognition» in the import window puts the files
+  (or a link's download) in the library; «Transcribe» on the recording starts it when the text is needed.
+- **The precise mode in the import window**, under the speech model, not behind «Change»; turned on in
+  Settings with nothing ticked, it ticks GigaAM v3, Whisper Pro and Parakeet TDT v3; its text says what
+  «the main model» is.
+- **A disputed word says who picked it**: the analysis model by the words around it, or the most
+  accurate model when the analysis model did not decide.
+- **The Models panel**: a running model shows the minutes until it unloads by itself; on hover a chip
+  says what a click does («Unload ×» in red, «Start ▷»).
+- **Features**: the recording's header shows them at the right, in one place, after «Feature:»; the
+  picker stays under them after a feature is made; the library has a button of its own for them beside
+  the filters.
+- **Task cards**: «Assignee» before the name, «for» before the person a task is for.
+- **Live captions**: the fast mode uses Gemma 4 E2B (measured on en↔ru: near E4B in quality at ~0.4 s a
+  phrase); models not free for commercial use are no longer picked.
+- Dark checkboxes everywhere; no blue dots on the Settings sections; a softer dialog shadow; a list's
+  focus ring is no longer cut; «Dubbing environment works» is a green notice, not a red error.
+
 ## 0.8.7 — English
 
 - **Features**: tag a meeting with the feature it is about (one or a few). A series can tag its new
@@ -421,6 +441,25 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.8
+
+- **Импорт без распознавания**: «Только добавить, без распознавания» в окне импорта кладёт файлы (или
+  скачанное по ссылке) в медиатеку; кнопка «Распознать» у записи запускает распознавание, когда нужен текст.
+- **Точный режим в окне импорта** — под моделью распознавания, а не за «Изменить»; включённый в настройках
+  без отмеченных моделей, сам отмечает GigaAM v3, Whisper Pro и Parakeet TDT v3; подсказка объясняет, что
+  такое «основная модель».
+- **Спорное слово говорит, кто выбрал вариант**: модель анализа по смыслу соседних слов или самая точная
+  модель, если модель анализа это место не решила.
+- **Панель «Модели»**: у работающей модели видно, через сколько минут она выгрузится сама; при наведении
+  плашка говорит, что сделает клик («Выгрузить ×» красным, «Запустить ▷»).
+- **Фичи**: в шапке записи — справа, на одном месте, после «Фича:»; окно выбора остаётся под ними после
+  создания фичи; в медиатеке у фич своя кнопка рядом с фильтрами.
+- **Карточки задач**: «Исполнитель» перед именем, «для» перед тем, кому задача нужна.
+- **Живые субтитры**: быстрый режим берёт Gemma 4 E2B (замер en↔ru: почти как E4B по качеству, ~0,4 с на
+  фразу); модели, не разрешённые для коммерческого использования, больше не выбираются.
+- Тёмные чекбоксы везде; без синих точек у разделов настроек; мягче тень окон; рамка выбранного списка
+  больше не обрезается; «Окружение дубляжа работает» — зелёное уведомление, а не красная ошибка.
 
 ## 0.8.7
 
