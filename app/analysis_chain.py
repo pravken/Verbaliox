@@ -1,5 +1,6 @@
 """
-The analysis of a recording in steps, so its parts cannot disagree (Настройки → ИИ-анализ → «Анализ по шагам»):
+The analysis of a recording in steps, so its parts cannot disagree (Настройки → ИИ-анализ → «Анализ по шагам»,
+on by default since the measurement in bench-report/analysis-chain.md):
 
 1. the decisions and the open questions, read from the transcript alone;
 2. the tasks (commitments.extract), with those decisions as hints;
@@ -29,7 +30,7 @@ def enabled(settings: Optional[Dict[str, str]] = None) -> bool:
         from app.database import get_all_settings
 
         settings = get_all_settings()
-    return (settings.get("analysis_chain") or "false").lower() == "true"
+    return (settings.get("analysis_chain") or "true").lower() == "true"
 
 
 def task_items(meeting_id: int) -> List[Dict[str, str]]:

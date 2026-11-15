@@ -297,8 +297,10 @@ class AutoChaptersTest(unittest.TestCase):
 
     def setUp(self):
         ProcessMeetingJobTest.setUp(self)
-        update_settings({"auto_summary": "true", "auto_commitments": "false", "summary_grounding": "false"})
-        self.addCleanup(update_settings, {"auto_summary": "false", "auto_commitments": "true", "summary_grounding": "true"})
+        update_settings({"auto_summary": "true", "auto_commitments": "false", "summary_grounding": "false",
+                         "analysis_chain": "false"})
+        self.addCleanup(update_settings, {"auto_summary": "false", "auto_commitments": "true", "summary_grounding": "true",
+                                          "analysis_chain": "true"})
         from app import llm
 
         for p in (mock.patch.object(llm, "available", return_value=True),
@@ -314,9 +316,18 @@ class AutoChaptersTest(unittest.TestCase):
             return "- [00:00] Начало — вступление\n- [05:00] Итоги — решения" if kw["template_key"] == "chapters" else "## Итоги"
 
         segs = [{"start": 0.0, "end": end, "text": "длинный разговор", "words": []}]
-        with mock.patch.object(transcriber, "generate_meeting_summary", side_effect=summary):
+        from app import ollama_client
+
+        with mock.patch.object(transcriber, "generate_meeting_summary", side_effect=summary), \
+                mock.patch.object(ollama_client, "generate_meeting_summary", side_effect=summary):
             m = self._run(lambda *a, **k: segs)
         return made, m
+
+    def test_in_steps_the_decisions_come_before_the_protocol(self):
+        update_settings({"analysis_chain": "true"})
+        made, m = self._templates(900.0)
+        self.assertEqual(made, ["decisions", "protocol", "chapters"])
+        self.assertIn("## Решения", m["summaries"]["protocol"])
 
     def test_long_meeting_gets_chapters(self):
         made, m = self._templates(900.0)

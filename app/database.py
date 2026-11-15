@@ -207,7 +207,7 @@ def init_db() -> None:
             "file_name_template": "{date} {title}",  # recordings and exports (app/naming.py)
             "date_folders": "off",  # off | day | month | year_month: folders by date (app/naming.py)
             "summary_templates": "[]",  # the user's own summary templates, JSON (summary_templates())
-            "analysis_chain": "false",  # the protocol in steps: decisions, tasks, then the protocol (app/analysis_chain.py)
+            "analysis_chain": "true",  # the protocol in steps: decisions, tasks, then the protocol (app/analysis_chain.py)
             "summary_grounding": "true",  # summaries checked against the transcript (app/grounding.py)
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
             "dictionary_fuzzy": "true",  # dictionary terms replace words that sound like them (app/vocab.py)
