@@ -1963,6 +1963,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                         speakers=speakers_meta,
                         template_key="protocol",
                         user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
+                        mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
                         answer_lang=detected_lang,
                         local_only=local_only,
                         part_notes=part_notes,

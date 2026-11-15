@@ -337,6 +337,7 @@ _MEETING_EXTRA_COLUMNS = {
     "pending_exports_json": "TEXT DEFAULT '[]'",
     "exports_json": "TEXT DEFAULT '[]'",  # files saved by exports (Save as), deleted with the recording on request
     "user_notes": "TEXT DEFAULT ''",  # the user's own notes of the meeting (studio or "My notes" tab)
+    "mfu": "TEXT DEFAULT ''",  # the organizer's meeting follow-up, pasted by the user: tasks and summary lean on it
     "media_removed": "INTEGER DEFAULT 0",  # 1: the sound was deleted for privacy, the transcript kept
     "transcript_verified": "INTEGER DEFAULT 0",  # 1: the user checked and corrected it: a reference for app/bench.py
     "has_video": "INTEGER DEFAULT NULL",  # NULL: told from the file extension (see is_video)
@@ -1173,7 +1174,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 
 
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
-    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes",
+    allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes", "mfu",
                "transcript_verified", "audio_path", "transcript_made_with",
                "local_only", "series_id"}
     items = [(k, v) for k, v in fields.items() if k in allowed]

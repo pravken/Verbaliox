@@ -49,5 +49,72 @@ class DismissedTest(unittest.TestCase):
         self.assertIn("созвониться с подрядчиком", system)
 
 
+@unittest.skipIf(commitments is None, "app dependencies not installed")
+class MfuTest(unittest.TestCase):
+    """The organizer's meeting follow-up (MFU) pasted into a recording: its tasks are taken as written,
+    the ones heard only in the talk stay, marked by their source."""
+
+    def _llm(self):
+        talk = ('{"who": "Анна", "what": "обновить бюджет", "due": "до пятницы", "time": "00:20", "quote": "Я обновлю бюджет до пятницы"}\n'
+                '{"who": "Анна", "what": "созвониться с подрядчиком", "due": "", "time": "00:30", "quote": "созвонюсь с подрядчиком по смете"}')
+        mfu = ('{"who": "Анна", "kind": "part", "what": "обновить бюджет проекта", "due": "до пятницы", "quote": "Анна — обновить бюджет"}\n'
+               '{"who": "Пётр", "kind": "ext", "what": "подготовить договор", "due": "к 20 ноября", "quote": "Пётр — договор к 20 ноября"}')
+
+        def chat(system, user):
+            if system == commitments._SYSTEM_MFU:
+                self.mfu_seen = user
+                return mfu
+            if system == commitments._CHECK:
+                return "\n".join(f"{i}: да" for i in range(1, 10))
+            return talk
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm.chat.side_effect = chat
+        return llm
+
+    def test_the_mfu_tasks_come_first_and_the_talk_adds_the_rest(self):
+        init_db()
+        m = create_meeting("Планёрка", "q.m4a", "/tmp/q.m4a")
+        save_meeting_results(m["id"], speakers={"S1": {"name": "Анна"}}, segments=[
+            {"id": 0, "start": 20, "end": 25, "speaker": "S1", "text": "Я обновлю бюджет до пятницы"},
+            {"id": 1, "start": 30, "end": 35, "speaker": "S1", "text": "И ещё созвонюсь с подрядчиком по смете"}])
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(m["id"], mfu="Итоги:\n1. Анна — обновить бюджет до пятницы\n2. Пётр — договор к 20 ноября")
+        llm = self._llm()
+        with mock.patch("app.llm.target", return_value=llm):
+            items = commitments.extract(m["id"])
+        got = {x["what"]: x for x in items}
+        self.assertEqual(set(got), {"обновить бюджет проекта", "подготовить договор", "созвониться с подрядчиком"})
+        self.assertEqual(got["подготовить договор"]["source"], "mfu")  # not said in the talk: kept, as agreed
+        self.assertEqual(got["обновить бюджет проекта"]["source"], "mfu")  # said in both: once, the MFU's words
+        self.assertEqual(got["обновить бюджет проекта"]["at"], 20)  # with the moment it was said
+        self.assertEqual(got["созвониться с подрядчиком"]["source"], "ai")  # heard only in the talk
+        self.assertIn("Пётр — договор", self.mfu_seen)
+
+    def test_without_an_mfu_nothing_changes(self):
+        init_db()
+        m = create_meeting("Планёрка 2", "q.m4a", "/tmp/q.m4a")
+        save_meeting_results(m["id"], speakers={"S1": {"name": "Анна"}}, segments=[
+            {"id": 0, "start": 20, "end": 25, "speaker": "S1", "text": "Я обновлю бюджет до пятницы"}])
+        llm = self._llm()
+        with mock.patch("app.llm.target", return_value=llm):
+            items = commitments.extract(m["id"])
+        self.assertTrue(items and all(x["source"] == "ai" for x in items))
+        self.assertFalse(any(c[0][0] == commitments._SYSTEM_MFU for c in llm.chat.call_args_list))
+
+    def test_every_summary_is_told_the_mfu(self):
+        from app import ollama_client
+
+        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm.chat.return_value = "обзор"
+        segs = [{"start": 0, "end": 5, "speaker": "S1", "text": "обсудили бюджет"}]
+        with mock.patch("app.llm.target", return_value=llm):
+            ollama_client.generate_meeting_summary(segs, {}, "protocol", mfu="1. Анна — обновить бюджет")
+        system, user = llm.chat.call_args[0]
+        self.assertIn("Анна — обновить бюджет", system + user)
+        self.assertIn("MFU", system + user)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -37,3 +37,4 @@ bench-report/data/
 
 # The Teams captions probe writes the text of a meeting next to itself (tools/teams_captions_probe.py)
 tools/teams_probe_*.txt
+.shots/
