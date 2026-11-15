@@ -2604,6 +2604,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .an-task-tag-on { border-color: #BF5AF2; background: rgba(191, 90, 242, 0.2); box-shadow: 0 0 8px rgba(191, 90, 242, 0.5); color: #EBD3FF; }
 /* Features (static/js/features.js): a tag with the feature's colour as a dot and a tint */
 .ft-row { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.ft-label { color: var(--hc-dim, #8E8E93); font-size: var(--fs-label, 11.5px); white-space: nowrap; }
+#meeting-features { max-width: 320px; }
 .ft-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 180px; padding: 1px 8px; border-radius: 6px; background: color-mix(in srgb, var(--ft) 18%, transparent); border: 1px solid color-mix(in srgb, var(--ft) 45%, transparent); color: #F5F5F7; font-size: var(--fs-caption); line-height: 18px; white-space: nowrap; }
 .ft-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ft); }
 .ft-name { overflow: hidden; text-overflow: ellipsis; }
