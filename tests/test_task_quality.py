@@ -23,6 +23,21 @@ class InMeetingTest(unittest.TestCase):
             self.assertFalse(commitments.in_meeting_action(x), x["what"])
 
 
+    def test_product_tasks_with_meeting_words_stay(self):
+        """All three audits: single words («экран», «демонстрация», «звук», «в чат») dropped real tasks."""
+        for what, quote in [("переделать экран оплаты", "надо переделать экран оплаты"),
+                            ("подготовить демонстрацию для клиента", "Олег подготовит демонстрацию для клиента"),
+                            ("разослать запись встречи", "разошлю всем запись встречи"),
+                            ("купить камеру в переговорку", "купим новую камеру в переговорку"),
+                            ("написать в чат поддержки", "напиши в чат поддержки про сбой"),
+                            ("починить звук в приложении", "звук в приложении пропадает, починим"),
+                            ("fix the mute button bug", "we need to fix the mute button bug"),
+                            ("обновить экран логина", "экран логина надо обновить")]:
+            self.assertFalse(commitments.in_meeting_action({"what": what, "quote": quote, "due": ""}), what)
+        for what, quote in [("открыть таблицу", "секунду, сейчас открою таблицу"), ("показать слайд", "дайте я покажу слайд")]:
+            self.assertTrue(commitments.in_meeting_action({"what": what, "quote": quote, "due": ""}), what)
+
+
 @unittest.skipIf(commitments is None, "app dependencies not installed")
 class DismissedTest(unittest.TestCase):
     def test_a_deleted_task_stays_away_and_teaches_the_model(self):
