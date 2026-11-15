@@ -225,7 +225,8 @@ function analysisSections() {
       ...((sums.custom || '').trim() || anIsBusy('custom') ? [{ key: 'custom', label: t('anAnswer'), about: '', page: true, make: false }] : []),
     ] },
     { label: t('anGrpWork'), items: [
-      { key: 'tasks', label: t('sumTasks'), about: t('tipSumTasks'), page: true, make: true },
+      // «Следующие шаги» repeated the tasks: only a recording that has one made keeps it
+      ...((sums.tasks || '').trim() || anIsBusy('tasks') ? [{ key: 'tasks', label: t('sumTasks'), about: t('tipSumTasks'), page: true, make: true }] : []),
       { key: 'commitments', label: t('sumCommitments'), about: t('tipSumCommitments'), page: true, make: true },
       { key: 'followup', label: t('anLetter'), about: t('tipSumFollowup'), page: true, make: true },
       ...(m.series_id ? [{ key: 'since_last', label: t('sumSinceLast'), about: t('tipSumSinceLast'), page: true, make: true }] : []),
@@ -636,7 +637,7 @@ function renderAnalysisOverview(box) {
         <span class="an-row-text"><b>${escapeHtml(c.title)}</b>${c.desc ? `<span class="an-row-sub">${escapeHtml(c.desc)}</span>` : ''}</span></div>`).join('') : md('chapters');
     return card('chapters', t('sumChapters'), body, { count: chs.length, regen: true });
   }, {});
-  consider('tasks', t('sumTasks'), () => card('tasks', t('sumTasks'), md('tasks'), { count: anListCount('tasks'), open: true, clamp: true }), {});
+  consider('tasks', t('sumTasks'), () => card('tasks', t('sumTasks'), md('tasks'), { count: anListCount('tasks'), open: true, clamp: true }), { make: false });
   consider('commitments', t('sumCommitments'), () => card('commitments', t('sumCommitments'), `<div class="an-row-sub">${escapeHtml(t('anCommitCount').replace('{n}', () => String(anListCount('commitments'))))}</div>`, { count: anListCount('commitments'), open: true }), {});
   (state.summaryTemplates || []).forEach(x => {
     const key = `tpl:${x.id}`;
@@ -715,7 +716,7 @@ function openAnalysisMenu(kind, el) {
 // «Настроить»: which cards the overview shows (made ones; the others are offered below it)
 function openOverviewConfig(el) {
   document.getElementById('an-cfg-pop')?.remove();
-  const keys = [['tldr', t('anShort')], ['chapters', t('sumChapters')], ['tasks', t('sumTasks')], ['commitments', t('sumCommitments')],
+  const keys = [['tldr', t('anShort')], ['chapters', t('sumChapters')], ...(anHasContent('tasks') ? [['tasks', t('sumTasks')]] : []), ['commitments', t('sumCommitments')],
     ['followup', t('anLetter')], ...(state.activeMeeting && state.activeMeeting.series_id ? [['since_last', t('sumSinceLast')]] : []),
     ['notes', t('sumNotes')], ['mynotes', t('notesTitle')],
     ...(state.summaryTemplates || []).map(x => [`tpl:${x.id}`, x.name])];
@@ -875,14 +876,19 @@ async function createAnalysisSection(key, ev) {
     const data = await readJson(res);
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
     if (data.summaries) m.summaries = data.summaries;
-    if (key === 'commitments') state.anCommit = { id: m.id, n: Array.isArray(data) ? data.length : (data.items || []).length || 0 };
+    if (key === 'commitments') {
+      state.anCommit = { id: m.id, n: Array.isArray(data) ? data.length : (data.items || []).length || 0 };
+      // a task found now was added to the overview's «Следующие шаги» (app/analysis_chain.sync_next_steps)
+      const fresh = await fetch(`/api/meetings/${m.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+      if (fresh && fresh.summaries) m.summaries = fresh.summaries;
+    }
     if (key === 'chapters' && state.activeMeeting === m) renderChaptersBar();
   } catch (e) {
     showToast(`${anSectionInfo(key).label}: ${serverText(e.message)}`);
   } finally {
     state.anBusy.delete(busy);
     if (state.activeMeeting === m) {
-      if (key === 'commitments') await refreshCommitmentCount();
+      if (key === 'commitments' || key === 'protocol') await refreshCommitmentCount();  // the analysis in steps finds the tasks too
       renderSummaryPanel();
     }
   }

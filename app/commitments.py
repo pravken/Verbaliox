@@ -438,9 +438,10 @@ def supported(item: Dict[str, Any], m: Dict[str, Any]) -> bool:
     return UNVERIFIED_MARK not in ground_summary(line, m.get("segments") or [], m.get("speakers") or {})
 
 
-def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str, Any]]:
+def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[str] = None) -> List[Dict[str, Any]]:
     """Finds the promises of a recording (again: the earlier list of this recording is replaced,
-    keeping what was ticked off)."""
+    keeping what was ticked off). hints: the decisions to check against the transcript (the analysis in
+    steps gives its own; else the protocol's are used)."""
     from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import build_transcript_lines
@@ -471,8 +472,8 @@ def extract(meeting_id: int, model_name: Optional[str] = None) -> List[Dict[str,
         head += (f"Встреча относится к фиче:\n{about}\n\n" if about else "") + (glossary + "\n\n" if glossary else "")
         from app.meeting_context import note_for_tasks
 
-        hints = note_for_tasks(m)  # the protocol's decisions and next steps: one context for every tab
-        head += (hints + "\n\n") if hints else ""
+        note = hints if hints is not None else note_for_tasks(m)  # the decisions: one context for every tab
+        head += (note + "\n\n") if note else ""
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))

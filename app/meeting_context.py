@@ -78,9 +78,11 @@ def note_for_summary(meeting: Dict[str, Any], template_key: str) -> str:
     return "\n\n".join(parts)[:CONTEXT_MAX_CHARS]
 
 
-def note_for_tasks(meeting: Dict[str, Any]) -> str:
-    """The protocol's decisions and next steps, as hints for finding the tasks ('' without a protocol)."""
-    proto = _protocol_note(meeting, keys=("decisions", "next"))
+def note_for_tasks(meeting: Dict[str, Any], protocol_md: str = "") -> str:
+    """The protocol's decisions and next steps, as hints for finding the tasks ('' without a protocol).
+    protocol_md: another text with those sections (the decisions of the analysis in steps, app/analysis_chain)."""
+    source = {"summaries": {"protocol": protocol_md}} if protocol_md else meeting
+    proto = _protocol_note(source, keys=("decisions", "next"))
     if not proto:
         return ""
     return ("Протокол этой встречи (составлен по той же расшифровке) отметил решения и следующие шаги. Если из "

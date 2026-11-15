@@ -737,11 +737,18 @@ def api_extract_commitments(meeting_id: int, payload: CommitmentExtractPayload) 
     from app import commitments
 
     try:
-        return commitments.extract(meeting_id, payload.model or None)
+        items = commitments.extract(meeting_id, payload.model or None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e)[:300])
+    from app.analysis_chain import sync_next_steps
+
+    try:  # a task found now is in the overview's «Следующие шаги» too
+        sync_next_steps(meeting_id)
+    except Exception as e:
+        print(f"[analysis_chain] next steps: {e}", flush=True)
+    return items
 
 @router.get("/api/meetings/{meeting_id}/commitments")
 def api_meeting_commitments(meeting_id: int) -> List[Dict[str, Any]]:
@@ -889,19 +896,25 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
             raise HTTPException(status_code=404, detail="Шаблон не найден")
         template_prompt = tpl["prompt"]
     try:
-        result_md = generate_meeting_summary(
-            segments=segments,
-            speakers=speakers,
-            template_key=payload.template,
-            custom_prompt=payload.custom_prompt,
-            model_name=payload.model or None,
-            answer_lang=payload.lang or m.get("language") or "ru",
-            local_only=is_local_only(m),
-            user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
-            context_note=meeting_context_note(m, payload.template),
-            template_prompt=template_prompt,
-            participants=_roster(m),
-        )
+        from app import analysis_chain
+
+        if payload.template == "protocol" and not payload.custom_prompt.strip() and analysis_chain.enabled():
+            # the analysis in steps: decisions, then tasks, then the protocol with both
+            result_md = analysis_chain.run(meeting_id, payload.model or None, payload.lang or m.get("language") or "ru")
+        else:
+            result_md = generate_meeting_summary(
+                segments=segments,
+                speakers=speakers,
+                template_key=payload.template,
+                custom_prompt=payload.custom_prompt,
+                model_name=payload.model or None,
+                answer_lang=payload.lang or m.get("language") or "ru",
+                local_only=is_local_only(m),
+                user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
+                context_note=meeting_context_note(m, payload.template),
+                template_prompt=template_prompt,
+                participants=_roster(m),
+            )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
