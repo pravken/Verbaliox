@@ -12,7 +12,7 @@ class _Target:
     def __init__(self, answer=None, error=None, wait=0.0):
         self.answer, self.error, self.wait, self.asked = answer, error, wait, []
 
-    def chat(self, system, user):
+    def chat(self, system, user, short=False):
         import time
 
         self.asked.append((system, user))
