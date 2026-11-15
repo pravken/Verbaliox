@@ -2434,7 +2434,17 @@ function syncEnsembleBox() {
   const on = document.getElementById('set-asr-ensemble')?.checked;
   document.getElementById('set-ensemble-box')?.classList.toggle('hidden', !on);
 }
-document.addEventListener('change', (e) => { if (e.target?.id === 'set-asr-ensemble') syncEnsembleBox(); });
+// Turned on with nothing ticked: GigaAM v3, Whisper Pro and Parakeet TDT v3 are ticked (the downloaded
+// ones), so the choice is in sight; the settings save right after (the change handler below)
+const ENSEMBLE_DEFAULT = ['gigaam-v3', 'large-v3', 'parakeet-v3'];
+document.addEventListener('change', (e) => {
+  if (e.target?.id !== 'set-asr-ensemble') return;
+  const boxes = [...document.querySelectorAll('#set-ensemble-models input')];
+  if (e.target.checked && !boxes.some(b => b.checked)) {
+    boxes.forEach(b => { if (ENSEMBLE_DEFAULT.includes(b.value) && !b.disabled) b.checked = true; });
+  }
+  syncEnsembleBox();
+});
 
 // --- Dictionary ---
 // Audit 7.5: the dictionary has one place, Settings → Dictionary (the sidebar button opens it)
