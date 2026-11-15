@@ -54,7 +54,7 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
 
 CLOUD_MAX_CHARS = 300_000     # one request: about 100k tokens of Russian text
 # The whole answer comes at once, so this is how long the longest one may take: a long protocol of a
-# reasoning model (Claude Opus, Gemini Pro) writes for several minutes
+# reasoning model writes for several minutes
 TIMEOUT_SEC = 600.0
 RETRIES = 2                   # rate limit or a server error: try again after a pause
 ANTHROPIC_MAX_TOKENS = 16000  # the answer and the model's reasoning together; more needs a streamed answer
@@ -109,6 +109,7 @@ class Target:
     model: str
     max_chars: int
     chat_fn: Callable[[str, str], str]
+    logs_itself: bool = False  # the cloud model writes each request it sends (a retry too) to the privacy log
 
     @property
     def is_cloud(self) -> bool:
@@ -120,7 +121,7 @@ class Target:
 
     def chat(self, system: str, user: str, short: bool = False) -> str:
         """short: a short answer (a title, a check): a local model does not reason first."""
-        if self.is_cloud:
+        if self.is_cloud and not self.logs_itself:
             log_cloud_request(self.provider, self.model, system, user)
         return self.chat_fn(system, user, short=True) if short and not self.is_cloud else self.chat_fn(system, user)
 
@@ -249,23 +250,28 @@ def _cloud_target(settings: Dict[str, str]) -> Target:
     if not model:
         raise LlmError("Не указана модель облачного сервиса в «Настройки → Анализ».")
     fn = {"anthropic": _anthropic_chat, "gemini": _gemini_chat}.get(provider, _openai_chat)
-    chosen = {"model": model}
+
+    def send(system: str, user: str) -> str:
+        log_cloud_request(provider, tgt.model, system, user)  # what leaves the computer, with the model it goes to
+        return fn(base, key, tgt.model, system, user, provider)
 
     def chat(system: str, user: str) -> str:
         try:
-            return fn(base, key, chosen["model"], system, user, provider)
+            return send(system, user)
         except LlmError as e:
-            # The service retired the chosen model: take the default of the ones the key can use, once
+            # The service retired the chosen model: the newest of the same family the key can use
+            # (Haiku stays Haiku, Flash stays Flash), once; Settings → Analysis shows the new one
             if e.status != 404 or provider == "openai_compat":
                 raise
-            picked = ensure_model(provider)
+            picked = ensure_model(provider, like=tgt.model)
             if not picked["changed"]:
                 raise
-            print(f"[llm] {provider}: {chosen['model']} is gone, using {picked['model']}", flush=True)
-            chosen["model"] = picked["model"]
-            return fn(base, key, chosen["model"], system, user, provider)
+            print(f"[llm] {provider}: {tgt.model} is gone, using {picked['model']}", flush=True)
+            tgt.model = picked["model"]
+            return send(system, user)
 
-    return Target(provider, model, CLOUD_MAX_CHARS, chat)
+    tgt = Target(provider, model, CLOUD_MAX_CHARS, chat, logs_itself=True)
+    return tgt
 
 
 def _post(url: str, headers: Dict[str, str], payload: Dict[str, Any], provider: str) -> Dict[str, Any]:
@@ -289,6 +295,8 @@ def _post(url: str, headers: Dict[str, str], payload: Dict[str, Any], provider: 
                            "Попробуйте модель побыстрее или запись покороче.")
         except httpx.HTTPError as e:
             last = LlmError(f"{PROVIDERS[provider]['name']}: нет соединения ({type(e).__name__}). Проверьте интернет и прокси.")
+            if not isinstance(e, httpx.ConnectError):
+                raise last  # the request may have reached the service (cut while answering): not sent twice
             time.sleep(2 * (attempt + 1))
             continue
         if resp.status_code in (429, 500, 502, 503, 504, 529) and attempt < RETRIES:
@@ -335,6 +343,11 @@ def _cut(provider: str) -> LlmError:
                     "Выберите модель с большим лимитом ответа или запись покороче.")
 
 
+def _filtered(provider: str, reason: str) -> LlmError:
+    """The service stopped the answer for its own rules: what came before the stop is not the whole answer."""
+    return LlmError(f"{PROVIDERS[provider]['name']}: сервис остановил ответ своим фильтром ({reason}). Попробуйте другую модель.")
+
+
 def _empty(reason: Optional[str]) -> LlmError:
     return LlmError(f"Модель вернула пустой ответ ({reason})") if reason else LlmError("Модель вернула пустой ответ")
 
@@ -350,6 +363,7 @@ def _openai_chat(base: str, key: str, model: str, system: str, user: str, provid
             raise
         _NO_TEMPERATURE.add((base, model))
         payload.pop("temperature")
+        log_cloud_request(provider, model, system, user)  # sent again
         data = _post(f"{base}/chat/completions", {"Authorization": f"Bearer {key}"}, payload, provider)
     choices = data.get("choices") or []
     choice = choices[0] if choices else {}
@@ -360,8 +374,10 @@ def _openai_chat(base: str, key: str, model: str, system: str, user: str, provid
     reason = choice.get("finish_reason")
     if reason == "length":
         raise _cut(provider)
+    if reason == "content_filter":
+        raise _filtered(provider, reason)
     if not text:
-        raise _empty(reason if reason == "content_filter" else None)
+        raise _empty(None)
     return text
 
 
@@ -403,6 +419,8 @@ def _gemini_chat(base: str, key: str, model: str, system: str, user: str, provid
     reason = (cands[0].get("finishReason") if cands else None) or (data.get("promptFeedback") or {}).get("blockReason")
     if reason == "MAX_TOKENS":
         raise _cut(provider)
+    if reason and reason not in ("STOP", "FINISH_REASON_UNSPECIFIED"):  # SAFETY, RECITATION, BLOCKLIST…
+        raise _filtered(provider, reason)
     if not text.strip():
         raise _empty(reason)
     return text.strip()
@@ -479,19 +497,29 @@ def _version_key(model_id: str) -> tuple:
     return tuple(nums)
 
 
-def pick_default_model(provider: str, models: List[str]) -> Optional[str]:
+_FAMILIES = ("haiku", "sonnet", "opus", "fable", "flash", "pro", "mini", "nano", "lite")
+
+
+def pick_default_model(provider: str, models: List[str], like: Optional[str] = None) -> Optional[str]:
     """A sensible model from the ones the key can use: the newest of the preferred family
-    (Gemini Flash, Claude Sonnet, GPT mini), without previews, experiments and lite versions."""
+    (Gemini Flash, Claude Sonnet, GPT mini), without previews, experiments and lite versions.
+    `like`: a model to replace: the newest of its own family first (a cheap model stays a cheap one)."""
     usable = [m for m in models if not any(w in m.lower() for w in _SKIP_WORDS)]
     if not usable:
         return models[0] if models else None
     stable = [m for m in usable if not re.search(r"preview|exp|experimental|latest|\d{4}-\d{2}-\d{2}|-\d{8}$", m.lower())] or usable
+    words = [w for w in _FAMILIES if w in (like or "").lower()]
+    if words:
+        same = [m for m in stable if all(w in m.lower() for w in words)
+                and not any(w in m.lower() for w in _FAMILIES if w not in words)]
+        if same:
+            return max(same, key=_version_key)
     prefer = _PREFER.get(provider) or ()
     family = [m for m in stable if any(p in m.lower() for p in prefer) and "lite" not in m.lower() and "nano" not in m.lower()] or stable
     return max(family, key=_version_key)
 
 
-def ensure_model(provider: str) -> Dict[str, Any]:
+def ensure_model(provider: str, like: Optional[str] = None) -> Dict[str, Any]:
     """After a key is saved: if the chosen model is not available with it, switch to a default one.
     Returns {"models": [...], "model": chosen, "changed": bool}."""
     from app.database import update_settings
@@ -500,7 +528,7 @@ def ensure_model(provider: str) -> Dict[str, Any]:
     current = cloud_model(provider)
     if not models or current in models:
         return {"models": models, "model": current, "changed": False}
-    better = pick_default_model(provider, models)
+    better = pick_default_model(provider, models, like=like or current)
     if better and better != current:
         update_settings({f"llm_model_{provider}": better})
         return {"models": models, "model": better, "changed": True}

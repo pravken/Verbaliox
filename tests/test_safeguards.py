@@ -872,6 +872,19 @@ class CutAnswerTest(unittest.TestCase):
                 mock.patch("app.llm_text._ask_ollama", return_value=True):
             oc._ollama_chat("http://127.0.0.1:11434", "gemma4:e4b", "s", "u", short=True)
         self.assertEqual(sent[0]["think"], False)  # a title: no reasoning first
+        sent.clear()
+        loop = "\n".join(["- пункт"] * 20)
+        answers = iter([{"message": {"content": loop}, "done_reason": "length"}])
+        with mock.patch.object(oc.httpx, "Client", Client), mock.patch.object(oc, "raise_for_ollama"), \
+                mock.patch("app.llm_text._ask_ollama", return_value=True):
+            oc._ollama_chat("http://127.0.0.1:11434", "gemma4:e4b", "s", "u")
+        self.assertEqual(len(sent), 1)  # gone round in circles: more room would give more of the same
+
+    def test_reasoning_without_its_opening_tag_is_dropped(self):
+        from app.llm_text import strip_think
+
+        self.assertEqual(strip_think("думаю, думаю</think>\nОтвет"), "Ответ")
+        self.assertEqual(strip_think("<think>a</think>Ответ"), "Ответ")
 
 
 class EditsDuringMergeTest(unittest.TestCase):

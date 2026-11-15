@@ -326,6 +326,7 @@ const SERVER_PATTERNS_EN = [
   ["{}: ответ модели обрезан по лимиту длины. Выберите модель с большим лимитом ответа или запись покороче.", "{0}: the model's answer was cut at its length limit. Choose a model with a longer answer limit or a shorter recording."],
   ["{}: модель отказалась отвечать на этот текст{}. Попробуйте другую модель.", "{0}: the model declined to answer this text{1}. Try another model."],
   ["{}: сервис не ответил за {} мин. Попробуйте модель побыстрее или запись покороче.", "{0}: the service did not answer in {1} min. Try a faster model or a shorter recording."],
+  ["{}: сервис остановил ответ своим фильтром ({}). Попробуйте другую модель.", "{0}: the service stopped the answer with its filter ({1}). Try another model."],
   ["Модель вернула пустой ответ ({})", "The model returned an empty answer ({0})"],
   ["{}: нет соединения ({}). Проверьте интернет и прокси.", "{0}: no connection ({1}). Check the internet connection and the proxy."],
   ["Не удалось инициализировать модель Whisper ({}): {}", "Could not start the Whisper model ({0}): {1}"],

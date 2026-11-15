@@ -97,4 +97,7 @@ def thinking_off(model: Optional[str], analysis: bool = False, base_url: Optiona
 
 
 def strip_think(text: str) -> str:
-    return _THINK_RE.sub("", text or "").strip()
+    text = _THINK_RE.sub("", text or "")
+    if "</think>" in text.lower():  # the reasoning came without its opening tag: the answer is after the last close
+        text = re.split(r"</think>", text, flags=re.I)[-1]
+    return text.strip()
