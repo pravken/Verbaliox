@@ -1744,10 +1744,13 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
         conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))
-        try:
-            conn.execute("DELETE FROM commitments WHERE meeting_id = ?", (meeting_id,))
-        except sqlite3.OperationalError:
-            pass  # no commitments table yet (app/commitments.py creates it on first use)
+        # its tasks, the tasks deleted from it (they were examples for the model: a recording kept to
+        # local analysis must not leave them behind) and its feature tags (app/features.py)
+        for table in ("commitments", "commitments_dismissed", "meeting_features", "feature_suggestions", "feature_declined"):
+            try:
+                conn.execute(f"DELETE FROM {table} WHERE meeting_id = ?", (meeting_id,))
+            except sqlite3.OperationalError:
+                pass  # the table is made on first use of its module
         conn.commit()
         conn.close()
     events.publish({"type": "list"})

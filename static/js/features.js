@@ -27,7 +27,10 @@ function renderMeetingFeatures() {
   if (!m) { box.innerHTML = ''; return; }
   const own = (m.features || []).map(featureById).filter(Boolean);
   const guesses = (m.feature_suggestions || []).map(featureById).filter(Boolean);
-  box.innerHTML = own.map(f => `<button class="ft-chip-btn" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
+  // two at most next to the title, «+N» for the rest (the header has no room for more)
+  const shown = own.slice(0, 2), more = own.length - shown.length;
+  box.innerHTML = shown.map(f => `<button class="ft-chip-btn" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
+    + (more > 0 ? `<button class="ft-chip-btn ft-more" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(own.map(f => f.name).join(', '))}">+${more}</button>` : '')
     + guesses.map(f => `<span class="ft-suggest">${featureChipHtml(f, { suggested: true, title: t('ftSuggestedTip') })}
         <button class="ft-yes" ${pageCall('click', 'acceptFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftAccept'))}" aria-label="${escapeHtml(t('ftAccept'))}">✓</button>
         <button class="ft-no" ${pageCall('click', 'declineFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftDecline'))}" aria-label="${escapeHtml(t('ftDecline'))}">✕</button></span>`).join('')

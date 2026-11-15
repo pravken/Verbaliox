@@ -83,6 +83,41 @@ class FeatureTagsTest(unittest.TestCase):
         with mock.patch("app.llm.target", return_value=llm):
             self.assertEqual(features.suggest(mid), [])  # it has features now: no more guesses
 
+    def test_accepting_one_suggestion_keeps_the_others(self):
+        pay, search = features.create_feature("Платежи"), features.create_feature("Поиск")
+        mid = self._meeting()
+        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm.chat.return_value = '["Платежи", "Поиск"]'
+        with mock.patch("app.llm.target", return_value=llm):
+            features.suggest(mid)
+        features.accept_suggestion(mid, pay["id"])
+        m = get_meeting(mid)
+        self.assertEqual((m["features"], m["feature_suggestions"]), ([pay["id"]], [search["id"]]))
+
+    def test_a_deleted_meeting_leaves_no_tags_nor_deleted_tasks(self):
+        from app import commitments
+        from app.database import delete_meeting, get_connection
+
+        pay = features.create_feature("Платежи")
+        mid = self._meeting()
+        features.set_meeting_features(mid, [pay["id"]])
+        features.decline_suggestion(mid, pay["id"])
+        commitments._init()
+        conn = get_connection()
+        conn.execute("INSERT INTO commitments_dismissed (meeting_id, who, what, quote, at, created_at) VALUES (?, '', 'тайна', '', 0, '')", (mid,))
+        conn.commit()
+        conn.close()
+        delete_meeting(mid)
+        conn = get_connection()
+        left = [conn.execute(f"SELECT COUNT(*) FROM {t} WHERE meeting_id = ?", (mid,)).fetchone()[0]
+                for t in ("meeting_features", "feature_declined", "commitments_dismissed")]
+        conn.close()
+        self.assertEqual(left, [0, 0, 0])
+
+    def test_invisible_characters_are_dropped_from_names(self):
+        f = features.create_feature("Пла\u202eтежи\u200b")
+        self.assertEqual(f["name"], "Платежи")
+
     def test_answers_are_read_loosely(self):
         fs = [{"id": 1, "name": "Платежи"}, {"id": 2, "name": "Поиск"}]
         self.assertEqual(features.parse_names('Ответ: ["Поиск", "поиск", "Платежи"]', fs), [2, 1])
