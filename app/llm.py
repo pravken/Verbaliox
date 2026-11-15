@@ -119,11 +119,16 @@ class Target:
     def label(self) -> str:
         return self.model if not self.is_cloud else f"{PROVIDERS[self.provider]['name']} · {self.model}"
 
-    def chat(self, system: str, user: str, short: bool = False) -> str:
-        """short: a short answer (a title, a check): a local model does not reason first."""
+    def chat(self, system: str, user: str, short: bool = False, plain: bool = False) -> str:
+        """short: a short answer (a title, a check): a local model does not reason first.
+        plain: a long answer that needs no reasoning (a retelling): a local model does not reason either."""
         if self.is_cloud and not self.logs_itself:
             log_cloud_request(self.provider, self.model, system, user)
-        return self.chat_fn(system, user, short=True) if short and not self.is_cloud else self.chat_fn(system, user)
+        if self.is_cloud:
+            return self.chat_fn(system, user)
+        if short:
+            return self.chat_fn(system, user, short=True)
+        return self.chat_fn(system, user, plain=True) if plain else self.chat_fn(system, user)
 
 
 def log_cloud_request(provider: str, model: str, system: str, user: str) -> None:
@@ -234,7 +239,7 @@ def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) 
         wanted = same[0] if same else models[0]
     from app.ollama_client import single_pass_max_chars
 
-    return Target("ollama", wanted, single_pass_max_chars(), lambda system, user, short=False: _ollama_chat(base_url, wanted, system, user, short=short))
+    return Target("ollama", wanted, single_pass_max_chars(), lambda system, user, short=False, plain=False: _ollama_chat(base_url, wanted, system, user, short=short, plain=plain))
 
 
 # ------------------------------------------------------------------ cloud
