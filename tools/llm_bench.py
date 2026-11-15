@@ -6,6 +6,8 @@ Bench of local LLMs for the analysis the app does: the protocol (generate_meetin
     python tools/llm_bench.py --models qwen3.5:4b gemma4:e4b --meetings 84 85 --profile 8gb --out bench.jsonl
     python tools/llm_bench.py ... --cpu            # every layer on the processor (num_gpu 0)
     python tools/llm_bench.py ... --ctx 32768      # a longer context (the long recording is read in one pass)
+    python tools/llm_bench.py ... --app-flow       # the app's own analysis, written to the copy (and --chain:
+                                                   # the same with «Анализ по шагам»)
 
 The Ollama address is the one in the copy's Settings. Before each model every model is unloaded
 (app.bench.clean_slate); the model is loaded once with a short prompt first (warm-up: the disk cache and
@@ -186,6 +188,89 @@ def _schema_check(m: Dict[str, Any], mid: str, base: str) -> Dict[str, Any]:
     return {"valid": ok, "tasks": n, "status": resp.status_code, "error": "" if resp.status_code == 200 else resp.text[:200]}
 
 
+def _reset_analysis(meeting_id: int) -> None:
+    """The recording as just transcribed: no tasks and no protocol in the copy, so the tasks are not told
+    an earlier protocol's decisions (note_for_tasks) and the protocol not earlier tasks."""
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("DELETE FROM commitments WHERE meeting_id = ?", (meeting_id,))
+        conn.execute("UPDATE meetings SET summaries_json = '{}' WHERE id = ?", (meeting_id,))
+
+
+def _agreement(meeting_id: int, protocol: str) -> Dict[str, Any]:
+    """How the protocol and the tasks of a recording disagree: tasks missing from «Следующие шаги»,
+    next steps that are no task, and the «Решения» points with their check against the transcript."""
+    from app.analysis_chain import _listed, task_lines
+    from app.grounding import UNVERIFIED_MARK
+    from app.meeting_context import protocol_points
+
+    tasks = task_lines(meeting_id)
+    pts = protocol_points(protocol)
+    # A step is looked up among the tasks without its time marks: _listed splits «who: what» at the first
+    # colon, and «[10:08]» of a step without a person would be split there
+    bare = lambda p: re.sub(r"\s*\[\d{1,2}:\d{2}(?::\d{2})?(?:[–-]\d{1,2}:\d{2}(?::\d{2})?)?\]|\s*\[\?\]", "", p)
+    return {"tasks_not_in_next": [t for t in tasks if not _listed(t, pts["next"])],
+            "next_not_tasks": [p for p in pts["next"] if not _listed(bare(p), tasks)],
+            "decisions": pts["decisions"], "open": pts["open"],
+            "decisions_unverified": sum(1 for d in pts["decisions"] if UNVERIFIED_MARK in d)}
+
+
+def _app_analysis(m: Dict[str, Any], mid: str, chain: bool) -> Dict[str, Any]:
+    """The analysis as the app makes it after a recording (app/transcriber.py, step 4), written to the copy:
+    without the setting the tasks first and then the protocol told them; with it analysis_chain.run.
+    Then the grounding, the protocol saved and sync_next_steps. Timings per step."""
+    from app import analysis_chain, bench, commitments
+    from app.database import get_meeting, merge_summaries
+    from app.features import note_for as features_note_for
+    from app.grounding import ground_summary
+    from app.meeting_context import note_for_summary
+    from app.ollama_client import generate_meeting_summary
+
+    meeting_id = int(m["id"])
+    _reset_analysis(meeting_id)
+    lang = bench._answer_lang(m)
+    marks = [("start", time.perf_counter(), 0)]
+
+    def mark(name: str) -> None:
+        marks.append((name, time.perf_counter(), len(_calls)))
+
+    if chain:
+        names = iter(["decisions", "tasks", "protocol"])
+        protocol = analysis_chain.run(meeting_id, mid, lang, stage=lambda _t: mark(next(names)), part_notes={})
+    else:
+        try:
+            from app.people import meeting_roster
+
+            roster = meeting_roster(get_meeting(meeting_id) or {})
+        except Exception:
+            roster = []
+        mark("tasks")
+        commitments.extract(meeting_id, mid)
+        mark("protocol")
+        cur = get_meeting(meeting_id) or {}
+        protocol = generate_meeting_summary(
+            segments=cur["segments"], speakers=cur.get("speakers") or {}, template_key="protocol", model_name=mid,
+            user_notes=cur.get("user_notes") or "", mfu=cur.get("mfu") or "", features_note=features_note_for(cur),
+            context_note=note_for_summary(cur, "protocol"), answer_lang=lang, local_only=True, part_notes={},
+            participants=roster)
+    mark("end")
+    steps = {a[0]: {"sec": round(b[1] - a[1], 1), "requests": b[2] - a[2]} for a, b in zip(marks[1:], marks[2:])}
+    if chain:  # the moment before the decisions step: the opening of the run itself
+        steps["decisions"]["sec"] = round(steps["decisions"]["sec"] + marks[1][1] - marks[0][1], 1)
+    protocol = ground_summary(protocol, m["segments"], m.get("speakers") or {})
+    before = _agreement(meeting_id, protocol)
+    merge_summaries(meeting_id, {"protocol": protocol})
+    added = analysis_chain.sync_next_steps(meeting_id)
+    final = ((get_meeting(meeting_id) or {}).get("summaries") or {}).get("protocol") or protocol
+    tasks = [{"who": t.get("who") or "", "to": t.get("to_whom") or "", "what": t.get("what") or "",
+              "due": t.get("due_date") or t.get("due") or "", "quote": t.get("quote") or "", "at": t.get("at")}
+             for t in commitments.for_meetings([meeting_id]) if t.get("status") != "deleted"]
+    return {"chain": chain, "analysis_sec": round(marks[-1][1] - marks[0][1], 1), "steps": steps,
+            "protocol": final, "tasks": tasks, "before_sync": before, "synced_added": added,
+            "after_sync": _agreement(meeting_id, final)}
+
+
 def run(args) -> None:
     from app import bench
     from app.asr_onnx import guess_language
@@ -233,6 +318,15 @@ def run(args) -> None:
                                    "transcript_chars": sum(len(str(s.get("text") or "")) for s in m["segments"]),
                                    "duration_min": round(float(m.get("duration") or 0) / 60, 1)}
             try:
+                if args.chain or args.app_flow:
+                    rec.update(_app_analysis(m, mid, chain=args.chain))
+                    calls = list(_calls)
+                    rec.update(requests=len(calls), truncated=sum(1 for c in calls if c["done_reason"] == "length"),
+                               prompt_tokens=sum(c["prompt_tokens"] for c in calls),
+                               gen_tokens=sum(c["gen_tokens"] for c in calls),
+                               max_prompt_tokens=max((c["prompt_tokens"] for c in calls), default=0),
+                               calls=[{k: v for k, v in c.items() if k not in ("raw", "thinking")} for c in calls])
+                    raise _Done
                 t = time.perf_counter()
                 md = generate_meeting_summary(m["segments"], m.get("speakers") or {}, "protocol", model_name=mid,
                                               answer_lang=bench._answer_lang(m), local_only=True)
@@ -265,6 +359,8 @@ def run(args) -> None:
                 rec["calls"] = [{k: v for k, v in c.items() if k not in ("raw", "thinking")} for c in calls]
                 if args.schema:
                     rec["schema"] = _schema_check(m, mid, base)
+            except _Done:
+                pass
             except Exception as e:  # noqa: BLE001
                 import traceback
 
@@ -277,6 +373,10 @@ def run(args) -> None:
                                                       "prefill_tps", "gen_tps", "peak_vram_gb", "error")},
                              ensure_ascii=False), flush=True)
     bench._ollama_unload_all()
+
+
+class _Done(Exception):
+    """The app's analysis (--app-flow, --chain) is measured: the protocol-then-tasks steps below are skipped."""
 
 
 def _append(path: Path, rec: Dict[str, Any]) -> None:
@@ -299,6 +399,11 @@ def main() -> None:
     ap.add_argument("--schema", action="store_true", help="also one task request with a JSON schema in `format`")
     ap.add_argument("--think-off", action="store_true",
                     help="turn thinking off by the model's capabilities (/api/show), not by its name prefix")
+    ap.add_argument("--app-flow", action="store_true",
+                    help="the analysis as the app makes it without «Анализ по шагам»: the tasks, then the protocol told "
+                         "them, sync_next_steps; written to the copy (its tasks and protocol of the recording replaced)")
+    ap.add_argument("--chain", action="store_true",
+                    help="the same with «Анализ по шагам» (app.analysis_chain.run)")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     if args.think_off:
