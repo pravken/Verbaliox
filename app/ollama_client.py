@@ -51,38 +51,6 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "min_vram_gb": 4,  # 0: fine without a GPU too
         "cpu_ok": True,
     },
-    {
-        "id": "qwen3.5:4b",
-        "name": "Qwen3.5 4B",
-        "badge": "3.4 GB · Apache",
-        "size": "3.4 GB",
-        "vram": "4–6 GB / CPU",
-        "license": "Apache",
-        "desc_ru": "Alibaba Qwen3.5 4B. Компактная и быстрая, прежняя модель по умолчанию. В замерах на реальных встречах находит заметно меньше задач, чем Gemma 4; оставлена для совместимости с прежними анализами.",
-        "desc_en": "Alibaba Qwen3.5 4B. Compact and fast, the former default. On real meetings it found noticeably fewer tasks than Gemma 4; kept for consistency with earlier analyses.",
-        "good_ru": "Протоколы, задачи и ответы по записям на русском и английском; быстрая работа, в том числе без видеокарты",
-        "good_en": "Summaries, tasks and answers for Russian and English recordings; fast, including without a GPU",
-        "weak_ru": "На длинных записях и сложных вопросах возможны пропуски деталей; без видеокарты ответ формируется дольше",
-        "weak_en": "Details may be missed on long recordings and complex questions; slower without a GPU",
-        "min_vram_gb": 4,  # 0: fine without a GPU too
-        "cpu_ok": True,
-    },
-    {
-        "id": "qwen2.5:1.5b",
-        "name": "Qwen Lite",
-        "badge": "1 GB · Apache",
-        "size": "1 GB",
-        "vram": "2–4 GB / CPU",
-        "license": "Apache",
-        "desc_ru": "Alibaba Qwen2.5 1.5B — минимальные требования (≈1 ГБ памяти) и высокая скорость. Подходит для коротких записей на слабых компьютерах; на длинных встречах протокол и задачи заметно беднее, чем у Gemma 4.",
-        "desc_en": "Alibaba Qwen2.5 1.5B — the lowest requirements (≈1 GB of memory) and high speed. Suits short recordings on modest computers; on long meetings the protocol and tasks are noticeably poorer than Gemma 4's.",
-        "good_ru": "Наименьшие требования и высокая скорость: компьютеры без видеокарты, короткие записи",
-        "good_en": "The lowest requirements and high speed: computers without a GPU, short recordings",
-        "weak_ru": "Протоколы менее подробные, точность в деталях ниже",
-        "weak_en": "Less detailed summaries, lower accuracy in details",
-        "min_vram_gb": 0,  # 0: fine without a GPU too
-        "cpu_ok": True,
-    },
 ]
 
 _LLM_DISPLAY_NAMES: Dict[str, str] = {
@@ -92,8 +60,9 @@ _LLM_DISPLAY_NAMES: Dict[str, str] = {
     "qwen3:14b": "Qwen3 14B",
     "qwen3:4b": "Qwen3 4B",
     "qwen3.5:4b": "Qwen3.5 4B",
-    # no longer offered (bench-report/report.md), named still for those who have them; qwen3:8b and
-    # qwen3:14b: gemma4:e4b finds more, faster, in less memory (bench-report/llm-profiles.md; 14b not measured)
+    # no longer offered (bench-report/report.md), named still for those who have them; qwen3:8b, qwen3:14b,
+    # qwen3.5:4b and qwen2.5:1.5b: one of the two gemma4 finds more, faster, in less memory
+    # (bench-report/llm-profiles.md; 14b and 1.5b not measured)
     "qwen2.5:7b": "Qwen 7B Standard",
     "qwen2.5:14b": "Qwen 14B Pro",
     "mistral:7b": "Mistral 7B",
@@ -341,7 +310,7 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
     if not base_url:
         base_url = settings.get("ollama_url", "http://127.0.0.1:11434")
     base_url = base_url.replace("localhost", "127.0.0.1")
-    active_model = settings.get("ollama_model", "qwen3.5:4b")
+    active_model = settings.get("ollama_model", "gemma4:e2b")
 
     exe = find_ollama_executable()
     # Status polling never starts background processes: Ollama is only launched after an
