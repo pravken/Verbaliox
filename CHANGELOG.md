@@ -6,6 +6,15 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.12 — English
+
+- **The first start**: the window no longer crashes while WebView2 makes its profile (the server now
+  starts once the window is ready); the tray icon and «Start with Windows» work from the first start.
+- **Setup uses the Python it downloaded**: when Windows refuses the link uv makes inside the program
+  folder, the environment is made from that Python directly instead of the system's.
+- **The setup window**: Ollama found shows a green dot; missing, a dark check box (the whole row ticks it)
+  instead of a white square.
+
 ## 0.8.11 — English
 
 - **The analysis in steps** (on by default, Settings → AI analysis): the decisions and open questions
@@ -486,6 +495,15 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.12
+
+- **Первый запуск**: окно больше не падает, пока WebView2 создаёт профиль (сервер стартует, когда окно
+  готово); значок в трее и автозапуск работают с первого запуска.
+- **Установщик использует скачанный Python**: если Windows запрещает ссылку, которую uv делает в папке
+  программы, окружение создаётся прямо из этого Python, а не из системного.
+- **Окно настройки**: найденный Ollama отмечен зелёной точкой; если его нет — тёмный флажок (отмечается
+  кликом по всей строке) вместо белого квадрата.
 
 ## 0.8.11
 
