@@ -1743,10 +1743,24 @@ function modelInfoButton(id) {
 function modelInfoBlock(id, html) {
   return html ? `<div class="mc-more${modelInfoOpen.has(id) ? '' : ' hidden'}">${html}</div>` : '';
 }
+// A click on the card itself (not on its buttons, links or fields) opens and closes the same block;
+// a click that ends a text selection in the description does nothing
+document.addEventListener('click', (ev) => {
+  const card = ev.target.closest && ev.target.closest('.mc-card');
+  if (!card || ev.target.closest('button, a, input, select, textarea, label, [data-click]')) return;
+  if (String(window.getSelection && window.getSelection()).trim()) return;
+  card.querySelector('.mc-info')?.click();
+});
 function toggleModelInfo(id, el) {
   if (modelInfoOpen.has(id)) modelInfoOpen.delete(id); else modelInfoOpen.add(id);
   const card = el && el.closest('.mc-card');
-  card?.querySelector('.mc-more')?.classList.toggle('hidden', !modelInfoOpen.has(id));
+  const more = card?.querySelector('.mc-more');
+  if (more) {
+    more.classList.toggle('hidden', !modelInfoOpen.has(id));
+    // only on a click: a list redrawn with the block already open does not play it again
+    more.classList.remove('mc-opening');
+    if (modelInfoOpen.has(id)) { void more.offsetWidth; more.classList.add('mc-opening'); }
+  }
   el?.classList.toggle('is-on', modelInfoOpen.has(id));
   el?.setAttribute('aria-expanded', String(modelInfoOpen.has(id)));
 }
