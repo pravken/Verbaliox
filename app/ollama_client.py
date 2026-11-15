@@ -219,6 +219,34 @@ def _is_ollama_port_open(host: Optional[str] = None, port: Optional[int] = None)
         return False
 
 
+_started_serve: Optional["subprocess.Popen"] = None  # the `ollama serve` the app started itself
+
+
+def release_on_exit(timeout: float = 1.5) -> List[str]:
+    """When the app closes: an Ollama the user started (not ours, which ends with the app) is left running,
+    but lets go of the models it keeps in memory. Quick and never raises. Returns the models asked to go."""
+    if _started_serve is not None and _started_serve.poll() is None:
+        return []  # ours: ended with the app (app/shutdown.py)
+    try:
+        from app.database import get_all_settings
+
+        base = (get_all_settings().get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
+        host, port = _ollama_address(base)
+        if host != "127.0.0.1" or not _is_ollama_port_open(host, port):
+            return []  # another computer's Ollama is not ours to empty
+        with httpx.Client(timeout=timeout) as client:
+            names = [m.get("name") or m.get("model") for m in client.get(f"{base}/api/ps").json().get("models") or []]
+            for name in [n for n in names if n]:
+                try:
+                    client.post(f"{base}/api/generate", json={"model": name, "keep_alive": 0})
+                except httpx.HTTPError:
+                    pass
+        return [n for n in names if n]
+    except Exception as e:
+        print(f"[ollama] models not let go on exit: {e}", flush=True)
+        return []
+
+
 def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: bool = True) -> bool:
     host, port = _ollama_address(base_url)
     if _is_ollama_port_open(host, port):
@@ -237,13 +265,20 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
             env = {**os.environ}
             env.setdefault("OLLAMA_MAX_LOADED_MODELS", "1")
             env.setdefault("OLLAMA_NUM_PARALLEL", "1")
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [exe, "serve"],
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
             )
+            # Ours: it ends with the app, its runners and the model in memory too (it stayed after the app
+            # was closed: reported by the user); bound to the app's job, it ends on a crash as well
+            from app.shutdown import track
+
+            track(proc)
+            global _started_serve
+            _started_serve = proc
             for _ in range(80):  # a cold start (first run, slow disk) can take many seconds
                 time.sleep(0.25)
                 if _is_ollama_port_open(host, port):
