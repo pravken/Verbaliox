@@ -859,7 +859,9 @@ async function verifyDubEnv() {
   try {
     const res = await fetch('/api/dub/verify', { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    showError(res.ok ? (data.ok ? t('sdubVerifyOk') : t('sdubVerifyFailed')) : (data.detail));
+    // a working environment is good news: a green notice, not the red one of an error
+    if (res.ok && data.ok) showToast(t('sdubVerifyOk'), null, 'success');
+    else showError(res.ok ? t('sdubVerifyFailed') : serverText(data.detail));
   } finally {
     btn.disabled = false;
     btn.textContent = t('sdubVerifyBtn');
