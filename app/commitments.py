@@ -89,12 +89,24 @@ def _same_as_mfu(x: Dict[str, Any], y: Dict[str, Any]) -> bool:
 VERIFY_CONTEXT_SEC = 40  # the lines this far before and after a task's moment go with it
 
 
-# What is done during the meeting itself, at once: «пошарю экран», «скину ссылку в чат». Such a line
-# without a due date and without «после встречи» / «завтра» is not a task, whatever the model said
-_IN_MEETING = re.compile(
-    r"(экран|демонстрац|расшар|пошар|шарю|шарить|микрофон|камер[уаые]\b|\bзвук\b|слышно|видно мен|\bв чат|в чатик|"
-    r"перезайд|переподключ|запиш\w* (встреч|созвон)|запись встречи|секунд|минутк|"
-    r"share (my |the )?screen|screen ?shar|\bunmute|\bmute\b|\bcamera\b|in the chat|rejoin)", re.I)
+# What is done during the meeting itself, at once: «пошарю экран», «скину ссылку в чат». Judged by the
+# words said (the quote), not by single words: «переделать экран оплаты», «подготовить демонстрацию»,
+# «купить камеру», «написать в чат поддержки» are tasks (all three audits found the word list dropping them).
+# An action is of the meeting when it is
+# - meeting control: share the screen, the microphone or camera on/off, a link «в чат», rejoin;
+# - or said as «right now» («сейчас», «секунду», «дайте я…») about what is shown in the meeting.
+# A due date or «после встречи» / «завтра» makes it a task whatever the words.
+_CONTROL = re.compile(
+    r"(пошар|расшар|\bшарю|\bшарить|покажу (свой |мой )?экран|включ\w* (свой |мой )?(микрофон|камер|звук)|"
+    r"выключ\w* (свой |мой )?(микрофон|камер|звук)|(скину|кину|скидываю|кидаю|брошу|закину)\b.{0,40}\bв чат|"
+    r"перезайд|переподключ|share (my |the |your )?screen|screen ?shar|\bunmute|\bmute (my|your)|"
+    r"turn (on|off) (my|the) (camera|mic)|(drop|post|paste|put) .{0,30}in the chat|\brejoin)", re.I)
+_RIGHT_NOW = re.compile(
+    r"(\bсейчас\b|\bщас\b|секунд|минутк|\bдай(те)? (я|покажу|открою)|\bдавай(те)? я\b|прямо тут|"
+    r"right now|\blet me\b|one sec|give me a (sec|second|minute)|\bi'?ll just\b)", re.I)
+_SHOWN = re.compile(
+    r"(экран|демонстрац|ссылк|\bчат|таблиц|документ|файл|слайд|презентац|открою|покажу|микрофон|камер|звук|"
+    r"слышно|видно|screen|link|chat|slide|doc|file|show|open|mic|camera|sound)", re.I)
 _LATER = re.compile(
     r"(после (встречи|созвона|звонка)|\bпозже|\bпотом\b|\bзавтра|\bдо конца|\bк (понедельник|вторник|сред|четверг|пятниц|"
     r"суббот|воскресен|концу|\d)|after the (meeting|call)|\blater\b|\btomorrow|\bby (monday|tuesday|wednesday|thursday|"
@@ -106,8 +118,10 @@ def in_meeting_action(item: Dict[str, Any]) -> bool:
     not a task for after it."""
     if (item.get("due") or "").strip():
         return False
-    text = f"{item.get('what') or ''} {item.get('quote') or ''}"
-    return bool(_IN_MEETING.search(text)) and not _LATER.search(text)
+    said = str(item.get("quote") or "").strip() or str(item.get("what") or "")
+    if _LATER.search(f"{said} {item.get('what') or ''}"):
+        return False
+    return bool(_CONTROL.search(said) or (_RIGHT_NOW.search(said) and _SHOWN.search(said)))
 
 
 def _norm_what(t: str) -> str:
