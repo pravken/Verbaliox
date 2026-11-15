@@ -63,7 +63,9 @@ if defined UV (
         "!UV!" venv .venv --python "!SIGNED_PY!"
     ) else (
         rem Prefer a uv-managed Python: the Microsoft Store Python virtualizes AppData and hides files from other programs
-        "!UV!" venv .venv --python 3.11 --python-preference only-managed || "!UV!" venv .venv --python 3.11
+        "!UV!" venv .venv --python 3.11 --python-preference only-managed
+        if not exist ".venv\Scripts\python.exe" call :managed_venv
+        if not exist ".venv\Scripts\python.exe" "!UV!" venv .venv --python 3.11
     )
     rem The Python of the environment must run: a policy that blocks programs in AppData blocks the
     rem Python uv downloads there too. Then the pip way below makes it on Python 3.11 of python.org
@@ -189,6 +191,18 @@ if errorlevel 1 (
     goto :eof
 )
 set "UV=%~1"
+goto :eof
+
+rem --- uv downloaded its Python but Windows refused the link uv makes to it inside the program folder
+rem --- ("untrusted mount point", os error 448): the environment is made by that Python itself, by its full
+rem --- path, instead of falling back to another Python of the system
+:managed_venv
+set "MANAGED_PY="
+for /d %%d in ("%~dp0python\cpython-3.11.*-windows-x86_64-none") do if exist "%%~d\python.exe" set "MANAGED_PY=%%~d\python.exe"
+if not defined MANAGED_PY goto :eof
+echo       uv could not link its Python ^(a Windows restriction^): the environment from !MANAGED_PY!
+if exist .venv rmdir /s /q .venv
+"!MANAGED_PY!" -m venv .venv
 goto :eof
 
 rem --- The environment's Python runs (it exists and is not blocked)
