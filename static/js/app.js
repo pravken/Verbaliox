@@ -493,7 +493,7 @@ function renderSummaryPanel() {
   }
   if (tab === 'mfu') {
     // the editor of the same recording keeps its caret; another recording's is drawn again (a text typed
-    // for one recording was saved into the next one: the Fable audit)
+    // for one recording was saved into the next one: found by an audit)
     const ed = document.getElementById('mfu-input');
     if (!(ed && box.contains(ed) && document.activeElement === ed && ed.dataset.mid === String(m.id))) renderMfuEditor(box);
     return;
@@ -1010,6 +1010,7 @@ async function toggleCommitment(input) {
   });
   if (!res.ok) { input.checked = !input.checked; showError((await readJson(res)).detail); return; }
   input.closest('.an-task')?.classList.toggle('an-task-done', input.checked);
+  if (typeof refreshFeaturePage === 'function') refreshFeaturePage();
 }
 
 async function openCommitmentPlace(btn) {

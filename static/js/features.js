@@ -82,9 +82,10 @@ function drawFeaturePicker() {
   const m = state.activeMeeting;
   if (!m || !_ftAnchor) return;
   const on = new Set(m.features || []);
-  const list = (state.features || []).map(f => `<button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
-      ${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span>${on.has(f.id) ? '<span class="tk-tick">✓</span>' : '<span class="tk-tick"></span>'}
-      <span class="ft-open" role="button" tabindex="0" ${pageCall('click', 'openFeaturePageFromPick', [f.id, { $: 'event' }])} title="${escapeHtml(t('fpOpenTip'))}">↗</span></button>`).join('');
+  // the page link is a button of its own beside the item, not inside it (a button in a button: no keyboard)
+  const list = (state.features || []).map(f => `<div class="ft-pick-row"><button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
+      ${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span>${on.has(f.id) ? '<span class="tk-tick">✓</span>' : '<span class="tk-tick"></span>'}</button>
+      <button class="ft-open" ${pageCall('click', 'openFeaturePageFromPick', [f.id, { $: 'event' }])} title="${escapeHtml(t('fpOpenTip'))}" aria-label="${escapeHtml(t('fpOpenTip'))}">↗</button></div>`).join('');
   const series = m.series_id ? `<label class="ft-series"><input type="checkbox" id="ft-for-series" ${pageCall('change', 'saveFeaturesForSeries')}>
       <span>${escapeHtml(t('ftForSeries'))}</span></label>` : '';
   tkOpenPop(`<div class="tk-pop-cap">${escapeHtml(t('ftPickTitle'))}</div>${list || `<div class="tk-pop-quote">${escapeHtml(t('ftNone'))}</div>`}
@@ -126,7 +127,7 @@ function taskFeatureChipsHtml(meetingId, ids) {
   const list = (ids || ((state.meetings || []).find(x => x.id === meetingId) || {}).features || []).map(featureById).filter(Boolean);
   if (!list.length) return '';
   const all = list.map(f => f.name).join(', ');
-  return `<span class="ft-compact" role="button" tabindex="0" ${pageCall('click', 'openFeaturePage', [list[0].id])}>${featureChipHtml(list[0], { title: all })}${list.length > 1 ? `<span class="ft-more" title="${escapeHtml(all)}">+${list.length - 1}</span>` : ''}</span>`;
+  return `<button type="button" class="ft-compact" ${pageCall('click', 'openFeaturePage', [list[0].id])}>${featureChipHtml(list[0], { title: all })}${list.length > 1 ? `<span class="ft-more" title="${escapeHtml(all)}">+${list.length - 1}</span>` : ''}</button>`;
 }
 
 // --- Словарь → Фичи: what each feature is. Every field has a use: keywords find it in a meeting's
@@ -214,7 +215,9 @@ async function openFeaturePage(id) {
   const res = await fetch(`/api/features/${id}`);
   const data = await readJson(res);
   if (!res.ok) { showError(data.detail); return; }
-  document.getElementById('feature-page')?.remove();
+  const before = document.getElementById('feature-page');
+  const scroll = before?.querySelector('.overflow-y-auto')?.scrollTop || 0;  // redrawn after a change: stays where it was
+  before?.remove();
   const f = data.feature;
   const tasks = data.tasks || [];
   const open = tasks.filter(x => x.status !== 'done');
@@ -224,6 +227,7 @@ async function openFeaturePage(id) {
   const decisions = data.meetings.filter(m => m.decisions.length);
   const wrap = document.createElement('div');
   wrap.id = 'feature-page';
+  wrap.dataset.fid = String(f.id);
   wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
@@ -255,7 +259,22 @@ async function openFeaturePage(id) {
     </div>`;
   wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="close"]')) wrap.remove(); });
   document.body.appendChild(wrap);
+  const body = wrap.querySelector('.overflow-y-auto');
+  if (body) body.scrollTop = scroll;
 }
+
+// A task changed on the open page (its person, due date, done): the counts and the cards follow
+function refreshFeaturePage() {
+  const page = document.getElementById('feature-page');
+  if (page) openFeaturePage(Number(page.dataset.fid));
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !document.getElementById('feature-page')) return;
+  if (document.querySelector('.tk-pop')) return;  // a picker over the page closes first
+  e.stopPropagation();
+  document.getElementById('feature-page')?.remove();
+});
 
 function openMeetingFromFeature(id) {
   document.getElementById('feature-page')?.remove();

@@ -2596,7 +2596,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .ft-no:hover { background: rgba(255, 69, 58, 0.16); color: #FF8A80; }
 .ft-series { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); cursor: pointer; }
 .an-task-side .ft-chip { max-width: 140px; }
-.ft-compact { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.ft-compact { display: inline-flex; align-items: center; gap: 4px; min-width: 0; background: none; border: 0; padding: 0; font: inherit; color: inherit; }
 .ft-more { padding: 0 5px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); line-height: 18px; }
 .tk-row-src { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; }
 .tk-row-src .ft-chip { max-width: 140px; }
@@ -2640,7 +2640,9 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .fp-meet-title { color: #F5F5F7; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fp-meet-date { color: var(--hc-dim, #8E8E93); font-size: var(--fs-caption); font-family: var(--font-mono); }
 .fp-meet-tldr { grid-column: 1 / -1; color: var(--hc-dim, #AEAEB2); font-size: 12px; line-height: 1.4; }
-.ft-open { margin-left: 6px; padding: 0 4px; border-radius: 4px; color: var(--hc-dim, #8E8E93); }
+.ft-pick-row { display: flex; align-items: center; gap: 2px; }
+.ft-pick-row > .tk-pop-item { flex: 1 1 auto; min-width: 0; }
+.ft-open { margin-left: 2px; padding: 2px 6px; border-radius: 4px; color: var(--hc-dim, #8E8E93); background: none; border: 0; cursor: pointer; }
 .ft-open:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.08); }
 .ft-compact { cursor: pointer; }
 @media (max-width: 640px) { .fp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

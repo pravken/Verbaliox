@@ -167,6 +167,18 @@ class FeatureTagsTest(unittest.TestCase):
         self.assertEqual([x["what"] for x in page["tasks"]], ["обновить экран оплаты"])
         self.assertIsNone(features.overview(999999))
         self.assertEqual(features.decisions_of("## Decisions\n1. Ship it\n## Next\n- x"), ["Ship it"])
+        self.assertEqual(features.decisions_of("**Решения**\n- Да\n**Итог**\n- нет"), ["Да"])
+        from app.ollama_client import SUMMARY_TEMPLATES
+
+        self.assertIn("## Решения", SUMMARY_TEMPLATES["protocol"])  # the standard protocol has them to show
+
+    def test_lists_split_on_lines_and_keep_whole_items(self):
+        f = features.create_feature("Списки")
+        features.update_feature(f["id"], keywords="payments\nэквайринг", terms=", ".join(f"term{i}" for i in range(80)))
+        f = next(x for x in features.list_features() if x["id"] == f["id"])
+        self.assertEqual(f["keywords"], "payments, эквайринг")
+        self.assertTrue(all(len(t) >= 5 for t in features.split_list(f["terms"])))  # no «te» of a cut «term57»
+        self.assertLessEqual(len(f["terms"]), features.LIST_MAX)
 
     def test_answers_are_read_loosely(self):
         fs = [{"id": 1, "name": "Платежи"}, {"id": 2, "name": "Поиск"}]
