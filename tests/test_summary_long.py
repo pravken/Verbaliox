@@ -20,7 +20,7 @@ class LongSummaryTest(unittest.TestCase):
                 for t in range(0, 5400, 10)]
         prompts = []
 
-        def chat(system, user):
+        def chat(system, user, **_):
             prompts.append(user)
             if user.startswith("Это фрагмент"):
                 first = re.search(r"\[(\d[\d:]*)\]", user).group(1)
@@ -47,7 +47,7 @@ class LongSummaryTest(unittest.TestCase):
         segs = [{"start": i * 10, "end": i * 10 + 9, "speaker": "S1", "text": text} for i in range(n)]
         asked = []
         llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
-        llm.chat.side_effect = lambda system, user: asked.append(user) or "- [00:00] конспект"
+        llm.chat.side_effect = lambda system, user, **_: asked.append(user) or "- [00:00] конспект"
         with mock.patch("app.llm.target", return_value=llm):
             ollama_client.generate_meeting_summary(segs, {}, "protocol", user_notes="заметка " * 750)
         self.assertTrue(any(a.startswith("Это фрагмент") for a in asked))
@@ -58,7 +58,7 @@ class LongSummaryTest(unittest.TestCase):
                 for t in range(0, 5400, 10)]
         asked = []
 
-        def chat(system, user):
+        def chat(system, user, **_):
             asked.append(user[:20])
             return "- [00:00] конспект" if user.startswith("Это фрагмент") else "ответ"
 
@@ -73,6 +73,17 @@ class LongSummaryTest(unittest.TestCase):
         self.assertEqual(sum(a.startswith("Это фрагмент") for a in asked), parts)  # none asked again
 
 
+@unittest.skipIf(ollama_client is None, "app dependencies not installed")
+class PlainAnswerTest(unittest.TestCase):
+    def test_a_retelling_asks_a_local_model_not_to_reason_and_the_cloud_as_usual(self):
+        from app.llm import Target
+
+        seen = []
+        Target("ollama", "gemma4:e4b", 1000, lambda s, u, **kw: seen.append(kw) or "ok").chat("s", "u", plain=True)
+        Target("openai", "gpt-x", 1000, lambda s, u: seen.append("cloud") or "ok", logs_itself=True).chat("s", "u", plain=True)
+        self.assertEqual(seen, [{"plain": True}, "cloud"])
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -84,7 +95,7 @@ class LongHighlightsTest(unittest.TestCase):
         segs = [{"start": t, "end": t + 9, "speaker": "S1", "text": "говорим о планах на квартал и бюджете " * 3}
                 for t in range(0, 5400, 10)]
 
-        def chat(system, user):
+        def chat(system, user, **_):
             first = re.search(r"\[(\d[\d:]*)\]", user).group(1)
             h, mm, ss = ([0] + [int(x) for x in first.split(":")])[-3:]
             a = h * 3600 + mm * 60 + ss + 30

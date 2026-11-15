@@ -951,9 +951,10 @@ def _goes_round(text: str) -> bool:
     return len(tail) >= 6 and len(tail) - len(set(tail)) >= len(tail) // 2
 
 
-def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False) -> str:
+def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False, plain: bool = False) -> str:
     """short: a short answer (a title, «да / нет» checks, a feature's name): the model does not reason
-    first, which is most of the time of such an answer."""
+    first, which is most of the time of such an answer. plain: a long answer without reasoning (the notes
+    of a part of a long recording): no thinking either, but a cut answer is still asked again."""
     from app import idle_unload
 
     idle_unload.touch(model)
@@ -992,7 +993,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
 
     def request() -> str:
         # asked here, once the answer counts as being written: Ollama is asked what the model can do
-        payload.update(thinking_off(model, analysis=not short, base_url=base_url))
+        payload.update(thinking_off(model, analysis=not (short or plain), base_url=base_url))
         with httpx.Client(timeout=600.0) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
             raise_for_ollama(resp)
@@ -1184,12 +1185,13 @@ def generate_meeting_summary(
             if progress:
                 progress(idx, len(chunks))
             notes.append(
-                llm.chat(
+                llm.chat(  # a retelling: gemma4's reasoning cut these at the answer limit, 2–3 retries an hour
                     system_prompt,
                     f"Это фрагмент {idx} из {len(chunks)} расшифровки длинной записи:\n```text\n{chunk}\n```\n\n"
                     f"Составь {lang} подробный конспект этого фрагмента списком: кто что сказал, факты, мнения, "
                     f"решения, задачи и сроки — каждый пункт с таймкодом `[ММ:СС]`. {focus}"
                     "Пиши только то, что есть в тексте фрагмента." + (f"\n\n{roster_note}" if roster_note else ""),
+                    plain=True,
                 )
             )
         if reuse and chunks:
