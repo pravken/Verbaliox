@@ -2121,12 +2121,13 @@ async function buildSemanticIndex() {
   setTimeout(loadSemanticStatus, 800);
 }
 
-// Can this local model answer now: 'ready', 'missing' (not downloaded) or 'off' (Ollama is not installed
-// or not running). Before the first status arrives it is taken as ready.
+// Can this local model answer: 'ready', 'missing' (not downloaded) or 'off' (Ollama is not installed).
+// A stopped Ollama is ready: analysis starts it, and its models are read from its folder. Before the
+// first status arrives it is taken as ready.
 function localLlmState(id) {
   const o = state.lastOllama || state.system?.ollama;
   if (!o) return 'ready';
-  if (!o.running) return 'off';
+  if (!o.running && !o.installed) return 'off';
   const item = (o.catalog || []).find(m => m.id === id);
   return (item && item.installed) || (o.models || []).includes(id) ? 'ready' : 'missing';
 }
