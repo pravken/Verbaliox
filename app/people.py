@@ -330,8 +330,7 @@ def mentions(meeting: Dict[str, Any], people: Optional[List[Dict[str, Any]]] = N
             continue
         spellings = [p["name"]] + list(p.get("aliases") or [])
         # a name as a whole word: "Анна" is not found in "Аннотация"; Russian endings are allowed
-        pats = [re.compile(r"(?<![\w-])" + re.escape(s) + r"(?:а|у|ой|ом|е|ы|ю|ем|и)?(?![\w-])", re.I)
-                for s in spellings if len(s) >= 3]
+        pats = _name_patterns(spellings)
         for seg in meeting.get("segments") or []:
             text = seg.get("text") or ""
             n = sum(len(p_.findall(text)) for p_ in pats)
@@ -561,6 +560,136 @@ def meeting_roster(meeting: Dict[str, Any]) -> List[str]:
         seen.add(n.lower())
         out.append(f"{n} — {roles[n.lower()]}" if roles.get(n.lower()) else n)
     return out[:40]
+
+
+def name_regex(spelling: str) -> str:
+    """A name in any case form: «Олег» → «Олега», «Олегу»; a name ending in а/я/й/ь changes it: «Ксения» →
+    «Ксении», «Ксению», «Игорь» → «Игоря». The same rule as the page's links (app.js markPeople)."""
+    s = " ".join(spelling.split())
+    body = r"\s+".join(re.escape(w) for w in s.split(" "))
+    if len(s) >= 4 and s[-1].lower() in "аяйь":
+        return body[:-1] + r"(?:а|я|у|ю|ой|ей|ою|ею|ы|и|е|й|ь|ем|ём|ом)"
+    return body + r"(?:а|у|ой|ом|е|ы|ю|ем|и|я|ей|ов|ым)?"
+
+
+def _name_patterns(spellings: List[str]) -> List["re.Pattern"]:
+    """A name as a whole word in any case form; short spellings are left out."""
+    return [re.compile(r"(?<![\w-])" + name_regex(s) + r"(?![\w-])", re.I) for s in spellings if len(s) >= 3]
+
+
+def card(name: str) -> Optional[Dict[str, Any]]:
+    """One person of «Контакты»: the directory's entry, the recordings they speak in, were invited to or
+    are named in, and their tasks. {person, spoke, invited, mentioned, tasks}; None for a name nobody knows."""
+    rows = _rows()
+    want = canonical(name, rows).lower()
+    person = next((p for p in directory() if p["name"].lower() == want), None)
+    if person is None:
+        return None
+    spellings = [person["name"], *person.get("aliases", [])]
+    keys = {s.lower() for s in spellings}
+    spoke = []
+    for p in _library_people():
+        if p["name"].lower() in keys:
+            spoke += p.get("recordings") or []
+    spoke_ids = {r["meeting_id"] for r in spoke}
+    with _db_lock:
+        conn = get_connection()
+        meetings = {int(r["id"]): dict(r) for r in conn.execute(
+            "SELECT id, title, recorded_at, created_at, user_notes FROM meetings WHERE status = 'completed'").fetchall()}
+        # the transcripts that may name the person: the database narrows by the name's start, Python checks
+        likes = sorted({s[:4] for s in spellings if len(s) >= 3})
+        found_rows = conn.execute(
+            "SELECT meeting_id, data FROM segments WHERE " + " OR ".join(["data LIKE ?"] * len(likes)),
+            tuple(f"%{x}%" for x in likes)).fetchall() if likes else []
+        conn.close()
+
+    def brief(mid: int) -> Dict[str, Any]:
+        m = meetings[mid]
+        return {"meeting_id": mid, "title": m["title"], "date": str(m["recorded_at"] or m["created_at"] or "")[:10]}
+
+    invited = [brief(mid) for mid, m in meetings.items()
+               if mid not in spoke_ids and keys & {n.lower() for n in calendar_attendees(m)}]
+    pats = _name_patterns(spellings)
+    named: Dict[int, Dict[str, Any]] = {}
+    for r in found_rows:
+        mid = int(r["meeting_id"])
+        if mid not in meetings or mid in spoke_ids:
+            continue
+        try:
+            seg = json.loads(r["data"] or "{}")
+        except ValueError:
+            continue
+        text = str(seg.get("text") or "")
+        if any(p.search(text) for p in pats):
+            e = named.setdefault(mid, {**brief(mid), "count": 0, "first_at": float(seg.get("start") or 0)})
+            e["count"] += 1
+            e["first_at"] = min(e["first_at"], float(seg.get("start") or 0))
+    from app import commitments
+
+    tasks = [t for t in commitments.all_tasks()
+             if canonical(t.get("who") or "", rows).lower() == want or canonical(t.get("to_whom") or "", rows).lower() == want]
+    by_date = lambda x: x.get("date") or ""  # noqa: E731
+    return {"person": person, "spoke": sorted(spoke, key=by_date, reverse=True)[:50],
+            "invited": sorted(invited, key=by_date, reverse=True)[:50],
+            "mentioned": sorted(named.values(), key=by_date, reverse=True)[:50],
+            "tasks": tasks[:100]}
+
+
+def expand_names(text: str, rows: Optional[List[Dict[str, Any]]] = None) -> str:
+    """A contact's other spelling written for them («Дима» merged into «Дмитрий Орлов») becomes the full name
+    (asked by the user: the analysis names people as in the contacts, the short form only when it is unclear
+    who that is). As written (the nominative), with the surname beside it too («Дима Орлов»); another case
+    form («Диме») stays, a declined full name is not made up. Spellings shorter than 3 letters are left."""
+    if not text:
+        return text
+    try:
+        rows = rows if rows is not None else _rows()
+    except Exception:
+        return text
+    for r in rows:
+        name = r["name"]
+        if r.get("kind", "person") != "person":
+            continue
+        surname = name.split()[-1] if len(name.split()) > 1 else ""
+        for alias in sorted(r["aliases"], key=len, reverse=True):
+            if len(alias) < 3 or alias.lower() == name.lower() or alias.lower() in name.lower().split():
+                continue
+            tail = r"(?:\s+" + re.escape(surname) + r")?" if surname and surname.lower() not in alias.lower() else ""
+            text = re.sub(r"(?<![\w-])" + r"\s+".join(re.escape(w) for w in alias.split()) + tail + r"(?![\w-])",
+                          lambda _m: name, text)
+    return text
+
+
+def known_people(meeting: Dict[str, Any], exclude: Optional[List[str]] = None, cloud: bool = False,
+                 limit: int = 60) -> List[str]:
+    """The contacts the analysis model is told of besides the participants («Контакты», asked by the user: a
+    person named in the talk but not in the meeting was written as heard, not as in the contacts). The ones
+    the transcript names come first; on a local model the rest follow (most present first), so a name the
+    recognition misheard can still be matched. A cloud service gets only the ones the transcript names: it
+    already has the transcript, not the user's whole address book. People only, with their role and the other
+    spellings: «Дмитрий Орлов — тимлид (также: Дима)»."""
+    try:
+        people = [p for p in directory() if p.get("kind") == "person"]
+    except Exception:
+        return []
+    skip = {_clean(n.split(" — ")[0]).lower() for n in (exclude or [])}
+    try:
+        named = {e["name"].lower() for e in mentions(meeting, people)}
+    except Exception:
+        named = set()
+    ordered = [p for p in people if p["name"].lower() in named] + \
+        ([] if cloud else [p for p in people if p["name"].lower() not in named])
+    out: List[str] = []
+    for p in ordered:
+        if p["name"].lower() in skip or p.get("is_me") and p["name"].lower() not in named:
+            continue
+        line = p["name"] + (f" — {p['role']}" if p.get("role") else "")
+        if p.get("aliases"):
+            line += f" (также: {', '.join(p['aliases'][:4])})"
+        out.append(line)
+        if len(out) >= limit:
+            break
+    return out
 
 
 _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё'-]*")

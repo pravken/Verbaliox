@@ -8,7 +8,7 @@
 const HM_PX = 44;  // pixels of an hour on the timeline
 const HM_PRESETS = [[9, 18, 'hmPreset918'], [8, 20, 'hmPreset820'], [20, 8, 'hmPresetNight'], [0, 0, 'hmPresetDay']];
 
-const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, calConfigured: true, tasks: [], tasksAt: 0, asked: new Set(), started: new Set() };
+const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, calConfigured: true, tasks: [], tasksAt: 0, asked: new Set(), started: new Set(), warned: new Set() };
 
 function hmSettings() { return (state.system && state.system.settings) || {}; }
 function hmNum(key, def) { const n = Number(hmSettings()[key]); return Number.isFinite(n) && hmSettings()[key] !== '' && hmSettings()[key] != null ? n : def; }
@@ -222,9 +222,42 @@ function renderHomeMeetings() {
   const box = document.getElementById('hm-timeline');
   box.style.height = `${top(b)}px`;
   const html = hours.map(x => `<div class="hm-hour" style="top: ${top(x)}px"><span>${hmPad(new Date(x).getHours())}:00</span><i></i></div>`);
+  // Meetings at the same time stand side by side, not on top of each other (reported by the user): a
+  // group of meetings that overlap shares the width, each in the first column free at its start
+  const lane = new Map();
+  const order = [...meetings].sort((x, y) => x.s - y.s || y.e - x.e);
+  let group = [], ends = [], groupEnd = 0;
+  const closeGroup = () => { group.forEach(g => { lane.get(g).cols = ends.length; }); group = []; ends = []; };
+  for (const e of order) {
+    const s0 = e.s.getTime(), e0 = Math.max(e.e.getTime(), s0 + 26 / HM_PX * 3600e3);  // as tall as it is drawn
+    if (group.length && s0 >= groupEnd) closeGroup();
+    let col = ends.findIndex(end => end <= s0);
+    if (col < 0) { col = ends.length; ends.push(e0); } else ends[col] = e0;
+    lane.set(e, { col, cols: 1 });
+    group.push(e);
+    groupEnd = group.length === 1 ? e0 : Math.max(groupEnd, e0);
+  }
+  closeGroup();
   for (const e of meetings) {
     const s = Math.max(e.s.getTime(), a), en = Math.min(e.e.getTime(), b);
     const hpx = Math.max(26, top(en) - top(s) - 3);
+    const { col, cols } = lane.get(e) || { col: 0, cols: 1 };
+    const narrow = cols > 1;
+    const place = narrow ? `left: calc(46px + (100% - 46px) * ${col} / ${cols}); right: auto; width: calc((100% - 46px) / ${cols} - 3px);` : '';
+    const lines = Math.max(1, Math.floor((hpx - (narrow && hpx < 40 ? 6 : 23)) / 17));  // the title wraps as far as the height lets it
+    // How much it overlaps the others (asked by the user: side by side, it was not clear): the time they
+    // share is hatched in the card, and its tooltip says with which meeting and for how long
+    const clock = ms => { const d = new Date(ms); return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}`; };
+    const overlaps = narrow ? meetings.filter(o => o !== e && o.s < e.e && e.s < o.e).map(o => {
+      const from = Math.max(o.s.getTime(), e.s.getTime()), to = Math.min(o.e.getTime(), e.e.getTime());
+      return { o, from, to };
+    }) : [];
+    const hatch = overlaps.map(({ from, to }) => {
+      const y = Math.max(0, top(Math.max(from, a)) - top(s)), h = Math.min(hpx, top(Math.min(to, b)) - top(s)) - y;
+      return h > 0 ? `<i class="hm-ovl" style="top: ${y}px; height: ${h}px"></i>` : '';
+    }).join('');
+    const overlapTip = overlaps.map(({ o, from, to }) => t('hmOverlapTip').replace('{title}', () => o.title || t('hmUntitled'))
+      .replace('{from}', () => clock(from)).replace('{to}', () => clock(to)).replace('{min}', () => Math.round((to - from) / 60e3))).join('\n');
     const past = e.e <= now, live = e.s <= now && now < e.e;
     const st = past ? 'past' : hmMeetingState(e);
     const time = `${hmPad(e.s.getHours())}:${hmPad(e.s.getMinutes())}–${hmPad(e.e.getHours())}:${hmPad(e.e.getMinutes())}`;
@@ -237,13 +270,13 @@ function renderHomeMeetings() {
         ? `<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-mt-link">${escapeHtml(DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : t('hmProcessing').replace('{pct}', () => r.progress || 0))}</button>`
         : `<span class="hm-mt-none">${escapeHtml(t('hmNoRecording'))}</span>`;
     } else if (hmAutoRec && hmAutoRec.key === e.key && isRecording()) {
-      action = `<span class="hm-mt-btn hm-mt-rec"><i></i>${escapeHtml(t('hmRecordingNow'))}</span>`;
+      action = `<span class="hm-mt-btn hm-mt-rec" title="${escapeHtml(t('hmRecordingNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordingNow'))}</span></span>`;
     } else if (live && now - e.s > 5 * 60e3 && !isRecording()) {
       // half-way through: not started by itself any more (hmAutoTick), but one click records the rest
-      action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t('hmRecordNow'))}</button>`;
+      action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmRecordNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordNow'))}</span></button>`;
     } else {
       const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever' }[st];
-      action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t(label))}</button>`;
+      action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" aria-label="${escapeHtml(t(label))}" title="${escapeHtml(`${t(label)}. ${t('hmMeetingTip')}`)}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t(label))}</span></button>`;
     }
     // A meeting ahead that continues a series: what is open from last time, and the brief on a click
     const bf = !past && e.before;
@@ -252,11 +285,13 @@ function renderHomeMeetings() {
           title="${escapeHtml(t('hmBriefTip').replace('{n}', () => bf.open_tasks).replace('{title}', () => bf.last.title).replace('{date}', () => bf.last.date))}">${escapeHtml(
           bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
       : '';
-    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}" style="top: ${top(s)}px; height: ${hpx}px">
-        <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml(`${time} · ${who}`)}">
-          <span class="flex items-baseline gap-1.5 min-w-0"><span class="hm-mt-title">${escapeHtml(e.title || t('hmUntitled'))}</span>${hpx < 34 ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
-          ${hpx >= 34 ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
-        </span>${brief}${action}
+    const title = e.title || t('hmUntitled');
+    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}">${hatch}
+        <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml([`${title}`, `${time} · ${who}`, overlapTip].filter(Boolean).join('\n'))}">
+          <span class="flex items-baseline gap-1.5 min-w-0">${narrow && hpx < 40 ? `<span class="hm-mt-time">${escapeHtml(clock(e.s.getTime()))}</span>` : ''}<span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
+          ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
+          ${narrow && hpx >= 40 ? `<span class="hm-mt-sub hm-mono">${escapeHtml(time)}</span>` : ''}
+        </span>${narrow ? '' : brief}${action}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
@@ -270,7 +305,7 @@ async function hmRecordNow(key) {
   const ev = home.events.find(e => e.key === key);
   if (!ev || isRecording() || hmAutoRec) return;
   home.started.add(key);
-  hmAutoRec = { key, end: ev.e.getTime() };
+  hmAutoRec = { key, end: ev.e.getTime(), title: ev.title || '' };
   await shellQuickRecord();
   renderHomeNow();
 }
@@ -456,6 +491,12 @@ async function hmAutoTick() {
       hmShowAsk(e);
       continue;
     }
+    // a minute before a meeting recorded by itself: a chime and a word (asked by the user)
+    if (st === 'on' && now >= s - 75e3 && now < s - 15e3 && !home.warned.has(e.key) && !isRecording()) {
+      home.warned.add(e.key);
+      recordSound('soon');
+      showToast(t('hmAutoSoon').replace('{title}', () => e.title || t('hmUntitled')));
+    }
     // only near the start: a meeting half over is not recorded by surprise
     if (st === 'on' && now >= s - 15e3 && now < s + 5 * 60e3 && !isRecording() && !hmAutoRec) {
       home.started.add(e.key);
@@ -464,6 +505,28 @@ async function hmAutoTick() {
       showToast(t('hmAutoStarted').replace('{title}', () => e.title || t('hmUntitled')));
       if (isRecording()) autoRecordNotice(true, 'calendar', e.title || t('hmUntitled'));
     }
+  }
+}
+
+// A meeting over before its time in the calendar: the recording the calendar started stops when the app
+// of the call lets go of the microphone (reported by the user: it ran on after the call). Only once an app
+// was seen holding it during this recording: an in-person meeting has none and runs to its end
+const HM_CALL_GONE_MS = 20e3;
+async function hmCallEndTick() {
+  if (!hmAutoRec || !isRecording() || _quickRecBusy) return;
+  const st = await fetch('/api/calls/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!st || !st.supported || !hmAutoRec) return;
+  if (st.meeting_app) { hmAutoRec.app = st.meeting_app; hmAutoRec.freeSince = 0; return; }
+  if (!hmAutoRec.app) return;
+  hmAutoRec.freeSince = hmAutoRec.freeSince || Date.now();
+  if (Date.now() - hmAutoRec.freeSince < HM_CALL_GONE_MS) return;
+  const rec = hmAutoRec;
+  hmAutoRec = null;
+  home.started.add(rec.key);
+  if (isRecording()) {
+    await shellQuickRecord();
+    autoRecordNotice(false, 'calendar', rec.title);
+    showToast(t('hmCallEnded').replace('{title}', () => rec.title || t('hmUntitled')));
   }
 }
 
@@ -510,7 +573,7 @@ async function hmAskAnswer(yes) {
   await hmSave({ meet_overrides: JSON.stringify(hmPruneOverrides(ov)) });
   if (yes && !isRecording() && !hmAutoRec) {
     home.started.add(e.key);
-    hmAutoRec = { key: e.key, end: e.e.getTime() };
+    hmAutoRec = { key: e.key, end: e.e.getTime(), title: e.title || '' };
     await shellQuickRecord();
   }
   if (state.appView === 'home') renderHomeNow();
@@ -599,6 +662,8 @@ async function openFromNotice(target) {
     openLastRecording();
   } else if (kind === 'settings') {
     openModal('settings', a || undefined);
+  } else if (kind === 'update') {  // a new version (app/updater.py notice_tick)
+    openUpdateDialog();
   } else if (kind === 'brief') {  // «brief:series:ID» or «brief:person:NAME» (app/brief_notice.py)
     openBriefFor(a, String(target).split(':').slice(2).join(':'));
   }
@@ -618,6 +683,7 @@ registerView('home', { show: renderHome, refresh: (changed) => { if (changed) ho
 
 document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
+  setInterval(hmCallEndTick, 5000);
   // the clock line and the processing on the page follow by themselves
   setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);
 });

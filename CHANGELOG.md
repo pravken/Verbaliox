@@ -6,6 +6,27 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.14 — English
+
+- **Contacts**: a button in the sidebar opens everyone the program knows. A person's card shows their open
+  tasks (each can be reassigned there), the recordings they speak in, are named in or were invited to, and
+  «+ Task». The analysis and the task search are told of the contacts, not only of the participants.
+- **Every person named is marked** in the analysis and the tasks: a contact is a link to their card; an unclear
+  name is offered a contact, as a feature is («Dmitry Orlov?» with ✓ and ✕); a name not in the contacts can be
+  added or said to be someone; a name the transcript does not have at all is red, the model may have made it up.
+- **Full names**: the model writes people as in the contacts, not «Дима»; a confirmed short form is written out
+  in the recording's analysis.
+- **Fewer doubtful words**: no common words («и», «в», «что»), no other endings, nothing every model heard alike
+  elsewhere; a button hides the underlines.
+- **New versions are told**: a Windows notification, a mark in the sidebar until installed, what is new before
+  and once after the update.
+- **Recording**: a chime a minute before a meeting is recorded by itself, at the start and after the stop (not in
+  the recording; Settings → Recording); a calendar recording stops when the call ends before its time.
+- **The day on the home page**: meetings at the same time stand side by side, their shared time hatched; full
+  titles on hover.
+- **The dictionary** opens in its own window; **the models panel** chooses after how long an idle model is
+  unloaded, its timer stays on one line.
+
 ## 0.8.13 — English
 
 - **The first start, one topic a step**: the AI analysis; the sound (microphone and computer sound, the
@@ -519,6 +540,27 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.14
+
+- **Контакты**: кнопка в боковой панели открывает всех людей, которых знает программа. Карточка человека:
+  открытые задачи (каждую можно передать другому), записи, где он говорит, где его упоминают и куда его
+  приглашали, и «+ Задача». Анализ и поиск задач знают контакты, а не только участников встречи.
+- **Каждое упоминание человека размечено** в анализе и задачах: контакт — ссылка на карточку; неясному имени
+  программа предлагает контакт, как фичу («Дмитрий Орлов?» с ✓ и ✕); имя не из контактов можно добавить или
+  указать, кто это; имя, которого нет и в расшифровке, — красное: модель могла его придумать.
+- **Полные имена**: модель пишет людей так, как они записаны в контактах, а не «Дима»; подтверждённая короткая
+  форма заменяется полным именем в анализе записи.
+- **Меньше сомнительных слов**: без частых слов («и», «в», «что»), без расхождений в окончаниях и без слов, которые
+  модели одинаково расслышали в других местах; кнопка скрывает подчёркивания.
+- **О новой версии сообщается**: уведомление Windows, отметка в боковой панели до установки, «Что нового» перед
+  обновлением и один раз после него.
+- **Запись**: звуковой сигнал за минуту до автозаписи встречи, при начале и после остановки (в запись не попадает;
+  «Настройки → Запись»); запись по календарю останавливается, когда звонок закончился раньше времени.
+- **День на странице «Сегодня»**: встречи в одно время стоят рядом, общее время заштриховано; полные названия при
+  наведении.
+- **Словарь** открывается в своём окне; в **панели моделей** выбирается, через сколько выгружать модель без дела,
+  таймер не переносится.
 
 ## 0.8.13
 

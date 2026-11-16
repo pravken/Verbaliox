@@ -297,7 +297,7 @@ function askAboutFeature(id) {
 
 function editFeatureFromPage() {
   document.getElementById('feature-page')?.remove();
-  openModal('settings', 'dictionary');
+  openDictionary();
 }
 
 function openFeaturePageFromPick(id, e) {

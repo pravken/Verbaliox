@@ -760,6 +760,11 @@
                     <span data-i18n="anExport">Экспорт</span>
                     <svg class="an-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
+                  <!-- Doubtful words underlined or not (app.js toggleSuspects): shown only when there are some -->
+                  <button id="an-wavy-btn" data-click="toggleSuspects" class="an-dots an-wavy hidden" aria-pressed="false"
+                    data-i18n-title="anSuspectsHide" title="Скрыть подчёркивания сомнительных слов" data-i18n-aria="anSuspectsHide" aria-label="Скрыть подчёркивания сомнительных слов">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14"/><path d="M4 16c1.3-1.6 2.7-1.6 4 0s2.7 1.6 4 0 2.7-1.6 4 0 2.7 1.6 4 0"/></svg>
+                  </button>
                   <button id="an-dots-btn" data-click="openAnalysisMenu" data-click-args='["dots", {"$": "el"}]' class="an-dots"
                     data-i18n-title="anMoreTip" title="Ещё действия с разделом" data-i18n-aria="anMoreTip" aria-label="Ещё действия с разделом">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>

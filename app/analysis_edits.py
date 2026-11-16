@@ -223,7 +223,57 @@ def fix_with_dictionary(text: str) -> str:
 
 # ---------------------------------------------------------------- doubtful words of the analysis
 UNSURE_PROB = 0.45  # a word Whisper heard with less certainty than this is doubtful
-SUSPECTS_MAX = 60
+SUSPECTS_MAX = 40
+# Words that carry no term or name: a model heard «в» for «во» or «и» for «а», and every «в» of the analysis was
+# underlined (reported by the user: «и», «в», «на», «что», «чтобы» all over the text). A doubtful word needs
+# 4 letters or more and must not be one of these.
+_COMMON = set("""
+это эта этот эти того тому том тем той тех теми чтобы если когда тоже также очень только может могут можно
+нужно надо было были будет будут есть быть уже ещё еще вот там тут здесь где куда потом сейчас тогда этого этой
+этих всем всех весь вся всё все свой своя свои своё себя себе него нему ним них она они оно его ему её ее их
+который которая которое которые которых какой какая какие как так там просто даже лишь между после перед через
+очень более менее почти сразу поэтому потому однако хотя пока именно вообще кстати вроде типа давайте давай ладно
+хорошо значит например конечно наверное вообще сегодня завтра вчера time that this with from have they what which
+there their about would could should will been were your into than then them when where just also only very
+""".split())
+
+
+def _content_tokens(text: str) -> List[str]:
+    """The words of a phrase that could be a term or a name: 4 letters or more and not a common word, or an
+    abbreviation or a code (XW, Q50: capitals or digits) of any length."""
+    def term(w: str) -> bool:
+        if w.casefold() in _COMMON:
+            return False
+        return sum(ch.isalpha() for ch in w) >= 4 or any(ch.isdigit() for ch in w) or sum(ch.isupper() for ch in w) >= 2
+    return [w for w in _WORD.findall(text or "") if term(w)]
+
+
+def _same_stem(a: str, b: str) -> bool:
+    """«картах» and «карте», «сроки» and «сроков»: one word with another ending."""
+    a, b = a.casefold(), b.casefold()
+    n = 0
+    while n < min(len(a), len(b)) and a[n] == b[n]:
+        n += 1
+    return n >= 4 and n >= min(len(a), len(b)) - 3
+
+
+def _only_endings(shown: str, options: List[str]) -> bool:
+    """The models heard the same words, at most with other endings: nothing for the analysis to fix (it
+    retells in its own words anyway)."""
+    mine = _content_tokens(shown)
+    for o in options:
+        other = _content_tokens(o)
+        if not other:
+            continue  # a model that heard nothing there tells nothing about the word
+        if len(other) != len(mine) or not all(_same_stem(x, y) for x, y in zip(mine, other)):
+            return False
+    return True
+
+
+def _trim_common(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """«на картах» → «картах»: a common word at the edge of a disputed span is not what was misheard."""
+    keep = [i for i, w in enumerate(words) if _content_tokens(str(w.get("word") or ""))]
+    return words[keep[0]:keep[-1] + 1] if keep else []
 CHECK_TEXT_MAX = 6000
 CHECK_MAX = 20
 
@@ -276,12 +326,17 @@ def suspects(meeting: Dict[str, Any]) -> List[Dict[str, Any]]:
         out.append({"word": word, "options": opts[:4], "source": source, "start": float(start or 0)})
 
     # A word Whisper was surely sure of elsewhere in the recording is not doubtful in one place: «проект»
-    # heard unsurely once was underlined everywhere (found by an audit)
+    # heard unsurely once was underlined everywhere (found by an audit). The same for a disputed word that
+    # every model heard alike twice or more elsewhere: the analysis underlines a word everywhere it is
     sure = set()
+    agreed: Dict[str, int] = {}
     for seg in meeting.get("segments") or []:
         for w in seg.get("words") or []:
+            key = _clean_word(w.get("word")).casefold()
             if isinstance(w.get("prob"), (int, float)) and w["prob"] >= 0.8 and not w.get("alts"):
-                sure.add(_clean_word(w.get("word")).casefold())
+                sure.add(key)
+            if not w.get("alts"):
+                agreed[key] = agreed.get(key, 0) + 1
 
     for seg in meeting.get("segments") or []:
         words = seg.get("words") or []
@@ -290,11 +345,17 @@ def suspects(meeting: Dict[str, Any]) -> List[Dict[str, Any]]:
                 return out
             if w.get("alts"):
                 span = max(1, int(w.get("span") or 1))
-                shown = " ".join(str(x.get("word") or "").strip() for x in words[i:i + span])
-                add(shown, [a.get("text") or "" for a in w["alts"]], "dispute", w.get("start"))
+                core = _trim_common(words[i:i + span])
+                shown = " ".join(str(x.get("word") or "").strip() for x in core)
+                options = [a.get("text") or "" for a in w["alts"]]
+                if not shown or _only_endings(shown, options):
+                    continue
+                if len(core) == 1 and agreed.get(_clean_word(shown).casefold(), 0) >= 2:
+                    continue
+                add(shown, options, "dispute", w.get("start"))
             elif isinstance(w.get("prob"), (int, float)) and w["prob"] < UNSURE_PROB:
                 word = _clean_word(w.get("word"))
-                if sum(ch.isalpha() for ch in word) >= 3 and word.casefold() not in sure:
+                if _content_tokens(word) and word.casefold() not in sure:
                     add(word, [], "unsure", w.get("start"))
     return out
 

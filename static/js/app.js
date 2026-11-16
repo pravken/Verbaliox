@@ -5,6 +5,7 @@
 const updateState = { info: null, notified: false, polling: false };
 
 function renderUpdateStatus() {
+  renderUpdatePill();  // the mark in the sidebar, whatever page is open
   const info = updateState.info;
   const text = document.getElementById('update-status-text');
   const btn = document.getElementById('update-install-btn');
@@ -26,6 +27,75 @@ function renderUpdateStatus() {
   btn.textContent = viaGit ? t('updateGitBtn') : dl.done ? t('updateRestartBtn') : t('updateInstallBtn');
 }
 
+// The mark of a new version under the library (asked by the user: a toast in a hidden window went unseen)
+function renderUpdatePill() {
+  const info = updateState.info;
+  const pill = document.getElementById('upd-pill');
+  if (!pill) return;
+  const on = !!(info && info.available && info.latest);
+  pill.classList.toggle('hidden', !on);
+  if (!on) return;
+  const dl = info.download || {};
+  document.getElementById('upd-pill-text').textContent = (dl.done && !dl.stale ? t('updPillReady') : t('updPill'))
+    .replace('{v}', () => info.latest.version);
+}
+
+// The release's text for the language of the page: its section «X.Y.Z — English» or «X.Y.Z» (CHANGELOG.md)
+function releaseNotesFor(notes) {
+  const parts = String(notes || '').split(/^## /m).filter(x => x.trim());
+  const en = state.uiLang === 'en';
+  const hit = parts.find(p => /english/i.test(p.split('\n')[0]) === en) || parts[0] || '';
+  return hit.split('\n').slice(1).join('\n').trim();
+}
+
+// What is new in a version, with «Установить» (a new one) or alone (after an update, once)
+async function openUpdateDialog(after = false) {
+  if (!updateState.info) {
+    try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { return; }
+  }
+  const info = updateState.info || {};
+  const latest = info.latest || {};
+  document.getElementById('upd-dlg')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'upd-dlg';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  const notes = releaseNotesFor(latest.notes);
+  const dl = info.download || {};
+  const canGo = !after && info.available && (info.can_install || info.git_checkout);
+  const goLabel = info.git_checkout ? t('updateGitBtn') : dl.done && !dl.stale ? t('updateRestartBtn') : t('updateInstallBtn');
+  wrap.innerHTML = `<div class="an-dlg upd-dlg modal-card">
+      <div class="an-dlg-head"><h2>${escapeHtml((after ? t('updWhatsNew') : t('updNewTitle')).replace('{v}', () => latest.version || info.current))}</h2>
+        <button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${after ? '' : `<p class="an-dlg-text">${escapeHtml(t('updNewText').replace('{cur}', () => info.current))}</p>`}
+      <div class="upd-notes an-md">${notes ? sanitizedMarkdown(notes) : `<p>${escapeHtml(t('updNoNotes'))}</p>`}</div>
+      <div class="an-dlg-foot">
+        ${latest.url ? `<button data-a="page" class="an-btn">${escapeHtml(t('updOnGithub'))}</button>` : ''}
+        <span class="flex-1"></span>
+        <button data-a="close" class="an-btn">${escapeHtml(t(canGo ? 'updLater' : 'close'))}</button>
+        ${canGo ? `<button data-a="go" class="an-btn an-btn-primary">${escapeHtml(goLabel)}</button>` : ''}
+      </div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('keydown', e => { if (e.key === 'Escape') wrap.remove(); });
+  wrap.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (e.target === wrap || (b && b.dataset.a === 'close')) { wrap.remove(); return; }
+    if (!b) return;
+    if (b.dataset.a === 'page') { openExternal(latest.url); return; }
+    if (b.dataset.a === 'go') { wrap.remove(); installUpdate(); }
+  });
+}
+
+// The first start of a new version: what changed in it, once (not on a fresh install)
+function maybeShowWhatsNew() {
+  const info = updateState.info;
+  if (!info || !info.current) return;
+  let seen = null;
+  try { seen = localStorage.getItem('vx-seen-version'); localStorage.setItem('vx-seen-version', info.current); } catch (e) { return; }
+  if (seen && seen !== info.current && info.latest && info.latest.version === info.current && info.latest.notes) openUpdateDialog(true);
+}
+
 async function updateViaGit() {
   if (!(await askConfirm(t('updGitConfirm'), false, t('updateGitBtn')))) return;
   const r = await fetch('/api/update/git', { method: 'POST' });
@@ -40,6 +110,7 @@ async function checkForUpdates(force) {
   } catch (e) { return; }
   renderUpdateStatus();
   const info = updateState.info;
+  if (!force) maybeShowWhatsNew();
   if (info.available && info.auto && (info.download || {}).active) {
     followUpdateDownload();  // started by the server (automatic updates): tell when it is ready
   } else if (!force && info.available && !updateState.notified) {
@@ -177,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSeries();  // the series name in the context menu of a recording
   loadLlmStatus();
   setTimeout(() => checkForUpdates(false), 4000);  // after the page has settled; only if enabled in settings
+  setInterval(() => checkForUpdates(false), 3600e3);  // the window may stay open for days (the server asks GitHub every 6 h)
   loadDictionary();
   loadVram();
   document.addEventListener('visibilitychange', () => {
@@ -1016,6 +1088,7 @@ async function renderCommitments(box) {
   box.innerHTML = anIsBusy('commitments') ? anMakingHtml()
     : items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, false, !!(m.mfu || '').trim())).join('')}</div>${commitmentExportBar(m.id)}`
     : anEmptyHtml('commitments');
+  linkPeople(box, '.an-task-what');  // a person the task names opens their card
 }
 
 // Promises as tasks for another app: Markdown (Obsidian, Notion), Todoist's CSV, a table
@@ -2200,14 +2273,43 @@ function anSuspectList(m) {
   });
 }
 
+// The doubtful words can be hidden (asked by the user: many wavy lines make the text hard to read); the
+// choice is this viewer's and stays for every recording
+function suspectsHidden() {
+  try { return localStorage.getItem('vx-an-suspects-off') === '1'; } catch { return false; }
+}
+
+function syncSuspectsButton(count) {
+  const btn = document.getElementById('an-wavy-btn');
+  const box = document.getElementById('summary-content');
+  const off = suspectsHidden();
+  box?.classList.toggle('an-suspects-off', off);
+  if (!btn) return;
+  if (typeof count === 'number') btn.classList.toggle('hidden', count === 0);
+  const tip = t(off ? 'anSuspectsShow' : 'anSuspectsHide');
+  btn.title = tip;
+  btn.setAttribute('aria-label', tip);
+  btn.setAttribute('aria-pressed', String(off));
+  btn.classList.toggle('is-off', off);
+}
+
+function toggleSuspects() {
+  const off = !suspectsHidden();
+  try { localStorage.setItem('vx-an-suspects-off', off ? '1' : '0'); } catch { /* the choice lives for this page only */ }
+  syncSuspectsButton();
+}
+
 function markSuspects(box) {
   const m = state.activeMeeting;
   if (!m || !box) return;
   loadSuspects(m);
   const list = anSuspectList(m);
+  syncSuspectsButton(list.length);
+  box.querySelectorAll('.an-guess').forEach(el => el.remove());
+  box.querySelectorAll('.an-person').forEach(el => el.replaceWith(...el.childNodes));
   box.querySelectorAll('.an-suspect').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
   box.querySelectorAll('.an-md').forEach(el => el.normalize());
-  if (!list.length) return;
+  if (!list.length) { markPeople(box); return; }
   const esc = w => w.split(/\s+/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
   // the longest first: «Claude Code» before «Claude»
   const order = list.map((x, i) => [x, i]).sort((a, b) => b[0].word.length - a[0].word.length);
@@ -2216,7 +2318,7 @@ function markSuspects(box) {
   box.querySelectorAll('.an-md').forEach(md => {
     if (md.closest('.an-edit')) return;
     const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
-      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -2245,6 +2347,275 @@ function markSuspects(box) {
     }
   });
   state.anSuspectShown = list;
+  markPeople(box);
+}
+
+// The people of «Контакты» named in the analysis are links to their card (asked by the user). A doubtful
+// word stays a doubtful word: the correction comes first. Names and their variants, Russian endings allowed
+function markPeople(box) {
+  if (!box) return;
+  if (!contacts.list) { loadContacts().then(() => { if (contacts.list && contacts.list.length) markSuspects(box); }); return; }
+  linkPeople(box, '.an-md');
+}
+
+// The same links in other texts: a task's words (the Tasks page, a recording's tasks). Elements of `selector`
+// inside `root`; their earlier links are made again
+function linkPeople(root, selector) {
+  if (!root) return;
+  if (!contacts.list) { loadContacts().then(list => { if (list && list.length) linkPeople(root, selector); }); return; }
+  root.querySelectorAll(`${selector} .an-guess`).forEach(el => el.remove());
+  root.querySelectorAll(`${selector} .an-person`).forEach(el => el.replaceWith(...el.childNodes));
+  const spell = [];
+  for (const p of contacts.list) {
+    if (p.kind !== 'person') continue;
+    for (const s of [p.name, ...(p.aliases || [])]) if (String(s || '').trim().length >= 3) spell.push([s.trim(), p.name]);
+  }
+  if (!spell.length) { markUnknownPeople(root, selector); return; }
+  spell.sort((a, b) => b[0].length - a[0].length);  // «Анна Петрова» before «Анна»
+  // any case form: «Олега»; a name ending in а/я/й/ь changes it: «Ксении», «Игоря» (app/people.py name_regex)
+  const esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const form = s => {
+    const body = s.split(/\s+/).map(esc).join('\\s+');
+    return s.length >= 4 && /[аяйь]$/i.test(s) ? `${body.slice(0, -1)}(?:а|я|у|ю|ой|ей|ою|ею|ы|и|е|й|ь|ем|ём|ом)`
+      : `${body}(?:а|у|ой|ом|е|ы|ю|ем|и|я|ей|ов|ым)?`;
+  };
+  const rx = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${spell.map(([s]) => `(${form(s)})`).join('|')})(?![\\p{L}\\p{N}_-])`, 'giu');
+  root.querySelectorAll(selector).forEach(md => {
+    if (md.closest('.an-edit')) return;
+    md.normalize();
+    const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      rx.lastIndex = 0;
+      if (!rx.test(text)) continue;
+      rx.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const hit of text.matchAll(rx)) {
+        const at = hit.slice(1).findIndex(x => x !== undefined);
+        const name = at >= 0 ? spell[at][1] : '';
+        if (!name) continue;
+        frag.append(text.slice(last, hit.index));
+        const span = document.createElement('span');
+        span.className = 'an-person';
+        span.dataset.person = name;
+        span.tabIndex = 0;
+        span.setAttribute('role', 'link');
+        span.title = t('anPersonTip').replace('{name}', () => name);
+        span.textContent = hit[0];
+        frag.append(span);
+        last = hit.index + hit[0].length;
+      }
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  });
+  markUnknownPeople(root, selector);
+}
+
+// A name that is not in the contacts (asked by the user: every person named is a link, so that no one is
+// made up). A capitalised word that is a given name (given_names.js), with the surname beside it: dashed
+// amber, a click adds the person to the contacts or says which contact it is. In the analysis of a recording
+// a name its transcript does not have at all is red: the model may have made the person up
+function givenName(word) {
+  const w = String(word || '').toLowerCase();
+  if (w.length < 3) return '';
+  const tries = [w];
+  for (const end of ['ами', 'ями', 'ого', 'ому', 'ой', 'ей', 'ом', 'ем', 'ою', 'ею', 'ам', 'ям', 'ах', 'ях', 'а', 'я', 'у', 'ю', 'е', 'ы', 'и']) {
+    if (w.endsWith(end) && w.length - end.length >= 2) {
+      const stem = w.slice(0, -end.length);
+      tries.push(stem, stem + 'а', stem + 'я', stem + 'й', stem + 'ь', stem + 'ия');
+    }
+  }
+  const hit = tries.find(x => GIVEN_NAMES.has(x));
+  return hit ? hit[0].toUpperCase() + hit.slice(1) : '';
+}
+
+// Latin letters as Russian (Boris → борис, Dmitry → дмитрий), to match a name with a contact spelled in the
+// other alphabet. Rough on purpose: only the first letters of the two are compared after it
+function toCyrillic(word) {
+  let w = String(word || '').toLowerCase();
+  if (!/[a-z]/.test(w)) return w;
+  const pairs = [['shch', 'щ'], ['sch', 'щ'], ['yo', 'ё'], ['yu', 'ю'], ['ya', 'я'], ['zh', 'ж'], ['kh', 'х'], ['ts', 'ц'], ['ch', 'ч'], ['sh', 'ш'],
+    ['iy', 'ий'], ['yi', 'ий'], ['ey', 'ей'], ['ay', 'ай'], ['oy', 'ой'], ['x', 'кс'], ['a', 'а'], ['b', 'б'], ['c', 'к'], ['d', 'д'],
+    ['e', 'е'], ['f', 'ф'], ['g', 'г'], ['h', 'х'], ['i', 'и'], ['j', 'дж'], ['k', 'к'], ['l', 'л'], ['m', 'м'], ['n', 'н'], ['o', 'о'],
+    ['p', 'п'], ['q', 'к'], ['r', 'р'], ['s', 'с'], ['t', 'т'], ['u', 'у'], ['v', 'в'], ['w', 'в'], ['y', 'ы'], ['z', 'з']];
+  let out = '';
+  while (w) {
+    const hit = pairs.find(([a]) => w.startsWith(a));
+    if (hit) { out += hit[1]; w = w.slice(hit[0].length); } else { out += w[0]; w = w.slice(1); }
+  }
+  return out.replace(/ы$/, 'и').replace(/ий$/, 'ий');
+}
+
+function nameGroupOf(word) {
+  const w = toCyrillic(givenName(word) || word).toLowerCase();
+  const g = typeof NAME_GROUPS !== 'undefined' && NAME_GROUPS.find(x => x.includes(w));
+  return g ? g[0] : w;
+}
+
+function sameStem(a, b) {
+  const x = toCyrillic(a).toLowerCase(), y = toCyrillic(b).toLowerCase();
+  const n = Math.min(x.length, y.length);
+  if (n < 4) return x === y;
+  let i = 0;
+  while (i < n && x[i] === y[i]) i++;
+  return i >= Math.max(4, n - 2);
+}
+
+// Who of the contacts a name of the analysis most likely is (asked by the user: an unclear person is offered,
+// as a feature is): the surname first, then the name in any of its forms («Дима» — Дмитрий, Boris — Борис).
+// One contact clearly ahead, or nobody
+function guessContact(first, surname) {
+  const people = (contacts.list || []).filter(p => p.kind === 'person');
+  const key = first ? nameGroupOf(first) : '';
+  const scored = people.map(p => {
+    let score = 0;
+    for (const spelling of [p.name, ...(p.aliases || [])]) {
+      const words = spelling.split(/\s+/);
+      let sc = 0;
+      if (surname && words.some(w => sameStem(w, surname))) sc += 3;
+      if (key && words.some(w => nameGroupOf(w) === key)) sc += 2;
+      score = Math.max(score, sc);
+    }
+    return { p, score };
+  }).filter(x => x.score >= 2).sort((a, b) => b.score - a.score || (b.p.recordings || 0) - (a.p.recordings || 0));
+  if (!scored.length || (scored[1] && scored[1].score === scored[0].score)) return '';
+  return scored[0].p.name;
+}
+
+function guessDismissed(said, name) {
+  try { return (JSON.parse(localStorage.getItem('vx-guess-no') || '[]')).includes(`${said}|${name}`.toLowerCase()); } catch { return false; }
+}
+
+function dismissGuess(said, name) {
+  try {
+    const list = JSON.parse(localStorage.getItem('vx-guess-no') || '[]');
+    list.push(`${said}|${name}`.toLowerCase());
+    localStorage.setItem('vx-guess-no', JSON.stringify(list.slice(-500)));
+  } catch { /* this page only */ }
+}
+
+async function acceptGuess(said, name) {
+  const res = await fetch('/api/people/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names: [name, said] }) });
+  if (!res.ok) { showError(serverText((await readJson(res)).detail)); return; }
+  showToast(t('pnMerged').replace('{name}', () => said).replace('{contact}', () => name), null, 'success');
+  await relinkPeople();
+}
+
+async function relinkPeople() {
+  await loadContacts(true);
+  // the confirmed spelling is written out as the full name in this recording's analysis (app/people.expand_names)
+  const m = state.activeMeeting;
+  if (m) {
+    const data = await fetch(`/api/meetings/${m.id}/analysis/expand-names`, { method: 'POST' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    if (data && data.changed && data.changed.length && state.activeMeeting === m) { m.summaries = data.summaries; renderSummaryPanel(); return; }
+  }
+  markSuspects(document.getElementById('summary-content'));
+  if (state.appView === 'tasks' && typeof renderTasks === 'function') renderTasks();
+  if (state.activeSummaryTab === 'commitments') renderSummaryPanel();
+}
+
+function transcriptHas(word) {
+  const m = state.activeMeeting;
+  if (!m || !Array.isArray(m.segments)) return true;
+  if (!m._lowText) Object.defineProperty(m, '_lowText', { value: m.segments.map(x => x.text || '').join(' ').toLowerCase(), enumerable: false });
+  const w = String(word || '').toLowerCase();
+  // a name in the other alphabet («Boris» for «Борис» said in a Russian talk) is not checked: it is not an invention
+  const latin = /[a-z]/.test(w), cyr = /[а-яё]/.test(m._lowText.slice(0, 2000));
+  if (latin === cyr) return true;
+  return m._lowText.includes(w.length > 5 ? w.slice(0, w.length - 2) : w.slice(0, 4));
+}
+
+function markUnknownPeople(root, selector) {
+  if (typeof GIVEN_NAMES === 'undefined') return;
+  const inMeeting = !!root.closest?.('#summary-content') || root.id === 'summary-content';
+  const offeredHere = new Set();
+  root.querySelectorAll(`${selector} .an-guess`).forEach(el => el.remove());
+  const rx = /(?<![\p{L}\p{N}_-])(\p{Lu}[\p{Ll}'’-]+)(?:\s+(\p{Lu}[\p{Ll}'’-]+))?(?![\p{L}\p{N}_-])/gu;
+  root.querySelectorAll(selector).forEach(md => {
+    if (md.closest('.an-edit')) return;
+    const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0, any = false;
+      for (const hit of text.matchAll(rx)) {
+        const first = givenName(hit[1]), second = hit[2] ? givenName(hit[2]) : '';
+        if (!first && !second) continue;
+        // «Захар Петров», «Melekhin Boris»: the name and the surname; the name as said otherwise
+        const guess = first ? [first, hit[2] || ''].join(' ').trim() : [hit[1], second].join(' ');
+        const name = first || second, surname = first ? hit[2] : hit[1];
+        const maybe = guessContact(name, surname || '');
+        const offered = maybe && !guessDismissed(guess, maybe) ? maybe : '';
+        const invented = !offered && inMeeting && !transcriptHas(first ? hit[1] : hit[2]);
+        frag.append(text.slice(last, hit.index));
+        const span = document.createElement('span');
+        span.className = `an-person ${offered ? 'an-person-maybe' : 'an-person-new'}${invented ? ' an-person-invented' : ''}`;
+        span.dataset.new = guess;
+        if (offered) span.dataset.guess = offered;
+        span.tabIndex = 0;
+        span.setAttribute('role', 'button');
+        span.title = offered ? t('anPersonMaybe').replace('{name}', () => guess).replace('{contact}', () => offered)
+          : t(invented ? 'anPersonInvented' : 'anPersonNew').replace('{name}', () => guess);
+        span.textContent = hit[0];
+        frag.append(span);
+        // the offer once per name in a text, as a feature is offered: «Дмитрий Орлов?» ✓ ✕
+        const shownKey = `${guess}|${offered}`.toLowerCase();
+        if (offered && !offeredHere.has(shownKey)) {
+          offeredHere.add(shownKey);
+          const chip = document.createElement('span');
+          chip.className = 'ft-suggest an-guess';
+          chip.innerHTML = `<span class="ft-chip ft-chip-suggested" style="--ft:#64D2FF"><span class="ft-name">${escapeHtml(offered)}?</span></span>`
+            + `<button class="ft-yes" data-guess-ok data-said="${escapeHtml(guess)}" data-contact="${escapeHtml(offered)}" title="${escapeHtml(t('anGuessYes').replace('{contact}', () => offered))}" aria-label="${escapeHtml(t('anGuessYes').replace('{contact}', () => offered))}">✓</button>`
+            + `<button class="ft-no" data-guess-no data-said="${escapeHtml(guess)}" data-contact="${escapeHtml(offered)}" title="${escapeHtml(t('anGuessNo'))}" aria-label="${escapeHtml(t('anGuessNo'))}">✕</button>`;
+          frag.append(chip);
+        }
+        last = hit.index + hit[0].length;
+        any = true;
+      }
+      if (!any) continue;
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  });
+}
+
+// A click on a name not in the contacts: add it, or say which contact it is (the name becomes their variant)
+function openUnknownPersonMenu(el) {
+  const said = el.dataset.new, shown = el.textContent, offered = el.dataset.guess;
+  const r = el.getBoundingClientRect();
+  const relink = relinkPeople;
+  const items = [...(offered ? [{ label: t('anGuessYes').replace('{contact}', () => offered), run: () => acceptGuess(said, offered) },
+    { label: t('anGuessNo'), run: () => { dismissGuess(said, offered); relinkPeople(); } }, { sep: true }] : []), { label: t('pnAdd').replace('{name}', () => said), run: async () => {
+    const name = await askText(t('pnAddAsk'), said);
+    if (!name || !name.trim()) return;
+    const res = await fetch('/api/people/directory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), kind: 'person' }) });
+    if (!res.ok) { showError(serverText((await readJson(res)).detail)); return; }
+    showToast(t('pnAdded').replace('{name}', () => name.trim()), null, 'success');
+    await relink();
+  } }, { label: t('pnIsContact'), run: () => {
+    const people = (contacts.list || []).filter(p => p.kind === 'person').slice(0, 14);
+    if (!people.length) { showToast(t('pnNoContacts')); return; }
+    setTimeout(() => openTextMenuAt(people.map(p => ({ label: p.name, run: async () => {
+      const res = await fetch('/api/people/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names: [p.name, said] }) });
+      if (!res.ok) { showError(serverText((await readJson(res)).detail)); return; }
+      showToast(t('pnMerged').replace('{name}', () => said).replace('{contact}', () => p.name), null, 'success');
+      await relink();
+    } })), r.left, r.bottom + 4), 0);
+  } }];
+  if (el.classList.contains('an-person-invented') && el.closest('#summary-content')) {
+    items.push({ sep: true }, { label: t('pnFixWord'), run: () => openWordFixDialog(shown, el.closest('[data-md]')?.dataset.md || null) });
+  }
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 4), 0);
 }
 
 function openSuspectMenu(el) {
@@ -2313,13 +2684,32 @@ async function checkAnalysisWords() {
   }
 }
 
+// The offer of a contact for a name: ✓ makes the name their variant, ✕ stops offering them for it
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-guess-ok], [data-guess-no]');
+  if (!b) return;
+  e.stopPropagation();
+  if (b.hasAttribute('data-guess-ok')) acceptGuess(b.dataset.said, b.dataset.contact);
+  else { dismissGuess(b.dataset.said, b.dataset.contact); relinkPeople(); }
+}, true);
+// A name of a contact anywhere else (a task's words): its card
+document.addEventListener('click', (e) => {
+  const who = e.target.closest && e.target.closest('.an-person');
+  if (!who || who.closest('#summary-content')) return;
+  e.stopPropagation();
+  if (who.dataset.new) openUnknownPersonMenu(who); else openPersonCard(who.dataset.person);
+});
 document.getElementById('summary-content')?.addEventListener('click', (e) => {
+  const who = e.target.closest && e.target.closest('.an-person');
+  if (who) { e.stopPropagation(); if (who.dataset.new) openUnknownPersonMenu(who); else openPersonCard(who.dataset.person); return; }
   const el = e.target.closest && e.target.closest('.an-suspect');
   if (!el) return;
   e.stopPropagation();  // the click would close the menu it opens
   openSuspectMenu(el);
 });
 document.getElementById('summary-content')?.addEventListener('keydown', (e) => {
+  const who = e.target.closest && e.target.closest('.an-person');
+  if (who && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (who.dataset.new) openUnknownPersonMenu(who); else openPersonCard(who.dataset.person); return; }
   const el = e.target.closest && e.target.closest('.an-suspect');
   if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openSuspectMenu(el); }
 });
