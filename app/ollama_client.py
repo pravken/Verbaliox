@@ -25,8 +25,8 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "size": "6.6 GB",
         "vram": "8+ GB VRAM",
         "license": "Apache",
-        "desc_ru": "Рекомендуется для видеокарт с 8 ГБ и больше: в сравнении на настоящих встречах нашла больше всех задач (около половины против трети у Qwen3 8B), протокол часовой встречи — за полторы минуты",
-        "desc_en": "Recommended for GPUs with 8 GB or more: on real meetings it found the most tasks (about half, against a third for Qwen3 8B); an hour's protocol in a minute and a half",
+        "desc_ru": "Google Gemma 4 E4B (≈4 млрд эффективных параметров). Лучший результат в замерах программы на реальных встречах: находит больше всех задач и решений; протокол часовой встречи — около 1,5 минуты на видеокарте. Рекомендуется для видеокарт от 8 ГБ.",
+        "desc_en": "Google Gemma 4 E4B (≈4B effective parameters). The best result in the app's measurements on real meetings: it finds the most tasks and decisions; an hour's protocol in about 1.5 minutes on a GPU. Recommended for cards with 8 GB or more.",
         "good_ru": "Задачи и решения встречи, протоколы на русском и английском почти без выдуманных чисел; в памяти около 5 ГБ, помещается вместе с распознаванием речи",
         "good_en": "Tasks and decisions of a meeting, summaries in Russian and English with almost no made-up numbers; about 5 GB in memory, fits next to speech recognition",
         "weak_ru": "Находит не все задачи и иногда добавляет лишние — проверяйте список; длинный протокол иногда обрывается в конце; без видеокарты протокол часа — около 11 минут",
@@ -42,77 +42,13 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
         "size": "4.6 GB",
         "vram": "4–8 GB / CPU",
         "license": "Apache",
-        "desc_ru": "Рекомендуется для видеокарт до 8 ГБ и компьютеров без видеокарты: в сравнении находит задачи в 3–5 раз чаще, чем Qwen3.5 4B, протокол часовой встречи без видеокарты — около 5 минут",
-        "desc_en": "Recommended for GPUs under 8 GB and computers without one: on real meetings it found tasks 3–5 times as often as Qwen3.5 4B; an hour's protocol without a GPU in about 5 minutes",
+        "desc_ru": "Google Gemma 4 E2B (≈2 млрд эффективных параметров). В замерах на реальных встречах находит заметно больше задач, чем Qwen3.5 4B; протокол часовой встречи на процессоре — около 5 минут. Для видеокарт до 8 ГБ и компьютеров без видеокарты.",
+        "desc_en": "Google Gemma 4 E2B (≈2B effective parameters). On real meetings it found noticeably more tasks than Qwen3.5 4B; an hour's protocol on the CPU in about 5 minutes. For cards under 8 GB and computers without one.",
         "good_ru": "Лёгкая: около 3 ГБ видеопамяти; протоколы на русском и английском без выдуманных чисел; лучший выбор для ноутбуков",
         "good_en": "Light: about 3 GB of video memory; summaries in Russian and English without made-up numbers; the best choice for laptops",
-        "weak_ru": "Находит меньше задач, чем Gemma 4 E4B (на 6 ГБ — около трети), — проверяйте список",
-        "weak_en": "Finds fewer tasks than Gemma 4 E4B (about a third on 6 GB), so check the list",
+        "weak_ru": "Находит меньше задач, чем Gemma 4 E4B, — проверяйте список",
+        "weak_en": "Finds fewer tasks than Gemma 4 E4B, so check the list",
         "min_vram_gb": 4,  # 0: fine without a GPU too
-        "cpu_ok": True,
-    },
-    {
-        "id": "qwen3.5:4b",
-        "name": "Qwen3.5 4B",
-        "badge": "3.4 GB · Apache",
-        "size": "3.4 GB",
-        "vram": "4–6 GB / CPU",
-        "license": "Apache",
-        "desc_ru": "Прежняя модель по умолчанию: быстрая и лёгкая, но в сравнении на настоящих встречах находит заметно меньше задач, чем Gemma 4",
-        "desc_en": "The former default: fast and light, but on real meetings it found far fewer tasks than Gemma 4",
-        "good_ru": "Протоколы, задачи и ответы по записям на русском и английском; быстрая работа, в том числе без видеокарты",
-        "good_en": "Summaries, tasks and answers for Russian and English recordings; fast, including without a GPU",
-        "weak_ru": "На длинных записях и сложных вопросах возможны пропуски деталей; без видеокарты ответ формируется дольше",
-        "weak_en": "Details may be missed on long recordings and complex questions; slower without a GPU",
-        "min_vram_gb": 4,  # 0: fine without a GPU too
-        "cpu_ok": True,
-    },
-    {
-        "id": "qwen3:8b",
-        "name": "Qwen3 8B",
-        "badge": "5.2 GB · Apache",
-        "size": "5.2 GB",
-        "vram": "10+ GB VRAM",
-        "license": "Apache",
-        "desc_ru": "Для тех, кто к ней привык; в сравнении на настоящих встречах Gemma 4 E4B находит больше задач и пишет протокол в 2–4 раза быстрее",
-        "desc_en": "For those used to it; on real meetings Gemma 4 E4B found more tasks and wrote the protocol 2–4 times as fast",
-        "good_ru": "Связный анализ всего разговора, хороший русский",
-        "good_en": "Coherent analysis of the whole conversation, good Russian",
-        "weak_ru": "Требуется видеокарта с 10 ГБ памяти, занимает её почти целиком; без неё работает медленно",
-        "weak_en": "Requires a GPU with 10 GB of memory and takes almost all of it; slow without one",
-        "min_vram_gb": 10,  # 0: fine without a GPU too
-        "cpu_ok": False,
-    },
-    {
-        "id": "qwen3:14b",
-        "name": "Qwen3 14B",
-        "badge": "9.3 GB · Apache",
-        "size": "9.3 GB",
-        "vram": "12–24 GB VRAM",
-        "license": "Apache",
-        "desc_ru": "Самый глубокий анализ для видеокарт с 12 ГБ и больше",
-        "desc_en": "The deepest analysis for GPUs with 12 GB or more",
-        "good_ru": "Самый подробный анализ: сложные вопросы, длинные записи, выводы по нескольким записям",
-        "good_en": "The most detailed analysis: hard questions, long recordings, conclusions across recordings",
-        "weak_ru": "Требуется видеокарта с 12 ГБ памяти; работает медленнее остальных, без видеокарты не рекомендуется",
-        "weak_en": "Requires a GPU with 12 GB of memory; slower than the others, not recommended without a GPU",
-        "min_vram_gb": 12,  # 0: fine without a GPU too
-        "cpu_ok": False,
-    },
-    {
-        "id": "qwen2.5:1.5b",
-        "name": "Qwen Lite",
-        "badge": "1 GB · Apache",
-        "size": "1 GB",
-        "vram": "2–4 GB / CPU",
-        "license": "Apache",
-        "desc_ru": "Сверхлегкая и быстрая модель для слабых ПК и процессоров",
-        "desc_en": "Ultra-lightweight model for low-VRAM GPUs and CPUs",
-        "good_ru": "Наименьшие требования и высокая скорость: компьютеры без видеокарты, короткие записи",
-        "good_en": "The lowest requirements and high speed: computers without a GPU, short recordings",
-        "weak_ru": "Протоколы менее подробные, точность в деталях ниже",
-        "weak_en": "Less detailed summaries, lower accuracy in details",
-        "min_vram_gb": 0,  # 0: fine without a GPU too
         "cpu_ok": True,
     },
 ]
@@ -124,7 +60,9 @@ _LLM_DISPLAY_NAMES: Dict[str, str] = {
     "qwen3:14b": "Qwen3 14B",
     "qwen3:4b": "Qwen3 4B",
     "qwen3.5:4b": "Qwen3.5 4B",
-    # no longer offered (bench-report/report.md), named still for those who have them
+    # no longer offered (bench-report/report.md), named still for those who have them; qwen3:8b, qwen3:14b,
+    # qwen3.5:4b and qwen2.5:1.5b: one of the two gemma4 finds more, faster, in less memory
+    # (bench-report/llm-profiles.md; 14b and 1.5b not measured)
     "qwen2.5:7b": "Qwen 7B Standard",
     "qwen2.5:14b": "Qwen 14B Pro",
     "mistral:7b": "Mistral 7B",
@@ -372,7 +310,7 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
     if not base_url:
         base_url = settings.get("ollama_url", "http://127.0.0.1:11434")
     base_url = base_url.replace("localhost", "127.0.0.1")
-    active_model = settings.get("ollama_model", "qwen3.5:4b")
+    active_model = settings.get("ollama_model", "gemma4:e2b")
 
     exe = find_ollama_executable()
     # Status polling never starts background processes: Ollama is only launched after an

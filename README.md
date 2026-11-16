@@ -44,7 +44,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Export** to Word (`.docx`), Markdown, plain text, SRT subtitles, JSON and video with subtitles, all from one menu. A translated or dubbed export that does not exist yet is made first and then saved to the export folder by itself.
 - **Obsidian**: a note per meeting (properties, summary, overview, tasks as a checklist, transcript) named `{date} {title}`, saved by hand or automatically after processing (Settings → Export).
 - **Translate & dub (optional)**: translates a finished recording with Ollama and re-voices it in each speaker's cloned voice over the original background. See [Translate & dub](#translate-dub).
-- **Model comparison** (Settings → Advanced → Model comparison): every downloaded speech model recognizes a fragment of a recording you have corrected, and you see its error rate (WER), speed and memory; language models write the same protocol and you see how many points the transcript does not support.
+- **Model comparison** (Settings → Experimental → Model comparison): every downloaded speech model recognizes a fragment of a recording you have corrected, and you see its error rate (WER), speed and memory; language models write the same protocol and you see how many points the transcript does not support.
 - **Checked summaries**: each point of an overview gets the time it comes from, and points the transcript does not support are marked `[?]`. **My notes** taken during the meeting go into every summary; your own summary templates.
 - **Promises across meetings**: who promised what to whom and by when, collected after each summary, shown before the next meeting of the series, exported to Obsidian, Todoist (CSV) or Markdown, and a follow-up email draft.
 - **Calendar** (an `.ics` file or link, read only): a recording made during a meeting gets its title and participants; the Studio lists the next meetings with a brief.
@@ -186,7 +186,6 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Hugging Face Transformers (runs Nemotron) | Apache 2.0 |
 | safetensors / regex / typer, rich, markdown-it-py, mdurl / shellingham / Pygments (Transformers dependencies) | Apache 2.0 / Apache 2.0 AND CNRI-Python / MIT / ISC / BSD-2-Clause |
 | Gemma 4 E4B / E2B ([google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) rev. 4ecc2ba6, [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) rev. 4adf1574; Ollama `gemma4:e4b` dc35e8d9c606, `gemma4:e2b` b37049369adf) | Apache 2.0 |
-| Qwen3.5 4B, Qwen3 8B / 14B, Qwen 2.5 1.5B | Apache 2.0 |
 | Ollama, FastAPI, pywebview | MIT / BSD-3 |
 | ONNX Runtime, CTranslate2, pythonnet | MIT |
 | scikit-learn, httpx, uvicorn | BSD-3 |
@@ -266,7 +265,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Экспорт** в Word (`.docx`), Markdown, текст, субтитры SRT, JSON и видео с субтитрами — всё в одном меню. Если нужного перевода или дубляжа ещё нет, он сначала выполняется, а файл затем сам сохраняется в папку экспорта.
 - **Obsidian**: заметка на каждую встречу (свойства, резюме, обзор, задачи чек-листом, расшифровка) с именем `{дата} {название}` — вручную или автоматически после обработки (Настройки → Экспорт).
 - **Перевод и дубляж (по желанию)**: готовая запись переводится через Ollama и озвучивается клонами голосов участников поверх исходного фона. Подробнее — в разделе [Перевод и дубляж](#дубляж).
-- **Сравнение моделей** («Настройки → Для опытных → Сравнение моделей»): каждая скачанная модель распознавания расшифровывает фрагмент исправленной вами записи — видно долю ошибок (WER), скорость и память; языковые модели пишут один и тот же протокол — видно, сколько пунктов не подтверждает расшифровка.
+- **Сравнение моделей** («Настройки → Эксперименты → Сравнение моделей»): каждая скачанная модель распознавания расшифровывает фрагмент исправленной вами записи — видно долю ошибок (WER), скорость и память; языковые модели пишут один и тот же протокол — видно, сколько пунктов не подтверждает расшифровка.
 - **Проверенные саммари**: у каждого пункта обзора есть время, откуда он взят, а пункты, которых нет в расшифровке, помечены `[?]`. **Мои заметки** во время встречи учитываются в каждом саммари; свои шаблоны саммари.
 - **Обещания между встречами**: кто, что, кому и к какому сроку пообещал — собирается после саммари, показывается перед следующей встречей серии, выгружается в Obsidian, Todoist (CSV) или Markdown; черновик письма по итогам.
 - **Календарь** (файл или ссылка `.ics`, только чтение): запись во время встречи получает её название и участников; в Студии видны ближайшие встречи со справкой.

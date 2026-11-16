@@ -623,6 +623,9 @@ label.settings-toggle { display: flex; }
 .mp-title { flex: 1; font-size: var(--fs-body); font-weight: 600; }
 .mp-close { width: 24px; height: 24px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-body); line-height: 1; }
 .mp-close:hover { background: rgba(255, 255, 255, 0.12); color: #F5F5F7; }
+.mp-info { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: 600; font-size: 13px; }
+.mp-info.is-on { background: rgba(10, 132, 255, 0.25); color: #F5F5F7; }
+.models-pop .mp-legend { padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
 .mp-unload { height: 24px; padding: 0 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: #F5F5F7; font-size: var(--fs-label); font-weight: 500; white-space: nowrap; }
 .mp-unload:hover:not(:disabled) { background: rgba(255, 69, 58, 0.18); color: #FF6961; }
 .mp-unload:disabled { opacity: 0.5; cursor: default; }
@@ -2249,6 +2252,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   font-weight: 500;
   letter-spacing: 0.01em;
 }
+/* The models panel is tall and lies over the header (the red «Запись», the tabs showed through it: reported
+   by the user): nearly solid, with the same blur */
+.models-pop { background: rgba(24, 25, 29, 0.96); }
 /* «Transparency effects» off in Windows: no blur, a solid fill */
 @media (prefers-reduced-transparency: reduce) {
   .macos-menu, .rp-pop, .tk-pop, .an-pop, .hm-pop, .tb-pop, .models-pop, .hm-ask, .hm-dict {
@@ -2425,6 +2431,8 @@ th.mc-size { font-family: inherit; }
 .mm-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
 .mm-dots i.on { background: #0A84FF; }
 .mm-load i.on { background: #FFB340; }
+.mm-dots i.half { background: linear-gradient(90deg, #0A84FF 50%, rgba(255, 255, 255, 0.14) 50%); }
+.mm-load i.half { background: linear-gradient(90deg, #FFB340 50%, rgba(255, 255, 255, 0.14) 50%); }
 .mc-no .mm-x, .mm-x { color: #FF453A; font-weight: 700; font-size: 12px; line-height: 1; }
 
 /* The calendar of a week or a month (home.js openCalendarView) */
@@ -2687,14 +2695,27 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* The models panel: a chip says on hover what a click does, the loaded one turns red to «Выгрузить»;
    the minutes until the app frees it by itself */
-.vr-act { max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; transition: max-width 0.18s ease, opacity 0.18s ease; }
-.vr-chip:hover .vr-act, .vr-chip:focus-visible .vr-act { max-width: 90px; opacity: 1; }
+/* The action is laid over the name, not added beside it: a chip that widened on hover moved the chips after it
+   and out from under the cursor, and they flickered (reported by the user) */
+.vr-chip { position: relative; }
+.vr-act { position: absolute; inset: 0; padding: 0 18px 0 6px; display: flex; align-items: center; justify-content: center;
+          overflow: hidden; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+.vr-chip:hover .vr-act, .vr-chip:focus-visible .vr-act { opacity: 1; }
+.vr-label, .vr-timer { transition: opacity 0.15s ease; }
+.vr-chip:hover:not(:disabled) .vr-label, .vr-chip:focus-visible .vr-label { opacity: 0; }
 .vr-chip.vr-chip-unload:hover, .vr-chip.vr-chip-unload:focus-visible { color: #FF6961; border-color: rgba(255, 105, 97, 0.5); background: rgba(255, 105, 97, 0.12); }
 .vr-chip.vr-chip-start:hover, .vr-chip.vr-chip-start:focus-visible { color: #64B5FF; border-color: rgba(100, 181, 255, 0.5); border-style: solid; }
+/* In the models panel each model is a line of its own (asked by the user): the action is said at the
+   right of the line, the name stays */
+.mp-chip-list { display: flex; flex-direction: column; gap: 4px; }
+.mp-chip-list .vr-chip { width: 100%; height: 26px; padding: 0 9px; gap: 6px; border-radius: 8px; }
+.mp-chip-list .vr-label { flex: 1 1 auto; text-align: left; }
+.mp-chip-list .vr-act { position: static; inset: auto; padding: 0; flex: none; justify-content: flex-end; }
+.mp-chip-list .vr-chip:hover:not(:disabled) .vr-label, .mp-chip-list .vr-chip:focus-visible .vr-label { opacity: 1; }
 .vr-timer { display: inline-flex; align-items: center; gap: 2px; opacity: 0.75; font-variant-numeric: tabular-nums; }
-.vr-chip:hover .vr-timer { display: none; }
+.vr-chip:hover .vr-timer { opacity: 0; }
 .vr-timer-ico { width: 10px; height: 10px; }
-@media (prefers-reduced-motion: reduce) { .vr-act { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .vr-act, .vr-label, .vr-timer { transition: none; } }
 
 /* Checkboxes in the dark theme: a dark box with a light edge, filled when ticked (the system's white
    box stood out on every task card); a task's box ticks green, a «delete too» box red */
@@ -2720,3 +2741,102 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 
 /* A line of a menu that says something, not an action: who chose a disputed word */
 .tm-info { padding: 6px 10px 4px; font-size: var(--fs-label, 11.5px); line-height: 1.4; color: var(--hc-dim, #8E8E93); white-space: normal; }
+
+/* The first start (settings.js: openFirstRunWizard): two short steps, one question each */
+.frw { width: 100%; max-width: 540px; display: flex; flex-direction: column; background: var(--surface-dialog); border: 1px solid var(--line);
+       border-radius: 18px; box-shadow: var(--shadow-dialog); overflow: hidden; }
+.frw-head { display: flex; align-items: center; gap: 12px; padding: 22px 24px 0; }
+.frw-title { font-size: 18px; font-weight: 600; color: #F5F5F7; margin: 0; }
+.frw-dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.frw-dot { width: 7px; height: 7px; border-radius: 4px; background: #3A3A3C; transition: width var(--dur) var(--ease-out); }
+.frw-dot.is-on { width: 20px; background: #0A84FF; }
+.frw-sub { margin: 6px 24px 14px; font-size: 13px; line-height: 1.45; color: #A1A1A6; }
+.frw-hw { margin: -4px 24px 14px; font-size: 12px; color: #6E6E73; }
+.frw-body { padding: 0 24px; overflow-y: auto; min-height: 0; }
+.frw-opts { display: grid; gap: 10px; }
+.frw-opt { display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 16px; text-align: left; background: var(--surface-card);
+           border: 1.5px solid transparent; border-radius: 14px; color: inherit; transition: border-color var(--dur-fast); }
+.frw-opt:hover { border-color: rgba(255, 255, 255, 0.18); }
+.frw-opt.is-on { border-color: #0A84FF; background: rgba(10, 132, 255, 0.12); }
+.frw-opt:focus-visible { outline: 2px solid #0A84FF; outline-offset: 2px; }
+.frw-ico { width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 11px;
+           background: #2C2C2E; color: #D1D1D6; }
+.frw-ico svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.frw-opt.is-on .frw-ico { background: rgba(10, 132, 255, 0.25); color: #fff; }
+.frw-opt-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.frw-opt-title { font-size: 14px; font-weight: 600; color: #F5F5F7; }
+.frw-opt-desc { margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: #A1A1A6; }
+.frw-badge { margin-left: 8px; padding: 2px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; color: #30D158;
+             background: rgba(48, 209, 88, 0.14); vertical-align: 1px; white-space: nowrap; }
+.frw-radio { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1.5px solid #636366; }
+.frw-opt.is-on .frw-radio { border: 5px solid #0A84FF; }
+.frw-sum { padding: 4px 16px; border-radius: 14px; background: var(--surface-card); }
+.frw-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.frw-row:last-child { border-bottom: 0; }
+.frw-k { width: 118px; flex: none; color: #A1A1A6; }
+.frw-v { flex: 1; min-width: 0; color: #F5F5F7; }
+.frw-d { display: block; margin-top: 2px; font-size: 12px; color: #8E8E93; }
+.frw-size { flex: none; font-family: var(--font-mono); font-size: 12px; color: #6E6E73; }
+.frw-size.is-total { color: #F5F5F7; }
+.frw-toggle { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 13px 16px; border-radius: 14px;
+              background: var(--surface-card); cursor: pointer; }
+.frw-after { margin: 12px 2px 0; }
+.frw-autos { display: grid; gap: 10px; }
+.frw-autos .frw-toggle { margin-top: 0; display: block; }
+.frw-auto-row { display: flex; align-items: center; gap: 14px; cursor: pointer; }
+.frw-sub-row { margin-top: 10px; }
+.frw-sub-row .frw-opt-title { font-size: 13px; font-weight: 500; }
+.frw-more { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.frw-apps { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.frw-app { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #D1D1D6; cursor: pointer; }
+.frw-app input { accent-color: #0A84FF; }
+.frw-input { width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25);
+  color: #F5F5F7; font-family: var(--font-mono); font-size: 12px; }
+.frw-input:focus { outline: none; border-color: #0A84FF; }
+.frw-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 3px; border-radius: 11px; background: var(--surface-card); }
+.frw-seg-btn { padding: 9px 6px; border-radius: 8px; font-size: 12.5px; line-height: 1.25; color: #A1A1A6; }
+.frw-seg-btn:hover { color: #F5F5F7; }
+.frw-seg-btn.is-on { background: #0A84FF; color: #fff; font-weight: 600; }
+.frw-mic .frw-k { width: auto; font-size: 12.5px; }
+.frw-mic { display: grid; gap: 8px; margin-top: 12px; cursor: default; }
+.frw-select { font-family: inherit; font-size: 12.5px; }
+.frw-level { display: flex; align-items: center; gap: 10px; }
+.frw-level-track { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.frw-level-bar { display: block; width: 0; height: 100%; background: #30D158; transition: width 60ms linear; }
+.frw-level-db { width: 52px; text-align: right; font-family: var(--font-mono); font-size: 11.5px; color: #8E8E93; }
+.frw-note { font-size: 12px; color: #6E6E73; }
+.frw-foot { display: flex; align-items: center; gap: 8px; padding: 18px 24px 22px; }
+.frw-later { margin-right: auto; padding: 0; font-size: 13px; color: #8E8E93; }
+.frw-later:hover { color: #F5F5F7; }
+
+/* The precise mode's models (settings.js: renderEnsembleModels): «Скачать» beside a model not downloaded */
+.ens-list { display: flex; flex-direction: column; gap: 2px; max-width: 460px; }
+/* a line per model, the status in its own column at the right: «Скачать» turning into «скачивается» moves nothing */
+.ens-item { display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: center; gap: 10px; min-height: 28px;
+            padding: 2px 8px; border-radius: 8px; }
+.ens-item:hover { background: rgba(255, 255, 255, 0.03); }
+.ens-item > :last-child { justify-self: end; }
+.ens-dl { height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; color: #64B5FF; background: rgba(10, 132, 255, 0.12);
+          border: 1px solid rgba(10, 132, 255, 0.35); white-space: nowrap; }
+.ens-dl:hover { background: rgba(10, 132, 255, 0.22); color: #F5F5F7; }
+.ens-dl.is-busy { color: #8E8E93; background: none; border-color: transparent; padding: 0; }
+
+/* A model card (Settings): name, badges, the measures in dots on one line; what it is under «i» */
+.mm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; }
+.mm-part { display: inline-flex; align-items: center; gap: 6px; }
+.mm-lbl { font-size: 11px; color: var(--hc-dim, #8E8E93); }
+.mm-line .mc-sub { display: inline; margin: 0 0 0 4px; font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
+.mm-val { font-variant-numeric: tabular-nums; }
+/* A card that opens on a click says so under the cursor: a lighter edge and tint, the «i» lights up */
+.mc-card:has(.mc-info) { cursor: pointer; transition: box-shadow 0.15s ease; }
+.mc-card:has(.mc-info):hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 0 0 999px rgba(255, 255, 255, 0.025); }
+.mc-card:has(.mc-info):hover .mc-info { color: #F5F5F7; background: rgba(10, 132, 255, 0.3); }
+.mc-card:has(.mc-info) .mc-more { cursor: text; }
+@keyframes mc-more-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.mc-more.mc-opening { animation: mc-more-in 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .mc-more.mc-opening { animation: none; } }
+.mc-info { transition: background 0.15s ease, color 0.15s ease; width: 18px; height: 18px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+           font: italic 600 11px Georgia, 'Times New Roman', serif; color: var(--hc-dim, #AEAEB2); background: rgba(255, 255, 255, 0.07); }
+.mc-info:hover, .mc-info.is-on { color: #F5F5F7; background: rgba(10, 132, 255, 0.3); }
+.mc-more { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.mc-more.hidden { display: none; }

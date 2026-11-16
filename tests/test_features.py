@@ -381,10 +381,13 @@ class DefaultAnalysisModelTest(unittest.TestCase):
             with self.subTest(gpu=gpu), mock.patch.object(hardware, "_gpu_probe", return_value=gpu):
                 self.assertEqual(hardware.get_hardware_info()["recommended_ollama_model"], model)
         ids = [m["id"] for m in RECOMMENDED_LLM_MODELS]
-        self.assertEqual(ids[:2], ["gemma4:e4b", "gemma4:e2b"])
-        self.assertIn("qwen3:8b", ids)  # kept for those used to it
-        qwen35 = next(m for m in RECOMMENDED_LLM_MODELS if m["id"] == "qwen3.5:4b")
-        self.assertNotIn("вдвое больше", qwen35["desc_ru"])  # not confirmed by the measurement
+        # one of the two gemma4 finds more, faster, in less memory: the rest are no longer offered, but
+        # still named for those who have them
+        self.assertEqual(ids, ["gemma4:e4b", "gemma4:e2b"])
+        from app.ollama_client import format_llm_model_name
+        for gone, name in (("qwen3:8b", "Qwen3 8B"), ("qwen3:14b", "Qwen3 14B"), ("qwen3.5:4b", "Qwen3.5 4B"),
+                           ("qwen2.5:1.5b", "Qwen Lite")):
+            self.assertEqual(format_llm_model_name(gone), name)
 
 
 class OllamaVersionTest(unittest.TestCase):
