@@ -2200,11 +2200,38 @@ function anSuspectList(m) {
   });
 }
 
+// The doubtful words can be hidden (asked by the user: many wavy lines make the text hard to read); the
+// choice is this viewer's and stays for every recording
+function suspectsHidden() {
+  try { return localStorage.getItem('vx-an-suspects-off') === '1'; } catch { return false; }
+}
+
+function syncSuspectsButton(count) {
+  const btn = document.getElementById('an-wavy-btn');
+  const box = document.getElementById('summary-content');
+  const off = suspectsHidden();
+  box?.classList.toggle('an-suspects-off', off);
+  if (!btn) return;
+  if (typeof count === 'number') btn.classList.toggle('hidden', count === 0);
+  const tip = t(off ? 'anSuspectsShow' : 'anSuspectsHide');
+  btn.title = tip;
+  btn.setAttribute('aria-label', tip);
+  btn.setAttribute('aria-pressed', String(off));
+  btn.classList.toggle('is-off', off);
+}
+
+function toggleSuspects() {
+  const off = !suspectsHidden();
+  try { localStorage.setItem('vx-an-suspects-off', off ? '1' : '0'); } catch { /* the choice lives for this page only */ }
+  syncSuspectsButton();
+}
+
 function markSuspects(box) {
   const m = state.activeMeeting;
   if (!m || !box) return;
   loadSuspects(m);
   const list = anSuspectList(m);
+  syncSuspectsButton(list.length);
   box.querySelectorAll('.an-suspect').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
   box.querySelectorAll('.an-md').forEach(el => el.normalize());
   if (!list.length) return;
