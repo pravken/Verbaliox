@@ -222,9 +222,29 @@ function renderHomeMeetings() {
   const box = document.getElementById('hm-timeline');
   box.style.height = `${top(b)}px`;
   const html = hours.map(x => `<div class="hm-hour" style="top: ${top(x)}px"><span>${hmPad(new Date(x).getHours())}:00</span><i></i></div>`);
+  // Meetings at the same time stand side by side, not on top of each other (reported by the user): a
+  // group of meetings that overlap shares the width, each in the first column free at its start
+  const lane = new Map();
+  const order = [...meetings].sort((x, y) => x.s - y.s || y.e - x.e);
+  let group = [], ends = [], groupEnd = 0;
+  const closeGroup = () => { group.forEach(g => { lane.get(g).cols = ends.length; }); group = []; ends = []; };
+  for (const e of order) {
+    const s0 = e.s.getTime(), e0 = Math.max(e.e.getTime(), s0 + 26 / HM_PX * 3600e3);  // as tall as it is drawn
+    if (group.length && s0 >= groupEnd) closeGroup();
+    let col = ends.findIndex(end => end <= s0);
+    if (col < 0) { col = ends.length; ends.push(e0); } else ends[col] = e0;
+    lane.set(e, { col, cols: 1 });
+    group.push(e);
+    groupEnd = group.length === 1 ? e0 : Math.max(groupEnd, e0);
+  }
+  closeGroup();
   for (const e of meetings) {
     const s = Math.max(e.s.getTime(), a), en = Math.min(e.e.getTime(), b);
     const hpx = Math.max(26, top(en) - top(s) - 3);
+    const { col, cols } = lane.get(e) || { col: 0, cols: 1 };
+    const narrow = cols > 1;
+    const place = narrow ? `left: calc(46px + (100% - 46px) * ${col} / ${cols}); right: auto; width: calc((100% - 46px) / ${cols} - 3px);` : '';
+    const lines = Math.max(1, Math.floor((hpx - (narrow || hpx < 34 ? 6 : 23)) / 17));  // the title wraps as far as the height lets it
     const past = e.e <= now, live = e.s <= now && now < e.e;
     const st = past ? 'past' : hmMeetingState(e);
     const time = `${hmPad(e.s.getHours())}:${hmPad(e.s.getMinutes())}–${hmPad(e.e.getHours())}:${hmPad(e.e.getMinutes())}`;
@@ -237,13 +257,13 @@ function renderHomeMeetings() {
         ? `<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-mt-link">${escapeHtml(DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : t('hmProcessing').replace('{pct}', () => r.progress || 0))}</button>`
         : `<span class="hm-mt-none">${escapeHtml(t('hmNoRecording'))}</span>`;
     } else if (hmAutoRec && hmAutoRec.key === e.key && isRecording()) {
-      action = `<span class="hm-mt-btn hm-mt-rec"><i></i>${escapeHtml(t('hmRecordingNow'))}</span>`;
+      action = `<span class="hm-mt-btn hm-mt-rec" title="${escapeHtml(t('hmRecordingNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordingNow'))}</span></span>`;
     } else if (live && now - e.s > 5 * 60e3 && !isRecording()) {
       // half-way through: not started by itself any more (hmAutoTick), but one click records the rest
-      action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t('hmRecordNow'))}</button>`;
+      action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmRecordNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordNow'))}</span></button>`;
     } else {
       const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever' }[st];
-      action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" title="${escapeHtml(t('hmMeetingTip'))}"><i></i>${escapeHtml(t(label))}</button>`;
+      action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" aria-label="${escapeHtml(t(label))}" title="${escapeHtml(`${t(label)}. ${t('hmMeetingTip')}`)}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t(label))}</span></button>`;
     }
     // A meeting ahead that continues a series: what is open from last time, and the brief on a click
     const bf = !past && e.before;
@@ -252,11 +272,12 @@ function renderHomeMeetings() {
           title="${escapeHtml(t('hmBriefTip').replace('{n}', () => bf.open_tasks).replace('{title}', () => bf.last.title).replace('{date}', () => bf.last.date))}">${escapeHtml(
           bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
       : '';
-    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}" style="top: ${top(s)}px; height: ${hpx}px">
-        <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml(`${time} · ${who}`)}">
-          <span class="flex items-baseline gap-1.5 min-w-0"><span class="hm-mt-title">${escapeHtml(e.title || t('hmUntitled'))}</span>${hpx < 34 ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
-          ${hpx >= 34 ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
-        </span>${brief}${action}
+    const title = e.title || t('hmUntitled');
+    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}">
+        <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml(`${title}\n${time} · ${who}`)}">
+          <span class="flex items-baseline gap-1.5 min-w-0"><span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
+          ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
+        </span>${narrow ? '' : brief}${action}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
