@@ -291,7 +291,7 @@ async function hmRecordNow(key) {
   const ev = home.events.find(e => e.key === key);
   if (!ev || isRecording() || hmAutoRec) return;
   home.started.add(key);
-  hmAutoRec = { key, end: ev.e.getTime() };
+  hmAutoRec = { key, end: ev.e.getTime(), title: ev.title || '' };
   await shellQuickRecord();
   renderHomeNow();
 }
@@ -488,6 +488,28 @@ async function hmAutoTick() {
   }
 }
 
+// A meeting over before its time in the calendar: the recording the calendar started stops when the app
+// of the call lets go of the microphone (reported by the user: it ran on after the call). Only once an app
+// was seen holding it during this recording: an in-person meeting has none and runs to its end
+const HM_CALL_GONE_MS = 20e3;
+async function hmCallEndTick() {
+  if (!hmAutoRec || !isRecording() || _quickRecBusy) return;
+  const st = await fetch('/api/calls/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!st || !st.supported || !hmAutoRec) return;
+  if (st.meeting_app) { hmAutoRec.app = st.meeting_app; hmAutoRec.freeSince = 0; return; }
+  if (!hmAutoRec.app) return;
+  hmAutoRec.freeSince = hmAutoRec.freeSince || Date.now();
+  if (Date.now() - hmAutoRec.freeSince < HM_CALL_GONE_MS) return;
+  const rec = hmAutoRec;
+  hmAutoRec = null;
+  home.started.add(rec.key);
+  if (isRecording()) {
+    await shellQuickRecord();
+    autoRecordNotice(false, 'calendar', rec.title);
+    showToast(t('hmCallEnded').replace('{title}', () => rec.title || t('hmUntitled')));
+  }
+}
+
 let hmAskEvent = null;
 function hmShowAsk(e) {
   hmAskEvent = e;
@@ -531,7 +553,7 @@ async function hmAskAnswer(yes) {
   await hmSave({ meet_overrides: JSON.stringify(hmPruneOverrides(ov)) });
   if (yes && !isRecording() && !hmAutoRec) {
     home.started.add(e.key);
-    hmAutoRec = { key: e.key, end: e.e.getTime() };
+    hmAutoRec = { key: e.key, end: e.e.getTime(), title: e.title || '' };
     await shellQuickRecord();
   }
   if (state.appView === 'home') renderHomeNow();
@@ -639,6 +661,7 @@ registerView('home', { show: renderHome, refresh: (changed) => { if (changed) ho
 
 document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
+  setInterval(hmCallEndTick, 5000);
   // the clock line and the processing on the page follow by themselves
   setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);
 });
