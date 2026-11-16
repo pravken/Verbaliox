@@ -662,6 +662,8 @@ async function openFromNotice(target) {
     openLastRecording();
   } else if (kind === 'settings') {
     openModal('settings', a || undefined);
+  } else if (kind === 'update') {  // a new version (app/updater.py notice_tick)
+    openUpdateDialog();
   } else if (kind === 'brief') {  // «brief:series:ID» or «brief:person:NAME» (app/brief_notice.py)
     openBriefFor(a, String(target).split(':').slice(2).join(':'));
   }
