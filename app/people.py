@@ -330,8 +330,7 @@ def mentions(meeting: Dict[str, Any], people: Optional[List[Dict[str, Any]]] = N
             continue
         spellings = [p["name"]] + list(p.get("aliases") or [])
         # a name as a whole word: "Анна" is not found in "Аннотация"; Russian endings are allowed
-        pats = [re.compile(r"(?<![\w-])" + re.escape(s) + r"(?:а|у|ой|ом|е|ы|ю|ем|и)?(?![\w-])", re.I)
-                for s in spellings if len(s) >= 3]
+        pats = _name_patterns(spellings)
         for seg in meeting.get("segments") or []:
             text = seg.get("text") or ""
             n = sum(len(p_.findall(text)) for p_ in pats)
@@ -561,6 +560,79 @@ def meeting_roster(meeting: Dict[str, Any]) -> List[str]:
         seen.add(n.lower())
         out.append(f"{n} — {roles[n.lower()]}" if roles.get(n.lower()) else n)
     return out[:40]
+
+
+def name_regex(spelling: str) -> str:
+    """A name in any case form: «Олег» → «Олега», «Олегу»; a name ending in а/я/й/ь changes it: «Ксения» →
+    «Ксении», «Ксению», «Игорь» → «Игоря». The same rule as the page's links (app.js markPeople)."""
+    s = " ".join(spelling.split())
+    body = r"\s+".join(re.escape(w) for w in s.split(" "))
+    if len(s) >= 4 and s[-1].lower() in "аяйь":
+        return body[:-1] + r"(?:а|я|у|ю|ой|ей|ою|ею|ы|и|е|й|ь|ем|ём|ом)"
+    return body + r"(?:а|у|ой|ом|е|ы|ю|ем|и|я|ей|ов|ым)?"
+
+
+def _name_patterns(spellings: List[str]) -> List["re.Pattern"]:
+    """A name as a whole word in any case form; short spellings are left out."""
+    return [re.compile(r"(?<![\w-])" + name_regex(s) + r"(?![\w-])", re.I) for s in spellings if len(s) >= 3]
+
+
+def card(name: str) -> Optional[Dict[str, Any]]:
+    """One person of «Контакты»: the directory's entry, the recordings they speak in, were invited to or
+    are named in, and their tasks. {person, spoke, invited, mentioned, tasks}; None for a name nobody knows."""
+    rows = _rows()
+    want = canonical(name, rows).lower()
+    person = next((p for p in directory() if p["name"].lower() == want), None)
+    if person is None:
+        return None
+    spellings = [person["name"], *person.get("aliases", [])]
+    keys = {s.lower() for s in spellings}
+    spoke = []
+    for p in _library_people():
+        if p["name"].lower() in keys:
+            spoke += p.get("recordings") or []
+    spoke_ids = {r["meeting_id"] for r in spoke}
+    with _db_lock:
+        conn = get_connection()
+        meetings = {int(r["id"]): dict(r) for r in conn.execute(
+            "SELECT id, title, recorded_at, created_at, user_notes FROM meetings WHERE status = 'completed'").fetchall()}
+        # the transcripts that may name the person: the database narrows by the name's start, Python checks
+        likes = sorted({s[:4] for s in spellings if len(s) >= 3})
+        found_rows = conn.execute(
+            "SELECT meeting_id, data FROM segments WHERE " + " OR ".join(["data LIKE ?"] * len(likes)),
+            tuple(f"%{x}%" for x in likes)).fetchall() if likes else []
+        conn.close()
+
+    def brief(mid: int) -> Dict[str, Any]:
+        m = meetings[mid]
+        return {"meeting_id": mid, "title": m["title"], "date": str(m["recorded_at"] or m["created_at"] or "")[:10]}
+
+    invited = [brief(mid) for mid, m in meetings.items()
+               if mid not in spoke_ids and keys & {n.lower() for n in calendar_attendees(m)}]
+    pats = _name_patterns(spellings)
+    named: Dict[int, Dict[str, Any]] = {}
+    for r in found_rows:
+        mid = int(r["meeting_id"])
+        if mid not in meetings or mid in spoke_ids:
+            continue
+        try:
+            seg = json.loads(r["data"] or "{}")
+        except ValueError:
+            continue
+        text = str(seg.get("text") or "")
+        if any(p.search(text) for p in pats):
+            e = named.setdefault(mid, {**brief(mid), "count": 0, "first_at": float(seg.get("start") or 0)})
+            e["count"] += 1
+            e["first_at"] = min(e["first_at"], float(seg.get("start") or 0))
+    from app import commitments
+
+    tasks = [t for t in commitments.all_tasks()
+             if canonical(t.get("who") or "", rows).lower() == want or canonical(t.get("to_whom") or "", rows).lower() == want]
+    by_date = lambda x: x.get("date") or ""  # noqa: E731
+    return {"person": person, "spoke": sorted(spoke, key=by_date, reverse=True)[:50],
+            "invited": sorted(invited, key=by_date, reverse=True)[:50],
+            "mentioned": sorted(named.values(), key=by_date, reverse=True)[:50],
+            "tasks": tasks[:100]}
 
 
 def known_people(meeting: Dict[str, Any], exclude: Optional[List[str]] = None, cloud: bool = False,

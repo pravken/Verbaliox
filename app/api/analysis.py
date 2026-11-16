@@ -236,6 +236,15 @@ def api_people_directory() -> List[Dict[str, Any]]:
 
     return directory()
 
+@router.get("/api/people/card")
+def api_people_card(name: str) -> Dict[str, Any]:
+    from app.people import card
+
+    data = card(name)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Такого человека нет в контактах")
+    return data
+
 @router.post("/api/people/directory")
 def api_people_add(payload: PersonPayload) -> Dict[str, Any]:
     from app.people import add

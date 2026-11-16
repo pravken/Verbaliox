@@ -253,6 +253,7 @@ const SERVER_TEXT_EN = {
   "Для сведения нужны расшифровки хотя бы двух моделей": "Merging needs the transcripts of at least two models",
   "Это слово не спорное": "This word is not disputed",
   "Такого варианта нет": "There is no such variant",
+  "Такого человека нет в контактах": "There is no such person in the contacts",
   "Сведение версий в очереди...": "Merging the versions: queued...",
   "Сведение версий: сопоставление слов...": "Merging the versions: lining up the words...",
   "Сведение версий отменено": "Merging the versions cancelled",

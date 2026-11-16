@@ -557,6 +557,8 @@ async function openPeopleDirectory() {
   wrap.addEventListener('click', async e => {
     const b = e.target.closest('button');
     if (e.target === wrap || (b && b.dataset.a === 'close')) { wrap.remove(); return; }
+    const name = e.target.closest('[data-card]');
+    if (name) { e.preventDefault(); openPersonCard(name.dataset.card); return; }  // the row is a label: no tick
     if (!b) return;
     if (b.dataset.tab) { dir.tab = b.dataset.tab; dir.picked = []; drawDirectory(); return; }
     if (b.dataset.a === 'merge') { await dirMerge(); return; }
@@ -587,7 +589,109 @@ async function openPeopleDirectory() {
 async function loadDirectory() {
   const res = await fetch('/api/people/directory');
   dir.items = res.ok ? await res.json() : [];
+  contacts.list = dir.items;  // the names the analysis links (app.js markPeople)
+  contacts.at = Date.now();
   drawDirectory();
+}
+
+// --- «Контакты»: the directory from the sidebar, a person's card, the names of the analysis as links
+// (asked by the user: a person named in a summary opens their card, with their recordings and tasks) ---
+function openContacts() { openPeopleDirectory(); }
+
+const contacts = { list: null, at: 0, loading: null };
+
+async function loadContacts(force = false) {
+  if (!force && contacts.list && Date.now() - contacts.at < 60e3) return contacts.list;
+  if (!contacts.loading) {
+    contacts.loading = fetch('/api/people/directory').then(r => (r.ok ? r.json() : [])).catch(() => [])
+      .then(list => { contacts.list = list || []; contacts.at = Date.now(); contacts.loading = null; return contacts.list; });
+  }
+  return contacts.loading;
+}
+
+function pcDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+async function openPersonCard(name) {
+  const res = await fetch(`/api/people/card?name=${encodeURIComponent(name)}`);
+  const data = await readJson(res);
+  if (!res.ok) { showError(serverText(data.detail)); return; }
+  await loadPersonPhotos();
+  document.getElementById('pc-dlg')?.remove();
+  const p = data.person;
+  const wrap = document.createElement('div');
+  wrap.id = 'pc-dlg';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[62] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  const rec = (r, extra = '') => `<button class="pc-rec" data-open="${Number(r.meeting_id)}" data-at="${Number(r.first_at || 0)}">
+      <span class="pc-rec-date">${escapeHtml(pcDate(r.date))}</span><span class="pc-rec-title">${escapeHtml(r.title || '')}</span>${extra}</button>`;
+  const group = (key, rows, fmt) => (rows.length ? `<section class="pc-sec"><h3>${escapeHtml(t(key))} <span>${rows.length}</span></h3>
+      <div class="pc-list">${rows.map(fmt).join('')}</div></section>` : '');
+  const open = data.tasks.filter(x => x.status !== 'done');
+  const done = data.tasks.length - open.length;
+  const task = x => `<button class="pc-task" data-task-meeting="${Number(x.meeting_id || 0)}" data-at="${Number(x.at || 0)}" ${x.meeting_id ? '' : 'disabled'}>
+      <span class="pc-task-what">${escapeHtml(x.what)}</span>
+      <span class="pc-task-meta">${escapeHtml([x.due_date ? pcDate(x.due_date) : '', x.meeting_title || ''].filter(Boolean).join(' · '))}</span></button>`;
+  const sub = [p.role, (p.aliases || []).length ? `${t('spAlso')}: ${p.aliases.join(', ')}` : ''].filter(Boolean).join(' · ');
+  const nothing = !data.spoke.length && !data.invited.length && !data.mentioned.length;
+  wrap.innerHTML = `<div class="an-dlg pc-card modal-card">
+      <div class="pc-head">
+        <span class="sp-mav pc-ava">${spFaceHtml(p.name, spInitial(p.name))}</span>
+        <div class="pc-who"><h2>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</h2>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div>
+        <button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button>
+      </div>
+      <div class="pc-actions">
+        <button data-a="task" class="an-btn an-btn-primary">+ ${escapeHtml(t('pcTask'))}</button>
+        <button data-a="edit" class="an-btn">${escapeHtml(t('pcEdit'))}</button>
+        <button data-a="photo" class="an-btn">${escapeHtml(t(personPhotoUrl(p.name) ? 'spPhotoChange' : 'spPhoto'))}</button>
+      </div>
+      <div class="pc-body">
+        <section class="pc-sec"><h3>${escapeHtml(t('pcTasks'))} <span>${open.length}${done ? ` · ${escapeHtml(t('pcDoneN').replace('{n}', () => String(done)))}` : ''}</span></h3>
+          ${open.length ? `<div class="pc-list">${open.map(task).join('')}</div>` : `<p class="pc-empty">${escapeHtml(t('pcNoTasks'))}</p>`}</section>
+        ${group('pcSpoke', data.spoke, r => rec(r))}
+        ${group('pcMentioned', data.mentioned, r => rec(r, `<span class="pc-rec-n">${escapeHtml(t('pcTimes').replace('{n}', () => String(r.count)))}</span>`))}
+        ${group('pcInvited', data.invited, r => rec(r))}
+        ${nothing ? `<p class="pc-empty">${escapeHtml(t('pcNothing'))}</p>` : ''}
+      </div></div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  const closeAll = () => { close(); document.getElementById('sp-dir-dlg')?.remove(); };
+  wrap.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  wrap.addEventListener('click', async e => {
+    const b = e.target.closest('button');
+    if (e.target === wrap || (b && b.dataset.a === 'close')) { close(); return; }
+    if (!b) return;
+    if (b.dataset.open) { closeAll(); switchAppView('library'); await selectMeetingAndSeek(Number(b.dataset.open), Number(b.dataset.at) || 0); return; }
+    if (b.dataset.taskMeeting && Number(b.dataset.taskMeeting)) {
+      closeAll(); switchAppView('library'); await selectMeetingAndSeek(Number(b.dataset.taskMeeting), Number(b.dataset.at) || 0); return;
+    }
+    if (b.dataset.a === 'task') {
+      const what = await askText(t('pcTaskAsk').replace('{name}', () => p.name), '');
+      if (!what || !what.trim()) return;
+      const r = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ what: what.trim(), who: p.name }) });
+      const made = await readJson(r);
+      if (!r.ok) { showError(serverText(made.detail)); return; }
+      showToast(t('pcTaskMade'), null, 'success');
+      if (typeof loadTasks === 'function' && state.appView === 'tasks') loadTasks();
+      openPersonCard(p.name);
+      return;
+    }
+    if (b.dataset.a === 'edit') {
+      const newName = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
+      if (newName === null || !newName.trim()) return;
+      const role = await askText(t('spDirRole').replace('{name}', () => newName.trim()), p.role || '');
+      await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) });
+      openPersonCard(newName.trim());
+      return;
+    }
+    if (b.dataset.a === 'photo') { pickPersonPhoto(p.name); }
+  });
+  wrap.querySelector('[data-a="task"]').focus();
 }
 
 function drawDirectory() {
@@ -606,7 +710,7 @@ function drawDirectory() {
     return `<label class="sp-drow${on ? ' sp-drow-on' : ''}">
         <input type="checkbox" data-pick="${escapeHtml(p.name)}" ${on ? 'checked' : ''} aria-label="${escapeHtml(t('spPick'))}">
         <span class="sp-mav${p.kind === 'dept' ? ' sp-mav-dept' : ''}">${p.kind === 'dept' ? '▦' : spFaceHtml(p.name, spInitial(p.name))}</span>
-        <span class="sp-dname"><b>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</b><span>${escapeHtml(sub)}</span></span>
+        <span class="sp-dname"><b class="sp-dlink" data-card="${escapeHtml(p.name)}" title="${escapeHtml(t('pcOpenTip'))}">${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</b><span>${escapeHtml(sub)}</span></span>
         <span class="sp-dcell">${escapeHtml(where(p))}</span>
         <span class="sp-dcell${p.voice ? ' sp-voice' : ''}">${escapeHtml(p.voice ? `● ${t('spSample')}` : '—')}</span>
         <span class="sp-dcell sp-dtasks">${p.tasks || '—'}</span>
