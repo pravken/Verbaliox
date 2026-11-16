@@ -922,11 +922,11 @@ function openLlmPicker() {
   draw();
 }
 
-// The first start in four short steps (the old window had the sets, the models, their purposes and a
-// comparison table on one screen: too much text, reported by the user): the AI analysis, where the sound
-// comes from (with a check of the microphone), what works by itself (calls, the calendar, Teams captions,
-// the start with Windows, the noise filter: asked by the user to be offered here, not only in Settings),
-// then what downloads, with the precise mode (every speech model) as a switch. The language is not asked: the
+// The first start in short steps, one topic each (the old window had the sets, the models, their purposes
+// and a comparison table on one screen: too much text, reported by the user): the AI analysis; the sound
+// (the source, the microphone with a level check, the noise filter); calls (recorded by themselves, Teams
+// captions; Windows only); the calendar; then what downloads, with the precise mode (every speech model)
+// and the start with Windows as switches. Asked by the user to be offered here, not only in Settings. The language is not asked: the
 // recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
 // Settings → Recognition to choose the models
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
@@ -941,10 +941,11 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
+  const st = { page: 'ai', preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
     calls: false, apps: new Set(['zoom', 'teams', 'telegram']), cal: false, calSource: '', allMeet: false,
     startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '' };
-  const STEPS = 4, SOUND = 1, AUTO = 2, SUM = 3;
+  // the pages in order; «calls» only where the program can watch for calls (Windows)
+  const pages = () => ['ai', 'sound', env.calls && 'calls', 'cal', 'sum'].filter(Boolean);
   // The microphones, asked when the sound step opens (the names come with the permission to listen)
   let mics = null;
   const loadMics = async () => {
@@ -953,7 +954,7 @@ function openFirstRunWizard(data) {
       probe.getTracks().forEach(tr => tr.stop());
       mics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
     } catch (e) { mics = []; }
-    if (document.body.contains(wrap) && st.step === SOUND) draw();
+    if (document.body.contains(wrap) && st.page === 'sound') draw();
   };
   // The microphone's level while the check runs: the bar is looked up each frame (a redraw replaces it)
   const meter = { stream: null, ctx: null, raf: 0 };
@@ -997,7 +998,7 @@ function openFirstRunWizard(data) {
     env.outlook = !!(cal && cal.outlook);
     if (env.outlook && !st.calSource) st.calSource = 'outlook';
     env.filter = filter && (filter.installed || filter.can_download) ? filter : null;
-    if (document.body.contains(wrap) && st.step === AUTO) draw();
+    if (document.body.contains(wrap) && st.page !== 'ai') draw();
   });
   const filterMb = () => (st.filter && env.filter && !env.filter.installed ? Number(env.filter.size_mb || 0) : 0);
   const item = id => catalog.find(i => i.id === id);
@@ -1022,12 +1023,11 @@ function openFirstRunWizard(data) {
         <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
       <input type="checkbox" role="switch" class="vs-switch" data-auto="${key}" ${on ? 'checked' : ''} /></label>${more}</div>`;
   const autoNames = () => [st.calls && env.calls && t('frwShortCalls'), st.cal && st.calSource.trim() && t('frwShortCal'),
-    st.cal && st.calSource.trim() && st.allMeet && t('frwShortAll'), st.teams && env.calls && t('frwShortTeams'),
-    st.startup && t('frwShortStartup')].filter(Boolean);
+    st.cal && st.calSource.trim() && st.allMeet && t('frwShortAll'), st.teams && env.calls && t('frwShortTeams')].filter(Boolean);
   const SOURCES = [['both', 'sourceBoth'], ['mic', 'sourceMic'], ['system', 'sourceSystem']];
   const draw = () => {
     let title, sub, body, extra = '';
-    if (st.step === SOUND) {
+    if (st.page === 'sound') {
       title = t('frwSoundQ');
       sub = t('frwSoundSub');
       const usesMic = st.source !== 'system';
@@ -1044,26 +1044,28 @@ function openFirstRunWizard(data) {
             <span class="frw-level-db">${meter.stream ? '' : '−60 dB'}</span>
             <button data-a="meter" class="ui-btn ui-btn-subtle">${escapeHtml(t(meter.stream ? 'frwMicStop' : 'frwMicCheck'))}</button></div>
           ${meter.stream ? `<span class="frw-note">${escapeHtml(t('frwMicSay'))}</span>` : ''}
-        </div>` : ''}`;
-    } else if (st.step === AUTO) {
-      title = t('frwAutoQ');
-      sub = t('frwAutoSub');
+        </div>` : ''}
+        ${usesMic && env.filter ? `<div class="frw-autos frw-after">${sw('filter', st.filter, t('frwFilter'), env.filter.installed ? t('frwFilterReady')
+          : t('frwFilterD').replace('{size}', () => wizardSizeText(Number(env.filter.size_mb || 0))))}</div>` : ''}`;
+    } else if (st.page === 'calls') {
+      title = t('frwCallsQ');
+      sub = t('frwCallsSub');
       const apps = st.calls ? `<div class="frw-apps">${Object.entries(CALL_APP_NAMES).map(([id, name]) =>
         `<label class="frw-app"><input type="checkbox" data-app="${id}" ${st.apps.has(id) ? 'checked' : ''} />${escapeHtml(name)}</label>`).join('')}</div>` : '';
+      body = `<div class="frw-autos">
+          ${sw('calls', st.calls, t('frwCalls'), t('frwCallsD'), apps)}
+          ${sw('teams', st.teams, t('teamsToggle'), t('frwTeamsD'))}
+        </div>`;
+    } else if (st.page === 'cal') {
+      title = t('frwCalQ');
+      sub = t('frwCalSub');
       const cal = st.cal ? `<div class="frw-more">
           <input type="text" spellcheck="false" class="frw-input" data-cal-src value="${escapeHtml(st.calSource)}" placeholder="${escapeHtml(t('frwCalPh'))}" aria-label="${escapeHtml(t('frwCal'))}" />
           <label class="frw-auto-row frw-sub-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwCalAll'))}</span>
             <span class="frw-opt-desc">${escapeHtml(t('frwCalAllD'))}</span></span>
           <input type="checkbox" role="switch" class="vs-switch" data-auto="allMeet" ${st.allMeet ? 'checked' : ''} /></label></div>` : '';
-      body = `<div class="frw-autos">
-          ${env.calls ? sw('calls', st.calls, t('frwCalls'), t('frwCallsD'), apps) : ''}
-          ${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}
-          ${env.calls ? sw('teams', st.teams, t('teamsToggle'), t('frwTeamsD')) : ''}
-          ${sw('startup', st.startup, t('frwStartup'), t('frwStartupD'))}
-          ${env.filter ? sw('filter', st.filter, t('frwFilter'), env.filter.installed ? t('frwFilterReady')
-            : t('frwFilterD').replace('{size}', () => wizardSizeText(Number(env.filter.size_mb || 0)))) : ''}
-        </div>`;
-    } else if (st.step === 0) {
+      body = `<div class="frw-autos">${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}</div>`;
+    } else if (st.page === 'ai') {
       title = t('frwAiQ');
       sub = t('frwAiSub');
       extra = `<div class="frw-hw">${escapeHtml(t('frHardware'))}: ${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</div>`;
@@ -1094,17 +1096,19 @@ function openFirstRunWizard(data) {
           <span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwPrecise'))}${badge(t('frwPreciseBadge'))}</span>
             <span class="frw-opt-desc">${escapeHtml(t('frwPreciseD').replace('{n}', () => String(allSpeech.length)))}</span></span>
           <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
+        <div class="frw-autos frw-after">${sw('startup', st.startup, t('frwStartup'), t('frwStartupD'))}</div>
         <p class="frw-after frw-note">${escapeHtml(t('frwProgress'))}</p>`;
     }
-    const dots = Array.from({ length: STEPS }, (_, i) => `<span class="frw-dot${i === st.step ? ' is-on' : ''}"></span>`).join('');
+    const list = pages(), at = list.indexOf(st.page);
+    const dots = list.map((_, i) => `<span class="frw-dot${i === at ? ' is-on' : ''}"></span>`).join('');
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${st.step + 1} / ${STEPS}">${dots}</span></div>
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
         <button data-a="later" class="frw-later">${escapeHtml(t('frLater'))}</button>
-        ${st.step > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
-        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < SUM ? t('frNext') : t('frStart'))}</button>
+        ${at > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.page !== 'sum' ? t('frNext') : t('frStart'))}</button>
       </div></div>`;
     wrap.querySelector('#first-run-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;  // the page is zoomed: vh would not fit
   };
@@ -1126,8 +1130,8 @@ function openFirstRunWizard(data) {
       const key = auto.dataset.auto;
       st[key] = auto.checked;
       if (key === 'startup') st.startupTouched = true;
-      // a recording that starts by itself needs the program running: it starts with Windows, unless the
-      // user has said otherwise on this step
+      // a recording that starts by itself needs the program running: it starts with Windows (the switch
+      // is on the last page), unless the user has already said otherwise there
       if ((key === 'calls' || key === 'allMeet') && auto.checked && !st.startupTouched) st.startup = true;
       if (key === 'calls' || key === 'cal' || key === 'allMeet' || key === 'startup') draw();
       return;
@@ -1150,10 +1154,11 @@ function openFirstRunWizard(data) {
     }
     if (b.dataset.a === 'meter') { if (meter.stream) { stopMeter(); draw(); } else startMeter(); return; }
     if (b.dataset.a === 'later') { stopMeter(); wrap.remove(); openModal('settings', 'recognition'); return; }
-    if (b.dataset.a === 'back' || (b.dataset.a === 'next' && st.step < SUM)) {
+    if (b.dataset.a === 'back' || (b.dataset.a === 'next' && st.page !== 'sum')) {
       stopMeter();
-      st.step += b.dataset.a === 'back' ? -1 : 1;
-      if (st.step === SOUND && mics === null) loadMics();
+      const list = pages();
+      st.page = list[Math.max(0, list.indexOf(st.page) + (b.dataset.a === 'back' ? -1 : 1))];
+      if (st.page === 'sound' && mics === null) loadMics();
       draw();
       return;
     }

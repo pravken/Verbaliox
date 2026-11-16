@@ -128,7 +128,7 @@ await step('first run wizard', async () => {
   for (const url of ['**/api/models/setup', '**/api/onnx-models/**', '**/api/ffmpeg/install', '**/api/ollama/**']) await page.route(url, stub);
   await page.evaluate(() => { document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()); openFirstRunWizard(state.system); });
   await sleep(300);
-  // Four steps: the AI analysis, the sound, what runs by itself, then what downloads (the language is not asked:
+  // One topic a step: the AI analysis, the sound, (calls: Windows only), the calendar, then what downloads (the language is not asked:
   // the recommended set)
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
@@ -139,9 +139,9 @@ await step('first run wizard', async () => {
   await page.click('#first-run-wizard label:has(input[data-auto="cal"])');
   await page.fill('#first-run-wizard input[data-cal-src]', 'https://example.com/basic.ics');
   await page.click('#first-run-wizard label:has(input[data-auto="allMeet"])');
-  expect(await page.isChecked('#first-run-wizard input[data-auto="startup"]'), 'the start with Windows did not follow the recording of meetings');
   expect(await page.inputValue('#first-run-wizard input[data-cal-src]') === 'https://example.com/basic.ics', 'the calendar address was lost on a redraw');
   await page.click('#first-run-wizard button[data-a="next"]');
+  expect(await page.isChecked('#first-run-wizard input[data-auto="startup"]'), 'the start with Windows did not follow the recording of meetings');
   expect((await page.textContent('#first-run-dialog')).includes(await page.evaluate(() => t('frwShortAll'))), 'the summary does not list the automation');
   // The precise mode on the last step: every speech model joins the models to download
   await page.click('#first-run-wizard label:has(input[data-ens])');
