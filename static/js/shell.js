@@ -5,7 +5,7 @@
 // --- Views of the main area ---
 // "library" is the open recording (its transcript, analysis and speakers); its name stays for the
 // many places that open a recording. Ctrl+1…5 follow the top bar (video.js).
-const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings'];
+const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable'];
 const VIEW_HOOKS = {};
 
 // A view of a package: show() runs each time it comes on screen, hide() when another one does,
