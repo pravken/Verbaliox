@@ -207,6 +207,27 @@ await step('calendar view', async () => {
   expect(!(await page.$('#cal-view')), 'Esc did not close the calendar');
 });
 
+// The library as a table on the whole window: sorted by a header, a column added, a double click opens
+await step('library table', async () => {
+  await page.click('#lib-table-btn');
+  await sleep(500);
+  expect(await page.isVisible('#libtable-view'), 'the table did not open');
+  const rows = await page.$$eval('#lt-table tr[data-mid]', trs => trs.length);
+  expect(rows > 0, 'the table has no rows');
+  await page.click('#lt-table th[data-col="name"]');
+  await sleep(200);
+  expect(await page.isVisible('#lt-table th.lt-sorted[data-col="name"]'), 'the name header did not sort');
+  await page.click('button[data-click="openLibTableColumnsMenu"]');
+  await page.click('#lt-cols-menu button[data-col="size"]');
+  await sleep(200);
+  expect(await page.isVisible('#lt-table th[data-col="size"]'), 'the size column did not appear');
+  await page.click('#lt-cols-menu button[data-col="reset"]');
+  await page.keyboard.press('Escape');
+  await page.dblclick('#lt-table tr[data-mid] td.lt-c-name');
+  await sleep(600);
+  expect(await page.evaluate(() => state.appView) === 'library', 'a double click did not open the recording');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
