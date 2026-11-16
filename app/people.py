@@ -563,6 +563,38 @@ def meeting_roster(meeting: Dict[str, Any]) -> List[str]:
     return out[:40]
 
 
+def known_people(meeting: Dict[str, Any], exclude: Optional[List[str]] = None, cloud: bool = False,
+                 limit: int = 60) -> List[str]:
+    """The contacts the analysis model is told of besides the participants («Контакты», asked by the user: a
+    person named in the talk but not in the meeting was written as heard, not as in the contacts). The ones
+    the transcript names come first; on a local model the rest follow (most present first), so a name the
+    recognition misheard can still be matched. A cloud service gets only the ones the transcript names: it
+    already has the transcript, not the user's whole address book. People only, with their role and the other
+    spellings: «Дмитрий Орлов — тимлид (также: Дима)»."""
+    try:
+        people = [p for p in directory() if p.get("kind") == "person"]
+    except Exception:
+        return []
+    skip = {_clean(n.split(" — ")[0]).lower() for n in (exclude or [])}
+    try:
+        named = {e["name"].lower() for e in mentions(meeting, people)}
+    except Exception:
+        named = set()
+    ordered = [p for p in people if p["name"].lower() in named] + \
+        ([] if cloud else [p for p in people if p["name"].lower() not in named])
+    out: List[str] = []
+    for p in ordered:
+        if p["name"].lower() in skip or p.get("is_me") and p["name"].lower() not in named:
+            continue
+        line = p["name"] + (f" — {p['role']}" if p.get("role") else "")
+        if p.get("aliases"):
+            line += f" (также: {', '.join(p['aliases'][:4])})"
+        out.append(line)
+        if len(out) >= limit:
+            break
+    return out
+
+
 _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё'-]*")
 _NAME_ENDINGS = ("ами", "ями", "ого", "его", "ому", "ему", "ой", "ей", "ом", "ем", "ую", "юю", "ая", "яя",
                  "ов", "ев", "ах", "ях", "ам", "ям", "а", "я", "у", "ю", "е", "ы", "и", "ь", "s")

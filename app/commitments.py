@@ -474,6 +474,16 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
     head = ("Участники встречи (имена и фамилии написаны верно, пиши их так же): " + "; ".join(roster) + ". "
             "В разговоре их могут звать коротко или иначе («Макс» — Максим, «Саша» — Александр, по фамилии, "
             "латиницей или кириллицей); в who пиши имя из этого списка, если ясно, о ком речь.\n\n") if roster else ""
+    try:  # the user's contacts besides the participants: a task for someone not in the meeting (app/people.known_people)
+        from app.people import known_people
+
+        known = known_people(m, exclude=roster, cloud=bool(getattr(llm, "is_cloud", False)))
+    except Exception:
+        known = []
+    if known:
+        head += ("Люди из контактов пользователя (могут упоминаться, хотя их нет на встрече): " + "; ".join(known)
+                 + ". Если задача для кого-то из них, в who пиши имя как в этом списке.\n\n")
+        roster = roster + [k.split(" (также:")[0] for k in known]
     try:  # the meeting's feature and the dictionary's terms (Словарь, Словарь → Фичи)
         from app import vocab
         from app.features import describe

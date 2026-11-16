@@ -94,6 +94,19 @@ class PeopleDirectoryTest(unittest.TestCase):
         found = people.mentions(database.get_meeting(mid))
         self.assertEqual([(x["name"], x["count"]) for x in found], [("Олег", 2)])  # not Мария (speaks), not Анна
 
+    def test_known_people_for_the_analysis(self):
+        # asked by the user: a person named in the talk but not in the meeting is written as in the contacts
+        mid = self._meeting(names=("Мария", "Участник 2"), texts=["Нужно спросить Олега", "ок", "ок", "ок", "ок", "ок"])
+        people.add("Анна")
+        people.add("Олег")
+        people.update("Олег", role="тимлид")
+        m = database.get_meeting(mid)
+        local = people.known_people(m, exclude=["Мария — дизайнер"])
+        self.assertEqual(local[0], "Олег — тимлид")  # named in the talk: first
+        self.assertIn("Анна", local)                 # a local model hears of the others too
+        self.assertNotIn("Мария", " ".join(local))   # a participant is in the roster already
+        self.assertEqual(people.known_people(m, cloud=True), ["Олег — тимлид"])  # a cloud: only the named ones
+
     def test_merge_and_split_speakers_of_a_recording(self):
         mid = self._meeting(names=("Мария", "Участник 2", "Участник 3"))
         m = people.merge_speakers(mid, "SPEAKER_02", "SPEAKER_01")

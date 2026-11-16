@@ -53,5 +53,21 @@ class NamesInSummaryTest(unittest.TestCase):
         self.assertEqual(out, "Яцукевич рассказал про сроки.")
 
 
+    def test_the_summary_is_told_of_the_contacts_named_in_the_talk(self):
+        # asked by the user: a contact named in the talk, not a participant, is written as in the contacts
+        people.add("Дмитрий Захарченко")
+        people.update("Дмитрий Захарченко", role="тимлид")
+        people.add("Ксения Лебедева")
+        sent = []
+        llm = mock.Mock(is_cloud=True, max_chars=100000, label="m")
+        llm.chat = lambda system, user: (sent.append(user), "Дмитрий Захарчено проверит.")[1]
+        segs = [{"start": 0, "end": 5, "speaker": "SPEAKER_00", "text": "Это проверит Дмитрий Захарченко."}]
+        with mock.patch("app.llm.target", return_value=llm):
+            out = ollama_client.generate_meeting_summary(segs, {"SPEAKER_00": {"name": "Мария"}}, participants=["Мария"])
+        self.assertIn("Дмитрий Захарченко — тимлид", sent[0])
+        self.assertNotIn("Ксения", sent[0])  # a cloud model hears only of the contacts the transcript names
+        self.assertEqual(out, "Дмитрий Захарченко проверит.")
+
+
 if __name__ == "__main__":
     unittest.main()
