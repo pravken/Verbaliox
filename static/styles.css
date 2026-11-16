@@ -1691,6 +1691,10 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 /* A contact named in the analysis: a link to the card (app.js markPeople) */
 .an-person { cursor: pointer; border-bottom: 1px dotted rgba(100, 210, 255, 0.55); border-radius: 2px; }
 .an-person:hover, .an-person:focus-visible { color: #64D2FF; border-bottom-style: solid; outline: none; }
+.an-person-new { border-bottom: 1px dashed rgba(255, 214, 10, 0.75); }
+.an-person-new:hover, .an-person-new:focus-visible { color: #FFD60A; border-bottom-style: dashed; }
+.an-person-invented { border-bottom: 1.5px dashed rgba(255, 69, 58, 0.9); }
+.an-person-invented:hover, .an-person-invented:focus-visible { color: #FF6961; }
 /* The dictionary in its own window (settings.js openDictionary): the section of Settings, moved in */
 .dict-dlg { width: 760px; max-height: min(780px, 92vh); }
 .dict-dlg-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
