@@ -1169,6 +1169,14 @@ def generate_meeting_summary(
             known = known_people({"segments": segments, "speakers": speakers}, exclude=roster, cloud=llm.is_cloud)
         except Exception:
             known = []
+    if roster or known:
+        known_rule = (
+            "Людей называй полным именем и фамилией из этих списков, а не уменьшительными или короткими формами "
+            "(не «Дима» или «Саня», а полное имя и фамилия того человека из списка), даже если в разговоре их зовут коротко. "
+            "Короткую форму оставляй, только если неясно, кто из списка это."
+        )
+    else:
+        known_rule = ""
     if known:
         roster_note = (roster_note + "\n\n" if roster_note else "") + (
             "Люди из контактов пользователя — в разговоре могут упоминаться и те, кого нет на встрече: "
@@ -1177,6 +1185,8 @@ def generate_meeting_summary(
             "списка, о которых в записи не говорили."
         )
 
+    if known_rule:
+        roster_note = roster_note + "\n" + known_rule
     source_label = "Вот точная расшифровка аудио/видеозаписи"
     single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
@@ -1237,6 +1247,12 @@ def generate_meeting_summary(
         from app.people import fix_name_typos
 
         answer = fix_name_typos(answer, roster + [k.split(" (также:")[0] for k in known])
+    try:  # «Дима», a spelling merged into «Дмитрий Орлов»: the full name, as in the contacts
+        from app.people import expand_names
+
+        answer = expand_names(answer)
+    except Exception:
+        pass
     from app.analysis_edits import fix_with_dictionary
 
     return fix_with_dictionary(answer)  # a word corrected by hand once stays corrected

@@ -2437,6 +2437,12 @@ async function acceptGuess(said, name) {
 
 async function relinkPeople() {
   await loadContacts(true);
+  // the confirmed spelling is written out as the full name in this recording's analysis (app/people.expand_names)
+  const m = state.activeMeeting;
+  if (m) {
+    const data = await fetch(`/api/meetings/${m.id}/analysis/expand-names`, { method: 'POST' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    if (data && data.changed && data.changed.length && state.activeMeeting === m) { m.summaries = data.summaries; renderSummaryPanel(); return; }
+  }
   markSuspects(document.getElementById('summary-content'));
   if (state.appView === 'tasks' && typeof renderTasks === 'function') renderTasks();
   if (state.activeSummaryTab === 'commitments') renderSummaryPanel();
