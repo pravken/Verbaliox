@@ -922,9 +922,10 @@ function openLlmPicker() {
   draw();
 }
 
-// The first start in two short steps (the old window had the sets, the models, their purposes and a
-// comparison table on one screen: too much text, reported by the user): the AI analysis, then what
-// downloads, with the precise mode (every speech model) as a switch. The language is not asked: the
+// The first start in three short steps (the old window had the sets, the models, their purposes and a
+// comparison table on one screen: too much text, reported by the user): the AI analysis, what works by
+// itself (calls, the calendar, the start with Windows, the noise filter: asked by the user to be offered
+// here, not only in Settings), then what downloads, with the precise mode (every speech model) as a switch. The language is not asked: the
 // recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
 // Settings → Recognition to choose the models
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
@@ -939,7 +940,23 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false };
+  const st = { step: 0, preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
+    calls: false, apps: new Set(['zoom', 'teams', 'telegram']), cal: false, calSource: '', allMeet: false,
+    startup: false, startupTouched: false, filter: true };
+  // What this computer offers (Windows only: calls, Outlook; the filter may be there already), asked once
+  const env = { calls: false, outlook: false, filter: null };
+  Promise.all([
+    fetch('/api/calls/status').then(r => r.json()).catch(() => null),
+    fetch('/api/calendar/upcoming').then(r => r.json()).catch(() => null),
+    fetch('/api/voice-filter/status').then(r => (r.ok ? r.json() : null)).catch(() => null),
+  ]).then(([calls, cal, filter]) => {
+    env.calls = !!(calls && calls.supported);
+    env.outlook = !!(cal && cal.outlook);
+    if (env.outlook && !st.calSource) st.calSource = 'outlook';
+    env.filter = filter && (filter.installed || filter.can_download) ? filter : null;
+    if (document.body.contains(wrap) && st.step === 1) draw();
+  });
+  const filterMb = () => (st.filter && env.filter && !env.filter.installed ? Number(env.filter.size_mb || 0) : 0);
   const item = id => catalog.find(i => i.id === id);
   const allSpeech = ENSEMBLE_ALL.filter(id => item(id));
   const models = () => picks.presets.find(p => p.id === st.preset).models;
@@ -957,9 +974,32 @@ function openFirstRunWizard(data) {
   const sizeOf = ids => ids.filter(id => !item(id)?.installed).reduce((a, id) => a + wizardSizeMb(item(id)), 0);
   const ffmpegMb = () => ((data.ffmpeg || {}).available ? 0 : (((data.ffmpeg || {}).download_info || {}).size_mb || 0));
   const llmMb = () => (st.ai === 'local' ? wizardSizeMb(llmItem) : 0);
+  const sw = (key, on, title, desc, more = '') => `<div class="frw-toggle">
+      <label class="frw-auto-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(title)}</span>
+        <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
+      <input type="checkbox" role="switch" class="vs-switch" data-auto="${key}" ${on ? 'checked' : ''} /></label>${more}</div>`;
+  const autoNames = () => [st.calls && env.calls && t('frwShortCalls'), st.cal && st.calSource.trim() && t('frwShortCal'),
+    st.cal && st.calSource.trim() && st.allMeet && t('frwShortAll'), st.startup && t('frwShortStartup')].filter(Boolean);
   const draw = () => {
     let title, sub, body, extra = '';
-    if (st.step === 0) {
+    if (st.step === 1) {
+      title = t('frwAutoQ');
+      sub = t('frwAutoSub');
+      const apps = st.calls ? `<div class="frw-apps">${Object.entries(CALL_APP_NAMES).map(([id, name]) =>
+        `<label class="frw-app"><input type="checkbox" data-app="${id}" ${st.apps.has(id) ? 'checked' : ''} />${escapeHtml(name)}</label>`).join('')}</div>` : '';
+      const cal = st.cal ? `<div class="frw-more">
+          <input type="text" spellcheck="false" class="frw-input" data-cal-src value="${escapeHtml(st.calSource)}" placeholder="${escapeHtml(t('frwCalPh'))}" aria-label="${escapeHtml(t('frwCal'))}" />
+          <label class="frw-auto-row frw-sub-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwCalAll'))}</span>
+            <span class="frw-opt-desc">${escapeHtml(t('frwCalAllD'))}</span></span>
+          <input type="checkbox" role="switch" class="vs-switch" data-auto="allMeet" ${st.allMeet ? 'checked' : ''} /></label></div>` : '';
+      body = `<div class="frw-autos">
+          ${env.calls ? sw('calls', st.calls, t('frwCalls'), t('frwCallsD'), apps) : ''}
+          ${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}
+          ${sw('startup', st.startup, t('frwStartup'), t('frwStartupD'))}
+          ${env.filter ? sw('filter', st.filter, t('frwFilter'), env.filter.installed ? t('frwFilterReady')
+            : t('frwFilterD').replace('{size}', () => wizardSizeText(Number(env.filter.size_mb || 0)))) : ''}
+        </div>`;
+    } else if (st.step === 0) {
       title = t('frwAiQ');
       sub = t('frwAiSub');
       extra = `<div class="frw-hw">${escapeHtml(t('frHardware'))}: ${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</div>`;
@@ -973,7 +1013,7 @@ function openFirstRunWizard(data) {
       title = t('frwSumQ');
       sub = t('frwSumSub');
       const ids = speech();
-      const total = sizeOf(ids) + ffmpegMb() + llmMb();
+      const total = sizeOf(ids) + ffmpegMb() + llmMb() + filterMb();
       const aiTitle = { local: t('frwAiLocal'), cloud: t('frwAiCloud'), none: t('frwAiNone') }[st.ai];
       const row = (k, v, d, size, strong) => `<div class="frw-row"><span class="frw-k">${escapeHtml(k)}</span>
           <span class="frw-v">${escapeHtml(v)}${d ? `<span class="frw-d">${escapeHtml(d)}</span>` : ''}</span>
@@ -983,6 +1023,7 @@ function openFirstRunWizard(data) {
           ${row(t('frwSpeech'), t(st.preset === 'multi' ? 'frwMulti' : 'frwRuen'),
             ids.map(formatModelName).concat(ffmpegMb() ? ['FFmpeg'] : []).join(' · '), speechSize ? wizardSizeText(speechSize) : t('llmPickInstalled'))}
           ${row(t('frwAi'), aiTitle, st.ai === 'local' ? formatModelName(picks.llm) : '', llmMb() ? wizardSizeText(llmMb()) : '')}
+          ${row(t('frwAuto'), autoNames().join(' · ') || t('frwAutoNone'), filterMb() ? t('frwFilter') : '', filterMb() ? wizardSizeText(filterMb()) : '')}
           ${row(t('frwTotal'), '', '', total ? wizardSizeText(total) : t('frwNothing'), true)}
         </div>
         ${allSpeech.length > 1 ? `<label class="frw-toggle">
@@ -991,22 +1032,39 @@ function openFirstRunWizard(data) {
           <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
         <p class="frw-after frw-note">${escapeHtml(t('frwProgress'))}</p>`;
     }
-    const dots = [0, 1].map(i => `<span class="frw-dot${i === st.step ? ' is-on' : ''}"></span>`).join('');
+    const dots = [0, 1, 2].map(i => `<span class="frw-dot${i === st.step ? ' is-on' : ''}"></span>`).join('');
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${st.step + 1} / 2">${dots}</span></div>
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${st.step + 1} / 3">${dots}</span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
         <button data-a="later" class="frw-later">${escapeHtml(t('frLater'))}</button>
         ${st.step > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
-        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < 1 ? t('frNext') : t('frStart'))}</button>
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < 2 ? t('frNext') : t('frStart'))}</button>
       </div></div>`;
     wrap.querySelector('#first-run-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;  // the page is zoomed: vh would not fit
   };
   draw();
+  // The calendar address is typed: kept as it is, without a redraw that would take the focus away
+  wrap.addEventListener('input', e => {
+    if (e.target.matches('input[data-cal-src]')) st.calSource = e.target.value;
+  });
   wrap.addEventListener('click', async e => {
     const ens = e.target.closest('input[data-ens]');
     if (ens) { st.ensemble = ens.checked; draw(); return; }  // every speech model joins the list to download
+    const auto = e.target.closest('input[data-auto]');
+    if (auto) {
+      const key = auto.dataset.auto;
+      st[key] = auto.checked;
+      if (key === 'startup') st.startupTouched = true;
+      // a recording that starts by itself needs the program running: it starts with Windows, unless the
+      // user has said otherwise on this step
+      if ((key === 'calls' || key === 'allMeet') && auto.checked && !st.startupTouched) st.startup = true;
+      if (key === 'calls' || key === 'cal' || key === 'allMeet' || key === 'startup') draw();
+      return;
+    }
+    const app = e.target.closest('input[data-app]');
+    if (app) { if (app.checked) st.apps.add(app.dataset.app); else st.apps.delete(app.dataset.app); return; }
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.pick) {
@@ -1017,10 +1075,18 @@ function openFirstRunWizard(data) {
     }
     if (b.dataset.a === 'later') { wrap.remove(); openModal('settings', 'recognition'); return; }
     if (b.dataset.a === 'back') { st.step--; draw(); return; }
-    if (b.dataset.a === 'next' && st.step < 1) { st.step++; draw(); return; }
+    if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
     if (b.dataset.a === 'next') {
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech());
+      const calSource = st.cal ? st.calSource.trim() : '';
+      // only what was turned on (or the filter, on by default, turned off): the rest stays as it was
+      const automation = {
+        ...(st.calls && env.calls && st.apps.size ? { call_auto_record: 'true', call_apps: [...st.apps].join(',') } : {}),
+        ...(calSource ? { calendar_ics: calSource, meet_auto_all: String(st.allMeet) } : {}),
+        ...(st.startup ? { start_with_windows: 'true', close_to_tray: 'true' } : {}),
+        ...(env.filter && !st.filter ? { rec_voice_filter: 'false' } : {}),
+      };
+      await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech(), automation, !!filterMb());
     }
   });
   document.body.appendChild(wrap);
@@ -1028,7 +1094,7 @@ function openFirstRunWizard(data) {
 
 // What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
 // the app downloads one at a time) and the analysis model, all in the background
-async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false, toDownload = null) {
+async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false, toDownload = null, automation = {}, getFilter = false) {
   const roles = wizardRoles(chosen, mainPick);
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
@@ -1040,11 +1106,23 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
   // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
   // here, the server would refuse the whole request and every choice of the wizard would be lost
   if (ai === 'local') settings.llm_provider = 'ollama';
+  // calls, the start with Windows, the noise filter; the calendar goes on its own below: an address the
+  // server refuses would lose every other choice of the wizard with it
+  const { calendar_ics: calSource, meet_auto_all: allMeet, ...rest } = automation;
+  Object.assign(settings, rest);
   const saved = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings }) }).catch(() => null);
   if (!saved || !saved.ok) {
     const err = saved ? await saved.json().catch(() => ({})) : {};
     showError(serverText(err.detail) || t('errorGeneric'));
+  }
+  if (calSource) {
+    const cal = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { calendar_ics: calSource, meet_auto_all: allMeet || 'false' } }) }).catch(() => null);
+    if (!cal || !cal.ok) {
+      const err = cal ? await cal.json().catch(() => ({})) : {};
+      showError(`${t('frwCalFailed')} ${serverText(err.detail) || t('errorGeneric')}`);
+    }
   }
   state.speechModelRu = roles.ru;
   document.getElementById('set-whisper-model').value = roles.main;
@@ -1066,6 +1144,7 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
   };
   nextWhisper();
   if (ai === 'local') pullOllamaModel(picks.llm, true);
+  if (getFilter) installVoiceFilter();
   showToast(t('frDownloading'));
   await loadSystemInfo();
   if (ai === 'cloud') openModal('settings', 'analysis');
