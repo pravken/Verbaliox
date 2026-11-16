@@ -5,6 +5,7 @@
 const updateState = { info: null, notified: false, polling: false };
 
 function renderUpdateStatus() {
+  renderUpdatePill();  // the mark in the sidebar, whatever page is open
   const info = updateState.info;
   const text = document.getElementById('update-status-text');
   const btn = document.getElementById('update-install-btn');
@@ -26,6 +27,75 @@ function renderUpdateStatus() {
   btn.textContent = viaGit ? t('updateGitBtn') : dl.done ? t('updateRestartBtn') : t('updateInstallBtn');
 }
 
+// The mark of a new version under the library (asked by the user: a toast in a hidden window went unseen)
+function renderUpdatePill() {
+  const info = updateState.info;
+  const pill = document.getElementById('upd-pill');
+  if (!pill) return;
+  const on = !!(info && info.available && info.latest);
+  pill.classList.toggle('hidden', !on);
+  if (!on) return;
+  const dl = info.download || {};
+  document.getElementById('upd-pill-text').textContent = (dl.done && !dl.stale ? t('updPillReady') : t('updPill'))
+    .replace('{v}', () => info.latest.version);
+}
+
+// The release's text for the language of the page: its section «X.Y.Z — English» or «X.Y.Z» (CHANGELOG.md)
+function releaseNotesFor(notes) {
+  const parts = String(notes || '').split(/^## /m).filter(x => x.trim());
+  const en = state.uiLang === 'en';
+  const hit = parts.find(p => /english/i.test(p.split('\n')[0]) === en) || parts[0] || '';
+  return hit.split('\n').slice(1).join('\n').trim();
+}
+
+// What is new in a version, with «Установить» (a new one) or alone (after an update, once)
+async function openUpdateDialog(after = false) {
+  if (!updateState.info) {
+    try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { return; }
+  }
+  const info = updateState.info || {};
+  const latest = info.latest || {};
+  document.getElementById('upd-dlg')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'upd-dlg';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  const notes = releaseNotesFor(latest.notes);
+  const dl = info.download || {};
+  const canGo = !after && info.available && (info.can_install || info.git_checkout);
+  const goLabel = info.git_checkout ? t('updateGitBtn') : dl.done && !dl.stale ? t('updateRestartBtn') : t('updateInstallBtn');
+  wrap.innerHTML = `<div class="an-dlg upd-dlg modal-card">
+      <div class="an-dlg-head"><h2>${escapeHtml((after ? t('updWhatsNew') : t('updNewTitle')).replace('{v}', () => latest.version || info.current))}</h2>
+        <button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${after ? '' : `<p class="an-dlg-text">${escapeHtml(t('updNewText').replace('{cur}', () => info.current))}</p>`}
+      <div class="upd-notes an-md">${notes ? sanitizedMarkdown(notes) : `<p>${escapeHtml(t('updNoNotes'))}</p>`}</div>
+      <div class="an-dlg-foot">
+        ${latest.url ? `<button data-a="page" class="an-btn">${escapeHtml(t('updOnGithub'))}</button>` : ''}
+        <span class="flex-1"></span>
+        <button data-a="close" class="an-btn">${escapeHtml(t(canGo ? 'updLater' : 'close'))}</button>
+        ${canGo ? `<button data-a="go" class="an-btn an-btn-primary">${escapeHtml(goLabel)}</button>` : ''}
+      </div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('keydown', e => { if (e.key === 'Escape') wrap.remove(); });
+  wrap.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (e.target === wrap || (b && b.dataset.a === 'close')) { wrap.remove(); return; }
+    if (!b) return;
+    if (b.dataset.a === 'page') { openExternal(latest.url); return; }
+    if (b.dataset.a === 'go') { wrap.remove(); installUpdate(); }
+  });
+}
+
+// The first start of a new version: what changed in it, once (not on a fresh install)
+function maybeShowWhatsNew() {
+  const info = updateState.info;
+  if (!info || !info.current) return;
+  let seen = null;
+  try { seen = localStorage.getItem('vx-seen-version'); localStorage.setItem('vx-seen-version', info.current); } catch (e) { return; }
+  if (seen && seen !== info.current && info.latest && info.latest.version === info.current && info.latest.notes) openUpdateDialog(true);
+}
+
 async function updateViaGit() {
   if (!(await askConfirm(t('updGitConfirm'), false, t('updateGitBtn')))) return;
   const r = await fetch('/api/update/git', { method: 'POST' });
@@ -40,6 +110,7 @@ async function checkForUpdates(force) {
   } catch (e) { return; }
   renderUpdateStatus();
   const info = updateState.info;
+  if (!force) maybeShowWhatsNew();
   if (info.available && info.auto && (info.download || {}).active) {
     followUpdateDownload();  // started by the server (automatic updates): tell when it is ready
   } else if (!force && info.available && !updateState.notified) {
@@ -177,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSeries();  // the series name in the context menu of a recording
   loadLlmStatus();
   setTimeout(() => checkForUpdates(false), 4000);  // after the page has settled; only if enabled in settings
+  setInterval(() => checkForUpdates(false), 3600e3);  // the window may stay open for days (the server asks GitHub every 6 h)
   loadDictionary();
   loadVram();
   document.addEventListener('visibilitychange', () => {

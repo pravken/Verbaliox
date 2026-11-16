@@ -1700,6 +1700,13 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .an-guess .ft-yes, .an-guess .ft-no { width: 18px; height: 18px; font-size: 11px; }
 .an-person-invented:hover, .an-person-invented:focus-visible { color: #FF6961; }
 /* The dictionary in its own window (settings.js openDictionary): the section of Settings, moved in */
+.upd-pill { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 7px 10px; border-radius: 9px; font-size: 12px; font-weight: 600;
+  color: #7EE787; background: rgba(48, 209, 88, 0.12); border: 1px solid rgba(48, 209, 88, 0.35); text-align: left; flex-shrink: 0; }
+.upd-pill:hover { background: rgba(48, 209, 88, 0.2); }
+.upd-pill.hidden { display: none; }
+.upd-pill svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.upd-dlg { width: 640px; max-height: min(720px, 90vh); }
+.upd-notes { flex: 1; min-height: 0; overflow-y: auto; font-size: 13px; line-height: 1.5; padding-right: 4px; }
 .dict-dlg { width: 760px; max-height: min(780px, 92vh); }
 .dict-dlg-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
 .dict-dlg-body .sx-section.sx-sub { margin-top: 0; padding-top: 0; border-top: 0; }

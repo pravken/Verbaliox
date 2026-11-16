@@ -194,6 +194,11 @@
       </div>
     </div>
 
+    <!-- A new version: stays in sight until it is installed (app.js renderUpdateStatus) -->
+    <button id="upd-pill" data-click="openUpdateDialog" class="upd-pill hidden" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      <span id="upd-pill-text" class="truncate"></span>
+    </button>
     <!-- Sidebar Footer: Contacts, Dictionary, Settings -->
     <div class="px-2.5 py-2.5 border-t apple-border grid grid-cols-2 gap-1.5 bg-apple-sidebar/90 shrink-0">
       <button data-click="openContacts" data-i18n-title="tipContactsBtn" title="Все люди: участники записей, приглашённые и добавленные вами"
