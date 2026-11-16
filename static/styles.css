@@ -1694,6 +1694,10 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .an-person-new { border-bottom: 1px dashed rgba(255, 214, 10, 0.75); }
 .an-person-new:hover, .an-person-new:focus-visible { color: #FFD60A; border-bottom-style: dashed; }
 .an-person-invented { border-bottom: 1.5px dashed rgba(255, 69, 58, 0.9); }
+.an-person-maybe { color: #9FD8FF; border-bottom: 1px dashed rgba(100, 210, 255, 0.55); }
+.an-guess { margin: 0 2px 0 4px; vertical-align: 1px; white-space: nowrap; }
+.an-guess .ft-chip { font-size: 11.5px; line-height: 16px; padding: 0 6px; }
+.an-guess .ft-yes, .an-guess .ft-no { width: 18px; height: 18px; font-size: 11px; }
 .an-person-invented:hover, .an-person-invented:focus-visible { color: #FF6961; }
 /* The dictionary in its own window (settings.js openDictionary): the section of Settings, moved in */
 .dict-dlg { width: 760px; max-height: min(780px, 92vh); }

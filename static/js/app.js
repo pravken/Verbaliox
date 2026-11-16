@@ -2233,6 +2233,7 @@ function markSuspects(box) {
   loadSuspects(m);
   const list = anSuspectList(m);
   syncSuspectsButton(list.length);
+  box.querySelectorAll('.an-guess').forEach(el => el.remove());
   box.querySelectorAll('.an-person').forEach(el => el.replaceWith(...el.childNodes));
   box.querySelectorAll('.an-suspect').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
   box.querySelectorAll('.an-md').forEach(el => el.normalize());
@@ -2245,7 +2246,7 @@ function markSuspects(box) {
   box.querySelectorAll('.an-md').forEach(md => {
     if (md.closest('.an-edit')) return;
     const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
-      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -2290,6 +2291,7 @@ function markPeople(box) {
 function linkPeople(root, selector) {
   if (!root) return;
   if (!contacts.list) { loadContacts().then(list => { if (list && list.length) linkPeople(root, selector); }); return; }
+  root.querySelectorAll(`${selector} .an-guess`).forEach(el => el.remove());
   root.querySelectorAll(`${selector} .an-person`).forEach(el => el.replaceWith(...el.childNodes));
   const spell = [];
   for (const p of contacts.list) {
@@ -2310,7 +2312,7 @@ function linkPeople(root, selector) {
     if (md.closest('.an-edit')) return;
     md.normalize();
     const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
-      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -2361,6 +2363,85 @@ function givenName(word) {
   return hit ? hit[0].toUpperCase() + hit.slice(1) : '';
 }
 
+// Latin letters as Russian (Boris → борис, Dmitry → дмитрий), to match a name with a contact spelled in the
+// other alphabet. Rough on purpose: only the first letters of the two are compared after it
+function toCyrillic(word) {
+  let w = String(word || '').toLowerCase();
+  if (!/[a-z]/.test(w)) return w;
+  const pairs = [['shch', 'щ'], ['sch', 'щ'], ['yo', 'ё'], ['yu', 'ю'], ['ya', 'я'], ['zh', 'ж'], ['kh', 'х'], ['ts', 'ц'], ['ch', 'ч'], ['sh', 'ш'],
+    ['iy', 'ий'], ['yi', 'ий'], ['ey', 'ей'], ['ay', 'ай'], ['oy', 'ой'], ['x', 'кс'], ['a', 'а'], ['b', 'б'], ['c', 'к'], ['d', 'д'],
+    ['e', 'е'], ['f', 'ф'], ['g', 'г'], ['h', 'х'], ['i', 'и'], ['j', 'дж'], ['k', 'к'], ['l', 'л'], ['m', 'м'], ['n', 'н'], ['o', 'о'],
+    ['p', 'п'], ['q', 'к'], ['r', 'р'], ['s', 'с'], ['t', 'т'], ['u', 'у'], ['v', 'в'], ['w', 'в'], ['y', 'ы'], ['z', 'з']];
+  let out = '';
+  while (w) {
+    const hit = pairs.find(([a]) => w.startsWith(a));
+    if (hit) { out += hit[1]; w = w.slice(hit[0].length); } else { out += w[0]; w = w.slice(1); }
+  }
+  return out.replace(/ы$/, 'и').replace(/ий$/, 'ий');
+}
+
+function nameGroupOf(word) {
+  const w = toCyrillic(givenName(word) || word).toLowerCase();
+  const g = typeof NAME_GROUPS !== 'undefined' && NAME_GROUPS.find(x => x.includes(w));
+  return g ? g[0] : w;
+}
+
+function sameStem(a, b) {
+  const x = toCyrillic(a).toLowerCase(), y = toCyrillic(b).toLowerCase();
+  const n = Math.min(x.length, y.length);
+  if (n < 4) return x === y;
+  let i = 0;
+  while (i < n && x[i] === y[i]) i++;
+  return i >= Math.max(4, n - 2);
+}
+
+// Who of the contacts a name of the analysis most likely is (asked by the user: an unclear person is offered,
+// as a feature is): the surname first, then the name in any of its forms («Дима» — Дмитрий, Boris — Борис).
+// One contact clearly ahead, or nobody
+function guessContact(first, surname) {
+  const people = (contacts.list || []).filter(p => p.kind === 'person');
+  const key = first ? nameGroupOf(first) : '';
+  const scored = people.map(p => {
+    let score = 0;
+    for (const spelling of [p.name, ...(p.aliases || [])]) {
+      const words = spelling.split(/\s+/);
+      let sc = 0;
+      if (surname && words.some(w => sameStem(w, surname))) sc += 3;
+      if (key && words.some(w => nameGroupOf(w) === key)) sc += 2;
+      score = Math.max(score, sc);
+    }
+    return { p, score };
+  }).filter(x => x.score >= 2).sort((a, b) => b.score - a.score || (b.p.recordings || 0) - (a.p.recordings || 0));
+  if (!scored.length || (scored[1] && scored[1].score === scored[0].score)) return '';
+  return scored[0].p.name;
+}
+
+function guessDismissed(said, name) {
+  try { return (JSON.parse(localStorage.getItem('vx-guess-no') || '[]')).includes(`${said}|${name}`.toLowerCase()); } catch { return false; }
+}
+
+function dismissGuess(said, name) {
+  try {
+    const list = JSON.parse(localStorage.getItem('vx-guess-no') || '[]');
+    list.push(`${said}|${name}`.toLowerCase());
+    localStorage.setItem('vx-guess-no', JSON.stringify(list.slice(-500)));
+  } catch { /* this page only */ }
+}
+
+async function acceptGuess(said, name) {
+  const res = await fetch('/api/people/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names: [name, said] }) });
+  if (!res.ok) { showError(serverText((await readJson(res)).detail)); return; }
+  showToast(t('pnMerged').replace('{name}', () => said).replace('{contact}', () => name), null, 'success');
+  await relinkPeople();
+}
+
+async function relinkPeople() {
+  await loadContacts(true);
+  markSuspects(document.getElementById('summary-content'));
+  if (state.appView === 'tasks' && typeof renderTasks === 'function') renderTasks();
+  if (state.activeSummaryTab === 'commitments') renderSummaryPanel();
+}
+
 function transcriptHas(word) {
   const m = state.activeMeeting;
   if (!m || !Array.isArray(m.segments)) return true;
@@ -2375,11 +2456,13 @@ function transcriptHas(word) {
 function markUnknownPeople(root, selector) {
   if (typeof GIVEN_NAMES === 'undefined') return;
   const inMeeting = !!root.closest?.('#summary-content') || root.id === 'summary-content';
+  const offeredHere = new Set();
+  root.querySelectorAll(`${selector} .an-guess`).forEach(el => el.remove());
   const rx = /(?<![\p{L}\p{N}_-])(\p{Lu}[\p{Ll}'’-]+)(?:\s+(\p{Lu}[\p{Ll}'’-]+))?(?![\p{L}\p{N}_-])/gu;
   root.querySelectorAll(selector).forEach(md => {
     if (md.closest('.an-edit')) return;
     const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
-      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -2392,16 +2475,32 @@ function markUnknownPeople(root, selector) {
         if (!first && !second) continue;
         // «Захар Петров», «Kotov Boris»: the name and the surname; the name as said otherwise
         const guess = first ? [first, hit[2] || ''].join(' ').trim() : [hit[1], second].join(' ');
-        const invented = inMeeting && !transcriptHas(first ? hit[1] : hit[2]);
+        const name = first || second, surname = first ? hit[2] : hit[1];
+        const maybe = guessContact(name, surname || '');
+        const offered = maybe && !guessDismissed(guess, maybe) ? maybe : '';
+        const invented = !offered && inMeeting && !transcriptHas(first ? hit[1] : hit[2]);
         frag.append(text.slice(last, hit.index));
         const span = document.createElement('span');
-        span.className = `an-person an-person-new${invented ? ' an-person-invented' : ''}`;
+        span.className = `an-person ${offered ? 'an-person-maybe' : 'an-person-new'}${invented ? ' an-person-invented' : ''}`;
         span.dataset.new = guess;
+        if (offered) span.dataset.guess = offered;
         span.tabIndex = 0;
         span.setAttribute('role', 'button');
-        span.title = t(invented ? 'anPersonInvented' : 'anPersonNew').replace('{name}', () => guess);
+        span.title = offered ? t('anPersonMaybe').replace('{name}', () => guess).replace('{contact}', () => offered)
+          : t(invented ? 'anPersonInvented' : 'anPersonNew').replace('{name}', () => guess);
         span.textContent = hit[0];
         frag.append(span);
+        // the offer once per name in a text, as a feature is offered: «Дмитрий Орлов?» ✓ ✕
+        const shownKey = `${guess}|${offered}`.toLowerCase();
+        if (offered && !offeredHere.has(shownKey)) {
+          offeredHere.add(shownKey);
+          const chip = document.createElement('span');
+          chip.className = 'ft-suggest an-guess';
+          chip.innerHTML = `<span class="ft-chip ft-chip-suggested" style="--ft:#64D2FF"><span class="ft-name">${escapeHtml(offered)}?</span></span>`
+            + `<button class="ft-yes" data-guess-ok data-said="${escapeHtml(guess)}" data-contact="${escapeHtml(offered)}" title="${escapeHtml(t('anGuessYes').replace('{contact}', () => offered))}" aria-label="${escapeHtml(t('anGuessYes').replace('{contact}', () => offered))}">✓</button>`
+            + `<button class="ft-no" data-guess-no data-said="${escapeHtml(guess)}" data-contact="${escapeHtml(offered)}" title="${escapeHtml(t('anGuessNo'))}" aria-label="${escapeHtml(t('anGuessNo'))}">✕</button>`;
+          frag.append(chip);
+        }
         last = hit.index + hit[0].length;
         any = true;
       }
@@ -2414,14 +2513,11 @@ function markUnknownPeople(root, selector) {
 
 // A click on a name not in the contacts: add it, or say which contact it is (the name becomes their variant)
 function openUnknownPersonMenu(el) {
-  const said = el.dataset.new, shown = el.textContent;
+  const said = el.dataset.new, shown = el.textContent, offered = el.dataset.guess;
   const r = el.getBoundingClientRect();
-  const relink = async () => {
-    await loadContacts(true);
-    markSuspects(document.getElementById('summary-content'));
-    if (state.appView === 'tasks' && typeof renderTasks === 'function') renderTasks();
-  };
-  const items = [{ label: t('pnAdd').replace('{name}', () => said), run: async () => {
+  const relink = relinkPeople;
+  const items = [...(offered ? [{ label: t('anGuessYes').replace('{contact}', () => offered), run: () => acceptGuess(said, offered) },
+    { label: t('anGuessNo'), run: () => { dismissGuess(said, offered); relinkPeople(); } }, { sep: true }] : []), { label: t('pnAdd').replace('{name}', () => said), run: async () => {
     const name = await askText(t('pnAddAsk'), said);
     if (!name || !name.trim()) return;
     const res = await fetch('/api/people/directory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), kind: 'person' }) });
@@ -2510,6 +2606,14 @@ async function checkAnalysisWords() {
   }
 }
 
+// The offer of a contact for a name: ✓ makes the name their variant, ✕ stops offering them for it
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-guess-ok], [data-guess-no]');
+  if (!b) return;
+  e.stopPropagation();
+  if (b.hasAttribute('data-guess-ok')) acceptGuess(b.dataset.said, b.dataset.contact);
+  else { dismissGuess(b.dataset.said, b.dataset.contact); relinkPeople(); }
+}, true);
 // A name of a contact anywhere else (a task's words): its card
 document.addEventListener('click', (e) => {
   const who = e.target.closest && e.target.closest('.an-person');
