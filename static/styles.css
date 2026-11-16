@@ -1250,6 +1250,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-mt-narrow { padding: 3px 6px 3px 8px; gap: 6px; align-items: flex-start; }
 .hm-mt-narrow .hm-mt-btn { padding: 0 7px; }
 .hm-mt-narrow .hm-mt-btn-t, .hm-mt-narrow .hm-mt-none { display: none; }
+.hm-ovl { position: absolute; left: 0; right: 0; pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgba(255, 159, 10, 0.2) 0 4px, transparent 4px 9px); border-top: 1px dashed rgba(255, 159, 10, 0.5); border-bottom: 1px dashed rgba(255, 159, 10, 0.5); }
+.hm-mt > :not(.hm-ovl) { position: relative; }
 .hm-mt-time { flex: none; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
 .hm-mt-sub { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-mt-link { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; color: #8CC4FF; font-size: var(--fs-label); line-height: 1.35; }

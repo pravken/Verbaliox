@@ -8,7 +8,7 @@
 const HM_PX = 44;  // pixels of an hour on the timeline
 const HM_PRESETS = [[9, 18, 'hmPreset918'], [8, 20, 'hmPreset820'], [20, 8, 'hmPresetNight'], [0, 0, 'hmPresetDay']];
 
-const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, calConfigured: true, tasks: [], tasksAt: 0, asked: new Set(), started: new Set() };
+const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, calConfigured: true, tasks: [], tasksAt: 0, asked: new Set(), started: new Set(), warned: new Set() };
 
 function hmSettings() { return (state.system && state.system.settings) || {}; }
 function hmNum(key, def) { const n = Number(hmSettings()[key]); return Number.isFinite(n) && hmSettings()[key] !== '' && hmSettings()[key] != null ? n : def; }
@@ -244,7 +244,20 @@ function renderHomeMeetings() {
     const { col, cols } = lane.get(e) || { col: 0, cols: 1 };
     const narrow = cols > 1;
     const place = narrow ? `left: calc(46px + (100% - 46px) * ${col} / ${cols}); right: auto; width: calc((100% - 46px) / ${cols} - 3px);` : '';
-    const lines = Math.max(1, Math.floor((hpx - (narrow || hpx < 34 ? 6 : 23)) / 17));  // the title wraps as far as the height lets it
+    const lines = Math.max(1, Math.floor((hpx - (narrow && hpx < 40 ? 6 : 23)) / 17));  // the title wraps as far as the height lets it
+    // How much it overlaps the others (asked by the user: side by side, it was not clear): the time they
+    // share is hatched in the card, and its tooltip says with which meeting and for how long
+    const clock = ms => { const d = new Date(ms); return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}`; };
+    const overlaps = narrow ? meetings.filter(o => o !== e && o.s < e.e && e.s < o.e).map(o => {
+      const from = Math.max(o.s.getTime(), e.s.getTime()), to = Math.min(o.e.getTime(), e.e.getTime());
+      return { o, from, to };
+    }) : [];
+    const hatch = overlaps.map(({ from, to }) => {
+      const y = Math.max(0, top(Math.max(from, a)) - top(s)), h = Math.min(hpx, top(Math.min(to, b)) - top(s)) - y;
+      return h > 0 ? `<i class="hm-ovl" style="top: ${y}px; height: ${h}px"></i>` : '';
+    }).join('');
+    const overlapTip = overlaps.map(({ o, from, to }) => t('hmOverlapTip').replace('{title}', () => o.title || t('hmUntitled'))
+      .replace('{from}', () => clock(from)).replace('{to}', () => clock(to)).replace('{min}', () => Math.round((to - from) / 60e3))).join('\n');
     const past = e.e <= now, live = e.s <= now && now < e.e;
     const st = past ? 'past' : hmMeetingState(e);
     const time = `${hmPad(e.s.getHours())}:${hmPad(e.s.getMinutes())}–${hmPad(e.e.getHours())}:${hmPad(e.e.getMinutes())}`;
@@ -273,10 +286,11 @@ function renderHomeMeetings() {
           bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
       : '';
     const title = e.title || t('hmUntitled');
-    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}">
-        <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml(`${title}\n${time} · ${who}`)}">
-          <span class="flex items-baseline gap-1.5 min-w-0"><span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
+    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}">${hatch}
+        <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml([`${title}`, `${time} · ${who}`, overlapTip].filter(Boolean).join('\n'))}">
+          <span class="flex items-baseline gap-1.5 min-w-0">${narrow && hpx < 40 ? `<span class="hm-mt-time">${escapeHtml(clock(e.s.getTime()))}</span>` : ''}<span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
           ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
+          ${narrow && hpx >= 40 ? `<span class="hm-mt-sub hm-mono">${escapeHtml(time)}</span>` : ''}
         </span>${narrow ? '' : brief}${action}
       </div>`);
   }
@@ -476,6 +490,12 @@ async function hmAutoTick() {
       home.asked.add(e.key);
       hmShowAsk(e);
       continue;
+    }
+    // a minute before a meeting recorded by itself: a chime and a word (asked by the user)
+    if (st === 'on' && now >= s - 75e3 && now < s - 15e3 && !home.warned.has(e.key) && !isRecording()) {
+      home.warned.add(e.key);
+      recordSound('soon');
+      showToast(t('hmAutoSoon').replace('{title}', () => e.title || t('hmUntitled')));
     }
     // only near the start: a meeting half over is not recorded by surprise
     if (st === 'on' && now >= s - 15e3 && now < s + 5 * 60e3 && !isRecording() && !hmAutoRec) {
