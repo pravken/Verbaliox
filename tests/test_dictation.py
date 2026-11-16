@@ -210,6 +210,39 @@ class OllamaModelChoiceTest(unittest.TestCase):
         self.assertIn("400", str(e.exception))
 
 
+class OllamaModelsOnDiskTest(unittest.TestCase):
+    """Ollama is started only when analysis needs it: with it stopped, the models it has downloaded are
+    read from its folder, so a model on the disk does not read as «не скачана» after a restart."""
+
+    def test_stopped_ollama_lists_the_models_of_its_folder(self):
+        import tempfile
+        from pathlib import Path
+
+        from app import ollama_client
+
+        init_db()
+        with tempfile.TemporaryDirectory() as d:
+            man = Path(d) / "manifests"
+            for rel in ("registry.ollama.ai/library/gemma4/e4b", "registry.ollama.ai/library/bge-m3/latest",
+                        "registry.ollama.ai/someone/tuned/q4", "hf.co/org/model-gguf/Q4_K_M"):
+                (man / rel).parent.mkdir(parents=True, exist_ok=True)
+                (man / rel).write_text("{}")
+            self.assertEqual(ollama_client.models_on_disk(d),
+                             ["bge-m3:latest", "gemma4:e4b", "hf.co/org/model-gguf:Q4_K_M", "someone/tuned:q4"])
+            with mock.patch.object(ollama_client, "_is_ollama_port_open", return_value=False), \
+                    mock.patch.object(ollama_client, "ollama_models_dir", return_value=d):
+                st = ollama_client.get_ollama_status()
+        self.assertFalse(st["running"])
+        self.assertIn("gemma4:e4b", st["models"])
+        self.assertTrue(next(x for x in st["catalog"] if x["id"] == "gemma4:e4b")["installed"])
+        self.assertFalse(next(x for x in st["catalog"] if x["id"] == "gemma4:e2b")["installed"])
+
+    def test_no_folder_no_models(self):
+        from app import ollama_client
+
+        self.assertEqual(ollama_client.models_on_disk("/nonexistent/ollama"), [])
+
+
 class EmbeddingSettingTest(unittest.TestCase):
     def test_an_embedding_model_chosen_for_analysis_is_replaced_once(self):
         import httpx

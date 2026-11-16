@@ -246,6 +246,27 @@ def ollama_models_dir() -> str:
     return custom or str(Path.home() / ".ollama" / "models")
 
 
+def models_on_disk(models_dir: Optional[str] = None) -> List[str]:
+    """The models Ollama has downloaded, read from its folder (manifests/<registry>/<namespace>/<model>/<tag>)
+    without starting it: named as its /api/tags names them («gemma4:e4b», «user/model:tag», «hf.co/user/model:tag»).
+    The program no longer keeps Ollama running, and a model it already has must not read as missing."""
+    root = Path(models_dir or ollama_models_dir()) / "manifests"
+    names: List[str] = []
+    try:
+        for tag in root.glob("*/*/*/*"):
+            if not tag.is_file() or tag.name.startswith("."):
+                continue
+            model, namespace, registry = tag.parent.name, tag.parent.parent.name, tag.parent.parent.parent.name
+            if registry == "registry.ollama.ai":
+                name = f"{model}:{tag.name}" if namespace == "library" else f"{namespace}/{model}:{tag.name}"
+            else:
+                name = f"{registry}/{namespace}/{model}:{tag.name}"
+            names.append(name)
+    except OSError:
+        return []
+    return sorted(set(names))
+
+
 def use_program_folder_for_ollama_models() -> None:
     """Before the app installs Ollama: its models (gigabytes each) go next to the program, as the speech
     models do, instead of the system disk. Only when nobody chose a folder (OLLAMA_MODELS) and Ollama
@@ -326,6 +347,9 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
                     models = [m["name"] for m in data.get("models", [])]
         except Exception:
             running = False
+    if not running:
+        # started only when analysis needs it: what it has downloaded is on the disk
+        models = models_on_disk()
 
     # The embedding model chosen as the analysis model (it was listed among them before 0.5.1): the
     # first model that writes text takes its place, once

@@ -1940,7 +1940,7 @@ const I18N = {
 
     // --- redesign: analysis-speakers (C: analysis, speakers, people — static/js/people.js) ---
     anNavAria: 'Разделы анализа',
-    llmStateOff: 'Ollama не запущен',
+    llmStateOff: 'Ollama не установлена',
     llmStateMissing: 'не скачана',
     rdSasPillOff: 'Модель не установлена',
     rdSasNoAiText: 'Отвечать пока некому: модель анализа не установлена.',
@@ -4538,7 +4538,7 @@ const I18N = {
 
     // --- redesign: analysis-speakers (C: analysis, speakers, people — static/js/people.js) ---
     anNavAria: 'Analysis sections',
-    llmStateOff: 'Ollama is not running',
+    llmStateOff: 'Ollama is not installed',
     llmStateMissing: 'not downloaded',
     rdSasPillOff: 'No model installed',
     rdSasNoAiText: 'Nothing can answer yet: no analysis model is installed.',
