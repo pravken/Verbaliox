@@ -523,12 +523,41 @@ function renderModelsPop() {
     ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">
         <span class="mp-dl-title">${AI_MARK}${escapeHtml(t('mpDownloadable').replace('{n}', () => dl.length))}</span>
         <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
-      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}`;
+      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
+    <div class="mp-idle"><span>${escapeHtml(t('mpIdleLabel'))}</span>
+      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? idle.minutes ?? 10))}</button></div>`;
   placeModelsPop();
 }
 
+// After how long an idle model is unloaded, chosen in the panel too (asked by the user; the same setting as
+// Settings → General). A menu, not a list: the panel is redrawn every few seconds and would close a list
+const IDLE_CHOICES = [[0, 'idleUnloadNever'], [1, 'idleMin1'], [5, 'idleMin5'], [10, 'idleMin10'], [15, 'idleMin15'], [30, 'idleMin30'], [60, 'idleMin60']];
+function idleUnloadText(min) {
+  const found = IDLE_CHOICES.find(([m]) => m === Number(min || 0));
+  return found ? t(found[1]) : `${min} ${t('unitMinShort')}`;
+}
+
+function openIdleUnloadMenu(el) {
+  const r = el.getBoundingClientRect();
+  const cur = Number(((state.system || {}).settings || {}).idle_unload_minutes ?? 10);
+  setTimeout(() => openTextMenuAt(IDLE_CHOICES.map(([m, key]) => ({ label: `${m === cur ? '✓ ' : ''}${t(key)}`, run: () => setIdleUnload(m) })),
+    r.left, r.bottom + 4), 0);
+}
+
+async function setIdleUnload(min) {
+  const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { idle_unload_minutes: String(min) } }) }).catch(() => null);
+  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  if (state.system && state.system.settings) state.system.settings.idle_unload_minutes = String(min);
+  const sel = document.getElementById('set-idle-unload');
+  if (sel) sel.value = String(min);
+  if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline.idle_unload_minutes = String(min);
+  if (modelsPop.open) renderModelsPop();
+  loadVram();
+}
+
 document.addEventListener('pointerdown', (e) => {
-  if (modelsPop.open && !e.target.closest('#models-pop, #vram-row')) closeModelsPop();
+  if (modelsPop.open && !e.target.closest('#models-pop, #vram-row, #text-menu')) closeModelsPop();  // its menu (unload delay) too
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && modelsPop.open) { closeModelsPop(); document.getElementById('vram-row').focus(); }
