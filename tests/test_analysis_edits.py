@@ -160,6 +160,26 @@ class SuspectsTest(unittest.TestCase):
                          [("кубер", ["Kubernetes"], "dispute"), ("бюджет", [], "unsure")])
         self.assertEqual(found[0]["start"], 1.2)  # «переносим» is unsure too but the analysis does not have it
 
+    def test_common_words_and_endings_are_not_doubtful(self):
+        # reported by the user: «и», «в», «на», «что», «чтобы» were underlined all over the analysis
+        def word(text, start, alts=None, prob=0.99):
+            w = {"word": " " + text, "start": start, "end": start + 0.5, "prob": prob}
+            if alts:
+                w["alts"] = [{"text": a, "models": [str(n)]} for n, a in enumerate(alts)]
+            return w
+        meeting = {
+            "summaries": {"protocol": "- Обсудили туман на картах и сроки, чтобы успеть; рендер в XW"},
+            "segments": [{"id": 0, "start": 0, "end": 9, "text": "", "words": [
+                word("в", 0, ["в", "во"]), word("и", 1, ["и", "а"]), word("чтобы", 2, ["чтобы", "что бы"]),
+                word("на", 3, ["на", "в"]), word("картах", 3.5, ["картах", "карте"]),
+                word("сроки", 4, ["сроки", "срок"]), word("рендер", 5, ["рендер", "рендер"]),
+                word("XW", 6, ["XW", "икс-вэ"]), word("туман", 7, ["туман", "тумане"], prob=0.2),
+                word("рендер", 8), word("рендер", 8.5)]}],
+        }
+        found = analysis_edits.suspects(meeting)
+        # «рендер» was heard alike twice elsewhere; «XW» stays: the models heard different words
+        self.assertEqual([x["word"] for x in found], ["XW"])
+
     def test_the_model_answer_keeps_only_words_of_the_text(self):
         answer = ('Вот: [{"wrong": "кубер", "right": "Kubernetes", "reason": "продукт"}, '
                   '{"wrong": "Жира", "right": "Jira"}, {"wrong": "бюджет", "right": "Бюджет"}, "x"]')
