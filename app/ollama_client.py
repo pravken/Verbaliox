@@ -1159,6 +1159,23 @@ def generate_meeting_summary(
         "точно как в этом списке, буква в букву. Не придумывай фамилии, отчества и должности, которых нет "
         "ни в этом списке, ни в расшифровке; если не ясно, о ком речь, пиши имя так, как оно сказано."
     ) if roster else ""
+    # The user's contacts besides the participants: a person named in the talk is written as in the contacts
+    # (app/people.known_people; a cloud service gets only the ones the transcript names)
+    known: List[str] = []
+    if participants is not None:
+        try:
+            from app.people import known_people
+
+            known = known_people({"segments": segments, "speakers": speakers}, exclude=roster, cloud=llm.is_cloud)
+        except Exception:
+            known = []
+    if known:
+        roster_note = (roster_note + "\n\n" if roster_note else "") + (
+            "Люди из контактов пользователя — в разговоре могут упоминаться и те, кого нет на встрече: "
+            + "; ".join(known) + ". Если в разговоре говорят о ком-то из них (по имени, коротко, по фамилии или "
+            "с искажением распознавания), пиши имя и фамилию как в этом списке. Не упоминай людей из этого "
+            "списка, о которых в записи не говорили."
+        )
 
     source_label = "Вот точная расшифровка аудио/видеозаписи"
     single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
@@ -1216,10 +1233,10 @@ def generate_meeting_summary(
         "Не выдумывай посторонних людей, встреч или проектов."
     )
     answer = llm.chat(system_prompt, user_message)
-    if roster:  # a participant's name still written with a letter wrong
+    if roster or known:  # a participant's or a contact's name still written with a letter wrong
         from app.people import fix_name_typos
 
-        answer = fix_name_typos(answer, roster)
+        answer = fix_name_typos(answer, roster + [k.split(" (также:")[0] for k in known])
     from app.analysis_edits import fix_with_dictionary
 
     return fix_with_dictionary(answer)  # a word corrected by hand once stays corrected
