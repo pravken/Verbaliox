@@ -1732,6 +1732,41 @@ function recStartGoesOn() {
   if (_recStopWanted) throw Object.assign(new Error('stopped while starting'), { startAborted: true });
 }
 
+// --- Sounds of the recording (asked by the user): a chime a minute before a meeting is recorded by itself,
+// before a recording starts and after it stops. Made here (Web Audio): no sound files. The start one plays
+// before the capture begins and the stop one after it ended, so neither is in the recording
+let _recSoundCtx = null;
+function recordSoundsOn() {
+  return (((state.system || {}).settings || {}).rec_sounds) !== 'false';
+}
+
+function recordSound(kind) {
+  if (!recordSoundsOn()) return Promise.resolve();
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    _recSoundCtx = _recSoundCtx || new Ctx();
+    const ctx = _recSoundCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const notes = { soon: [[880, 0], [880, 0.22]], start: [[523.25, 0], [783.99, 0.14]], stop: [[783.99, 0], [523.25, 0.14]] }[kind] || [];
+    const t0 = ctx.currentTime + 0.02;
+    for (const [freq, at] of notes) {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + at);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.16);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0 + at);
+      osc.stop(t0 + at + 0.18);
+    }
+    const len = notes.length ? notes[notes.length - 1][1] + 0.2 : 0;
+    return new Promise(resolve => setTimeout(resolve, len * 1000 + 60));
+  } catch (e) {
+    return Promise.resolve();
+  }
+}
+
 async function startLiveRecording() {
   if (isRecording() || _recStarting) return;
   _recStarting = true;
@@ -1788,6 +1823,7 @@ async function startLiveRecording() {
       return;
     }
     _recDiskWarned = false;
+    await recordSound('start');  // before the capture: not in the recording
     recStartGoesOn();
     if (appTarget) await startAppScreenCapture(appTarget);
     recStartGoesOn();
@@ -2192,6 +2228,7 @@ async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, st
   };
   const data = await send();
   if (!data) return undefined;
+  recordSound('stop');  // the server has ended the capture of the computer's sound: not in the recording
   return afterSaved(data, quiet);
 }
 
