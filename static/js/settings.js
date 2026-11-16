@@ -2712,7 +2712,57 @@ document.addEventListener('change', (e) => {
 });
 
 // --- Dictionary ---
-// Audit 7.5: the dictionary has one place, Settings → Dictionary (the sidebar button opens it)
+// Audit 7.5: the dictionary has one place, its section of Settings. The sidebar button shows that very
+// section in a window of its own (asked by the user: the button opened the whole settings): it is moved
+// into the window while it is open and put back after, so there is one dictionary and one set of handlers
+const DICT_SWITCHES = { 'set-dict-fuzzy': 'dictionary_fuzzy', 'set-feature-suggest': 'feature_suggest' };
+
+async function openDictionary() {
+  if (document.getElementById('dict-dlg')) return;
+  mountSettingsPage();
+  const section = document.querySelector('#modal-settings [data-stab="dictionary"]');
+  if (!section) { openModal('settings', 'dictionary'); return; }
+  const home = { parent: section.parentElement, next: section.nextSibling, cls: section.className };
+  const wrap = document.createElement('div');
+  wrap.id = 'dict-dlg';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.setAttribute('aria-label', t('dictionary'));
+  wrap.innerHTML = `<div class="an-dlg dict-dlg modal-card">
+      <div class="an-dlg-head"><h2>${escapeHtml(t('dictionary'))}</h2><button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      <div class="dict-dlg-body"></div></div>`;
+  section.classList.remove('hidden');
+  section.querySelector('.sx-section-head')?.classList.add('hidden');  // the window has its own title
+  wrap.querySelector('.dict-dlg-body').appendChild(section);
+  document.body.appendChild(wrap);
+  const close = () => {
+    section.querySelector('.sx-section-head')?.classList.remove('hidden');
+    section.className = home.cls;
+    home.parent.insertBefore(section, home.next);
+    wrap.remove();
+  };
+  wrap.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (e.target === wrap || (b && b.dataset.a === 'close')) close();
+  });
+  wrap.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.target.closest('input, textarea')) { e.stopPropagation(); close(); } });
+  // its two switches are settings: saved here, as the settings page would (it saves only what is inside it)
+  wrap.addEventListener('change', async e => {
+    const key = DICT_SWITCHES[e.target.id];
+    if (!key) return;
+    const value = String(!!e.target.checked);
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => null);
+    if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+    if (state.system && state.system.settings) state.system.settings[key] = value;
+    if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
+  });
+  await loadDictionary();
+  renderSettingsDictionary();
+  if (typeof renderDictFeatures === 'function') renderDictFeatures();
+  setTimeout(() => document.getElementById('settings-dict-term')?.focus(), 60);
+}
 async function loadDictionary() {
   const res = await fetch('/api/dictionary');
   const terms = await readJson(res);
