@@ -1245,6 +1245,11 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-mt-k-ask { --hm-tint: rgba(255, 159, 10, 0.1); border-left-color: #FF9F0A; }
 .hm-mt-live { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
 .hm-mt-title { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-mt-title.hm-mt-wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; word-break: break-word; }
+/* side by side with another meeting: the title and the state's dot, the words of the state in its tooltip */
+.hm-mt-narrow { padding: 3px 6px 3px 8px; gap: 6px; align-items: flex-start; }
+.hm-mt-narrow .hm-mt-btn { padding: 0 7px; }
+.hm-mt-narrow .hm-mt-btn-t, .hm-mt-narrow .hm-mt-none { display: none; }
 .hm-mt-time { flex: none; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
 .hm-mt-sub { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-mt-link { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; color: #8CC4FF; font-size: var(--fs-label); line-height: 1.35; }
