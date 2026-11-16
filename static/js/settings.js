@@ -922,10 +922,11 @@ function openLlmPicker() {
   draw();
 }
 
-// The first start in three short steps (the old window had the sets, the models, their purposes and a
-// comparison table on one screen: too much text, reported by the user): the AI analysis, what works by
-// itself (calls, the calendar, the start with Windows, the noise filter: asked by the user to be offered
-// here, not only in Settings), then what downloads, with the precise mode (every speech model) as a switch. The language is not asked: the
+// The first start in four short steps (the old window had the sets, the models, their purposes and a
+// comparison table on one screen: too much text, reported by the user): the AI analysis, where the sound
+// comes from (with a check of the microphone), what works by itself (calls, the calendar, Teams captions,
+// the start with Windows, the noise filter: asked by the user to be offered here, not only in Settings),
+// then what downloads, with the precise mode (every speech model) as a switch. The language is not asked: the
 // recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
 // Settings → Recognition to choose the models
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
@@ -942,7 +943,49 @@ function openFirstRunWizard(data) {
   const picks = firstRunPicks(data, state.uiLang);
   const st = { step: 0, preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
     calls: false, apps: new Set(['zoom', 'teams', 'telegram']), cal: false, calSource: '', allMeet: false,
-    startup: false, startupTouched: false, filter: true };
+    startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '' };
+  const STEPS = 4, SOUND = 1, AUTO = 2, SUM = 3;
+  // The microphones, asked when the sound step opens (the names come with the permission to listen)
+  let mics = null;
+  const loadMics = async () => {
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach(tr => tr.stop());
+      mics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    } catch (e) { mics = []; }
+    if (document.body.contains(wrap) && st.step === SOUND) draw();
+  };
+  // The microphone's level while the check runs: the bar is looked up each frame (a redraw replaces it)
+  const meter = { stream: null, ctx: null, raf: 0 };
+  const stopMeter = () => {
+    cancelAnimationFrame(meter.raf);
+    meter.stream?.getTracks().forEach(tr => tr.stop());
+    meter.ctx?.close().catch(() => null);
+    meter.stream = meter.ctx = null;
+  };
+  const startMeter = async () => {
+    stopMeter();
+    try {
+      meter.stream = await navigator.mediaDevices.getUserMedia({ audio: st.mic ? { deviceId: { exact: st.mic } } : true });
+    } catch (e) { showError(t('frwMicFailed')); draw(); return; }
+    meter.ctx = new AudioContext();
+    const an = meter.ctx.createAnalyser();
+    an.fftSize = 1024;
+    meter.ctx.createMediaStreamSource(meter.stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const tick = () => {
+      an.getFloatTimeDomainData(buf);
+      const peak = buf.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      const db = peak > 0 ? Math.max(-60, 20 * Math.log10(peak)) : -60;
+      const bar = wrap.querySelector('.frw-level-bar');
+      if (bar) bar.style.width = `${Math.round((db + 60) / 60 * 100)}%`;
+      const num = wrap.querySelector('.frw-level-db');
+      if (num) num.textContent = `${Math.round(db)} dB`;
+      meter.raf = requestAnimationFrame(tick);
+    };
+    tick();
+    draw();
+  };
   // What this computer offers (Windows only: calls, Outlook; the filter may be there already), asked once
   const env = { calls: false, outlook: false, filter: null };
   Promise.all([
@@ -954,7 +997,7 @@ function openFirstRunWizard(data) {
     env.outlook = !!(cal && cal.outlook);
     if (env.outlook && !st.calSource) st.calSource = 'outlook';
     env.filter = filter && (filter.installed || filter.can_download) ? filter : null;
-    if (document.body.contains(wrap) && st.step === 1) draw();
+    if (document.body.contains(wrap) && st.step === AUTO) draw();
   });
   const filterMb = () => (st.filter && env.filter && !env.filter.installed ? Number(env.filter.size_mb || 0) : 0);
   const item = id => catalog.find(i => i.id === id);
@@ -979,10 +1022,30 @@ function openFirstRunWizard(data) {
         <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
       <input type="checkbox" role="switch" class="vs-switch" data-auto="${key}" ${on ? 'checked' : ''} /></label>${more}</div>`;
   const autoNames = () => [st.calls && env.calls && t('frwShortCalls'), st.cal && st.calSource.trim() && t('frwShortCal'),
-    st.cal && st.calSource.trim() && st.allMeet && t('frwShortAll'), st.startup && t('frwShortStartup')].filter(Boolean);
+    st.cal && st.calSource.trim() && st.allMeet && t('frwShortAll'), st.teams && env.calls && t('frwShortTeams'),
+    st.startup && t('frwShortStartup')].filter(Boolean);
+  const SOURCES = [['both', 'sourceBoth'], ['mic', 'sourceMic'], ['system', 'sourceSystem']];
   const draw = () => {
     let title, sub, body, extra = '';
-    if (st.step === 1) {
+    if (st.step === SOUND) {
+      title = t('frwSoundQ');
+      sub = t('frwSoundSub');
+      const usesMic = st.source !== 'system';
+      const micOptions = (mics || []).map((m, i) => `<option value="${escapeHtml(m.deviceId)}" ${m.deviceId === st.mic ? 'selected' : ''}>${
+        escapeHtml(m.label || t('micNumbered').replace('{n}', () => i + 1))}</option>`).join('');
+      body = `<div class="frw-seg" role="radiogroup" aria-label="${escapeHtml(t('recSourceModeLabel'))}">${SOURCES.map(([id, key]) =>
+          `<button data-src="${id}" role="radio" aria-checked="${st.source === id}" class="frw-seg-btn${st.source === id ? ' is-on' : ''}">${escapeHtml(t(key))}</button>`).join('')}</div>
+        <p class="frw-note frw-after">${escapeHtml(t({ both: 'frwSrcBothD', mic: 'frwSrcMicD', system: 'frwSrcSysD' }[st.source]))}</p>
+        ${usesMic ? `<div class="frw-toggle frw-mic">
+          <label class="frw-k" for="frw-mic">${escapeHtml(t('recMicDeviceLabel'))}</label>
+          <select id="frw-mic" class="frw-input frw-select" data-mic>${mics === null ? `<option value="">${escapeHtml(t('frwMicLoading'))}</option>`
+            : `<option value="" ${st.mic ? '' : 'selected'}>${escapeHtml(t('uiDefaultSystemMicrophone'))}</option>${micOptions}`}</select>
+          <div class="frw-level"><span class="frw-level-track"><span class="frw-level-bar"></span></span>
+            <span class="frw-level-db">${meter.stream ? '' : '−60 dB'}</span>
+            <button data-a="meter" class="ui-btn ui-btn-subtle">${escapeHtml(t(meter.stream ? 'frwMicStop' : 'frwMicCheck'))}</button></div>
+          ${meter.stream ? `<span class="frw-note">${escapeHtml(t('frwMicSay'))}</span>` : ''}
+        </div>` : ''}`;
+    } else if (st.step === AUTO) {
       title = t('frwAutoQ');
       sub = t('frwAutoSub');
       const apps = st.calls ? `<div class="frw-apps">${Object.entries(CALL_APP_NAMES).map(([id, name]) =>
@@ -995,6 +1058,7 @@ function openFirstRunWizard(data) {
       body = `<div class="frw-autos">
           ${env.calls ? sw('calls', st.calls, t('frwCalls'), t('frwCallsD'), apps) : ''}
           ${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}
+          ${env.calls ? sw('teams', st.teams, t('teamsToggle'), t('frwTeamsD')) : ''}
           ${sw('startup', st.startup, t('frwStartup'), t('frwStartupD'))}
           ${env.filter ? sw('filter', st.filter, t('frwFilter'), env.filter.installed ? t('frwFilterReady')
             : t('frwFilterD').replace('{size}', () => wizardSizeText(Number(env.filter.size_mb || 0)))) : ''}
@@ -1032,15 +1096,15 @@ function openFirstRunWizard(data) {
           <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
         <p class="frw-after frw-note">${escapeHtml(t('frwProgress'))}</p>`;
     }
-    const dots = [0, 1, 2].map(i => `<span class="frw-dot${i === st.step ? ' is-on' : ''}"></span>`).join('');
+    const dots = Array.from({ length: STEPS }, (_, i) => `<span class="frw-dot${i === st.step ? ' is-on' : ''}"></span>`).join('');
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${st.step + 1} / 3">${dots}</span></div>
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${st.step + 1} / ${STEPS}">${dots}</span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
         <button data-a="later" class="frw-later">${escapeHtml(t('frLater'))}</button>
         ${st.step > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
-        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < 2 ? t('frNext') : t('frStart'))}</button>
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.step < SUM ? t('frNext') : t('frStart'))}</button>
       </div></div>`;
     wrap.querySelector('#first-run-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;  // the page is zoomed: vh would not fit
   };
@@ -1048,6 +1112,11 @@ function openFirstRunWizard(data) {
   // The calendar address is typed: kept as it is, without a redraw that would take the focus away
   wrap.addEventListener('input', e => {
     if (e.target.matches('input[data-cal-src]')) st.calSource = e.target.value;
+  });
+  wrap.addEventListener('change', e => {
+    if (!e.target.matches('select[data-mic]')) return;
+    st.mic = e.target.value;
+    if (meter.stream) startMeter();  // the check follows the chosen microphone
   });
   wrap.addEventListener('click', async e => {
     const ens = e.target.closest('input[data-ens]');
@@ -1073,10 +1142,23 @@ function openFirstRunWizard(data) {
       draw();
       return;
     }
-    if (b.dataset.a === 'later') { wrap.remove(); openModal('settings', 'recognition'); return; }
-    if (b.dataset.a === 'back') { st.step--; draw(); return; }
-    if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
+    if (b.dataset.src) {
+      st.source = b.dataset.src;
+      if (st.source === 'system') stopMeter();
+      draw();
+      return;
+    }
+    if (b.dataset.a === 'meter') { if (meter.stream) { stopMeter(); draw(); } else startMeter(); return; }
+    if (b.dataset.a === 'later') { stopMeter(); wrap.remove(); openModal('settings', 'recognition'); return; }
+    if (b.dataset.a === 'back' || (b.dataset.a === 'next' && st.step < SUM)) {
+      stopMeter();
+      st.step += b.dataset.a === 'back' ? -1 : 1;
+      if (st.step === SOUND && mics === null) loadMics();
+      draw();
+      return;
+    }
     if (b.dataset.a === 'next') {
+      stopMeter();
       wrap.remove();
       const calSource = st.cal ? st.calSource.trim() : '';
       // only what was turned on (or the filter, on by default, turned off): the rest stays as it was
@@ -1084,6 +1166,9 @@ function openFirstRunWizard(data) {
         ...(st.calls && env.calls && st.apps.size ? { call_auto_record: 'true', call_apps: [...st.apps].join(',') } : {}),
         ...(calSource ? { calendar_ics: calSource, meet_auto_all: String(st.allMeet) } : {}),
         ...(st.startup ? { start_with_windows: 'true', close_to_tray: 'true' } : {}),
+        ...(st.teams && env.calls ? { teams_captions: 'true' } : {}),
+        record_source_mode: st.source,
+        ...(st.mic && st.source !== 'system' ? { record_mic_device: st.mic } : {}),
         ...(env.filter && !st.filter ? { rec_voice_filter: 'false' } : {}),
       };
       await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech(), automation, !!filterMb());

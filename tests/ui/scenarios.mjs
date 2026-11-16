@@ -128,9 +128,12 @@ await step('first run wizard', async () => {
   for (const url of ['**/api/models/setup', '**/api/onnx-models/**', '**/api/ffmpeg/install', '**/api/ollama/**']) await page.route(url, stub);
   await page.evaluate(() => { document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()); openFirstRunWizard(state.system); });
   await sleep(300);
-  // Three steps: the AI analysis, what runs by itself, then what downloads (the language is not asked:
+  // Four steps: the AI analysis, the sound, what runs by itself, then what downloads (the language is not asked:
   // the recommended set)
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
+  // Where the sound comes from: the microphone only
+  await page.click('#first-run-wizard button[data-src="mic"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   // The calendar with every meeting recorded: that turns the start with Windows on as well
   await page.click('#first-run-wizard label:has(input[data-auto="cal"])');
@@ -155,6 +158,7 @@ await step('first run wizard', async () => {
   expect(first.speech_model_ru === 'gigaam-v3', `Russian model not set: ${JSON.stringify(first)}`);
   expect(['parakeet-v3', 'large-v3-turbo'].includes(first.whisper_model), `main model not set: ${JSON.stringify(first)}`);
   expect(first.language === 'auto', `language not left to detection: ${JSON.stringify(first)}`);
+  expect(first.record_source_mode === 'mic', `the sound source not saved: ${JSON.stringify(first)}`);
   expect(first.start_with_windows === 'true' && first.close_to_tray === 'true', `the start with Windows not saved: ${JSON.stringify(first)}`);
   expect(!('calendar_ics' in first), 'the calendar went with the other settings: a refused address would lose them all');
   const cal = sent.find(x => 'calendar_ics' in x) || {};
@@ -173,6 +177,7 @@ await step('first run wizard, cloud', async () => {
   await page.evaluate(() => openFirstRunWizard(state.system));
   await sleep(300);
   await page.click('#first-run-wizard button[data-pick="ai:cloud"]');
+  await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
