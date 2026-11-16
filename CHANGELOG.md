@@ -6,6 +6,19 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.15 — English
+
+- **The library as a table on the whole window**, like the columns of Windows Explorer: the button beside
+  «Library» opens it. Name, feature, date, length, participants, language and status; date added, file size,
+  recognition model, open tasks and folder on request («Columns», with «Restore defaults»). A click on a header
+  sorts, the edge of a header sets the width; groups by day, feature or folder; search and a feature filter.
+  A click picks (Ctrl and Shift for several), a double click or Enter opens, a right click is the recording's
+  menu, a row dragged goes into a folder.
+- **The feature in the library**: its colour and name beside the title of a recording; in the compact list a
+  coloured dot in the same place on every row.
+- **A downloaded analysis model no longer reads as not downloaded** after a restart: while Ollama is stopped
+  its models are read from its folder, and analysis starts it by itself.
+
 ## 0.8.14 — English
 
 - **Contacts**: a button in the sidebar opens everyone the program knows. A person's card shows their open
@@ -540,6 +553,19 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.15
+
+- **Медиатека таблицей на всё окно**, как столбцы в проводнике Windows: кнопка рядом с «Медиатека». Название,
+  фича, дата, длительность, участники, язык и состояние; по выбору дата добавления, размер файла, модель
+  распознавания, открытые задачи и папка («Столбцы», «Вернуть как было»). Клик по заголовку сортирует, край
+  заголовка меняет ширину; группы по дням, фичам или папкам; поиск и фильтр по фиче. Клик выбирает (Ctrl и
+  Shift — несколько), двойной клик или Enter открывает, правый клик — меню записи, строку можно перетащить
+  в папку.
+- **Фича в медиатеке**: цвет и название рядом с названием записи; в компактном списке — цветная точка на
+  одном месте у всех строк.
+- **Скачанная модель анализа больше не числится нескачанной** после перезапуска: пока Ollama остановлена,
+  её модели читаются из её папки, а анализ запускает её сам.
 
 ## 0.8.14
 
