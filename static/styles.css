@@ -2746,7 +2746,11 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .mp-chip-list .vr-label { flex: 1 1 auto; text-align: left; }
 .mp-chip-list .vr-act { position: static; inset: auto; padding: 0; flex: none; justify-content: flex-end; }
 .mp-chip-list .vr-chip:hover:not(:disabled) .vr-label, .mp-chip-list .vr-chip:focus-visible .vr-label { opacity: 1; }
-.vr-timer { display: inline-flex; align-items: center; gap: 2px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.vr-timer { display: inline-flex; flex: none; align-items: center; gap: 2px; white-space: nowrap; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.mp-idle { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--hc-dim, #8E8E93); }
+.mp-idle-btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; color: #F5F5F7; background: rgba(255, 255, 255, 0.06); white-space: nowrap; }
+.mp-idle-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.mp-idle-btn .vr-timer-ico { width: 11px; height: 11px; }
 .vr-chip:hover .vr-timer { opacity: 0; }
 .vr-timer-ico { width: 10px; height: 10px; }
 @media (prefers-reduced-motion: reduce) { .vr-act, .vr-label, .vr-timer { transition: none; } }
