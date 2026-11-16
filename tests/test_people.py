@@ -107,6 +107,19 @@ class PeopleDirectoryTest(unittest.TestCase):
         self.assertNotIn("Мария", " ".join(local))   # a participant is in the roster already
         self.assertEqual(people.known_people(m, cloud=True), ["Олег — тимлид"])  # a cloud: only the named ones
 
+    def test_a_contact_card_has_recordings_and_tasks(self):
+        talk = self._meeting(names=("Олег", "Мария"))
+        named = self._meeting(names=("Мария", "Участник 2"), texts=["Спросим Олега", "ок", "ок", "ок", "ок", "ок"])
+        self._meeting(names=("Мария", "Участник 2"), texts=["Олеговна не придёт", "ок", "ок", "ок", "ок", "ок"])
+        from app import commitments
+        commitments.create("Прислать смету", "Олег")
+        c = people.card("олег")
+        self.assertEqual(c["person"]["name"], "Олег")
+        self.assertEqual([r["meeting_id"] for r in c["spoke"]], [talk])
+        self.assertEqual([r["meeting_id"] for r in c["mentioned"]], [named])  # «Олеговна» is another word
+        self.assertEqual([t["what"] for t in c["tasks"]], ["Прислать смету"])
+        self.assertIsNone(people.card("Никто Неизвестный"))
+
     def test_merge_and_split_speakers_of_a_recording(self):
         mid = self._meeting(names=("Мария", "Участник 2", "Участник 3"))
         m = people.merge_speakers(mid, "SPEAKER_02", "SPEAKER_01")

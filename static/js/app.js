@@ -2232,9 +2232,10 @@ function markSuspects(box) {
   loadSuspects(m);
   const list = anSuspectList(m);
   syncSuspectsButton(list.length);
+  box.querySelectorAll('.an-person').forEach(el => el.replaceWith(...el.childNodes));
   box.querySelectorAll('.an-suspect').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
   box.querySelectorAll('.an-md').forEach(el => el.normalize());
-  if (!list.length) return;
+  if (!list.length) { markPeople(box); return; }
   const esc = w => w.split(/\s+/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
   // the longest first: «Claude Code» before «Claude»
   const order = list.map((x, i) => [x, i]).sort((a, b) => b[0].word.length - a[0].word.length);
@@ -2272,6 +2273,62 @@ function markSuspects(box) {
     }
   });
   state.anSuspectShown = list;
+  markPeople(box);
+}
+
+// The people of «Контакты» named in the analysis are links to their card (asked by the user). A doubtful
+// word stays a doubtful word: the correction comes first. Names and their variants, Russian endings allowed
+function markPeople(box) {
+  if (!box) return;
+  if (!contacts.list) { loadContacts().then(() => { if (contacts.list && contacts.list.length) markSuspects(box); }); return; }
+  const spell = [];
+  for (const p of contacts.list) {
+    if (p.kind !== 'person') continue;
+    for (const s of [p.name, ...(p.aliases || [])]) if (String(s || '').trim().length >= 3) spell.push([s.trim(), p.name]);
+  }
+  if (!spell.length) return;
+  spell.sort((a, b) => b[0].length - a[0].length);  // «Анна Петрова» before «Анна»
+  // any case form: «Олега»; a name ending in а/я/й/ь changes it: «Ксении», «Игоря» (app/people.py name_regex)
+  const esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const form = s => {
+    const body = s.split(/\s+/).map(esc).join('\\s+');
+    return s.length >= 4 && /[аяйь]$/i.test(s) ? `${body.slice(0, -1)}(?:а|я|у|ю|ой|ей|ою|ею|ы|и|е|й|ь|ем|ём|ом)`
+      : `${body}(?:а|у|ой|ом|е|ы|ю|ем|и|я|ей|ов|ым)?`;
+  };
+  const rx = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${spell.map(([s]) => `(${form(s)})`).join('|')})(?![\\p{L}\\p{N}_-])`, 'giu');
+  box.querySelectorAll('.an-md').forEach(md => {
+    if (md.closest('.an-edit')) return;
+    const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      rx.lastIndex = 0;
+      if (!rx.test(text)) continue;
+      rx.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const hit of text.matchAll(rx)) {
+        const at = hit.slice(1).findIndex(x => x !== undefined);
+        const name = at >= 0 ? spell[at][1] : '';
+        if (!name) continue;
+        frag.append(text.slice(last, hit.index));
+        const span = document.createElement('span');
+        span.className = 'an-person';
+        span.dataset.person = name;
+        span.tabIndex = 0;
+        span.setAttribute('role', 'link');
+        span.title = t('anPersonTip').replace('{name}', () => name);
+        span.textContent = hit[0];
+        frag.append(span);
+        last = hit.index + hit[0].length;
+      }
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  });
 }
 
 function openSuspectMenu(el) {
@@ -2341,12 +2398,16 @@ async function checkAnalysisWords() {
 }
 
 document.getElementById('summary-content')?.addEventListener('click', (e) => {
+  const who = e.target.closest && e.target.closest('.an-person');
+  if (who) { openPersonCard(who.dataset.person); return; }
   const el = e.target.closest && e.target.closest('.an-suspect');
   if (!el) return;
   e.stopPropagation();  // the click would close the menu it opens
   openSuspectMenu(el);
 });
 document.getElementById('summary-content')?.addEventListener('keydown', (e) => {
+  const who = e.target.closest && e.target.closest('.an-person');
+  if (who && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openPersonCard(who.dataset.person); return; }
   const el = e.target.closest && e.target.closest('.an-suspect');
   if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openSuspectMenu(el); }
 });
