@@ -239,6 +239,18 @@ def matching_app(in_use: List[str], watched: List[str]) -> Optional[str]:
     return None
 
 
+# Browsers a meeting may run in (Google Meet, Teams or Zoom on the web). Only for ending a recording the
+# calendar started: the page stops it once the app it saw holding the microphone lets go of it. The
+# program's own window (msedgewebview2.exe) is not among them
+BROWSERS = ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe", "browser.exe", "arc.exe")
+
+
+def meeting_app(in_use: List[str]) -> Optional[str]:
+    """A call app (any of CALL_APPS, chosen or not) or a browser holding the microphone: what a calendar
+    meeting runs in. Its key, or the browser's file name."""
+    return matching_app(in_use, list(CALL_APPS)) or next((n for n in in_use if n in BROWSERS), None)
+
+
 def watched_apps(settings: Dict[str, str]) -> List[str]:
     return [a.strip() for a in (settings.get("call_apps") or DEFAULT_APPS).split(",") if a.strip() in CALL_APPS]
 
@@ -324,5 +336,6 @@ def status() -> Dict[str, object]:
     except Exception as e:
         records = [{"name": f"error: {e}", "start": 0, "stop": 0}]
     return {"supported": sys.platform == "win32", "active": _watcher.active, "running": _started, "mic_now": mic,
+            "meeting_app": meeting_app([m for m in mic if not m.startswith("error:")]),
             "records_count": len(records), "records": records[:3],
             "apps": [{"id": k, "name": v["name"]} for k, v in CALL_APPS.items()]}
