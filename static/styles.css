@@ -2699,6 +2699,15 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .ft-add { padding: 1px 8px; border-radius: 6px; border: 1px dashed var(--hc-line, rgba(255, 255, 255, 0.25)); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); line-height: 18px; white-space: nowrap; }
 .ft-add:hover { color: #F5F5F7; border-color: rgba(255, 255, 255, 0.45); }
 .ft-suggest { display: inline-flex; align-items: center; gap: 2px; }
+.lib-ft { display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 60px; max-width: 45%; }
+/* beside a feature the title and the chip share the row: each keeps a readable part of it */
+.lib-title { flex: 1 1 0; min-width: 40%; }
+.lib-ft .ft-chip { max-width: 100%; min-width: 0; padding: 0 6px; font-size: 10.5px; line-height: 16px; gap: 4px; }
+.lib-ft .ft-dot { width: 6px; height: 6px; }
+.lib-ft-more { flex: none; font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
+.bg-apple-blue .lib-ft .ft-chip, .lib-tile-on .lib-ft .ft-chip { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.55); }
+.bg-apple-blue .lib-ft-more { color: rgba(255, 255, 255, 0.85); }
+.lib-tile .lib-ft { max-width: 100%; }
 .ft-yes, .ft-no { width: 20px; height: 20px; border-radius: 6px; color: var(--hc-dim, #AEAEB2); font-size: 12px; }
 .ft-yes:hover { background: rgba(48, 209, 88, 0.18); color: #7EE787; }
 .ft-no:hover { background: rgba(255, 69, 58, 0.16); color: #FF8A80; }
