@@ -6,6 +6,30 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.13 — English
+
+- **The first start, one topic a step**: the AI analysis; the sound (microphone and computer sound, the
+  microphone only or the computer only, the microphone with a level check, the noise filter); calls
+  recorded by themselves with the apps to watch and Teams captions (Windows); the calendar (Outlook or a
+  link) and recording every meeting in it; then what downloads, with the precise mode and «Start with
+  Windows». A calendar address the server refuses no longer loses the other choices.
+- **The precise mode takes every speech model**, and its list shows each model on its own line with its
+  state and «Download» beside one not downloaded yet.
+- **Analysis models: only Gemma 4 E4B and Gemma 4 E2B are offered.** In the measurements on real meetings
+  one of the two finds more tasks, faster and in less memory than Qwen3.5 4B, Qwen3 8B, Qwen3 14B and Qwen
+  Lite. A Qwen already downloaded stays in the list and keeps working. With no model chosen, Gemma 4 E2B
+  is used.
+- **Model cards**: the size, the license and the scores stay in sight; the description opens under «i» or
+  with a click on the card. The descriptions say what each model is and what it was measured at. The
+  scores (accuracy, quality, speed, load) follow the measurements, half a dot a step, so no two models tie.
+- **The models panel**: one model per line (no flicker under the cursor), the legend under «i», a solid
+  background.
+- With a cloud model the local ones are named «for translation and dubbing», which always run on this
+  computer.
+- **The GPU build of ONNX Runtime**: a file the antivirus holds while it is renamed no longer fails the
+  install (WinError 5); the program uses the new folder and finishes the swap at the next start.
+- Settings: «For advanced users» is now «Experimental».
+
 ## 0.8.12 — English
 
 - **The first start**: the window no longer crashes while WebView2 makes its profile (the server now
@@ -495,6 +519,29 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.13
+
+- **Первый запуск — одна тема на шаг**: ИИ-анализ; звук (микрофон и звук компьютера, только микрофон или
+  только компьютер, микрофон с проверкой уровня, фильтр шума); автозапись звонков с выбором программ и
+  субтитры Teams (Windows); календарь (Outlook или ссылка) и запись всех встреч из него; затем что
+  скачается, с точным режимом и «Запускать вместе с Windows». Неверный адрес календаря больше не сбрасывает
+  остальные выборы.
+- **Точный режим берёт все модели распознавания**, а его список показывает каждую модель отдельной строкой
+  с состоянием и кнопкой «Скачать» у ещё не скачанной.
+- **Модели анализа: в списке только Gemma 4 E4B и Gemma 4 E2B.** В замерах на реальных встречах одна из
+  них находит больше задач, быстрее и в меньшей памяти, чем Qwen3.5 4B, Qwen3 8B, Qwen3 14B и Qwen Lite.
+  Уже скачанная Qwen остаётся в списке и работает. Если модель не выбрана, берётся Gemma 4 E2B.
+- **Карточки моделей**: размер, лицензия и оценки всегда на виду; описание открывается по «i» или по клику
+  на карточку. Описания говорят, что это за модель и какие у неё замеры. Оценки (точность, качество,
+  скорость, нагрузка) следуют замерам, шаг — половина точки, у двух моделей они не совпадают.
+- **Панель моделей**: каждая модель с новой строки (без мерцания под курсором), легенда под «i», плотный
+  фон.
+- При облачной модели локальные подписаны «для перевода и дубляжа»: они всегда работают на этом
+  компьютере.
+- **Сборка ONNX Runtime для видеокарты**: файл, который антивирус держит при переименовании, больше не
+  срывает установку (WinError 5); программа берёт новую папку и заканчивает замену при следующем запуске.
+- Настройки: «Для опытных» теперь называется «Эксперименты».
 
 ## 0.8.12
 

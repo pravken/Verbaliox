@@ -196,7 +196,7 @@ def translate_units(
 ) -> None:
     settings = get_all_settings()
     base_url = (settings.get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
-    model = settings.get("ollama_model") or "qwen3.5:4b"
+    model = settings.get("ollama_model") or "gemma4:e2b"
     ensure_ollama_running(base_url)
     model = _ollama_model(base_url, model)
     src = DUB_LANGUAGES.get(src_code, src_code)
@@ -923,7 +923,7 @@ def run_dub_job(meeting: Dict[str, Any], target_lang: str, progress: ProgressFn,
             if not units:
                 raise RuntimeError("Модель Ollama не вернула перевод ни для одной фразы")
             try:  # the model the translation used, not one the settings name and Ollama lacks
-                used = _ollama_model(ollama_url, settings_now.get("ollama_model") or "qwen3.5:4b")
+                used = _ollama_model(ollama_url, settings_now.get("ollama_model") or "gemma4:e2b")
             except RuntimeError:
                 used = settings_now.get("ollama_model") or ""
             _unload_ollama(ollama_url, used, wait=True)
@@ -984,7 +984,7 @@ def run_dub_job(meeting: Dict[str, Any], target_lang: str, progress: ProgressFn,
                 check_cancel()
                 progress(88, f"Сокращение {len(too_long)} слишком длинных фраз...")
                 src_name, tgt_name = DUB_LANGUAGES.get(src_lang, src_lang), DUB_LANGUAGES[target_lang]
-                model = _ollama_model(ollama_url, settings_now.get("ollama_model") or "qwen3.5:4b")
+                model = _ollama_model(ollama_url, settings_now.get("ollama_model") or "gemma4:e2b")
                 # The LLM is loaded again. Next to three TTS processes it may not fit in VRAM and then
                 # runs on the CPU, many times slower (measured: 203 s instead of 19 s for 7 phrases),
                 # so only one process stays. Each shortened phrase is voiced while the next is shortened.

@@ -167,7 +167,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     if (document.getElementById('set-clean-fillers')) {
       document.getElementById('set-clean-fillers').checked = s.clean_fillers !== 'false';
     }
-    document.getElementById('set-ollama-model').value = s.ollama_model || 'qwen3.5:4b';
+    document.getElementById('set-ollama-model').value = s.ollama_model || 'gemma4:e2b';
     document.getElementById('set-auto-summary').checked = s.auto_summary !== 'false';
     document.getElementById('set-auto-title').checked = s.auto_title !== 'false';
     document.getElementById('set-summary-grounding').checked = s.summary_grounding !== 'false';
@@ -338,7 +338,8 @@ function renderVram(data) {
       : c.loaded
       ? (c.kind === 'dub' ? 'bg-apple-amber/15 text-apple-amber border-apple-amber/30' : 'bg-apple-green/15 text-apple-green border-apple-green/30')
       : 'bg-transparent text-apple-tertiary border-white/15 border-dashed';
-    // what a click does, said on hover: «Выгрузить ×» (the chip turns red) or «Запустить ▷»
+    // what a click does, said on hover over the name, the chip keeping its width: «Выгрузить ×» (the chip
+    // turns red) or «Запустить ▷» (it widened on hover, the chips moved under the cursor and flickered)
     const icon = c.loaded
       ? (actionable ? `<span class="vr-act">${escapeHtml(t('mpActUnload'))}</span><span class="opacity-60 group-hover:opacity-100">×</span>` : '')
       : (actionable ? `<span class="vr-act">${escapeHtml(t('mpActStart'))}</span><span class="opacity-70 group-hover:opacity-100">${MODEL_START_ICON}</span>` : '');
@@ -349,7 +350,7 @@ function renderVram(data) {
       title="${escapeHtml(vramChipTitle(c))}"
       class="group vr-chip ${actionable ? (c.loaded ? 'vr-chip-unload' : 'vr-chip-start') : ''} max-w-full inline-flex items-center gap-1 px-1.5 h-5 rounded-full border text-[11px] font-medium transition ${cls} ${actionable ? 'hover:bg-white/10' : 'cursor-default'}">
       <span class="w-1.5 h-1.5 rounded-full shrink-0 ${c.loaded || c.loading ? 'bg-current' : 'border border-current'}"></span>
-      <span class="truncate">${c.default ? '★ ' : ''}${escapeHtml(vramChipLabel(c))}</span>${timer}${icon}</button>`;
+      <span class="truncate vr-label">${c.default ? '★ ' : ''}${escapeHtml(vramChipLabel(c))}</span>${timer}${icon}</button>`;
   };
   // Split by where each model runs (or will), then by what it is for; the ones at work first.
   // Without a video card all are on the processor
@@ -476,6 +477,12 @@ function toggleModelsDownloads() {
   renderModelsPop();
 }
 
+// The legend of the marks, under «i» (it took the bottom of the panel each time: asked by the user)
+function toggleModelsLegend() {
+  modelsPop.legend = !modelsPop.legend;
+  renderModelsPop();
+}
+
 function renderModelsPop() {
   const pop = document.getElementById('models-pop');
   if (!pop || !modelsPop.open) return;
@@ -485,7 +492,7 @@ function renderModelsPop() {
     const items = list.filter(([c]) => (MODEL_GROUP[c.kind] || 'speech') === g);
     if (!items.length) return '';
     return `<div class="mp-group"><div class="mp-group-title">${AI_MARK}${escapeHtml(t(g === 'ai' ? 'mpGroupAi' : 'mpGroupSpeech'))}</div>
-      <div class="flex flex-wrap gap-1">${items.map(([c, i]) => chipHtml(c, i)).join('')}</div></div>`;
+      <div class="mp-chip-list">${items.map(([c, i]) => chipHtml(c, i)).join('')}</div></div>`;
   }).join('');
   const section = (where, list) => {
     const on = list.filter(([c]) => c.loaded || c.loading).length;
@@ -501,20 +508,22 @@ function renderModelsPop() {
   const anyLoaded = (vram.chips || []).some(c => c.loaded && c.kind !== 'dub');
   pop.innerHTML = `<div class="mp-head"><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
       ${anyLoaded ? `<button data-click="unloadAllModelsNow" class="mp-unload" title="${escapeHtml(t('tipUnloadAll'))}" ${vram.busy ? 'disabled' : ''}>${escapeHtml(t('mpUnloadAll'))}</button>` : ''}
+      <button data-click="toggleModelsLegend" class="mp-close mp-info${modelsPop.legend ? ' is-on' : ''}" aria-expanded="${!!modelsPop.legend}"
+        aria-label="${escapeHtml(t('mpLegendTip'))}" title="${escapeHtml(t('mpLegendTip'))}">i</button>
       <button data-click="closeModelsPop" class="mp-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button></div>
-    ${vram.data?.gpu ? section('gpu', parts.gpu) : ''}${section('cpu', parts.cpu)}
-    ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">
-        <span class="mp-dl-title">${AI_MARK}${escapeHtml(t('mpDownloadable').replace('{n}', () => dl.length))}</span>
-        <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
-      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
-    <div class="mp-legend">
+    ${modelsPop.legend ? `<div class="mp-legend">
       <span><i class="mp-lg-dot mp-lg-on"></i>${escapeHtml(t('mpLgOn'))}</span>
       <span><i class="mp-lg-dot mp-lg-loading"></i>${escapeHtml(t('mpLgLoading'))}</span>
       <span><i class="mp-lg-dot mp-lg-idle"></i>${escapeHtml(t('mpLgIdle'))}</span>
       <span>${MODEL_START_ICON}${escapeHtml(t('mpLgStart'))}</span>
       <span><b class="mp-lg-x">×</b>${escapeHtml(t('mpLgStop'))}</span>
       <span>${MODEL_TIMER_ICON}${escapeHtml(t('mpLgTimer'))}</span>
-    </div>`;
+    </div>` : ''}
+    ${vram.data?.gpu ? section('gpu', parts.gpu) : ''}${section('cpu', parts.cpu)}
+    ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">
+        <span class="mp-dl-title">${AI_MARK}${escapeHtml(t('mpDownloadable').replace('{n}', () => dl.length))}</span>
+        <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
+      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}`;
   placeModelsPop();
 }
 
@@ -712,7 +721,7 @@ function updateWhisperModelsUI(models) {
   renderTxModelBar();
 
   if (catalogBox && whisperList.length > 0) {
-    catalogBox.innerHTML = modelCompareTable(whisperList.map(i => ({ ...i, size: modelSizeLabel(i) })), { mark: activeModel }) + whisperList.map(item => {
+    catalogBox.innerHTML = whisperList.map(item => {
       const isSelected = item.id === activeModel;
       const desc = state.uiLang === 'en' ? item.desc_en : item.desc_ru;
       const isDownloadingThis = (st.active && st.model_id === item.id) || (item.engine === 'onnx' && item.downloading);
@@ -752,21 +761,25 @@ function updateWhisperModelsUI(models) {
       }
 
       return `
-        <div class="sx-model-card p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+        <div class="mc-card sx-model-card p-3 rounded-xl border transition ${
           isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
         }">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center flex-wrap gap-2">
-              <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
-              <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
-              ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center flex-wrap gap-2">
+                <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
+                <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
+                <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+                ${item.id === state.speechModelRu && speechRoutingOn() ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(t('routeTagRu'))}</span>` : ''}
+                ${modelInfoButton(item.id)}
+              </div>
+              ${modelMetersLine(item.id)}
             </div>
-            ${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label mt-1">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
-            <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
-            ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}
+            <div class="shrink-0">${actionHtml}</div>
           </div>
-          <div class="shrink-0">${actionHtml}</div>
+          ${modelInfoBlock(item.id, `${modelPurpose(item.id) ? `<p class="text-[11.5px] text-apple-label">${escapeHtml(modelPurpose(item.id))}</p>` : ''}
+            <p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(desc)}</p>
+            ${item.installed ? modelLocationHtml(item.path, item.disk_mb) : ''}`)}
         </div>
       `;
     }).join('');
@@ -909,6 +922,14 @@ function openLlmPicker() {
   draw();
 }
 
+// The first start in short steps, one topic each (the old window had the sets, the models, their purposes
+// and a comparison table on one screen: too much text, reported by the user): the AI analysis; the sound
+// (the source, the microphone with a level check, the noise filter); calls (recorded by themselves, Teams
+// captions; Windows only); the calendar; then what downloads, with the precise mode (every speech model)
+// and the start with Windows as switches. Asked by the user to be offered here, not only in Settings. The language is not asked: the
+// recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
+// Settings → Recognition to choose the models
+const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
 function openFirstRunWizard(data) {
   document.getElementById('first-run-wizard')?.remove();
   const wrap = document.createElement('div');
@@ -920,122 +941,242 @@ function openFirstRunWizard(data) {
   const catalog = ((data.models || {}).whisper_catalog) || state.whisperCatalog || [];
   const llmCatalog = ((data.ollama || {}).catalog) || [];
   const picks = firstRunPicks(data, state.uiLang);
-  const st = { step: 0, preset: picks.rec, custom: new Set(['gigaam-v3']), ai: picks.gpu ? 'local' : 'none', main: '', ensemble: false };
+  const st = { page: 'ai', preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
+    calls: false, apps: new Set(['zoom', 'teams', 'telegram']), cal: false, calSource: '', allMeet: false,
+    startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '' };
+  // the pages in order; «calls» only where the program can watch for calls (Windows)
+  const pages = () => ['ai', 'sound', env.calls && 'calls', 'cal', 'sum'].filter(Boolean);
+  // The microphones, asked when the sound step opens (the names come with the permission to listen)
+  let mics = null;
+  const loadMics = async () => {
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach(tr => tr.stop());
+      mics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    } catch (e) { mics = []; }
+    if (document.body.contains(wrap) && st.page === 'sound') draw();
+  };
+  // The microphone's level while the check runs: the bar is looked up each frame (a redraw replaces it)
+  const meter = { stream: null, ctx: null, raf: 0 };
+  const stopMeter = () => {
+    cancelAnimationFrame(meter.raf);
+    meter.stream?.getTracks().forEach(tr => tr.stop());
+    meter.ctx?.close().catch(() => null);
+    meter.stream = meter.ctx = null;
+  };
+  const startMeter = async () => {
+    stopMeter();
+    try {
+      meter.stream = await navigator.mediaDevices.getUserMedia({ audio: st.mic ? { deviceId: { exact: st.mic } } : true });
+    } catch (e) { showError(t('frwMicFailed')); draw(); return; }
+    meter.ctx = new AudioContext();
+    const an = meter.ctx.createAnalyser();
+    an.fftSize = 1024;
+    meter.ctx.createMediaStreamSource(meter.stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const tick = () => {
+      an.getFloatTimeDomainData(buf);
+      const peak = buf.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      const db = peak > 0 ? Math.max(-60, 20 * Math.log10(peak)) : -60;
+      const bar = wrap.querySelector('.frw-level-bar');
+      if (bar) bar.style.width = `${Math.round((db + 60) / 60 * 100)}%`;
+      const num = wrap.querySelector('.frw-level-db');
+      if (num) num.textContent = `${Math.round(db)} dB`;
+      meter.raf = requestAnimationFrame(tick);
+    };
+    tick();
+    draw();
+  };
+  // What this computer offers (Windows only: calls, Outlook; the filter may be there already), asked once
+  const env = { calls: false, outlook: false, filter: null };
+  Promise.all([
+    fetch('/api/calls/status').then(r => r.json()).catch(() => null),
+    fetch('/api/calendar/upcoming').then(r => r.json()).catch(() => null),
+    fetch('/api/voice-filter/status').then(r => (r.ok ? r.json() : null)).catch(() => null),
+  ]).then(([calls, cal, filter]) => {
+    env.calls = !!(calls && calls.supported);
+    env.outlook = !!(cal && cal.outlook);
+    if (env.outlook && !st.calSource) st.calSource = 'outlook';
+    env.filter = filter && (filter.installed || filter.can_download) ? filter : null;
+    if (document.body.contains(wrap) && st.page !== 'ai') draw();
+  });
+  const filterMb = () => (st.filter && env.filter && !env.filter.installed ? Number(env.filter.size_mb || 0) : 0);
   const item = id => catalog.find(i => i.id === id);
-  const models = () => st.preset === 'custom' ? [...st.custom] : picks.presets.find(p => p.id === st.preset).models;
-  const tag = text => `<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-apple-green/15 text-apple-green">${escapeHtml(text)}</span>`;
-  // A model: its name and size on one line, what it is for under them (long purposes wrap evenly)
-  const modelText = id => `<span class="block min-w-0 flex-1">
-      <span class="flex items-baseline justify-between gap-3"><span class="text-white font-medium">${escapeHtml(formatModelName(id))}</span>
-        <span class="font-mono text-apple-tertiary shrink-0">${item(id)?.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(wizardSizeText(wizardSizeMb(item(id))))}</span></span>
-      <span class="block text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</span></span>`;
-  const modelLine = id => `<div class="flex text-[11.5px] pt-1.5 mt-1.5 border-t border-white/5">${modelText(id)}</div>`;
-  const choice = (key, on, title, body) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="w-full text-left p-3 rounded-xl border transition ${on ? 'bg-apple-blue/15 border-apple-blue/60' : 'bg-apple-sidebar border-white/10 hover:border-white/25'}">
-      <div class="text-xs font-semibold text-white">${title}</div><div class="mt-1 space-y-0.5">${body}</div></button>`;
+  const allSpeech = ENSEMBLE_ALL.filter(id => item(id));
+  const models = () => picks.presets.find(p => p.id === st.preset).models;
+  const speech = () => (st.ensemble ? [...new Set([...models(), ...allSpeech])] : models());
   const llmItem = llmCatalog.find(m => m.id === picks.llm) || { size: '' };
-  // The precise mode always has Whisper Pro among its models: downloaded with the set when it is on
-  const ENS_MODEL = 'large-v3';
-  const downloads = () => {
-    const ids = models();
-    return st.ensemble && models().length >= 2 && !ids.includes(ENS_MODEL) && item(ENS_MODEL) ? [...ids, ENS_MODEL] : ids;
-  };
-  const plan = () => {
-    const list = downloads().filter(id => !item(id)?.installed);
-    const rows = list.map(id => ({ name: formatModelName(id), mb: wizardSizeMb(item(id)) }));
-    if (!(data.ffmpeg || {}).available) rows.unshift({ name: 'FFmpeg', mb: ((data.ffmpeg || {}).download_info || {}).size_mb || 0 });
-    if (st.ai === 'local') rows.push({ name: formatModelName(picks.llm), mb: wizardSizeMb(llmItem) });
-    return rows;
-  };
+  const badge = text => `<span class="frw-badge">${escapeHtml(text)}</span>`;
+  const option = (key, on, icon, title, desc, rec) => `<button data-pick="${escapeHtml(key)}" role="radio" aria-checked="${on}" class="frw-opt${on ? ' is-on' : ''}">
+      <span class="frw-ico" aria-hidden="true">${icon}</span>
+      <span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(title)}${rec ? badge(t('frRecommended')) : ''}</span>
+        <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
+      <span class="frw-radio" aria-hidden="true"></span></button>`;
+  const ICON_PC = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+  const ICON_CLOUD = '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.3 4.5 4.5 0 0 0 7 18z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg>';
+  const sizeOf = ids => ids.filter(id => !item(id)?.installed).reduce((a, id) => a + wizardSizeMb(item(id)), 0);
+  const ffmpegMb = () => ((data.ffmpeg || {}).available ? 0 : (((data.ffmpeg || {}).download_info || {}).size_mb || 0));
+  const llmMb = () => (st.ai === 'local' ? wizardSizeMb(llmItem) : 0);
+  const sw = (key, on, title, desc, more = '') => `<div class="frw-toggle">
+      <label class="frw-auto-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(title)}</span>
+        <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
+      <input type="checkbox" role="switch" class="vs-switch" data-auto="${key}" ${on ? 'checked' : ''} /></label>${more}</div>`;
+  const autoNames = () => [st.calls && env.calls && t('frwShortCalls'), st.cal && st.calSource.trim() && t('frwShortCal'),
+    st.cal && st.calSource.trim() && st.allMeet && t('frwShortAll'), st.teams && env.calls && t('frwShortTeams')].filter(Boolean);
+  const SOURCES = [['both', 'sourceBoth'], ['mic', 'sourceMic'], ['system', 'sourceSystem']];
   const draw = () => {
-    let body = '';
-    if (st.step === 0) {
-      const cards = picks.presets.map(p => {
-        const on = st.preset === p.id;
-        const title = escapeHtml(t(`frPreset_${p.id}`)) + (p.id === picks.rec ? tag(t('frRecommended')) : '');
-        let inner = `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t(`frPreset_${p.id}_desc`))}</div>`;
-        if (p.models) inner += p.models.map(modelLine).join('');
-        return choice(`preset:${p.id}`, on, title, inner);
-      }).join('');
-      // The models side by side under the sets; for an own choice they are ticked right in it
-      const compare = `<div class="text-xs text-white font-medium pt-1">${escapeHtml(t(st.preset === 'custom' ? 'frPickModels' : 'mcTitle'))}</div>
-        ${modelCompareTable(catalog.map(i => ({ ...i, size: wizardSizeText(wizardSizeMb(i)) })), st.preset === 'custom' ? { check: st.custom } : {})}`;
-      body = `<p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(t('frIntro'))}</p>
-        <div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</span></div>
-        <div class="text-xs text-white font-medium pt-1">${escapeHtml(t('frPresetQ'))}</div>
-        <div class="space-y-2" role="radiogroup">${cards}</div>${compare}
-        <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNote'))}</p>`;
-    } else if (st.step === 1) {
-      const local = escapeHtml(t('frAiLocal')) + (picks.gpu ? tag(t('frRecommended')) : '');
-      body = `<div class="text-xs text-white font-medium">${escapeHtml(t('frLlmQ'))}</div>
-        <p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiDesc'))}</p>
-        <div class="space-y-2" role="radiogroup">
-          ${choice('ai:none', st.ai === 'none', escapeHtml(t('frLlmSkip')) + (picks.gpu ? '' : tag(t('frRecommended'))), `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frLlmSkipDesc'))}</div>`)}
-          ${choice('ai:local', st.ai === 'local', local, `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml((picks.gpu ? t('frAiLocalDesc') : t('frAiLocalCpu')).replace('{model}', () => formatModelName(picks.llm)).replace('{size}', () => llmItem.size || ''))}</div>
-            ${(data.ollama || {}).installed ? '' : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('frLlmNoOllama'))}</div>`}`)}
-          ${choice('ai:cloud', st.ai === 'cloud', escapeHtml(t('frAiCloud')), `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudDesc'))}</div>`)}
+    let title, sub, body, extra = '';
+    if (st.page === 'sound') {
+      title = t('frwSoundQ');
+      sub = t('frwSoundSub');
+      const usesMic = st.source !== 'system';
+      const micOptions = (mics || []).map((m, i) => `<option value="${escapeHtml(m.deviceId)}" ${m.deviceId === st.mic ? 'selected' : ''}>${
+        escapeHtml(m.label || t('micNumbered').replace('{n}', () => i + 1))}</option>`).join('');
+      body = `<div class="frw-seg" role="radiogroup" aria-label="${escapeHtml(t('recSourceModeLabel'))}">${SOURCES.map(([id, key]) =>
+          `<button data-src="${id}" role="radio" aria-checked="${st.source === id}" class="frw-seg-btn${st.source === id ? ' is-on' : ''}">${escapeHtml(t(key))}</button>`).join('')}</div>
+        <p class="frw-note frw-after">${escapeHtml(t({ both: 'frwSrcBothD', mic: 'frwSrcMicD', system: 'frwSrcSysD' }[st.source]))}</p>
+        ${usesMic ? `<div class="frw-toggle frw-mic">
+          <label class="frw-k" for="frw-mic">${escapeHtml(t('recMicDeviceLabel'))}</label>
+          <select id="frw-mic" class="frw-input frw-select" data-mic>${mics === null ? `<option value="">${escapeHtml(t('frwMicLoading'))}</option>`
+            : `<option value="" ${st.mic ? '' : 'selected'}>${escapeHtml(t('uiDefaultSystemMicrophone'))}</option>${micOptions}`}</select>
+          <div class="frw-level"><span class="frw-level-track"><span class="frw-level-bar"></span></span>
+            <span class="frw-level-db">${meter.stream ? '' : '−60 dB'}</span>
+            <button data-a="meter" class="ui-btn ui-btn-subtle">${escapeHtml(t(meter.stream ? 'frwMicStop' : 'frwMicCheck'))}</button></div>
+          ${meter.stream ? `<span class="frw-note">${escapeHtml(t('frwMicSay'))}</span>` : ''}
+        </div>` : ''}
+        ${usesMic && env.filter ? `<div class="frw-autos frw-after">${sw('filter', st.filter, t('frwFilter'), env.filter.installed ? t('frwFilterReady')
+          : t('frwFilterD').replace('{size}', () => wizardSizeText(Number(env.filter.size_mb || 0))))}</div>` : ''}`;
+    } else if (st.page === 'calls') {
+      title = t('frwCallsQ');
+      sub = t('frwCallsSub');
+      const apps = st.calls ? `<div class="frw-apps">${Object.entries(CALL_APP_NAMES).map(([id, name]) =>
+        `<label class="frw-app"><input type="checkbox" data-app="${id}" ${st.apps.has(id) ? 'checked' : ''} />${escapeHtml(name)}</label>`).join('')}</div>` : '';
+      body = `<div class="frw-autos">
+          ${sw('calls', st.calls, t('frwCalls'), t('frwCallsD'), apps)}
+          ${sw('teams', st.teams, t('teamsToggle'), t('frwTeamsD'))}
+        </div>`;
+    } else if (st.page === 'cal') {
+      title = t('frwCalQ');
+      sub = t('frwCalSub');
+      const cal = st.cal ? `<div class="frw-more">
+          <input type="text" spellcheck="false" class="frw-input" data-cal-src value="${escapeHtml(st.calSource)}" placeholder="${escapeHtml(t('frwCalPh'))}" aria-label="${escapeHtml(t('frwCal'))}" />
+          <label class="frw-auto-row frw-sub-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwCalAll'))}</span>
+            <span class="frw-opt-desc">${escapeHtml(t('frwCalAllD'))}</span></span>
+          <input type="checkbox" role="switch" class="vs-switch" data-auto="allMeet" ${st.allMeet ? 'checked' : ''} /></label></div>` : '';
+      body = `<div class="frw-autos">${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}</div>`;
+    } else if (st.page === 'ai') {
+      title = t('frwAiQ');
+      sub = t('frwAiSub');
+      extra = `<div class="frw-hw">${escapeHtml(t('frHardware'))}: ${escapeHtml(hwDeviceLabel(hw))}${hw.vram_total_gb ? ` · ${hw.vram_total_gb} ${t('unitGB')}` : ''}</div>`;
+      const local = t('frwAiLocalD').replace('{model}', () => formatModelName(picks.llm)).replace('{size}', () => (wizardSizeMb(llmItem) ? wizardSizeText(wizardSizeMb(llmItem)) : ''));
+      body = `<div class="frw-opts" role="radiogroup">
+          ${option('ai:local', st.ai === 'local', ICON_PC, t('frwAiLocal'), (data.ollama || {}).installed ? local : `${local} · ${t('frwWithOllama')}`, picks.gpu)}
+          ${option('ai:cloud', st.ai === 'cloud', ICON_CLOUD, t('frwAiCloud'), t('frwAiCloudD'), false)}
+          ${option('ai:none', st.ai === 'none', ICON_PAUSE, t('frwAiNone'), t('frwAiNoneD'), !picks.gpu)}
         </div>`;
     } else {
-      const rows = plan();
-      const total = rows.reduce((a, r) => a + (r.mb || 0), 0);
-      const roles = wizardRoles(models(), st.main);
-      const others = models().filter(m => m !== 'gigaam-v3');
-      // Several besides GigaAM: which one is the main model is asked, not guessed
-      const mainQ = others.length > 1 ? `<div class="text-[11.5px] text-apple-label leading-snug">${escapeHtml(t('frMainQ'))}</div>
-        <div class="space-y-2" role="radiogroup">${others.map(id => choice(`main:${id}`, id === roles.main, escapeHtml(formatModelName(id)),
-          `<div class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(modelPurpose(id))}</div>`)).join('')}</div>` : '';
-      body = `${mainQ}<div class="text-xs text-white font-medium">${escapeHtml(t('frSummaryQ'))}</div>
-        <div class="rounded-xl bg-apple-sidebar border border-white/10 p-3 space-y-1.5">
-          ${rows.length ? rows.map(r => `<div class="flex items-baseline justify-between gap-2 text-[11.5px]"><span class="text-white">${escapeHtml(r.name)}</span><span class="font-mono text-apple-tertiary">${escapeHtml(r.mb ? wizardSizeText(r.mb) : '')}</span></div>`).join('')
-            : `<div class="text-[11.5px] text-apple-secondary">${escapeHtml(t('frNothingToDownload'))}</div>`}
-          ${rows.length ? `<div class="flex items-baseline justify-between gap-2 text-[11.5px] border-t border-white/10 pt-1.5"><span class="text-apple-secondary">${escapeHtml(t('frTotal'))}</span><span class="font-mono text-white">${escapeHtml(wizardSizeText(total))}</span></div>` : ''}
+      title = t('frwSumQ');
+      sub = t('frwSumSub');
+      const ids = speech();
+      const total = sizeOf(ids) + ffmpegMb() + llmMb() + filterMb();
+      const aiTitle = { local: t('frwAiLocal'), cloud: t('frwAiCloud'), none: t('frwAiNone') }[st.ai];
+      const row = (k, v, d, size, strong) => `<div class="frw-row"><span class="frw-k">${escapeHtml(k)}</span>
+          <span class="frw-v">${escapeHtml(v)}${d ? `<span class="frw-d">${escapeHtml(d)}</span>` : ''}</span>
+          <span class="frw-size${strong ? ' is-total' : ''}">${escapeHtml(size)}</span></div>`;
+      const speechSize = sizeOf(ids) + ffmpegMb();
+      body = `<div class="frw-sum">
+          ${row(t('frwSpeech'), t(st.preset === 'multi' ? 'frwMulti' : 'frwRuen'),
+            ids.map(formatModelName).concat(ffmpegMb() ? ['FFmpeg'] : []).join(' · '), speechSize ? wizardSizeText(speechSize) : t('llmPickInstalled'))}
+          ${row(t('frwAi'), aiTitle, st.ai === 'local' ? formatModelName(picks.llm) : '', llmMb() ? wizardSizeText(llmMb()) : '')}
+          ${row(t('frwAuto'), autoNames().join(' · ') || t('frwAutoNone'), filterMb() ? t('frwFilter') : '', filterMb() ? wizardSizeText(filterMb()) : '')}
+          ${row(t('frwTotal'), '', '', total ? wizardSizeText(total) : t('frwNothing'), true)}
         </div>
-        ${roles.ru ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frRouteNote').replace('{ru}', () => formatModelName(roles.ru)).replace('{main}', () => formatModelName(roles.main)))}</p>` : ''}
-        ${st.ai === 'cloud' ? `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('frAiCloudNext'))}</p>` : ''}
-        ${models().length >= 2 ? `<label class="vs-row cursor-pointer text-xs text-apple-label rounded-xl border border-white/10 p-3">
-            <span><span class="text-white font-medium">${escapeHtml(t('ensToggle'))}</span>
-              <span class="fr-ens-best">${tag(t('frEnsBest'))}</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5">${escapeHtml(t('frEnsHint'))}</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
-        <p class="text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('frBackground'))}</p>`;
+        ${allSpeech.length > 1 ? `<label class="frw-toggle">
+          <span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwPrecise'))}${badge(t('frwPreciseBadge'))}</span>
+            <span class="frw-opt-desc">${escapeHtml(t('frwPreciseD').replace('{n}', () => String(allSpeech.length)))}</span></span>
+          <input type="checkbox" role="switch" class="vs-switch" data-ens ${st.ensemble ? 'checked' : ''} /></label>` : ''}
+        <div class="frw-autos frw-after">${sw('startup', st.startup, t('frwStartup'), t('frwStartupD'))}</div>
+        <p class="frw-after frw-note">${escapeHtml(t('frwProgress'))}</p>`;
     }
-    const canNext = st.step !== 0 || models().length > 0;
-    wrap.innerHTML = `<div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card flex flex-col" id="first-run-dialog">
-      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-center justify-between">
-        <div class="text-sm font-semibold text-white">${escapeHtml(t('frTitle'))}</div>
-        <div class="text-[11.5px] text-apple-tertiary font-mono">${st.step + 1} / 3</div>
-      </div>
-      <div class="px-5 py-4 space-y-3 overflow-y-auto">${body}</div>
-      <div class="px-5 py-3 border-t apple-border flex items-center gap-2">
-        <button data-a="later" class="ui-btn ui-btn-subtle mr-auto">${escapeHtml(t('frLater'))}</button>
-        ${st.step > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
-        <button data-a="next" class="ui-btn ui-btn-primary" ${canNext ? '' : 'disabled'}>${escapeHtml(st.step < 2 ? t('frNext') : t('frStart'))}</button>
+    const list = pages(), at = list.indexOf(st.page);
+    const dots = list.map((_, i) => `<span class="frw-dot${i === at ? ' is-on' : ''}"></span>`).join('');
+    wrap.innerHTML = `<div class="frw" id="first-run-dialog">
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
+      <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
+      <div class="frw-body">${body}</div>
+      <div class="frw-foot">
+        <button data-a="later" class="frw-later">${escapeHtml(t('frLater'))}</button>
+        ${at > 0 ? `<button data-a="back" class="ui-btn ui-btn-subtle">${escapeHtml(t('frBack'))}</button>` : ''}
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.page !== 'sum' ? t('frNext') : t('frStart'))}</button>
       </div></div>`;
     wrap.querySelector('#first-run-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;  // the page is zoomed: vh would not fit
   };
   draw();
+  // The calendar address is typed: kept as it is, without a redraw that would take the focus away
+  wrap.addEventListener('input', e => {
+    if (e.target.matches('input[data-cal-src]')) st.calSource = e.target.value;
+  });
+  wrap.addEventListener('change', e => {
+    if (!e.target.matches('select[data-mic]')) return;
+    st.mic = e.target.value;
+    if (meter.stream) startMeter();  // the check follows the chosen microphone
+  });
   wrap.addEventListener('click', async e => {
     const ens = e.target.closest('input[data-ens]');
-    if (ens) { st.ensemble = ens.checked; draw(); return; }  // Whisper Pro joins the list to download
-    const box = e.target.closest('input[data-model]');
-    if (box) {
-      if (box.checked) st.custom.add(box.dataset.model); else st.custom.delete(box.dataset.model);
-      draw();
+    if (ens) { st.ensemble = ens.checked; draw(); return; }  // every speech model joins the list to download
+    const auto = e.target.closest('input[data-auto]');
+    if (auto) {
+      const key = auto.dataset.auto;
+      st[key] = auto.checked;
+      if (key === 'startup') st.startupTouched = true;
+      // a recording that starts by itself needs the program running: it starts with Windows (the switch
+      // is on the last page), unless the user has already said otherwise there
+      if ((key === 'calls' || key === 'allMeet') && auto.checked && !st.startupTouched) st.startup = true;
+      if (key === 'calls' || key === 'cal' || key === 'allMeet' || key === 'startup') draw();
       return;
     }
+    const app = e.target.closest('input[data-app]');
+    if (app) { if (app.checked) st.apps.add(app.dataset.app); else st.apps.delete(app.dataset.app); return; }
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.pick) {
       const [kind, value] = b.dataset.pick.split(':');
-      if (kind === 'preset') st.preset = value; else if (kind === 'main') st.main = value; else st.ai = value;
+      st.ai = value;
       draw();
       return;
     }
-    if (b.dataset.a === 'later') { wrap.remove(); openModal('settings', 'recognition'); return; }
-    if (b.dataset.a === 'back') { st.step--; draw(); return; }
-    if (b.dataset.a === 'next' && st.step < 2) { st.step++; draw(); return; }
+    if (b.dataset.src) {
+      st.source = b.dataset.src;
+      if (st.source === 'system') stopMeter();
+      draw();
+      return;
+    }
+    if (b.dataset.a === 'meter') { if (meter.stream) { stopMeter(); draw(); } else startMeter(); return; }
+    if (b.dataset.a === 'later') { stopMeter(); wrap.remove(); openModal('settings', 'recognition'); return; }
+    if (b.dataset.a === 'back' || (b.dataset.a === 'next' && st.page !== 'sum')) {
+      stopMeter();
+      const list = pages();
+      st.page = list[Math.max(0, list.indexOf(st.page) + (b.dataset.a === 'back' ? -1 : 1))];
+      if (st.page === 'sound' && mics === null) loadMics();
+      draw();
+      return;
+    }
     if (b.dataset.a === 'next') {
+      stopMeter();
       wrap.remove();
-      await runFirstRunSetup(data, models(), st.ai, picks, st.main, st.ensemble && models().length >= 2, downloads());
+      const calSource = st.cal ? st.calSource.trim() : '';
+      // only what was turned on (or the filter, on by default, turned off): the rest stays as it was
+      const automation = {
+        ...(st.calls && env.calls && st.apps.size ? { call_auto_record: 'true', call_apps: [...st.apps].join(',') } : {}),
+        ...(calSource ? { calendar_ics: calSource, meet_auto_all: String(st.allMeet) } : {}),
+        ...(st.startup ? { start_with_windows: 'true', close_to_tray: 'true' } : {}),
+        ...(st.teams && env.calls ? { teams_captions: 'true' } : {}),
+        record_source_mode: st.source,
+        ...(st.mic && st.source !== 'system' ? { record_mic_device: st.mic } : {}),
+        ...(env.filter && !st.filter ? { rec_voice_filter: 'false' } : {}),
+      };
+      await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech(), automation, !!filterMb());
     }
   });
   document.body.appendChild(wrap);
@@ -1043,20 +1184,35 @@ function openFirstRunWizard(data) {
 
 // What the wizard chose: the settings, then FFmpeg, the speech models (Whisper ones one after another:
 // the app downloads one at a time) and the analysis model, all in the background
-async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false, toDownload = null) {
+async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = false, toDownload = null, automation = {}, getFilter = false) {
   const roles = wizardRoles(chosen, mainPick);
   const preset = picks.presets.find(p => p.models && p.models.join() === chosen.join());
   const settings = { whisper_model: roles.main, speech_model_ru: roles.ru,
     language: preset ? preset.lang : (chosen.length === 1 && chosen[0] === 'gigaam-v3' ? 'ru' : 'auto') };
-  if (ensemble === true) settings.asr_ensemble = 'true';  // the precise mode for every new recording
+  if (ensemble === true) {  // the precise mode for every new recording, with every speech model downloaded
+    settings.asr_ensemble = 'true';
+    settings.asr_ensemble_models = (Array.isArray(toDownload) ? toDownload : chosen).filter(id => ENSEMBLE_ALL.includes(id)).join(',');
+  }
   // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
   // here, the server would refuse the whole request and every choice of the wizard would be lost
   if (ai === 'local') settings.llm_provider = 'ollama';
+  // calls, the start with Windows, the noise filter; the calendar goes on its own below: an address the
+  // server refuses would lose every other choice of the wizard with it
+  const { calendar_ics: calSource, meet_auto_all: allMeet, ...rest } = automation;
+  Object.assign(settings, rest);
   const saved = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings }) }).catch(() => null);
   if (!saved || !saved.ok) {
     const err = saved ? await saved.json().catch(() => ({})) : {};
     showError(serverText(err.detail) || t('errorGeneric'));
+  }
+  if (calSource) {
+    const cal = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { calendar_ics: calSource, meet_auto_all: allMeet || 'false' } }) }).catch(() => null);
+    if (!cal || !cal.ok) {
+      const err = cal ? await cal.json().catch(() => ({})) : {};
+      showError(`${t('frwCalFailed')} ${serverText(err.detail) || t('errorGeneric')}`);
+    }
   }
   state.speechModelRu = roles.ru;
   document.getElementById('set-whisper-model').value = roles.main;
@@ -1078,6 +1234,7 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
   };
   nextWhisper();
   if (ai === 'local') pullOllamaModel(picks.llm, true);
+  if (getFilter) installVoiceFilter();
   showToast(t('frDownloading'));
   await loadSystemInfo();
   if (ai === 'cloud') openModal('settings', 'analysis');
@@ -1200,7 +1357,7 @@ function updateOllamaUI(ollama) {
 
   const pill = document.getElementById('settings-ollama-pill');
   const catalogBox = document.getElementById('ollama-catalog-list');
-  const activeModel = document.getElementById('set-ollama-model').value || ollama.active_model || 'qwen3.5:4b';
+  const activeModel = document.getElementById('set-ollama-model').value || ollama.active_model || 'gemma4:e2b';
 
   if (ollama.running) {
     pill.textContent = t('uiOllamaActive');
@@ -1248,19 +1405,23 @@ function updateOllamaUI(ollama) {
       }
 
       return `
-        <div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+        <div class="mc-card p-3 rounded-xl border transition ${
           isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
         }">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center flex-wrap gap-2">
-              <span class="text-xs font-semibold text-white">${escapeHtml(pretty)}</span>
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
-              <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center flex-wrap gap-2">
+                <span class="text-xs font-semibold text-white">${escapeHtml(pretty)}</span>
+                <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(badgeLabel)}</span>
+                <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+                ${modelInfoButton(item.id)}
+              </div>
+              ${modelMetersLine(item.id)}
             </div>
-            <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(desc)}</p>
-            ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}
+            <div class="shrink-0">${actionHtml}</div>
           </div>
-          <div class="shrink-0">${actionHtml}</div>
+          ${modelInfoBlock(item.id, `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(desc)}</p>
+            ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
         </div>
       `;
     }).join('');
@@ -1645,27 +1806,30 @@ function modelSizeLabel(item) {
   return item.size || (item.size_mb >= 1000 ? (item.size_mb / 1024).toFixed(1) + ' GB' : (item.size_mb || '') + ' MB');
 }
 
-// --- Model meters: accuracy, speed and load in five dots, from the measurements in bench-report/
-// (FLEURS read speech, RTX 3090: report.md, gpu-report.md). Speed follows this computer: with an NVIDIA
-// card the GPU figures, without one the CPU ones. The real numbers are in the tooltips. Memory: ram on
-// the processor (faster-whisper int8, Ollama), vram on the video card.
+// --- Model meters: accuracy (or quality), speed and load in dots, half a dot a step, so that no two models
+// share a score in one list: a tie hid what one model gains over another. Speech (bench-report/gpu-report.md,
+// FLEURS after loudness normalization, RTX 3090): the order follows the word error rate per language, shown
+// beside the dots as accuracy; speed follows this computer (the GPU figures with an NVIDIA card, else the CPU
+// ones). Analysis (bench-report/llm-profiles.md, 9 recordings with a checked task list): the order of the
+// tasks found and of the time for an hour-long meeting; numbers are not shown (a share of tasks reads as
+// a pass mark). A model left out of those measurements is placed by its size. Memory: ram on the
+// processor, vram on the card.
 const MODEL_METERS = {
-  'gigaam-v3': { acc: { ru: [5, 3.8] }, speed: { cpu: [4, '30'], gpu: [5, '50'] }, load: [1], ram: 1.4, vram: 2.5 },
-  'parakeet-v3': { acc: { ru: [4, 5.5], en: [4, 7.8] }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
-  'large-v3-turbo': { acc: { ru: [5, 4.0], en: [5, 5.8] }, speed: { cpu: [1, ''], gpu: [5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
-  'large-v3': { acc: { ru: [5, 3.8], en: [5, 5.7] }, speed: { cpu: [1, ''], gpu: [3, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
-  // Analysis: quality from the comparisons on real recordings (bench-report/llm-profiles.md, report.md) and
-  // the model size; speed and memory from the size of each model
-  'qwen2.5:1.5b': { quality: 2, speed: { cpu: [4, ''], gpu: [5, ''] }, load: [1], ram: 2, vram: 2 },
-  'gemma4:e4b': { quality: 5, speed: { cpu: [2, ''], gpu: [5, ''] }, load: [3], ram: 6, vram: 5 },
-  'gemma4:e2b': { quality: 4, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 4, vram: 3 },
-  'qwen3.5:4b': { quality: 3, speed: { cpu: [3, ''], gpu: [5, ''] }, load: [2], ram: 5, vram: 5 },
-  'qwen3:8b': { quality: 3, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [3], ram: 10, vram: 10 },
-  'qwen3:14b': { quality: 5, speed: { cpu: [1, ''], gpu: [3, ''] }, load: [5], ram: 12, vram: 12 },
+  'gigaam-v3': { wer: { ru: 3.53 }, acc: { ru: 5 }, speed: { cpu: [5, '30'], gpu: [4, '50'] }, load: [1], ram: 1.4, vram: 2.5 },
+  'large-v3': { wer: { ru: 3.84, en: 5.65 }, acc: { ru: 4.5, en: 5 }, speed: { cpu: [1, ''], gpu: [2.5, '14–21'] }, load: [3], ram: 3.1, vram: 3.9 },
+  'large-v3-turbo': { wer: { ru: 3.97, en: 5.82 }, acc: { ru: 4, en: 4.5 }, speed: { cpu: [1.5, ''], gpu: [4.5, '48–59'] }, load: [2], ram: 1.6, vram: 2.2 },
+  'parakeet-v3': { wer: { ru: 5.48, en: 7.78 }, acc: { ru: 2.5, en: 3 }, speed: { cpu: [4, '23'], gpu: [5, '56–72'] }, load: [2], ram: 3.4, vram: 3.3 },
+  'gemma4:e4b': { quality: 5, speed: { cpu: [2, ''], gpu: [3.5, ''] }, load: [3], ram: 6, vram: 5 },
+  'gemma4:e2b': { quality: 3, speed: { cpu: [4, ''], gpu: [4.5, ''] }, load: [2], ram: 4, vram: 3 },
+  // no longer offered (a gemma4 is better on every count), still rated for those who have them
+  'qwen3:14b': { quality: 4, est: true, speed: { cpu: [1, ''], gpu: [1, ''] }, load: [5], ram: 12, vram: 12 },
+  'qwen3:8b': { quality: 3.5, speed: { cpu: [1.5, ''], gpu: [2, ''] }, load: [3], ram: 10, vram: 10 },
+  'qwen3.5:4b': { quality: 2, speed: { cpu: [3, ''], gpu: [4, ''] }, load: [2], ram: 5, vram: 5 },
+  'qwen2.5:1.5b': { quality: 1, est: true, speed: { cpu: [5, ''], gpu: [5, ''] }, load: [1], ram: 2, vram: 2 },
 };
 
 function meterDots(n, cls) {
-  return `<span class="mm-dots ${cls || ''}" aria-hidden="true">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+  return `<span class="mm-dots ${cls || ''}" aria-hidden="true">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : i - 0.5 <= n ? 'half' : ''}"></i>`).join('')}</span>`;
 }
 
 function hasFastGpu() {
@@ -1674,25 +1838,36 @@ function hasFastGpu() {
 }
 
 function meterNum(x) { return String(x).replace('.', state.uiLang === 'en' ? '.' : ','); }
+function meterVal(text, cls) { return `<span class="mc-sub mm-val ${cls || ''}">${escapeHtml(text)}</span>`; }
 
 // One cell of the comparison: accuracy in a language (or a red cross where the model does not know it)
 function meterAccCell(m, lang) {
   const name = t(lang === 'ru' ? 'mmRu' : 'mmEn');
-  if (!m.acc[lang]) {
+  const wer = m.wer && m.wer[lang];
+  if (!wer) {
     const tip = t('mmNoLangTip').replace('{lang}', () => name);
     return `<td class="mc-no" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}"><span class="mm-x" aria-hidden="true">✕</span></td>`;
   }
-  const [n, wer] = m.acc[lang];
-  const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => meterNum(wer));
-  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5. ${tip}`)}">${meterDots(n)}</td>`;
+  const n = m.acc[lang];
+  const acc = meterNum((100 - wer).toFixed(1));
+  const tip = t('mmWerTip').replace('{lang}', () => name).replace('{wer}', () => meterNum(wer.toFixed(1)));
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${meterNum(n)}/5, ${acc}%. ${tip}`)}">${meterDots(n)}${meterVal(acc + '%')}</td>`;
+}
+
+// Analysis quality: the order of the models in the comparison on real recordings
+function meterQualityCell(m) {
+  const tip = t(m.est ? 'mmQualityEstTip' : 'mmQualityTip');
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${meterNum(m.quality)}/5. ${tip}`)}">${meterDots(m.quality)}</td>`;
 }
 
 function meterSpeedCell(m) {
   const gpu = hasFastGpu();
   const [n, x] = m.speed[gpu ? 'gpu' : 'cpu'];
-  const tip = x ? t('mmSpeedTip').replace('{x}', () => x).replace('{where}', () => t(gpu ? 'mmOnGpu' : 'mmOnCpu'))
-    : n <= 1 ? t('mmCpuSlow') : t(gpu ? 'mmOnGpu' : 'mmOnCpu');
-  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${n}/5. ${tip}`)}">${meterDots(n)}${n <= 1 ? `<span class="mc-sub mm-warn">${escapeHtml(t('mcSlow'))}</span>` : ''}</td>`;
+  const where = t(gpu ? 'mmOnGpu' : 'mmOnCpu');
+  const tip = x ? t('mmSpeedTip').replace('{x}', () => x).replace('{where}', () => where)
+    : n < 2 && !m.quality ? t('mmCpuSlow') : m.quality ? t(m.est ? 'mmSpeedEstTip' : 'mmSpeedLlmTip').replace('{where}', () => where) : where;
+  const val = x ? meterVal('×' + x.split('–')[0]) : n < 2 ? meterVal(t('mcSlow'), 'mm-warn') : '';
+  return `<td title="${escapeHtml(tip)}" aria-label="${escapeHtml(`${meterNum(n)}/5. ${tip}`)}">${meterDots(n)}${val}</td>`;
 }
 
 function meterLoadCell(m) {
@@ -1708,7 +1883,7 @@ function meterLoadCell(m) {
 function modelCompareTable(items, opts = {}) {
   const rows = items.filter(i => MODEL_METERS[i.id]);
   if (!rows.length) return '';
-  const llm = !MODEL_METERS[rows[0].id].acc;
+  const llm = !!MODEL_METERS[rows[0].id].quality;
   // Speech: «Accuracy» over its two languages (a second header row), the rest span both rows
   const span = llm ? '' : ' rowspan="2"';
   const head = [opts.check ? `<th class="mc-check"${span}></th>` : '', `<th class="mc-name"${span}>${escapeHtml(t('mcModel'))}</th>`,
@@ -1718,13 +1893,59 @@ function modelCompareTable(items, opts = {}) {
   const body = rows.map(i => {
     const m = MODEL_METERS[i.id];
     const cells = llm
-      ? `<td title="${escapeHtml(t('mmQualityTip'))}">${meterDots(m.quality)}</td>`
+      ? meterQualityCell(m)
       : meterAccCell(m, 'ru') + meterAccCell(m, 'en');
     const check = opts.check ? `<td class="mc-check"><input type="checkbox" class="tk-check" data-model="${escapeHtml(i.id)}" aria-label="${escapeHtml(formatModelName(i.id))}" ${opts.check.has(i.id) ? 'checked' : ''}></td>` : '';
     return `<tr class="${i.id === opts.mark ? 'mc-on' : ''}">${check}<td class="mc-name">${escapeHtml(formatModelName(i.id))}</td>${cells}${meterSpeedCell(m)}${meterLoadCell(m)}
       <td class="mc-size">${i.installed ? escapeHtml(t('llmPickInstalled')) : escapeHtml(i.size || '')}</td></tr>`;
   }).join('');
   return `<div class="mc-wrap"><table class="mc-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+// A model card's measures on one line, the same dots and numbers as the comparison (accuracy or quality,
+// speed, load); how each was measured is in the tooltips
+function modelMetersLine(id) {
+  const m = MODEL_METERS[id];
+  if (!m) return '';
+  const cell = html => html.replace(/^<td/, '<span').replace(/<\/td>$/, '</span>');
+  const part = (label, html) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${cell(html)}</span>`;
+  const quality = !m.quality
+    ? part(`${t('mmAccuracy')} ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
+    : part(t('mmQuality'), meterQualityCell(m));
+  return `<div class="mm-line">${quality}${part(t('mmSpeed'), meterSpeedCell(m))}${part(t('mmLoad'), meterLoadCell(m))}</div>`;
+}
+
+// What a model is, under «i» of its card (the cards showed long texts and folders: asked by the user to
+// keep only the badges and the measures in sight)
+const modelInfoOpen = new Set();
+function modelInfoButton(id) {
+  const on = modelInfoOpen.has(id);
+  return `<button type="button" class="mc-info${on ? ' is-on' : ''}" data-click="toggleModelInfo" data-click-args='${escapeHtml(JSON.stringify([id, { $: 'el' }]))}'
+    aria-expanded="${on}" title="${escapeHtml(t('mcInfoTip'))}" aria-label="${escapeHtml(t('mcInfoTip'))}">i</button>`;
+}
+function modelInfoBlock(id, html) {
+  return html ? `<div class="mc-more${modelInfoOpen.has(id) ? '' : ' hidden'}">${html}</div>` : '';
+}
+// A click on the card itself (not on its buttons, links or fields) opens and closes the same block;
+// a click that ends a text selection in the description does nothing
+document.addEventListener('click', (ev) => {
+  const card = ev.target.closest && ev.target.closest('.mc-card');
+  if (!card || ev.target.closest('button, a, input, select, textarea, label, [data-click]')) return;
+  if (String(window.getSelection && window.getSelection()).trim()) return;
+  card.querySelector('.mc-info')?.click();
+});
+function toggleModelInfo(id, el) {
+  if (modelInfoOpen.has(id)) modelInfoOpen.delete(id); else modelInfoOpen.add(id);
+  const card = el && el.closest('.mc-card');
+  const more = card?.querySelector('.mc-more');
+  if (more) {
+    more.classList.toggle('hidden', !modelInfoOpen.has(id));
+    // only on a click: a list redrawn with the block already open does not play it again
+    more.classList.remove('mc-opening');
+    if (modelInfoOpen.has(id)) { void more.offsetWidth; more.classList.add('mc-opening'); }
+  }
+  el?.classList.toggle('is-on', modelInfoOpen.has(id));
+  el?.setAttribute('aria-expanded', String(modelInfoOpen.has(id)));
 }
 
 // What each speech model is for, said where a model is chosen
@@ -1835,17 +2056,20 @@ function renderSemanticModelCard() {
           <button data-id="${escapeHtml((ollama.models || []).find(n => n === model || n.startsWith(model + ':')) || model)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
             class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button></div>`
       : `<button data-click="pullSemanticModel" class="ui-btn ui-btn-primary">${SVG_ICONS.download}<span>${escapeHtml(t('semanticDownload'))} (1.2 GB)</span></button>`;
-  box.innerHTML = `<div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${installed ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'}">
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center flex-wrap gap-2">
-        <span class="text-xs font-semibold text-white">BGE-M3</span>
-        <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">1.2 GB · MIT</span>
-        <span class="text-[11px] text-apple-tertiary">${installed ? '✓ ' + escapeHtml(t('semanticInstalled')) : '1+ GB VRAM / CPU'}</span>
+  box.innerHTML = `<div class="mc-card p-3 rounded-xl border transition ${installed ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'}">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center flex-wrap gap-2">
+          <span class="text-xs font-semibold text-white">BGE-M3</span>
+          <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">1.2 GB · MIT</span>
+          <span class="text-[11px] text-apple-tertiary">${installed ? '✓ ' + escapeHtml(t('semanticInstalled')) : '1+ GB VRAM / CPU'}</span>
+          ${modelInfoButton('bge-m3')}
+        </div>
       </div>
-      <p class="text-[11.5px] text-apple-secondary mt-1 leading-snug">${escapeHtml(t('semanticModelDesc'))}</p>
-      ${installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}
+      <div class="shrink-0">${action}</div>
     </div>
-    <div class="shrink-0">${action}</div>
+    ${modelInfoBlock('bge-m3', `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(t('semanticModelDesc'))}</p>
+      ${installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
   </div>`;
 }
 
@@ -1885,7 +2109,7 @@ function renderSummaryModelSelect() {
   const summarySelect = document.getElementById('summary-llm-select');
   const ollama = state.lastOllama;
   if (!summarySelect || !ollama || !ollama.catalog) return;
-  const activeModel = document.getElementById('set-ollama-model').value || ollama.active_model || 'qwen3.5:4b';
+  const activeModel = document.getElementById('set-ollama-model').value || ollama.active_model || 'gemma4:e2b';
   const cloud = cloudLlmChoice();
   const onCloud = !!cloud && state.llm.mode === 'cloud';
   summarySelect.innerHTML = (cloud
@@ -1931,6 +2155,13 @@ function renderLlmSettings() {
       `apple-segment-btn ${(k === 'cloud') === cloud ? 'apple-segment-active' : 'text-apple-secondary hover:text-white'}`;
   }
   document.getElementById('llm-cloud-panel').classList.toggle('hidden', !cloud && !state.llmShowCloud);
+  // With a cloud model the local ones stay: translation, live subtitles and dubbing always use Ollama
+  for (const [id, key] of [['ollama-section-title', 'ollamaSectionTitle'], ['ollama-section-desc', 'ollamaSectionDesc']]) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.dataset.i18n = cloud ? key + 'Cloud' : key;
+    el.textContent = t(el.dataset.i18n);
+  }
   const sel = document.getElementById('set-llm-provider');
   if (!state.llmProviderEdited) sel.value = st.provider;
   renderLlmProvider(true);
@@ -2393,7 +2624,7 @@ function startOllamaPollingLoop(model) {
 }
 
 async function pullOllamaModel(modelArg, makeActive = true) {
-  const model = (modelArg || document.getElementById('set-ollama-model').value || 'qwen3.5:4b').trim();
+  const model = (modelArg || document.getElementById('set-ollama-model').value || 'gemma4:e2b').trim();
   let allowInstall = false;
   if (state.system && state.system.ollama && !state.system.ollama.installed) {
     allowInstall = await askConfirm(t('uiOllamaIsNotInstalled'), false, t('cfInstall'));
@@ -2426,27 +2657,51 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   startOllamaPollingLoop(model);
 }
 
-// The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog,
-// the ones not downloaded shown but not offered
+// The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog; one not
+// downloaded has its «Скачать» right there (it was only marked «не скачана»: asked by the user) and is ticked
+// once it is downloaded
+const ensPending = new Set();
 function renderEnsembleModels(s = (state.system && state.system.settings) || {}) {
   const box = document.getElementById('set-ensemble-models');
   if (!box) return;
   const picked = new Set(String(s.asr_ensemble_models || '').split(',').map(x => x.trim()).filter(Boolean));
   const list = ((state.system && state.system.models && state.system.models.whisper_catalog) || []);
-  box.innerHTML = list.map(m => `<label class="flex items-center gap-1.5 text-xs ${m.installed ? 'text-apple-label cursor-pointer' : 'text-apple-tertiary'}">
+  const downloading = new Map(modelDownloadsNow().map(d => [d.id, d.pct]));
+  let ticked = false;
+  for (const m of list) {
+    if (m.installed && ensPending.has(m.id)) { ensPending.delete(m.id); picked.add(m.id); ticked = true; }
+  }
+  box.innerHTML = list.map(m => {
+    const tail = m.installed ? ''
+      : downloading.has(m.id) || ensPending.has(m.id)
+        ? `<span class="ens-dl is-busy">${escapeHtml(t('ensDownloading'))}${downloading.get(m.id) ? ` · ${downloading.get(m.id)}%` : ''}</span>`
+        : `<button type="button" class="ens-dl" data-click="downloadEnsembleModel" data-click-args='${escapeHtml(JSON.stringify([m.id]))}'
+            title="${escapeHtml(t('tipDownloadModel'))}">↓ ${escapeHtml(t('ensDownload'))}${m.size ? ` · ${escapeHtml(wizardSizeText(wizardSizeMb(m)))}` : ''}</button>`;
+    return `<span class="ens-item"><label class="flex items-center gap-1.5 text-xs ${m.installed ? 'text-apple-label cursor-pointer' : 'text-apple-tertiary'}">
       <input type="checkbox" id="set-ens-${escapeHtml(m.id)}" value="${escapeHtml(m.id)}" ${picked.has(m.id) ? 'checked' : ''} ${m.installed ? '' : 'disabled'}
         class="rounded bg-apple-sidebar border-white/20 text-apple-blue" />
-      <span>${escapeHtml(m.name || m.id)}</span>${m.installed ? '' : `<span class="text-[11px]">· ${escapeHtml(t('ensNotDownloaded'))}</span>`}</label>`).join('');
+      <span>${escapeHtml(m.name || m.id)}</span></label>${tail || '<span></span>'}</span>`;
+  }).join('');
   syncEnsembleBox();
+  if (ticked) scheduleSettingsSave();  // a model downloaded from here joins the precise mode
+}
+
+// «Скачать» beside a model of the precise mode: downloaded in the background, without changing the main model
+async function downloadEnsembleModel(id) {
+  const m = ((state.system && state.system.models && state.system.models.whisper_catalog) || []).find(x => x.id === id);
+  if (!m) return;
+  ensPending.add(id);
+  renderEnsembleModels();
+  if (m.engine === 'onnx') await startOnnxModelDownload(id); else await startWhisperModelDownload(id, true);
 }
 
 function syncEnsembleBox() {
   const on = document.getElementById('set-asr-ensemble')?.checked;
   document.getElementById('set-ensemble-box')?.classList.toggle('hidden', !on);
 }
-// Turned on with nothing ticked: GigaAM v3, Whisper Pro and Parakeet TDT v3 are ticked (the downloaded
-// ones), so the choice is in sight; the settings save right after (the change handler below)
-const ENSEMBLE_DEFAULT = ['gigaam-v3', 'large-v3', 'parakeet-v3'];
+// Turned on with nothing ticked: every speech model is ticked (the downloaded ones), so the choice is in
+// sight; the settings save right after (the change handler below)
+const ENSEMBLE_DEFAULT = ENSEMBLE_ALL;
 document.addEventListener('change', (e) => {
   if (e.target?.id !== 'set-asr-ensemble') return;
   const boxes = [...document.querySelectorAll('#set-ensemble-models input')];

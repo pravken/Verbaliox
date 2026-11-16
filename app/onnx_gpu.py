@@ -41,13 +41,28 @@ def _rmtree(d: Path) -> bool:
     return not d.exists()
 
 
+def _rename(src: Path, dst: Path, tries: int = 10, wait: float = 0.5) -> None:
+    """A folder of DLLs just written is held for a moment by the antivirus scanning them («[WinError 5]
+    Access is denied» on the rename right after the install: a user's settings): tried again a few times."""
+    import time
+
+    for i in range(tries):
+        try:
+            src.rename(dst)
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
 def _finish_pending() -> None:
     """What a running program could not do: its DLLs were loaded (Windows keeps them locked)."""
     if REMOVE_MARK.exists():
         if _rmtree(TARGET) and _rmtree(NEW):
             REMOVE_MARK.unlink(missing_ok=True)
     elif _complete(NEW) and _rmtree(TARGET):
-        NEW.rename(TARGET)
+        _rename(NEW, TARGET)
 
 
 def activate() -> bool:
@@ -59,11 +74,14 @@ def activate() -> bool:
             _finish_pending()
         except OSError:
             pass
-    if os.environ.get("VERBALIOX_NO_ONNX_GPU") or not _complete(TARGET) or REMOVE_MARK.exists() \
+    # the build still in its «.new» folder (its rename was refused): used from there, renamed at the next start
+    build = TARGET if _complete(TARGET) else NEW if _complete(NEW) and not TARGET.exists() else None
+    if os.environ.get("VERBALIOX_NO_ONNX_GPU") or build is None or REMOVE_MARK.exists() \
             or "onnxruntime" in sys.modules:
         return False
-    sys.path.insert(0, str(TARGET))
+    sys.path.insert(0, str(build))
     _state["activated"] = True
+    _state["from_new"] = build == NEW
     return True
 
 
@@ -134,7 +152,8 @@ def status() -> Dict[str, Any]:
         st = dict(_state)
     st.update(nvidia=nvidia_present(), installed=installed(), active=cuda_available(),
               removal_pending=REMOVE_MARK.exists() and TARGET.exists())
-    st["restart_needed"] = st["installed"] and (not st["activated"] or _complete(NEW))
+    # a newer build waits in NEW while the running one is TARGET; one run from NEW itself needs nothing
+    st["restart_needed"] = st["installed"] and (not st["activated"] or (_complete(NEW) and not st.get("from_new")))
     return st
 
 
@@ -193,7 +212,10 @@ def _install() -> None:
         _rmtree(NEW)
         tmp.rename(NEW)
         if not _state["activated"] and "onnxruntime" not in sys.modules:
-            _finish_pending()
+            try:
+                _finish_pending()
+            except OSError as e:  # still held: the build is used from NEW, renamed at the next start
+                print(f"[onnx_gpu] {NEW.name} not renamed yet: {e}", flush=True)
             activate()  # works now: nothing has imported onnxruntime yet
         # else NEW replaces TARGET at the next start
     except Exception as e:

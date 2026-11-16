@@ -21,8 +21,8 @@ WHISPER_CATALOG: List[Dict[str, Any]] = [
         "badge": "1.5 GB · MIT",
         "size": "1.5 GB",
         "vram": "4+ GB VRAM",
-        "desc_ru": "Рекомендуется — скорость в 4 раза выше Pro-версии при почти той же точности",
-        "desc_en": "Recommended — 4x faster than Pro with near-identical accuracy",
+        "desc_ru": "OpenAI Whisper large-v3 с облегчённым декодером (4 слоя вместо 32). 99 языков, язык определяется автоматически. Ошибка распознавания (WER) на FLEURS: 4,0 % — русский, 5,8 % — английский, почти как у Pro. На видеокарте NVIDIA — в 48–59 раз быстрее реального времени; на процессоре медленная.",
+        "desc_en": "OpenAI Whisper large-v3 with a lighter decoder (4 layers instead of 32). 99 languages, detected automatically. Word error rate (WER) on FLEURS: 4.0% Russian, 5.8% English — close to Pro. On an NVIDIA card 48–59 times faster than real time; slow on the CPU.",
     },
     {
         "id": "large-v3",
@@ -32,8 +32,8 @@ WHISPER_CATALOG: List[Dict[str, Any]] = [
         "badge": "2.9 GB · MIT",
         "size": "2.9 GB",
         "vram": "8+ GB VRAM",
-        "desc_ru": "Максимальная точность для сложного звука, акцентов и сленга",
-        "desc_en": "Maximum accuracy for noisy audio, accents, and technical jargon",
+        "desc_ru": "Полная OpenAI Whisper large-v3: 99 языков, самая устойчивая к шуму, акцентам и терминологии. WER на FLEURS: 3,8 % — русский, 5,7 % — английский. На видеокарте NVIDIA — в 14–21 раз быстрее реального времени; на процессоре слишком медленная для длинных записей.",
+        "desc_en": "The full OpenAI Whisper large-v3: 99 languages, the most robust to noise, accents and terminology. WER on FLEURS: 3.8% Russian, 5.7% English. On an NVIDIA card 14–21 times faster than real time; too slow on the CPU for long recordings.",
     },
 ]
 
