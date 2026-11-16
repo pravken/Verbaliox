@@ -322,12 +322,15 @@ function renderTasksList() {
     const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
     return `<section class="tk-group">
-      <div class="tk-group-head">${head}${g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>` : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`}${kind}${me}
+      <div class="tk-group-head">${head}${g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>`
+        : g.person && g.key ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openPersonCard', [g.name])} title="${escapeHtml(t('pcOpenTip'))}">${escapeHtml(g.title)}</button>`
+        : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`}${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
       ${tkGroupRowsHtml(g)}
     </section>`;
   }).join('');
+  linkPeople(box, '.tk-row-text');  // a person the task names opens their card (people.js)
 }
 
 // A group draws its first TK_GROUP_ROWS tasks and «ещё N»: a page of thousands of rows took seconds
@@ -454,7 +457,9 @@ function openTaskAssign(id, e) {
     return `<button class="tk-pop-item" data-who="${escapeHtml((name || '').toLocaleLowerCase())}" role="menuitemradio" aria-checked="${on}" ${pageCall('click', 'assignTask', [id, name, kind])}>
       ${tkAvatar(name, kind, 20)}<span class="tk-grow">${escapeHtml(name || t('tkNobody'))}</span>${on ? '<span class="tk-tick">✓</span>' : ''}</button>`;
   };
-  const html = quote + tkAssignOptions(x).map(([title, list]) =>
+  // the person it is for now: their card (contacts, people.js), with their other tasks and recordings
+  const card = x.who ? `<button class="tk-pop-item tk-pop-card" ${pageCall('click', 'tkOpenCard', [x.who])}>${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-grow">${escapeHtml(t('tkCardOf').replace('{name}', () => x.who))}</span><span aria-hidden="true">↗</span></button>` : '';
+  const html = quote + card + tkAssignOptions(x).map(([title, list]) =>
     `<div class="tk-pop-group"><div class="tk-pop-cap">${escapeHtml(title)}</div>${list.map(p => opt(p.name, p.kind)).join('')}</div>`).join('')
     + `<div class="tk-pop-cap"></div>${opt('', 'none')}`
     + `<div class="tk-pop-add">
@@ -514,7 +519,11 @@ async function assignTask(id, name, kind) {
   tkClosePop();
   const task = await tkPatch(id, { who: name, who_kind: name ? kind : 'none' });
   if (task) { TK.report = null; await tkRefreshPeople(); }
+  if (task && document.getElementById('pc-dlg') && typeof pcShown === 'string') openPersonCard(pcShown);  // the card open beside
+  if (task && state.appView === 'library' && state.activeSummaryTab === 'commitments') renderSummaryPanel();
 }
+
+function tkOpenCard(name) { tkClosePop(); openPersonCard(name); }
 
 // --- The due date: the near days, a date, or none ---
 function tkDueChoices() {

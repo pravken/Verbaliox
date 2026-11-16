@@ -615,6 +615,7 @@ function pcDate(iso) {
   return new Date(y, m - 1, d).toLocaleDateString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+let pcShown = '';  // the person whose card is open (tasks.js assignTask draws it again after a change)
 async function openPersonCard(name) {
   const res = await fetch(`/api/people/card?name=${encodeURIComponent(name)}`);
   const data = await readJson(res);
@@ -622,6 +623,7 @@ async function openPersonCard(name) {
   await loadPersonPhotos();
   document.getElementById('pc-dlg')?.remove();
   const p = data.person;
+  pcShown = p.name;
   const wrap = document.createElement('div');
   wrap.id = 'pc-dlg';
   wrap.className = 'fixed inset-0 modal-backdrop z-[62] flex items-center justify-center p-4';
@@ -633,9 +635,12 @@ async function openPersonCard(name) {
       <div class="pc-list">${rows.map(fmt).join('')}</div></section>` : '');
   const open = data.tasks.filter(x => x.status !== 'done');
   const done = data.tasks.length - open.length;
-  const task = x => `<button class="pc-task" data-task-meeting="${Number(x.meeting_id || 0)}" data-at="${Number(x.at || 0)}" ${x.meeting_id ? '' : 'disabled'}>
+  // a task: its words open the recording at its moment; «Передать…» gives it to someone else (the same
+  // list of people as on the Tasks page)
+  const task = x => `<div class="pc-task-row"><button class="pc-task" data-task-meeting="${Number(x.meeting_id || 0)}" data-at="${Number(x.at || 0)}" ${x.meeting_id ? '' : 'disabled'}>
       <span class="pc-task-what">${escapeHtml(x.what)}</span>
-      <span class="pc-task-meta">${escapeHtml([x.due_date ? pcDate(x.due_date) : '', x.meeting_title || ''].filter(Boolean).join(' · '))}</span></button>`;
+      <span class="pc-task-meta">${escapeHtml([x.due_date ? pcDate(x.due_date) : '', x.meeting_title || ''].filter(Boolean).join(' · '))}</span></button>
+      <button class="pc-reassign" data-reassign="${Number(x.id)}" title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">${escapeHtml(t('pcReassign'))}</button></div>`;
   const sub = [p.role, (p.aliases || []).length ? `${t('spAlso')}: ${p.aliases.join(', ')}` : ''].filter(Boolean).join(' · ');
   const nothing = !data.spoke.length && !data.invited.length && !data.mentioned.length;
   wrap.innerHTML = `<div class="an-dlg pc-card modal-card">
@@ -665,6 +670,7 @@ async function openPersonCard(name) {
     const b = e.target.closest('button');
     if (e.target === wrap || (b && b.dataset.a === 'close')) { close(); return; }
     if (!b) return;
+    if (b.dataset.reassign) { e.stopPropagation(); await tkPickerFor(Number(b.dataset.reassign), { stopPropagation() {}, currentTarget: b }, openTaskAssign); return; }
     if (b.dataset.open) { closeAll(); switchAppView('library'); await selectMeetingAndSeek(Number(b.dataset.open), Number(b.dataset.at) || 0); return; }
     if (b.dataset.taskMeeting && Number(b.dataset.taskMeeting)) {
       closeAll(); switchAppView('library'); await selectMeetingAndSeek(Number(b.dataset.taskMeeting), Number(b.dataset.at) || 0); return;
