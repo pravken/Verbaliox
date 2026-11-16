@@ -85,6 +85,7 @@ function scheduleSidebarRender() {
   requestAnimationFrame(() => {
     live.renderQueued = false;
     if (!state.globalSearchQuery) renderMeetingsSidebar();
+    if (state.appView === 'libtable' && typeof renderLibTable === 'function') renderLibTable();
   });
 }
 
@@ -780,6 +781,26 @@ function recordingBadgesHtml(m) {
     + badge('dub', dubLangs.length > 0, `${t('recBadgeDub')}${dubLangs.length ? ': ' + dubLangs.map(langName).join(', ') : ''}`, dubLangs.map(langCode).join(' '));
 }
 
+// The feature of a recording beside its title (asked by the user): its colour and name, «+N» for more
+function libFeatureChip(m) {
+  const ids = m.features || [];
+  const f = ids.length && typeof featureById === 'function' ? featureById(ids[0]) : null;
+  if (!f) return '';
+  const names = ids.map(featureById).filter(Boolean).map(x => x.name).join(', ');
+  return `<span class="lib-ft" title="${escapeHtml(`${t('ftLabel')} ${names}`)}">${featureChipHtml(f, { title: names })}${ids.length > 1 ? `<span class="lib-ft-more">+${ids.length - 1}</span>` : ''}</span>`;
+}
+
+// In the compact list only the colour of the feature, on the same place in every row (an empty slot
+// without one): the names are in the table on the whole window and in the tooltip
+function libFeatureDot(m) {
+  const ids = m.features || [];
+  const f = ids.length && typeof featureById === 'function' ? featureById(ids[0]) : null;
+  if (!f) return '<span class="lib-ft-dot" aria-hidden="true"></span>';
+  const c = /^#[0-9A-Fa-f]{6}$/.test(f.color || '') ? f.color : '#8E8E93';
+  const names = ids.map(featureById).filter(Boolean).map(x => x.name).join(', ');
+  return `<span class="lib-ft-dot lib-ft-dot-on" style="--ft:${c}" title="${escapeHtml(`${t('ftLabel')} ${names}`)}"></span>`;
+}
+
 function meetingRowHtml(m, depth) {
   const picked = libIsSelected(m);
   const isSelected = picked && libSelectionShown();
@@ -802,7 +823,8 @@ function meetingRowHtml(m, depth) {
       ${thumb}
       <div class="min-w-0 flex-1">
         <div class="flex items-center justify-between gap-2">
-          <span title="${escapeHtml(libTitle(m))}" class="text-[12.5px] font-medium leading-snug line-clamp-2 break-words min-w-0">${escapeHtml(libTitle(m))}</span>
+          <span title="${escapeHtml(libTitle(m))}" class="text-[12.5px] font-medium leading-snug line-clamp-2 break-words min-w-0${m.features && m.features.length ? ' lib-title' : ''}">${escapeHtml(libTitle(m))}</span>
+          ${libFeatureChip(m)}
           <button data-click="openRecordingContextMenu" data-click-args='[{"$": "event"}, ${m.id}]' title="${escapeHtml(t('tipItemMenu'))}"
             class="row-more opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 px-1 rounded hover:bg-black/20 text-xs shrink-0 transition">•••</button>
         </div>
@@ -1278,10 +1300,12 @@ function renderLibSelectionBar() {
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'lib-selection-bar';
-    bar.className = 'mx-1 mb-1.5 px-2 py-1.5 rounded-lg bg-apple-blue/15 border border-apple-blue/30 flex items-center gap-1.5 text-[11.5px] text-white';
-    const list = document.getElementById('meetings-list');
-    list.parentNode.insertBefore(bar, list);
+    bar.className = 'mx-1 mb-1.5 px-2 py-1.5 rounded-lg bg-apple-blue/15 border border-apple-blue/30 flex flex-wrap items-center gap-1.5 text-[11.5px] text-white';
   }
+  // over the table while the library is a table on the whole window, over the list otherwise
+  const under = state.appView === 'libtable' && document.getElementById('lt-scroll') || document.getElementById('meetings-list');
+  if (bar.nextElementSibling !== under) under.parentNode.insertBefore(bar, under);
+  bar.classList.toggle('lt-selbar', under.id === 'lt-scroll');
   bar.innerHTML = `<span class="flex-1 min-w-0 truncate">${escapeHtml(t('libSelected').replace('{n}', () => n))}</span>
     <button data-click="bulkRename" class="ui-btn ui-btn-subtle h-6 !px-2 text-[11.5px]" title="${escapeHtml(t('tipBulkRename'))}">${escapeHtml(t('bulkRename'))}</button>
     <button data-click="bulkAutoTitles" class="ui-btn ui-btn-subtle h-6 !px-2 text-[11.5px]" title="${escapeHtml(t('tipBulkAutoTitle'))}">${escapeHtml(t('bulkAutoTitle'))}</button>
@@ -1406,6 +1430,7 @@ function meetingCompactRowHtml(m, depth) {
            isSelected ? 'bg-apple-blue text-white' : soft ? 'lib-row-soft text-apple-label' : 'text-apple-label hover:bg-white/5'
          }" style="padding-left:${10 + depth * 14}px">
       <span class="shrink-0 ${isSelected ? 'text-white' : 'text-apple-tertiary'}">${m.is_video ? ICON_FILE_VIDEO : ICON_FILE_AUDIO}</span>
+      ${libFeatureDot(m)}
       <span class="truncate flex-1 min-w-0">${escapeHtml(libTitle(m))}</span>
       <span class="rec-badges shrink-0 ${isSelected ? 'text-white' : 'text-apple-secondary'}">${recordingBadgesHtml(m)}</span>
       <span class="font-mono text-[11px] shrink-0 ${isSelected ? 'text-white' : 'text-apple-tertiary'}">${isBusy ? `${m.progress}%` : libPrefs().sort === 'size' ? formatSize(m.size_bytes) : formatTime(m.duration)}</span>
@@ -1432,6 +1457,7 @@ function meetingTileHtml(m) {
       </div>
       <div class="px-1.5 pt-1 pb-1.5 min-w-0">
         <div class="text-[11.5px] font-medium leading-tight line-clamp-2">${escapeHtml(libTitle(m))}</div>
+        ${libFeatureChip(m) ? `<div class="mt-1 min-w-0">${libFeatureChip(m)}</div>` : ''}
         <div class="flex items-center justify-between gap-1 mt-1 text-[11px] ${isSelected ? 'text-white' : 'text-apple-secondary'}">
           <span class="rec-badges">${recordingBadgesHtml(m)}</span>
           <span class="shrink-0">${escapeHtml(libSortValue(m))}</span>
