@@ -236,6 +236,34 @@ def api_people_directory() -> List[Dict[str, Any]]:
 
     return directory()
 
+@router.post("/api/meetings/{meeting_id}/analysis/expand-names")
+def api_expand_names(meeting_id: int) -> Dict[str, Any]:
+    """The contacts' short spellings in the analysis of a recording written out as their full names (after
+    one was confirmed as a contact's variant on the page)."""
+    from app.database import get_meeting, merge_summaries
+    from app.people import expand_names
+
+    m = get_meeting(meeting_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    changed = {}
+    for key, value in (m.get("summaries") or {}).items():
+        if key != "error" and isinstance(value, str) and value.strip():
+            new = expand_names(value)
+            if new != value:
+                changed[key] = new
+    sums = merge_summaries(meeting_id, changed) if changed else (m.get("summaries") or {})
+    return {"summaries": sums, "changed": sorted(changed)}
+
+@router.get("/api/people/card")
+def api_people_card(name: str) -> Dict[str, Any]:
+    from app.people import card
+
+    data = card(name)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Такого человека нет в контактах")
+    return data
+
 @router.post("/api/people/directory")
 def api_people_add(payload: PersonPayload) -> Dict[str, Any]:
     from app.people import add

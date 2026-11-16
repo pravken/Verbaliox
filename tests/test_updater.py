@@ -527,3 +527,40 @@ class AutostartTest(unittest.TestCase):
                 mock.patch.object(updater.subprocess, "Popen") as popen:
             updater.launch_installer(restart=True, minimized=True)
         self.assertIn("--restart-minimized", popen.call_args.args[0])
+
+
+class UpdateNoticeTest(unittest.TestCase):
+    """A new version is said in a Windows notification once (asked by the user: the app lives in the tray)."""
+
+    def setUp(self):
+        from app import app_status, database
+
+        database.init_db()
+        database.update_settings({"update_notified": "", "update_ready_notified": "", "quiet_mode": "false"})
+        app_status.take_notices()
+
+    def _status(self, version="9.9.9", done=False):
+        return {"available": True, "auto": True, "can_install": True, "latest": {"version": version},
+                "download": {"done": done, "active": False}}
+
+    def test_once_per_version_then_once_when_ready(self):
+        from app import app_status
+
+        with mock.patch.object(updater, "check", return_value=self._status()):
+            updater.notice_tick()
+            updater.notice_tick()
+        first = app_status.take_notices()
+        self.assertEqual([n["title"] for n in first], ["Вышла Verbaliox 9.9.9"])
+        self.assertEqual(first[0]["target"], "update")
+        with mock.patch.object(updater, "check", return_value=self._status(done=True)):
+            updater.notice_tick()
+            updater.notice_tick()
+        self.assertEqual([n["title"] for n in app_status.take_notices()], ["Verbaliox 9.9.9 готова к установке"])
+
+    def test_quiet_mode_says_nothing(self):
+        from app import app_status, database
+
+        database.update_settings({"quiet_mode": "true"})
+        with mock.patch.object(updater, "check", return_value=self._status("9.9.10")):
+            updater.notice_tick()
+        self.assertEqual(app_status.take_notices(), [])

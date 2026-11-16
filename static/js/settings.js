@@ -163,6 +163,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-asr-ensemble').checked = s.asr_ensemble === 'true';
     document.getElementById('set-echo-cancel').checked = s.rec_echo_cancel !== 'false';
     document.getElementById('set-teams-captions').checked = s.teams_captions === 'true';
+    document.getElementById('set-rec-sounds').checked = s.rec_sounds !== 'false';
     renderEnsembleModels(s);
     if (document.getElementById('set-clean-fillers')) {
       document.getElementById('set-clean-fillers').checked = s.clean_fillers !== 'false';
@@ -523,12 +524,41 @@ function renderModelsPop() {
     ${dl.length ? `<section class="mp-dl"><button data-click="toggleModelsDownloads" class="mp-dl-head" aria-expanded="${modelsPop.dlOpen}">
         <span class="mp-dl-title">${AI_MARK}${escapeHtml(t('mpDownloadable').replace('{n}', () => dl.length))}</span>
         <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
-      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}`;
+      ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
+    <div class="mp-idle"><span>${escapeHtml(t('mpIdleLabel'))}</span>
+      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? idle.minutes ?? 10))}</button></div>`;
   placeModelsPop();
 }
 
+// After how long an idle model is unloaded, chosen in the panel too (asked by the user; the same setting as
+// Settings → General). A menu, not a list: the panel is redrawn every few seconds and would close a list
+const IDLE_CHOICES = [[0, 'idleUnloadNever'], [1, 'idleMin1'], [5, 'idleMin5'], [10, 'idleMin10'], [15, 'idleMin15'], [30, 'idleMin30'], [60, 'idleMin60']];
+function idleUnloadText(min) {
+  const found = IDLE_CHOICES.find(([m]) => m === Number(min || 0));
+  return found ? t(found[1]) : `${min} ${t('unitMinShort')}`;
+}
+
+function openIdleUnloadMenu(el) {
+  const r = el.getBoundingClientRect();
+  const cur = Number(((state.system || {}).settings || {}).idle_unload_minutes ?? 10);
+  setTimeout(() => openTextMenuAt(IDLE_CHOICES.map(([m, key]) => ({ label: `${m === cur ? '✓ ' : ''}${t(key)}`, run: () => setIdleUnload(m) })),
+    r.left, r.bottom + 4), 0);
+}
+
+async function setIdleUnload(min) {
+  const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { idle_unload_minutes: String(min) } }) }).catch(() => null);
+  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  if (state.system && state.system.settings) state.system.settings.idle_unload_minutes = String(min);
+  const sel = document.getElementById('set-idle-unload');
+  if (sel) sel.value = String(min);
+  if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline.idle_unload_minutes = String(min);
+  if (modelsPop.open) renderModelsPop();
+  loadVram();
+}
+
 document.addEventListener('pointerdown', (e) => {
-  if (modelsPop.open && !e.target.closest('#models-pop, #vram-row')) closeModelsPop();
+  if (modelsPop.open && !e.target.closest('#models-pop, #vram-row, #text-menu')) closeModelsPop();  // its menu (unload delay) too
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && modelsPop.open) { closeModelsPop(); document.getElementById('vram-row').focus(); }
@@ -2504,6 +2534,7 @@ function settingsFormValues() {
     asr_ensemble: String(document.getElementById('set-asr-ensemble').checked),
     rec_echo_cancel: String(document.getElementById('set-echo-cancel').checked),
     teams_captions: String(document.getElementById('set-teams-captions').checked),
+    rec_sounds: String(document.getElementById('set-rec-sounds').checked),
     asr_ensemble_models: [...document.querySelectorAll('#set-ensemble-models input:checked')].map(x => x.value).join(','),
     ollama_model: document.getElementById('set-ollama-model').value.trim(),
     auto_summary: String(document.getElementById('set-auto-summary').checked),
@@ -2712,7 +2743,57 @@ document.addEventListener('change', (e) => {
 });
 
 // --- Dictionary ---
-// Audit 7.5: the dictionary has one place, Settings → Dictionary (the sidebar button opens it)
+// Audit 7.5: the dictionary has one place, its section of Settings. The sidebar button shows that very
+// section in a window of its own (asked by the user: the button opened the whole settings): it is moved
+// into the window while it is open and put back after, so there is one dictionary and one set of handlers
+const DICT_SWITCHES = { 'set-dict-fuzzy': 'dictionary_fuzzy', 'set-feature-suggest': 'feature_suggest' };
+
+async function openDictionary() {
+  if (document.getElementById('dict-dlg')) return;
+  mountSettingsPage();
+  const section = document.querySelector('#modal-settings [data-stab="dictionary"]');
+  if (!section) { openModal('settings', 'dictionary'); return; }
+  const home = { parent: section.parentElement, next: section.nextSibling, cls: section.className };
+  const wrap = document.createElement('div');
+  wrap.id = 'dict-dlg';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.setAttribute('aria-label', t('dictionary'));
+  wrap.innerHTML = `<div class="an-dlg dict-dlg modal-card">
+      <div class="an-dlg-head"><h2>${escapeHtml(t('dictionary'))}</h2><button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      <div class="dict-dlg-body"></div></div>`;
+  section.classList.remove('hidden');
+  section.querySelector('.sx-section-head')?.classList.add('hidden');  // the window has its own title
+  wrap.querySelector('.dict-dlg-body').appendChild(section);
+  document.body.appendChild(wrap);
+  const close = () => {
+    section.querySelector('.sx-section-head')?.classList.remove('hidden');
+    section.className = home.cls;
+    home.parent.insertBefore(section, home.next);
+    wrap.remove();
+  };
+  wrap.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (e.target === wrap || (b && b.dataset.a === 'close')) close();
+  });
+  wrap.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.target.closest('input, textarea')) { e.stopPropagation(); close(); } });
+  // its two switches are settings: saved here, as the settings page would (it saves only what is inside it)
+  wrap.addEventListener('change', async e => {
+    const key = DICT_SWITCHES[e.target.id];
+    if (!key) return;
+    const value = String(!!e.target.checked);
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => null);
+    if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+    if (state.system && state.system.settings) state.system.settings[key] = value;
+    if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
+  });
+  await loadDictionary();
+  renderSettingsDictionary();
+  if (typeof renderDictFeatures === 'function') renderDictFeatures();
+  setTimeout(() => document.getElementById('settings-dict-term')?.focus(), 60);
+}
 async function loadDictionary() {
   const res = await fetch('/api/dictionary');
   const terms = await readJson(res);
@@ -2916,7 +2997,7 @@ const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
-    ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'],
+    ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
@@ -2937,7 +3018,7 @@ const SETTINGS_RESET = {
 };
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
-  record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', import_copy: 'false', rec_voice_filter: 'true',
+  record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
   auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them

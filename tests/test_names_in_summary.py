@@ -53,5 +53,37 @@ class NamesInSummaryTest(unittest.TestCase):
         self.assertEqual(out, "Мацулевич рассказал про сроки.")
 
 
+    def test_the_summary_is_told_of_the_contacts_named_in_the_talk(self):
+        # asked by the user: a contact named in the talk, not a participant, is written as in the contacts
+        people.add("Дмитрий Кравченко")
+        people.update("Дмитрий Кравченко", role="тимлид")
+        people.add("Ксения Белкина")
+        sent = []
+        llm = mock.Mock(is_cloud=True, max_chars=100000, label="m")
+        llm.chat = lambda system, user: (sent.append(user), "Дмитрий Кравчено проверит.")[1]
+        segs = [{"start": 0, "end": 5, "speaker": "SPEAKER_00", "text": "Это проверит Дмитрий Кравченко."}]
+        with mock.patch("app.llm.target", return_value=llm):
+            out = ollama_client.generate_meeting_summary(segs, {"SPEAKER_00": {"name": "Мария"}}, participants=["Мария"])
+        self.assertIn("Дмитрий Кравченко — тимлид", sent[0])
+        self.assertNotIn("Ксения", sent[0])  # a cloud model hears only of the contacts the transcript names
+        self.assertEqual(out, "Дмитрий Кравченко проверит.")
+
+
+    def test_a_contacts_short_name_is_written_out_in_full(self):
+        # asked by the user: «Дима» merged into «Дмитрий Орлов» is written as the full name in the analysis
+        people.merge(["Дмитрий Орлов", "Дима"])
+        text = "Дима проверит сроки, Дима Орлов согласен. Диме прислать смету. Димитрий не придёт."
+        self.assertEqual(people.expand_names(text),
+                         "Дмитрий Орлов проверит сроки, Дмитрий Орлов согласен. Диме прислать смету. Димитрий не придёт.")
+        sent = []
+        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm.chat = lambda system, user: (sent.append(user), "Дима проверит сроки.")[1]
+        segs = [{"start": 0, "end": 5, "speaker": "SPEAKER_00", "text": "Дима проверит сроки."}]
+        with mock.patch("app.llm.target", return_value=llm):
+            out = ollama_client.generate_meeting_summary(segs, {"SPEAKER_00": {"name": "Мария"}}, participants=["Мария"])
+        self.assertIn("не «Дима» или «Саня», а полное имя и фамилия", sent[0])
+        self.assertEqual(out, "Дмитрий Орлов проверит сроки.")
+
+
 if __name__ == "__main__":
     unittest.main()

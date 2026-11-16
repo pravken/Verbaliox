@@ -196,6 +196,45 @@ def _auto_download(st: Dict[str, Any]) -> None:
             pass
 
 
+# --- A new version said in a Windows notification (asked by the user: the app lives in the tray for days, the
+# one check at start-up and a message inside a hidden window were missed). Once per version: when it is
+# found, and when it is downloaded and ready. Not in quiet mode; the window keeps its own mark of it
+def notice_tick() -> Dict[str, Any]:
+    from app import app_status
+    from app.database import get_all_settings, update_settings
+
+    st = check()
+    settings = get_all_settings()
+    latest = st.get("latest") or {}
+    ver = latest.get("version") or ""
+    if not st.get("available") or not ver:
+        return st
+    quiet = (settings.get("quiet_mode") or "false").lower() == "true"
+    dl = st.get("download") or {}
+    if settings.get("update_notified") != ver:
+        update_settings({"update_notified": ver})
+        if not quiet:
+            how = ("Скачается сама и установится, когда программа будет свободна. " if st.get("auto") and st.get("can_install")
+                   else "")
+            app_status.add_notice(f"Вышла Verbaliox {ver}", how + "Нажмите, чтобы посмотреть, что нового", "update")
+    elif dl.get("done") and not dl.get("stale") and settings.get("update_ready_notified") != ver:
+        update_settings({"update_ready_notified": ver})
+        if not quiet:
+            app_status.add_notice(f"Verbaliox {ver} готова к установке",
+                                  "Установится при выходе из программы. Нажмите, чтобы перезапустить сейчас", "update")
+    return st
+
+
+def notice_loop() -> None:
+    time.sleep(90)  # after the start-up: the page checks once itself then
+    while True:
+        try:
+            notice_tick()
+        except Exception as e:
+            print(f"[update] notice: {e}", flush=True)
+        time.sleep(30 * 60)  # check() asks GitHub at most every CHECK_INTERVAL_SEC; a download done is seen sooner
+
+
 def _download_current() -> bool:
     """The archive downloaded is of the release found last (call with _lock held)."""
     dl, latest = _state.get("download") or {}, _state.get("latest") or {}

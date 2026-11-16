@@ -98,6 +98,14 @@ class CallWatchTest(unittest.TestCase):
         self.assertEqual(matching_app(["telegrammessengerllp.telegramdesktop_t4vj0pshhgkwm"], ["telegram"]), "telegram")
         self.assertIsNone(matching_app(["zoom.exe"], ["teams"]))  # not watched
 
+    def test_the_app_a_calendar_meeting_runs_in(self):
+        # a meeting over early: the calendar's recording stops once its app lets go of the microphone
+        from app.call_watch import meeting_app
+
+        self.assertEqual(meeting_app(["msedgewebview2.exe", "ms-teams.exe"]), "teams")  # any call app, chosen or not
+        self.assertEqual(meeting_app(["chrome.exe"]), "chrome.exe")  # Google Meet in a browser
+        self.assertIsNone(meeting_app(["msedgewebview2.exe"]))  # the program's own window is not a meeting
+
     def test_start_after_delay_stop_after_grace(self):
         from app.call_watch import START_DELAY_SEC, STOP_GRACE_SEC, CallWatcher
 

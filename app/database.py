@@ -212,6 +212,7 @@ def init_db() -> None:
             "auto_commitments": "true",  # promises found after the automatic summary (app/commitments.py)
             "dictionary_fuzzy": "true",  # dictionary terms replace words that sound like them (app/vocab.py)
             "teams_captions": "false",  # who speaks, read from the Teams captions while recording (app/teams_captions.py)
+            "rec_sounds": "true",  # a chime before a meeting is recorded by itself, at the start and after the stop
             "rec_echo_cancel": "true",  # the speakers' echo taken out of the microphone on save (app/echo_cancel.py)
             "asr_ensemble": "false",  # the precise mode for new recordings (several models + merging)
             "asr_ensemble_models": "",  # its models, comma separated; "" = the most accurate installed ones
