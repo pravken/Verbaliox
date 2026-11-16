@@ -1016,6 +1016,7 @@ async function renderCommitments(box) {
   box.innerHTML = anIsBusy('commitments') ? anMakingHtml()
     : items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, false, !!(m.mfu || '').trim())).join('')}</div>${commitmentExportBar(m.id)}`
     : anEmptyHtml('commitments');
+  linkPeople(box, '.an-task-what');  // a person the task names opens their card
 }
 
 // Promises as tasks for another app: Markdown (Obsidian, Notion), Todoist's CSV, a table
@@ -2281,6 +2282,15 @@ function markSuspects(box) {
 function markPeople(box) {
   if (!box) return;
   if (!contacts.list) { loadContacts().then(() => { if (contacts.list && contacts.list.length) markSuspects(box); }); return; }
+  linkPeople(box, '.an-md');
+}
+
+// The same links in other texts: a task's words (the Tasks page, a recording's tasks). Elements of `selector`
+// inside `root`; their earlier links are made again
+function linkPeople(root, selector) {
+  if (!root) return;
+  if (!contacts.list) { loadContacts().then(list => { if (list && list.length) linkPeople(root, selector); }); return; }
+  root.querySelectorAll(`${selector} .an-person`).forEach(el => el.replaceWith(...el.childNodes));
   const spell = [];
   for (const p of contacts.list) {
     if (p.kind !== 'person') continue;
@@ -2296,8 +2306,9 @@ function markPeople(box) {
       : `${body}(?:а|у|ой|ом|е|ы|ю|ем|и|я|ей|ов|ым)?`;
   };
   const rx = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${spell.map(([s]) => `(${form(s)})`).join('|')})(?![\\p{L}\\p{N}_-])`, 'giu');
-  box.querySelectorAll('.an-md').forEach(md => {
+  root.querySelectorAll(selector).forEach(md => {
     if (md.closest('.an-edit')) return;
+    md.normalize();
     const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
       acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
@@ -2397,6 +2408,13 @@ async function checkAnalysisWords() {
   }
 }
 
+// A name of a contact anywhere else (a task's words): its card
+document.addEventListener('click', (e) => {
+  const who = e.target.closest && e.target.closest('.an-person');
+  if (!who || who.closest('#summary-content')) return;
+  e.stopPropagation();
+  openPersonCard(who.dataset.person);
+});
 document.getElementById('summary-content')?.addEventListener('click', (e) => {
   const who = e.target.closest && e.target.closest('.an-person');
   if (who) { openPersonCard(who.dataset.person); return; }
