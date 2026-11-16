@@ -635,6 +635,31 @@ def card(name: str) -> Optional[Dict[str, Any]]:
             "tasks": tasks[:100]}
 
 
+def expand_names(text: str, rows: Optional[List[Dict[str, Any]]] = None) -> str:
+    """A contact's other spelling written for them («Дима» merged into «Дмитрий Орлов») becomes the full name
+    (asked by the user: the analysis names people as in the contacts, the short form only when it is unclear
+    who that is). As written (the nominative), with the surname beside it too («Дима Орлов»); another case
+    form («Диме») stays, a declined full name is not made up. Spellings shorter than 3 letters are left."""
+    if not text:
+        return text
+    try:
+        rows = rows if rows is not None else _rows()
+    except Exception:
+        return text
+    for r in rows:
+        name = r["name"]
+        if r.get("kind", "person") != "person":
+            continue
+        surname = name.split()[-1] if len(name.split()) > 1 else ""
+        for alias in sorted(r["aliases"], key=len, reverse=True):
+            if len(alias) < 3 or alias.lower() == name.lower() or alias.lower() in name.lower().split():
+                continue
+            tail = r"(?:\s+" + re.escape(surname) + r")?" if surname and surname.lower() not in alias.lower() else ""
+            text = re.sub(r"(?<![\w-])" + r"\s+".join(re.escape(w) for w in alias.split()) + tail + r"(?![\w-])",
+                          lambda _m: name, text)
+    return text
+
+
 def known_people(meeting: Dict[str, Any], exclude: Optional[List[str]] = None, cloud: bool = False,
                  limit: int = 60) -> List[str]:
     """The contacts the analysis model is told of besides the participants («Контакты», asked by the user: a
