@@ -58,16 +58,49 @@ def safe_filename(name: str, limit: int = 150) -> str:
     return name[:limit].rstrip(" .") or "note"
 
 
+def feature_names(m: Dict[str, Any]) -> List[str]:
+    """The names of the features the recording is about, its first one first."""
+    ids = m.get("features")
+    if ids is None and m.get("id"):
+        try:
+            from app.features import feature_map
+
+            ids = feature_map([int(m["id"])]).get(int(m["id"]), [])
+        except Exception:
+            ids = []
+    if not ids:
+        return []
+    try:
+        from app.features import list_features
+
+        by_id = {f["id"]: f["name"] for f in list_features()}
+    except Exception:
+        return []
+    return [by_id[i] for i in ids if by_id.get(i)]
+
+
 def note_filename(m: Dict[str, Any], template: str = "") -> str:
     dt = meeting_datetime(m)
     template = (template or "{date} {title}").strip() or "{date} {title}"
+    feature = (feature_names(m) or [""])[0] if "{feature}" in template else ""
+    if not feature:  # no feature: «{feature} — » goes with its dash, not only the word
+        template = re.sub(r"\{feature\}\s*[-–—_.,:]*\s*", "", template)
     name = (
         template.replace("{date}", dt.strftime("%Y-%m-%d"))
         .replace("{time}", dt.strftime("%H-%M"))
         .replace("{title}", m.get("title") or "")
         .replace("{lang}", (m.get("language") or "").upper())
+        .replace("{feature}", feature)
     )
+    # a recording without a feature: «{feature} — {title}» must not start with a dash
+    name = re.sub(r"^[\s\-–—_.,]+|[\s\-–—_.,]+$", "", name)
     return safe_filename(name) + ".md"
+
+
+def feature_tag(name: str) -> str:
+    """An Obsidian tag of a feature: no spaces or signs a tag cannot hold («Туманы на картах» → «Туманы-на-картах»)."""
+    tag = re.sub(r"[^\w/-]+", "-", name.strip(), flags=re.UNICODE).strip("-/")
+    return tag if tag and not tag.isdigit() else ""
 
 
 def _yaml_str(value: Any) -> str:
@@ -97,6 +130,7 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
     segments = m.get("segments") or []
     summaries = readable_summaries(m)
     names = [s.get("name") or k for k, s in speakers.items()]
+    features = feature_names(m)
 
     props = [
         "---",
@@ -108,9 +142,11 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
         "participants:",
         *[f"  - {_yaml_str(n)}" for n in names],
         f"source: {_yaml_str(m.get('filename') or '')}",
+        *(["features:", *[f"  - {_yaml_str(f)}" for f in features]] if features else []),
         "tags:",
         "  - verbaliox",
         "  - meeting",
+        *[f"  - {_yaml_str(t)}" for t in dict.fromkeys(feature_tag(f) for f in features) if t],
         f"verbaliox_id: {int(m.get('id') or 0)}",
         "---",
         "",
@@ -221,6 +257,11 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
             raise LookupError("Встреча не найдена")
         if (m.get("status") != "completed" and not in_job) or not m.get("segments"):
             raise ValueError("Запись ещё не расшифрована")
+        if _on(settings, "obsidian_feature_folders"):
+            # a folder per feature (asked by the user): the notes of one feature together, its first one
+            feature = (feature_names(m) or [""])[0]
+            if feature:
+                folder = folder / safe_filename(feature, 80)
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / note_filename(m, settings.get("obsidian_filename") or "")
         old = Path(m.get("obsidian_path") or "")

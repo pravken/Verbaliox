@@ -144,7 +144,7 @@ class ObsidianTest(unittest.TestCase):
                          "obsidian_filename": "{date} {title}", "obsidian_generate": "false"})
 
     def tearDown(self):
-        update_settings({"obsidian_vault": ""})
+        update_settings({"obsidian_vault": "", "obsidian_feature_folders": "true", "obsidian_filename": "{date} {title}"})
         shutil.rmtree(self.vault, ignore_errors=True)
 
     def test_note_is_written_renamed_and_never_overwrites_others(self):
@@ -185,6 +185,27 @@ class ObsidianTest(unittest.TestCase):
         path.write_text(edited, encoding="utf-8")
         obsidian.export_meeting(m["id"], explicit=False)
         self.assertEqual(path.read_text(encoding="utf-8"), edited)
+
+    def test_notes_of_a_feature_go_into_its_folder_and_name(self):
+        from app import features
+
+        f = features.create_feature("Туманы на картах", "#FF9F0A")
+        m = _done_meeting(title="Синк", recorded_at="2024-05-14 10:30:00")
+        features.set_meeting_features(m["id"], [f["id"]])
+        update_settings({"obsidian_filename": "{date} {feature} — {title}"})
+        path = obsidian.export_meeting(m["id"])
+        self.assertEqual(path, self.vault / "Meetings" / "2024" / "Туманы на картах" / "2024-05-14 Туманы на картах — Синк.md")
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('features:\n  - "Туманы на картах"', text)
+        self.assertIn('  - "Туманы-на-картах"', text)  # a tag cannot hold spaces
+        # without a feature: the common folder, and no dash left at the start of the name
+        other = _done_meeting(title="Планёрка", recorded_at="2024-05-14 11:00:00")
+        self.assertEqual(obsidian.export_meeting(other["id"]), self.vault / "Meetings" / "2024" / "2024-05-14 Планёрка.md")
+        # the folders switched off: the note moves back into the common folder
+        update_settings({"obsidian_feature_folders": "false"})
+        moved = obsidian.export_meeting(m["id"])
+        self.assertEqual(moved.parent, self.vault / "Meetings" / "2024")
+        self.assertFalse(path.exists())
 
     def test_tasks_become_checklist(self):
         self.assertEqual(obsidian._tasks_as_checklist("- сделать\n- [x] готово"), "- [ ] сделать\n- [x] готово")
