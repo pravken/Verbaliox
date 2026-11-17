@@ -901,19 +901,27 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 }
 /* The sidebar's head is as tall as the top bar, so their bottom borders make one line */
 .side-head { height: 56px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+/* Recording (asked by the user): a round red button at the right end of the bar; while it records it opens
+   into «● 12:34 ■ Стоп», while it starts it says «Запуск…» */
+.tb-rec-wrap { margin-left: auto; }
 .tb-rec {
-  display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; border-radius: 19px;
-  font-size: var(--fs-body); font-weight: 600; color: #FFFFFF; background: #D70015; white-space: nowrap; transition: filter var(--dur-fast) ease;
-  /* audit 3.19: as wide as its longest idle label («Запуск…»), so «Запись» → «Запуск…» does not
-     push the tabs; the clock has digits of one width */
-  min-width: 124px; justify-content: center; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 34px; width: 34px; padding: 0; border-radius: 17px;
+  color: #FFFFFF; background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.6); white-space: nowrap;
+  font-variant-numeric: tabular-nums; transition: background-color var(--dur-fast) ease;
 }
-.tb-rec:hover { filter: brightness(1.12); }
-.tb-rec-busy { opacity: 0.8; cursor: progress; }
+.tb-rec:hover { background: rgba(255, 69, 58, 0.24); }
+.tb-rec #tb-rec-label { display: none; }
+.tb-rec-on, .tb-rec-busy { width: auto; padding: 0 5px 0 12px; background: rgba(255, 69, 58, 0.16); border-color: rgba(255, 69, 58, 0.55); }
+.tb-rec-on #tb-rec-label { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 12px; background: #FF453A; color: #FFFFFF; font-size: var(--fs-label); font-weight: 600; }
+.tb-rec-on #tb-rec-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: #FFFFFF; }
+.tb-rec-busy #tb-rec-label { display: inline; padding-right: 8px; font-size: var(--fs-ui); color: #FF8A80; }
+.tb-rec-busy { opacity: 0.85; cursor: progress; }
 .tb-rec-busy .tb-rec-dot { animation: tb-blink 0.6s steps(2, start) infinite; }
-.tb-rec-dot { width: 10px; height: 10px; border-radius: 5px; background: #FFFFFF; transition: border-radius var(--dur) ease; }
-.tb-rec-on .tb-rec-dot { border-radius: 2px; animation: tb-blink 1s steps(2, start) infinite; }
-.tb-rec-clock { font-family: var(--font-mono); font-weight: 500; font-size: var(--fs-ui); opacity: 0.85; }
+.tb-rec-dot { width: 12px; height: 12px; border-radius: 6px; background: #FF453A; flex: none; }
+.tb-rec-on .tb-rec-dot, .tb-rec-busy .tb-rec-dot { width: 9px; height: 9px; }
+.tb-rec-on .tb-rec-dot { animation: tb-blink 1s steps(2, start) infinite; }
+.tb-rec-wrap .tb-pop { left: auto; right: 0; }
+.tb-rec-clock { font-family: var(--font-mono); font-weight: 500; font-size: var(--fs-ui); color: #FFFFFF; }
 @keyframes tb-blink { 50% { opacity: 0.35; } }
 /* While recording: the microphone and the computer sound, each an icon with three bars that move
    with its level; dim while it is silent */
@@ -928,7 +936,7 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .rec-src-bars i:nth-child(1) { height: 10px; transform: scaleY(calc((3 + 7 * var(--lv)) / 10)); }
 .rec-src-bars i:nth-child(2) { height: 14px; transform: scaleY(calc((3 + 11 * var(--lv)) / 14)); }
 .rec-src-bars i:nth-child(3) { height: 8px; transform: scaleY(calc((3 + 5 * var(--lv)) / 8)); }
-.rec-src-tb { padding-left: 9px; margin-left: 1px; border-left: 1px solid var(--hc-line, rgba(255, 255, 255, 0.35)); }
+.rec-src-tb { padding: 0 2px 0 9px; margin-left: 1px; border-left: 1px solid var(--hc-line, rgba(255, 255, 255, 0.35)); }
 .rec-src-studio { color: #30D158; margin-right: 4px; }
 .rec-src-studio .rec-src-item:not(.rec-src-on) { color: var(--hc-dim, #8E8E93); }
 @media (prefers-reduced-motion: reduce) { .rec-src-bars i { transition: none; } }
@@ -990,7 +998,7 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 @media (prefers-reduced-motion: reduce) { .tb-analysing .tb-ai { animation: tb-ai-pulse 1.6s ease-in-out infinite; } }
 .tb-pop {
   position: absolute; top: 46px; left: 0; width: 320px; padding: 12px 14px; display: flex; flex-direction: column; gap: 9px;
-  border-radius: 12px; background: rgba(16, 17, 21, 0.92); backdrop-filter: blur(24px) saturate(1.3); -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  border-radius: 12px; background: rgba(16, 17, 21, 0.97); backdrop-filter: blur(24px) saturate(1.3); -webkit-backdrop-filter: blur(24px) saturate(1.3);
   border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.09)); box-shadow: var(--shadow-menu); z-index: 40;
 }
 .tb-pop.hidden { display: none; }
@@ -1011,15 +1019,13 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .topbar.tb-c2 { gap: 3px; padding: 0 10px; }
 .topbar.tb-c2 .tb-tab { padding: 0 12px; }
 .topbar.tb-c2 .tb-subtab { padding: 0 9px; }
-.topbar.tb-c2 .tb-rec { padding: 0 14px; }
 .topbar.tb-c2 .tb-sep { margin: 0 4px; }
 .topbar.tb-c3 #nav-home .tb-lbl, .topbar.tb-c3 #nav-studio .tb-lbl, .topbar.tb-c3 #nav-ask .tb-lbl { display: none; }
 .topbar.tb-c3 #nav-home .tb-ico, .topbar.tb-c3 #nav-studio .tb-ico { display: block; }
 .topbar.tb-c3 #nav-home, .topbar.tb-c3 #nav-studio, .topbar.tb-c3 #nav-ask { padding: 0 11px; }
 .topbar.tb-c4 .tb-subtab .tb-lbl { display: none; }
 .topbar.tb-c4 .tb-subtab .tb-ico { display: block; }
-.topbar.tb-c5 #tb-rec-label { display: none; }
-.topbar.tb-c5 .tb-rec { padding: 0 13px; }
+.topbar.tb-c5 .tb-rec-on #tb-rec-label { padding: 0 7px; }
 .topbar.tb-c6 { overflow-x: auto; scrollbar-width: none; }
 
 .statusbar {
