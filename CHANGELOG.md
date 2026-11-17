@@ -6,6 +6,21 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.17 — English
+
+- **Memory left to the system** (Settings → General): RAM and video memory the app and its models do not take,
+  «Auto» by the computer (RAM: 2 GB at 8, 4 at 16, 6 at 32, 8 above; video memory 0.5 GB, 1 GB on cards of
+  12 GB and more). Ollama and the work processes are capped at the rest, Ollama keeps the card's reserve free,
+  idle models are unloaded when free memory runs short; a model that does not fit says so in words.
+- **Names in the analysis follow**: a participant renamed in a recording, or a contact's name put right, is
+  written anew in the analyses and tasks, in the right case («Ярослава Мельника» → «Ярослава Мельникова»).
+- **«This is someone else…»** on a person in the analysis: every mention and the recording's tasks go to the
+  participant or contact chosen (with «Undo»).
+- **A dictionary word can be edited**: the word, its variants and category («Edit» or a double click).
+- **The «Analysis» tab shows the analysis running**: its mark turns and a dot pulses.
+- **Recording**: no false «the computer's sound is not heard» after a call watched in another window; the
+  voice cleanup after a long call shows the time it has taken (and its share from the second time on).
+
 ## 0.8.16 — English
 
 - **One person, one block of text**: replies of the same person in a row are no longer split into lines with the
@@ -562,6 +577,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.17
+
+- **Запас памяти для системы** («Настройки → Общие»): ОЗУ и видеопамять, которые программа и модели не
+  занимают. «Авто» по объёму компьютера (ОЗУ: 2 ГБ при 8, 4 при 16, 6 при 32, 8 больше; видеопамять 0,5 ГБ,
+  на картах от 12 ГБ — 1 ГБ). Ollama и рабочие процессы ограничены остальным, Ollama оставляет запас карты
+  свободным, при нехватке свободной памяти простаивающие модели выгружаются; если модели не хватило памяти,
+  об этом сказано словами.
+- **Имена в анализе следуют за правкой**: переименованный участник записи или исправленное имя контакта
+  переписываются в анализах и задачах в нужном падеже («Ярослава Мельника» → «Ярослава Мельникова»).
+- **«Это другой человек…»** по клику на человека в анализе: все упоминания и задачи записи переходят на
+  выбранного участника или контакта (с «Отменить»).
+- **Слово в словаре можно исправить**: само слово, варианты и категорию («Изменить» или двойной клик).
+- **Вкладка «Анализ» показывает, что анализ идёт**: значок вращается, рядом пульсирует точка.
+- **Запись**: нет ложного «звука компьютера не слышно» после звонка в другом окне; очистка голоса после
+  долгого звонка показывает прошедшее время (а со второго раза и долю готового).
 
 ## 0.8.16
 
