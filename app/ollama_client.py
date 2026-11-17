@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -203,6 +204,13 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
             env = {**os.environ}
             env.setdefault("OLLAMA_MAX_LOADED_MODELS", "1")
             env.setdefault("OLLAMA_NUM_PARALLEL", "1")
+            try:  # the video memory left to the system (app/mem_reserve.py): what does not fit goes to the processor
+                from app.mem_reserve import ollama_env
+
+                for k, v in ollama_env().items():
+                    env.setdefault(k, v)
+            except Exception:
+                traceback.print_exc()
             proc = subprocess.Popen(
                 [exe, "serve"],
                 env=env,
@@ -323,7 +331,12 @@ def raise_for_ollama(resp: "httpx.Response") -> None:
         err = resp.json().get("error") or resp.text
     except Exception:
         err = getattr(resp, "text", "") or ""
-    raise RuntimeError(f"Ollama ответила ошибкой {resp.status_code}: {str(err).strip()[:200]}")
+    err = str(err).strip()[:200]
+    if re.search(r"memory|alloc|out of memory|oom", err, re.I):
+        # the memory left to the system (app/mem_reserve.py) is kept: the model does not fit in the rest
+        raise RuntimeError(f"Модели не хватило памяти ({err}). Закройте другие программы, выберите модель поменьше "
+                           "или уменьшите запас в «Настройки → Общие → Оставлять системе».")
+    raise RuntimeError(f"Ollama ответила ошибкой {resp.status_code}: {err}")
 
 
 def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:

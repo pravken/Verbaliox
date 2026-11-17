@@ -180,7 +180,19 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
         from app import semantic
 
         semantic.kick()
+    if "mem_reserve_ram" in values or "mem_reserve_vram" in values:
+        from app import mem_reserve
+
+        mem_reserve.apply()  # the cap of the work processes now; the card's reserve when Ollama starts again
     return {"settings": updated, "ollama": get_ollama_status()}
+
+
+@router.get("/api/memory/reserve")
+def api_memory_reserve() -> Dict[str, Any]:
+    """The memory left to the system: the computer's RAM and video memory, the reserves and their «auto»."""
+    from app import mem_reserve
+
+    return mem_reserve.status()
 
 @router.get("/api/ollama/status")
 def api_ollama_status() -> Dict[str, Any]:

@@ -183,6 +183,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     loadSemanticStatus();
     const idleSel = document.getElementById('set-idle-unload');
     idleSel.value = [...idleSel.options].some(o => o.value === String(s.idle_unload_minutes)) ? String(s.idle_unload_minutes) : '10';
+    fillMemReserve(s);
     fillObsidianSettings(s);
     fillDubSettings(s);
     renderRecordSaveHint();
@@ -2548,6 +2549,8 @@ function settingsFormValues() {
     semantic_search: String(document.getElementById('set-semantic').checked),
     semantic_model: document.getElementById('set-semantic-model').value.trim() || 'bge-m3',
     idle_unload_minutes: document.getElementById('set-idle-unload').value,
+    mem_reserve_ram: document.getElementById('set-mem-reserve-ram')?.value || 'auto',
+    mem_reserve_vram: document.getElementById('set-mem-reserve-vram')?.value || 'auto',
     ...obsidianSettingsPayload(),
     ...llmSettingsPayload(),
     record_source_mode: document.getElementById('set-record-source')?.value || 'both',
@@ -2990,13 +2993,33 @@ async function benchUse(kind, model) {
   else await selectActiveOllamaModel(model);
 }
 
+// The memory left to the system (app/mem_reserve.py): «Авто (4 ГБ)» names what auto means on this computer
+const MEM_RESERVE_RAM = ['auto', '2', '3', '4', '6', '8', '12', '16'];
+const MEM_RESERVE_VRAM = ['auto', '0.5', '1', '1.5', '2', '3', '4'];
+async function fillMemReserve(s) {
+  const ram = document.getElementById('set-mem-reserve-ram'), vram = document.getElementById('set-mem-reserve-vram');
+  if (!ram || !vram) return;
+  const st = await fetch('/api/memory/reserve').then(r => (r.ok ? r.json() : null)).catch(() => null) || {};
+  const gb = v => `${String(v).replace('.', state.uiLang === 'en' ? '.' : ',')} ${t('unitGB')}`;
+  const fill = (sel, list, cur, autoGb, total) => {
+    sel.innerHTML = list.filter(v => v === 'auto' || !total || Number(v) < total)
+      .map(v => `<option value="${v}">${escapeHtml(v === 'auto' ? `${t('memReserveAuto')}${autoGb != null ? ` (${gb(autoGb)})` : ''}` : gb(v))}</option>`).join('');
+    sel.value = list.includes(cur) ? cur : 'auto';
+  };
+  fill(ram, MEM_RESERVE_RAM, String(s.mem_reserve_ram || 'auto'), st.ram_auto_gb, st.ram_total_gb);
+  fill(vram, MEM_RESERVE_VRAM, String(s.mem_reserve_vram || 'auto'), st.vram_total_gb ? st.vram_auto_gb : null, st.vram_total_gb);
+  vram.disabled = !st.vram_total_gb;
+  vram.closest('label')?.classList.toggle('opacity-50', !st.vram_total_gb);
+}
+
 // --- The settings page of the redesign: sections, a search, changes saved at once, a reset per section ---
 
 // What "Сбросить раздел" puts back: [element id, setting key, 'check' | 'value']. The default values
 // are those of app/database.init_db (tests/test_settings_page.py keeps them the same)
 const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
-    ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
+    ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
+    ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],
@@ -3019,6 +3042,7 @@ const SETTINGS_RESET = {
 };
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
+  mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
   auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
