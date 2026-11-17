@@ -125,6 +125,17 @@
             <button data-click="unloadAllModelsNow" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="idleUnloadNow">Выгрузить всё сейчас</button>
             <span id="idle-unload-status" class="text-[11.5px] text-apple-tertiary"></span>
           </div>
+          <!-- The memory left to the system (app/mem_reserve.py): the app and its models never take it -->
+          <div class="mem-reserve">
+            <div class="text-xs text-apple-label" data-i18n="memReserveTitle">Оставлять системе</div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <label class="mem-reserve-field"><span data-i18n="memReserveRam">ОЗУ</span>
+                <select id="set-mem-reserve-ram" data-i18n-title="memReserveRamTip" title="Оперативная память, которую программа и модели не займут" class="h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none"></select></label>
+              <label class="mem-reserve-field"><span data-i18n="memReserveVram">Видеопамять</span>
+                <select id="set-mem-reserve-vram" data-i18n-title="memReserveVramTip" title="Видеопамять, которую модели не займут" class="h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none"></select></label>
+            </div>
+            <p id="mem-reserve-hint" class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="memReserveHint">Программа и модели не займут эту часть памяти: при нехватке простаивающие модели выгружаются сами, а Ollama не может взять больше. Запас видеопамяти — со следующего запуска Ollama.</p>
+          </div>
           <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipQuietMode" title="Без всплывающих уведомлений Windows: о начале и конце записи, о готовых расшифровках. Переключается и в меню значка в трее">
             <span data-i18n="quietModeToggle">Тихий режим (без уведомлений)</span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-quiet-mode" />

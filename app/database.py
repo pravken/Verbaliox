@@ -179,6 +179,8 @@ def init_db() -> None:
             "voice_profiles": "true",  # name known voices automatically (app/voice_profiles.py)
             "update_check": "true",  # look for a new release on GitHub at start (app/updater.py)
             "idle_unload_minutes": "10",  # free models from memory after this long unused; 0 = never
+            "mem_reserve_ram": "auto",  # RAM left to the system, GB or auto (app/mem_reserve.py)
+            "mem_reserve_vram": "auto",  # video memory left to the system, GB or auto
             "recordings_dir": "",  # where recordings made in the app are saved; "" = <data>/recordings
             "live_whisper_model": "auto",
             "record_hotkey": "Ctrl+Alt+R",
