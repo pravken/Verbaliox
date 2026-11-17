@@ -934,6 +934,7 @@ async function createAnalysisSection(key, ev) {
   const busy = `${m.id}:${key}`;
   if (state.anBusy.has(busy)) return;
   state.anBusy.add(busy);
+  syncAnalysisMark();
   if (state.activeMeeting === m) renderSummaryPanel();
   const { chosenModel } = summaryModelChoice();
   try {
@@ -959,6 +960,7 @@ async function createAnalysisSection(key, ev) {
     showToast(`${anSectionInfo(key).label}: ${serverText(e.message)}`);
   } finally {
     state.anBusy.delete(busy);
+    syncAnalysisMark();
     if (state.activeMeeting === m) {
       if (key === 'commitments' || key === 'protocol') await refreshCommitmentCount();  // the analysis in steps finds the tasks too
       renderSummaryPanel();
@@ -1391,6 +1393,7 @@ async function runCustomQuestion() {
   state.anQuestion = { id: m.id, text: prompt };
   state.anBusy = state.anBusy || new Set();
   state.anBusy.add(`${m.id}:custom`);
+  syncAnalysisMark();
   state.activeSummaryTab = 'custom';  // the section shows while it is made
   renderSummaryPanel();
   try {
@@ -1406,6 +1409,7 @@ async function runCustomQuestion() {
     showError(serverText(e.message));
   } finally {
     state.anBusy.delete(`${m.id}:custom`);
+    syncAnalysisMark();
     if (state.activeMeeting === m) { renderChaptersBar(); renderSummaryPanel(); }
   }
 }

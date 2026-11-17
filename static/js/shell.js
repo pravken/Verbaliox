@@ -95,6 +95,7 @@ function renderTopbar() {
   set('nav-transcript', view === 'library' && tab === 'transcript');
   set('nav-summary', view === 'library' && tab === 'summary');
   set('nav-speakers', view === 'library' && tab === 'speakers');
+  syncAnalysisMark();
   if (m) {
     // the sections made (summaries["error"] is the last failure, not a section)
     const ready = Object.entries(m.summaries || {}).filter(([k, v]) => k !== 'error' && typeof v === 'string' && v.trim()).length;
@@ -102,6 +103,23 @@ function renderTopbar() {
     badge('nav-speakers-n', Object.keys(m.speakers || {}).length);
   }
   scheduleFitTopbar();
+}
+
+// While the analysis of the open recording runs (a section asked for here, or the analysis after the
+// transcription), the mark of «Анализ» in the bar turns and a dot pulses beside it (asked by the user)
+function analysisRunning(m) {
+  if (!m) return false;
+  if (m.status === 'summarizing') return true;
+  const own = `${m.id}:`;
+  return !!state.anBusy && [...state.anBusy].some(k => k.startsWith(own));
+}
+function syncAnalysisMark() {
+  const el = document.getElementById('nav-summary');
+  if (!el) return;
+  const on = analysisRunning(state.activeMeeting);
+  if (el.classList.contains('tb-analysing') === on) return;
+  el.classList.toggle('tb-analysing', on);
+  el.title = on ? t('tipAnalysisRunning') : t('tipTabSummary');
 }
 
 // The bar fits the window at any width and interface scale: the steps of styles.css (tb-c1…tb-c6) are
