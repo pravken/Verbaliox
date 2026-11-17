@@ -3269,11 +3269,11 @@ function renderSettingsDictionary() {
       <label class="flex items-center gap-2.5 min-w-0 cursor-pointer">
         <input type="checkbox" ${item.active ? 'checked' : ''} data-change="toggleDictItem" data-change-args='[${item.id}, {"$": "checked"}]'
           class="rounded bg-apple-bg border-white/20 text-apple-blue" />
-        <span class="truncate ${item.active ? 'text-white' : 'text-apple-tertiary line-through'}">${escapeHtml(item.term)}</span>
+        <span class="truncate ${item.active ? 'text-white' : 'text-apple-tertiary line-through'}" data-dblclick="editDictItem" data-dblclick-args='[${item.id}]'>${escapeHtml(item.term)}</span>
         ${item.variants ? `<span class="dict-variants text-apple-tertiary truncate" title="${escapeHtml(t('dictVariantsTip'))}">← ${escapeHtml(item.variants)}</span>` : ''}
         <span class="text-[11px] px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary shrink-0">${escapeHtml(item.category)}</span>
       </label>
-      <button data-click="editDictVariants" data-click-args='[${item.id}]' title="${escapeHtml(t('dictVariantsEdit'))}" aria-label="${escapeHtml(t('dictVariantsEdit'))}" class="text-[11px] text-apple-tertiary hover:text-white transition px-1 shrink-0 ml-auto">${escapeHtml(t('dictVariantsEditShort'))}</button>
+      <button data-click="editDictItem" data-click-args='[${item.id}]' title="${escapeHtml(t('dictEditTip'))}" aria-label="${escapeHtml(t('dictEditTip'))}" class="dict-edit-btn shrink-0 ml-auto">${SVG_ICONS.pencil}<span>${escapeHtml(t('editBtn'))}</span></button>
       <button data-click="deleteSettingsDictItem" data-click-args='[${item.id}]' title="${escapeHtml(t('tipDeleteDictTerm'))}" class="text-apple-tertiary hover:text-apple-red transition p-1">${SVG_ICONS.closeX}</button>
     </div>`).join('');
 }
@@ -3308,17 +3308,51 @@ async function addSettingsDictItem() {
   checkSettingsDictTerm();
 }
 
-// How a term may be recognized ("клод, klot" for Claude): replaced by the term after recognition
-async function editDictVariants(id) {
+// A word of the dictionary changed in one window (asked by the user: a word written wrong could not be put
+// right): the word, how it may be recognized ("клод, klot" for Claude) and its category
+function editDictItem(id) {
   const item = (state.dictionary || []).find(d => d.id === id);
   if (!item) return;
-  const v = await askText(t('dictVariantsAsk').replace('{term}', () => item.term), item.variants || '', { title: t('dictVariantsTitle') });
-  if (v === null) return;
-  const res = await fetch(`/api/dictionary/${id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variants: v }),
-  }).catch(() => null);
-  if (!res || !res.ok) { showError(); return; }
-  await loadDictionary();
+  const wrap = document.createElement('div');
+  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  const field = (key, label, value, hint = '') => `<label class="block space-y-1"><span class="text-xs text-apple-label">${escapeHtml(label)}</span>
+    <input data-k="${key}" type="text" value="${escapeHtml(value || '')}" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+    ${hint ? `<span class="block text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(hint)}</span>` : ''}</label>`;
+  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-3.5 modal-card">
+      <div class="text-sm font-semibold text-white">${escapeHtml(t('dictEditTitle'))}</div>
+      ${field('term', t('dictEditWord'), item.term)}
+      ${field('variants', t('dictVariantsEdit'), item.variants, t('dictEditVariantsHint'))}
+      ${field('category', t('dictEditCategory'), item.category)}
+      <div class="dict-edit-err hidden text-xs text-apple-red"></div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('save'))}</button>
+      </div></form>`;
+  const val = k => wrap.querySelector(`[data-k="${k}"]`).value.trim();
+  const close = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  wrap.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = { term: val('term'), variants: val('variants'), category: val('category') || item.category };
+    const err = wrap.querySelector('.dict-edit-err');
+    if (!body.term) { err.textContent = serverText('Пустое слово'); err.classList.remove('hidden'); return; }
+    const res = await fetch(`/api/dictionary/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res || !res.ok) {
+      err.textContent = res ? errorText(await readJson(res), res) : t('errorGeneric');
+      err.classList.remove('hidden');
+      return;
+    }
+    close();
+    await loadDictionary();
+  });
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="no"]')) close(); });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  const first = wrap.querySelector('[data-k="term"]');
+  first.focus();
+  first.select();
 }
 
 // Deleted at once, with a way back

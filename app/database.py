@@ -659,6 +659,29 @@ def set_dictionary_variants(term_id: int, variants: str) -> None:
         conn.close()
 
 
+def rename_dictionary_term(term_id: int, term: Optional[str] = None, category: Optional[str] = None) -> None:
+    """A word of the dictionary written anew (a typo in it, asked by the user) or put in another category;
+    its spellings stay, without the new word itself."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT term, variants FROM dictionary WHERE id = ?", (term_id,)).fetchone()
+            if not row:
+                return
+            new = " ".join((term or "").split()) or row["term"]
+            if new != row["term"]:
+                other = conn.execute("SELECT id FROM dictionary WHERE term = ? AND id != ?", (new, term_id)).fetchone()
+                if other:
+                    raise ValueError("Такое слово уже есть в словаре")
+                conn.execute("UPDATE dictionary SET term = ?, variants = ? WHERE id = ?",
+                             (new, _clean_variants(new, row["variants"] or ""), term_id))
+            if category is not None and category.strip():
+                conn.execute("UPDATE dictionary SET category = ? WHERE id = ?", (category.strip()[:40], term_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def delete_dictionary_term(term_id: int) -> None:
     with _db_lock:
         conn = get_connection()
