@@ -518,7 +518,16 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
         if voice_filter.find_exe():
             _mix_stage(meeting_id, 82, "Сведение дорожек: очистка голоса…")
             filtered = page.with_name(page.name + ".voice.wav")
-            if voice_filter.clean(tool_cmd("ffmpeg"), mic or page, filtered):
+
+            def voice_progress(part: Optional[float], elapsed: float) -> None:
+                # «очистка голоса… 40% · 3:12»: the number moves, the stage is not stuck
+                took = f"{int(elapsed) // 60}:{int(elapsed) % 60:02d}"
+                if part is None:
+                    _mix_stage(meeting_id, 82, f"Сведение дорожек: очистка голоса… {took}")
+                else:
+                    _mix_stage(meeting_id, 82 + int(part * 9), f"Сведение дорожек: очистка голоса… {int(part * 100)}% · {took}")
+
+            if voice_filter.clean(tool_cmd("ffmpeg"), mic or page, filtered, progress=voice_progress):
                 if mic:
                     mic.unlink(missing_ok=True)
                 mic, voice = filtered, "cleaned"

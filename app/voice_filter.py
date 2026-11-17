@@ -88,10 +88,46 @@ def start_download() -> Dict[str, Any]:
     return status()
 
 
-def clean(ffmpeg: str, source: Path, out: Path, atten_db: int = ATTEN_DB) -> bool:
+RATE_KEY = "voice_filter_rate"  # seconds of sound the filter cleaned per second on this computer, last time
+
+
+def _run_with_progress(cmd: list, flags: int, seconds: float, progress) -> "subprocess.CompletedProcess":
+    """The filter run, telling `progress(fraction or None, elapsed)` every 2 s: an hour of a microphone takes
+    about ten minutes, and a stage that stays at one number that long looked stuck (asked by the user).
+    The fraction is estimated from the speed of the last run on this computer; None the first time."""
+    import time
+
+    from app.database import get_all_settings, update_settings
+
+    try:
+        rate = float(get_all_settings().get(RATE_KEY) or 0)
+    except ValueError:
+        rate = 0.0
+    start = time.monotonic()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=flags)
+    while True:
+        try:
+            out, err = proc.communicate(timeout=2.0)
+            break
+        except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - start
+            if elapsed > 6 * 3600:
+                proc.kill()
+                out, err = proc.communicate()
+                break
+            if progress:
+                progress(min(0.97, elapsed * rate / seconds) if rate > 0 and seconds > 0 else None, elapsed)
+    took = time.monotonic() - start
+    if proc.returncode == 0 and seconds > 30 and took > 1:
+        update_settings({RATE_KEY: f"{seconds / took:.2f}"})
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
+def clean(ffmpeg: str, source: Path, out: Path, atten_db: int = ATTEN_DB, progress=None) -> bool:
     """The voice in `source` (any sound or video file) without its noise, written to `out` (WAV,
     48 kHz mono, the same length and timing). False when the filter is not there or did not work:
-    the recording is then mixed with the microphone as it was."""
+    the recording is then mixed with the microphone as it was. `progress(fraction or None, elapsed)`
+    is told while it runs."""
     exe = find_exe()
     if not exe:
         return False
@@ -105,8 +141,9 @@ def clean(ffmpeg: str, source: Path, out: Path, atten_db: int = ATTEN_DB) -> boo
             if res.returncode != 0 or not raw.is_file():
                 raise RuntimeError((res.stderr or b"").decode("utf-8", "replace")[-300:])
             # -D: the delay of the network made up for, so the voice stays where the system sound is
-            res = subprocess.run([exe, "-D", "-a", str(int(atten_db)), "-o", str(Path(tmp) / "out"), str(raw)],
-                                 capture_output=True, creationflags=flags, timeout=6 * 3600)
+            seconds = max(0.0, (raw.stat().st_size - 44) / (48000 * 2))
+            res = _run_with_progress([exe, "-D", "-a", str(int(atten_db)), "-o", str(Path(tmp) / "out"), str(raw)],
+                                     flags, seconds, progress)
             done = Path(tmp) / "out" / raw.name
             if res.returncode != 0 or not done.is_file():
                 raise RuntimeError((res.stderr or res.stdout or b"").decode("utf-8", "replace")[-300:])

@@ -349,6 +349,8 @@ const SERVER_PATTERNS_EN = [
   ["{}: нужен адрес вида http(s)://сервер[:порт]", "{0}: an address like http(s)://server[:port] is needed"],
   ["Не удалось извлечь звук: {}", "Could not extract the sound: {0}"],
   ["Сведение дорожек: убираем эхо колонок… {}%", "Mixing the tracks: removing the speakers' echo… {0}%"],
+  ["Сведение дорожек: очистка голоса… {}", "Mixing the tracks: cleaning the voice… {0}"],
+  ["Сведение дорожек: очистка голоса… {}% · {}", "Mixing the tracks: cleaning the voice… {0}% · {1}"],
   ["Длина файла {} мин {} с, а у записи {} мин {} с. Это тот же файл?", "The file is {0} min {1} s long, the recording {2} min {3} s. Is it the same file?"],
   ["Скачивание по ссылке… ({} из {})", "Downloading from the link… ({0} of {1})"],
   ["Ждёт скачивания ({} из {})", "Waiting to download ({0} of {1})"],
