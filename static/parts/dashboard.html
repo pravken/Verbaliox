@@ -1,0 +1,24 @@
+<!-- «Дэшборд» (static/js/dashboard.js): widgets the user arranges; part of static/parts/workspace.html.
+     The full list of tasks and its calendar stay on the Tasks page («Все задачи →»). -->
+    <div id="dashboard-view" class="hidden flex-1 min-h-0 tk-view">
+      <header class="db-head">
+        <!-- the greeting and the date of the former home page (moved in by dashboard.js) -->
+        <div id="db-hello" class="db-hello"></div>
+        <div id="db-qa" class="db-qa"></div>
+      </header>
+      <div class="db-bar">
+        <span id="db-sub" class="tk-sub"></span>
+        <span class="tk-grow"></span>
+        <div id="db-periods" class="tk-seg" role="radiogroup" data-i18n-title="dbPeriod" title="Период"></div>
+        <button id="db-feature-btn" class="tk-btn" data-click="openDashFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"></button>
+        <button id="db-edit-btn" class="tk-btn" data-click="toggleDashEdit" aria-pressed="false">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 14v6M14 17h6"/></svg>
+          <span id="db-edit-label" data-i18n="dbEdit">Настроить</span>
+        </button>
+      </div>
+      <div class="db-body">
+        <div id="db-grid" class="db-grid"></div>
+        <div id="db-park" class="hidden"></div>
+        <aside id="db-drawer" class="db-drawer hidden" aria-label="Виджеты" data-i18n-aria="dbWidgets"></aside>
+      </div>
+    </div>
