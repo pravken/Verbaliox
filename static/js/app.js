@@ -1581,7 +1581,7 @@ function openRecordingsDir() {
 }
 
 // --- Obsidian settings ---
-const OBSIDIAN_TOGGLES = ['auto', 'generate', 'summary', 'tasks', 'chapters', 'transcript'];
+const OBSIDIAN_TOGGLES = ['auto', 'generate', 'summary', 'tasks', 'chapters', 'transcript', 'feature_folders'];
 
 function fillObsidianSettings(s) {
   for (const k of OBSIDIAN_TOGGLES) {
@@ -1662,11 +1662,16 @@ function updateObsidianPreview() {
   const m = state.activeMeeting;
   const d = new Date();
   const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // the feature of the open recording, or an example one: the folder and {feature} show what they do
+  const f = m && (m.features || []).length && typeof featureById === 'function' ? featureById(m.features[0]) : null;
+  const feature = f ? f.name : t('obsExampleFeature');
   const name = tpl.replace('{date}', () => date).replace('{time}', () => `${String(d.getHours()).padStart(2, '0')}-${String(d.getMinutes()).padStart(2, '0')}`)
-    .replace('{title}', () => (m && m.title) || t('obsExampleTitle')).replace('{lang}', () => ((m && m.language) || 'ru').toUpperCase());
+    .replace('{title}', () => (m && m.title) || t('obsExampleTitle')).replace('{lang}', () => ((m && m.language) || 'ru').toUpperCase())
+    .replace('{feature}', () => feature);
+  const byFeature = document.getElementById('set-obsidian-feature_folders')?.checked;
   const sep = vault.includes('/') && !vault.includes('\\') ? '/' : '\\';
   document.getElementById('obs-preview').textContent = vault
-    ? `${t('obsPreview')}: ${[vault, sub, name + '.md'].filter(Boolean).join(sep)}`
+    ? `${t('obsPreview')}: ${[vault, sub, byFeature ? feature : '', name + '.md'].filter(Boolean).join(sep)}`
     : t('obsPreviewNoVault');
 }
 

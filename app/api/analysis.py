@@ -1,5 +1,6 @@
 """Series, voices, segment edits, summaries, promises, notes and templates."""
 
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import File, HTTPException, UploadFile
@@ -111,6 +112,12 @@ def api_meeting_features(meeting_id: int, payload: MeetingFeaturesPayload) -> Di
     if not get_meeting(meeting_id):
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     set_meeting_features(meeting_id, payload.ids, payload.for_series)
+    try:  # the note in Obsidian follows: another feature's folder, {feature} in its name, its tags
+        from app.obsidian import refresh_if_exported
+
+        refresh_if_exported(meeting_id)
+    except Exception:
+        traceback.print_exc()
     m = get_meeting(meeting_id) or {}
     return {"features": m.get("features", []), "feature_suggestions": m.get("feature_suggestions", [])}
 
