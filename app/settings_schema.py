@@ -21,7 +21,7 @@ BOOLS = {
     "keep_model_loaded", "onnx_gpu", "onnx_gpu_vad", "voice_profiles", "update_check", "quiet_mode",
     "call_auto_record", "semantic_search", "auto_title", "obsidian_auto", "summary_grounding", "analysis_chain", "auto_commitments", "auto_chapters", "dictionary_fuzzy", "asr_ensemble", "rec_echo_cancel", "teams_captions", "rec_sounds", "meeting_follow", "import_copy", "rec_voice_filter",
     "delete_media_after", "update_auto", "update_beta", "obsidian_summary", "obsidian_tasks", "obsidian_chapters",
-    "obsidian_transcript", "obsidian_generate", "llm_cloud_consent", "watch_folder_recursive",
+    "obsidian_transcript", "obsidian_generate", "obsidian_feature_folders", "llm_cloud_consent", "watch_folder_recursive",
     "dub_keep_original_track", "dub_denoise", "dub_room_tone", "dub_keep_workdir", "dictation_translate_cloud", "dictation_save",
     "start_with_windows", "close_to_tray", "ask_import_params", "proc_denoise", "proc_loudnorm", "proc_leveling",
     "meet_auto_all", "meet_ask_inperson", "work_day_fit", "device_auto",

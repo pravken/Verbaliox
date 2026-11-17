@@ -86,8 +86,11 @@ async function hmLoadEvents(force) {
   return hmEventsLoading;
 }
 
+// The day of the home page is drawn on «Дэшборд» (its blocks are there: static/js/dashboard.js)
+function hmShown() { return state.appView === 'home' || state.appView === 'dashboard'; }
+
 function renderHome() {
-  hmLoad().then(() => { if (state.appView === 'home') renderHomeNow(); });
+  hmLoad().then(() => { if (hmShown()) renderHomeNow(); });
   renderHomeNow();
 }
 
@@ -550,7 +553,7 @@ async function hmSetNever(e, on) {
   const ov = hmOverrides();
   delete ov[e.key];
   if (!await hmSave({ meet_never: JSON.stringify(list), meet_overrides: JSON.stringify(hmPruneOverrides(ov)) })) return false;
-  if (state.appView === 'home') renderHomeNow();
+  if (hmShown()) renderHomeNow();
   return true;
 }
 
@@ -576,7 +579,7 @@ async function hmAskAnswer(yes) {
     hmAutoRec = { key: e.key, end: e.e.getTime(), title: e.title || '' };
     await shellQuickRecord();
   }
-  if (state.appView === 'home') renderHomeNow();
+  if (hmShown()) renderHomeNow();
 }
 
 // --- Dictation from the home page (app/dictation.py, the text is shown here, not typed) ---
@@ -685,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
   setInterval(hmCallEndTick, 5000);
   // the clock line and the processing on the page follow by themselves
-  setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);
+  setInterval(() => { if (hmShown() && !document.hidden) renderHomeNow(); }, 30000);
 });
 
 
