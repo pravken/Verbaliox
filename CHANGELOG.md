@@ -6,6 +6,18 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.18 — English
+
+- **Dashboard instead of «Today» and «Tasks»**, the first page of the app: the date and greeting, the period
+  (week, month, quarter) and a feature filter; widgets for the numbers of the period, today's meetings with
+  auto-recording, the week, my tasks, features with eight weeks of activity, time in meetings, the people met
+  most, the decisions of the analyses, a summary of the period by the local model, recent recordings and what is
+  being processed. «Customize» drags, sizes (S · M · L · W), removes and adds widgets; the set is kept on this
+  computer. Only my own tasks are counted («This is me»); other people's stay on the Tasks page.
+- **Obsidian: notes in feature folders** (on by default) and {feature} in the file name template; the note
+  moves when the feature changes; features in the note's properties and as a tag.
+- **Recording**: a round red button at the right of the top bar; while recording it shows the time and «Stop».
+
 ## 0.8.17 — English
 
 - **Memory left to the system** (Settings → General): RAM and video memory the app and its models do not take,
@@ -577,6 +589,18 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.18
+
+- **Дэшборд вместо «Сегодня» и «Задачи»** — первая страница программы: дата и приветствие, период (неделя,
+  месяц, квартал) и фильтр по фиче; виджеты с цифрами периода, встречами сегодня с автозаписью, неделей, моими
+  задачами, фичами с активностью за 8 недель, временем во встречах, людьми, с кем чаще всего, решениями из
+  анализов, сводкой периода локальной моделью, недавними записями и тем, что в работе. «Настроить»:
+  перетаскивание, размер (S · M · L · W), убрать и добавить виджеты; набор хранится на компьютере.
+  Считаются только мои задачи («Это я»), чужие остаются на странице «Задачи».
+- **Obsidian: заметки по папкам фич** (включено) и {feature} в шаблоне имени файла; при смене фичи заметка
+  переезжает; фичи в свойствах заметки и тегом.
+- **Запись**: круглая красная кнопка справа в верхней панели; во время записи — время и «Стоп».
 
 ## 0.8.17
 
