@@ -228,6 +228,29 @@ await step('library table', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a double click did not open the recording');
 });
 
+// The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
+await step('dashboard', async () => {
+  await page.evaluate(() => switchAppView('dashboard'));
+  await sleep(1200);
+  expect(await page.isVisible('#dashboard-view'), 'the dashboard did not open');
+  expect(await page.locator('#db-grid .db-w').count() >= 8, 'the widgets are missing');
+  expect(await page.isVisible('#db-hello .hm-greeting'), 'the greeting did not move to the dashboard');
+  await page.click('#db-edit-btn');
+  await sleep(200);
+  const before = await page.locator('#db-grid .db-w').count();
+  await page.click('#db-grid .db-w .db-x >> nth=0');
+  expect(await page.locator('#db-grid .db-w').count() === before - 1, 'a widget was not removed');
+  await page.click('#db-drawer .db-lib-add >> nth=0');
+  expect(await page.locator('#db-grid .db-w').count() === before, 'a widget was not added');
+  await page.click('#db-drawer button:has-text("Вернуть как было")');
+  await page.click('#db-edit-btn');
+  await page.click('#db-periods button >> nth=1');
+  await sleep(600);
+  expect((await page.textContent('#db-sub')).startsWith('Месяц'), 'the period did not change');
+  await page.click('#db-periods button >> nth=0');
+  await sleep(300);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

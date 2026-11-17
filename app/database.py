@@ -206,6 +206,7 @@ def init_db() -> None:
             "obsidian_vault": "",
             "obsidian_subfolder": "Verbaliox",
             "obsidian_filename": "{date} {title}",
+            "obsidian_feature_folders": "true",  # a note of a recording with a feature goes into the feature's folder
             "file_name_template": "{date} {title}",  # recordings and exports (app/naming.py)
             "date_folders": "off",  # off | day | month | year_month: folders by date (app/naming.py)
             "summary_templates": "[]",  # the user's own summary templates, JSON (summary_templates())
