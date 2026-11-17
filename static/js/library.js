@@ -36,7 +36,10 @@ async function loadMeetingsList() {
       state.activeMeeting.stage_text = updated.stage_text;
       updateProcessingBanner(state.activeMeeting);
     }
-  } else if (state.meetings.length > 0 && !state.activeMeeting) {
+  }
+  if (state.activeMeeting) {
+    syncAnalysisMark();  // the analysis after the transcription started or ended
+  } else if (state.meetings.length > 0) {
     // The top row as the list is sorted (not the newest id), scrolled into view
     const first = libVisibleIds()[0] ?? state.meetings[0].id;
     await selectMeeting(first, true);

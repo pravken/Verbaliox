@@ -953,6 +953,13 @@ def api_update_speaker(meeting_id: int, payload: SpeakerUpdatePayload) -> Dict[s
         from app import commitments
 
         commitments.rename_person(meeting_id, renamed[0], name)  # its tasks take the new name
+        try:  # and the analysis names them anew (asked by the user: a fixed typo stayed in the summary)
+            from app.people import rename_in_analysis
+
+            if rename_in_analysis(meeting_id, renamed[0], name):
+                m = get_meeting(meeting_id) or m
+        except Exception:
+            traceback.print_exc()
     if learned:
         # Naming a voice teaches its profile: later recordings get the name automatically
         from app.voice_profiles import learn

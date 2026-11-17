@@ -210,6 +210,12 @@ async def lifespan(_app: FastAPI):
     except Exception:
         traceback.print_exc()
     idle_unload.start()
+    try:
+        from app import mem_reserve
+
+        mem_reserve.start()  # the memory left to the system (Settings → General)
+    except Exception:
+        traceback.print_exc()
     from app import onnx_gpu
 
     onnx_gpu.maybe_install_on_start()

@@ -103,6 +103,30 @@ class TranscriptEditApiTest(unittest.TestCase):
         self.assertEqual(self.c.patch(url, json={"speaker_id": "<script>", "name": "x"}).status_code, 400)
         self.assertEqual(self.c.patch(url, json={"speaker_id": "SPEAKER_00", "name": "x", "color": "red"}).status_code, 400)
 
+    def test_a_participant_renamed_is_renamed_in_the_analysis(self):
+        from app.database import merge_summaries
+
+        merge_summaries(self.mid, {"protocol": "Задачу берёт Анна; Анне помогут."})
+        r = self.c.patch(f"/api/meetings/{self.mid}/speakers", json={"speaker_id": "SPEAKER_00", "name": "Алла"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["summaries"]["protocol"], "Задачу берёт Алла; Алле помогут.")
+        # «это другой человек» in the analysis: every mention and the tasks take the other name
+        r = self.c.post(f"/api/meetings/{self.mid}/analysis/rename-person", json={"old": "Алла", "new": "Мария"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["summaries"]["protocol"], "Задачу берёт Мария; Марии помогут.")
+        self.assertEqual(self.c.post(f"/api/meetings/{self.mid}/analysis/rename-person", json={"old": "", "new": "x"}).status_code, 400)
+
+    def test_a_dictionary_word_is_edited(self):
+        r = self.c.post("/api/dictionary", json={"term": "Верболикс", "variants": "верба ликс"})
+        item = next(d for d in r.json()["items"] if d["term"] == "Верболикс")
+        self.c.post("/api/dictionary", json={"term": "Фича"})
+        r = self.c.patch(f"/api/dictionary/{item['id']}", json={"term": "Verbaliox", "category": "Продукт"})
+        self.assertEqual(r.status_code, 200)
+        d = next(x for x in self.c.get("/api/dictionary").json() if x["id"] == item["id"])
+        self.assertEqual((d["term"], d["category"], d["variants"]), ("Verbaliox", "Продукт", "верба ликс"))
+        self.assertEqual(self.c.patch(f"/api/dictionary/{item['id']}", json={"term": "Фича"}).status_code, 409)
+        self.assertEqual(self.c.patch(f"/api/dictionary/{item['id']}", json={"term": "  "}).status_code, 400)
+
     def test_edits_wait_while_the_recording_is_transcribed(self):
         from unittest import mock
 

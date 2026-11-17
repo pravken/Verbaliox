@@ -179,6 +179,8 @@ def init_db() -> None:
             "voice_profiles": "true",  # name known voices automatically (app/voice_profiles.py)
             "update_check": "true",  # look for a new release on GitHub at start (app/updater.py)
             "idle_unload_minutes": "10",  # free models from memory after this long unused; 0 = never
+            "mem_reserve_ram": "auto",  # RAM left to the system, GB or auto (app/mem_reserve.py)
+            "mem_reserve_vram": "auto",  # video memory left to the system, GB or auto
             "recordings_dir": "",  # where recordings made in the app are saved; "" = <data>/recordings
             "live_whisper_model": "auto",
             "record_hotkey": "Ctrl+Alt+R",
@@ -657,6 +659,29 @@ def set_dictionary_variants(term_id: int, variants: str) -> None:
                          (_clean_variants(row["term"], variants), term_id))
             conn.commit()
         conn.close()
+
+
+def rename_dictionary_term(term_id: int, term: Optional[str] = None, category: Optional[str] = None) -> None:
+    """A word of the dictionary written anew (a typo in it, asked by the user) or put in another category;
+    its spellings stay, without the new word itself."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT term, variants FROM dictionary WHERE id = ?", (term_id,)).fetchone()
+            if not row:
+                return
+            new = " ".join((term or "").split()) or row["term"]
+            if new != row["term"]:
+                other = conn.execute("SELECT id FROM dictionary WHERE term = ? AND id != ?", (new, term_id)).fetchone()
+                if other:
+                    raise ValueError("Такое слово уже есть в словаре")
+                conn.execute("UPDATE dictionary SET term = ?, variants = ? WHERE id = ?",
+                             (new, _clean_variants(new, row["variants"] or ""), term_id))
+            if category is not None and category.strip():
+                conn.execute("UPDATE dictionary SET category = ? WHERE id = ?", (category.strip()[:40], term_id))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def delete_dictionary_term(term_id: int) -> None:

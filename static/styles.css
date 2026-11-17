@@ -831,6 +831,11 @@ html select:focus-visible { outline-offset: -2px; }
 .seg-icon-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.06); }
 /* A block of one person's phrases (workspace.js transcriptGroupHtml): the phrases run on as one paragraph */
 .seg-block { overflow-wrap: anywhere; }
+.mem-reserve { display: flex; flex-direction: column; gap: 6px; }
+.mem-reserve-field { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-label); color: var(--hc-dim, #AEAEB2); }
+.dict-edit-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 6px; border-radius: 6px; font-size: 11px; color: var(--hc-dim, #8A8A90); }
+.dict-edit-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.07); }
+.dict-edit-err.hidden { display: none; }
 .seg-para { position: relative; margin: 0; }
 .seg-para + .seg-para { margin-top: 8px; }
 .seg-para-time { position: absolute; left: -64px; width: 48px; text-align: right; font-family: var(--font-mono); font-size: 11px; line-height: inherit; min-height: 0;
@@ -975,6 +980,14 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-active .tb-badge { background: #FFFFFF; color: #0060C7; font-weight: 600; }  /* audit 2.7: opaque on the chosen tab */
 .tb-ai { width: 13px; height: 13px; flex: none; fill: url(#vs-ai-grad); }
 .tb-subtab .tb-ai { width: 12px; height: 12px; }
+/* The analysis of the open recording is running: its mark turns, a dot pulses beside the name */
+.tb-analysing .tb-ai { animation: tb-ai-turn 2.4s linear infinite; transform-origin: 50% 50%; }
+.tb-analysing .tb-lbl::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; vertical-align: 2px; border-radius: 50%;
+  background: #BF5AF2; animation: tb-ai-pulse 1.2s ease-in-out infinite; }
+.tb-active.tb-analysing .tb-lbl::after { background: #FFFFFF; }
+@keyframes tb-ai-turn { to { transform: rotate(360deg); } }
+@keyframes tb-ai-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tb-analysing .tb-ai { animation: tb-ai-pulse 1.6s ease-in-out infinite; } }
 .tb-pop {
   position: absolute; top: 46px; left: 0; width: 320px; padding: 12px 14px; display: flex; flex-direction: column; gap: 9px;
   border-radius: 12px; background: rgba(16, 17, 21, 0.92); backdrop-filter: blur(24px) saturate(1.3); -webkit-backdrop-filter: blur(24px) saturate(1.3);
