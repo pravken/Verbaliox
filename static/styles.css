@@ -831,6 +831,12 @@ html select:focus-visible { outline-offset: -2px; }
 .seg-icon-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.06); }
 /* A block of one person's phrases (workspace.js transcriptGroupHtml): the phrases run on as one paragraph */
 .seg-block { overflow-wrap: anywhere; }
+.seg-para { position: relative; margin: 0; }
+.seg-para + .seg-para { margin-top: 8px; }
+.seg-para-time { position: absolute; left: -64px; width: 48px; text-align: right; font-family: var(--font-mono); font-size: 11px; line-height: inherit; min-height: 0;
+  color: var(--hc-dim, #6E6E73); opacity: 0.75; transition: color var(--dur-fast) ease, opacity var(--dur-fast) ease; }
+.seg-para-time:hover, .segment-group:hover .seg-para-time { opacity: 1; }
+.seg-para-time:hover { color: #0A84FF; }
 .seg-piece-text { white-space: normal; }
 .seg-piece { border-radius: 5px; padding: 1px 0; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .seg-piece:hover { background: rgba(255, 255, 255, 0.035); }

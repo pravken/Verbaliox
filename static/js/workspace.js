@@ -1562,6 +1562,8 @@ async function updateSpeaker(speakerId, newName, newColor) {
 // scrolls far away. Short transcripts are rendered in one go.
 const TX_CHUNK = 40;
 const TX_EAGER_LIMIT = 150;
+const TX_PARA_PAUSE = 3;   // s of silence that start a new paragraph in one person's block
+const TX_PARA_LONG = 45;   // s a paragraph runs before the next phrase starts a new one
 const tx = { items: [], query: '', speakers: {}, observer: null };
 
 // A line being edited stays open, with what was typed, when the transcript is drawn again for another
@@ -1756,7 +1758,7 @@ function transcriptGroupHtml(group) {
   const options = Object.keys(speakers).map(k =>
     `<option value="${escapeHtml(k)}" ${k === first.speaker ? 'selected' : ''} class="bg-apple-card text-white">${escapeHtml(speakers[k].name)}</option>`).join('');
   const lang = state.activeMeeting && state.activeMeeting.language;
-  const pieces = group.segs.map(seg => {
+  const piece = seg => {
     const id = Number(seg.id) || 0;
     const badge = seg.lang && seg.lang !== lang
       ? `<span class="seg-lang" title="${escapeHtml(t('tipSegLang'))}">${escapeHtml(String(seg.lang).toUpperCase())}</span>` : '';
@@ -1764,7 +1766,22 @@ function transcriptGroupHtml(group) {
       + `${badge}<span id="seg-text-${id}" class="seg-piece-text">${segBodyHtml(seg)}</span>`
       + `<button data-click="openInlineSegmentEditor" data-click-args='[${id}]' class="seg-piece-edit" title="${escapeHtml(t('tipEditSegment'))}" aria-label="${escapeHtml(t('tipEditSegment'))}">${SVG_ICONS.pencil}</button>`
       + '</span>';
-  }).join(' ');
+  };
+  // A long block reads in paragraphs: a new one after a pause in the speech, or once one runs long;
+  // each after the first has its time on the left (the name is not repeated)
+  const paras = [];
+  for (const seg of group.segs) {
+    const cur = paras[paras.length - 1];
+    const prev = cur && cur[cur.length - 1];
+    const pause = prev ? (Number(seg.start) || 0) - (Number(prev.end) || 0) : 0;
+    const long = cur ? (Number(seg.start) || 0) - (Number(cur[0].start) || 0) : 0;
+    if (!cur || pause >= TX_PARA_PAUSE || long >= TX_PARA_LONG) paras.push([seg]); else cur.push(seg);
+  }
+  const pieces = paras.map((segs, i) => {
+    const s0 = Number(segs[0].start) || 0;
+    const time = i ? `<button data-click="seekPlayer" data-click-args='[${s0}]' title="${escapeHtml(t('tipSeekTimestamp'))}" class="seg-time seg-para-time">${formatTime(s0)}</button>` : '';
+    return `<p class="seg-para">${time}${segs.map(piece).join(' ')}</p>`;
+  }).join('');
   return `
     <div class="segment-group group px-3.5 py-2.5 flex items-baseline gap-4 hover:bg-white/[0.02]" data-start="${Number(first.start) || 0}">
       <button data-click="seekPlayer" data-click-args='[${Number(first.start) || 0}]'
