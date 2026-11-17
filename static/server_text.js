@@ -231,6 +231,7 @@ const SERVER_TEXT_EN = {
   "Пустая сводка": "Empty summary",
   "Пустое слово": "Empty word",
   "Пустой вопрос": "Empty question",
+  "Такое слово уже есть в словаре": "This word is already in the dictionary",
   "Разговор слишком большой, чтобы его сохранить": "The conversation is too big to save",
   "Разделение участников встречи по голосам...": "Separating the speakers by voice...",
   "Реплика не найдена": "Line not found",

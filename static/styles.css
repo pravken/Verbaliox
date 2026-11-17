@@ -831,6 +831,9 @@ html select:focus-visible { outline-offset: -2px; }
 .seg-icon-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.06); }
 /* A block of one person's phrases (workspace.js transcriptGroupHtml): the phrases run on as one paragraph */
 .seg-block { overflow-wrap: anywhere; }
+.dict-edit-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 6px; border-radius: 6px; font-size: 11px; color: var(--hc-dim, #8A8A90); }
+.dict-edit-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.07); }
+.dict-edit-err.hidden { display: none; }
 .seg-para { position: relative; margin: 0; }
 .seg-para + .seg-para { margin-top: 8px; }
 .seg-para-time { position: absolute; left: -64px; width: 48px; text-align: right; font-family: var(--font-mono); font-size: 11px; line-height: inherit; min-height: 0;

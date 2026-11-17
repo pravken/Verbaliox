@@ -227,11 +227,22 @@ def api_add_dictionary(payload: DictionaryCreatePayload) -> Dict[str, Any]:
 class DictionaryTogglePayload(BaseModel):
     active: Optional[bool] = None
     variants: Optional[str] = None
+    term: Optional[str] = None      # the word itself written anew
+    category: Optional[str] = None
 
 @router.patch("/api/dictionary/{term_id}")
 def api_toggle_dictionary(term_id: int, payload: DictionaryTogglePayload) -> Dict[str, Any]:
     if payload.active is not None:
         toggle_dictionary_term(term_id, payload.active)
+    if payload.term is not None or payload.category is not None:
+        from app.database import rename_dictionary_term
+
+        if payload.term is not None and not payload.term.strip():
+            raise HTTPException(status_code=400, detail="Пустое слово")
+        try:
+            rename_dictionary_term(term_id, payload.term, payload.category)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
     if payload.variants is not None:
         set_dictionary_variants(term_id, payload.variants)
     vocab.invalidate()
