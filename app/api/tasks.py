@@ -29,6 +29,14 @@ def _meetings(briefs: Dict[int, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
                        "participants": participants(m)} for mid, m in sorted(briefs.items())}
 
 
+@router.get("/api/dashboard")
+def api_dashboard(period: str = "week", feature: int = 0) -> Dict[str, Any]:
+    """Everything the widgets of «Дэшборд» show for a period (app/dashboard.py)."""
+    from app.dashboard import build
+
+    return build(period, feature or None)
+
+
 @router.get("/api/tasks")
 def api_tasks() -> Dict[str, Any]:
     from app import commitments

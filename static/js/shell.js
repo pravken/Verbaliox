@@ -5,7 +5,7 @@
 // --- Views of the main area ---
 // "library" is the open recording (its transcript, analysis and speakers); its name stays for the
 // many places that open a recording. Ctrl+1…5 follow the top bar (video.js).
-const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable'];
+const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable', 'dashboard'];
 const VIEW_HOOKS = {};
 
 // A view of a package: show() runs each time it comes on screen, hide() when another one does,
@@ -31,6 +31,7 @@ function onLibraryChanged() {
 }
 
 function switchAppView(view) {
+  if (view === 'home') view = 'dashboard';  // «Сегодня» is part of the dashboard now (its day, greeting, recent recordings)
   if (!APP_VIEWS.includes(view)) view = 'library';
   const prev = state.appView;
   if (state.theatre && view !== 'library') exitTheatre();
@@ -84,8 +85,7 @@ function renderTopbar() {
     el.classList.toggle('tb-active', on);
     if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
   };
-  set('nav-home', view === 'home');
-  set('nav-tasks', view === 'tasks');
+  set('nav-tasks', view === 'dashboard' || view === 'tasks');  // the tasks' page opens from the dashboard
   set('nav-studio', view === 'studio');
   set('nav-ask', view === 'ask');
   const m = state.activeMeeting;
@@ -161,7 +161,10 @@ async function refreshTasksCount(force) {
   if (!force && Date.now() - _tasksCountAt < 10000) return;
   _tasksCountAt = Date.now();
   const items = await fetch('/api/commitments').then(r => (r.ok ? r.json() : null)).catch(() => null);
-  if (Array.isArray(items)) badge('nav-tasks-n', items.length);
+  if (!Array.isArray(items)) return;
+  // the user's own open tasks (the dashboard tracks only those); everyone's while «Это я» is not set
+  const me = String(((state.system || {}).settings || {}).my_name || '').split(',').map(n => n.trim().toLocaleLowerCase()).filter(Boolean);
+  badge('nav-tasks-n', me.length ? items.filter(x => me.includes(String(x.who || '').trim().toLocaleLowerCase())).length : items.length);
 }
 
 // The open recording changes in many places; the bar follows it without each of them calling it
