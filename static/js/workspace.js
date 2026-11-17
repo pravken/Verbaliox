@@ -1562,6 +1562,8 @@ async function updateSpeaker(speakerId, newName, newColor) {
 // scrolls far away. Short transcripts are rendered in one go.
 const TX_CHUNK = 40;
 const TX_EAGER_LIMIT = 150;
+const TX_PARA_PAUSE = 3;   // s of silence that start a new paragraph in one person's block
+const TX_PARA_LONG = 45;   // s a paragraph runs before the next phrase starts a new one
 const tx = { items: [], query: '', speakers: {}, observer: null };
 
 // A line being edited stays open, with what was typed, when the transcript is drawn again for another
@@ -1622,6 +1624,7 @@ function renderTranscriptNow() {
   tx.items = filtered;
   tx.query = query;
   tx.speakers = speakers;
+  tx.order = new Map(segments.map((seg, i) => [seg.id, i]));
 
   if (filtered.length === 0) {
     const m = state.activeMeeting || {};
@@ -1658,9 +1661,10 @@ function renderTranscriptNow() {
 
 function estimateChunkHeight(k) {
   let h = 0;
-  for (const seg of tx.items.slice(k * TX_CHUNK, (k + 1) * TX_CHUNK)) {
-    h += 52 + 22 * Math.ceil((seg.text || '').length / 95) + 6;
-    if (state.txView === 'both') h += 20 * Math.ceil((seg.text || '').length / 95);
+  for (const g of transcriptGroups(tx.items.slice(k * TX_CHUNK, (k + 1) * TX_CHUNK), k * TX_CHUNK)) {
+    const len = g.segs.reduce((n, seg) => n + (seg.text || '').length + 1, 0);
+    h += 52 + 22 * Math.ceil(len / 95) + 6;
+    if (state.txView === 'both') h += 20 * Math.ceil(len / 95) + 6 * g.segs.length;
   }
   return h;
 }
@@ -1687,8 +1691,7 @@ function onTranscriptChunkVisibility(entries) {
 function renderTranscriptChunk(el) {
   const k = Number(el.dataset.chunk);
   const start = k * TX_CHUNK;
-  el.innerHTML = tx.items.slice(start, start + TX_CHUNK)
-    .map((seg, j) => transcriptSegmentHtml(seg, start + j)).join('');
+  el.innerHTML = transcriptGroups(tx.items.slice(start, start + TX_CHUNK), start).map(transcriptGroupHtml).join('');
   el.style.height = '';
   el.dataset.rendered = '1';
   // a line being edited that this part holds (a long transcript draws its parts as they scroll in)
@@ -1701,18 +1704,28 @@ function renderTranscriptChunk(el) {
   }
 }
 
-function transcriptSegmentHtml(seg, idx) {
-  const speakers = tx.speakers;
-  const query = tx.query;
-  const speakerOptionsHtml = (currentSpk) => Object.keys(speakers).map(k =>
-    `<option value="${escapeHtml(k)}" ${k === currentSpk ? 'selected' : ''} class="bg-apple-card text-white">${escapeHtml(speakers[k].name)}</option>`
-  ).join('');
+// Replies of one person in a row are one block: the name and the time once, the phrases one after
+// another as a paragraph. Each phrase stays its own element (#seg-<id>, .segment-row): playback lights
+// it, a click on a word seeks, its pencil (on hover), a double click or the right-click menu edits it.
+// A block breaks where the person changes, or where a search or a speaker filter left out lines between.
+function transcriptGroups(items, start) {
+  const order = tx.order || new Map();
+  const groups = [];
+  items.forEach((seg, j) => {
+    const last = groups[groups.length - 1];
+    const prev = last && last.segs[last.segs.length - 1];
+    const next = prev && order.get(seg.id) === order.get(prev.id) + 1;
+    if (last && next && prev.speaker === seg.speaker) last.segs.push(seg);
+    else groups.push({ segs: [seg], idx: start + j });
+  });
+  return groups;
+}
 
-  const spk = speakers[seg.speaker] || { name: seg.speaker || 'Speaker', color: '#0A84FF' };
+function segBodyHtml(seg) {
+  const query = tx.query;
   const words = seg.words || [];
   const quiet = rpHiddenWords(seg);  // «Без запинок»: the words it hides, or the text it shows
   const hidden = new Set((quiet && quiet.drop) || []);
-
   let bodyHtml = '';
   const tr = activeSegmentTranslation(seg);
   if (tr && state.txView === 'tr') {
@@ -1734,50 +1747,60 @@ function transcriptSegmentHtml(seg, idx) {
     }
     if (tr) bodyHtml += translationHtml(seg, tr, query, true);
   }
+  return bodyHtml;
+}
 
-  const mergeBtnHtml = idx > 0 ? `
-    <button data-click="mergeSegmentWithPrevious" data-click-args='[${Number(seg.id) || 0}]'
-      title="${escapeHtml(t('tipMergeSegment'))}"
-      class="seg-merge-btn opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 inline-flex items-center gap-1 text-[11.5px] text-apple-tertiary hover:text-apple-blue transition">
-      ${SVG_ICONS.mergeUp}
-      <span>${t('mergeBtn')}</span>
-    </button>
-  ` : '';
-
+function transcriptGroupHtml(group) {
+  const speakers = tx.speakers;
+  const first = group.segs[0];
+  const ids = group.segs.map(x => Number(x.id) || 0);
+  const spk = speakers[first.speaker] || { name: first.speaker || 'Speaker', color: '#0A84FF' };
+  const options = Object.keys(speakers).map(k =>
+    `<option value="${escapeHtml(k)}" ${k === first.speaker ? 'selected' : ''} class="bg-apple-card text-white">${escapeHtml(speakers[k].name)}</option>`).join('');
+  const lang = state.activeMeeting && state.activeMeeting.language;
+  const piece = seg => {
+    const id = Number(seg.id) || 0;
+    const badge = seg.lang && seg.lang !== lang
+      ? `<span class="seg-lang" title="${escapeHtml(t('tipSegLang'))}">${escapeHtml(String(seg.lang).toUpperCase())}</span>` : '';
+    return `<span id="seg-${id}" data-start="${Number(seg.start) || 0}" data-end="${Number(seg.end) || 0}" class="segment-row seg-piece" data-dblclick="openInlineSegmentEditor" data-dblclick-args='[${id}]'>`
+      + `${badge}<span id="seg-text-${id}" class="seg-piece-text">${segBodyHtml(seg)}</span>`
+      + `<button data-click="openInlineSegmentEditor" data-click-args='[${id}]' class="seg-piece-edit" title="${escapeHtml(t('tipEditSegment'))}" aria-label="${escapeHtml(t('tipEditSegment'))}">${SVG_ICONS.pencil}</button>`
+      + '</span>';
+  };
+  // A long block reads in paragraphs: a new one after a pause in the speech, or once one runs long;
+  // each after the first has its time on the left (the name is not repeated)
+  const paras = [];
+  for (const seg of group.segs) {
+    const cur = paras[paras.length - 1];
+    const prev = cur && cur[cur.length - 1];
+    const pause = prev ? (Number(seg.start) || 0) - (Number(prev.end) || 0) : 0;
+    const long = cur ? (Number(seg.start) || 0) - (Number(cur[0].start) || 0) : 0;
+    if (!cur || pause >= TX_PARA_PAUSE || long >= TX_PARA_LONG) paras.push([seg]); else cur.push(seg);
+  }
+  const pieces = paras.map((segs, i) => {
+    const s0 = Number(segs[0].start) || 0;
+    const time = i ? `<button data-click="seekPlayer" data-click-args='[${s0}]' title="${escapeHtml(t('tipSeekTimestamp'))}" class="seg-time seg-para-time">${formatTime(s0)}</button>` : '';
+    return `<p class="seg-para">${time}${segs.map(piece).join(' ')}</p>`;
+  }).join('');
   return `
-    <div id="seg-${Number(seg.id) || 0}" data-start="${Number(seg.start) || 0}" data-end="${Number(seg.end) || 0}"
-      class="segment-row group px-3.5 py-2.5 flex items-baseline gap-4 hover:bg-white/[0.02]">
-      <button data-click="seekPlayer" data-click-args='[${Number(seg.start) || 0}]'
+    <div class="segment-group group px-3.5 py-2.5 flex items-baseline gap-4 hover:bg-white/[0.02]" data-start="${Number(first.start) || 0}">
+      <button data-click="seekPlayer" data-click-args='[${Number(first.start) || 0}]'
         title="${escapeHtml(t('tipSeekTimestamp'))}"
         class="seg-time text-[11.5px] font-mono text-apple-tertiary hover:text-apple-blue shrink-0 w-12 text-right transition">
-        ${formatTime(seg.start)}
+        ${formatTime(first.start)}
       </button>
-
       <div class="flex-1 min-w-0">
-        <div class="flex items-center justify-between mb-0.5">
-          <div class="flex items-center min-w-0">
-          <select data-change="changeSegmentSpeaker" data-change-args='[${Number(seg.id) || 0}, {"$": "value"}]'
-            title="${escapeHtml(t('tipChangeSegSpeaker'))}"
+        <div class="flex items-center min-w-0 mb-0.5">
+          <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
+            title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
             style="color: ${escapeHtml(spk.color)}"
             class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">
-            ${speakerOptionsHtml(seg.speaker)}
+            ${options}
           </select>
-          ${speakers[seg.speaker] ? `<button data-click="startInlineSpeakerRename" data-click-args='[${Number(seg.id)}]' class="seg-icon-btn"
-            title="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[seg.speaker].name))}" aria-label="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[seg.speaker].name))}">${SVG_ICONS.pencil}</button>` : ''}
-          ${seg.lang && state.activeMeeting && seg.lang !== state.activeMeeting.language
-            ? `<span class="ml-2 text-[11px] font-mono px-1 rounded bg-white/10 text-apple-secondary" title="${escapeHtml(t('tipSegLang'))}">${escapeHtml(String(seg.lang).toUpperCase())}</span>` : ''}
-          </div>
-          <div class="flex items-center gap-2.5">
-            ${mergeBtnHtml}
-            <button data-click="openInlineSegmentEditor" data-click-args='[${Number(seg.id) || 0}]'
-              title="${escapeHtml(t('tipEditSegment'))}" class="seg-edit-btn">
-              ${SVG_ICONS.pencil}<span>${t('editBtn')}</span>
-            </button>
-          </div>
+          ${speakers[first.speaker] ? `<button data-click="startInlineSpeakerRename" data-click-args='[${ids[0]}]' class="seg-icon-btn"
+            title="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}" aria-label="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}">${SVG_ICONS.pencil}</button>` : ''}
         </div>
-        <div id="seg-text-${Number(seg.id) || 0}" class="text-[13.5px] text-apple-label/90 leading-relaxed">
-          ${bodyHtml}
-        </div>
+        <div class="seg-block text-[13.5px] text-apple-label/90 leading-relaxed">${pieces}</div>
       </div>
     </div>
   `;
@@ -1988,7 +2011,7 @@ function startInlineSpeakerRename(segId) {
   const m = state.activeMeeting;
   const seg = m && (m.segments || []).find(s => s.id === segId);
   const spk = seg && (m.speakers || {})[seg.speaker];
-  const row = document.getElementById(`seg-${segId}`);
+  const row = document.getElementById(`seg-${segId}`)?.closest('.segment-group');  // the block's header
   const sel = row && row.querySelector('select');
   if (!spk || !sel) return;
   const input = document.createElement('input');
@@ -2078,6 +2101,26 @@ async function restoreSegmentText(meetingId, segId, text) {
   const data = await readJson(res);
   if (!res.ok) { showToast(errorText(data, res)); return; }
   if (state.activeMeeting && state.activeMeeting.id === meetingId) { state.activeMeeting = data; renderTranscript(); }
+}
+
+// The person of a whole block (its phrases one by one; the transcript is drawn once at the end)
+async function changeBlockSpeaker(ids, newSpeaker) {
+  const id = state.activeMeeting && state.activeMeeting.id;
+  if (!id || !ids.length) return;
+  let data = null;
+  for (const segId of ids) {
+    const res = await fetch(`/api/meetings/${id}/segments/${segId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speaker: newSpeaker }),
+    });
+    const got = await readJson(res);
+    if (!res.ok) { showToast(errorText(got, res)); break; }
+    data = got;
+  }
+  if (!state.activeMeeting || state.activeMeeting.id !== id) return;  // another recording is open now
+  if (data) state.activeMeeting = data;
+  renderSpeakerPillsBar();
+  renderSpeakersPanel();
+  renderTranscript();
 }
 
 async function changeSegmentSpeaker(segId, newSpeaker) {

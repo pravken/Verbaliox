@@ -1939,6 +1939,20 @@ function textMenuItems(e) {
     items.push({ label: t('ctxCopyLine'), run: () => copyPlain(segText) });
     items.push({ label: t('ctxCopyWithTime'), run: () => copyPlain(`[${formatTime(start)}] ${segText}`) });
     items.push({ label: t('ctxPlayFromHere'), key: formatTime(start), run: () => seekPlayer(start) });
+    // a phrase of a block: its own text, its person, joined to the one before
+    const segId = Number(String(segRow.id || '').replace(/^seg-/, ''));
+    const m = state.activeMeeting;
+    const segs = (m && m.segments) || [];
+    const at = segs.findIndex(x => x.id === segId);
+    if (at >= 0) {
+      items.push({ sep: true });
+      items.push({ label: t('ctxEditPhrase'), run: () => openInlineSegmentEditor(segId) });
+      const others = Object.entries(m.speakers || {}).filter(([k]) => k !== segs[at].speaker);
+      if (others.length) {
+        items.push({ label: t('ctxPhraseSpeaker'), run: () => openTextMenuAt(others.map(([k, sp]) => ({ label: sp.name || k, run: () => changeSegmentSpeaker(segId, k) })), e.clientX, e.clientY) });
+      }
+      if (at > 0) items.push({ label: t('ctxMergePhrase'), run: () => mergeSegmentWithPrevious(segId) });
+    }
   } else if (inStudio) {
     const row = el.closest('.cap-row');
     const line = row ? capRowText(row) : '';
