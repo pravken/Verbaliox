@@ -978,6 +978,14 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-active .tb-badge { background: #FFFFFF; color: #0060C7; font-weight: 600; }  /* audit 2.7: opaque on the chosen tab */
 .tb-ai { width: 13px; height: 13px; flex: none; fill: url(#vs-ai-grad); }
 .tb-subtab .tb-ai { width: 12px; height: 12px; }
+/* The analysis of the open recording is running: its mark turns, a dot pulses beside the name */
+.tb-analysing .tb-ai { animation: tb-ai-turn 2.4s linear infinite; transform-origin: 50% 50%; }
+.tb-analysing .tb-lbl::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; vertical-align: 2px; border-radius: 50%;
+  background: #BF5AF2; animation: tb-ai-pulse 1.2s ease-in-out infinite; }
+.tb-active.tb-analysing .tb-lbl::after { background: #FFFFFF; }
+@keyframes tb-ai-turn { to { transform: rotate(360deg); } }
+@keyframes tb-ai-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tb-analysing .tb-ai { animation: tb-ai-pulse 1.6s ease-in-out infinite; } }
 .tb-pop {
   position: absolute; top: 46px; left: 0; width: 320px; padding: 12px 14px; display: flex; flex-direction: column; gap: 9px;
   border-radius: 12px; background: rgba(16, 17, 21, 0.92); backdrop-filter: blur(24px) saturate(1.3); -webkit-backdrop-filter: blur(24px) saturate(1.3);
