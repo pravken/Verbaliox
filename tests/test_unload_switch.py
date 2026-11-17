@@ -71,9 +71,21 @@ class UnloadSwitchTest(unittest.TestCase):
             self.assertEqual(vram.release_idle_speech_models(), [])  # in use: left alone
         rel.assert_not_called()
 
+    def test_the_video_memory_left_to_the_system_is_not_counted_as_free(self):
+        card = mock.patch.object(vram, "gpu_memory", return_value={"total_gb": 7.6, "free_gb": 6.0, "used_gb": 1.6})
+        with card, mock.patch.object(vram, "ollama_loaded", return_value=[]):
+            with mock.patch.object(vram, "_vram_reserve", return_value=0.0):
+                self.assertTrue(vram.room_for_analysis("gemma4:e4b"))
+            with mock.patch.object(vram, "_vram_reserve", return_value=0.5):
+                self.assertFalse(vram.room_for_analysis("gemma4:e4b"))  # 5.5 GB left for 5.8: one at a time
+                self.assertTrue(vram.room_for_analysis("gemma4:e2b"))
+
     def test_gemma4_and_speech_share_a_card_of_8_gb(self):
         card = lambda total, free: mock.patch.object(vram, "gpu_memory", return_value={  # noqa: E731
             "total_gb": total, "free_gb": free, "used_gb": total - free})
+        no_reserve = mock.patch.object(vram, "_vram_reserve", return_value=0.0)
+        no_reserve.start()
+        self.addCleanup(no_reserve.stop)
         with mock.patch.object(vram, "ollama_loaded", return_value=[]):
             with card(7.6, 6.0):
                 self.assertTrue(vram.room_for_analysis("gemma4:e4b"))

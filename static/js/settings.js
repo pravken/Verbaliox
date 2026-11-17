@@ -183,6 +183,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     loadSemanticStatus();
     const idleSel = document.getElementById('set-idle-unload');
     idleSel.value = [...idleSel.options].some(o => o.value === String(s.idle_unload_minutes)) ? String(s.idle_unload_minutes) : '10';
+    fillMemReserve(s);
     fillObsidianSettings(s);
     fillDubSettings(s);
     renderRecordSaveHint();
@@ -2548,6 +2549,8 @@ function settingsFormValues() {
     semantic_search: String(document.getElementById('set-semantic').checked),
     semantic_model: document.getElementById('set-semantic-model').value.trim() || 'bge-m3',
     idle_unload_minutes: document.getElementById('set-idle-unload').value,
+    mem_reserve_ram: document.getElementById('set-mem-reserve-ram')?.value || 'auto',
+    mem_reserve_vram: document.getElementById('set-mem-reserve-vram')?.value || 'auto',
     ...obsidianSettingsPayload(),
     ...llmSettingsPayload(),
     record_source_mode: document.getElementById('set-record-source')?.value || 'both',
@@ -2990,13 +2993,33 @@ async function benchUse(kind, model) {
   else await selectActiveOllamaModel(model);
 }
 
+// The memory left to the system (app/mem_reserve.py): «Авто (4 ГБ)» names what auto means on this computer
+const MEM_RESERVE_RAM = ['auto', '2', '3', '4', '6', '8', '12', '16'];
+const MEM_RESERVE_VRAM = ['auto', '0.5', '1', '1.5', '2', '3', '4'];
+async function fillMemReserve(s) {
+  const ram = document.getElementById('set-mem-reserve-ram'), vram = document.getElementById('set-mem-reserve-vram');
+  if (!ram || !vram) return;
+  const st = await fetch('/api/memory/reserve').then(r => (r.ok ? r.json() : null)).catch(() => null) || {};
+  const gb = v => `${String(v).replace('.', state.uiLang === 'en' ? '.' : ',')} ${t('unitGB')}`;
+  const fill = (sel, list, cur, autoGb, total) => {
+    sel.innerHTML = list.filter(v => v === 'auto' || !total || Number(v) < total)
+      .map(v => `<option value="${v}">${escapeHtml(v === 'auto' ? `${t('memReserveAuto')}${autoGb != null ? ` (${gb(autoGb)})` : ''}` : gb(v))}</option>`).join('');
+    sel.value = list.includes(cur) ? cur : 'auto';
+  };
+  fill(ram, MEM_RESERVE_RAM, String(s.mem_reserve_ram || 'auto'), st.ram_auto_gb, st.ram_total_gb);
+  fill(vram, MEM_RESERVE_VRAM, String(s.mem_reserve_vram || 'auto'), st.vram_total_gb ? st.vram_auto_gb : null, st.vram_total_gb);
+  vram.disabled = !st.vram_total_gb;
+  vram.closest('label')?.classList.toggle('opacity-50', !st.vram_total_gb);
+}
+
 // --- The settings page of the redesign: sections, a search, changes saved at once, a reset per section ---
 
 // What "Сбросить раздел" puts back: [element id, setting key, 'check' | 'value']. The default values
 // are those of app/database.init_db (tests/test_settings_page.py keeps them the same)
 const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
-    ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
+    ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
+    ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],
@@ -3019,6 +3042,7 @@ const SETTINGS_RESET = {
 };
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
+  mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
   auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
@@ -3269,11 +3293,11 @@ function renderSettingsDictionary() {
       <label class="flex items-center gap-2.5 min-w-0 cursor-pointer">
         <input type="checkbox" ${item.active ? 'checked' : ''} data-change="toggleDictItem" data-change-args='[${item.id}, {"$": "checked"}]'
           class="rounded bg-apple-bg border-white/20 text-apple-blue" />
-        <span class="truncate ${item.active ? 'text-white' : 'text-apple-tertiary line-through'}">${escapeHtml(item.term)}</span>
+        <span class="truncate ${item.active ? 'text-white' : 'text-apple-tertiary line-through'}" data-dblclick="editDictItem" data-dblclick-args='[${item.id}]'>${escapeHtml(item.term)}</span>
         ${item.variants ? `<span class="dict-variants text-apple-tertiary truncate" title="${escapeHtml(t('dictVariantsTip'))}">← ${escapeHtml(item.variants)}</span>` : ''}
         <span class="text-[11px] px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary shrink-0">${escapeHtml(item.category)}</span>
       </label>
-      <button data-click="editDictVariants" data-click-args='[${item.id}]' title="${escapeHtml(t('dictVariantsEdit'))}" aria-label="${escapeHtml(t('dictVariantsEdit'))}" class="text-[11px] text-apple-tertiary hover:text-white transition px-1 shrink-0 ml-auto">${escapeHtml(t('dictVariantsEditShort'))}</button>
+      <button data-click="editDictItem" data-click-args='[${item.id}]' title="${escapeHtml(t('dictEditTip'))}" aria-label="${escapeHtml(t('dictEditTip'))}" class="dict-edit-btn shrink-0 ml-auto">${SVG_ICONS.pencil}<span>${escapeHtml(t('editBtn'))}</span></button>
       <button data-click="deleteSettingsDictItem" data-click-args='[${item.id}]' title="${escapeHtml(t('tipDeleteDictTerm'))}" class="text-apple-tertiary hover:text-apple-red transition p-1">${SVG_ICONS.closeX}</button>
     </div>`).join('');
 }
@@ -3308,17 +3332,51 @@ async function addSettingsDictItem() {
   checkSettingsDictTerm();
 }
 
-// How a term may be recognized ("клод, klot" for Claude): replaced by the term after recognition
-async function editDictVariants(id) {
+// A word of the dictionary changed in one window (asked by the user: a word written wrong could not be put
+// right): the word, how it may be recognized ("клод, klot" for Claude) and its category
+function editDictItem(id) {
   const item = (state.dictionary || []).find(d => d.id === id);
   if (!item) return;
-  const v = await askText(t('dictVariantsAsk').replace('{term}', () => item.term), item.variants || '', { title: t('dictVariantsTitle') });
-  if (v === null) return;
-  const res = await fetch(`/api/dictionary/${id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variants: v }),
-  }).catch(() => null);
-  if (!res || !res.ok) { showError(); return; }
-  await loadDictionary();
+  const wrap = document.createElement('div');
+  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  const field = (key, label, value, hint = '') => `<label class="block space-y-1"><span class="text-xs text-apple-label">${escapeHtml(label)}</span>
+    <input data-k="${key}" type="text" value="${escapeHtml(value || '')}" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+    ${hint ? `<span class="block text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(hint)}</span>` : ''}</label>`;
+  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-3.5 modal-card">
+      <div class="text-sm font-semibold text-white">${escapeHtml(t('dictEditTitle'))}</div>
+      ${field('term', t('dictEditWord'), item.term)}
+      ${field('variants', t('dictVariantsEdit'), item.variants, t('dictEditVariantsHint'))}
+      ${field('category', t('dictEditCategory'), item.category)}
+      <div class="dict-edit-err hidden text-xs text-apple-red"></div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('save'))}</button>
+      </div></form>`;
+  const val = k => wrap.querySelector(`[data-k="${k}"]`).value.trim();
+  const close = () => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  wrap.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = { term: val('term'), variants: val('variants'), category: val('category') || item.category };
+    const err = wrap.querySelector('.dict-edit-err');
+    if (!body.term) { err.textContent = serverText('Пустое слово'); err.classList.remove('hidden'); return; }
+    const res = await fetch(`/api/dictionary/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res || !res.ok) {
+      err.textContent = res ? errorText(await readJson(res), res) : t('errorGeneric');
+      err.classList.remove('hidden');
+      return;
+    }
+    close();
+    await loadDictionary();
+  });
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="no"]')) close(); });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  const first = wrap.querySelector('[data-k="term"]');
+  first.focus();
+  first.select();
 }
 
 // Deleted at once, with a way back

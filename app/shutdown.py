@@ -28,39 +28,79 @@ _job = None  # the Windows job of the work processes; its handle closes with the
 _job_lock = threading.Lock()
 
 
+def _structs():
+    import ctypes
+    from ctypes import wintypes
+
+    class BASIC(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class EXTENDED(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", BASIC), ("IoInfo", ctypes.c_uint64 * 6),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    return EXTENDED
+
+
+def _EXTENDED():  # noqa: N802 - a structure made on first use (ctypes.wintypes exists on Windows only)
+    global _extended_cls
+    if _extended_cls is None:
+        _extended_cls = _structs()
+    return _extended_cls()
+
+
+_extended_cls = None
+
+
 def _job_handle():
     global _job
     with _job_lock:
         if _job is not None:
             return _job
         import ctypes
-        from ctypes import wintypes
 
-        class BASIC(ctypes.Structure):
-            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
-                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
-                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
-                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
-                        ("SchedulingClass", wintypes.DWORD)]
-
-        class EXTENDED(ctypes.Structure):
-            _fields_ = [("BasicLimitInformation", BASIC), ("IoInfo", ctypes.c_uint64 * 6),
-                        ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
-                        ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
-
-        JobObjectExtendedLimitInformation, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 9, 0x2000
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.CreateJobObjectW.restype = ctypes.c_void_p
         job = kernel32.CreateJobObjectW(None, None)
         if not job:
             raise OSError(ctypes.get_last_error(), "CreateJobObjectW")
-        info = EXTENDED()
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if not kernel32.SetInformationJobObject(ctypes.c_void_p(job), JobObjectExtendedLimitInformation,
-                                                ctypes.byref(info), ctypes.sizeof(info)):
-            raise OSError(ctypes.get_last_error(), "SetInformationJobObject")
+        _set_limits(kernel32, job)  # ends with the app; the memory cap of app/mem_reserve.py when set
         _job = (kernel32, job)
         return _job
+
+
+_job_memory_limit = 0  # bytes; 0: none
+
+
+def set_job_memory_limit(limit: int) -> None:
+    """Caps the memory all the work processes together may commit (app/mem_reserve.py: the RAM left to the
+    system). Past it their allocations fail (Ollama reports it) instead of the computer swapping to a halt.
+    Kept for the job made later too; Windows only, never raises."""
+    global _job_memory_limit
+    _job_memory_limit = max(0, int(limit))
+    if sys.platform != "win32" or _job is None:
+        return
+    try:
+        _set_limits(*_job)
+    except Exception as e:
+        print(f"[shutdown] memory limit of the work processes not set: {e}", flush=True)
+
+
+def _set_limits(kernel32: Any, job: Any) -> None:
+    import ctypes
+
+    JobObjectExtendedLimitInformation, KILL_ON_CLOSE, JOB_MEMORY = 9, 0x2000, 0x200
+    info = _EXTENDED()
+    info.BasicLimitInformation.LimitFlags = KILL_ON_CLOSE | (JOB_MEMORY if _job_memory_limit else 0)
+    info.JobMemoryLimit = _job_memory_limit
+    if not kernel32.SetInformationJobObject(ctypes.c_void_p(job), JobObjectExtendedLimitInformation,
+                                            ctypes.byref(info), ctypes.sizeof(info)):
+        raise OSError(ctypes.get_last_error(), "SetInformationJobObject")
 
 
 def _bind_to_app(proc: Any) -> None:

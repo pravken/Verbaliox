@@ -118,14 +118,24 @@ def room_for_analysis(model: Optional[str]) -> bool:
             return True
     except Exception:
         pass
-    return mem["free_gb"] >= gb
+    return mem["free_gb"] - _vram_reserve() >= gb
+
+
+def _vram_reserve() -> float:
+    """The video memory left to the system (Settings → General): not counted as free for the models."""
+    try:
+        from app.mem_reserve import vram_reserve_gb
+
+        return vram_reserve_gb()
+    except Exception:
+        return 0.0
 
 
 def room_for_speech(need_gb: float) -> bool:
     """The analysis models Ollama holds may stay while a recording is recognized: all of them share the
     card, it has 8 GB and more, and the speech model's memory is free now."""
     mem = gpu_memory()
-    if not mem or mem["total_gb"] < SHARE_MIN_CARD_GB or mem["free_gb"] < need_gb:
+    if not mem or mem["total_gb"] < SHARE_MIN_CARD_GB or mem["free_gb"] - _vram_reserve() < need_gb:
         return False
     try:
         loaded = [m["name"] for m in ollama_loaded()]
