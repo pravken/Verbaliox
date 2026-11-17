@@ -6,6 +6,15 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.16 — English
+
+- **One person, one block of text**: replies of the same person in a row are no longer split into lines with the
+  name repeated. The name and the time are shown once and the phrases run on as one text; a long block is split
+  into paragraphs after a pause in the speech or once a paragraph runs long, each with its time on the left.
+  Each phrase can still be edited (the pencil on hover or a double click), playback lights the current phrase,
+  a click on a word seeks. The person of a whole block is changed in its header; of one phrase, with a right
+  click «This phrase was said by…», where «Edit phrase» and «Join with the previous phrase» are too.
+
 ## 0.8.15 — English
 
 - **The library as a table on the whole window**, like the columns of Windows Explorer: the button beside
@@ -553,6 +562,15 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.16
+
+- **Один человек — один блок текста**: реплики одного участника подряд больше не дробятся на строки с повтором
+  имени. Имя и время показываются один раз, фразы идут сплошным текстом; длинный блок делится на абзацы после
+  паузы в речи или когда абзац затянулся, у каждого — время слева. Каждую фразу по-прежнему можно поправить
+  (карандаш при наведении или двойной клик), при воспроизведении подсвечивается текущая фраза, клик по слову
+  перематывает. Участник всего блока меняется в его заголовке, одной фразы — правым кликом «Эту фразу сказал…»,
+  там же «Изменить фразу» и «Соединить с предыдущей фразой».
 
 ## 0.8.15
 
