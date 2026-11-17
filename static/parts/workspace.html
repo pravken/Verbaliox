@@ -8,21 +8,6 @@
     <nav id="app-bar" class="topbar" data-i18n-aria="navAria" aria-label="Разделы программы">
       <!-- The gradient of the "AI" marks of the page (fill: url(#vs-ai-grad)) -->
       <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="vs-ai-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D4B3FF"/><stop offset="1" stop-color="#6CC8FF"/></linearGradient></defs></svg>
-      <div class="relative">
-        <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" title="Начать запись с последними настройками (Ctrl+Alt+R)">
-          <span id="tb-rec-dot" class="tb-rec-dot"></span><span id="tb-rec-label" class="tb-lbl" data-i18n="tbRecord">Запись</span><span id="tb-rec-clock" class="tb-rec-clock hidden"></span><span class="rec-src rec-src-tb hidden" data-rec-src></span>
-        </button>
-        <div id="tb-rec-done" class="tb-pop hidden" role="status">
-          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-apple-green shrink-0"></span><b class="text-[14px] font-semibold text-white" data-i18n="tbRecSaved">Запись сохранена</b><span id="tb-rec-saved-time" class="font-mono text-[12.5px] text-apple-secondary"></span>
-            <span class="flex-1"></span><button data-click="hideQuickRecDone" class="tb-pop-x" data-i18n-title="close" title="Закрыть">✕</button></div>
-          <p class="text-[12.5px] leading-snug text-apple-label" data-i18n="tbRecSavedHint">Расшифровка начнётся сама.</p>
-          <div class="flex gap-2">
-            <button data-click="openQuickRecResult" id="tb-rec-open" class="tb-pop-btn tb-pop-primary" data-i18n="tbRecOpen">Открыть запись</button>
-            <button data-click="runAll" data-click-args='[["hideQuickRecDone"], ["switchAppView", "studio"]]' class="tb-pop-btn" data-i18n="tbRecSettings">Настройки записи</button>
-          </div>
-        </div>
-      </div>
-      <span class="tb-sep" aria-hidden="true"></span>
       <button data-click="switchAppView" data-click-args='["dashboard"]' id="nav-tasks" class="tb-tab" data-i18n-title="tipNavDashboard" title="Мои задачи, неделя, фичи и сводки (Ctrl+2)"><span data-i18n="navDashboard">Дэшборд</span><span id="nav-tasks-n" class="tb-badge hidden"></span></button>
       <div id="tb-record" class="tb-group hidden" role="group" data-i18n-aria="tbRecordGroup" aria-label="Открытая запись">
         <button data-click="openRecordTab" data-click-args='["transcript"]' id="nav-transcript" class="tb-subtab" data-i18n-title="tipTabTranscript" title="Показать полную расшифровку речи по ролям и таймкодам (Ctrl+3)"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span class="tb-lbl" data-i18n="tabTranscript">Расшифровка</span></button>
@@ -37,6 +22,21 @@
         <span id="nav-studio-dot" class="hidden w-2 h-2 rounded-full bg-apple-red animate-pulse"></span><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><span id="nav-studio-label" class="tb-lbl" data-i18n="navStudio">Студия</span>
       </button>
       <button data-click="switchAppView" data-click-args='["ask"]' id="nav-ask" class="tb-tab" data-i18n-title="tipNavAsk" title="Вопросы к одной записи, к папке или ко всей медиатеке (Ctrl+5)"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="navAsk">Ассистент</span></button>
+      <!-- Recording: a round button at the right end; while recording it shows the time and «Стоп» -->
+      <div class="relative tb-rec-wrap">
+        <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">
+          <span id="tb-rec-dot" class="tb-rec-dot"></span><span id="tb-rec-clock" class="tb-rec-clock hidden"></span><span class="rec-src rec-src-tb hidden" data-rec-src></span><span id="tb-rec-label" class="tb-lbl" data-i18n="tbRecord">Запись</span>
+        </button>
+        <div id="tb-rec-done" class="tb-pop hidden" role="status">
+          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-apple-green shrink-0"></span><b class="text-[14px] font-semibold text-white" data-i18n="tbRecSaved">Запись сохранена</b><span id="tb-rec-saved-time" class="font-mono text-[12.5px] text-apple-secondary"></span>
+            <span class="flex-1"></span><button data-click="hideQuickRecDone" class="tb-pop-x" data-i18n-title="close" title="Закрыть">✕</button></div>
+          <p class="text-[12.5px] leading-snug text-apple-label" data-i18n="tbRecSavedHint">Расшифровка начнётся сама.</p>
+          <div class="flex gap-2">
+            <button data-click="openQuickRecResult" id="tb-rec-open" class="tb-pop-btn tb-pop-primary" data-i18n="tbRecOpen">Открыть запись</button>
+            <button data-click="runAll" data-click-args='[["hideQuickRecDone"], ["switchAppView", "studio"]]' class="tb-pop-btn" data-i18n="tbRecSettings">Настройки записи</button>
+          </div>
+        </div>
+      </div>
     </nav>
 
     <!-- The views of the shell (registerView in static/js/shell.js); each lives in its own part -->
