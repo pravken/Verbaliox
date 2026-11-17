@@ -156,10 +156,10 @@ const REC_SRC_ICONS = {
   mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
   sys: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
 };
-const recSrc = { mic: { on: false, lv: 0, at: 0, used: false }, sys: { on: false, lv: 0, at: 0, used: false } };
+const recSrc = { mic: { on: false, lv: 0, at: 0, seen: 0, used: false }, sys: { on: false, lv: 0, at: 0, seen: 0, used: false } };
 
 function recSourcesStart(mic, sys) {
-  for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: performance.now() });
+  for (const [k, used] of [['mic', mic], ['sys', sys]]) Object.assign(recSrc[k], { used, on: false, lv: 0, at: performance.now(), seen: 0 });
   recSrc.sys.warned = false;
   recSrc.sys.heard = false;
   document.querySelectorAll('[data-rec-src]').forEach(box => {
@@ -182,6 +182,10 @@ function recSourcesUpdate(levels) {
   for (const k of ['mic', 'sys']) {
     const s = recSrc[k], db = levels[k];
     if (!s.used || db == null) continue;
+    // the window was hidden (another app in front, Teams): its levels were not looked at, so that time is not
+    // silence (a false «the computer's sound is not heard» came after a call watched in Teams)
+    if (s.seen && now - s.seen > 3000) s.at = now;
+    s.seen = now;
     const amp = Math.max(0, Math.min(1, (db + 54) / 42));
     s.lv = Math.max(amp, s.lv * 0.86);
     if (db > -44) { s.at = now; s.heard = true; }
