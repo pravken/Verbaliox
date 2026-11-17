@@ -120,6 +120,32 @@ class PeopleDirectoryTest(unittest.TestCase):
         self.assertEqual([t["what"] for t in c["tasks"]], ["Прислать смету"])
         self.assertIsNone(people.card("Никто Неизвестный"))
 
+    def test_a_name_put_right_is_written_anew_in_the_analysis(self):
+        r = people.rename_in_text
+        text = "Ярослав Мельник предложил; задача для Ярослава Мельника. Мельник ушёл."
+        self.assertEqual(r(text, "Ярослав Мельник", "Ярослав Мельников"),
+                         "Ярослав Мельников предложил; задача для Ярослава Мельникова. Мельников ушёл.")
+        self.assertEqual(r("Вклад Дмитрия Орлова; Орлову дали.", "Дмитрий Орлов", "Дмитрий Козлов"),
+                         "Вклад Дмитрия Козлова; Козлову дали.")
+        self.assertEqual(r("Олеговна сказала", "Олег Петров", "Олег Сидоров"), "Олеговна сказала")  # another word
+        mid = self._meeting(names=("Ярослав Мельник", "Мария"))
+        database.merge_summaries(mid, {"protocol": "- Вклад Ярослава Мельника в прототип", "error": "Ярослав Мельник"})
+        self.assertEqual(people.rename_in_analysis(mid, "Ярослав Мельник", "Ярослав Мельников"), ["protocol"])
+        sums = database.get_meeting(mid)["summaries"]
+        self.assertEqual(sums["protocol"], "- Вклад Ярослава Мельникова в прототип")
+        self.assertEqual(sums["error"], "Ярослав Мельник")  # the last failure is not an analysis text
+
+    def test_a_contact_renamed_everywhere(self):
+        mid = self._meeting(names=("Мария", "Участник 2"))
+        database.merge_summaries(mid, {"protocol": "Задача для Олега Петрва"})
+        from app import commitments
+        commitments.create("Прислать смету", "Олег Петрв", meeting_id=mid)
+        people.add("Олег Петрв", "person")
+        people.update("Олег Петрв", new_name="Олег Петров")
+        self.assertEqual(people.rename_everywhere("Олег Петрв", "Олег Петров"), 1)
+        self.assertEqual(database.get_meeting(mid)["summaries"]["protocol"], "Задача для Олега Петрова")
+        self.assertIn("Олег Петров", [t["who"] for t in commitments.all_tasks()])
+
     def test_merge_and_split_speakers_of_a_recording(self):
         mid = self._meeting(names=("Мария", "Участник 2", "Участник 3"))
         m = people.merge_speakers(mid, "SPEAKER_02", "SPEAKER_01")

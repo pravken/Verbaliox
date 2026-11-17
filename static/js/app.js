@@ -2636,6 +2636,55 @@ function openUnknownPersonMenu(el) {
   setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 4), 0);
 }
 
+// A contact named in the analysis: their card, or «someone else» (asked by the user: a contribution was put
+// under a wrong surname) — every mention of them in this recording's analysis and its tasks take the other one
+function openKnownPersonMenu(el) {
+  const name = el.dataset.person;
+  const m = state.activeMeeting;
+  const r = el.getBoundingClientRect();
+  const items = [{ label: t('pnOpenCard').replace('{name}', () => name), run: () => openPersonCard(name) }];
+  if (m && el.closest('#summary-content')) {
+    items.push({ sep: true }, { label: t('pnIsSomeoneElse'), run: () => setTimeout(() => openReplacePersonMenu(name, r), 0) });
+  }
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 4), 0);
+}
+
+async function openReplacePersonMenu(name, r) {
+  const m = state.activeMeeting;
+  if (!m) return;
+  if (typeof loadContacts === 'function') await loadContacts(true);  // the contacts as they are now
+  const low = name.toLowerCase();
+  // the participants of the recording first, then the other contacts
+  const here = Object.values(m.speakers || {}).map(sp => sp && sp.name).filter(Boolean);
+  const people = (contacts.list || []).filter(p => p.kind === 'person').map(p => p.name);
+  const names = [...new Set([...here, ...people])].filter(n => n.toLowerCase() !== low && !/^(SPEAKER_|Спикер |Speaker )/i.test(n)).slice(0, 16);
+  const items = [{ info: true, label: t('pnReplaceWho').replace('{name}', () => name) }, { sep: true },
+    ...names.map(n => ({ label: n, run: () => replacePersonInAnalysis(name, n) })),
+    { sep: true }, { label: t('pnReplaceOther'), run: async () => {
+      const typed = await askText(t('pnReplaceAsk').replace('{name}', () => name), '');
+      if (typed && typed.trim()) replacePersonInAnalysis(name, typed.trim());
+    } }];
+  openTextMenuAt(items, r.left, r.bottom + 4);
+}
+
+async function replacePersonInAnalysis(oldName, newName, undo = false) {
+  const m = state.activeMeeting;
+  if (!m) return;
+  const res = await fetch(`/api/meetings/${m.id}/analysis/rename-person`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ old: oldName, new: newName }),
+  });
+  const data = await readJson(res);
+  if (!res.ok) { showError(errorText(data, res)); return; }
+  if (state.activeMeeting !== m) return;
+  m.summaries = data.summaries;
+  renderSummaryPanel();
+  if (data.tasks && typeof loadTasks === 'function') loadTasks().then(() => { if (state.appView === 'tasks') renderTasks(); });
+  if (undo) return;
+  if (!data.changed.length && !data.tasks) { showToast(t('pnReplaceNone').replace('{name}', () => oldName)); return; }
+  showToast(t('pnReplaced').replace('{name}', () => oldName).replace('{other}', () => newName),
+    { label: t('spUndo'), onClick: () => replacePersonInAnalysis(newName, oldName, true) });
+}
+
 function openSuspectMenu(el) {
   const m = state.activeMeeting;
   const x = (state.anSuspectShown || [])[Number(el.dataset.i)];
@@ -2719,7 +2768,7 @@ document.addEventListener('click', (e) => {
 });
 document.getElementById('summary-content')?.addEventListener('click', (e) => {
   const who = e.target.closest && e.target.closest('.an-person');
-  if (who) { e.stopPropagation(); if (who.dataset.new) openUnknownPersonMenu(who); else openPersonCard(who.dataset.person); return; }
+  if (who) { e.stopPropagation(); if (who.dataset.new) openUnknownPersonMenu(who); else openKnownPersonMenu(who); return; }
   const el = e.target.closest && e.target.closest('.an-suspect');
   if (!el) return;
   e.stopPropagation();  // the click would close the menu it opens
@@ -2727,7 +2776,7 @@ document.getElementById('summary-content')?.addEventListener('click', (e) => {
 });
 document.getElementById('summary-content')?.addEventListener('keydown', (e) => {
   const who = e.target.closest && e.target.closest('.an-person');
-  if (who && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (who.dataset.new) openUnknownPersonMenu(who); else openPersonCard(who.dataset.person); return; }
+  if (who && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (who.dataset.new) openUnknownPersonMenu(who); else openKnownPersonMenu(who); return; }
   const el = e.target.closest && e.target.closest('.an-suspect');
   if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openSuspectMenu(el); }
 });
