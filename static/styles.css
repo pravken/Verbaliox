@@ -829,6 +829,21 @@ html select:focus-visible { outline-offset: -2px; }
   color: var(--hc-dim, #8A8A90); opacity: 0; transition: opacity var(--dur-fast) ease; }
 .segment-row:hover .seg-icon-btn, .seg-icon-btn:focus-visible { opacity: 1; }
 .seg-icon-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.06); }
+/* A block of one person's phrases (workspace.js transcriptGroupHtml): the phrases run on as one paragraph */
+.seg-block { overflow-wrap: anywhere; }
+.seg-piece-text { white-space: normal; }
+.seg-piece { border-radius: 5px; padding: 1px 0; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.seg-piece:hover { background: rgba(255, 255, 255, 0.035); }
+.seg-piece.segment-active { background-color: rgba(10, 132, 255, 0.16); }
+.seg-piece:has(textarea), .seg-piece.segment-active:has(textarea) { display: block; background: none; }
+.seg-piece:has(textarea) .seg-piece-edit, .seg-piece:has(textarea) .seg-lang { display: none; }
+.seg-piece-edit { position: relative; display: inline-block; width: 0; height: 0; padding: 0; vertical-align: top; opacity: 0; transition: opacity var(--dur-fast) ease; }
+.seg-piece-edit svg { position: absolute; left: -12px; top: -15px; width: 22px; height: 20px; padding: 3px 4px; border-radius: 6px;
+  background: #2C2C2E; border: 1px solid rgba(255, 255, 255, 0.14); color: #D1D1D6; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
+.seg-piece:hover .seg-piece-edit, .seg-piece-edit:focus-visible { opacity: 1; }
+.seg-piece-edit:hover svg { color: #FFFFFF; background: #0A84FF; border-color: #0A84FF; }
+.seg-lang { margin-right: 4px; padding: 0 4px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; background: rgba(255, 255, 255, 0.1); color: var(--hc-dim, #AEAEB2); }
+.segment-group:hover .seg-icon-btn { opacity: 1; }
 .seg-name-input { font-size: var(--fs-caption); line-height: 1.35; font-weight: 600; background: rgba(0, 0, 0, 0.25); border: 1px solid #0A84FF; border-radius: 6px; padding: 1px 6px; outline: none; min-width: 140px; }
 /* --- Room to hit small controls (at least 24 css px), with the rows keeping their height --- */
 .seg-time, .seg-spk, .seg-merge-btn { min-height: 24px; }
