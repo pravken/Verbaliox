@@ -36,16 +36,38 @@ class VoiceFilterTest(unittest.TestCase):
             return mock.Mock(returncode=0, stderr=b"", stdout=b"")
 
         dest = self.dir / "voice.wav"
-        with mock.patch.object(vf, "find_exe", return_value="deep-filter"), mock.patch.object(vf.subprocess, "run", run):
+        with mock.patch.object(vf, "find_exe", return_value="deep-filter"), mock.patch.object(vf.subprocess, "run", run), \
+                mock.patch.object(vf, "_run_with_progress", lambda cmd, flags, seconds, progress: run(cmd)):
             self.assertTrue(vf.clean("ffmpeg", self.src, dest))
         self.assertEqual(dest.read_bytes(), b"clean")
         self.assertIn("48000", calls[0])                  # 48 kHz mono for the network
         self.assertIn("-D", calls[1])                     # no shift against the system sound
         self.assertEqual(calls[1][calls[1].index("-a") + 1], str(vf.ATTEN_DB))
 
+    def test_the_filter_tells_how_far_it_is(self):
+        """An hour of a microphone takes minutes: the stage moves (elapsed time, then a share by the last speed)."""
+        import sys
+
+        from app import database
+
+        database.init_db()
+        database.update_settings({vf.RATE_KEY: ""})
+        seen = []
+        cmd = [sys.executable, "-c", "import time; time.sleep(2.6)"]
+        res = vf._run_with_progress(cmd, 0, 60.0, lambda part, elapsed: seen.append((part, elapsed)))
+        self.assertEqual(res.returncode, 0)
+        self.assertTrue(seen and seen[0][0] is None and seen[0][1] >= 1.9)  # no speed known yet: the time only
+        rate = float(database.get_all_settings()[vf.RATE_KEY])
+        self.assertGreater(rate, 10)                                        # 60 s of sound in ~2.6 s
+        seen.clear()
+        vf._run_with_progress(cmd, 0, 600.0, lambda part, elapsed: seen.append((part, elapsed)))
+        self.assertTrue(0 < seen[0][0] < 0.98)                              # now a share
+
     def test_a_failure_keeps_the_recording_as_it_was(self):
+        failed = mock.Mock(returncode=1, stderr=b"boom", stdout=b"")
         with mock.patch.object(vf, "find_exe", return_value="deep-filter"), \
-                mock.patch.object(vf.subprocess, "run", return_value=mock.Mock(returncode=1, stderr=b"boom", stdout=b"")):
+                mock.patch.object(vf.subprocess, "run", return_value=failed), \
+                mock.patch.object(vf, "_run_with_progress", return_value=failed):
             self.assertFalse(vf.clean("ffmpeg", self.src, self.dir / "voice.wav"))
         self.assertFalse((self.dir / "voice.wav").exists())
 
