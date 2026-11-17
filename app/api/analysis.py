@@ -255,6 +255,27 @@ def api_expand_names(meeting_id: int) -> Dict[str, Any]:
     sums = merge_summaries(meeting_id, changed) if changed else (m.get("summaries") or {})
     return {"summaries": sums, "changed": sorted(changed)}
 
+class AnalysisPersonPayload(BaseModel):
+    old: str
+    new: str
+
+@router.post("/api/meetings/{meeting_id}/analysis/rename-person")
+def api_analysis_rename_person(meeting_id: int, payload: AnalysisPersonPayload) -> Dict[str, Any]:
+    """A person the analysis named is someone else (asked by the user: a contribution was put under a wrong
+    surname): every mention in this recording's analysis and its tasks take the other person."""
+    from app import commitments
+    from app.database import get_meeting
+    from app.people import rename_in_analysis
+
+    old, new = payload.old.strip()[:120], payload.new.strip()[:120]
+    if not old or not new:
+        raise HTTPException(status_code=400, detail="Укажите, кого на кого заменить")
+    if not get_meeting(meeting_id):
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    changed = rename_in_analysis(meeting_id, old, new)
+    tasks = commitments.rename_person(meeting_id, old, new)
+    return {"summaries": (get_meeting(meeting_id) or {}).get("summaries") or {}, "changed": changed, "tasks": tasks}
+
 @router.get("/api/people/card")
 def api_people_card(name: str) -> Dict[str, Any]:
     from app.people import card
@@ -278,9 +299,14 @@ def api_people_update(payload: PersonUpdatePayload) -> Dict[str, Any]:
     from app.people import update
 
     try:
-        return update(payload.name, role=payload.role, kind=payload.kind, is_me=payload.is_me, new_name=payload.new_name)
+        person = update(payload.name, role=payload.role, kind=payload.kind, is_me=payload.is_me, new_name=payload.new_name)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if payload.new_name and person["name"].lower() != payload.name.strip().lower():
+        from app.people import rename_everywhere
+
+        rename_everywhere(payload.name, person["name"])  # the analyses and tasks that named them follow
+    return person
 
 @router.post("/api/people/merge")
 def api_people_merge(payload: PeopleMergePayload) -> Dict[str, Any]:

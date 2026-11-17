@@ -19,7 +19,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.database import _db_lock, get_all_settings, get_connection, update_settings
 
@@ -570,6 +570,156 @@ def name_regex(spelling: str) -> str:
     if len(s) >= 4 and s[-1].lower() in "аяйь":
         return body[:-1] + r"(?:а|я|у|ю|ой|ей|ою|ею|ы|и|е|й|ь|ем|ём|ом)"
     return body + r"(?:а|у|ой|ом|е|ы|ю|ем|и|я|ей|ов|ым)?"
+
+
+_CASES = ("nom", "gen", "dat", "ins", "prep", "acc")
+
+
+def _name_type(word: str) -> Tuple[str, str]:
+    """(type, stem) of a word of a Russian name, for declining it; ("", word) for one that is not declined here."""
+    w = word.lower()
+    if not re.fullmatch(r"[а-яё-]+", w) or len(w) < 3:
+        return "", word
+    if re.search(r"(ова|ева|ёва|ина|ына)$", w):
+        return "sur_f", word[:-1]
+    if re.search(r"(ов|ев|ёв|ин|ын)$", w):
+        return "sur_m", word
+    if w.endswith(("ская", "цкая", "ский", "цкий", "ая", "яя", "ой", "ый")):
+        return "", word  # an adjective-like surname («Толстой», «Вишневская»): written as it is
+    if w.endswith("ия"):
+        return "f_iya", word[:-1]
+    if w.endswith("ий"):
+        return "m_iy", word[:-1]
+    if w[-1] in "й":
+        return "m_y", word[:-1]
+    if w[-1] == "ь":
+        return "m_soft", word[:-1]
+    if w[-1] == "я":
+        return "f_ya", word[:-1]
+    if w[-1] == "а":
+        return "f_a", word[:-1]
+    if w[-1] in "бвгдзклмнпрстфхжшчщц":
+        return "m_hard", word
+    return "", word
+
+
+def _endings(kind: str, stem: str) -> Dict[str, str]:
+    hush = stem[-1:].lower() in "гкхжшчщ"
+    return {
+        "m_hard": {"nom": "", "gen": "а", "dat": "у", "ins": "ем" if stem[-1:].lower() in "жшчщц" else "ом", "prep": "е", "acc": "а"},
+        "sur_m": {"nom": "", "gen": "а", "dat": "у", "ins": "ым", "prep": "е", "acc": "а"},
+        "m_y": {"nom": "й", "gen": "я", "dat": "ю", "ins": "ем", "prep": "е", "acc": "я"},
+        "m_iy": {"nom": "й", "gen": "я", "dat": "ю", "ins": "ем", "prep": "и", "acc": "я"},
+        "m_soft": {"nom": "ь", "gen": "я", "dat": "ю", "ins": "ем", "prep": "е", "acc": "я"},
+        "f_a": {"nom": "а", "gen": "и" if hush else "ы", "dat": "е", "ins": "ой", "prep": "е", "acc": "у"},
+        "f_ya": {"nom": "я", "gen": "и", "dat": "е", "ins": "ей", "prep": "е", "acc": "ю"},
+        "f_iya": {"nom": "я", "gen": "и", "dat": "и", "ins": "ей", "prep": "и", "acc": "ю"},
+        "sur_f": {"nom": "а", "gen": "ой", "dat": "ой", "ins": "ой", "prep": "ой", "acc": "у"},
+    }.get(kind, {})
+
+
+def _case_of(word: str, seen: str) -> Optional[str]:
+    """The case a word of a name was seen in («Олега» of «Олег» → genitive); None when it cannot be told."""
+    if seen.lower() == word.lower():
+        return "nom"
+    kind, stem = _name_type(word)
+    if not kind or not seen.lower().startswith(stem.lower()):
+        return None
+    tail = seen[len(stem):].lower()
+    ends = _endings(kind, stem)
+    return next((c for c in _CASES if ends.get(c) == tail), None)
+
+
+def _decline(word: str, case: Optional[str]) -> str:
+    kind, stem = _name_type(word)
+    if not case or case == "nom" or not kind:
+        return word
+    return stem + _endings(kind, stem).get(case, word[len(stem):])
+
+
+def _word_form(old_word: str, new_word: str, seen: str) -> str:
+    """The new spelling of one word of a name in the case the old one was seen in: «Мельника» (of
+    «Мельник») → «Мельникова» (of «Мельников»), «Алле» (of «Алла») → «Марии» (of «Мария»)."""
+    return _decline(new_word, _case_of(old_word, seen))
+
+
+def rename_in_text(text: str, old: str, new: str) -> str:
+    """A person's name written again in a text (the analysis of a recording) after its spelling was put right
+    or the person was said to be someone else: every case form of the old name («Ярослава Мельника») becomes
+    the same form of the new one, word by word when both have the same number of words; otherwise the
+    nominative only («Ярослав Мельник» → «Ярослав Мельников-Петров»). A surname or given name written alone
+    follows too when it is long enough to be the person's."""
+    old, new = " ".join((old or "").split()), " ".join((new or "").split())
+    if not text or not old or not new or old == new:
+        return text
+    ow, nw = old.split(" "), new.split(" ")
+    word = lambda w: "(" + name_regex(w) + ")"  # noqa: E731
+    full = re.compile(r"(?<![\w-])" + r"\s+".join(word(w) for w in ow) + r"(?![\w-])", re.I)
+
+    def whole(m: "re.Match") -> str:
+        if len(ow) == len(nw):
+            return " ".join(_word_form(o, n, m.group(i + 1)) for i, (o, n) in enumerate(zip(ow, nw)))
+        # «Олега» → «Дмитрия Орлова»: the case of the old name, told by its words, for every new word
+        case = next((c for c in (_case_of(o, m.group(i + 1)) for i, o in enumerate(ow)) if c), None)
+        return " ".join(_decline(n, case) for n in nw)
+
+    done: List[str] = []  # what was written already stays out of the next pass («Мельников» is not «Мельник»+«ов»)
+
+    def keep(value: str) -> str:
+        done.append(value)
+        return f"\x00{len(done) - 1}\x00"
+
+    text = full.sub(lambda m: keep(whole(m)), text)
+    if 1 < len(ow) == len(nw):  # «Мельник сказал»: a word of the name alone, when it changed and is not a common short word
+        for o, n in zip(ow, nw):
+            if o.lower() == n.lower() or len(o) < 4:
+                continue
+            one = re.compile(r"(?<![\w-])(" + name_regex(o) + r")(?![\w-])", re.I)
+            text = one.sub(lambda m, o=o, n=n: keep(_word_form(o, n, m.group(1))), text)
+    return re.sub("\x00(\\d+)\x00", lambda m: done[int(m.group(1))], text)
+
+
+def rename_in_analysis(meeting_id: int, old: str, new: str) -> List[str]:
+    """The analysis of a recording with a person's name written anew (rename_in_text); the sections changed."""
+    from app.database import get_meeting, merge_summaries
+
+    m = get_meeting(meeting_id)
+    if not m:
+        return []
+    changed = {}
+    for key, value in (m.get("summaries") or {}).items():
+        if key != "error" and isinstance(value, str) and value.strip():
+            fixed = rename_in_text(value, old, new)
+            if fixed != value:
+                changed[key] = fixed
+    if changed:
+        merge_summaries(meeting_id, changed)
+    return sorted(changed)
+
+
+def rename_everywhere(old: str, new: str) -> int:
+    """A contact's name put right in «Контакты»: the analyses that name them and their tasks follow
+    (the recordings whose analysis has the old name, found by its start in the database first)."""
+    old, new = _clean(old), _clean(new)
+    if not old or not new or old.lower() == new.lower():
+        return 0
+    from app import commitments
+
+    with _db_lock:
+        conn = get_connection()
+        ids = [int(r["id"]) for r in conn.execute(
+            "SELECT id FROM meetings WHERE summaries_json LIKE ?", (f"%{old.split()[-1][:4]}%",)).fetchall()]
+        task_ids = [int(r["meeting_id"]) for r in conn.execute(
+            "SELECT DISTINCT meeting_id FROM commitments WHERE meeting_id IS NOT NULL").fetchall()] \
+            if conn.execute("SELECT name FROM sqlite_master WHERE name = 'commitments'").fetchone() else []
+        conn.close()
+    n = 0
+    for mid in ids:
+        if rename_in_analysis(mid, old, new):
+            n += 1
+    for mid in task_ids:
+        commitments.rename_person(mid, old, new)
+    return n
 
 
 def _name_patterns(spellings: List[str]) -> List["re.Pattern"]:
