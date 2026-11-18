@@ -228,6 +228,7 @@ class RecordFinishPayload(BaseModel):
     page_started_at: float = 0        # when the page's recorder began (unix seconds): lines up the system audio
     speakers_hint: int = 0            # how many people, chosen in the studio (0: found by the voices)
     speaker_marks: List[Dict[str, Any]] = []  # «Сейчас говорит»: [{at: seconds into the recording, name}]
+    call_app: str = ""                # the call that started it ("teams", "telegram"...; app/call_watch.py)
 
 def _run_ffmpeg(cmd: List[str]) -> subprocess.CompletedProcess:
     try:
@@ -653,7 +654,10 @@ def _attach_recording_info(meeting_id: int, payload: RecordFinishPayload) -> Non
 
             from app import calendar_ics
 
-            calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None)
+            # what the recording says of itself: is it the meeting, or someone who called meanwhile
+            heard = [str(mk.get("name") or "") for mk in payload.speaker_marks or []]
+            calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None,
+                                            title=payload.title, names=heard, call_app=payload.call_app)
         except Exception as e:
             print("[calendar]", e, flush=True)
 

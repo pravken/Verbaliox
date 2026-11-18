@@ -356,6 +356,8 @@ _MEETING_EXTRA_COLUMNS = {
     "local_only": "INTEGER DEFAULT 0",  # 1: never sent to a cloud model (see is_local_only)
     "media_size": "INTEGER DEFAULT NULL",  # bytes of the media file; NULL: not measured yet
     "series_id": "INTEGER DEFAULT NULL",  # a series of recurring meetings (app/series.py)
+    # the calendar meeting going on when it was recorded, and whether it is that meeting (app/calendar_match.py)
+    "calendar_json": "TEXT DEFAULT ''",
     # Whether there is a transcript / a summary, kept by triggers (_FLAG_TRIGGERS): the library list
     # reads these instead of the transcripts themselves (megabytes per recording)
     "has_transcript": "INTEGER DEFAULT 0",
@@ -1233,7 +1235,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
     allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes", "mfu",
                "transcript_verified", "audio_path", "transcript_made_with",
-               "local_only", "series_id"}
+               "local_only", "series_id", "calendar_json"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
     if not items:
         return
