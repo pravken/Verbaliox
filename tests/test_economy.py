@@ -55,6 +55,30 @@ class EconomyTest(unittest.TestCase):
         time.sleep(0.3)  # the dropped job is skipped by the worker
         self.assertEqual(get_meeting(mid)["status"], "completed")
 
+    def test_the_whole_queue_paused_and_cancelled_at_once(self):
+        """Asked by the user: with many files waiting, «Пауза» and «Отменить все» for the whole queue."""
+        from app.database import create_meeting, get_meeting, update_meeting_progress
+
+        ids = []
+        for i in range(3):
+            mid = create_meeting(title=f"Файл {i}", filename="a.wav", media_path="")["id"]
+            update_meeting_progress(mid, status="completed", progress=100)
+            meeting_guard.defer(mid)
+            ids.append(mid)
+        transcriber.pause_queue(True)
+        try:
+            for mid in ids:
+                self.assertTrue(transcriber.enqueue_analysis_job(mid))
+            time.sleep(0.3)
+            self.assertTrue(all(transcriber.is_job_active(m) for m in ids))  # paused: none of them started
+            self.assertEqual(transcriber.cancel_all()["dropped"], 3)
+            self.assertFalse(any(transcriber.is_job_active(m) for m in ids))
+            self.assertEqual([get_meeting(m)["status"] for m in ids], ["completed"] * 3)
+        finally:
+            transcriber.pause_queue(False)
+        time.sleep(0.3)  # the dropped jobs are skipped by the worker when it goes on
+        self.assertEqual(transcriber.queue_snapshot(), [])
+
     def test_processor_threads(self):
         with mock.patch("os.cpu_count", return_value=20):
             self.assertEqual(asr_onnx.cpu_threads({"cpu_threads": "auto"}), 8)  # not all 20 (100 % in a meeting)

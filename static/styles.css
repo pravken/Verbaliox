@@ -3165,3 +3165,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .obs-rx-hint { display: block; margin-top: 2px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
 .obs-rx-go { display: flex; justify-content: flex-end; padding: 6px 8px 4px; }
 
+/* the whole queue at once (static/js/library.js toggleQueuePause, cancelWholeQueue) */
+.q-tool { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 500; color: var(--hc-dim, #A1A1A6); background: rgba(255, 255, 255, 0.05); }
+.q-tool:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.1); }
+.q-tool-on { color: #FFB340; background: rgba(255, 159, 10, 0.14); }
+.q-tool-danger:hover { color: #FF8A80; background: rgba(255, 69, 58, 0.14); }
+

@@ -59,6 +59,33 @@ def api_queue() -> List[Dict[str, Any]]:
 
     return queue_snapshot()
 
+class QueuePausePayload(BaseModel):
+    paused: bool = True
+
+
+@router.get("/api/queue/paused")
+def api_queue_paused() -> Dict[str, Any]:
+    from app.transcriber import queue_paused
+
+    return {"paused": queue_paused()}
+
+
+@router.post("/api/queue/pause")
+def api_queue_pause(payload: QueuePausePayload) -> Dict[str, Any]:
+    """«Пауза» / «Продолжить» of the whole queue: the job running finishes, the next ones wait."""
+    from app.transcriber import pause_queue
+
+    return {"paused": pause_queue(payload.paused)}
+
+
+@router.post("/api/queue/cancel-all")
+def api_queue_cancel_all() -> Dict[str, Any]:
+    """«Отменить все»: every job of the queue, the waiting ones at once, the running one broken off."""
+    from app.transcriber import cancel_all
+
+    return cancel_all()
+
+
 @router.post("/api/dub/setup")
 def api_dub_setup() -> Dict[str, Any]:
     """Installs the optional dubbing environment (.venv-dub) after the user confirmed it in the UI."""

@@ -78,8 +78,9 @@ class _PriorityExecutor:
 
         while True:
             with self._cv:
-                # the economy mode (recording only): the next job waits until it ends (wake() or 5 s)
-                while not self._heap or economy.on():
+                # the queue paused by the user, or the economy mode (recording only): the next job waits
+                # until it ends (wake() or 5 s); the job running goes on
+                while not self._heap or _paused[0] or economy.on():
                     self._cv.wait(timeout=5.0 if self._heap else None)
                 _prio, _n, fut, fn, args = heapq.heappop(self._heap)
             if not fut.set_running_or_notify_cancel():
@@ -107,6 +108,35 @@ _executor = _PriorityExecutor()
 def wake_queue() -> None:
     """The economy mode ended (app/economy.py): the waiting jobs start now, not at the next look."""
     _executor.wake()
+
+
+# «Пауза» of the whole queue (asked by the user: many files waiting, one button for all): the job running
+# finishes, the next ones wait until «Продолжить». Not kept over a restart: the app starts working.
+_paused = [False]
+
+
+def pause_queue(paused: bool) -> bool:
+    _paused[0] = bool(paused)
+    print(f"[queue] {'paused' if paused else 'resumed'}", flush=True)
+    _executor.wake()
+    _publish_queue_changed()
+    return _paused[0]
+
+
+def queue_paused() -> bool:
+    return _paused[0]
+
+
+def cancel_all() -> Dict[str, int]:
+    """«Отменить все»: the jobs waiting leave the queue at once, the one running is broken off."""
+    with _jobs_lock:
+        ids = [q["id"] for q in _queue]
+        running = _running_id
+    dropped = sum(1 for mid in ids if mid != running and cancel_waiting(mid))
+    stopped = 1 if running is not None and running in ids and request_cancel(running) else 0
+    print(f"[queue] all cancelled: {dropped} waiting, {stopped} running", flush=True)
+    _publish_queue_changed()
+    return {"dropped": dropped, "stopped": stopped}
 
 # Jobs that are queued or running, and jobs the user asked to cancel
 _jobs_lock = threading.Lock()
