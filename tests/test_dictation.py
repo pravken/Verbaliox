@@ -260,3 +260,29 @@ class EmbeddingSettingTest(unittest.TestCase):
         self.assertEqual(st["active_model"], "qwen3:8b")
         self.assertEqual(database.get_all_settings()["ollama_model"], "qwen3:8b")
         self.assertEqual(st["chat_models"], ["qwen3:8b"])
+
+
+class AnalysisWithOllamaStoppedTest(unittest.TestCase):
+    """Ollama stops with the app now: the automatic analysis after a transcription must still run (it starts
+    Ollama), when Ollama is installed and has a model on the disk (reported by the user: it stopped running)."""
+
+    def test_a_stopped_local_ollama_with_a_model_is_available(self):
+        from app import ollama_client
+
+        init_db()
+        update_settings({"llm_provider": "ollama", "ollama_url": "http://127.0.0.1:11434"})
+        off = {"running": False, "installed": True, "models": ["gemma4:e4b"], "chat_models": ["gemma4:e4b"]}
+        with mock.patch("app.ollama_client.get_ollama_status", return_value=off), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value="C:/ollama.exe"):
+            self.assertTrue(llm.available())
+        with mock.patch("app.ollama_client.get_ollama_status", return_value={**off, "models": [], "chat_models": []}), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value="C:/ollama.exe"):
+            self.assertFalse(llm.available())  # no model downloaded
+        with mock.patch("app.ollama_client.get_ollama_status", return_value=off), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value=None):
+            self.assertFalse(llm.available())  # Ollama not installed
+        update_settings({"ollama_url": "http://192.168.1.5:11434"})
+        with mock.patch("app.ollama_client.get_ollama_status", return_value=off), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value="C:/ollama.exe"):
+            self.assertFalse(llm.available())  # Ollama on another computer is not started from here
+        update_settings({"ollama_url": "http://127.0.0.1:11434"})
