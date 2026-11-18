@@ -224,7 +224,12 @@ function renderHomeMeetings() {
   const top = (ms) => ((ms - a) / 3600e3) * HM_PX;
   const box = document.getElementById('hm-timeline');
   box.style.height = `${top(b)}px`;
-  const html = hours.map(x => `<div class="hm-hour" style="top: ${top(x)}px"><span>${hmPad(new Date(x).getHours())}:00</span><i></i></div>`);
+  // The time already past is filled, up to the line of "now" (asked by the user: where the border is and
+  // which meetings are over was not clear); the whole scale once the day is over
+  const nowMs = now.getTime();
+  const pastTo = nowMs <= a ? 0 : Math.min(nowMs, b);
+  const html = pastTo ? [`<div class="hm-pastfill" style="height: ${top(pastTo)}px" aria-hidden="true"></div>`] : [];
+  html.push(...hours.map(x => `<div class="hm-hour" style="top: ${top(x)}px"><span>${hmPad(new Date(x).getHours())}:00</span><i></i></div>`));
   // Meetings at the same time stand side by side, not on top of each other (reported by the user): a
   // group of meetings that overlap shares the width, each in the first column free at its start
   const lane = new Map();
@@ -289,16 +294,21 @@ function renderHomeMeetings() {
           bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
       : '';
     const title = e.title || t('hmUntitled');
-    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}">${hatch}
+    // a meeting going on: how far it is, filled in its card, and the minutes left
+    const done = live ? Math.round((nowMs - e.s.getTime()) / (e.e.getTime() - e.s.getTime()) * 100) : 0;
+    const left = live ? Math.max(1, Math.round((e.e.getTime() - nowMs) / 60e3)) : 0;
+    const liveFill = live ? `<i class="hm-mt-prog" style="width: ${done}%"></i>` : '';
+    const liveSub = live ? ` · <b class="hm-mt-left">${escapeHtml(t('hmLiveLeft').replace('{n}', () => left))}</b>` : '';
+    html.push(`<div class="hm-mt hm-mt-k-${past ? 'past' : st}${live ? ' hm-mt-live' : ''}${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}">${liveFill}${hatch}
         <span class="flex-1 min-w-0 flex flex-col gap-px" title="${escapeHtml([`${title}`, `${time} · ${who}`, overlapTip].filter(Boolean).join('\n'))}">
           <span class="flex items-baseline gap-1.5 min-w-0">${narrow && hpx < 40 ? `<span class="hm-mt-time">${escapeHtml(clock(e.s.getTime()))}</span>` : ''}<span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
-          ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span> · ${escapeHtml(who)}</span>` : ''}
+          ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span>${live ? liveSub : ` · ${escapeHtml(who)}`}</span>` : ''}
           ${narrow && hpx >= 40 ? `<span class="hm-mt-sub hm-mono">${escapeHtml(time)}</span>` : ''}
         </span>${narrow ? '' : brief}${action}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
-  if (now.getTime() >= a && now.getTime() <= b) html.push(`<div class="hm-now" style="top: ${top(now.getTime())}px"><span></span></div>`);
+  if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t">${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
   box.innerHTML = html.join('');
   return meetings;
 }
