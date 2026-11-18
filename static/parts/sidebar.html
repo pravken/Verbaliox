@@ -136,8 +136,16 @@
     <!-- Processing queue (shown only while something is queued or running) -->
     <div id="queue-panel" class="hidden mx-2.5 mt-1 mb-1 rounded-lg border apple-border bg-white/[0.03]">
       <div class="px-2.5 pt-2 pb-1 flex items-center justify-between">
-        <span class="text-[11.5px] font-semibold text-apple-secondary uppercase tracking-wider">
+        <span class="text-[11.5px] font-semibold text-apple-secondary uppercase tracking-wider whitespace-nowrap min-w-0 truncate">
           <span data-i18n="queueTitle">Очередь</span> <span id="queue-count" class="font-mono text-apple-blue"></span>
+        </span>
+        <!-- the whole queue at once (asked by the user: many files waiting) -->
+        <span class="flex items-center gap-1 shrink-0">
+          <button id="queue-pause-btn" data-click="toggleQueuePause" class="q-tool"></button>
+          <button data-click="cancelWholeQueue" class="q-tool q-tool-danger" data-i18n-title="queueCancelAllTip" title="Отменить все задачи очереди">
+            <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            <span data-i18n="queueCancelAll">Все</span>
+          </button>
         </span>
       </div>
       <div id="queue-list" class="px-1.5 pb-1.5 space-y-1 max-h-48 overflow-y-auto"></div>
