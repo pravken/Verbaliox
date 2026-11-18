@@ -3156,3 +3156,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 @media (max-width: 1100px) { .db-grid .db-w { grid-column: span 12 !important; } .db-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tk-back { align-self: flex-start; background: none; border: 0; padding: 0; color: #4DA3FF; font-size: var(--fs-label); cursor: pointer; }
 .tk-back:hover { text-decoration: underline; }
+
+/* «Реэкспорт всех расшифровок» (static/js/app.js obsidianExportAll): what to write, and to complete */
+.obs-rx-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: var(--fs-ui); color: #F5F5F7; }
+.obs-rx-row:hover { background: rgba(255, 255, 255, 0.06); }
+.obs-rx-row input { margin: 2px 0 0; accent-color: #0A84FF; flex: none; }
+.obs-rx-sep { margin-top: 4px; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); border-radius: 0 0 6px 6px; padding-top: 9px; }
+.obs-rx-hint { display: block; margin-top: 2px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
+.obs-rx-go { display: flex; justify-content: flex-end; padding: 6px 8px 4px; }
+
