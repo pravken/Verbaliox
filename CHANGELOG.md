@@ -6,6 +6,18 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.20 — English
+
+- **Dashboard: the time already past is filled.** Today: the scale up to «now», a thicker line with the time,
+  a tick on the meetings over, the one going on in red with how far it is and the minutes left. Week: the days
+  past filled whole, today down to a line with the time after the last thing already begun.
+- **Choosing a feature of a recording**: a click chooses and closes the list, the feature lights up in the
+  header; in the list the recording's features are framed and ticked.
+- **Obsidian: «Re-export all transcripts»** — all recordings or only those without a note, and «Complete what
+  is missing»: where a transcript has no overview, tasks or chapters, the analysis model writes them (in the
+  queue, one at a time, not during meetings) and the note is saved again.
+- **Models panel**: a loaded model (gemma) no longer shows 0.5 GB; never less than the size of its file.
+
 ## 0.8.19 — English
 
 - **The automatic analysis runs again** after a transcription: Ollama now stops with the app, and a stopped
@@ -611,6 +623,18 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.20
+
+- **Дэшборд: прошедшее время закрашено.** Сегодня: шкала до «сейчас», толстая линия со временем, у прошедших
+  встреч галочка, идущая встреча красная — сколько прошло и сколько осталось минут. Неделя: прошедшие дни
+  закрашены целиком, сегодня — до черты со временем после последнего начавшегося события.
+- **Выбор фичи у записи**: клик выбирает и закрывает список, фича подсвечивается в шапке; в списке выбранные
+  обведены рамкой и отмечены галочкой.
+- **Obsidian: «Реэкспорт всех расшифровок»** — все записи или только без заметки, и «Дополнить недостающее»:
+  где есть расшифровка, но нет обзора, задач или глав, их допишет модель анализа (в очереди, по одной, не во
+  время встреч) и заметка пересохранится.
+- **Панель моделей**: загруженная модель (gemma) больше не показывает 0,5 ГБ — не меньше размера её файла.
 
 ## 0.8.19
 
