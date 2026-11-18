@@ -41,6 +41,17 @@ _MORE = {
 }
 _SHOWN_ELSEWHERE = {"tldr", "protocol", "tasks", "chapters", "error"}
 
+# The name of each section's marks (asked by the user: «read only the tasks», an agent finds them by this name,
+# listed in the note's properties); the same in every language, never translated
+# «notes» (the synopsis) would read like the mark of the user's own notes, <!-- verbaliox:notes -->
+_SECTION_IDS = {"followup": "followup_email", "custom": "answer", "mfu": "what_matters", "notes": "synopsis"}
+
+
+def section_id(key: str) -> str:
+    """tpl:12 → template_12, followup → followup_email; letters, digits and «_» only."""
+    key = _SECTION_IDS.get(key, key)
+    return re.sub(r"[^a-z0-9_]+", "_", key.replace("tpl:", "template_").lower()).strip("_") or "section"
+
 
 _STATS = {
     "ru": {"line": "Говорили {talk} из {dur} · тишина {silence}% · реплик {turns}, в среднем {avg}",
@@ -94,7 +105,7 @@ def _talk_stats(m: Dict[str, Any], lang: str, link) -> List[str]:
 
 
 def _more_sections(summaries: Dict[str, Any], lang: str) -> List[tuple]:
-    """[(heading, markdown)] of the sections of the analysis besides the overview, tasks and chapters."""
+    """[(key, heading, markdown)] of the sections of the analysis besides the overview, tasks and chapters."""
     try:
         from app.database import summary_templates
 
@@ -106,7 +117,7 @@ def _more_sections(summaries: Dict[str, Any], lang: str) -> List[tuple]:
             and isinstance(summaries[k], str) and summaries[k].strip()]
     order = list(labels) + sorted(k for k in keys if k.startswith("tpl:"))
     keys.sort(key=lambda k: (order.index(k) if k in order else len(order), k))
-    return [(labels.get(k) or names.get(k) or (k[4:] if k.startswith("tpl:") else k), summaries[k]) for k in keys]
+    return [(k, labels.get(k) or names.get(k) or (k[4:] if k.startswith("tpl:") else k), summaries[k]) for k in keys]
 
 
 def _settings() -> Dict[str, str]:
@@ -201,7 +212,8 @@ def _demote(md: str, levels: int = 1) -> str:
 
 
 # The parts of a note for a program that reads many of them (asked by the user: an agent reads the analysis
-# and leaves the transcript out): HTML comments, not shown by Obsidian
+# and leaves the transcript out): HTML comments, not shown by Obsidian. Each section has its own pair too,
+# <!-- verbaliox:<id>:start --> … <!-- verbaliox:<id>:end -->, its id listed in the properties (section_mark)
 ANALYSIS_START, ANALYSIS_END = "<!-- verbaliox:analysis:start -->", "<!-- verbaliox:analysis:end -->"
 TRANSCRIPT_START, TRANSCRIPT_END = "<!-- verbaliox:transcript:start -->", "<!-- verbaliox:transcript:end -->"
 
@@ -233,11 +245,6 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
         "  - meeting",
         *[f"  - {_yaml_str(t)}" for t in dict.fromkeys(feature_tag(f) for f in features) if t],
         f"verbaliox_id: {int(m.get('id') or 0)}",
-        # for a program or an agent that reads many notes: the analysis and the transcript are between these
-        # marks (comments: Obsidian does not show them), so the analysis can be read without the transcript
-        # the marks named without the comment itself: an agent splitting the note on a mark must find it only once
-        'sections: "analysis between the comments verbaliox:analysis:start/end, '
-        'transcript between verbaliox:transcript:start/end"',
         "---",
         "",
         f"# {m.get('title') or L['untitled']}",
@@ -251,11 +258,17 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
     starts = [float(seg.get("start") or 0.0) for seg in segments]
     anchors: Dict[int, str] = {}  # the transcript's lines a chapter or a moment of the analysis points to
 
-    def head(title: str) -> str:
-        # a heading the note's contents links to (Obsidian takes [[#heading]]; these signs would break the link)
+    sections: List[tuple] = []  # (id, heading) in the order of the note
+
+    def add(to: List[str], sid: str, title: str, *lines: str) -> None:
+        """A section between its marks; its heading goes into the contents (Obsidian takes [[#heading]];
+        these signs would break the link)."""
         title = re.sub(r"[\[\]|#^]+", " ", title).strip() or "—"
+        if any(s == sid for s, _ in sections):
+            sid = f"{sid}_{len(sections) + 1}"
         headings.append(title)
-        return f"## {title}"
+        sections.append((sid, title))
+        to += [f"<!-- verbaliox:{sid}:start -->", f"## {title}", "", *lines, f"<!-- verbaliox:{sid}:end -->", ""]
 
     def moments(md: str) -> str:
         """«[00:18]» or «00:18» of a chapter, «[12:34]» in the analysis: a link to that line of the transcript
@@ -272,12 +285,12 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
         return re.sub(r"(^|[\s(\[])\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?(?=[\s).,;:]|$)", link, md, flags=re.M)
 
     if (m.get("user_notes") or "").strip():
-        body += [head(L["notes"]), "", m["user_notes"].strip(), ""]
+        add(body, "meeting_notes", L["notes"], m["user_notes"].strip(), "")
     if _on(settings, "obsidian_summary"):
         if summaries.get("tldr"):
-            body += [head(L["summary"]), "", moments(_demote(summaries["tldr"])), ""]
+            add(body, "summary", L["summary"], moments(_demote(summaries["tldr"])), "")
         if summaries.get("protocol"):
-            body += [head(L["overview"]), "", moments(_demote(summaries["protocol"])), ""]
+            add(body, "overview", L["overview"], moments(_demote(summaries["protocol"])), "")
     try:
         from app import commitments
 
@@ -285,31 +298,41 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
     except Exception:
         promised = []
     if promised:
-        body += [head(L["promises"]), "", commitments.export_text(promised, "md").strip(), ""]
+        add(body, "tasks_by_person", L["promises"], commitments.export_text(promised, "md").strip(), "")
     if _on(settings, "obsidian_tasks") and summaries.get("tasks"):
-        body += [head(L["tasks"]), "", _tasks_as_checklist(_demote(summaries["tasks"])), ""]
+        add(body, "tasks", L["tasks"], _tasks_as_checklist(_demote(summaries["tasks"])), "")
     if _on(settings, "obsidian_chapters") and summaries.get("chapters"):
-        body += [head(L["chapters"]), "", moments(_demote(summaries["chapters"])), ""]
+        add(body, "chapters", L["chapters"], moments(_demote(summaries["chapters"])), "")
     if _on(settings, "obsidian_stats") and segments:
         def at(sec: float) -> str:  # a moment of the transcript, a link to its line when the transcript is there
             stamp = format_timestamp(sec)
             return moments(f"[{stamp}]") if with_text else f"`{stamp}`"
         stats = _talk_stats(m, lang, at)
         if stats:
-            body += [head(L["people"]), "", *stats]
+            add(body, "participants", L["people"], *stats)
     if _on(settings, "obsidian_more"):  # the decisions, the letter, the notes, the user's templates, the answers
-        for heading, md in _more_sections(summaries, lang):
-            body += [head(heading), "", moments(_demote(md)), ""]
+        for key, heading, md in _more_sections(summaries, lang):
+            add(body, section_id(key), heading, moments(_demote(md)), "")
     if body:
         body = [ANALYSIS_START, "", *body, ANALYSIS_END, ""]
     if with_text:
-        body += [TRANSCRIPT_START, "", head(L["transcript"]), ""]
+        lines: List[str] = []
         for i, seg in enumerate(segments):
             spk = speakers.get(seg.get("speaker") or "", {}).get("name") or seg.get("speaker") or ""
             mark = f" ^{anchors[i]}" if i in anchors else ""  # a block id: a chapter's link lands on this line
-            body.append(f"**{spk}** `{format_timestamp(seg.get('start') or 0.0)}` {(seg.get('text') or '').strip()}{mark}")
-            body.append("")
-        body += [TRANSCRIPT_END, ""]
+            lines += [f"**{spk}** `{format_timestamp(seg.get('start') or 0.0)}` {(seg.get('text') or '').strip()}{mark}", ""]
+        add(body, "transcript", L["transcript"], *lines)
+    if sections:
+        # the list of the marks for a program or an agent (asked by the user: «read only the tasks»): each
+        # section is between <!-- verbaliox:<id>:start --> and <!-- verbaliox:<id>:end -->; the comments
+        # themselves are not written here, so splitting the note on a mark finds it once
+        props[props.index("---", 1):props.index("---", 1)] = [
+            "section_mark: \"each section is between the HTML comments verbaliox:<id>:start and verbaliox:<id>:end; "
+            "all the analysis between verbaliox:analysis:start and verbaliox:analysis:end; "
+            "the user's own notes after verbaliox:notes to the end\"",
+            "sections:",
+            *[f"  - {_yaml_str(f'{sid}: {title}')}" for sid, title in sections],
+        ]
     if len(headings) > 1:  # the note's contents: a click goes to the section (the transcript included)
         props += [f"**{L['contents']}:** " + " · ".join(f"[[#{h}]]" for h in headings), ""]
     return "\n".join(props + body).rstrip() + "\n"
