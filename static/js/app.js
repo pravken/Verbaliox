@@ -1675,9 +1675,25 @@ function updateObsidianPreview() {
     : t('obsPreviewNoVault');
 }
 
-// «Сохранить все записи»: every transcribed recording's note, in the background; the count follows
-async function obsidianExportAll() {
-  const res = await fetch('/api/obsidian/export-all', { method: 'POST' }).catch(() => null);
+// «Реэкспорт всех расшифровок»: every transcribed recording's note, or only those without one, in the
+// background; «Дополнить» first has the analysis model make what a note shows and its analysis lacks
+// (the overview, tasks, chapters), in the queue. The count follows
+function obsidianExportAll(e) {
+  e?.stopPropagation?.();
+  tkOpenPop(`<div class="tk-pop-cap">${escapeHtml(t('obsReexportTitle'))}</div>
+    <label class="obs-rx-row"><input type="radio" name="obs-rx-scope" value="all" checked><span>${escapeHtml(t('obsReexportAll'))}</span></label>
+    <label class="obs-rx-row"><input type="radio" name="obs-rx-scope" value="missing"><span>${escapeHtml(t('obsReexportMissing'))}</span></label>
+    <label class="obs-rx-row obs-rx-sep"><input type="checkbox" id="obs-rx-complete" checked><span>${escapeHtml(t('obsReexportComplete'))}
+      <span class="obs-rx-hint">${escapeHtml(t('obsReexportCompleteHint'))}</span></span></label>
+    <div class="obs-rx-go"><button class="tk-btn tk-btn-primary tk-btn-sm" ${pageCall('click', 'obsidianExportAllStart')}>${escapeHtml(t('obsReexportStart'))}</button></div>`,
+  document.getElementById('obs-export-all'), 330);
+}
+
+async function obsidianExportAllStart() {
+  const missing = document.querySelector('input[name="obs-rx-scope"]:checked')?.value === 'missing';
+  const complete = !!document.getElementById('obs-rx-complete')?.checked;
+  tkClosePop();
+  const res = await fetch(`/api/obsidian/export-all?missing_only=${missing}&complete=${complete}`, { method: 'POST' }).catch(() => null);
   const data = res ? await readJson(res) : null;
   if (!res || !res.ok) { showError(res ? errorText(data, res) : t('errorGeneric')); return; }
   obsidianExportAllWatch(data);
@@ -1690,7 +1706,8 @@ async function obsidianExportAllWatch(st) {
   if (!box || !st) return;
   if (btn) btn.disabled = !!st.active;
   box.textContent = st.active ? t('obsExportAllRunning').replace('{done}', () => st.done).replace('{total}', () => st.total)
-    : st.total ? t('obsExportAllDone').replace('{n}', () => st.total - st.failed - (st.kept || 0))
+    : st.total ? t('obsExportAllDone').replace('{n}', () => st.total - st.failed - (st.kept || 0) - (st.queued || 0))
+      + (st.queued ? ` · ${t('obsExportAllQueued').replace('{n}', () => st.queued)}` : '')
       + (st.kept ? ` · ${t('obsExportAllKept').replace('{n}', () => st.kept)}` : '')
       + (st.failed ? ` · ${t('obsExportAllFailed').replace('{n}', () => st.failed)}` : '') : '';
   if (st.active) setTimeout(() => obsidianExportAllWatch(), 1500);

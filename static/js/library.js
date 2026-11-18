@@ -163,6 +163,7 @@ function queueKindLabel(q) {
   if (q.kind === 'burn_subs') return `${t('queueKindBurnSubs')} (${lang})`;
   if (q.kind === 'cut') return t('queueKindCut');
   if (q.kind === 'analysis') return t('queueKindAnalysis');
+  if (q.kind === 'complete') return t('queueKindComplete');
   return t('queueKindTranscribe');
 }
 

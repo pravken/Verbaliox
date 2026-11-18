@@ -526,7 +526,25 @@ def refresh_if_exported(meeting_id: int) -> None:
 
 
 # --- Every recording at once: when auto-export is turned on, or on request («Сохранить все записи») ---
-_all_state: Dict[str, Any] = {"active": False, "done": 0, "total": 0, "failed": 0, "kept": 0}
+_all_state: Dict[str, Any] = {"active": False, "done": 0, "total": 0, "failed": 0, "kept": 0, "queued": 0}
+CHAPTERS_MIN_SEC = 600  # as the automatic chapters (app/transcriber.AUTO_CHAPTERS_MIN_SEC)
+
+
+def missing_parts(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> List[str]:
+    """What the note of a recording should have and its analysis lacks: the overview, the tasks, the chapters
+    of a long recording (each only when the note shows it). «Реэкспорт» completes them (asked by the user:
+    a transcript without an overview is completed)."""
+    settings = settings or _settings()
+    s = m.get("summaries") or {}
+    out = []
+    if _on(settings, "obsidian_summary") and not (s.get("protocol") or "").strip():
+        out.append("protocol")
+    if _on(settings, "obsidian_tasks") and not (s.get("tasks") or "").strip():
+        out.append("tasks")
+    if _on(settings, "obsidian_chapters") and float(m.get("duration") or 0) >= CHAPTERS_MIN_SEC \
+            and not (s.get("chapters") or "").strip():
+        out.append("chapters")
+    return out
 _all_lock = threading.Lock()
 
 
@@ -534,9 +552,11 @@ def export_all_status() -> Dict[str, Any]:
     return dict(_all_state)
 
 
-def export_all(missing_only: bool = False) -> Dict[str, Any]:
+def export_all(missing_only: bool = False, complete: bool = False) -> Dict[str, Any]:
     """Writes the note of every transcribed recording in the background (the existing ones updated, the user's
-    edits above their section kept: explicit=False). missing_only: only the recordings without a note yet."""
+    edits above their section kept: explicit=False). missing_only: only the recordings without a note yet.
+    complete: a recording whose analysis lacks what the note shows (missing_parts) goes to the queue, where
+    the analysis model completes it and writes its note (app/transcriber.enqueue_complete_job)."""
     from app.database import list_meetings
 
     if vault_dir() is None:
@@ -547,7 +567,7 @@ def export_all(missing_only: bool = False) -> Dict[str, Any]:
             return export_all_status()
         ids = [m["id"] for m in meetings if m.get("status") == "completed" and m.get("has_transcript")
                and not (missing_only and m.get("obsidian_path") and Path(m["obsidian_path"]).is_file())]
-        _all_state.update(active=True, done=0, total=len(ids), failed=0, kept=0)
+        _all_state.update(active=True, done=0, total=len(ids), failed=0, kept=0, queued=0)
     paths = {m["id"]: m.get("obsidian_path") or "" for m in meetings}
 
     def mtime(path: str) -> float:
@@ -558,8 +578,19 @@ def export_all(missing_only: bool = False) -> Dict[str, Any]:
 
     def run() -> None:
         try:
+            settings = _settings()
             for mid in ids:
                 try:
+                    if complete:
+                        from app.database import get_meeting
+
+                        if missing_parts(get_meeting(mid) or {}, settings):
+                            from app import transcriber
+
+                            if transcriber.enqueue_complete_job(mid):
+                                _all_state["queued"] += 1
+                                _all_state["done"] += 1
+                                continue
                     before = mtime(paths.get(mid, ""))
                     target = export_meeting(mid, generate=False, explicit=False)
                     if before and mtime(str(target)) == before:
