@@ -1283,7 +1283,12 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-mt-k-past .hm-mt-title { color: #C7C7CC; }
 .hm-mt-k-on { --hm-tint: rgba(48, 209, 88, 0.1); border-left-color: #30D158; }
 .hm-mt-k-ask { --hm-tint: rgba(255, 159, 10, 0.1); border-left-color: #FF9F0A; }
-.hm-mt-live { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.hm-mt-live { border-left-color: #FF453A; box-shadow: inset 0 0 0 1px rgba(255, 69, 58, 0.55); }
+/* how far a meeting going on is (static/js/home.js), and the minutes left */
+.hm-mt-prog { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 69, 58, 0.15); pointer-events: none; }
+.hm-mt-left { color: #FF8A80; font-weight: 600; }
+/* a meeting over: a tick before its title */
+.hm-mt-k-past .hm-mt-title::before { content: '✓ '; color: #7EE787; }
 .hm-mt-title { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-mt-title.hm-mt-wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; word-break: break-word; }
 /* side by side with another meeting: the title and the state's dot, the words of the state in its tooltip */
@@ -1292,7 +1297,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-mt-narrow .hm-mt-btn-t, .hm-mt-narrow .hm-mt-none { display: none; }
 .hm-ovl { position: absolute; left: 0; right: 0; pointer-events: none;
   background: repeating-linear-gradient(135deg, rgba(255, 159, 10, 0.2) 0 4px, transparent 4px 9px); border-top: 1px dashed rgba(255, 159, 10, 0.5); border-bottom: 1px dashed rgba(255, 159, 10, 0.5); }
-.hm-mt > :not(.hm-ovl) { position: relative; }
+.hm-mt > :not(.hm-ovl):not(.hm-mt-prog) { position: relative; }
 .hm-mt-time { flex: none; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
 .hm-mt-sub { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-mt-link { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; color: #8CC4FF; font-size: var(--fs-label); line-height: 1.35; }
@@ -1307,8 +1312,11 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-mt-btn.hm-mt-rec { border-color: rgba(255, 69, 58, 0.6); background: rgba(255, 69, 58, 0.14); color: #FF8A80; }
 .hm-mt-btn.hm-mt-rec > i { background: #FF453A; animation: tb-blink 1s steps(2, start) infinite; }
 .hm-mt-empty { position: absolute; left: 46px; right: 0; top: 40%; text-align: center; font-size: var(--fs-ui); color: var(--hc-dim, #8A8A90); }
-.hm-now { position: absolute; left: 38px; right: 0; height: 0; border-top: 1.5px solid #FF453A; pointer-events: none; }
-.hm-now > span { position: absolute; left: -5px; top: -5px; width: 8px; height: 8px; border-radius: 4px; background: #FF453A; }
+.hm-now { position: absolute; z-index: 3; left: 38px; right: 0; height: 0; border-top: 2px solid #FF453A; pointer-events: none; }
+/* the time of "now" on its line, over the hours */
+.hm-now-t { position: absolute; left: -40px; top: -10px; padding: 1px 5px; border-radius: 6px; background: #FF453A; color: #fff; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; font-weight: 600; }
+/* the time of the day already past, filled up to "now" (asked by the user: where the border is) */
+.hm-pastfill { position: absolute; left: 0; right: 0; top: 0; border-radius: 8px 8px 0 0; background: rgba(255, 255, 255, 0.055); pointer-events: none; }
 .hm-q { display: flex; flex-direction: column; gap: 7px; padding: 9px 0; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.05)); text-align: left; }
 .hm-q:first-child { border-top: 0; }
 .hm-q-title { flex: 1; min-width: 0; font-weight: 600; font-size: var(--fs-ui); color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2848,6 +2856,15 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .fp-meet-tldr { grid-column: 1 / -1; color: var(--hc-dim, #AEAEB2); font-size: 12px; line-height: 1.4; }
 .ft-pick-row { display: flex; align-items: center; gap: 2px; }
 .ft-pick-row > .tk-pop-item { flex: 1 1 auto; min-width: 0; }
+/* the features of the recording in the list: framed, their box ticked */
+.ft-pick-row > .tk-pop-item { border: 1px solid transparent; }
+.ft-pick-on > .tk-pop-item { border-color: rgba(10, 132, 255, 0.55); background: rgba(10, 132, 255, 0.12); }
+.ft-pick-box { flex: none; width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid rgba(255, 255, 255, 0.3); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; line-height: 1; color: #fff; box-sizing: border-box; }
+.ft-pick-on .ft-pick-box { background: #0A84FF; border-color: #0A84FF; }
+/* the feature just chosen lights up in the header */
+/* inside the chip: the header clips what stands out of it */
+.ft-flash .ft-chip { animation: ft-flash 1.6s ease-out; }
+@keyframes ft-flash { 0%, 35% { box-shadow: inset 0 0 0 2px #0A84FF, 0 0 0 0 transparent; filter: brightness(1.35); } 100% { box-shadow: inset 0 0 0 2px transparent; filter: none; } }
 .ft-open { margin-left: 2px; padding: 2px 6px; border-radius: 4px; color: var(--hc-dim, #8E8E93); background: none; border: 0; cursor: pointer; }
 .ft-open:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.08); }
 .ft-compact { cursor: pointer; }
@@ -3057,7 +3074,18 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-day.today .db-dn b { color: #4DA3FF; }
 .db-ev { display: block; width: 100%; text-align: left; border: 0; border-left: 3px solid #4DA3FF; border-radius: 6px; padding: 5px 7px; margin-bottom: 6px; background: rgba(255, 255, 255, 0.04); color: #E5E5EA; font-size: var(--fs-label); line-height: 1.3; cursor: pointer; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 .db-ev.own { border-left-color: #8E8E93; }
-.db-ev.past { opacity: 0.6; }
+/* the time already past (static/js/dashboard.js dbWeek): a day before today filled whole, today down to
+   the line of "now"; a meeting over has a tick, the one going on is red with how far it is */
+/* half the gap of the columns each side: the days already past make one band */
+.db-day-past, .db-day .db-past { margin: -6px -4px 0; padding: 6px 4px 0; border-radius: 8px; background: rgba(255, 255, 255, 0.055); }
+.db-day-past { padding-bottom: 6px; }
+.db-day .db-past { border-radius: 8px 8px 0 0; padding-bottom: 1px; }
+.db-now { position: relative; height: 2px; margin: 0 -4px 14px; background: #FF453A; border-radius: 1px; }
+.db-now b { position: absolute; right: 0; top: -9px; padding: 1px 5px; border-radius: 5px; background: #FF453A; color: #fff; font-family: var(--font-mono); font-size: 10.5px; line-height: 1.35; font-weight: 600; }
+.db-ev.done { opacity: 0.6; }
+.db-ev.done .db-tm::after { content: ' ✓'; color: #7EE787; }
+.db-ev.live { position: relative; border-left-color: #FF453A; box-shadow: inset 0 0 0 1px rgba(255, 69, 58, 0.5); }
+.db-ev-prog { position: absolute; left: 0; bottom: 0; height: 3px; background: #FF453A; }
 .db-ev:disabled { cursor: default; }
 .db-ev:not(:disabled):hover { background: rgba(255, 255, 255, 0.08); }
 .db-tm { display: block; font-family: var(--font-mono); font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
@@ -3128,3 +3156,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 @media (max-width: 1100px) { .db-grid .db-w { grid-column: span 12 !important; } .db-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tk-back { align-self: flex-start; background: none; border: 0; padding: 0; color: #4DA3FF; font-size: var(--fs-label); cursor: pointer; }
 .tk-back:hover { text-decoration: underline; }
+
+/* «Реэкспорт всех расшифровок» (static/js/app.js obsidianExportAll): what to write, and to complete */
+.obs-rx-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: var(--fs-ui); color: #F5F5F7; }
+.obs-rx-row:hover { background: rgba(255, 255, 255, 0.06); }
+.obs-rx-row input { margin: 2px 0 0; accent-color: #0A84FF; flex: none; }
+.obs-rx-sep { margin-top: 4px; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); border-radius: 0 0 6px 6px; padding-top: 9px; }
+.obs-rx-hint { display: block; margin-top: 2px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
+.obs-rx-go { display: flex; justify-content: flex-end; padding: 6px 8px 4px; }
+

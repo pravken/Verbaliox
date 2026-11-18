@@ -239,6 +239,27 @@ class ObsidianTest(unittest.TestCase):
         self.assertNotIn("<!--", props)
         database.save_summary_templates([])
 
+    def test_reexport_completes_what_the_analysis_lacks(self):
+        """Asked by the user: re-export with «complete»: a transcript without an overview goes to the queue."""
+        with_all = _done_meeting(title="Полная", recorded_at="2024-05-17 10:00:00")
+        database.merge_summaries(with_all["id"], {"protocol": "- Обзор", "tasks": "- Задача"})
+        bare = _done_meeting(title="Без обзора", recorded_at="2024-05-17 11:00:00")
+        self.assertEqual(obsidian.missing_parts(get_meeting(with_all["id"])), [])
+        self.assertIn("protocol", obsidian.missing_parts(get_meeting(bare["id"])))
+        import time
+
+        with mock.patch("app.transcriber.enqueue_complete_job", return_value=True) as job:
+            obsidian.export_all(missing_only=False, complete=True)
+            for _ in range(50):
+                if not obsidian.export_all_status()["active"]:
+                    break
+                time.sleep(0.05)
+        queued = {c.args[0] for c in job.call_args_list}
+        self.assertIn(bare["id"], queued)
+        self.assertNotIn(with_all["id"], queued)  # complete already: written at once
+        self.assertTrue(get_meeting(with_all["id"]).get("obsidian_path"))
+        self.assertGreaterEqual(obsidian.export_all_status()["queued"], 1)
+
     def test_auto_export_writes_new_and_earlier_notes(self):
         m = _done_meeting(title="Ранняя", recorded_at="2024-05-16 10:00:00")
         update_settings({"obsidian_auto": "true"})

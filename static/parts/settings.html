@@ -1047,7 +1047,7 @@
           </div>
           <p id="obs-preview" class="text-[11.5px] text-apple-tertiary leading-snug break-all"></p>
           <div class="flex items-center gap-2 flex-wrap">
-            <button data-click="obsidianExportAll" id="obs-export-all" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="obsExportAll">Сохранить все записи</button>
+            <button data-click="obsidianExportAll" data-click-args='[{"$": "event"}]' id="obs-export-all" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" aria-haspopup="dialog" data-i18n="obsExportAll">Реэкспорт всех расшифровок</button>
             <span id="obs-export-all-status" class="text-[11.5px] text-apple-tertiary"></span>
           </div>
           <div class="space-y-0.5">
