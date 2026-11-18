@@ -191,6 +191,12 @@ def _safe_check() -> None:
 def _loop() -> None:
     while True:
         _safe_check()
+        try:  # recordings whose transcription was cancelled: a reminder, never during a meeting
+            from app import untranscribed
+
+            untranscribed.notice_tick()
+        except Exception:
+            traceback.print_exc()
         time.sleep(POLL_SEC)
 
 

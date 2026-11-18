@@ -3016,6 +3016,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-more:hover { text-decoration: underline; }
 .db-c { min-width: 0; }
 .db-note { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); line-height: 1.45; margin: 4px 0 8px; }
+/* the reminder of recordings whose transcription was cancelled (app/untranscribed.py) */
+.db-untx { grid-column: span 12; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.28); font-size: var(--fs-body, 13px); color: #F5F5F7; }
+.db-untx-text { flex: 1 1 320px; min-width: 0; line-height: 1.45; }
+.db-untx-name { background: none; border: 0; padding: 0; color: #4DA3FF; cursor: pointer; font: inherit; }
+.db-untx-name:hover { text-decoration: underline; }
+.db-untx-go { color: #FFB340; }
 .db-empty { grid-column: span 12; padding: 60px 0; text-align: center; color: var(--hc-dim, #8E8E93); }
 .neg { color: #FF8A80 !important; }
 /* the borrowed blocks of the home page sit in their widget without a second frame */
