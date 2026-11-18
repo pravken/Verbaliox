@@ -174,7 +174,11 @@ def api_since_last(meeting_id: int, payload: SinceLastPayload) -> Dict[str, Any]
         raise HTTPException(status_code=503, detail=str(e)[:300])
     from app.database import merge_summaries
 
-    return {"summaries": merge_summaries(meeting_id, {"since_last": md})}
+    sums = merge_summaries(meeting_id, {"since_last": md})
+    from app.obsidian import refresh_if_exported
+
+    refresh_if_exported(meeting_id)
+    return {"summaries": sums}
 
 class BriefPayload(BaseModel):
     series_id: Optional[int] = None
@@ -829,6 +833,9 @@ def api_extract_commitments(meeting_id: int, payload: CommitmentExtractPayload) 
         sync_next_steps(meeting_id)
     except Exception as e:
         print(f"[analysis_chain] next steps: {e}", flush=True)
+    from app.obsidian import refresh_if_exported
+
+    refresh_if_exported(meeting_id)  # and in the note
     return items
 
 @router.get("/api/meetings/{meeting_id}/commitments")
@@ -1014,10 +1021,9 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
     if not in_steps:  # the analysis in steps checks its protocol before its lists go in
         result_md = maybe_ground(result_md, key, m)
     summaries = merge_summaries(meeting_id, {key: result_md}, remove=("error",))
-    if key != "custom":
-        from app.obsidian import refresh_if_exported
+    from app.obsidian import refresh_if_exported
 
-        refresh_if_exported(meeting_id)
+    refresh_if_exported(meeting_id)  # every section made goes into the note too, the answers to questions included
     return {"key": key, "summary": result_md, "summaries": summaries}
 
 

@@ -166,7 +166,16 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
         values = clean_all({k: v for k, v in payload.settings.items() if not str(k).startswith("llm_key_")})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    was_auto = (get_all_settings().get("obsidian_auto") or "false") == "true"
     updated = update_settings(values)
+    if values.get("obsidian_auto") == "true" and not was_auto:
+        # auto-export turned on: the recordings made before it get their notes too (asked by the user)
+        try:
+            from app.obsidian import export_all
+
+            export_all(missing_only=True)
+        except Exception as e:
+            print(f"[obsidian] notes of the earlier recordings: {e}", flush=True)
     if "dictionary_fuzzy" in values:
         vocab.invalidate()
     if "start_with_windows" in values:
