@@ -6,6 +6,28 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.19 — English
+
+- **The automatic analysis runs again** after a transcription: Ollama now stops with the app, and a stopped
+  Ollama was taken for «no analysis model». It is started when a model is downloaded.
+- **Analysis only when there is no meeting**: while the app records or the calendar has a meeting, the analysis
+  does not start; one already running stops and its model is unloaded, so the computer does not slow down. The
+  recordings are analysed by themselves two minutes after the meeting (Settings → After transcription).
+- **Economy mode (recording only)** in the tray icon's menu and Settings → General: the models are unloaded,
+  transcription, analysis and live captions wait; the status bar shows it and turns it off with a click.
+- **Less load on the processor**: GigaAM and Parakeet on the processor use half of the cores (2 to 8) instead
+  of all of them; the number can be set. «Turn captions on when a recording starts» can be switched off; the
+  Teams captions are saved with the recording either way. GigaAM and Parakeet can each be set to the processor.
+- **Obsidian: everything in the note** — the transcript, overview, tasks, chapters, decisions, letter, notes,
+  your own templates and answers, added whenever something new is made. A contents line with links, times in
+  the chapters that open the transcript line, a «Participants» section (who spoke how much, longest monologues,
+  interruptions), and marks around every section for agents (`<!-- verbaliox:tasks:start -->`, listed in the
+  note's properties). «Save all recordings», and turning auto-export on writes the notes of earlier recordings.
+- **A call during a calendar meeting** is no longer named after it: the people heard, the title and the call's
+  app are compared with the event; another person's call is named «Call: Name».
+- **A reminder of recordings whose transcription was cancelled**, on the dashboard («Transcribe all», «Don't
+  remind») and once a day as a notification, never during a meeting.
+
 ## 0.8.18 — English
 
 - **Dashboard instead of «Today» and «Tasks»**, the first page of the app: the date and greeting, the period
@@ -589,6 +611,28 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.19
+
+- **Автоанализ после расшифровки снова работает**: Ollama теперь выключается вместе с программой, и выключенная
+  Ollama принималась за «нет модели анализа». Теперь она запускается сама, если модель скачана.
+- **Анализ — только когда нет встречи**: пока идёт запись или по календарю встреча, анализ не запускается, а
+  начатый останавливается, и модель выгружается из памяти, чтобы компьютер не тормозил. Записи разбираются
+  сами через две минуты после встречи (Настройки → После расшифровки).
+- **Режим экономии (только запись)** в меню значка в трее и в Настройках → Общие: модели выгружаются,
+  расшифровка, анализ и субтитры ждут; внизу окна надпись, нажатие выключает режим.
+- **Меньше нагрузки на процессор**: GigaAM и Parakeet на процессоре берут половину ядер (от 2 до 8), а не все;
+  число можно выбрать. «Включать субтитры при начале записи» можно выключить — субтитры Teams всё равно
+  сохраняются с записью. GigaAM и Parakeet можно по отдельности оставить на процессоре.
+- **Obsidian: в заметке всё** — расшифровка, обзор, задачи, главы, решения, письмо, конспект, свои шаблоны и
+  ответы; новое дописывается сразу после генерации. Оглавление со ссылками, время в главах ведёт на строку
+  расшифровки, раздел «Участники» (кто сколько говорил, длинные монологи, перебивания) и метки вокруг каждого
+  раздела для агентов (`<!-- verbaliox:tasks:start -->`, список в свойствах заметки). «Сохранить все записи»,
+  а при включении автоэкспорта сохраняются и прежние записи.
+- **Звонок во время встречи из календаря** больше не получает её название: с встречей сравниваются те, кто
+  говорил, название и приложение звонка; звонок другого человека называется «Звонок: Имя».
+- **Напоминание о записях, расшифровку которых отменили**: на дэшборде («Расшифровать все», «Не напоминать») и
+  уведомлением раз в день, никогда во время встречи.
 
 ## 0.8.18
 
