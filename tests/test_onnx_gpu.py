@@ -128,6 +128,19 @@ class OnnxGpuTest(unittest.TestCase):
         with mock.patch.object(onnx_gpu, "enabled", return_value=False):
             self.assertFalse(onnx_gpu.gpu_for_job("gigaam-v3"))
 
+    def test_a_model_set_to_the_processor_never_takes_the_card(self):
+        """Asked by the user: GigaAM or Parakeet on the processor, the video card left free."""
+        from app.database import init_db, update_settings
+
+        init_db()
+        roomy = {"free_gb": 20.0, "used_gb": 1, "total_gb": 24}
+        with mock.patch.object(onnx_gpu, "enabled", return_value=True), mock.patch("app.vram.gpu_memory", return_value=roomy):
+            update_settings({"onnx_gigaam_device": "cpu", "onnx_parakeet_device": "auto"})
+            self.assertFalse(onnx_gpu.gpu_for_job("gigaam-v3"))
+            self.assertTrue(onnx_gpu.gpu_for_job("parakeet-v3"))
+            update_settings({"onnx_gigaam_device": "auto"})
+            self.assertTrue(onnx_gpu.gpu_for_job("gigaam-v3"))
+
 
 class OnnxLoadProvidersTest(unittest.TestCase):
     def test_gpu_and_cpu_copies(self):

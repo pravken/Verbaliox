@@ -32,6 +32,8 @@ FLOATS = {"dub_voice_cfg": (1.0, 3.0)}  # VoxCPM2 guidance (cfg_value)
 CHOICES = {"llm_provider": {"ollama", "cloud"}, "date_folders": {"off", "day", "month", "year_month"},
            "record_source_mode": {"mic", "system", "both"}, "ui_scale": {"75", "90", "100", "115", "130", "150"},
            # the memory left to the system (app/mem_reserve.py)
+           # GigaAM / Parakeet on the video card or always on the processor (app/onnx_gpu.gpu_for_job)
+           "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},
            "mem_reserve_vram": {"auto", "0.5", "1", "1.5", "2", "3", "4"}}
 SPEECH_MODELS = {"whisper_model", "speech_model_ru", "live_whisper_model"}

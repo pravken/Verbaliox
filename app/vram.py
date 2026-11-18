@@ -479,7 +479,10 @@ def vram_snapshot() -> Dict[str, Any]:
         elif c["kind"] == "live":
             c["where"] = "gpu" if on_gpu else "cpu"
         elif c["kind"] == "onnx":
-            c["where"] = "gpu" if (c.get("device") == "cuda" or (not c.get("loaded") and onnx_gpu)) else "cpu"
+            from app.onnx_gpu import device_setting
+
+            c["where"] = "gpu" if (c.get("device") == "cuda" or (not c.get("loaded") and onnx_gpu
+                                                                  and device_setting(c["name"]) != "cpu")) else "cpu"
         elif c["kind"] == "ollama":
             c["where"] = "cpu" if c.get("loaded") and not c.get("size_gb") else "gpu"
             c["embedding"] = is_embedding_model(c["name"])  # the model of search by meaning
