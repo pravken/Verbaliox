@@ -322,7 +322,7 @@ const SERVER_TEXT_EN = {
   "Дополнение заметки в очереди...": "Completing the note: queued...",
   "Дополнение заметки отменено": "Completing the note cancelled",
   "Анализ ждёт модель анализа: она недоступна": "The analysis waits for an analysis model: none is available",
-  "Режим экономии: субтитры во время записи выключены": "Economy mode: live captions are off",
+  "«Только запись»: субтитры во время записи выключены": "«Recording only»: live captions are off",
   "облачная модель": "cloud model",
   "процесс распознавания завершился": "the recognition process ended",
   "процесс распознавания не отвечает": "the recognition process does not answer",

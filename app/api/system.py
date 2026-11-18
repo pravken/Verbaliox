@@ -174,6 +174,11 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
     if "economy_mode" in values and (values["economy_mode"] == "true") != was_economy:
         from app import economy
 
+        if values["economy_mode"] == "true":  # for the time chosen beside it
+            end = economy.until_for(values.get("economy_for") or before.get("economy_for") or "0")
+            update_settings({"economy_until": f"{end:.0f}" if end else ""})
+        else:
+            update_settings({"economy_until": ""})
         economy.applied(values["economy_mode"] == "true")
     if "cpu_threads" in values and values["cpu_threads"] != was_threads:
         try:  # the models on the processor load again with the new number of threads

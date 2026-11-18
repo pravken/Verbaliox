@@ -524,19 +524,48 @@ class TrayController:
 
             self.window.evaluate_js(f"window.openFromNotice && window.openFromNotice({json.dumps(target)})")
 
-    # ---- economy mode: recording only, no model works (app/economy.py; also in Settings → Общие)
+    # ---- «Только запись»: no model works, until turned off or for a time (app/economy.py; also in
+    # Settings → Общие); «Не мешать на встречах»: the analysis waits while a meeting goes on (app/meeting_guard.py)
     def _economy(self) -> bool:
         from app import economy
 
         return economy.on()
 
-    def _toggle_economy(self) -> None:
+    def _economy_items(self):
         from app import economy
 
-        now = economy.set_mode(not economy.on())
-        self.tray.notify("Режим экономии включён" if now else "Режим экономии выключен",
-                         "Работает только запись: расшифровка, анализ и субтитры подождут" if now
-                         else "Расшифровка и анализ продолжаются", target="")
+        if economy.on():
+            end = economy.until()
+            when = f" — до {time.strftime('%H:%M', time.localtime(end))}" if end else ""
+            return [("Только запись" + when, "economy:off", 0x8)]  # MF_CHECKED: a click turns it off
+        return [("Только запись", [
+            ("Пока не выключу", "economy:0", 0),
+            ("На 30 минут", "economy:30", 0),
+            ("На 1 час", "economy:60", 0),
+            ("На 2 часа", "economy:120", 0),
+            ("На 4 часа", "economy:240", 0),
+            ("До конца дня", "economy:day", 0),
+        ], 0)]
+
+    def _set_economy(self, choice: str) -> None:
+        from app import economy
+
+        now = economy.set_mode(choice != "off", choice if choice != "off" else "0")
+        end = economy.until() if now else 0
+        self.tray.notify("Только запись" if now else "«Только запись» выключено",
+                         ("Расшифровка, анализ и субтитры подождут"
+                          + (f" до {time.strftime('%H:%M', time.localtime(end))}" if end else ", пока режим не выключат"))
+                         if now else "Расшифровка и анализ продолжаются", target="")
+
+    def _meetings_quiet(self) -> bool:
+        from app import meeting_guard
+
+        return meeting_guard.enabled()
+
+    def _toggle_meetings_quiet(self) -> None:
+        from app.database import update_settings
+
+        update_settings({"analysis_after_meetings": "false" if self._meetings_quiet() else "true"})
 
     def _toggle_quiet(self) -> None:
         from app.database import update_settings
@@ -678,7 +707,8 @@ class TrayController:
             ("Вопрос по медиатеке…", "ask", 0),
             (None, None, 0),
             ("Тихий режим (без уведомлений)", "quiet", 0x8 if self._quiet() else 0),  # MF_CHECKED
-            ("Режим экономии (только запись)", "economy", 0x8 if self._economy() else 0),
+            ("Не мешать на встречах", "meetings_quiet", 0x8 if self._meetings_quiet() else 0),
+            *self._economy_items(),
             ("Настройки…", "settings", 0),
             ("Открыть папку данных", "data", 0),
             (None, None, 0),
@@ -725,8 +755,11 @@ class TrayController:
         if cmd == "quiet":
             self._toggle_quiet()
             return
-        if cmd == "economy":
-            self._toggle_economy()
+        if cmd.startswith("economy:"):
+            self._set_economy(cmd.split(":", 1)[1])
+            return
+        if cmd == "meetings_quiet":
+            self._toggle_meetings_quiet()
             return
         if cmd == "hotkey_record":
             self._hotkey_record()
