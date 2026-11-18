@@ -24,10 +24,101 @@ _lock = threading.Lock()
 
 _LABELS = {
     "ru": {"summary": "Резюме", "overview": "Обзор", "tasks": "Задачи", "chapters": "Главы", "transcript": "Расшифровка",
-           "participants": "Участники", "untitled": "Запись", "notes": "Заметки со встречи", "promises": "Задачи"},
+           "participants": "Участники", "untitled": "Запись", "notes": "Заметки со встречи", "promises": "Задачи по людям",
+           "contents": "Содержание", "people": "Участники"},
     "en": {"summary": "Summary", "overview": "Overview", "tasks": "Tasks", "chapters": "Chapters", "transcript": "Transcript",
-           "participants": "Participants", "untitled": "Recording", "notes": "Notes from the meeting", "promises": "Tasks"},
+           "participants": "Participants", "untitled": "Recording", "notes": "Notes from the meeting", "promises": "Tasks by person",
+           "contents": "Contents", "people": "Participants"},
 }
+
+# Every other section the analysis can make, under its own heading, in this order; the user's templates
+# (tpl:<id>) by their names, then anything else that is there (asked by the user: the note has all of it)
+_MORE = {
+    "ru": {"decisions": "Решения", "followup": "Письмо после встречи", "notes": "Конспект", "since_last": "С прошлой встречи",
+           "custom": "Ответ на вопрос", "mfu": "Что важно"},
+    "en": {"decisions": "Decisions", "followup": "Follow-up email", "notes": "Notes", "since_last": "Since the last meeting",
+           "custom": "Answer", "mfu": "What matters"},
+}
+_SHOWN_ELSEWHERE = {"tldr", "protocol", "tasks", "chapters", "error"}
+
+# The name of each section's marks (asked by the user: «read only the tasks», an agent finds them by this name,
+# listed in the note's properties); the same in every language, never translated
+# «notes» (the synopsis) would read like the mark of the user's own notes, <!-- verbaliox:notes -->
+_SECTION_IDS = {"followup": "followup_email", "custom": "answer", "mfu": "what_matters", "notes": "synopsis"}
+
+
+def section_id(key: str) -> str:
+    """tpl:12 → template_12, followup → followup_email; letters, digits and «_» only."""
+    key = _SECTION_IDS.get(key, key)
+    return re.sub(r"[^a-z0-9_]+", "_", key.replace("tpl:", "template_").lower()).strip("_") or "section"
+
+
+_STATS = {
+    "ru": {"line": "Говорили {talk} из {dur} · тишина {silence}% · реплик {turns}, в среднем {avg}",
+           "cols": ("Участник", "Время", "Доля", "", "Реплик", "Слов/мин", "Вопросов", "Перебивал"),
+           "mono": "Самые длинные монологи", "inter": "Кто кого перебивал"},
+    "en": {"line": "Talk {talk} of {dur} · silence {silence}% · {turns} turns, {avg} on average",
+           "cols": ("Participant", "Time", "Share", "", "Turns", "Words/min", "Questions", "Interrupted"),
+           "mono": "Longest monologues", "inter": "Who interrupted whom"},
+}
+
+
+def _duration(sec: float) -> str:
+    sec = int(round(sec or 0))
+    return f"{sec // 3600}:{sec % 3600 // 60:02d}:{sec % 60:02d}" if sec >= 3600 else f"{sec // 60}:{sec % 60:02d}"
+
+
+def _talk_stats(m: Dict[str, Any], lang: str, link) -> List[str]:
+    """The «Участники» page of the app as text (asked by the user): who spoke how long, a bar of their share,
+    turns, pace, questions, interruptions; the longest monologues link to their place in the transcript."""
+    from app.analytics import conversation_analytics
+
+    a = conversation_analytics(m)
+    if not a["speakers"]:
+        return []
+    T = _STATS[lang]
+    out = [T["line"].format(talk=_duration(a["talk_seconds"]), dur=_duration(a["duration"]), silence=str(a["silence_share"]).replace(".", ","),
+                            turns=a["turns"], avg=_duration(a["avg_turn"])), ""]
+    out += ["| " + " | ".join(T["cols"]) + " |", "|" + "---|" * len(T["cols"])]
+    for r in a["speakers"]:
+        cells = round(r["share"] / 5)
+        bar = "█" * cells + "░" * (20 - cells)
+        out.append(f"| {str(r['name']).replace('|', chr(92) + '|')} | {_duration(r['seconds'])} | {str(r['share']).replace('.', ',')}% | `{bar}` | {r['turns']} | "
+                   f"{r['wpm'] if r['wpm'] is not None else '—'} | {r['questions']} | {r['interruptions']} |")
+    out.append("")
+    if a["longest_monologues"]:
+        out += [f"**{T['mono']}:**", ""]
+        out += [f"- {link(x['start'])} {x['name']} — {_duration(x['seconds'])}" for x in a["longest_monologues"]]
+        out.append("")
+    segs = sorted(m.get("segments") or [], key=lambda x: float(x.get("start") or 0))
+    names = {k: (v or {}).get("name") or k for k, v in (m.get("speakers") or {}).items()}
+    pairs: Dict[tuple, int] = {}
+    for prev, cur in zip(segs, segs[1:]):
+        if prev.get("speaker") != cur.get("speaker") and float(cur.get("start") or 0) < float(prev.get("end") or 0) - 0.2:
+            key = (names.get(cur.get("speaker"), cur.get("speaker")), names.get(prev.get("speaker"), prev.get("speaker")))
+            pairs[key] = pairs.get(key, 0) + 1
+    if pairs:
+        out += [f"**{T['inter']}:**", ""]
+        out += [f"- {a_} → {b_}: {n}" for (a_, b_), n in sorted(pairs.items(), key=lambda kv: -kv[1])[:6]]
+        out.append("")
+    return out
+
+
+def _more_sections(summaries: Dict[str, Any], lang: str) -> List[tuple]:
+    """[(key, heading, markdown)] of the sections of the analysis besides the overview, tasks and chapters."""
+    try:
+        from app.database import summary_templates
+
+        names = {f"tpl:{t['id']}": t["name"] for t in summary_templates()}
+    except Exception:
+        names = {}
+    labels = _MORE[lang]
+    keys = [k for k in summaries if k not in _SHOWN_ELSEWHERE and not str(k).startswith("_")
+            and isinstance(summaries[k], str) and summaries[k].strip()]
+    order = list(labels) + sorted(k for k in keys if k.startswith("tpl:"))
+    keys.sort(key=lambda k: (order.index(k) if k in order else len(order), k))
+    gone = "Свой шаблон" if lang != "en" else "Own template"  # a template deleted since: no name left
+    return [(k, labels.get(k) or names.get(k) or (gone if k.startswith("tpl:") else k), summaries[k]) for k in keys]
 
 
 def _settings() -> Dict[str, str]:
@@ -121,6 +212,13 @@ def _demote(md: str, levels: int = 1) -> str:
     return "\n".join(out).strip()
 
 
+# The parts of a note for a program that reads many of them (asked by the user: an agent reads the analysis
+# and leaves the transcript out): HTML comments, not shown by Obsidian. Each section has its own pair too,
+# <!-- verbaliox:<id>:start --> … <!-- verbaliox:<id>:end -->, its id listed in the properties (section_mark)
+ANALYSIS_START, ANALYSIS_END = "<!-- verbaliox:analysis:start -->", "<!-- verbaliox:analysis:end -->"
+TRANSCRIPT_START, TRANSCRIPT_END = "<!-- verbaliox:transcript:start -->", "<!-- verbaliox:transcript:end -->"
+
+
 def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> str:
     settings = settings or _settings()
     lang = "en" if (m.get("language") or "") == "en" else "ru"
@@ -156,13 +254,62 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
     if names:
         props += [f"**{L['participants']}:** " + ", ".join(names), ""]
     body: List[str] = []
+    headings: List[str] = []
+    with_text = _on(settings, "obsidian_transcript") and bool(segments)
+    starts = [float(seg.get("start") or 0.0) for seg in segments]
+    anchors: Dict[int, str] = {}  # the transcript's lines a chapter or a moment of the analysis points to
+
+    sections: List[tuple] = []  # (id, heading) in the order of the note
+
+    def add(to: List[str], sid: str, title: str, *lines: str) -> None:
+        """A section between its marks; its heading goes into the contents (Obsidian takes [[#heading]];
+        these signs would break the link)."""
+        title = re.sub(r"[\[\]|#^]+", " ", title).strip() or "—"
+        if title in headings:  # a template named like a section: its own heading, so the contents link finds it
+            title = f"{title} ({sum(1 for h in headings if h == title or h.startswith(title + ' (')) + 1})"
+        if any(s == sid for s, _ in sections):
+            sid = f"{sid}_{len(sections) + 1}"
+        headings.append(title)
+        sections.append((sid, title))
+        to += [f"<!-- verbaliox:{sid}:start -->", f"## {title}", "", *lines, f"<!-- verbaliox:{sid}:end -->", ""]
+
+    total = max([float(seg.get("end") or seg.get("start") or 0.0) for seg in segments] + [float(m.get("duration") or 0.0)])
+
+    def moments(md: str, bare: bool = False) -> str:
+        """«[12:34]» in the analysis, and «00:18» at the start of a chapter's line (bare): a link to that line
+        of the transcript (asked by the user: from a chapter straight to the text). Only with the transcript
+        in the note, and only a moment within the recording: «встреча в 15:30» is a clock time, left as it is.
+        In a table row the link's «|» is escaped, so the cell is not split."""
+        if not with_text:
+            return md
+
+        def link(mt: "re.Match", in_table: bool) -> str:
+            parts = [int(x) for x in mt.group(2).split(":")]
+            sec = parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
+            if sec > total + 5:
+                return mt.group(0)
+            i = max(0, next((k for k, st in enumerate(starts) if st > sec + 0.5), len(starts)) - 1)
+            anchors[i] = f"t{i}"
+            return f"{mt.group(1)}[[#^t{i}{chr(92) if in_table else ''}|{mt.group(2)}]]"
+
+        bracketed = re.compile(r"(^|[\s(])\[(\d{1,2}:\d{2}(?::\d{2})?)\](?=[\s).,;:]|$)")
+        at_start = re.compile(r"^(\s*(?:[-*+]|\d+[.)])?\s*)(\d{1,2}:\d{2}(?::\d{2})?)(?=[\s).,;:—–-]|$)")
+        out = []
+        for line in md.split("\n"):
+            table = line.lstrip().startswith("|")
+            line = bracketed.sub(lambda mt: link(mt, table), line)
+            if bare and not table:
+                line = at_start.sub(lambda mt: link(mt, False), line, count=1)
+            out.append(line)
+        return "\n".join(out)
+
     if (m.get("user_notes") or "").strip():
-        body += [f"## {L['notes']}", "", m["user_notes"].strip(), ""]
+        add(body, "meeting_notes", L["notes"], m["user_notes"].strip(), "")
     if _on(settings, "obsidian_summary"):
         if summaries.get("tldr"):
-            body += [f"## {L['summary']}", "", _demote(summaries["tldr"]), ""]
+            add(body, "summary", L["summary"], moments(_demote(summaries["tldr"])), "")
         if summaries.get("protocol"):
-            body += [f"## {L['overview']}", "", _demote(summaries["protocol"]), ""]
+            add(body, "overview", L["overview"], moments(_demote(summaries["protocol"])), "")
     try:
         from app import commitments
 
@@ -170,17 +317,43 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
     except Exception:
         promised = []
     if promised:
-        body += [f"## {L['promises']}", "", commitments.export_text(promised, "md").strip(), ""]
+        add(body, "tasks_by_person", L["promises"], commitments.export_text(promised, "md").strip(), "")
     if _on(settings, "obsidian_tasks") and summaries.get("tasks"):
-        body += [f"## {L['tasks']}", "", _tasks_as_checklist(_demote(summaries["tasks"])), ""]
+        add(body, "tasks", L["tasks"], _tasks_as_checklist(_demote(summaries["tasks"])), "")
     if _on(settings, "obsidian_chapters") and summaries.get("chapters"):
-        body += [f"## {L['chapters']}", "", _demote(summaries["chapters"]), ""]
-    if _on(settings, "obsidian_transcript") and segments:
-        body += [f"## {L['transcript']}", ""]
-        for seg in segments:
+        add(body, "chapters", L["chapters"], moments(_demote(summaries["chapters"]), bare=True), "")
+    if _on(settings, "obsidian_stats") and segments:
+        def at(sec: float) -> str:  # a moment of the transcript, a link to its line when the transcript is there
+            stamp = format_timestamp(sec)
+            return moments(f"[{stamp}]") if with_text else f"`{stamp}`"
+        stats = _talk_stats(m, lang, at)
+        if stats:
+            add(body, "participants", L["people"], *stats)
+    if _on(settings, "obsidian_more"):  # the decisions, the letter, the notes, the user's templates, the answers
+        for key, heading, md in _more_sections(summaries, lang):
+            add(body, section_id(key), heading, moments(_demote(md)), "")
+    if body:
+        body = [ANALYSIS_START, "", *body, ANALYSIS_END, ""]
+    if with_text:
+        lines: List[str] = []
+        for i, seg in enumerate(segments):
             spk = speakers.get(seg.get("speaker") or "", {}).get("name") or seg.get("speaker") or ""
-            body.append(f"**{spk}** `{format_timestamp(seg.get('start') or 0.0)}` {(seg.get('text') or '').strip()}")
-            body.append("")
+            mark = f" ^{anchors[i]}" if i in anchors else ""  # a block id: a chapter's link lands on this line
+            lines += [f"**{spk}** `{format_timestamp(seg.get('start') or 0.0)}` {(seg.get('text') or '').strip()}{mark}", ""]
+        add(body, "transcript", L["transcript"], *lines)
+    if sections:
+        # the list of the marks for a program or an agent (asked by the user: «read only the tasks»): each
+        # section is between <!-- verbaliox:<id>:start --> and <!-- verbaliox:<id>:end -->; the comments
+        # themselves are not written here, so splitting the note on a mark finds it once
+        props[props.index("---", 1):props.index("---", 1)] = [
+            "section_mark: \"each section is between the HTML comments verbaliox:<id>:start and verbaliox:<id>:end; "
+            "all the analysis between verbaliox:analysis:start and verbaliox:analysis:end; "
+            "the user's own notes after verbaliox:notes to the end\"",
+            "sections:",
+            *[f"  - {_yaml_str(f'{sid}: {title}')}" for sid, title in sections],
+        ]
+    if len(headings) > 1:  # the note's contents: a click goes to the section (the transcript included)
+        props += [f"**{L['contents']}:** " + " · ".join(f"[[#{h}]]" for h in headings), ""]
     return "\n".join(props + body).rstrip() + "\n"
 
 
@@ -334,11 +507,13 @@ def auto_export_enabled(settings: Optional[Dict[str, str]] = None) -> bool:
 
 
 def refresh_if_exported(meeting_id: int) -> None:
-    """After a rename or a new summary: update the note in the background if it was saved before."""
+    """After a rename or anything the analysis made: write the note in the background (auto-export on)."""
     from app.database import get_meeting
 
     m = get_meeting(meeting_id)
-    if not m or not m.get("obsidian_path") or not auto_export_enabled():
+    # a recording whose note was never written gets it now (a section made later, a recording older than the
+    # setting): with auto-export on, the note always has what the recording has (asked by the user)
+    if not m or not auto_export_enabled() or m.get("status") != "completed" or not m.get("segments"):
         return
 
     def _run() -> None:
@@ -348,3 +523,54 @@ def refresh_if_exported(meeting_id: int) -> None:
             traceback.print_exc()
 
     threading.Thread(target=_run, daemon=True, name="obsidian_refresh").start()
+
+
+# --- Every recording at once: when auto-export is turned on, or on request («Сохранить все записи») ---
+_all_state: Dict[str, Any] = {"active": False, "done": 0, "total": 0, "failed": 0, "kept": 0}
+_all_lock = threading.Lock()
+
+
+def export_all_status() -> Dict[str, Any]:
+    return dict(_all_state)
+
+
+def export_all(missing_only: bool = False) -> Dict[str, Any]:
+    """Writes the note of every transcribed recording in the background (the existing ones updated, the user's
+    edits above their section kept: explicit=False). missing_only: only the recordings without a note yet."""
+    from app.database import list_meetings
+
+    if vault_dir() is None:
+        raise ValueError("Папка хранилища Obsidian не выбрана в настройках")
+    meetings = list_meetings()
+    with _all_lock:  # a double click starts one run
+        if _all_state["active"]:
+            return export_all_status()
+        ids = [m["id"] for m in meetings if m.get("status") == "completed" and m.get("has_transcript")
+               and not (missing_only and m.get("obsidian_path") and Path(m["obsidian_path"]).is_file())]
+        _all_state.update(active=True, done=0, total=len(ids), failed=0, kept=0)
+    paths = {m["id"]: m.get("obsidian_path") or "" for m in meetings}
+
+    def mtime(path: str) -> float:
+        try:
+            return Path(path).stat().st_mtime if path else 0.0
+        except OSError:
+            return 0.0
+
+    def run() -> None:
+        try:
+            for mid in ids:
+                try:
+                    before = mtime(paths.get(mid, ""))
+                    target = export_meeting(mid, generate=False, explicit=False)
+                    if before and mtime(str(target)) == before:
+                        _all_state["kept"] += 1  # edited in Obsidian above the user's section: left as it is
+                except Exception as e:
+                    _all_state["failed"] += 1
+                    print(f"[obsidian] meeting {mid}: {e}", flush=True)
+                _all_state["done"] += 1
+            print(f"[obsidian] {_all_state['done'] - _all_state['failed']} of {len(ids)} note(s) written", flush=True)
+        finally:
+            _all_state["active"] = False
+
+    threading.Thread(target=run, daemon=True, name="obsidian_export_all").start()
+    return export_all_status()

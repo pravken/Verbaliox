@@ -162,6 +162,7 @@ function queueKindLabel(q) {
   if (q.kind === 'translate') return `${t('queueKindTranslate')} → ${lang}`;
   if (q.kind === 'burn_subs') return `${t('queueKindBurnSubs')} (${lang})`;
   if (q.kind === 'cut') return t('queueKindCut');
+  if (q.kind === 'analysis') return t('queueKindAnalysis');
   return t('queueKindTranscribe');
 }
 
@@ -211,6 +212,7 @@ function handleLiveEvent(ev) {
   if (ev.type === 'queue') { scheduleQueueReload(); scheduleVramRefresh(800); return; }
   if (ev.type === 'exported') { onExportedEvent(ev); scheduleListReload(); return; }
   if (ev.type === 'call') { handleCallEvent(ev); return; }
+  if (ev.type === 'economy') { onEconomyEvent(ev); return; }
   // Text recognized so far, while the recording is still being transcribed
   if (ev.type === 'segments') {
     if (state.activeMeeting && state.activeMeeting.id === ev.id) selectMeeting(ev.id, false);

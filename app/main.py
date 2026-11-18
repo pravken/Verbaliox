@@ -225,6 +225,9 @@ async def lifespan(_app: FastAPI):
     from app import call_watch
 
     call_watch.start()
+    from app import meeting_guard
+
+    meeting_guard.start()  # the analysis waits for the end of a meeting
     from app import watch_folder
 
     watch_folder.start()

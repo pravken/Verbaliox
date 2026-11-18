@@ -523,6 +523,15 @@ def stop_session(session_id: str) -> None:
         s.translator.stop()
 
 
+def stop_all() -> int:
+    """Every caption session ends (app/economy.py: recording only); the page sees its session gone."""
+    with _sessions_lock:
+        ids = list(_sessions)
+    for sid in ids:
+        stop_session(sid)
+    return len(ids)
+
+
 def _drop_idle() -> None:
     """Sessions whose page stopped sending audio (closed, reloaded, crashed) end, with their
     translator thread."""

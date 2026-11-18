@@ -552,8 +552,14 @@ def day(start: datetime, end: datetime) -> List[Dict[str, Any]]:
             for e in window(start, end)]
 
 
-def apply_to_recording(meeting_id: int, started_at: Optional[datetime] = None) -> bool:
-    """A recording made during a calendar meeting: its title and participants come from the event."""
+def apply_to_recording(meeting_id: int, started_at: Optional[datetime] = None, title: str = "",
+                       names: Optional[List[str]] = None, call_app: str = "") -> bool:
+    """A recording made during a calendar meeting: its title and participants come from the event, when
+    the recording is that meeting (app/calendar_match.py): a person who called meanwhile is not its invitees.
+    `title`, `names`, `call_app`: what the recording itself says (its title, the people heard, the call's app)."""
+    import json
+
+    from app import calendar_match
     from app.database import get_meeting, update_meeting_fields
 
     if not _source():
@@ -562,7 +568,20 @@ def apply_to_recording(meeting_id: int, started_at: Optional[datetime] = None) -
     m = get_meeting(meeting_id)
     if not ev or not m:
         return False
-    fields: Dict[str, Any] = {}
+    names = names or []
+    verdict = calendar_match.verdict(ev, title, names, call_app)
+    print(f"[calendar] meeting {meeting_id} during «{ev['title']}»: {verdict}", flush=True)
+    fields: Dict[str, Any] = {"calendar_json": json.dumps({
+        "title": ev["title"], "attendees": ev["attendees"][:30], "online": bool(ev.get("online")), "call_app": call_app,
+        "recorded_title": m.get("title") or "", "sure": verdict != "unknown", "match": verdict != "no"}, ensure_ascii=False)}
+    if verdict == "no":
+        named = calendar_match.call_title(names, "en" if (m.get("language") or "") == "en" else "ru")
+        from app.ollama_client import is_generic_title
+
+        if named and m.get("title_is_default") and is_generic_title(m.get("title") or ""):
+            fields.update(title=named[:300], title_is_default=0)  # without names: named by its content later
+        update_meeting_fields(meeting_id, **fields)
+        return False
     if ev["title"] and m.get("title_is_default"):
         fields.update(title=ev["title"][:300], title_is_default=0)
     if ev["attendees"]:
@@ -570,6 +589,5 @@ def apply_to_recording(meeting_id: int, started_at: Optional[datetime] = None) -
         notes = (m.get("user_notes") or "").strip()
         if head not in notes:
             fields["user_notes"] = (head + ("\n" + notes if notes else ""))[:50000]
-    if fields:
-        update_meeting_fields(meeting_id, **fields)
-    return bool(fields)
+    update_meeting_fields(meeting_id, **fields)
+    return len(fields) > 1  # the title or the participants written, not the record of the match alone

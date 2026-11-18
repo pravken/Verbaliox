@@ -56,13 +56,15 @@ async function loadDashboard() {
   const p = dbPrefs();
   DB.loading = true;
   const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}`;
-  const [data, week] = await Promise.all([
+  const [data, week, untx] = await Promise.all([
     fetch(`/api/dashboard?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
     dbLoadWeek(),
+    fetch('/api/untranscribed').then(r => (r.ok ? r.json() : null)).catch(() => null),
   ]);
   DB.loading = false;
   DB.data = data;
   DB.week = week;
+  DB.untx = (untx && untx.items) || [];
   if (state.appView === 'dashboard') renderDashboard();
 }
 
@@ -96,6 +98,7 @@ function renderDashboard() {
       + (def.host ? '' : `<h3 class="db-h">${escapeHtml(t(def.title))}${dbLink(w.id)}</h3>`)
       + `<div class="db-c">${def.host ? '' : dbWidgetHtml(w.id, size)}</div>${tools}${sizes}</section>`;
   }).join('') || `<div class="db-empty">${escapeHtml(t('dbEmpty'))}</div>`;
+  if (!DB.edit && (DB.untx || []).length) grid.insertAdjacentHTML('afterbegin', dbUntxHtml());
   // the home page's blocks in their widgets (home.js keeps drawing them where they are)
   p.layout.forEach((w, i) => {
     const def = DB_WIDGETS[w.id];
@@ -104,6 +107,37 @@ function renderDashboard() {
     if (block) grid.querySelector(`.db-w[data-i="${i}"] .db-c`).appendChild(block);
   });
   renderDashDrawer();
+}
+
+// Recordings whose transcription was cancelled and never done (app/untranscribed.py): asked by the user,
+// a reminder with «Расшифровать», above the widgets
+function dbUntxHtml() {
+  const items = DB.untx || [];
+  const names = items.slice(0, 3).map(m => `<button class="db-untx-name" data-click="openMeeting" data-click-args='[${m.id}]'>${escapeHtml(m.title || t('hmUntitled'))}</button>`).join(', ');
+  const more = items.length > 3 ? ` ${escapeHtml(t('dbUntxMore').replace('{n}', () => items.length - 3))}` : '';
+  return `<div class="db-untx" role="status">
+    <span class="db-untx-text">${escapeHtml(t(items.length > 1 ? 'dbUntxMany' : 'dbUntxOne').replace('{n}', () => items.length))} ${names}${more}</span>
+    <button class="tk-btn db-untx-go" data-click="dashTranscribeUntx">${escapeHtml(t(items.length > 1 ? 'dbUntxGoAll' : 'dbUntxGo'))}</button>
+    <button class="tk-btn" data-click="dashDismissUntx">${escapeHtml(t('dbUntxDismiss'))}</button>
+  </div>`;
+}
+
+async function dashTranscribeUntx() {
+  const ids = (DB.untx || []).map(m => m.id);
+  const res = await fetch('/api/untranscribed/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) }).catch(() => null);
+  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  const out = await res.json();
+  showToast(t('dbUntxQueued').replace('{n}', () => out.queued), null, 'success');
+  DB.untx = [];
+  renderDashboard();
+  loadMeetingsList().catch(() => {});
+}
+
+async function dashDismissUntx() {
+  const ids = (DB.untx || []).map(m => m.id);
+  await fetch('/api/untranscribed/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) }).catch(() => null);
+  DB.untx = [];
+  renderDashboard();
 }
 
 // The blocks borrowed from the home page go back to it, out of the grid

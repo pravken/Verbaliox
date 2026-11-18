@@ -661,6 +661,8 @@ async function openFromNotice(target) {
   } else if (kind === 'studio') {
     switchAppView('studio');
     studioTab('text');
+  } else if (kind === 'dashboard') {  // recordings whose transcription was cancelled (app/untranscribed.py)
+    switchAppView('dashboard');
   } else if (kind === 'last') {
     openLastRecording();
   } else if (kind === 'settings') {
