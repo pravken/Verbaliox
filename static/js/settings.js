@@ -170,6 +170,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     }
     document.getElementById('set-ollama-model').value = s.ollama_model || 'gemma4:e2b';
     document.getElementById('set-auto-summary').checked = s.auto_summary !== 'false';
+    document.getElementById('set-analysis-after-meetings').checked = s.analysis_after_meetings !== 'false';
     document.getElementById('set-auto-title').checked = s.auto_title !== 'false';
     document.getElementById('set-summary-grounding').checked = s.summary_grounding !== 'false';
     document.getElementById('set-analysis-chain').checked = s.analysis_chain !== 'false';
@@ -2540,6 +2541,7 @@ function settingsFormValues() {
     asr_ensemble_models: [...document.querySelectorAll('#set-ensemble-models input:checked')].map(x => x.value).join(','),
     ollama_model: document.getElementById('set-ollama-model').value.trim(),
     auto_summary: String(document.getElementById('set-auto-summary').checked),
+    analysis_after_meetings: String(document.getElementById('set-analysis-after-meetings').checked),
     auto_title: String(document.getElementById('set-auto-title').checked),
     summary_grounding: String(document.getElementById('set-summary-grounding').checked),
     analysis_chain: String(document.getElementById('set-analysis-chain').checked),
@@ -3027,7 +3029,7 @@ const SETTINGS_RESET = {
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
     ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
-  analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-auto-title', 'auto_title', 'check'],
+  analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-analysis-after-meetings', 'analysis_after_meetings', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
     ['set-semantic', 'semantic_search', 'check']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
@@ -3045,7 +3047,7 @@ const SETTINGS_DEFAULTS = {
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
-  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
+  auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',

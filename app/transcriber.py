@@ -43,7 +43,7 @@ from app.text_utils import (
 
 # The order of kinds of jobs in the queue: a meeting just recorded is transcribed first, a dub or a
 # translation started before it (tens of minutes) waits. Within a kind, the order they were given
-KIND_PRIORITY = {"transcribe": 0, "resplit": 1, "merge": 1, "cut": 2, "translate": 2, "burn": 2, "dub": 3}
+KIND_PRIORITY = {"transcribe": 0, "resplit": 1, "merge": 1, "cut": 2, "translate": 2, "burn": 2, "analysis": 2, "dub": 3}
 
 
 class _PriorityExecutor:
@@ -741,8 +741,45 @@ def enqueue_resplit_job(meeting_id: int, num_speakers: int = 0) -> bool:
                              _resplit_runner, num_speakers)
 
 
+def _analysis_runner(meeting_id: int) -> str:
+    """The analysis that waited for the end of a meeting (app/meeting_guard.py), with what needs the model
+    after it: the title by content, the suggested features, the note in Obsidian."""
+    from app import cancel_scope, meeting_guard
+    from app.database import get_all_settings
+
+    settings = get_all_settings()
+    if meeting_guard.busy(settings):  # a meeting began while it waited in the queue
+        return "Анализ — после окончания встречи"
+    m = get_meeting(meeting_id) or {}
+    segments, speakers = m.get("segments") or [], m.get("speakers") or {}
+    if not segments:
+        meeting_guard.done(meeting_id)
+        return "Нет расшифровки для анализа"
+    lang = m.get("language") or "ru"
+    with meeting_guard.guard(meeting_id):
+        _auto_analysis(meeting_id, settings, segments, speakers, lang)
+    if _cancel_wanted(meeting_id):
+        meeting_guard.clear_interrupted(meeting_id)
+        meeting_guard.done(meeting_id)  # cancelled by the user: not started again by itself
+        raise JobCancelled()
+    if meeting_guard.interrupted(meeting_id):
+        meeting_guard.clear_interrupted(meeting_id)
+        cancel_scope.reset(threading.get_ident())
+        return "Анализ — после окончания встречи"  # still marked: done when the meeting ends
+    meeting_guard.done(meeting_id)
+    notes = _after_transcription(meeting_id, segments, speakers, lang, settings, first=False)
+    err = ((get_meeting(meeting_id) or {}).get("summaries") or {}).get("error")
+    return (f"Ошибка анализа: {str(err)[:140]}" if err else "Анализ готов") + "".join(f"; {n}" for n in notes)
+
+
+def enqueue_analysis_job(meeting_id: int) -> bool:
+    """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time)."""
+    return _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner)
+
+
 # runner -> (name for error messages, text after a cancel)
 _SIDE_JOB_NAMES = {
+    _analysis_runner: ("анализ", "Анализ отменён"),
     _resplit_runner: ("разделение участников", "Разделение участников отменено"),
     _cut_runner: ("нарезка записи", "Нарезка отменена"),
     _translate_runner: ("перевод", "Перевод отменён"),
@@ -1185,14 +1222,131 @@ def _collect_segments(meeting_id: int, segments_iter, total_dur: float,
     return raw_segments
 
 
+def _auto_analysis(meeting_id: int, settings: Dict[str, str], merged_segments: List[Dict[str, Any]],
+                   speakers_meta: Dict[str, Any], detected_lang: str) -> None:
+    """The analysis right after a transcript (the overview, the tasks, the chapters); also run later for a
+    recording whose analysis waited for a meeting to end (app/meeting_guard.py). Never raises: a failure
+    is kept in the summaries as «error» (a cancel or a meeting breaking it off is not one)."""
+    from app import meeting_guard
+
+    total_len = max((float(x.get("end") or 0) for x in merged_segments), default=0.0)
+    summaries: Dict[str, Any] = {}
+    from app import llm
+
+    from app.database import is_local_only
+    from app.features import note_for as features_note_for
+    from app.meeting_context import note_for_summary as meeting_context_note
+
+    local_only = is_local_only(get_meeting(meeting_id))
+    if llm.available(settings, local_only=local_only):
+        cloud = llm.uses_cloud(settings) and not local_only
+        if not cloud:  # the analysis model loads alone: the speech models go first
+            _release_speech_models()
+        update_meeting_progress(
+            meeting_id,
+            status="summarizing",
+            progress=90,
+            stage_text="Формирование обзора записи (" + ("облачная модель" if cloud else "Ollama") + ")...",
+        )
+        try:
+            where = "облачная модель" if cloud else "Ollama"
+            part_notes: Dict[str, Any] = {}  # the parts of a long recording, read once for both
+            try:  # who was there, their names written right (app/people.meeting_roster)
+                from app.people import meeting_roster
+
+                roster = meeting_roster({**(get_meeting(meeting_id) or {}), "speakers": speakers_meta})
+            except Exception:
+                roster = []
+            from app import analysis_chain
+
+            auto_tasks = settings.get("auto_commitments", "true").lower() == "true"
+            summary_md = None
+            in_steps = analysis_chain.enabled(settings)
+            if in_steps:
+                # In steps: the decisions, the tasks, the protocol with both (its result sections are
+                # those lists word for word)
+                try:
+                    summary_md = analysis_chain.run(
+                        meeting_id, None, detected_lang, find_tasks=auto_tasks,
+                        stage=lambda text: update_meeting_progress(meeting_id, stage_text=text),
+                        part_notes=part_notes,
+                    )
+                except Exception as chain_err:
+                    if _cancel_wanted(meeting_id):
+                        raise
+                    # a step failed (a timeout, the context): the protocol in one go instead, so the
+                    # recording still gets its overview (found by an audit)
+                    print(f"[analysis_chain] meeting {meeting_id}: {chain_err}; the protocol in one go", flush=True)
+                    in_steps = False
+            if summary_md is None:
+                # The tasks first: they are checked against the transcript (a quote for each), and the
+                # protocol is then told them, so its «Следующие шаги» are the same tasks
+                if settings.get("auto_commitments", "true").lower() == "true":
+                    try:
+                        from app import commitments
+
+                        update_meeting_progress(meeting_id, stage_text="Поиск задач и договорённостей...")
+                        commitments.extract(meeting_id)
+                    except Exception as c_err:
+                        print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
+                    update_meeting_progress(meeting_id, stage_text=f"Формирование обзора записи ({where})...")
+                summary_md = generate_meeting_summary(
+                    progress=lambda done, total: update_meeting_progress(
+                        meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
+                    segments=merged_segments,
+                    speakers=speakers_meta,
+                    template_key="protocol",
+                    user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
+                    mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
+                    features_note=features_note_for(get_meeting(meeting_id) or {}),
+                    context_note=meeting_context_note(get_meeting(meeting_id) or {}, "protocol"),
+                    answer_lang=detected_lang,
+                    local_only=local_only,
+                    part_notes=part_notes,
+                    participants=roster,
+                )
+            from app.grounding import ground_summary
+
+            # the analysis in steps checks its protocol itself, before the program's lists go in
+            if settings.get("summary_grounding", "true").lower() == "true" and not in_steps:
+                summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
+            summaries["protocol"] = summary_md
+            merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))
+            try:  # a task the protocol did not list is added to its «Следующие шаги»
+                analysis_chain.sync_next_steps(meeting_id)
+            except Exception as sync_err:
+                print(f"[analysis_chain] meeting {meeting_id}: {sync_err}", flush=True)
+            # The topics above the timeline: worth it for a meeting long enough to have several
+            if settings.get("auto_chapters", "true").lower() == "true" and total_len >= AUTO_CHAPTERS_MIN_SEC:
+                try:
+                    update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
+                    chapters_md = generate_meeting_summary(
+                        segments=merged_segments, speakers=speakers_meta, template_key="chapters",
+                        answer_lang=detected_lang, local_only=local_only, part_notes=part_notes,
+                        participants=roster)
+                    summaries["chapters"] = chapters_md
+                    merge_summaries(meeting_id, {"chapters": chapters_md})
+                except Exception as ch_err:
+                    print(f"[chapters] meeting {meeting_id}: {ch_err}", flush=True)
+        except Exception as sum_err:
+            # a cancel, or a meeting that began (app/meeting_guard.py), broke the request off: not an error
+            if not _cancel_wanted(meeting_id) and not meeting_guard.interrupted(meeting_id):
+                summaries["error"] = str(sum_err)
+                merge_summaries(meeting_id, {"error": str(sum_err)})
+
+
 def _after_transcription(
     meeting_id: int,
     segments: List[Dict[str, Any]],
     speakers: Dict[str, Any],
     lang: str,
     settings: Dict[str, str],
+    with_llm: bool = True,
+    first: bool = True,
 ) -> List[str]:
-    """Optional steps that must never fail the transcription; returns short notes for the status."""
+    """Optional steps that must never fail the transcription; returns short notes for the status.
+    with_llm=False: none of them asks the analysis model (a meeting is going on, app/meeting_guard.py);
+    first=False: run again after the analysis that waited, the steps without the model already done."""
     from app import obsidian
     from app.database import update_meeting_fields
     from app.ollama_client import generate_meeting_title, is_generic_title
@@ -1201,6 +1355,7 @@ def _after_transcription(
     meeting = get_meeting(meeting_id) or {}
     if (
         segments
+        and with_llm
         and settings.get("auto_title", "true").lower() == "true"
         and meeting.get("title_is_default")
         and is_generic_title(meeting.get("title") or "")
@@ -1223,7 +1378,8 @@ def _after_transcription(
     try:  # a recurring meeting joins the series of the earlier ones (app/series.py)
         from app import series
 
-        series.auto_assign(meeting_id)
+        if first:
+            series.auto_assign(meeting_id)
     except Exception as e:
         print(f"[series] meeting {meeting_id}: {e}", flush=True)
     try:  # its features: the series' own (set by the user), else the analysis model's suggestion (app/features.py)
@@ -1234,7 +1390,7 @@ def _after_transcription(
         # feature); else the analysis model's guess. The last two only suggest, for ✓ / ✕
         suggest_on = settings.get("feature_suggest", "true").lower() == "true"
         if not features.apply_series_rule(meeting_id) and suggest_on and not features.suggest_by_title(meeting_id) \
-                and features.list_features() \
+                and with_llm and features.list_features() \
                 and llm_targets.available(settings, local_only=_local_only(get_meeting(meeting_id) or {})):
             features.suggest(meeting_id)
     except Exception as e:
@@ -1243,7 +1399,7 @@ def _after_transcription(
         update_meeting_progress(meeting_id, progress=97, stage_text="Сохранение заметки в Obsidian...")
         try:
             # The job is not "completed" yet: the note is written for the finished transcript
-            path = obsidian.export_meeting(meeting_id, generate=True, in_job=True)
+            path = obsidian.export_meeting(meeting_id, generate=with_llm, in_job=True)
             notes.append(f"заметка Obsidian: {path.name}")
         except Exception as e:
             notes.append(f"Obsidian: {str(e)[:120]}")
@@ -1941,118 +2097,34 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         # 4. Automatic AI Summary via local Ollama (if enabled and Ollama has a model)
         auto_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true") and not skipped
-        total_len = max((float(x.get("end") or 0) for x in merged_segments), default=0.0)
-        summaries = meeting.get("summaries") or {}
-
+        deferred = False
         if auto_summary and merged_segments:
-            from app import llm
+            from app import meeting_guard
 
-            from app.database import is_local_only
-            from app.features import note_for as features_note_for
-            from app.meeting_context import note_for_summary as meeting_context_note
+            if meeting_guard.busy(settings):
+                # a meeting is going on (recording, or the calendar): the analysis model would slow it down,
+                # the recording is analysed when it ends (asked by the user)
+                meeting_guard.defer(meeting_id)
+                deferred = True
+            else:
+                with meeting_guard.guard(meeting_id):
+                    _auto_analysis(meeting_id, settings, merged_segments, speakers_meta, detected_lang)
+                if meeting_guard.interrupted(meeting_id) and not _cancel_wanted(meeting_id):
+                    meeting_guard.defer(meeting_id)  # a meeting began during it: done again after
+                    deferred = True
+                    from app import cancel_scope
 
-            local_only = is_local_only(get_meeting(meeting_id))
-            if llm.available(settings, local_only=local_only):
-                cloud = llm.uses_cloud(settings) and not local_only
-                if not cloud:  # the analysis model loads alone: the speech models go first
-                    _release_speech_models()
-                update_meeting_progress(
-                    meeting_id,
-                    status="summarizing",
-                    progress=90,
-                    stage_text="Формирование обзора записи (" + ("облачная модель" if cloud else "Ollama") + ")...",
-                )
-                try:
-                    where = "облачная модель" if cloud else "Ollama"
-                    part_notes: Dict[str, Any] = {}  # the parts of a long recording, read once for both
-                    try:  # who was there, their names written right (app/people.meeting_roster)
-                        from app.people import meeting_roster
-
-                        roster = meeting_roster({**(get_meeting(meeting_id) or {}), "speakers": speakers_meta})
-                    except Exception:
-                        roster = []
-                    from app import analysis_chain
-
-                    auto_tasks = settings.get("auto_commitments", "true").lower() == "true"
-                    summary_md = None
-                    in_steps = analysis_chain.enabled(settings)
-                    if in_steps:
-                        # In steps: the decisions, the tasks, the protocol with both (its result sections are
-                        # those lists word for word)
-                        try:
-                            summary_md = analysis_chain.run(
-                                meeting_id, None, detected_lang, find_tasks=auto_tasks,
-                                stage=lambda text: update_meeting_progress(meeting_id, stage_text=text),
-                                part_notes=part_notes,
-                            )
-                        except Exception as chain_err:
-                            if _cancel_wanted(meeting_id):
-                                raise
-                            # a step failed (a timeout, the context): the protocol in one go instead, so the
-                            # recording still gets its overview (found by an audit)
-                            print(f"[analysis_chain] meeting {meeting_id}: {chain_err}; the protocol in one go", flush=True)
-                            in_steps = False
-                    if summary_md is None:
-                        # The tasks first: they are checked against the transcript (a quote for each), and the
-                        # protocol is then told them, so its «Следующие шаги» are the same tasks
-                        if settings.get("auto_commitments", "true").lower() == "true":
-                            try:
-                                from app import commitments
-
-                                update_meeting_progress(meeting_id, stage_text="Поиск задач и договорённостей...")
-                                commitments.extract(meeting_id)
-                            except Exception as c_err:
-                                print(f"[commitments] meeting {meeting_id}: {c_err}", flush=True)
-                            update_meeting_progress(meeting_id, stage_text=f"Формирование обзора записи ({where})...")
-                        summary_md = generate_meeting_summary(
-                            progress=lambda done, total: update_meeting_progress(
-                                meeting_id, stage_text=f"Формирование обзора записи ({where}): часть {done} из {total}..."),
-                            segments=merged_segments,
-                            speakers=speakers_meta,
-                            template_key="protocol",
-                            user_notes=(get_meeting(meeting_id) or {}).get("user_notes") or "",
-                            mfu=(get_meeting(meeting_id) or {}).get("mfu") or "",
-                            features_note=features_note_for(get_meeting(meeting_id) or {}),
-                            context_note=meeting_context_note(get_meeting(meeting_id) or {}, "protocol"),
-                            answer_lang=detected_lang,
-                            local_only=local_only,
-                            part_notes=part_notes,
-                            participants=roster,
-                        )
-                    from app.grounding import ground_summary
-
-                    # the analysis in steps checks its protocol itself, before the program's lists go in
-                    if settings.get("summary_grounding", "true").lower() == "true" and not in_steps:
-                        summary_md = ground_summary(summary_md, merged_segments, speakers_meta)
-                    summaries["protocol"] = summary_md
-                    merge_summaries(meeting_id, {"protocol": summary_md}, remove=("error",))
-                    try:  # a task the protocol did not list is added to its «Следующие шаги»
-                        analysis_chain.sync_next_steps(meeting_id)
-                    except Exception as sync_err:
-                        print(f"[analysis_chain] meeting {meeting_id}: {sync_err}", flush=True)
-                    # The topics above the timeline: worth it for a meeting long enough to have several
-                    if settings.get("auto_chapters", "true").lower() == "true" and total_len >= AUTO_CHAPTERS_MIN_SEC:
-                        try:
-                            update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
-                            chapters_md = generate_meeting_summary(
-                                segments=merged_segments, speakers=speakers_meta, template_key="chapters",
-                                answer_lang=detected_lang, local_only=local_only, part_notes=part_notes,
-                                participants=roster)
-                            summaries["chapters"] = chapters_md
-                            merge_summaries(meeting_id, {"chapters": chapters_md})
-                        except Exception as ch_err:
-                            print(f"[chapters] meeting {meeting_id}: {ch_err}", flush=True)
-                except Exception as sum_err:
-                    if not _cancel_wanted(meeting_id):  # a cancel broke the request off: not an error
-                        summaries["error"] = str(sum_err)
-                        merge_summaries(meeting_id, {"error": str(sum_err)})
+                    cancel_scope.reset(threading.get_ident())  # the steps below are not cut off by it
+                meeting_guard.clear_interrupted(meeting_id)
 
         clear_vram()
 
         # 5. A title from the content instead of a file name, and the note in Obsidian
         skipped = skipped or _cancel_wanted(meeting_id)
         notes = ["обзор и название пропущены (отмена)"] if skipped else \
-            _after_transcription(meeting_id, merged_segments, speakers_meta, detected_lang, settings)
+            _after_transcription(meeting_id, merged_segments, speakers_meta, detected_lang, settings, with_llm=not deferred)
+        if deferred:
+            notes = ["анализ — после окончания встречи", *notes]
         if ensemble_note:
             notes = [ensemble_note, *notes]
         if speakers_note:

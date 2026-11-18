@@ -163,6 +163,7 @@ def init_db() -> None:
             "feature_suggest": "true",  # the analysis model suggests a recording's features (app/features.py)
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
+            "analysis_after_meetings": "true",
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
             "vad_filter": "true",
