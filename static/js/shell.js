@@ -296,6 +296,8 @@ function onEconomyEvent(ev) {
   if (box) box.checked = !!ev.on;
   if (ev.on && typeof stopLiveCaptions === 'function' && liveCap.session) {
     stopLiveCaptions();  // the server ended its session: the recording goes on without them
+    const capToggle = document.getElementById('live-captions-toggle');
+    if (capToggle && capToggle.checked) { capToggle.checked = false; liveCap.autoOff = true; }  // back after it
     if (typeof renderLiveCaptionsError === 'function') renderLiveCaptionsError(t('economyNoCaptions'));
   }
   renderStatusbar();

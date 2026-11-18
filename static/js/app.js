@@ -1690,7 +1690,9 @@ async function obsidianExportAllWatch(st) {
   if (!box || !st) return;
   if (btn) btn.disabled = !!st.active;
   box.textContent = st.active ? t('obsExportAllRunning').replace('{done}', () => st.done).replace('{total}', () => st.total)
-    : st.total ? t('obsExportAllDone').replace('{n}', () => st.total - st.failed) + (st.failed ? ` · ${t('obsExportAllFailed').replace('{n}', () => st.failed)}` : '') : '';
+    : st.total ? t('obsExportAllDone').replace('{n}', () => st.total - st.failed - (st.kept || 0))
+      + (st.kept ? ` · ${t('obsExportAllKept').replace('{n}', () => st.kept)}` : '')
+      + (st.failed ? ` · ${t('obsExportAllFailed').replace('{n}', () => st.failed)}` : '') : '';
   if (st.active) setTimeout(() => obsidianExportAllWatch(), 1500);
 }
 

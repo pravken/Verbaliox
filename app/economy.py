@@ -45,12 +45,18 @@ def applied(enabled: bool) -> None:
     meeting_guard.kick()  # on: the analysis is broken off and its models unloaded; off: it follows
     if enabled:
         def unload() -> None:
+            import time
+
             try:
-                from app import idle_unload, live
+                from app import dictation, idle_unload, live
 
                 live.stop_all()  # the captions of a recording going on stop (its sound is still recorded)
-
-                idle_unload.unload_now()
+                # the job running finishes with its models (unloading them now frees nothing and makes it
+                # load them again), and a dictation the user is speaking keeps its model: unloaded after
+                while on() and (transcriber.running_job_kind() or dictation._state.get("active")):
+                    time.sleep(5)
+                if on():
+                    idle_unload.unload_now()
             except Exception:
                 traceback.print_exc()
 

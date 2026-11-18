@@ -164,7 +164,7 @@ def cancel_waiting(meeting_id: int) -> bool:
     or started again meanwhile. False when it is not waiting (running, or another kind of job)."""
     with _jobs_lock:
         entry = next((q for q in _queue if q["id"] == meeting_id), None)
-        if not entry or entry["kind"] != "transcribe" or _running_id == meeting_id or entry.get("started_at"):
+        if not entry or _running_id == meeting_id or entry.get("started_at"):
             return False
         _queue[:] = [q for q in _queue if q["id"] != meeting_id]
         _active_jobs.discard(meeting_id)
@@ -172,7 +172,16 @@ def cancel_waiting(meeting_id: int) -> bool:
         _dropped[meeting_id] = _dropped.get(meeting_id, 0) + 1
     from app.database import update_meeting_progress
 
-    update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Обработка отменена", error_message="")
+    if entry["kind"] == "transcribe":
+        update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Обработка отменена", error_message="")
+    else:
+        # a job on a finished transcript (an analysis, a translation, a dub) waiting, e.g. in the economy mode:
+        # the recording goes back as it was
+        if entry["kind"] == "analysis":
+            from app import meeting_guard
+
+            meeting_guard.done(meeting_id)  # cancelled by the user: not started again by itself
+        update_meeting_progress(meeting_id, status="completed", progress=100, stage_text="Обработка отменена", error_message="")
     _publish_queue_changed()
     # exports that waited for its end are settled now, as at the end of a job
     threading.Thread(target=_run_pending_exports, args=(meeting_id,), daemon=True).start()
@@ -187,7 +196,7 @@ def _skip_dropped(meeting_id: int) -> bool:
         n = _dropped.get(meeting_id, 0)
         if not n:
             for q in _queue:
-                if q["id"] == meeting_id and q["kind"] == "transcribe":
+                if q["id"] == meeting_id:
                     q["started_at"] = q.get("started_at") or time.time()
             return False
         if n == 1:
@@ -422,6 +431,9 @@ def enqueue_dub_job(meeting_id: int, target_lang: str) -> bool:
 def _run_dub_job(meeting_id: int, target_lang: str, back: str = "completed") -> None:
     from app.dubbing import run_dub_job
 
+    if _skip_dropped(meeting_id):  # taken out of the queue while it waited (cancel_waiting)
+        return
+
     def _progress(pct: int, text: str) -> None:
         update_meeting_progress(meeting_id, progress=pct, stage_text=text)
 
@@ -483,6 +495,8 @@ def _enqueue_side_job(meeting_id: int, kind: str, lang: str, status: str, queued
 def _run_side_job(meeting_id: int, back: str, runner, *args) -> None:
     # Like a dub, these jobs never invalidate the transcript: the recording goes back to the status it
     # had (`back`) and the outcome (done, cancelled, error) is reported in stage_text / error_message.
+    if _skip_dropped(meeting_id):  # taken out of the queue while it waited (cancel_waiting)
+        return
     _queue_start(meeting_id)
     try:
         done_text = runner(meeting_id, *args)
@@ -768,8 +782,17 @@ def _analysis_runner(meeting_id: int) -> str:
         meeting_guard.done(meeting_id)
         return "Нет расшифровки для анализа"
     lang = m.get("language") or "ru"
-    with meeting_guard.guard(meeting_id):
-        _auto_analysis(meeting_id, settings, segments, speakers, lang)
+    processing = m.get("processing") or {}
+    want_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true")
+    if want_summary:
+        from app import llm
+        from app.database import is_local_only
+
+        if not llm.available(settings, local_only=is_local_only(m)):
+            # no analysis model now (Ollama removed, no cloud key): the mark stays, said plainly
+            return "Анализ ждёт модель анализа: она недоступна"
+        with meeting_guard.guard(meeting_id):
+            _auto_analysis(meeting_id, settings, segments, speakers, lang)
     if _cancel_wanted(meeting_id):
         meeting_guard.clear_interrupted(meeting_id)
         meeting_guard.done(meeting_id)  # cancelled by the user: not started again by itself
@@ -782,6 +805,15 @@ def _analysis_runner(meeting_id: int) -> str:
     notes = _after_transcription(meeting_id, segments, speakers, lang, settings, first=False)
     err = ((get_meeting(meeting_id) or {}).get("summaries") or {}).get("error")
     return (f"Ошибка анализа: {str(err)[:140]}" if err else "Анализ готов") + "".join(f"; {n}" for n in notes)
+
+
+def obsidian_generates(settings: Dict[str, str]) -> bool:
+    try:
+        from app import obsidian
+
+        return obsidian.auto_export_enabled(settings) and (settings.get("obsidian_generate") or "true").lower() == "true"
+    except Exception:
+        return False
 
 
 def enqueue_analysis_job(meeting_id: int) -> bool:
@@ -1008,6 +1040,10 @@ def enqueue_whisper_preload(model_name: Optional[str] = None) -> bool:
     """Loads a Whisper model (the one from the settings by default) in the job worker, so it never
     races a job. A transcription with the same model reuses it. False when the queue is busy."""
     global _preloading, _preloading_name
+    from app import economy
+
+    if economy.on():  # recording only: no model is loaded ahead
+        return False
     with _jobs_lock:
         if _queue or _preloading:
             return False
@@ -2120,7 +2156,7 @@ def _process_meeting_job(meeting_id: int) -> None:
         if auto_summary and merged_segments:
             from app import meeting_guard
 
-            if meeting_guard.busy(settings):
+            if meeting_guard.busy():  # read now: the mode may have been turned on during the transcription
                 # a meeting is going on (recording, or the calendar): the analysis model would slow it down,
                 # the recording is analysed when it ends (asked by the user)
                 meeting_guard.defer(meeting_id)
@@ -2140,6 +2176,15 @@ def _process_meeting_job(meeting_id: int) -> None:
 
         # 5. A title from the content instead of a file name, and the note in Obsidian
         skipped = skipped or _cancel_wanted(meeting_id)
+        if not deferred and not skipped:
+            from app import meeting_guard
+
+            if meeting_guard.busy():
+                # a meeting (or recording only) without the analysis to wait: the title by content, the
+                # features and the note's overview wait with an analysis of their own
+                deferred = bool(settings.get("auto_title", "true").lower() == "true" or obsidian_generates(settings))
+                if deferred:
+                    meeting_guard.defer(meeting_id)
         notes = ["обзор и название пропущены (отмена)"] if skipped else \
             _after_transcription(meeting_id, merged_segments, speakers_meta, detected_lang, settings, with_llm=not deferred)
         if deferred:

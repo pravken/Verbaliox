@@ -31,7 +31,9 @@ def items() -> List[Dict[str, Any]]:
         conn.commit()
         rows = conn.execute(
             "SELECT id, title, media_path, recorded_at, created_at, duration FROM meetings "
-            "WHERE status = 'cancelled' AND COALESCE(has_transcript, 0) = 0 "
+            # never finished: a cancel mid-recognition keeps the phrases saved so far (has_transcript is 1),
+            # but no transcript was made (its model is set when one is)
+            "WHERE status = 'cancelled' AND COALESCE(transcript_model, '') = '' "
             "ORDER BY COALESCE(recorded_at, created_at) DESC").fetchall()
         conn.close()
     out = []

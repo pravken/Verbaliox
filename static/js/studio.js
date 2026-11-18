@@ -586,6 +586,7 @@ async function handleCallEvent(ev) {
     if (!isRecording()) state.callRecording = null;
     else autoRecordNotice(true, 'call', ev.name || ev.app);
   } else if (ev.state === 'ended' && state.callRecording) {
+    if (isRecording()) state.recCallApp = state.callRecording;  // the recording saved next was this call (app/calendar_match.py)
     state.callRecording = null;
     if (!isRecording()) return;
     showToast(t('callRecordEnded').replace('{app}', () => ev.name || ev.app));
@@ -645,6 +646,7 @@ async function meetingFollowTick() {
       try {
         showToast(t('meetingEndedStop').replace('{name}', () => mf.base));
         autoRecordNotice(false, 'meeting', mf.base);
+        state.recCallApp = state.callRecording || state.recCallApp;
         state.callRecording = null;
         await stopAndTranscribeRecording();
       } finally {
@@ -1088,7 +1090,7 @@ function liveDraftTrOn() {
 
 function saveLiveCaptionPrefs() {
   const prefs = {
-    on: document.getElementById('live-captions-toggle').checked,
+    on: document.getElementById('live-captions-toggle').checked || !!liveCap.autoOff,
     translate: document.getElementById('live-translate-select').value,
     draft: document.getElementById('live-draft-toggle').checked,
     draftTr: document.getElementById('live-draft-tr-toggle').checked,
@@ -1473,6 +1475,7 @@ async function studioConfigure(speechChanged) {
 }
 
 async function studioToggleCaptions(on) {
+  liveCap.autoOff = false;  // the user's own choice now
   saveLiveCaptionPrefs();
   if (on && !liveCap.session && _recAudioCtx && window._recMixedStream) {
     try { await startLiveCaptions(_recAudioCtx, window._recMixedStream); } catch (e) { renderLiveCaptionsError(e.message); }
@@ -1902,9 +1905,15 @@ async function startLiveRecording() {
     capReset();
     // «Включать субтитры при начале записи» off, or the economy mode: the recording starts without them
     // (the switch can turn them on; the Teams captions are read either way, stTeamsStart below)
+    // The switch shows them off for this recording; the user's choice is kept (liveCap.autoOff) for the
+    // next recordings and comes back when this one ends
     const capSettings = (state.system && state.system.settings) || {};
-    if (capSettings.live_captions_auto === 'false' || economyOn()) document.getElementById('live-captions-toggle').checked = false;
-    if (document.getElementById('live-captions-toggle').checked) {
+    const capToggle = document.getElementById('live-captions-toggle');
+    if (capToggle.checked && (capSettings.live_captions_auto === 'false' || economyOn())) {
+      capToggle.checked = false;
+      liveCap.autoOff = true;
+    }
+    if (capToggle.checked) {
       startLiveCaptions(ctx, mixedStream).catch(err => {
         console.error(err);
         renderLiveCaptionsError(err.message);
@@ -2089,6 +2098,11 @@ async function checkRecordingDisk() {
 }
 
 function _cleanupRecordingResources() {
+  if (liveCap.autoOff) {  // captions held off for the recording (settings, economy mode): the switch as it was
+    liveCap.autoOff = false;
+    const capToggle = document.getElementById('live-captions-toggle');
+    if (capToggle) capToggle.checked = true;
+  }
   if (_recScreenId) {  // a start that failed half way: the screen capture must not keep running
     fetch(`/api/record/screen/${_recScreenId}/cancel`, { method: 'POST' }).catch(() => {});
     _recScreenId = null;
@@ -2164,7 +2178,10 @@ async function cancelLiveRecording() {
 // undefined when nothing was recording or saving failed
 async function stopAndTranscribeRecording(opts) {
   const quiet = !!(opts && opts.quiet);
+  // the app of the call that started it, for the calendar's check (a messenger call is not the meeting)
+  const callApp = String(state.callRecording || state.recCallApp || '');
   state.callRecording = null;
+  state.recCallApp = null;
   if (_recStarting) { _recStopWanted = true; return undefined; }  // the start stops itself (recStartGoesOn)
   if (!_mediaRecorder && !_recCaptureId && !_recScreenId) return undefined;
   document.getElementById('record-status-hint').textContent = t('recStatusSaving');
@@ -2186,7 +2203,7 @@ async function stopAndTranscribeRecording(opts) {
   const startedAt = _recStartTime ? _recStartTime / 1000 : 0;
   state.recSaving = { title: rawTitle };
   try {
-    return await _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt });
+    return await _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt, callApp });
   } finally {
     state.recSaving = null;
     syncLibLiveRow();
@@ -2195,14 +2212,14 @@ async function stopAndTranscribeRecording(opts) {
 
 // What the server is told of the recording: at «Стоп», and every 10 s while it goes on (the watchdog of
 // app/api/recording.py saves it with these notes if the page is gone before «Стоп»)
-function recordingInfo({ page, captureId, screenId, rawTitle, startedAt }) {
+function recordingInfo({ page, captureId, screenId, rawTitle, startedAt, callApp }) {
   const ta = document.getElementById('studio-notes-input');
   return {
     title: rawTitle, page_id: page ? page.id : null, capture_id: captureId, screen_id: screenId,
     has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
     notes: ta ? ta.value : '', started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
     speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
-    call_app: String(state.callRecording || ''),  // the calendar's meeting or a call meanwhile (app/calendar_match.py)
+    call_app: String(callApp ?? state.callRecording ?? ''),  // the calendar's meeting or a call meanwhile (app/calendar_match.py)
   };
 }
 
@@ -2215,13 +2232,13 @@ function recordHeartbeat() {
     .catch(() => {});
 }
 
-async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt }) {
+async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, startedAt, callApp }) {
   _cleanupRecordingResources();
 
   // every chunk is on the server (waited for, but not for ever: a request that hangs)
   if (page) await Promise.race([page.upload, new Promise(res => setTimeout(res, 180000))]);
   if (page && page.failed) showToast(page.failed);
-  const body = JSON.stringify(recordingInfo({ page, captureId, screenId, rawTitle, startedAt }));
+  const body = JSON.stringify(recordingInfo({ page, captureId, screenId, rawTitle, startedAt, callApp }));
   // The notes go when the server has the recording: a failed answer keeps them, and «Сохранить ещё раз»
   // sends the same again (the parts wait on the server; its watchdog saves them in 3 minutes otherwise)
   const send = async () => {
