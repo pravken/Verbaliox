@@ -66,14 +66,17 @@ class MeetingGuardTest(unittest.TestCase):
         worker.start()
         time.sleep(0.1)
         app_status.set_recording(True)
-        with mock.patch("app.vram.ollama_loaded", return_value=[{"name": "gemma4:e4b"}]), \
-                mock.patch("app.vram.ollama_unload", return_value=[]) as unload:
+        # only the models this app loaded go (another program's stays), and gently
+        loaded = [{"name": "gemma4:e4b"}, {"name": "someone-elses:7b"}]
+        with mock.patch("app.vram.ollama_loaded", return_value=loaded), \
+                mock.patch("app.vram.ollama_unload", return_value=[]) as unload, \
+                mock.patch("app.idle_unload._ollama_used", {"gemma4:e4b"}):
             self.assertEqual(meeting_guard.check(now=1010.0), "recording")
             meeting_guard.check(now=1030.0)  # still going: unloaded once, when it began
         worker.join(3)
         self.assertTrue(result.get("aborted"))
         self.assertTrue(meeting_guard.interrupted(mid))
-        unload.assert_called_once_with(["gemma4:e4b"])
+        unload.assert_called_once_with(["gemma4:e4b"], force=False)
         meeting_guard.clear_interrupted(mid)
         cancel_scope.reset(worker.ident)
 
@@ -87,6 +90,13 @@ class MeetingGuardTest(unittest.TestCase):
             meeting_guard.check(now=1100.0 + meeting_guard.QUIET_SEC + 1)
             enqueue.assert_called_once_with(mid)
 
+    def test_a_calendar_event_alone_takes_no_model_from_the_users_work(self):
+        meeting_guard.check(now=1000.0)
+        with mock.patch("app.calendar_ics.current_meeting", return_value={"title": "Планёрка"}), \
+                mock.patch("app.vram.ollama_unload") as unload:
+            self.assertEqual(meeting_guard.check(now=1010.0), "calendar")
+        unload.assert_not_called()  # no automatic analysis was running: nothing to free
+
     @unittest.skipIf(transcriber is None, "app dependencies not installed")
     def test_the_waiting_analysis_runs_only_without_a_meeting(self):
         mid = _meeting()
@@ -97,7 +107,8 @@ class MeetingGuardTest(unittest.TestCase):
             run.assert_not_called()
             self.assertEqual(meeting_guard.pending(), [mid])
             app_status.set_recording(False)
-            with mock.patch.object(transcriber, "_after_transcription", return_value=[]):
+            with mock.patch.object(transcriber, "_after_transcription", return_value=[]), \
+                    mock.patch("app.llm.available", return_value=True):
                 self.assertEqual(transcriber._analysis_runner(mid), "Анализ готов")
             run.assert_called_once()
         self.assertEqual(meeting_guard.pending(), [])

@@ -43,9 +43,29 @@ def _my_keys() -> Set[str]:
 
 
 def same_person(a: str, b: str, mine: Optional[Set[str]] = None) -> bool:
-    """A word of the name (a first name or a surname, in any spelling) in both, not one of the user's own."""
+    """The same person, in any spelling (Latin or Cyrillic, an e-mail), the user's own name words left out.
+    Two full names must share two words, or one word and a close spelling of the other («Alexander Petrov»,
+    «Александр Петров»): a first name alone is not enough («Анна Смирнова» is not «Анна Иванова»).
+    A single word (a first name, a surname, a login) is found in the other name; a login like «bpetrov»
+    holds the surname."""
+    import difflib
+
     mine = _my_keys() if mine is None else mine
-    return bool((_keys(a) & _keys(b)) - mine)
+    ka, kb = _keys(a) - mine, _keys(b) - mine
+    if not ka or not kb:
+        return False
+    shared = ka & kb
+    if len(ka) >= 2 and len(kb) >= 2:
+        if len(shared) >= 2:
+            return True
+        if len(shared) == 1:
+            ra, rb = ka - shared, kb - shared
+            return any(difflib.SequenceMatcher(None, x, y).ratio() >= 0.8 for x in ra for y in rb)
+        return False
+    if shared:
+        return True
+    small, big = (ka, kb) if len(ka) <= len(kb) else (kb, ka)
+    return len(small) == 1 and any(len(x) >= 5 and x in s for s in small for x in big)
 
 
 def _others(names: Iterable[str], mine: Set[str]) -> List[str]:
@@ -59,6 +79,18 @@ def _others(names: Iterable[str], mine: Set[str]) -> List[str]:
     return out
 
 
+# The words of a call window or a preset that do not name a meeting
+_CALL_WORDS = {"собрание", "совещание", "звонок", "созвон", "вызов", "конференция", "microsoft", "teams", "telegram",
+               "whatsapp", "discord", "skype", "zoom", "meet", "google", "call", "chat", "чат"}
+
+
+def _generic(title: str) -> bool:
+    from app.ollama_client import is_generic_title
+
+    words = re.findall(r"[^\W\d_]+", title.casefold())
+    return is_generic_title(title) or all(w in _CALL_WORDS or len(w) <= 1 for w in words)
+
+
 def _titles_alike(a: str, b: str) -> bool:
     ka, kb = _keys(a), _keys(b)
     if not ka or not kb:
@@ -67,24 +99,24 @@ def _titles_alike(a: str, b: str) -> bool:
 
 
 def verdict(ev: Dict[str, Any], title: str = "", names: Iterable[str] = (), call_app: str = "") -> str:
-    from app.ollama_client import is_generic_title
-
     mine = _my_keys()
     invited = [a for a in ev.get("attendees") or [] if _keys(a) - mine]
     heard = _others(names, mine)
     if heard:
         if any(same_person(h, a, mine) for h in heard for a in invited):
             return "yes"
-        if invited:
-            return "no"  # the people of the conversation are known, and none of them was invited
+        # none of them invited: «no» only when the invitees are written as full names (a login or a mailing
+        # list cannot be compared, a voice recognized may be someone the invite was forwarded to)
+        if any(len(_keys(a) - mine) >= 2 for a in invited):
+            return "no"
     title = (title or "").strip()
-    if title and not is_generic_title(title):
+    if title and not _generic(title):
         if _titles_alike(title, ev.get("title") or ""):
             return "yes"
         if any(same_person(title, a, mine) for a in invited):
             # a call window named after one of the invitees: the meeting itself when it is a one-on-one
             return "yes" if len(invited) <= 1 else "unknown"
-        return "no"  # another meeting (its Teams window) or a name the user gave it
+        # another title: a preset's or a typed name says nothing sure; the voices decide (recheck)
     if (call_app or "").lower() in MESSENGERS and ev.get("online"):
         return "no"  # a meeting with a link is not held in a messenger call
     return "unknown"

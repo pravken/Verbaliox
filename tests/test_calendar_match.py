@@ -33,7 +33,12 @@ class CalendarMatchTest(unittest.TestCase):
         self.assertEqual(v(EVENT, names=["Smirnova Anna"]), "yes")
         self.assertEqual(v(EVENT, names=["Олег Кузнецов", "Я Сам"]), "no")  # someone else called
         self.assertEqual(v(EVENT, title="Синк по релизу"), "yes")  # the Teams meeting window
-        self.assertEqual(v(EVENT, title="Олег Кузнецов"), "no")  # a call window of another person
+        self.assertEqual(v(EVENT, title="Олег Кузнецов"), "unknown")  # a typed name: the voices decide
+        self.assertEqual(v(EVENT, title="Совещание в Microsoft Teams"), "unknown")
+        self.assertEqual(v(EVENT, names=["Анна Иванова"]), "no")  # the same first name is not the same person
+        logins = {**EVENT, "attendees": ["bpetrov@example.com", "asmirnova@example.com"]}
+        self.assertEqual(v(logins, names=["Борис Петров"]), "yes")  # a login holds the surname
+        self.assertEqual(v(logins, names=["Олег Кузнецов"]), "unknown")  # logins only: not sure it is not them
         self.assertEqual(v(EVENT, call_app="telegram"), "no")  # a meeting with a link is not a Telegram call
         self.assertEqual(v(EVENT, title="Запись"), "unknown")  # nothing to tell by yet
         self.assertEqual(calendar_match.call_title(["Олег Кузнецов", "Я Сам", "Участник 2"]), "Звонок: Олег Кузнецов")

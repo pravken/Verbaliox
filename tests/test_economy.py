@@ -35,6 +35,26 @@ class EconomyTest(unittest.TestCase):
         self.assertTrue(ran.wait(3))  # and starts when the mode ends
         self.assertEqual(meeting_guard.busy(), "")
 
+    def test_a_waiting_analysis_can_be_cancelled_and_the_recording_unlocked(self):
+        from app.database import create_meeting, get_meeting, update_meeting_progress
+
+        mid = create_meeting(title="Синк", filename="a.wav", media_path="")["id"]
+        update_meeting_progress(mid, status="completed", progress=100)
+        meeting_guard.defer(mid)
+        with mock.patch("app.idle_unload.unload_now"), mock.patch("app.live.stop_all"), mock.patch("app.meeting_guard.kick"):
+            economy.set_mode(True)
+        self.assertTrue(transcriber.enqueue_analysis_job(mid))
+        self.assertTrue(transcriber.is_job_active(mid))
+        self.assertTrue(transcriber.cancel_waiting(mid))  # waiting in the economy mode: out at once
+        self.assertFalse(transcriber.is_job_active(mid))
+        self.assertEqual(get_meeting(mid)["status"], "completed")
+        self.assertNotIn(mid, meeting_guard.pending())
+        self.assertFalse(transcriber.enqueue_whisper_preload())  # nothing is loaded ahead either
+        with mock.patch("app.meeting_guard.kick"):
+            economy.set_mode(False)
+        time.sleep(0.3)  # the dropped job is skipped by the worker
+        self.assertEqual(get_meeting(mid)["status"], "completed")
+
     def test_processor_threads(self):
         with mock.patch("os.cpu_count", return_value=20):
             self.assertEqual(asr_onnx.cpu_threads({"cpu_threads": "auto"}), 8)  # not all 20 (100 % in a meeting)

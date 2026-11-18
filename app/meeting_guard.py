@@ -29,6 +29,7 @@ _lock = threading.Lock()
 _running: Dict[int, int] = {}  # recording → the thread its automatic analysis runs on
 _interrupted: Set[int] = set()  # recordings whose analysis a meeting broke off
 _state = {"busy": "", "quiet_since": 0.0, "started": False}
+_sent: Set[int] = set()  # marked recordings sent to the queue since the last meeting: once each, not every poll
 
 
 def enabled(settings: Optional[Dict[str, str]] = None) -> bool:
@@ -132,22 +133,32 @@ def clear_interrupted(meeting_id: int) -> None:
 def _break_off() -> List[int]:
     from app import cancel_scope
 
+    # under the lock: guard() leaves _running under it too, so a thread is aborted only while its analysis
+    # still runs (not after it reset the abort, nor once the next job took the thread)
     with _lock:
         running = dict(_running)
         _interrupted.update(running)
-    for thread_id in running.values():
-        cancel_scope.abort(thread_id)
+        for thread_id in running.values():
+            cancel_scope.abort(thread_id)
     return list(running)
 
 
 def _unload_models() -> List[str]:
-    """The analysis models out of memory (a model Ollama keeps on this computer)."""
+    """The analysis models this app loaded out of memory, gently (no runner is killed). Not while the user's
+    own analysis or question is being answered, nor while live captions run (their translation may use
+    Ollama): what the user started by hand is never held back. Other programs' models are left alone."""
     try:
+        from app import idle_unload, live
+        from app.ollama_client import analysis_running
         from app.vram import ollama_loaded, ollama_unload
 
-        names = [m["name"] for m in ollama_loaded()]
+        if analysis_running() or live.has_sessions():
+            return []
+        with idle_unload._lock:
+            ours = set(idle_unload._ollama_used)
+        names = [m["name"] for m in ollama_loaded() if m["name"] in ours]
         if names:
-            ollama_unload(names)
+            ollama_unload(names, force=False)
         return names
     except Exception:
         traceback.print_exc()
@@ -164,20 +175,27 @@ def check(now: Optional[float] = None) -> str:
         _state["busy"] = reason
         if reason:
             _state["quiet_since"] = 0.0
+            _sent.clear()  # after this meeting they are tried again
         elif was or not _state["quiet_since"]:
             _state["quiet_since"] = now
         quiet_for = now - _state["quiet_since"] if not reason else 0.0
     if reason and not was:
         broken = _break_off()
-        unloaded = _unload_models()
+        # only when an analysis was broken off, or recording only was asked for: a calendar event coming
+        # does not take the model from the user's own work
+        unloaded = _unload_models() if (broken or reason == "economy") else []
         print(f"[meeting_guard] a meeting began ({reason}): analysis broken off {broken or '-'}, "
               f"unloaded {unloaded or '-'}", flush=True)
     if not reason and quiet_for >= QUIET_SEC:
         from app import transcriber
 
         for meeting_id in pending():
-            if not transcriber.is_job_active(meeting_id):
-                transcriber.enqueue_analysis_job(meeting_id)
+            with _lock:
+                if meeting_id in _sent:
+                    continue
+            if not transcriber.is_job_active(meeting_id) and transcriber.enqueue_analysis_job(meeting_id):
+                with _lock:
+                    _sent.add(meeting_id)
     return reason
 
 

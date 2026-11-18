@@ -43,6 +43,14 @@ class UntranscribedTest(unittest.TestCase):
         self._rec("Без файла", "cancelled", with_file=False)
         self._rec("Добавленная", "added")
         b = self._rec("Ещё одна", "cancelled")
+        # cancelled mid-recognition: the phrases saved so far are there, the transcript was never finished
+        from app.database import save_meeting_results
+
+        c = self._rec("Наполовину", "cancelled")
+        save_meeting_results(c, segments=[{"id": 1, "start": 0.0, "end": 2.0, "speaker": "S0", "text": "Привет"}])
+        update_meeting_progress(c, status="cancelled", progress=0)
+        self.assertIn(c, {x["id"] for x in untranscribed.items()})
+        untranscribed.dismiss([c])
         self.assertEqual({x["id"] for x in untranscribed.items()}, {a, b})
         untranscribed.dismiss([b])
         self.assertEqual([x["id"] for x in untranscribed.items()], [a])

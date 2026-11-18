@@ -83,7 +83,7 @@ def _talk_stats(m: Dict[str, Any], lang: str, link) -> List[str]:
     for r in a["speakers"]:
         cells = round(r["share"] / 5)
         bar = "█" * cells + "░" * (20 - cells)
-        out.append(f"| {r['name']} | {_duration(r['seconds'])} | {str(r['share']).replace('.', ',')}% | `{bar}` | {r['turns']} | "
+        out.append(f"| {str(r['name']).replace('|', chr(92) + '|')} | {_duration(r['seconds'])} | {str(r['share']).replace('.', ',')}% | `{bar}` | {r['turns']} | "
                    f"{r['wpm'] if r['wpm'] is not None else '—'} | {r['questions']} | {r['interruptions']} |")
     out.append("")
     if a["longest_monologues"]:
@@ -117,7 +117,8 @@ def _more_sections(summaries: Dict[str, Any], lang: str) -> List[tuple]:
             and isinstance(summaries[k], str) and summaries[k].strip()]
     order = list(labels) + sorted(k for k in keys if k.startswith("tpl:"))
     keys.sort(key=lambda k: (order.index(k) if k in order else len(order), k))
-    return [(k, labels.get(k) or names.get(k) or (k[4:] if k.startswith("tpl:") else k), summaries[k]) for k in keys]
+    gone = "Свой шаблон" if lang != "en" else "Own template"  # a template deleted since: no name left
+    return [(k, labels.get(k) or names.get(k) or (gone if k.startswith("tpl:") else k), summaries[k]) for k in keys]
 
 
 def _settings() -> Dict[str, str]:
@@ -264,25 +265,43 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
         """A section between its marks; its heading goes into the contents (Obsidian takes [[#heading]];
         these signs would break the link)."""
         title = re.sub(r"[\[\]|#^]+", " ", title).strip() or "—"
+        if title in headings:  # a template named like a section: its own heading, so the contents link finds it
+            title = f"{title} ({sum(1 for h in headings if h == title or h.startswith(title + ' (')) + 1})"
         if any(s == sid for s, _ in sections):
             sid = f"{sid}_{len(sections) + 1}"
         headings.append(title)
         sections.append((sid, title))
         to += [f"<!-- verbaliox:{sid}:start -->", f"## {title}", "", *lines, f"<!-- verbaliox:{sid}:end -->", ""]
 
-    def moments(md: str) -> str:
-        """«[00:18]» or «00:18» of a chapter, «[12:34]» in the analysis: a link to that line of the transcript
-        (asked by the user: from a chapter straight to the text). Only with the transcript in the note."""
+    total = max([float(seg.get("end") or seg.get("start") or 0.0) for seg in segments] + [float(m.get("duration") or 0.0)])
+
+    def moments(md: str, bare: bool = False) -> str:
+        """«[12:34]» in the analysis, and «00:18» at the start of a chapter's line (bare): a link to that line
+        of the transcript (asked by the user: from a chapter straight to the text). Only with the transcript
+        in the note, and only a moment within the recording: «встреча в 15:30» is a clock time, left as it is.
+        In a table row the link's «|» is escaped, so the cell is not split."""
         if not with_text:
             return md
 
-        def link(mt: "re.Match") -> str:
+        def link(mt: "re.Match", in_table: bool) -> str:
             parts = [int(x) for x in mt.group(2).split(":")]
             sec = parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
+            if sec > total + 5:
+                return mt.group(0)
             i = max(0, next((k for k, st in enumerate(starts) if st > sec + 0.5), len(starts)) - 1)
             anchors[i] = f"t{i}"
-            return f"{mt.group(1)}[[#^t{i}|{mt.group(2)}]]"
-        return re.sub(r"(^|[\s(\[])\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?(?=[\s).,;:]|$)", link, md, flags=re.M)
+            return f"{mt.group(1)}[[#^t{i}{chr(92) if in_table else ''}|{mt.group(2)}]]"
+
+        bracketed = re.compile(r"(^|[\s(])\[(\d{1,2}:\d{2}(?::\d{2})?)\](?=[\s).,;:]|$)")
+        at_start = re.compile(r"^(\s*(?:[-*+]|\d+[.)])?\s*)(\d{1,2}:\d{2}(?::\d{2})?)(?=[\s).,;:—–-]|$)")
+        out = []
+        for line in md.split("\n"):
+            table = line.lstrip().startswith("|")
+            line = bracketed.sub(lambda mt: link(mt, table), line)
+            if bare and not table:
+                line = at_start.sub(lambda mt: link(mt, False), line, count=1)
+            out.append(line)
+        return "\n".join(out)
 
     if (m.get("user_notes") or "").strip():
         add(body, "meeting_notes", L["notes"], m["user_notes"].strip(), "")
@@ -302,7 +321,7 @@ def build_note(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None) -> 
     if _on(settings, "obsidian_tasks") and summaries.get("tasks"):
         add(body, "tasks", L["tasks"], _tasks_as_checklist(_demote(summaries["tasks"])), "")
     if _on(settings, "obsidian_chapters") and summaries.get("chapters"):
-        add(body, "chapters", L["chapters"], moments(_demote(summaries["chapters"])), "")
+        add(body, "chapters", L["chapters"], moments(_demote(summaries["chapters"]), bare=True), "")
     if _on(settings, "obsidian_stats") and segments:
         def at(sec: float) -> str:  # a moment of the transcript, a link to its line when the transcript is there
             stamp = format_timestamp(sec)
@@ -507,7 +526,8 @@ def refresh_if_exported(meeting_id: int) -> None:
 
 
 # --- Every recording at once: when auto-export is turned on, or on request («Сохранить все записи») ---
-_all_state: Dict[str, Any] = {"active": False, "done": 0, "total": 0, "failed": 0}
+_all_state: Dict[str, Any] = {"active": False, "done": 0, "total": 0, "failed": 0, "kept": 0}
+_all_lock = threading.Lock()
 
 
 def export_all_status() -> Dict[str, Any]:
@@ -519,19 +539,31 @@ def export_all(missing_only: bool = False) -> Dict[str, Any]:
     edits above their section kept: explicit=False). missing_only: only the recordings without a note yet."""
     from app.database import list_meetings
 
-    if _all_state["active"]:
-        return export_all_status()
     if vault_dir() is None:
         raise ValueError("Папка хранилища Obsidian не выбрана в настройках")
-    ids = [m["id"] for m in list_meetings() if m.get("status") == "completed" and m.get("has_transcript")
-           and not (missing_only and m.get("obsidian_path") and Path(m["obsidian_path"]).is_file())]
-    _all_state.update(active=True, done=0, total=len(ids), failed=0)
+    meetings = list_meetings()
+    with _all_lock:  # a double click starts one run
+        if _all_state["active"]:
+            return export_all_status()
+        ids = [m["id"] for m in meetings if m.get("status") == "completed" and m.get("has_transcript")
+               and not (missing_only and m.get("obsidian_path") and Path(m["obsidian_path"]).is_file())]
+        _all_state.update(active=True, done=0, total=len(ids), failed=0, kept=0)
+    paths = {m["id"]: m.get("obsidian_path") or "" for m in meetings}
+
+    def mtime(path: str) -> float:
+        try:
+            return Path(path).stat().st_mtime if path else 0.0
+        except OSError:
+            return 0.0
 
     def run() -> None:
         try:
             for mid in ids:
                 try:
-                    export_meeting(mid, generate=False, explicit=False)
+                    before = mtime(paths.get(mid, ""))
+                    target = export_meeting(mid, generate=False, explicit=False)
+                    if before and mtime(str(target)) == before:
+                        _all_state["kept"] += 1  # edited in Obsidian above the user's section: left as it is
                 except Exception as e:
                     _all_state["failed"] += 1
                     print(f"[obsidian] meeting {mid}: {e}", flush=True)
