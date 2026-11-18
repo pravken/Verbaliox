@@ -30,7 +30,7 @@ function renderMeetingFeatures() {
   // two at most next to the title, «+N» for the rest (the header has no room for more)
   const shown = own.slice(0, 2), more = own.length - shown.length;
   // «Фича:» says what the chips are (a coloured chip alone read as any tag)
-  box.innerHTML = `<span class="ft-label">${escapeHtml(t('ftLabel'))}</span>` + shown.map(f => `<button class="ft-chip-btn" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
+  box.innerHTML = `<span class="ft-label">${escapeHtml(t('ftLabel'))}</span>` + shown.map(f => `<button class="ft-chip-btn" data-ft="${f.id}" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
     + (more > 0 ? `<button class="ft-chip-btn ft-more" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(own.map(f => f.name).join(', '))}">+${more}</button>` : '')
     + guesses.map(f => `<span class="ft-suggest">${featureChipHtml(f, { suggested: true, title: t('ftSuggestedTip') })}
         <button class="ft-yes" ${pageCall('click', 'acceptFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftAccept'))}" aria-label="${escapeHtml(t('ftAccept'))}">✓</button>
@@ -91,8 +91,10 @@ function drawFeaturePicker() {
   }
   const on = new Set(m.features || []);
   // the page link is a button of its own beside the item, not inside it (a button in a button: no keyboard)
-  const list = (state.features || []).map(f => `<div class="ft-pick-row"><button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
-      ${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span>${on.has(f.id) ? '<span class="tk-tick">✓</span>' : '<span class="tk-tick"></span>'}</button>
+  // a feature of the recording is framed, with its box ticked on the left (a small tick on the right was not
+  // seen: reported by the user)
+  const list = (state.features || []).map(f => `<div class="ft-pick-row${on.has(f.id) ? ' ft-pick-on' : ''}"><button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
+      <span class="ft-pick-box" aria-hidden="true">${on.has(f.id) ? '✓' : ''}</span>${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span></button>
       <button class="ft-open" ${pageCall('click', 'openFeaturePageFromPick', [f.id, { $: 'event' }])} title="${escapeHtml(t('fpOpenTip'))}" aria-label="${escapeHtml(t('fpOpenTip'))}">↗</button></div>`).join('');
   const series = m.series_id ? `<label class="ft-series"><input type="checkbox" id="ft-for-series" ${pageCall('change', 'saveFeaturesForSeries')}>
       <span>${escapeHtml(t('ftForSeries'))}</span></label>` : '';
@@ -102,11 +104,26 @@ function drawFeaturePicker() {
       <button class="tk-btn tk-btn-primary tk-btn-sm" ${pageCall('click', 'createFeatureFromPicker')}>${escapeHtml(t('ftCreate'))}</button></div>${series}</div>`, _ftAnchor, 300);
 }
 
-function toggleMeetingFeature(id) {
+// A click chooses and closes the list (asked by the user: after a click it was not clear the feature was
+// chosen): the feature added lights up in the header; another one is added by opening the list again
+async function toggleMeetingFeature(id) {
   const m = state.activeMeeting;
   const ids = new Set(m.features || []);
-  if (ids.has(id)) ids.delete(id); else ids.add(id);
-  saveMeetingFeatures([...ids], !!document.getElementById('ft-for-series')?.checked);
+  const adding = !ids.has(id);
+  if (adding) ids.add(id); else ids.delete(id);
+  const series = !!document.getElementById('ft-for-series')?.checked;
+  if (typeof tkClosePop === 'function') tkClosePop();
+  _ftAnchor = null;
+  await saveMeetingFeatures([...ids], series);
+  if (adding) flashMeetingFeature(id);
+}
+
+function flashMeetingFeature(id) {
+  const chip = document.querySelector(`#meeting-features [data-ft="${id}"]`) || document.querySelector('#meeting-features .ft-more');
+  if (!chip) return;
+  chip.classList.remove('ft-flash');
+  void chip.offsetWidth;  // the animation starts again
+  chip.classList.add('ft-flash');
 }
 
 function saveFeaturesForSeries() {
@@ -126,7 +143,11 @@ async function createFeatureFromPicker() {
   const f = await readJson(res);
   if (!res.ok) { showError(f.detail); return; }
   const m = state.activeMeeting;
-  await saveMeetingFeatures([...new Set([...(m.features || []), f.id])], !!document.getElementById('ft-for-series')?.checked);
+  const series = !!document.getElementById('ft-for-series')?.checked;
+  if (typeof tkClosePop === 'function') tkClosePop();
+  _ftAnchor = null;
+  await saveMeetingFeatures([...new Set([...(m.features || []), f.id])], series);
+  flashMeetingFeature(f.id);
 }
 
 // The tags of a task: the features of its meeting (tasks are not tagged one by one)
