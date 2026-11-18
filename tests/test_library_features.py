@@ -2,6 +2,7 @@ import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__
 import shutil
 import sqlite3
 import tempfile
+import re
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -206,6 +207,51 @@ class ObsidianTest(unittest.TestCase):
         moved = obsidian.export_meeting(m["id"])
         self.assertEqual(moved.parent, self.vault / "Meetings" / "2024")
         self.assertFalse(path.exists())
+
+    def test_the_note_has_everything_with_contents_links_and_marks(self):
+        m = _done_meeting(title="Синк", recorded_at="2024-05-15 10:00:00")
+        database.save_summary_templates([{"id": "risks", "name": "Риски", "prompt": "Какие риски?"}])
+        database.merge_summaries(m["id"], {"chapters": "- [00:00] Начало\n- [01:05] Тесты", "decisions": "- Выпускать в пятницу",
+                                           "tpl:risks": "- Срыв сроков", "custom": "Ответ на вопрос", "error": "старая ошибка"})
+        text = obsidian.export_meeting(m["id"]).read_text(encoding="utf-8")
+        for heading in ("## Решения", "## Риски", "## Ответ на вопрос", "## Участники", "## Расшифровка"):
+            self.assertIn(heading, text)
+        self.assertNotIn("старая ошибка", text)
+        self.assertIn("[[#Решения]]", text)  # the contents at the top
+        self.assertRegex(text, r"\[\[#\^t(\d+)\|01:05\]\] Тесты")  # a chapter links to its line of the transcript
+        anchor = re.search(r"\[\[#\^(t\d+)\|01:05\]\]", text).group(1)
+        self.assertRegex(text, r"`01:05` Тестирование до пятницы\. \^" + anchor)
+        self.assertIn("| Борис |", text)  # who spoke how long
+        # the analysis and the transcript between their marks (each mark once), the transcript last of the two
+        for mark in (obsidian.ANALYSIS_START, obsidian.ANALYSIS_END, obsidian.TRANSCRIPT_START, obsidian.TRANSCRIPT_END):
+            self.assertEqual(text.count(mark), 1)
+        a0, a1 = text.index(obsidian.ANALYSIS_START), text.index(obsidian.ANALYSIS_END)
+        t0, t1 = text.index(obsidian.TRANSCRIPT_START), text.index(obsidian.TRANSCRIPT_END)
+        self.assertTrue(a0 < text.index("## Решения") < a1 < t0 < text.index("## Расшифровка") < t1)
+        database.save_summary_templates([])
+
+    def test_auto_export_writes_new_and_earlier_notes(self):
+        m = _done_meeting(title="Ранняя", recorded_at="2024-05-16 10:00:00")
+        update_settings({"obsidian_auto": "true"})
+        try:
+            obsidian.refresh_if_exported(m["id"])  # a section made for a recording without a note yet
+            import time
+
+            for _ in range(50):
+                if (database.get_meeting(m["id"]) or {}).get("obsidian_path"):
+                    break
+                time.sleep(0.05)
+            self.assertTrue(Path(database.get_meeting(m["id"])["obsidian_path"]).is_file())
+            other = _done_meeting(title="Ещё одна", recorded_at="2024-05-16 11:00:00")
+            st = obsidian.export_all(missing_only=True)
+            for _ in range(100):
+                if not obsidian.export_all_status()["active"]:
+                    break
+                time.sleep(0.05)
+            self.assertGreaterEqual(st["total"], 1)
+            self.assertTrue(Path(database.get_meeting(other["id"])["obsidian_path"]).is_file())
+        finally:
+            update_settings({"obsidian_auto": "false"})
 
     def test_tasks_become_checklist(self):
         self.assertEqual(obsidian._tasks_as_checklist("- сделать\n- [x] готово"), "- [ ] сделать\n- [x] готово")

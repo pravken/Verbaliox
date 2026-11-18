@@ -1005,9 +1005,14 @@
             </div>
           </div>
           <p id="obs-preview" class="text-[11.5px] text-apple-tertiary leading-snug break-all"></p>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button data-click="obsidianExportAll" id="obs-export-all" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="obsExportAll">Сохранить все записи</button>
+            <span id="obs-export-all-status" class="text-[11.5px] text-apple-tertiary"></span>
+          </div>
           <div class="space-y-0.5">
             <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-              <span data-i18n="obsAutoToggle">Сохранять заметку автоматически после обработки</span>
+              <span><span data-i18n="obsAutoToggle">Сохранять заметку автоматически после обработки</span>
+                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="obsAutoHint">И обновлять её после каждого нового раздела анализа. При включении сохраняются и все прежние записи.</span></span>
               <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-auto" />
             </label>
             <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
@@ -1028,6 +1033,8 @@
               <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-tasks" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncTasks">Задачи</span></label>
               <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-chapters" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncChapters">Главы</span></label>
               <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-transcript" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncTranscript">Расшифровка</span></label>
+              <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-stats" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncStats">Участники: кто сколько говорил, реплики, монологи</span></label>
+              <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-more" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncMore">Остальной анализ: решения, письмо, конспект, свои шаблоны, ответы</span></label>
             </div>
           </div>
         </div>

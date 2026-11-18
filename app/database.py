@@ -229,6 +229,8 @@ def init_db() -> None:
             "obsidian_tasks": "true",
             "obsidian_chapters": "true",
             "obsidian_transcript": "true",
+            "obsidian_stats": "true",  # «Участники»: who spoke how long, turns, pace, monologues, interruptions
+            "obsidian_more": "true",  # every other section of the analysis (decisions, letter, notes, templates, answers)
             "obsidian_generate": "true",  # make the overview and tasks for the note if they are missing
             "llm_provider": "ollama",  # analysis: "ollama" (local) or "cloud" (app/llm.py)
             "llm_cloud_provider": "openai",
