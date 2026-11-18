@@ -653,6 +653,34 @@ def api_rename_meeting(meeting_id: int, payload: MeetingTitlePayload) -> Dict[st
     refresh_if_exported(meeting_id)
     return get_meeting(meeting_id)
 
+class UntranscribedPayload(BaseModel):
+    ids: List[int] = []
+
+
+@router.get("/api/untranscribed")
+def api_untranscribed() -> Dict[str, Any]:
+    """Recordings whose transcription was cancelled and never done (app/untranscribed.py): the dashboard reminds."""
+    from app import untranscribed
+
+    return {"items": untranscribed.items()}
+
+
+@router.post("/api/untranscribed/transcribe")
+def api_untranscribed_transcribe(payload: UntranscribedPayload) -> Dict[str, Any]:
+    from app import events, untranscribed
+
+    n = untranscribed.transcribe(payload.ids)
+    events.publish({"type": "list"})
+    return {"queued": n}
+
+
+@router.post("/api/untranscribed/dismiss")
+def api_untranscribed_dismiss(payload: UntranscribedPayload) -> Dict[str, Any]:
+    from app import untranscribed
+
+    return {"dismissed": untranscribed.dismiss(payload.ids)}
+
+
 @router.post("/api/meetings/{meeting_id}/retry")
 def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     m = get_meeting(meeting_id)

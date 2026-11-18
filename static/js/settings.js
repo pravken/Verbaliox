@@ -170,6 +170,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     }
     document.getElementById('set-ollama-model').value = s.ollama_model || 'gemma4:e2b';
     document.getElementById('set-auto-summary').checked = s.auto_summary !== 'false';
+    document.getElementById('set-analysis-after-meetings').checked = s.analysis_after_meetings !== 'false';
     document.getElementById('set-auto-title').checked = s.auto_title !== 'false';
     document.getElementById('set-summary-grounding').checked = s.summary_grounding !== 'false';
     document.getElementById('set-analysis-chain').checked = s.analysis_chain !== 'false';
@@ -177,6 +178,9 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
     document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
+    document.getElementById('set-economy-mode').checked = s.economy_mode === 'true';
+    document.getElementById('set-live-captions-auto').checked = s.live_captions_auto !== 'false';
+    document.getElementById('set-cpu-threads').value = s.cpu_threads || 'auto';
     loadWatchFolder();
     document.getElementById('set-semantic').checked = s.semantic_search === 'true';
     document.getElementById('set-semantic-model').value = s.semantic_model || 'bge-m3';
@@ -198,6 +202,10 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-calendar-ics').value = s.calendar_ics || '';
     loadCalendarSource();
     document.getElementById('set-onnx-gpu').checked = s.onnx_gpu !== 'false';
+    for (const f of ['gigaam', 'parakeet']) {
+      const sel = document.getElementById(`set-onnx-${f}-device`);
+      if (sel) sel.value = s[`onnx_${f}_device`] === 'cpu' ? 'cpu' : 'auto';
+    }
     loadBackupInfo();
     loadOrphans();
     loadOnnxGpu();
@@ -2526,6 +2534,9 @@ function settingsFormValues() {
     start_with_windows: String(document.getElementById('set-start-with-windows').checked),
     close_to_tray: String(document.getElementById('set-close-to-tray').checked),
     quiet_mode: String(document.getElementById('set-quiet-mode').checked),
+    economy_mode: String(document.getElementById('set-economy-mode').checked),
+    live_captions_auto: String(document.getElementById('set-live-captions-auto').checked),
+    cpu_threads: document.getElementById('set-cpu-threads').value || 'auto',
     vad_filter: String(document.getElementById('set-vad').checked),
     proc_denoise: String(document.getElementById('set-proc-denoise').checked),
     proc_loudnorm: String(document.getElementById('set-proc-loudnorm').checked),
@@ -2540,6 +2551,7 @@ function settingsFormValues() {
     asr_ensemble_models: [...document.querySelectorAll('#set-ensemble-models input:checked')].map(x => x.value).join(','),
     ollama_model: document.getElementById('set-ollama-model').value.trim(),
     auto_summary: String(document.getElementById('set-auto-summary').checked),
+    analysis_after_meetings: String(document.getElementById('set-analysis-after-meetings').checked),
     auto_title: String(document.getElementById('set-auto-title').checked),
     summary_grounding: String(document.getElementById('set-summary-grounding').checked),
     analysis_chain: String(document.getElementById('set-analysis-chain').checked),
@@ -2565,6 +2577,8 @@ function settingsFormValues() {
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
     onnx_gpu: document.getElementById('set-onnx-gpu')?.checked ? 'true' : 'false',
+    onnx_gigaam_device: document.getElementById('set-onnx-gigaam-device')?.value || 'auto',
+    onnx_parakeet_device: document.getElementById('set-onnx-parakeet-device')?.value || 'auto',
     ...callSettingsPayload(),
     ...dubSettingsPayload(),
     ...workdaySettingsPayload(),
@@ -3019,15 +3033,17 @@ async function fillMemReserve(s) {
 const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
-    ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
+    ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check'],
+    ['set-economy-mode', 'economy_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
-    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
-  analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-auto-title', 'auto_title', 'check'],
+    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-onnx-gigaam-device', 'onnx_gigaam_device', 'value'],
+    ['set-onnx-parakeet-device', 'onnx_parakeet_device', 'value'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
+  analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-analysis-after-meetings', 'analysis_after_meetings', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
     ['set-semantic', 'semantic_search', 'check']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
@@ -3041,11 +3057,11 @@ const SETTINGS_RESET = {
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
 };
 const SETTINGS_DEFAULTS = {
-  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
+  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', live_captions_auto: 'true', cpu_threads: 'auto',
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
-  diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
-  auto_summary: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
+  diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
+  auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',

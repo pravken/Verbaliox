@@ -247,9 +247,23 @@ def maybe_install_on_start() -> None:
         install_async()
 
 
+def device_setting(model_id: str) -> str:
+    """Settings → Распознавание: «auto» (the video card when it can) or «cpu» for this model."""
+    family = str(model_id or "").split("-")[0]
+    if family not in ("gigaam", "parakeet"):
+        return "auto"
+    try:
+        from app.database import get_all_settings
+
+        return (get_all_settings().get(f"onnx_{family}_device") or "auto").lower()
+    except Exception:
+        return "auto"
+
+
 def gpu_for_job(model_id: str) -> bool:
-    """Whether a transcription job runs this model on the GPU now: enough free video memory left."""
-    if not enabled():
+    """Whether a transcription job runs this model on the GPU now: enough free video memory left, and the
+    model not set to the processor (asked by the user: one of them on the processor, the card left free)."""
+    if not enabled() or device_setting(model_id) == "cpu":
         return False
     from app.asr_onnx import ONNX_MODELS, _key, _loaded
 

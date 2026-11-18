@@ -1581,7 +1581,7 @@ function openRecordingsDir() {
 }
 
 // --- Obsidian settings ---
-const OBSIDIAN_TOGGLES = ['auto', 'generate', 'summary', 'tasks', 'chapters', 'transcript', 'feature_folders'];
+const OBSIDIAN_TOGGLES = ['auto', 'generate', 'summary', 'tasks', 'chapters', 'transcript', 'feature_folders', 'more', 'stats'];
 
 function fillObsidianSettings(s) {
   for (const k of OBSIDIAN_TOGGLES) {
@@ -1673,6 +1673,27 @@ function updateObsidianPreview() {
   document.getElementById('obs-preview').textContent = vault
     ? `${t('obsPreview')}: ${[vault, sub, byFeature ? feature : '', name + '.md'].filter(Boolean).join(sep)}`
     : t('obsPreviewNoVault');
+}
+
+// «Сохранить все записи»: every transcribed recording's note, in the background; the count follows
+async function obsidianExportAll() {
+  const res = await fetch('/api/obsidian/export-all', { method: 'POST' }).catch(() => null);
+  const data = res ? await readJson(res) : null;
+  if (!res || !res.ok) { showError(res ? errorText(data, res) : t('errorGeneric')); return; }
+  obsidianExportAllWatch(data);
+}
+
+async function obsidianExportAllWatch(st) {
+  const box = document.getElementById('obs-export-all-status');
+  const btn = document.getElementById('obs-export-all');
+  st = st || await fetch('/api/obsidian/export-all').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!box || !st) return;
+  if (btn) btn.disabled = !!st.active;
+  box.textContent = st.active ? t('obsExportAllRunning').replace('{done}', () => st.done).replace('{total}', () => st.total)
+    : st.total ? t('obsExportAllDone').replace('{n}', () => st.total - st.failed - (st.kept || 0))
+      + (st.kept ? ` · ${t('obsExportAllKept').replace('{n}', () => st.kept)}` : '')
+      + (st.failed ? ` · ${t('obsExportAllFailed').replace('{n}', () => st.failed)}` : '') : '';
+  if (st.active) setTimeout(() => obsidianExportAllWatch(), 1500);
 }
 
 async function refreshObsidianStatus() {

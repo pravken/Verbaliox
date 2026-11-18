@@ -163,6 +163,10 @@ def init_db() -> None:
             "feature_suggest": "true",  # the analysis model suggests a recording's features (app/features.py)
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
+            "analysis_after_meetings": "true",
+            "economy_mode": "false",  # recording only, no model works (app/economy.py; the tray menu)
+            "live_captions_auto": "true",  # captions start with a recording (the studio's switch as last set)
+            "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
             "vad_filter": "true",
@@ -173,6 +177,8 @@ def init_db() -> None:
             "record_mic_device": "",
             "batched_inference": "true",  # faster-whisper BatchedInferencePipeline on GPU
             "keep_model_loaded": "true",  # reuse Whisper between queued recordings if VRAM allows
+            "onnx_gigaam_device": "auto",  # «auto»: the video card when its memory is enough, «cpu»: the processor always
+            "onnx_parakeet_device": "auto",
             "onnx_gpu": "true",  # GigaAM / Parakeet jobs on the NVIDIA GPU, its ONNX Runtime fetched once (app/onnx_gpu.py)
             "onnx_gpu_batch": "32",  # phrases per batch on the GPU (app/asr_onnx.gpu_tuning)
             "onnx_gpu_vad": "false",  # the VAD on the GPU too
@@ -229,6 +235,8 @@ def init_db() -> None:
             "obsidian_tasks": "true",
             "obsidian_chapters": "true",
             "obsidian_transcript": "true",
+            "obsidian_stats": "true",  # «Участники»: who spoke how long, turns, pace, monologues, interruptions
+            "obsidian_more": "true",  # every other section of the analysis (decisions, letter, notes, templates, answers)
             "obsidian_generate": "true",  # make the overview and tasks for the note if they are missing
             "llm_provider": "ollama",  # analysis: "ollama" (local) or "cloud" (app/llm.py)
             "llm_cloud_provider": "openai",
@@ -351,6 +359,8 @@ _MEETING_EXTRA_COLUMNS = {
     "local_only": "INTEGER DEFAULT 0",  # 1: never sent to a cloud model (see is_local_only)
     "media_size": "INTEGER DEFAULT NULL",  # bytes of the media file; NULL: not measured yet
     "series_id": "INTEGER DEFAULT NULL",  # a series of recurring meetings (app/series.py)
+    # the calendar meeting going on when it was recorded, and whether it is that meeting (app/calendar_match.py)
+    "calendar_json": "TEXT DEFAULT ''",
     # Whether there is a transcript / a summary, kept by triggers (_FLAG_TRIGGERS): the library list
     # reads these instead of the transcripts themselves (megabytes per recording)
     "has_transcript": "INTEGER DEFAULT 0",
@@ -1228,7 +1238,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
     allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes", "mfu",
                "transcript_verified", "audio_path", "transcript_made_with",
-               "local_only", "series_id"}
+               "local_only", "series_id", "calendar_json"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
     if not items:
         return

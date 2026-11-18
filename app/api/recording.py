@@ -228,6 +228,7 @@ class RecordFinishPayload(BaseModel):
     page_started_at: float = 0        # when the page's recorder began (unix seconds): lines up the system audio
     speakers_hint: int = 0            # how many people, chosen in the studio (0: found by the voices)
     speaker_marks: List[Dict[str, Any]] = []  # «Сейчас говорит»: [{at: seconds into the recording, name}]
+    call_app: str = ""                # the call that started it ("teams", "telegram"...; app/call_watch.py)
 
 def _run_ffmpeg(cmd: List[str]) -> subprocess.CompletedProcess:
     try:
@@ -512,7 +513,11 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
                 original_system, system, system_skip = system, lined_up, 0.0
     # The voice without its noise (app/voice_filter.py, DeepFilterNet): the microphone after the echo
     voice = "no"
-    if page and payload.has_mic and (get_all_settings().get("rec_voice_filter") or "true").lower() == "true":
+    from app import economy
+
+    # in the economy mode (recording only) the AI filter does not run: the echo is still removed
+    if page and payload.has_mic and (get_all_settings().get("rec_voice_filter") or "true").lower() == "true" \
+            and not economy.on():
         from app import voice_filter
 
         if voice_filter.find_exe():
@@ -653,7 +658,10 @@ def _attach_recording_info(meeting_id: int, payload: RecordFinishPayload) -> Non
 
             from app import calendar_ics
 
-            calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None)
+            # what the recording says of itself: is it the meeting, or someone who called meanwhile
+            heard = [str(mk.get("name") or "") for mk in payload.speaker_marks or []]
+            calendar_ics.apply_to_recording(meeting_id, datetime.fromtimestamp(payload.started_at) if payload.started_at > 0 else None,
+                                            title=payload.title, names=heard, call_app=payload.call_app)
         except Exception as e:
             print("[calendar]", e, flush=True)
 
@@ -695,6 +703,9 @@ def api_ui_state(payload: UiStatePayload) -> Dict[str, Any]:
     from app.app_status import set_recording, snapshot
 
     set_recording(payload.recording)
+    from app import meeting_guard
+
+    meeting_guard.kick()  # a recording began: an analysis running is broken off now, not at the next poll
     st = snapshot()
     return {"state": st["state"], "text": st["text"]}
 
@@ -709,8 +720,11 @@ class LiveStartPayload(BaseModel):
 
 @router.post("/api/live/start")
 def api_live_start(payload: LiveStartPayload) -> Dict[str, Any]:
+    from app import economy
     from app.live import start_session
 
+    if economy.on():
+        raise HTTPException(status_code=409, detail="Режим экономии: субтитры во время записи выключены")
     target, pair = _live_target(payload.translate_to, payload.pair)
     s = start_session(payload.lang, target, payload.capture_id, payload.speed, pair)
     s.draft = payload.draft

@@ -5,6 +5,8 @@
   <footer id="app-statusbar" class="statusbar" role="status">
     <button data-click="openStatusbarDownloads" data-click-args='[{"$": "event"}]' id="sb-dl" class="sb-queue sb-dl hidden" data-i18n-title="tipSbDownloads" title="Скачивание моделей: открыть список моделей"></button>
     <span class="flex-1"></span>
+    <!-- the economy mode (app/economy.py): a click turns it off -->
+    <button data-click="economyOff" id="sb-economy" class="sb-queue sb-economy hidden" data-i18n="sbEconomy" data-i18n-title="sbEconomyTip" title="Расшифровка, анализ и субтитры ждут. Нажмите, чтобы выключить">Режим экономии: только запись</button>
     <button data-click="openStatusbarQueue" id="sb-queue" class="sb-queue"></button>
   </footer>
 

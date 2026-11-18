@@ -190,6 +190,47 @@ def _key(model_id: str, gpu: bool) -> str:
     return f"{model_id}@gpu" if gpu else model_id
 
 
+def cpu_threads(settings: Optional[Dict[str, str]] = None) -> int:
+    """Threads a model on the processor may use (Settings → Запись → «Потоки процессора»). Left alone, ONNX
+    Runtime takes every core: the live captions of Parakeet kept a 20-thread processor at 100 % (reported by
+    the user). «auto»: half of them, 2 to 8."""
+    import os
+
+    if settings is None:
+        try:
+            from app.database import get_all_settings
+
+            settings = get_all_settings()
+        except Exception:
+            settings = {}
+    cores = os.cpu_count() or 4
+    value = str(settings.get("cpu_threads") or "auto").lower()
+    if value == "all":
+        return cores
+    if value.isdigit():
+        return max(1, min(int(value), cores))
+    return max(2, min(8, cores // 2))
+
+
+def _cpu_options():
+    """Session options of a model on the processor: its threads limited (cpu_threads)."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return None
+    so = ort.SessionOptions()
+    so.intra_op_num_threads = cpu_threads()
+    so.inter_op_num_threads = 1
+    return so
+
+
+def release_cpu() -> None:
+    """The copies on the processor go (the number of threads changed): loaded again when next needed."""
+    with _lock:
+        for key in [k for k in _loaded if not k.endswith("@gpu")]:
+            _loaded.pop(key, None)
+
+
 def _load(model_id: str, gpu: bool = False):
     """The model and the VAD, loaded once (installing the library and downloading what is missing).
     gpu: on the video card (app/onnx_gpu.py; a copy apart from the CPU one live captions use). The VAD
@@ -208,9 +249,11 @@ def _load(model_id: str, gpu: bool = False):
             if gpu:
                 onnx_gpu.prepare_cuda()
             batch, vad_gpu = gpu_tuning() if gpu else (CPU_BATCH, False)
+            cpu = None if gpu else _cpu_options()
             asr = onnx_asr.load_model(ONNX_MODELS[model_id]["onnx_name"], model_dir(model_id),
-                                      providers=onnx_gpu.providers(gpu))
-            vad = onnx_asr.load_vad(VAD_NAME, _vad_dir(), providers=onnx_gpu.providers(vad_gpu))
+                                      providers=onnx_gpu.providers(gpu), sess_options=cpu)
+            vad = onnx_asr.load_vad(VAD_NAME, _vad_dir(), providers=onnx_gpu.providers(vad_gpu),
+                                    sess_options=None if vad_gpu else _cpu_options())
             _loaded[key] = asr.with_vad(vad, max_speech_duration_s=MAX_PHRASE_SEC, min_silence_duration_ms=300,
                                         speech_pad_ms=120, batch_size=batch).with_timestamps()
         return _loaded[key]

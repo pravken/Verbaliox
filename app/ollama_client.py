@@ -1322,7 +1322,8 @@ def generate_meeting_title(
     """A short title (3-8 words) for the recording from the beginning of its transcript."""
     from app.llm import target
 
-    llm = target(model_name, start_ollama=False, local_only=local_only)
+    # the title by content is turned on by the user (auto_title): a stopped Ollama is started, as for the overview
+    llm = target(model_name, local_only=local_only)
     text = "\n".join(build_transcript_lines(segments, speakers))[:7000]
     if not text.strip():
         raise RuntimeError("Транскрипт пуст")
