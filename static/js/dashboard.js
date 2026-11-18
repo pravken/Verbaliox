@@ -248,16 +248,32 @@ function dbWeek() {
   for (let i = 0; i < 7; i++) { const x = new Date(a); x.setDate(a.getDate() + i); days.push(x); }
   const items = {};
   const put = (dt, item) => { const k = calKey(dt); (items[k] = items[k] || []).push(item); };
-  for (const e of w.events || []) put(new Date(e.start), { at: new Date(e.start), title: e.title || t('hmUntitled'), rec: e.recording ? e.recording.id : 0 });
-  for (const r of w.recordings || []) put(new Date(r.at), { at: new Date(r.at), title: r.title, rec: r.id, own: true });
+  for (const e of w.events || []) put(new Date(e.start), { at: new Date(e.start), end: new Date(e.end || e.start), title: e.title || t('hmUntitled'), rec: e.recording ? e.recording.id : 0 });
+  // a recording without a meeting: over by the time it is in the library (its length when it is known)
+  for (const r of w.recordings || []) put(new Date(r.at), { at: new Date(r.at), end: new Date(new Date(r.at).getTime() + (r.duration || 0) * 1000), title: r.title, rec: r.id, own: true });
   const shown = days.filter((x, i) => i < 5 || (items[calKey(x)] || []).length);
   const now = Date.now();
+  const pad = n => String(n).padStart(2, '0');
+  const item = it => {
+    // over (a tick), going on (red, with how far it is), or ahead
+    const done = it.end.getTime() <= now || (it.own && it.at.getTime() <= now);
+    const live = !done && it.at.getTime() <= now;
+    const pct = live ? Math.round((now - it.at) / Math.max(1, it.end - it.at) * 100) : 0;
+    return `<button class="db-ev${done ? ' done' : ''}${live ? ' live' : ''}${it.own ? ' own' : ''}" ${it.rec ? `data-click="openMeeting" data-click-args='[${it.rec}]'` : 'disabled'} title="${escapeHtml(it.title)}">`
+      + `<span class="db-tm">${pad(it.at.getHours())}:${pad(it.at.getMinutes())}</span>${escapeHtml(it.title)}${live ? `<i class="db-ev-prog" style="width:${pct}%"></i>` : ''}</button>`;
+  };
+  const nowDate = new Date(now);
   return `<div class="db-cal" style="grid-template-columns:repeat(${shown.length}, minmax(0, 1fr))">` + shown.map(x => {
     const k = calKey(x), list = (items[k] || []).sort((p, q) => p.at - q.at);
-    return `<div class="db-day${k === today ? ' today' : ''}"><div class="db-dn"><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}</div>`
-      + list.map(it => `<button class="db-ev${it.at.getTime() < now ? ' past' : ''}${it.own ? ' own' : ''}" ${it.rec ? `data-click="openMeeting" data-click-args='[${it.rec}]'` : 'disabled'} title="${escapeHtml(it.title)}">`
-        + `<span class="db-tm">${String(it.at.getHours()).padStart(2, '0')}:${String(it.at.getMinutes()).padStart(2, '0')}</span>${escapeHtml(it.title)}</button>`).join('')
-      + '</div>';
+    const head = `<div class="db-dn"><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}</div>`;
+    // The time already past is filled (asked by the user): a day before today whole; today down to the
+    // line of "now", which stands after the last thing already begun, never over a card
+    if (k === today) {
+      const begun = list.filter(it => it.at.getTime() <= now), ahead = list.filter(it => it.at.getTime() > now);
+      return `<div class="db-day today"><div class="db-past">${head}${begun.map(item).join('')}</div>`
+        + `<div class="db-now"><b>${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}</b></div>${ahead.map(item).join('')}</div>`;
+    }
+    return `<div class="db-day${k < today ? ' db-day-past' : ''}">${head}${list.map(item).join('')}</div>`;
   }).join('') + '</div>';
 }
 

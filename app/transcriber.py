@@ -43,7 +43,7 @@ from app.text_utils import (
 
 # The order of kinds of jobs in the queue: a meeting just recorded is transcribed first, a dub or a
 # translation started before it (tens of minutes) waits. Within a kind, the order they were given
-KIND_PRIORITY = {"transcribe": 0, "resplit": 1, "merge": 1, "cut": 2, "translate": 2, "burn": 2, "analysis": 2, "dub": 3}
+KIND_PRIORITY = {"transcribe": 0, "resplit": 1, "merge": 1, "cut": 2, "translate": 2, "burn": 2, "analysis": 2, "complete": 2, "dub": 3}
 
 
 class _PriorityExecutor:
@@ -816,6 +816,57 @@ def obsidian_generates(settings: Dict[str, str]) -> bool:
         return False
 
 
+def _complete_runner(meeting_id: int) -> str:
+    """«Реэкспорт» with «Дополнить» (asked by the user): what the note shows and the analysis lacks is made
+    (the overview with the tasks and the chapters, or the chapters alone, the tasks section), then the note
+    is written. Waits for the end of a meeting as the automatic analysis does."""
+    from app import cancel_scope, meeting_guard, obsidian
+    from app.database import get_all_settings
+
+    if meeting_guard.busy():
+        return "Дополнение — после окончания встречи: запустите реэкспорт ещё раз"
+    settings = get_all_settings()
+    m = get_meeting(meeting_id) or {}
+    segments, speakers = m.get("segments") or [], m.get("speakers") or {}
+    if not segments:
+        return "Нет расшифровки для анализа"
+    lang = m.get("language") or "ru"
+    missing = obsidian.missing_parts(m, settings)
+    if "protocol" in missing:
+        with meeting_guard.guard(meeting_id):
+            _auto_analysis(meeting_id, settings, segments, speakers, lang)  # the chapters of a long one with it
+    elif "chapters" in missing:
+        from app.database import is_local_only
+
+        with meeting_guard.guard(meeting_id):
+            try:
+                update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
+                chapters = generate_meeting_summary(segments=segments, speakers=speakers, template_key="chapters",
+                                                    answer_lang=lang, local_only=is_local_only(m))
+                merge_summaries(meeting_id, {"chapters": chapters})
+            except Exception as e:
+                if not meeting_guard.interrupted(meeting_id) and not _cancel_wanted(meeting_id):
+                    print(f"[complete] meeting {meeting_id}: {e}", flush=True)
+    if _cancel_wanted(meeting_id):
+        meeting_guard.clear_interrupted(meeting_id)
+        raise JobCancelled()
+    if meeting_guard.interrupted(meeting_id):
+        meeting_guard.clear_interrupted(meeting_id)
+        cancel_scope.reset(threading.get_ident())
+        return "Дополнение — после окончания встречи: запустите реэкспорт ещё раз"
+    try:  # the tasks section and whatever is still missing, then the note
+        path = obsidian.export_meeting(meeting_id, generate=True, explicit=False)
+        left = obsidian.missing_parts(get_meeting(meeting_id) or {}, settings)
+        return f"Заметка дополнена: {path.name}" + (" (не всё: модель анализа недоступна)" if left else "")
+    except Exception as e:
+        return f"Obsidian: {str(e)[:140]}"
+
+
+def enqueue_complete_job(meeting_id: int) -> bool:
+    """A recording's analysis completed for its note, in the queue (one model at a time)."""
+    return _enqueue_side_job(meeting_id, "complete", "", "summarizing", "Дополнение заметки в очереди...", _complete_runner)
+
+
 def enqueue_analysis_job(meeting_id: int) -> bool:
     """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time)."""
     return _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner)
@@ -824,6 +875,7 @@ def enqueue_analysis_job(meeting_id: int) -> bool:
 # runner -> (name for error messages, text after a cancel)
 _SIDE_JOB_NAMES = {
     _analysis_runner: ("анализ", "Анализ отменён"),
+    _complete_runner: ("дополнение заметки", "Дополнение заметки отменено"),
     _resplit_runner: ("разделение участников", "Разделение участников отменено"),
     _cut_runner: ("нарезка записи", "Нарезка отменена"),
     _translate_runner: ("перевод", "Перевод отменён"),

@@ -353,12 +353,13 @@ def api_pick_obsidian_vault() -> Dict[str, Any]:
     return {"ok": True, "folder": chosen, "is_vault": (Path(chosen) / ".obsidian").is_dir()}
 
 @router.post("/api/obsidian/export-all")
-def api_obsidian_export_all(missing_only: bool = False) -> Dict[str, Any]:
-    """Every transcribed recording's note written in the background (app/obsidian.export_all)."""
+def api_obsidian_export_all(missing_only: bool = False, complete: bool = False) -> Dict[str, Any]:
+    """Every transcribed recording's note written in the background (app/obsidian.export_all); complete: what
+    the analysis lacks is made first, in the queue."""
     from app.obsidian import export_all
 
     try:
-        return export_all(missing_only)
+        return export_all(missing_only, complete)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
