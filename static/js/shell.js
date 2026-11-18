@@ -278,7 +278,31 @@ function leaveSettingsPage() {
 }
 
 // --- The status bar: the queue (the load of the computer is in the sidebar) ---
+// The economy mode (app/economy.py): recording only; set in Settings → Общие or the tray icon's menu
+function economyOn() {
+  return String(((state.system && state.system.settings) || {}).economy_mode) === 'true';
+}
+
+async function economyOff() {
+  const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { economy_mode: 'false' } }) }).catch(() => null);
+  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  onEconomyEvent({ on: false });
+}
+
+function onEconomyEvent(ev) {
+  if (state.system && state.system.settings) state.system.settings.economy_mode = ev.on ? 'true' : 'false';
+  const box = document.getElementById('set-economy-mode');
+  if (box) box.checked = !!ev.on;
+  if (ev.on && typeof stopLiveCaptions === 'function' && liveCap.session) {
+    stopLiveCaptions();  // the server ended its session: the recording goes on without them
+    if (typeof renderLiveCaptionsError === 'function') renderLiveCaptionsError(t('economyNoCaptions'));
+  }
+  renderStatusbar();
+}
+
 function renderStatusbar() {
+  document.getElementById('sb-economy')?.classList.toggle('hidden', !economyOn());
   // Audit 6.4: a model downloading in the background is seen from every page
   const dl = document.getElementById('sb-dl');
   const downloads = typeof modelDownloadsNow === 'function' ? modelDownloadsNow() : [];

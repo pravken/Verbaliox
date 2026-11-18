@@ -40,7 +40,12 @@ def enabled(settings: Optional[Dict[str, str]] = None) -> bool:
 
 
 def busy(settings: Optional[Dict[str, str]] = None) -> str:
-    """Why the analysis waits: "recording", "calendar", or "" (no meeting, or the setting is off)."""
+    """Why the analysis waits: "economy" (recording only, app/economy.py), "recording", "calendar", or ""
+    (no meeting, or the setting is off)."""
+    from app import economy
+
+    if economy.on(settings):
+        return "economy"
     if not enabled(settings):
         return ""
     from app.app_status import _ui
