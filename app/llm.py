@@ -214,7 +214,16 @@ def available(settings: Optional[Dict[str, str]] = None, local_only: bool = Fals
     from app.ollama_client import get_ollama_status
 
     st = get_ollama_status()
-    return bool(st["running"] and st["models"])
+    models = st.get("chat_models", st["models"])
+    if st["running"]:
+        return bool(models)
+    # Ollama stops with the app now (and after its idle time): a stopped Ollama this app can start, with a
+    # model on the disk, is ready too. The automatic analysis after a transcription starts it (target());
+    # this read «not running» as «no analysis» and the overview stopped being made (reported by the user)
+    from app.ollama_client import _ollama_address, find_ollama_executable
+
+    host = _ollama_address((settings.get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1"))[0]
+    return bool(models) and host == "127.0.0.1" and find_ollama_executable() is not None
 
 
 # ------------------------------------------------------------------ Ollama
