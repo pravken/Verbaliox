@@ -318,6 +318,7 @@ const SERVER_TEXT_EN = {
   "Анализ готов": "Analysis ready",
   "Анализ в очереди...": "Analysis queued...",
   "Анализ отменён": "Analysis cancelled",
+  "Режим экономии: субтитры во время записи выключены": "Economy mode: live captions are off",
   "облачная модель": "cloud model",
   "процесс распознавания завершился": "the recognition process ended",
   "процесс распознавания не отвечает": "the recognition process does not answer",

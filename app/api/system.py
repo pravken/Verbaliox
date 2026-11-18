@@ -166,8 +166,22 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
         values = clean_all({k: v for k, v in payload.settings.items() if not str(k).startswith("llm_key_")})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    was_auto = (get_all_settings().get("obsidian_auto") or "false") == "true"
+    before = get_all_settings()
+    was_auto = (before.get("obsidian_auto") or "false") == "true"
+    was_economy = (before.get("economy_mode") or "false") == "true"
+    was_threads = before.get("cpu_threads") or "auto"
     updated = update_settings(values)
+    if "economy_mode" in values and (values["economy_mode"] == "true") != was_economy:
+        from app import economy
+
+        economy.applied(values["economy_mode"] == "true")
+    if "cpu_threads" in values and values["cpu_threads"] != was_threads:
+        try:  # the models on the processor load again with the new number of threads
+            from app import asr_onnx
+
+            asr_onnx.release_cpu()
+        except Exception as e:
+            print(f"[asr_onnx] {e}", flush=True)
     if values.get("obsidian_auto") == "true" and not was_auto:
         # auto-export turned on: the recordings made before it get their notes too (asked by the user)
         try:

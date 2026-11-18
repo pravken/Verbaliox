@@ -513,7 +513,11 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
                 original_system, system, system_skip = system, lined_up, 0.0
     # The voice without its noise (app/voice_filter.py, DeepFilterNet): the microphone after the echo
     voice = "no"
-    if page and payload.has_mic and (get_all_settings().get("rec_voice_filter") or "true").lower() == "true":
+    from app import economy
+
+    # in the economy mode (recording only) the AI filter does not run: the echo is still removed
+    if page and payload.has_mic and (get_all_settings().get("rec_voice_filter") or "true").lower() == "true" \
+            and not economy.on():
         from app import voice_filter
 
         if voice_filter.find_exe():
@@ -716,8 +720,11 @@ class LiveStartPayload(BaseModel):
 
 @router.post("/api/live/start")
 def api_live_start(payload: LiveStartPayload) -> Dict[str, Any]:
+    from app import economy
     from app.live import start_session
 
+    if economy.on():
+        raise HTTPException(status_code=409, detail="Режим экономии: субтитры во время записи выключены")
     target, pair = _live_target(payload.translate_to, payload.pair)
     s = start_session(payload.lang, target, payload.capture_id, payload.speed, pair)
     s.draft = payload.draft

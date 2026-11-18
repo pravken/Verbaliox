@@ -178,6 +178,9 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
     document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
+    document.getElementById('set-economy-mode').checked = s.economy_mode === 'true';
+    document.getElementById('set-live-captions-auto').checked = s.live_captions_auto !== 'false';
+    document.getElementById('set-cpu-threads').value = s.cpu_threads || 'auto';
     loadWatchFolder();
     document.getElementById('set-semantic').checked = s.semantic_search === 'true';
     document.getElementById('set-semantic-model').value = s.semantic_model || 'bge-m3';
@@ -2531,6 +2534,9 @@ function settingsFormValues() {
     start_with_windows: String(document.getElementById('set-start-with-windows').checked),
     close_to_tray: String(document.getElementById('set-close-to-tray').checked),
     quiet_mode: String(document.getElementById('set-quiet-mode').checked),
+    economy_mode: String(document.getElementById('set-economy-mode').checked),
+    live_captions_auto: String(document.getElementById('set-live-captions-auto').checked),
+    cpu_threads: document.getElementById('set-cpu-threads').value || 'auto',
     vad_filter: String(document.getElementById('set-vad').checked),
     proc_denoise: String(document.getElementById('set-proc-denoise').checked),
     proc_loudnorm: String(document.getElementById('set-proc-loudnorm').checked),
@@ -3027,7 +3033,8 @@ async function fillMemReserve(s) {
 const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
-    ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check']],
+    ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check'],
+    ['set-economy-mode', 'economy_mode', 'check']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],
@@ -3050,7 +3057,7 @@ const SETTINGS_RESET = {
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
 };
 const SETTINGS_DEFAULTS = {
-  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
+  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', live_captions_auto: 'true', cpu_threads: 'auto',
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',

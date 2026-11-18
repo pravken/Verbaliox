@@ -524,6 +524,20 @@ class TrayController:
 
             self.window.evaluate_js(f"window.openFromNotice && window.openFromNotice({json.dumps(target)})")
 
+    # ---- economy mode: recording only, no model works (app/economy.py; also in Settings → Общие)
+    def _economy(self) -> bool:
+        from app import economy
+
+        return economy.on()
+
+    def _toggle_economy(self) -> None:
+        from app import economy
+
+        now = economy.set_mode(not economy.on())
+        self.tray.notify("Режим экономии включён" if now else "Режим экономии выключен",
+                         "Работает только запись: расшифровка, анализ и субтитры подождут" if now
+                         else "Расшифровка и анализ продолжаются", target="")
+
     def _toggle_quiet(self) -> None:
         from app.database import update_settings
 
@@ -664,6 +678,7 @@ class TrayController:
             ("Вопрос по медиатеке…", "ask", 0),
             (None, None, 0),
             ("Тихий режим (без уведомлений)", "quiet", 0x8 if self._quiet() else 0),  # MF_CHECKED
+            ("Режим экономии (только запись)", "economy", 0x8 if self._economy() else 0),
             ("Настройки…", "settings", 0),
             ("Открыть папку данных", "data", 0),
             (None, None, 0),
@@ -709,6 +724,9 @@ class TrayController:
     def on_command(self, cmd: str) -> None:
         if cmd == "quiet":
             self._toggle_quiet()
+            return
+        if cmd == "economy":
+            self._toggle_economy()
             return
         if cmd == "hotkey_record":
             self._hotkey_record()

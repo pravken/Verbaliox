@@ -1900,6 +1900,10 @@ async function startLiveRecording() {
     liveCap.partial = '';
     liveCap.error = '';
     capReset();
+    // «Включать субтитры при начале записи» off, or the economy mode: the recording starts without them
+    // (the switch can turn them on; the Teams captions are read either way, stTeamsStart below)
+    const capSettings = (state.system && state.system.settings) || {};
+    if (capSettings.live_captions_auto === 'false' || economyOn()) document.getElementById('live-captions-toggle').checked = false;
     if (document.getElementById('live-captions-toggle').checked) {
       startLiveCaptions(ctx, mixedStream).catch(err => {
         console.error(err);

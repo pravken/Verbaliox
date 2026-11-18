@@ -69,11 +69,18 @@ class _PriorityExecutor:
             self._cv.notify()
         return fut
 
+    def wake(self) -> None:
+        with self._cv:
+            self._cv.notify_all()
+
     def _work(self) -> None:
+        from app import economy
+
         while True:
             with self._cv:
-                while not self._heap:
-                    self._cv.wait()
+                # the economy mode (recording only): the next job waits until it ends (wake() or 5 s)
+                while not self._heap or economy.on():
+                    self._cv.wait(timeout=5.0 if self._heap else None)
                 _prio, _n, fut, fn, args = heapq.heappop(self._heap)
             if not fut.set_running_or_notify_cancel():
                 continue
@@ -95,6 +102,11 @@ def _job_priority(fn: Callable, args: tuple) -> int:
 
 # Single worker queue ensures batch jobs run one after another without VRAM collisions
 _executor = _PriorityExecutor()
+
+
+def wake_queue() -> None:
+    """The economy mode ended (app/economy.py): the waiting jobs start now, not at the next look."""
+    _executor.wake()
 
 # Jobs that are queued or running, and jobs the user asked to cancel
 _jobs_lock = threading.Lock()

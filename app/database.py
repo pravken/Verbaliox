@@ -164,6 +164,9 @@ def init_db() -> None:
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "analysis_after_meetings": "true",
+            "economy_mode": "false",  # recording only, no model works (app/economy.py; the tray menu)
+            "live_captions_auto": "true",  # captions start with a recording (the studio's switch as last set)
+            "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
             "vad_filter": "true",
