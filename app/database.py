@@ -174,6 +174,8 @@ def init_db() -> None:
             "record_mic_device": "",
             "batched_inference": "true",  # faster-whisper BatchedInferencePipeline on GPU
             "keep_model_loaded": "true",  # reuse Whisper between queued recordings if VRAM allows
+            "onnx_gigaam_device": "auto",  # «auto»: the video card when its memory is enough, «cpu»: the processor always
+            "onnx_parakeet_device": "auto",
             "onnx_gpu": "true",  # GigaAM / Parakeet jobs on the NVIDIA GPU, its ONNX Runtime fetched once (app/onnx_gpu.py)
             "onnx_gpu_batch": "32",  # phrases per batch on the GPU (app/asr_onnx.gpu_tuning)
             "onnx_gpu_vad": "false",  # the VAD on the GPU too

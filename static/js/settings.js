@@ -199,6 +199,10 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-calendar-ics').value = s.calendar_ics || '';
     loadCalendarSource();
     document.getElementById('set-onnx-gpu').checked = s.onnx_gpu !== 'false';
+    for (const f of ['gigaam', 'parakeet']) {
+      const sel = document.getElementById(`set-onnx-${f}-device`);
+      if (sel) sel.value = s[`onnx_${f}_device`] === 'cpu' ? 'cpu' : 'auto';
+    }
     loadBackupInfo();
     loadOrphans();
     loadOnnxGpu();
@@ -2567,6 +2571,8 @@ function settingsFormValues() {
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
     onnx_gpu: document.getElementById('set-onnx-gpu')?.checked ? 'true' : 'false',
+    onnx_gigaam_device: document.getElementById('set-onnx-gigaam-device')?.value || 'auto',
+    onnx_parakeet_device: document.getElementById('set-onnx-parakeet-device')?.value || 'auto',
     ...callSettingsPayload(),
     ...dubSettingsPayload(),
     ...workdaySettingsPayload(),
@@ -3028,7 +3034,8 @@ const SETTINGS_RESET = {
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
-    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
+    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-onnx-gigaam-device', 'onnx_gigaam_device', 'value'],
+    ['set-onnx-parakeet-device', 'onnx_parakeet_device', 'value'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
   analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-analysis-after-meetings', 'analysis_after_meetings', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
     ['set-semantic', 'semantic_search', 'check']],
@@ -3046,7 +3053,7 @@ const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false',
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
-  diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', asr_ensemble: 'false',
+  diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
