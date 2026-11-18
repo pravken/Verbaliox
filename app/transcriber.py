@@ -2091,6 +2091,13 @@ def _process_meeting_job(meeting_id: int) -> None:
                 elif not ensemble_note:
                     ensemble_note = "точный режим: другие модели не справились, оставлена расшифровка основной"
 
+        try:  # recorded during a calendar meeting: are the voices its invitees (else a call meanwhile)
+            from app import calendar_match
+
+            calendar_match.recheck(meeting_id, speakers_meta)
+        except Exception as cal_err:
+            print(f"[calendar] meeting {meeting_id}: {cal_err}", flush=True)
+
         # Cancelled once the transcript is saved: it is complete and stays; the steps after it (the
         # overview, the title, the note) are skipped instead of running for minutes
         skipped = _cancel_wanted(meeting_id)

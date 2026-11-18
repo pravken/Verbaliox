@@ -2198,6 +2198,7 @@ function recordingInfo({ page, captureId, screenId, rawTitle, startedAt }) {
     has_video: !!(page && page.hasVideo), has_mic: !!(page && page.hasMic),
     notes: ta ? ta.value : '', started_at: startedAt, page_started_at: (page && page.startedAt) || 0,
     speakers_hint: stPeople.count || 0, speaker_marks: stPeople.marks,
+    call_app: String(state.callRecording || ''),  // the calendar's meeting or a call meanwhile (app/calendar_match.py)
   };
 }
 
