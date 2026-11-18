@@ -280,7 +280,9 @@ function leaveSettingsPage() {
 // --- The status bar: the queue (the load of the computer is in the sidebar) ---
 // The economy mode (app/economy.py): recording only; set in Settings → Общие or the tray icon's menu
 function economyOn() {
-  return String(((state.system && state.system.settings) || {}).economy_mode) === 'true';
+  const s = (state.system && state.system.settings) || {};
+  const end = Number(s.economy_until || 0);
+  return String(s.economy_mode) === 'true' && !(end && Date.now() / 1000 >= end);
 }
 
 async function economyOff() {
@@ -291,7 +293,10 @@ async function economyOff() {
 }
 
 function onEconomyEvent(ev) {
-  if (state.system && state.system.settings) state.system.settings.economy_mode = ev.on ? 'true' : 'false';
+  if (state.system && state.system.settings) {
+    state.system.settings.economy_mode = ev.on ? 'true' : 'false';
+    state.system.settings.economy_until = ev.until ? String(ev.until) : '';
+  }
   const box = document.getElementById('set-economy-mode');
   if (box) box.checked = !!ev.on;
   if (ev.on && typeof stopLiveCaptions === 'function' && liveCap.session) {
@@ -304,7 +309,14 @@ function onEconomyEvent(ev) {
 }
 
 function renderStatusbar() {
-  document.getElementById('sb-economy')?.classList.toggle('hidden', !economyOn());
+  const eco = document.getElementById('sb-economy');
+  if (eco) {
+    eco.classList.toggle('hidden', !economyOn());
+    // for a time: when it ends (the server turns it off then)
+    const end = Number(((state.system && state.system.settings) || {}).economy_until || 0);
+    const label = t('sbEconomy') + (end ? ` · ${t('sbEconomyUntil').replace('{time}', () => new Date(end * 1000).toLocaleTimeString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }))}` : '');
+    if (eco.textContent !== label) eco.textContent = label;
+  }
   // Audit 6.4: a model downloading in the background is seen from every page
   const dl = document.getElementById('sb-dl');
   const downloads = typeof modelDownloadsNow === 'function' ? modelDownloadsNow() : [];

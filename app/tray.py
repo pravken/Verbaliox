@@ -44,6 +44,7 @@ NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
 NIF_MESSAGE, NIF_ICON, NIF_TIP, NIF_INFO = 0x1, 0x2, 0x4, 0x10
 NIIF_INFO, NIIF_WARNING = 0x1, 0x2
 MF_STRING, MF_SEPARATOR, MF_GRAYED, MF_DEFAULT = 0x0, 0x800, 0x1, 0x1000
+MF_POPUP = 0x10  # an item whose command is a list of items: a submenu
 TPM_RIGHTBUTTON, TPM_RETURNCMD, TPM_NONOTIFY = 0x2, 0x100, 0x80
 
 LRESULT = ctypes.c_ssize_t
@@ -338,13 +339,24 @@ class Tray:
     def _show_menu(self) -> None:
         menu = user32.CreatePopupMenu()
         commands: Dict[int, str] = {}
-        for idx, (label, cmd, flags) in enumerate(self.menu_items(), start=1):
-            if label is None:
-                user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
-                continue
-            user32.AppendMenuW(menu, MF_STRING | flags, idx, label)
-            if cmd:
-                commands[idx] = cmd
+        counter = [0]
+
+        def fill(target, items) -> None:
+            for label, cmd, flags in items:
+                if label is None:
+                    user32.AppendMenuW(target, MF_SEPARATOR, 0, None)
+                    continue
+                if isinstance(cmd, list):  # a submenu (its items are the list)
+                    sub = user32.CreatePopupMenu()
+                    fill(sub, cmd)
+                    user32.AppendMenuW(target, MF_POPUP | flags, sub, label)
+                    continue
+                counter[0] += 1
+                user32.AppendMenuW(target, MF_STRING | flags, counter[0], label)
+                if cmd:
+                    commands[counter[0]] = cmd
+
+        fill(menu, self.menu_items())
         pt = POINT()
         user32.GetCursorPos(ctypes.byref(pt))
         user32.SetForegroundWindow(self.hwnd)  # otherwise the menu does not close on an outside click

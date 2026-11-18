@@ -79,6 +79,26 @@ class EconomyTest(unittest.TestCase):
         time.sleep(0.3)  # the dropped jobs are skipped by the worker when it goes on
         self.assertEqual(transcriber.queue_snapshot(), [])
 
+    def test_recording_only_for_a_time_ends_by_itself(self):
+        """Asked by the user: «Только запись» with a timer."""
+        from datetime import datetime
+
+        self.assertEqual(economy.until_for("0", now=1000.0), 0.0)
+        self.assertEqual(economy.until_for("60", now=1000.0), 1000.0 + 3600)
+        day_end = datetime.fromtimestamp(economy.until_for("day"))
+        self.assertEqual((day_end.hour, day_end.minute), (0, 0))
+        with mock.patch("app.idle_unload.unload_now"), mock.patch("app.live.stop_all"), mock.patch("app.meeting_guard.kick"):
+            economy.set_mode(True, "30")
+            self.assertTrue(economy.on())
+            self.assertGreater(economy.until(), time.time() + 29 * 60)
+            update_settings({"economy_until": f"{time.time() - 1:.0f}"})  # its time is over
+            self.assertFalse(economy.on())  # the queue goes on at once
+            economy.tick()
+        from app.database import get_all_settings
+
+        self.assertEqual(get_all_settings()["economy_mode"], "false")
+        self.assertEqual(get_all_settings()["economy_until"], "")
+
     def test_processor_threads(self):
         with mock.patch("os.cpu_count", return_value=20):
             self.assertEqual(asr_onnx.cpu_threads({"cpu_threads": "auto"}), 8)  # not all 20 (100 % in a meeting)

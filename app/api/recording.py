@@ -724,7 +724,7 @@ def api_live_start(payload: LiveStartPayload) -> Dict[str, Any]:
     from app.live import start_session
 
     if economy.on():
-        raise HTTPException(status_code=409, detail="Режим экономии: субтитры во время записи выключены")
+        raise HTTPException(status_code=409, detail="«Только запись»: субтитры во время записи выключены")
     target, pair = _live_target(payload.translate_to, payload.pair)
     s = start_session(payload.lang, target, payload.capture_id, payload.speed, pair)
     s.draft = payload.draft

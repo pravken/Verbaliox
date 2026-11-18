@@ -141,9 +141,20 @@
             <input type="checkbox" role="switch" class="vs-switch" id="set-quiet-mode" />
           </label>
           <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="economyToggle">Режим экономии (только запись)</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="economyHint">Работает только запись: модели выгружаются, расшифровка, анализ и субтитры ждут, пока режим не выключат. Субтитры Teams всё равно сохраняются с записью. Переключается и в меню значка в трее.</span></span>
+            <span><span data-i18n="economyToggle">Только запись</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="economyHint">Везде и всегда, пока включено: работает только запись, модели выгружаются, расшифровка, анализ и субтитры ждут. Субтитры Teams всё равно сохраняются с записью. Переключается и в меню значка в трее.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-economy-mode" />
+          </label>
+          <label class="flex items-center gap-2 ml-6 text-[11.5px] text-apple-secondary">
+            <span data-i18n="economyForLabel">Включать на</span>
+            <select id="set-economy-for" class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
+              <option value="0" data-i18n="economyFor0">пока не выключу</option>
+              <option value="30" data-i18n="economyFor30">30 минут</option>
+              <option value="60" data-i18n="economyFor60">1 час</option>
+              <option value="120" data-i18n="economyFor120">2 часа</option>
+              <option value="240" data-i18n="economyFor240">4 часа</option>
+              <option value="day" data-i18n="economyForDay">до конца дня</option>
+            </select>
           </label>
         </div>
 
