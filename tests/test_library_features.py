@@ -212,7 +212,7 @@ class ObsidianTest(unittest.TestCase):
         m = _done_meeting(title="Синк", recorded_at="2024-05-15 10:00:00")
         database.save_summary_templates([{"id": "risks", "name": "Риски", "prompt": "Какие риски?"}])
         database.merge_summaries(m["id"], {"chapters": "- [00:00] Начало\n- [01:05] Тесты", "decisions": "- Выпускать в пятницу",
-                                           "tpl:risks": "- Срыв сроков", "custom": "Ответ на вопрос", "error": "старая ошибка"})
+                                           "tpl:risks": "- Срыв сроков", "notes": "- Конспект", "custom": "Ответ на вопрос", "error": "старая ошибка"})
         text = obsidian.export_meeting(m["id"]).read_text(encoding="utf-8")
         for heading in ("## Решения", "## Риски", "## Ответ на вопрос", "## Участники", "## Расшифровка"):
             self.assertIn(heading, text)
@@ -228,6 +228,15 @@ class ObsidianTest(unittest.TestCase):
         a0, a1 = text.index(obsidian.ANALYSIS_START), text.index(obsidian.ANALYSIS_END)
         t0, t1 = text.index(obsidian.TRANSCRIPT_START), text.index(obsidian.TRANSCRIPT_END)
         self.assertTrue(a0 < text.index("## Решения") < a1 < t0 < text.index("## Расшифровка") < t1)
+        # every section between its own marks, named in the properties («read only the tasks»)
+        props = text.split("\n---\n", 1)[0]
+        self.assertIn('section_mark: "each section is between the HTML comments verbaliox:<id>:start', props)
+        for sid, title in (("decisions", "Решения"), ("template_risks", "Риски"), ("answer", "Ответ на вопрос"),
+                           ("participants", "Участники"), ("synopsis", "Конспект"), ("chapters", "Главы"), ("transcript", "Расшифровка")):
+            self.assertIn(f'  - "{sid}: {title}"', props)
+            part = text.split(f"<!-- verbaliox:{sid}:start -->", 1)[1].split(f"<!-- verbaliox:{sid}:end -->", 1)[0]
+            self.assertTrue(part.strip().startswith(f"## {title}"), sid)
+        self.assertNotIn("<!--", props)
         database.save_summary_templates([])
 
     def test_auto_export_writes_new_and_earlier_notes(self):
