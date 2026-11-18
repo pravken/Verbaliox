@@ -887,6 +887,21 @@ class CutAnswerTest(unittest.TestCase):
         self.assertEqual(_shown_size({"size": 5.4e9, "size_vram": 0.5e9}), 5.4e9)  # gemma4 on the PC
         self.assertEqual(_shown_size({"size": 5.4e9, "size_vram": 5.0e9}), 5.0e9)
 
+    def test_a_loaded_model_is_never_shown_smaller_than_its_file(self):
+        """Reported by the user: gemma always showed 0.5 GB (Ollama said that much for both its sizes)."""
+        from unittest import mock
+
+        from app import vram
+
+        ps = [{"name": "gemma4:e4b", "size": 0.5 * 2**30, "size_vram": 0.5 * 2**30}]
+        with mock.patch.object(vram, "_ollama_ps", return_value=ps), \
+                mock.patch.object(vram, "_disk_sizes", return_value={"gemma4:e4b": 9.6 * 2**30}):
+            self.assertEqual(vram.ollama_loaded()[0]["size_vram_gb"], 9.6)
+        ps = [{"name": "gemma4:e4b", "size": 10.2 * 2**30, "size_vram": 10.2 * 2**30}]
+        with mock.patch.object(vram, "_ollama_ps", return_value=ps), \
+                mock.patch.object(vram, "_disk_sizes", return_value={"gemma4:e4b": 9.6 * 2**30}):
+            self.assertEqual(vram.ollama_loaded()[0]["size_vram_gb"], 10.2)  # what it says, when it is believable
+
     def test_reasoning_without_its_opening_tag_is_dropped(self):
         from app.llm_text import strip_think
 

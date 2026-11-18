@@ -182,14 +182,44 @@ def _ollama_ps(timeout: float = 0.8) -> Optional[List[Dict[str, Any]]]:
         return None
 
 
+_DISK: Dict[str, Any] = {"at": 0.0, "sizes": {}}  # the models' file sizes (/api/tags), asked once a minute
+_SIZES_LOGGED: set = set()
+
+
+def _disk_sizes() -> Dict[str, float]:
+    import time
+
+    if time.time() - _DISK["at"] < 60:
+        return _DISK["sizes"]
+    _DISK["at"] = time.time()
+    try:
+        with httpx.Client(timeout=0.8) as client:
+            tags = client.get(f"{_ollama_base()}/api/tags").json().get("models") or []
+        _DISK["sizes"] = {(t.get("name") or t.get("model") or ""): float(t.get("size") or 0) for t in tags}
+    except Exception:
+        pass
+    return _DISK["sizes"]
+
+
 def ollama_loaded() -> List[Dict[str, Any]]:
     """Models Ollama keeps in memory. Never starts Ollama."""
     models = _ollama_ps() or []
-    return [
-        {"name": m.get("name") or m.get("model") or "?", "size_vram_gb": round(_shown_size(m) / 2**30, 1),
-         "expires_at": m.get("expires_at")}
-        for m in models
-    ]
+    disk = _disk_sizes() if models else {}
+    out = []
+    for m in models:
+        name = m.get("name") or m.get("model") or "?"
+        size = _shown_size(m)
+        # Ollama said ~0.5 GB for gemma that takes gigabytes (reported by the user: «always 0.5 GB»): a size under
+        # 60 % of the model's own file is not believed, the file's size is shown
+        file_size = disk.get(name) or 0.0
+        if file_size and size < file_size * 0.6:
+            size = file_size
+        if name not in _SIZES_LOGGED:  # what Ollama says, once a model, to check this on the user's computer
+            _SIZES_LOGGED.add(name)
+            print(f"[vram] {name}: ps size={m.get('size')} size_vram={m.get('size_vram')} file={file_size:.0f} "
+                  f"shown={size / 2**30:.1f} GB", flush=True)
+        out.append({"name": name, "size_vram_gb": round(size / 2**30, 1), "expires_at": m.get("expires_at")})
+    return out
 
 
 def _shown_size(m: Dict[str, Any]) -> float:
