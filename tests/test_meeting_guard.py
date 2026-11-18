@@ -55,6 +55,9 @@ class MeetingGuardTest(unittest.TestCase):
         result = {}
 
         def analysis():
+            # as a job of the queue does (_queue_start): a thread id is reused, an abort of an earlier thread
+            # with the same id must not end this one before the meeting begins
+            cancel_scope.reset(threading.get_ident())
             with meeting_guard.guard(mid):
                 try:
                     cancel_scope.call(lambda: time.sleep(5))
@@ -64,7 +67,11 @@ class MeetingGuardTest(unittest.TestCase):
         meeting_guard.check(now=1000.0)  # no meeting yet
         worker = threading.Thread(target=analysis)
         worker.start()
-        time.sleep(0.1)
+        for _ in range(100):  # the analysis has begun
+            with meeting_guard._lock:
+                if mid in meeting_guard._running:
+                    break
+            time.sleep(0.02)
         app_status.set_recording(True)
         # only the models this app loaded go (another program's stays), and gently
         loaded = [{"name": "gemma4:e4b"}, {"name": "someone-elses:7b"}]
