@@ -1021,6 +1021,10 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
     if not in_steps:  # the analysis in steps checks its protocol before its lists go in
         result_md = maybe_ground(result_md, key, m)
     summaries = merge_summaries(meeting_id, {key: result_md}, remove=("error",))
+    if key == "protocol":  # made by hand: the analysis that waited for a meeting to end is not redone over it
+        from app import meeting_guard
+
+        meeting_guard.done(meeting_id)
     from app.obsidian import refresh_if_exported
 
     refresh_if_exported(meeting_id)  # every section made goes into the note too, the answers to questions included

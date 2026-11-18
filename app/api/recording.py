@@ -695,6 +695,9 @@ def api_ui_state(payload: UiStatePayload) -> Dict[str, Any]:
     from app.app_status import set_recording, snapshot
 
     set_recording(payload.recording)
+    from app import meeting_guard
+
+    meeting_guard.kick()  # a recording began: an analysis running is broken off now, not at the next poll
     st = snapshot()
     return {"state": st["state"], "text": st["text"]}
 

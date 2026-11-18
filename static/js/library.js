@@ -162,6 +162,7 @@ function queueKindLabel(q) {
   if (q.kind === 'translate') return `${t('queueKindTranslate')} → ${lang}`;
   if (q.kind === 'burn_subs') return `${t('queueKindBurnSubs')} (${lang})`;
   if (q.kind === 'cut') return t('queueKindCut');
+  if (q.kind === 'analysis') return t('queueKindAnalysis');
   return t('queueKindTranscribe');
 }
 
