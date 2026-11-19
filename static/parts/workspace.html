@@ -18,7 +18,7 @@
           <svg class="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
         </button>
       </div>
-      <button data-click="switchAppView" data-click-args='["studio"]' id="nav-studio" class="tb-tab" data-i18n-title="tipNavStudio" title="Запись звука и экрана с субтитрами и переводом в реальном времени (Ctrl+4)">
+      <button data-click="switchAppView" data-click-args='["studio"]' id="nav-studio" class="tb-tab hidden" data-i18n-title="tipNavStudio" title="Запись звука и экрана с субтитрами и переводом в реальном времени (Ctrl+4)">
         <span id="nav-studio-dot" class="hidden w-2 h-2 rounded-full bg-apple-red animate-pulse"></span><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><span id="nav-studio-label" class="tb-lbl" data-i18n="navStudio">Студия</span>
       </button>
       <button data-click="switchAppView" data-click-args='["ask"]' id="nav-ask" class="tb-tab" data-i18n-title="tipNavAsk" title="Вопросы к одной записи, к папке или ко всей медиатеке (Ctrl+5)"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="navAsk">Ассистент</span></button>
@@ -27,6 +27,8 @@
         <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">
           <span id="tb-rec-dot" class="tb-rec-dot"></span><span id="tb-rec-clock" class="tb-rec-clock hidden"></span><span class="rec-src rec-src-tb hidden" data-rec-src></span><span id="tb-rec-label" class="tb-lbl" data-i18n="tbRecord">Запись</span>
         </button>
+        <button data-click="openRecMenu" data-click-args='[{"$": "event"}]' id="tb-rec-more" class="tb-rec-more" aria-haspopup="menu"
+          data-i18n-title="tipTbRecMenu2" title="Как записать: набор, субтитры, диктовка, настройки" data-i18n-aria="tipTbRecMenu2" aria-label="Как записать: набор, субтитры, диктовка, настройки">▾</button>
         <div id="tb-rec-done" class="tb-pop hidden" role="status">
           <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-apple-green shrink-0"></span><b class="text-[14px] font-semibold text-white" data-i18n="tbRecSaved">Запись сохранена</b><span id="tb-rec-saved-time" class="font-mono text-[12.5px] text-apple-secondary"></span>
             <span class="flex-1"></span><button data-click="hideQuickRecDone" class="tb-pop-x" data-i18n-title="close" title="Закрыть">✕</button></div>
@@ -131,7 +133,7 @@
         </div>
       </section>
 
-      <section class="st-card">
+      <section class="st-card st-card-meet">
         <h3 class="st-card-title" data-i18n="rdSasMeeting">Встреча</h3>
         <label for="record-title-input" class="st-sub-title" data-i18n="recTitleLabel">Название записи</label>
         <input id="record-title-input" type="text"
@@ -629,8 +631,7 @@
             <!-- Audit 8.4: with a text there, recognition folds into this mark of its model; it opens the row above -->
             <button id="tx-model-chip" data-click="toggleTxModelBar" class="tx-model-chip hidden" aria-expanded="false" aria-controls="tx-model-bar"
               data-i18n-title="tipTxModelChip" title="Модель расшифровки: сменить, расшифровать заново, параметры"></button>
-            <span class="tx-section-label tx-section-label-text" data-i18n="txSectionText">Текст</span>
-            <!-- Left: Speaker Filter Pills (they wrap within their part; the tools stay on one line) -->
+                        <!-- Left: Speaker Filter Pills (they wrap within their part; the tools stay on one line) -->
             <div class="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap min-h-[28px]" id="speaker-pills-container">
               <!-- Populated dynamically -->
             </div>
@@ -651,7 +652,7 @@
               </div>
               <!-- «Без запинок»: the text is shown without «э-э», «ну типа» and repeated words; the text
                    itself is not changed (rpToggleNoFillers in redesign_player.js) -->
-              <button data-click="rpToggleNoFillers" id="clean-fillers-btn" aria-pressed="false"
+              <button data-click="rpToggleNoFillers" id="clean-fillers-btn" aria-pressed="false" hidden
                 data-i18n-title="rdPlyrNoFillersTip"
                 title="Скрыть «э-э», «ну типа» и повторы слов. Только в показе текста: запись и сам текст не меняются"
                 class="ui-btn ui-btn-subtle">
@@ -664,7 +665,7 @@
                 <span class="tx-tool-label" data-i18n="rdPlyrRestoreFillers">Вернуть исходный текст</span>
               </button>
 
-              <button data-click="toggleAutoScroll" id="autoscroll-btn"
+              <button data-click="toggleAutoScroll" id="autoscroll-btn" hidden
                 data-i18n-title="tipAutoScroll"
                 title="Автоматически прокручивать текст за звучащей речью"
                 class="ui-btn ui-btn-active">
@@ -711,7 +712,7 @@
       <!-- TAB 2: ANALYSIS — sections on the left (dots: made or not), the open one on the right (app.js: renderAnalysis) -->
       <div id="wview-summary" class="hidden flex-1 flex flex-col min-h-0 tab-pane-anim">
         <div id="an-noai" class="an-noai hidden" role="status">
-          <span class="an-noai-text" data-i18n="anNoAiText">Модель анализа не подключена. Готовые разделы видны и копируются; создать новые или обновить — после подключения.</span>
+          <span class="an-noai-text" data-i18n="anNoAiText" data-i18n-title="anNoAiText">Модель анализа не подключена. Готовые разделы видны и копируются; создать новые или обновить — после подключения.</span>
           <button data-click="openLlmPicker" class="an-noai-main" data-i18n="noAiLocal">Выбрать локальную модель</button>
           <button data-click="openModal" data-click-args='["settings", "analysis"]' class="an-noai-alt" data-i18n="noAiCloud">Подключить облачную</button>
         </div>
@@ -775,15 +776,6 @@
                 <div id="analysis-estimate" class="hidden text-[11.5px] -mt-1 flex items-center gap-1.5"></div>
                 <div id="summary-content" class="an-body"></div>
               </div>
-            </div>
-            <div class="an-ask">
-              <input id="custom-summary-prompt" type="text"
-                data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "runCustomQuestion"]'
-                data-i18n-placeholder="anAskPh" placeholder="Спросите о том, что было в этой записи"
-                data-i18n-title="tipAskInput" title="Введите любой вопрос по содержанию встречи"
-                class="an-ask-input" />
-              <button data-click="runCustomQuestion" data-i18n-title="tipAskBtn" title="Отправить вопрос локальной модели ИИ"
-                class="an-ask-btn" data-i18n="askBtn">Спросить</button>
             </div>
           </div>
         </div>

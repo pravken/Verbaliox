@@ -429,7 +429,7 @@ function renderChaptersBar() {
   _chapters = parseChapters(m && m.summaries && m.summaries.chapters);
   _activeChapter = -1;
   const bar = document.getElementById('chapters-bar');
-  bar.classList.toggle('hidden', _chapters.length < 2);
+  bar.classList.add('hidden');  // the chapters are the bands of the player's wave (asked by the user: not twice)
   document.getElementById('chapters-list').innerHTML = _chapters.map((c, i) =>
     `<button data-click="seekPlayer" data-click-args='[${Number(c.start) || 0}]' id="chapter-${i}" title="${escapeHtml(c.desc || c.title)}"
       class="chapter-chip"><span class="font-mono text-apple-tertiary">${formatTime(c.start)}</span> ${escapeHtml(c.title)}</button>`
@@ -633,13 +633,6 @@ function renderAnalysisHead() {
   const has = anHasContent(tab), busy = anIsBusy(tab), ai = aiAvailable();
   const overview = tab === 'protocol';
   document.getElementById('an-noai')?.classList.toggle('hidden', ai);
-  // without a model the question field says so; a press anywhere that needs one points to the banner
-  const ask = document.getElementById('custom-summary-prompt');
-  if (ask) {
-    ask.placeholder = t('anAskPh');  // audit 7.6: why it waits is said once, by the banner
-    ask.title = ai ? t('tipAskInput') : t('anNeedModel');
-    ask.closest('.an-ask')?.classList.toggle('an-ask-off', !ai);
-  }
   const title = document.getElementById('an-title');
   if (title) title.textContent = it.label;
   const sub = document.getElementById('an-sub');
@@ -740,7 +733,8 @@ function renderAnalysisOverview(box) {
 // The menus of the section's head: the model, «Настроить» (the overview's cards), «Экспорт», ⋯
 function openAnalysisMenu(kind, el) {
   const r = el.getBoundingClientRect();
-  const at = (items) => setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6), 0);  // after this click closes menus
+  // after this click closes menus; the «⋯» at the right end opens leftwards from its right edge
+  const at = (items) => setTimeout(() => (kind === 'dots' ? openTextMenuAt(items, r.right, r.bottom + 6, { right: true }) : openTextMenuAt(items, r.left, r.bottom + 6)), 0);
   const tab = state.activeSummaryTab;
   const m = state.activeMeeting;
   if (!m) return;
@@ -769,6 +763,23 @@ function openAnalysisMenu(kind, el) {
   } else if (kind === 'dots') {
     const tpl = anTemplate(tab);
     const items = [];
+    // what the head showed as buttons (asked by the user: eight of them over a section): «Настроить»,
+    // the export, the doubtful words; the buttons still say when each applies (renderAnalysisHead)
+    const applies = id => { const b = document.getElementById(id); return !!b && !b.classList.contains('hidden'); };
+    if (applies('an-cfg-btn')) items.push({ label: `${t('anCfgTitle')}…`, run: () => openOverviewConfig(el) });
+    items.push({ label: `${t('anAskMenu')}…`, disabled: !aiAvailable(), run: () => runCustomQuestion() });
+    if (applies('an-exp-btn')) {
+      items.push({ sep: true });
+      if (anSectionText(tab).trim()) items.push({ label: `${t('anExport')}: ${t('anExportMd')}`, key: '.md', run: () => saveSectionMarkdown(tab) });
+      if (tab === 'commitments') {
+        items.push({ label: `${t('anExport')}: ${t('sumCommitments')} Markdown`, run: () => exportCommitments('md', m.id) },
+          { label: `${t('anExport')}: Todoist`, key: 'CSV', run: () => exportCommitments('todoist', m.id) });
+      }
+      items.push({ label: `${t('anExport')}: ${t('anExportWord')}`, key: '.docx', run: () => exportMeetingById(m.id, 'docx') },
+        { label: `${t('anExport')}: ${t('anExportObsidian')}`, run: () => exportToObsidian(m.id) });
+    }
+    if (applies('an-wavy-btn')) items.push({ sep: true }, { label: t(suspectsHidden() ? 'anSuspectsShow' : 'anSuspectsHide'), run: () => toggleSuspects() });
+    items.push({ sep: true });
     if (tpl) items.push({ label: t('anEditTemplate'), run: () => openTemplateDialog(tpl) });
     items.push({ label: t('anAllTemplates'), run: () => openTemplatesEditor() });
     if (analysisTextShown()) items.push({ label: t('anCheckWords'), disabled: !aiAvailable() || !!state.anChecking, run: () => checkAnalysisWords() });
@@ -1382,13 +1393,13 @@ async function generateSummaryForActiveTab() {
 }
 
 // A question about this recording: the answer is a section of its own («Ответ на вопрос»)
+// (asked by the user: the field under every section took room; it is in the «⋯» menu)
 async function runCustomQuestion() {
   const m = state.activeMeeting;
   if (!m) return;
-  const input = document.getElementById('custom-summary-prompt');
-  const prompt = input.value.trim();
   if (!aiAvailable()) { flashNoAiBanner(); return; }
-  if (!prompt) { input.focus(); return; }
+  const prompt = ((await askText(t('anAskPh'), '')) || '').trim();
+  if (!prompt) return;
   const { chosenModel } = summaryModelChoice();
   state.anQuestion = { id: m.id, text: prompt };
   state.anBusy = state.anBusy || new Set();
@@ -1404,7 +1415,6 @@ async function runCustomQuestion() {
     const data = await readJson(res);
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
     m.summaries = data.summaries;
-    input.value = '';
   } catch (e) {
     showError(serverText(e.message));
   } finally {
