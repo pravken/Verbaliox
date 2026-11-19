@@ -2495,6 +2495,12 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tx-model-chip:active { transform: scale(0.97); }
 .tx-model-chip.hidden { display: none; }
 .tx-model-chip-dot { width: 6px; height: 6px; border-radius: 3px; background: #30D158; }
+.tx-model-chip { height: 30px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); }
+.tx-model-chip-more { color: var(--hc-dim, #8E8E93); font-weight: 400; }
+#clean-fillers-btn[hidden], #autoscroll-btn[hidden] { display: none; }
+/* the speaker of a line: its name opens the choice (no arrow on every line) */
+.seg-spk { appearance: none; -webkit-appearance: none; padding: 0; }
+.seg-spk:hover, .seg-spk:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 
 /* Audit 8.3. The import window: model and language in sight, the rest one click away */
 .imp-card:not(.imp-more-open) .imp-more-item { display: none; }

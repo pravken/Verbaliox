@@ -429,7 +429,7 @@ function renderChaptersBar() {
   _chapters = parseChapters(m && m.summaries && m.summaries.chapters);
   _activeChapter = -1;
   const bar = document.getElementById('chapters-bar');
-  bar.classList.toggle('hidden', _chapters.length < 2);
+  bar.classList.add('hidden');  // the chapters are the bands of the player's wave (asked by the user: not twice)
   document.getElementById('chapters-list').innerHTML = _chapters.map((c, i) =>
     `<button data-click="seekPlayer" data-click-args='[${Number(c.start) || 0}]' id="chapter-${i}" title="${escapeHtml(c.desc || c.title)}"
       class="chapter-chip"><span class="font-mono text-apple-tertiary">${formatTime(c.start)}</span> ${escapeHtml(c.title)}</button>`

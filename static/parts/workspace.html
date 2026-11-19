@@ -631,8 +631,7 @@
             <!-- Audit 8.4: with a text there, recognition folds into this mark of its model; it opens the row above -->
             <button id="tx-model-chip" data-click="toggleTxModelBar" class="tx-model-chip hidden" aria-expanded="false" aria-controls="tx-model-bar"
               data-i18n-title="tipTxModelChip" title="Модель расшифровки: сменить, расшифровать заново, параметры"></button>
-            <span class="tx-section-label tx-section-label-text" data-i18n="txSectionText">Текст</span>
-            <!-- Left: Speaker Filter Pills (they wrap within their part; the tools stay on one line) -->
+                        <!-- Left: Speaker Filter Pills (they wrap within their part; the tools stay on one line) -->
             <div class="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap min-h-[28px]" id="speaker-pills-container">
               <!-- Populated dynamically -->
             </div>
@@ -653,7 +652,7 @@
               </div>
               <!-- «Без запинок»: the text is shown without «э-э», «ну типа» and repeated words; the text
                    itself is not changed (rpToggleNoFillers in redesign_player.js) -->
-              <button data-click="rpToggleNoFillers" id="clean-fillers-btn" aria-pressed="false"
+              <button data-click="rpToggleNoFillers" id="clean-fillers-btn" aria-pressed="false" hidden
                 data-i18n-title="rdPlyrNoFillersTip"
                 title="Скрыть «э-э», «ну типа» и повторы слов. Только в показе текста: запись и сам текст не меняются"
                 class="ui-btn ui-btn-subtle">
@@ -666,7 +665,7 @@
                 <span class="tx-tool-label" data-i18n="rdPlyrRestoreFillers">Вернуть исходный текст</span>
               </button>
 
-              <button data-click="toggleAutoScroll" id="autoscroll-btn"
+              <button data-click="toggleAutoScroll" id="autoscroll-btn" hidden
                 data-i18n-title="tipAutoScroll"
                 title="Автоматически прокручивать текст за звучащей речью"
                 class="ui-btn ui-btn-active">
