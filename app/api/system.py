@@ -154,6 +154,15 @@ def api_delete_whisper_model(model_id: str) -> Dict[str, Any]:
 class SettingsUpdatePayload(BaseModel):
     settings: Dict[str, Any]
 
+@router.get("/api/mcp/config")
+def api_mcp_config() -> Dict[str, Any]:
+    """The lines that connect an agent (Claude Desktop, Claude Code) to the library (app/mcp_server.py)."""
+    from app.mcp_server import client_config
+
+    cfg = client_config()
+    return {"claude_desktop": json.dumps(cfg["claude_desktop"], ensure_ascii=False, indent=2), "claude_code": cfg["claude_code"]}
+
+
 @router.post("/api/settings")
 def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
     # Sending transcripts to a cloud service needs the consent given in Settings → Analysis

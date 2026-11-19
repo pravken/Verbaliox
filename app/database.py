@@ -164,6 +164,7 @@ def init_db() -> None:
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "analysis_after_meetings": "true",
+            "mcp_local_only": "false",  # the agent (app/mcp_server.py) also gets the recordings marked «только локально»
             "economy_mode": "false",  # «Только запись»: no model works (app/economy.py; the tray menu)
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
