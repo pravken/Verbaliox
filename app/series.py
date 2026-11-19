@@ -251,5 +251,8 @@ def before_meeting(title: str, attendees: List[str], done: Optional[List[Dict[st
     if not rows:
         return None
     last = rows[-1]
+    # the open tasks themselves, a few (the dashboard's «Перед встречей»: who owes what, without a click)
+    brief = [{"id": t["id"], "what": t.get("what") or "", "who": t.get("who") or "", "to_whom": t.get("to_whom") or "",
+              "due_date": t.get("due_date") or ""} for t in tasks[:5]]
     return {**hit, "last": {"id": last["id"], "title": last.get("title") or "", "date": _when(last)[:10]},
-            "open_tasks": len(tasks)}
+            "open_tasks": len(tasks), "tasks": brief}

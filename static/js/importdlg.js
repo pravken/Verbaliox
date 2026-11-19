@@ -273,7 +273,7 @@ function impRowHtml(x) {
 
 function impFormatBytes(n) {
   if (!n) return '';
-  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1).replace('.', state.uiLang === 'en' ? '.' : ',')} ${t('impGB')}`;
+  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} ${t('impGB')}`;
   return `${Math.max(1, Math.round(n / (1 << 20)))} ${t('impMB')}`;
 }
 
