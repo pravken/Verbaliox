@@ -3182,18 +3182,35 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-dt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .db-dt-chip { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-label); color: var(--hc-dim, #A1A1A6); }
 .db-dt-seg { margin: 2px 0 8px; align-self: flex-start; }
-.db-dt-head, .db-dt-row:not(.db-dt-dec) { display: grid; grid-template-columns: 92px minmax(0, 1fr) 30px 30px 38px 62px; align-items: center; gap: 6px; }
+.db-dt-head, .db-dt-row { display: grid; grid-template-columns: minmax(0, 1fr) 30px 30px 40px 64px; align-items: center; gap: 6px; }
 .db-dt-head { font-size: 10.5px; color: var(--hc-dim, #8E8E93); padding: 0 6px 4px; text-align: center; }
-.db-dt-row { width: 100%; text-align: left; padding: 7px 6px; border-radius: 8px; background: none; border: 0; color: #E5E5EA; cursor: pointer; }
+.db-dt-row { width: 100%; text-align: left; padding: 8px 8px; border-radius: 8px; background: none; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); color: #E5E5EA; cursor: pointer; }
 .db-dt-row:hover, .db-dt-task:hover { background: rgba(255, 255, 255, 0.06); }
-.db-dt-when { font-size: 10.5px; color: var(--hc-dim, #8E8E93); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-dt-row.db-dt-row2 { grid-template-columns: minmax(0, 1fr) 64px; }
 .db-dt-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; }
 .db-dt-main b { font-weight: 550; font-size: var(--fs-ui); color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.db-dt-main b.db-dt-one { display: block; white-space: nowrap; }
+.db-dt-text { font-size: var(--fs-ui); line-height: 1.45; color: #E5E5EA; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+/* in the panel a feature is a quiet mark of the line, not a second loud chip */
+.db-detail small .ft-chip { padding: 0; background: none; border: 0; color: inherit; font-size: inherit; line-height: inherit; max-width: 140px; }
+.db-detail small .ft-name { overflow: hidden; text-overflow: ellipsis; }
+.db-detail small > span + span::before { content: '·'; margin-right: 5px; color: #636366; }
+.db-dt-zero { color: #636366; }
+/* decisions: a card per meeting, its decisions as points */
+.db-dt-group { margin-bottom: 8px; padding: 10px 12px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(255, 255, 255, 0.06); }
+.db-dt-ghead { display: flex; flex-direction: column; gap: 2px; width: 100%; min-width: 0; padding: 0; background: none; border: 0; text-align: left; color: inherit; cursor: pointer; }
+.db-dt-ghead:hover .db-dt-gtitle { color: #4DA3FF; }
+.db-dt-gtitle { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-dt-ghead small { display: flex; align-items: center; gap: 5px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.db-dt-points { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.db-dt-points li { position: relative; padding-left: 14px; font-size: var(--fs-ui); line-height: 1.45; color: #E5E5EA; }
+.db-dt-points li::before { content: ''; position: absolute; left: 2px; top: 0.6em; width: 5px; height: 5px; border-radius: 50%; background: #4DA3FF; opacity: 0.8; }
 .db-dt-main small { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
 .db-dt-num { text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: #C7C7CC; }
 .db-dt-dur { text-align: right; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--hc-dim, #A1A1A6); white-space: nowrap; }
 .db-dt-why { padding: 0 6px; border-radius: 6px; background: rgba(255, 159, 10, 0.14); color: #FFB340; font-size: 10.5px; line-height: 1.6; }
-.db-dt-task { display: flex; align-items: flex-start; gap: 8px; padding: 7px 6px; border-radius: 8px; }
+.db-dt-task { display: flex; align-items: flex-start; gap: 10px; padding: 9px 8px; border-radius: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.db-dt-task .db-due { flex: none; margin-top: 1px; }
 .db-dt-task .db-dt-main { flex: 1; }
 .db-dt-task.done { opacity: 0.55; }
 .db-ck-gap { width: 16px; flex: none; }

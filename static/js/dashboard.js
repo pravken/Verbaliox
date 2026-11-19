@@ -496,17 +496,17 @@ function dbDetailMeetings(d) {
   const reason = r => r.reasons.map(x => `<span class="db-dt-why" title="${escapeHtml(t(`dbWhy_${x}_tip`))}">${escapeHtml(t(`dbWhy_${x}`))}</span>`).join('');
   const list = rows.map(r => {
     const f = (r.features || []).map(featureById).filter(Boolean)[0];
+    const when = `${dbAgo(r.date, DB.data ? DB.data.today : r.date)}${r.time ? ` ${r.time}` : ''}`;
     return `<button class="db-dt-row" data-click="dashOpenSummary" data-click-args='[${r.id}]'>`
-      + `<span class="db-dt-when">${escapeHtml(dbAgo(r.date, DB.data ? DB.data.today : r.date))}${r.time ? ` ${escapeHtml(r.time)}` : ''}</span>`
-      + `<span class="db-dt-main"><b>${escapeHtml(r.title || t('hmUntitled'))}</b><small>${f ? featureChipHtml(f) : ''}${reason(r)}</small></span>`
-      + `<span class="db-dt-num" title="${escapeHtml(t('dbDtDecTip'))}">${r.decisions}</span>`
-      + `<span class="db-dt-num" title="${escapeHtml(t('dbDtTaskTip'))}">${r.tasks}</span>`
+      + `<span class="db-dt-main"><b class="db-dt-one">${escapeHtml(r.title || t('hmUntitled'))}</b><small>${f ? featureChipHtml(f) : ''}<span>${escapeHtml(when)}</span>${reason(r)}</small></span>`
+      + `<span class="db-dt-num${r.decisions ? '' : ' db-dt-zero'}" title="${escapeHtml(t('dbDtDecTip'))}">${r.decisions}</span>`
+      + `<span class="db-dt-num${r.tasks ? '' : ' db-dt-zero'}" title="${escapeHtml(t('dbDtTaskTip'))}">${r.tasks}</span>`
       + `<span class="db-dt-num" title="${escapeHtml(t('dbDtShareTip'))}">${r.my_share == null ? '—' : `${Math.round(r.my_share)}%`}</span>`
       + `<span class="db-dt-dur">${escapeHtml(dbHm(r.duration))}</span></button>`;
   }).join('');
   return `<div class="db-dt-sum">${escapeHtml(t('dbDtMeetingsSum').replace('{n}', () => rows.length).replace('{h}', () => dbHm(total)))}</div>`
     + (chips ? `<div class="db-dt-chips">${chips}</div>` : '') + seg
-    + (rows.length ? `<div class="db-dt-head"><span></span><span></span><span>${escapeHtml(t('dbDtDec'))}</span><span>${escapeHtml(t('dbDtTasks'))}</span><span>${escapeHtml(t('dbDtShare'))}</span><span></span></div>${list}`
+    + (rows.length ? `<div class="db-dt-head"><span></span><span>${escapeHtml(t('dbDtDec'))}</span><span>${escapeHtml(t('dbDtTasks'))}</span><span>${escapeHtml(t('dbDtShare'))}</span><span></span></div>${list}`
       : `<div class="db-note">${escapeHtml(t(DB_DETAIL.filter === 'useless' ? 'dbUselessNone' : 'dbNoMeetingsYet'))}</div>`);
 }
 
@@ -514,7 +514,7 @@ function dbDetailTasks(list, today, mine) {
   if (!list.length) return `<div class="db-note">${escapeHtml(t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'))}</div>`;
   return list.map(x => `<div class="db-dt-task${x.status === 'done' ? ' done' : ''}">`
     + (mine && x.status !== 'done' ? `<button class="db-ck" data-click="dbDetailDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
-    + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><b>${escapeHtml(x.what)}</b>`
+    + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><span class="db-dt-text">${escapeHtml(x.what)}</span>`
     + `<small>${escapeHtml([mine ? (x.to ? `→ ${x.to}` : '') : x.who, x.meeting_title ? `«${x.meeting_title}»` : '', x.meeting_date ? dbAgo(x.meeting_date, today) : ''].filter(Boolean).join(' · '))}</small></button>`
     + (x.due_date ? dbDue(x, today) : `<span class="db-due">${escapeHtml(mine ? t('tkNoDue') : t('dbDaysWaiting').replace('{n}', () => x.days || 0))}</span>`) + '</div>').join('');
 }
@@ -538,10 +538,19 @@ function dbRenderDetail() {
   else if (d.error) body = `<div class="db-note">${escapeHtml(t('dbNoData'))}</div>`;
   else if (kind === 'meetings' || kind === 'useless') body = dbDetailMeetings(d);
   else if (kind === 'decisions') {
-    body = d.decisions.length ? d.decisions.map(x => {
-      const f = (x.features || []).map(featureById).filter(Boolean)[0];
-      return `<button class="db-dt-row db-dt-dec" data-click="dashOpenSummary" data-click-args='[${x.meeting_id}]'><span class="db-dt-main"><b>${escapeHtml(x.text)}</b>`
-        + `<small>${f ? featureChipHtml(f) : ''}«${escapeHtml(x.title)}» · ${escapeHtml(dbAgo(x.date, today))}</small></span></button>`;
+    // grouped by their meeting (asked by the user: the same title and chip under every decision made the list
+    // a wall of equal lines): the meeting once as the card's head, its decisions as plain points under it
+    const groups = [];
+    for (const x of d.decisions) {
+      const last = groups[groups.length - 1];
+      if (last && last.meeting_id === x.meeting_id) last.items.push(x.text);
+      else groups.push({ ...x, items: [x.text] });
+    }
+    body = groups.length ? groups.map(g => {
+      const f = (g.features || []).map(featureById).filter(Boolean)[0];
+      return `<div class="db-dt-group"><button class="db-dt-ghead" data-click="dashOpenSummary" data-click-args='[${g.meeting_id}]'>`
+        + `<span class="db-dt-gtitle">${escapeHtml(g.title || t('hmUntitled'))}</span><small>${f ? featureChipHtml(f) : ''}<span>${escapeHtml(dbAgo(g.date, today))}</span></small></button>`
+        + `<ul class="db-dt-points">${g.items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
     }).join('') : `<div class="db-note">${escapeHtml(t('dbNoDecisionsYet'))}</div>`;
   } else if (kind === 'tasks' || kind === 'waiting') {
     body = d.needs_me ? `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div>` : dbDetailTasks(d.tasks, today, kind === 'tasks');
@@ -549,8 +558,8 @@ function dbRenderDetail() {
     body = `<div class="db-dt-sec">${escapeHtml(t('dbDtOwesMe'))}</div>${dbDetailTasks(d.owes_me || [], today, false)}`
       + `<div class="db-dt-sec">${escapeHtml(t('dbDtIOwe'))}</div>${dbDetailTasks(d.i_owe || [], today, true)}`
       + `<div class="db-dt-sec">${escapeHtml(t('dbDtTheirMeetings').replace('{n}', () => d.meetings_total || 0))}</div>`
-      + ((d.meetings || []).map(m => `<button class="db-dt-row" data-click="dashOpenSummary" data-click-args='[${m.id}]'><span class="db-dt-when">${escapeHtml(dbAgo(m.date, today))}</span>`
-        + `<span class="db-dt-main"><b>${escapeHtml(m.title || t('hmUntitled'))}</b></span><span class="db-dt-dur">${escapeHtml(dbHm(m.duration))}</span></button>`).join('')
+      + ((d.meetings || []).map(m => `<button class="db-dt-row db-dt-row2" data-click="dashOpenSummary" data-click-args='[${m.id}]'>`
+        + `<span class="db-dt-main"><b class="db-dt-one">${escapeHtml(m.title || t('hmUntitled'))}</b><small><span>${escapeHtml(dbAgo(m.date, today))}</span></small></span><span class="db-dt-dur">${escapeHtml(dbHm(m.duration))}</span></button>`).join('')
         || `<div class="db-note">${escapeHtml(t('dbNoMeetingsYet'))}</div>`)
       + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${JSON.stringify(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
   }
