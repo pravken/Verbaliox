@@ -37,6 +37,15 @@ def api_dashboard(period: str = "week", feature: int = 0) -> Dict[str, Any]:
     return build(period, feature or None)
 
 
+@router.get("/api/dashboard/detail")
+def api_dashboard_detail(kind: str = "meetings", period: str = "week", feature: int = 0, person: str = "") -> Dict[str, Any]:
+    """A widget of «Дэшборд» in full: the meetings, those without an outcome, the decisions, the user's tasks,
+    what is promised to the user, a person (app/dashboard.detail)."""
+    from app.dashboard import detail
+
+    return detail(kind, period, feature or None, person[:120])
+
+
 @router.get("/api/tasks")
 def api_tasks() -> Dict[str, Any]:
     from app import commitments

@@ -16,6 +16,52 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 PERIODS = ("week", "month", "quarter")
+DETAILS = ("meetings", "useless", "decisions", "tasks", "waiting", "person")
+# «Без итогов» (asked by the user): an analysed meeting this long with no decision and no task; one where
+# the user said almost nothing; a series whose meetings of the period all ended so
+NO_OUTCOME_MIN_SEC = 10 * 60
+SILENT_SHARE = 5.0  # % of the talk
+SILENT_MIN_SEC = 30 * 60
+SERIES_MIN = 3
+
+
+def _facts(full: Dict[str, Any], me: set, task_counts: Dict[int, int]) -> Dict[str, Any]:
+    """What a meeting gave: its decisions, its tasks, the user's share of the talk, and why it may be one
+    «без итогов» (reasons: no_outcome, silent; series is added over the period)."""
+    from app.features import decisions_of
+
+    protocol = (full.get("summaries") or {}).get("protocol") or ""
+    decisions = decisions_of(protocol)
+    duration = float(full.get("duration") or 0)
+    share = None
+    if me and full.get("segments"):
+        try:
+            from app.analytics import conversation_analytics
+
+            rows = conversation_analytics(full)["speakers"]
+            if rows:
+                share = round(sum(float(r["share"]) for r in rows if str(r.get("name") or "").strip().lower() in me), 1)
+        except Exception:
+            share = None
+    reasons = []
+    if protocol and duration >= NO_OUTCOME_MIN_SEC and not decisions and not task_counts.get(full.get("id") or 0):
+        reasons.append("no_outcome")
+    if share is not None and duration >= SILENT_MIN_SEC and share < SILENT_SHARE:
+        reasons.append("silent")
+    return {"decisions": decisions, "tasks": task_counts.get(full.get("id") or 0, 0), "my_share": share,
+            "analysed": bool(protocol), "reasons": reasons}
+
+
+def _series_reasons(rows: List[Dict[str, Any]]) -> None:
+    """A series whose meetings of the period (three at least) all ended without a decision or a task."""
+    by: Dict[int, List[Dict[str, Any]]] = {}
+    for r in rows:
+        if r.get("series_id"):
+            by.setdefault(r["series_id"], []).append(r)
+    for group in by.values():
+        if len(group) >= SERIES_MIN and all("no_outcome" in r["reasons"] for r in group):
+            for r in group:
+                r["reasons"].append("series")
 
 
 def _bounds(period: str, today: date) -> Tuple[date, date, date]:
@@ -70,17 +116,16 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     mine = [t for t in tasks if t.get("status") != "done" and is_mine(t)] if me else []
     over = [t for t in mine if t.get("due_date") and t["due_date"] < iso]
 
-    # the decisions of the period's analyses, newest first
+    # the decisions of the period's analyses, newest first, and what each meeting gave (_facts)
     decisions: List[Dict[str, Any]] = []
-    for m in sorted(now, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True):
-        try:
-            from app.database import get_meeting
-
-            full = get_meeting(m["id"]) or {}
-        except Exception:
-            continue
-        for text in decisions_of((full.get("summaries") or {}).get("protocol") or ""):
-            decisions.append({"text": text, "meeting_id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat()})
+    rows = _meeting_rows(now, me, fmap)
+    for r in rows:
+        for text in r.pop("decision_texts"):
+            decisions.append({"text": text, "meeting_id": r["id"], "title": r["title"], "date": r["date"]})
+    useless = [r for r in rows if r["reasons"]]
+    # promised to the user by someone else, still open («Жду от других»)
+    waiting = [t for t in tasks if t.get("status") != "done" and (t.get("to_whom") or "").strip().lower() in me
+               and not is_mine(t)] if me else []
 
     # hours by day (a week) or by week (a month, a quarter)
     buckets: List[Dict[str, Any]] = []
@@ -158,10 +203,123 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
                 "hours": round(sum(float(m.get("duration") or 0) for m in now) / 3600, 1),
                 "hours_before": round(sum(float(m.get("duration") or 0) for m in before) / 3600, 1),
                 "open": len(mine), "overdue": len(over), "decisions": len(decisions),
-                "decision_meetings": len({d["meeting_id"] for d in decisions})},
+                "decision_meetings": len({d["meeting_id"] for d in decisions}),
+                "useless": len(useless), "useless_hours": round(sum(r["duration"] for r in useless) / 3600, 1),
+                "waiting": len(waiting), "waiting_overdue": sum(1 for t in waiting if t.get("due_date") and t["due_date"] < iso)},
+        "waiting": [dict(task_brief(t), days=_days_open(t, today)) for t in sorted(
+            waiting, key=lambda t: (not (t.get("due_date") and t["due_date"] < iso), t.get("due_date") or "9999", t["id"]))[:8]],
         "buckets": buckets, "features": feats, "people": people,
         "decisions": decisions[:12], "tasks": [task_brief(t) for t in focus[:10]], "needs_me": not me,
         "recent": [{"id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat(), "duration": m.get("duration") or 0,
                     "status": m.get("status"), "has_summary": bool(m.get("has_summary")), "features": fmap.get(m["id"], [])}
                    for m in recent],
     }
+
+
+def _days_open(t: Dict[str, Any], today: date) -> int:
+    raw = str(t.get("meeting_date") or t.get("created_at") or "")[:10]
+    try:
+        return max(0, (today - date.fromisoformat(raw)).days)
+    except ValueError:
+        return 0
+
+
+def _meeting_rows(meetings: List[Dict[str, Any]], me: set, fmap: Dict[int, List[int]]) -> List[Dict[str, Any]]:
+    """Each meeting with what it gave (_facts), newest first; «decision_texts» for the caller to take."""
+    from app import commitments
+    from app.database import get_meeting
+
+    counts: Dict[int, int] = {}
+    for t in commitments.for_meetings([m["id"] for m in meetings]) if meetings else []:
+        counts[t["meeting_id"]] = counts.get(t["meeting_id"], 0) + 1
+    rows = []
+    for m in sorted(meetings, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True):
+        try:
+            full = get_meeting(m["id"]) or {}
+        except Exception:
+            continue
+        f = _facts(full, me, counts)
+        rows.append({"id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat(),
+                     "time": str(m.get("recorded_at") or "")[11:16], "duration": float(m.get("duration") or 0),
+                     "features": fmap.get(m["id"], []), "series_id": full.get("series_id"),
+                     "decisions": len(f["decisions"]), "tasks": f["tasks"], "my_share": f["my_share"],
+                     "analysed": f["analysed"], "reasons": f["reasons"], "decision_texts": f["decisions"]})
+    _series_reasons(rows)
+    return rows
+
+
+def detail(kind: str, period: str = "week", feature_id: Optional[int] = None, person: str = "",
+           today: Optional[date] = None) -> Dict[str, Any]:
+    """What a widget of the dashboard holds in full (asked by the user: a number could not be opened):
+    meetings (each with its decisions, tasks, the user's share of the talk, «без итогов» reasons), useless
+    (only those), decisions (all of the period), tasks (the user's, open and done), waiting (promised to
+    the user), person (the meetings with someone and the tasks between them)."""
+    from app import commitments
+    from app.database import list_meetings
+    from app.features import feature_map
+    from app.people import canonical, my_names
+
+    kind = kind if kind in DETAILS else "meetings"
+    period = period if period in PERIODS else "week"
+    today = today or date.today()
+    start, end, _prev = _bounds(period, today)
+    fmap = feature_map()
+    me = set(my_names())
+    meetings = [m for m in list_meetings() if _day(m) and m.get("status") not in ("failed", "cancelled")]
+    if feature_id:
+        meetings = [m for m in meetings if feature_id in fmap.get(m["id"], [])]
+    now = [m for m in meetings if start <= _day(m) < end]
+    out: Dict[str, Any] = {"kind": kind, "period": period, "start": start.isoformat(), "end": end.isoformat(),
+                           "feature": feature_id, "needs_me": not me}
+    tasks = commitments.all_tasks()
+    if feature_id:
+        tasks = [t for t in tasks if feature_id in fmap.get(t["meeting_id"], [])]
+    brief = lambda t: {"id": t["id"], "what": t.get("what") or "", "who": t.get("who") or "",  # noqa: E731
+                       "to": t.get("to_whom") or "", "status": t.get("status") or "open", "due_date": t.get("due_date") or "",
+                       "meeting_id": t.get("meeting_id") or 0, "meeting_title": t.get("meeting_title") or "",
+                       "meeting_date": str(t.get("meeting_date") or "")[:10], "at": t.get("at"),
+                       "features": fmap.get(t.get("meeting_id") or 0, []), "days": _days_open(t, today)}
+    if kind in ("meetings", "useless", "decisions"):
+        rows = _meeting_rows(now, me, fmap)
+        if kind == "decisions":
+            out["decisions"] = [{"text": d, "meeting_id": r["id"], "title": r["title"], "date": r["date"],
+                                 "features": r["features"]} for r in rows for d in r["decision_texts"]]
+            return out
+        for r in rows:
+            r.pop("decision_texts", None)
+        if kind == "useless":
+            rows = [r for r in rows if r["reasons"]]
+        out["meetings"] = rows
+        out["hours"] = round(sum(r["duration"] for r in rows) / 3600, 1)
+        by_feature: Dict[int, float] = {}
+        for r in rows:
+            for fid in r["features"] or [0]:
+                by_feature[fid] = by_feature.get(fid, 0.0) + r["duration"]
+        out["by_feature"] = [{"feature": k, "hours": round(v / 3600, 1)} for k, v in sorted(by_feature.items(), key=lambda kv: -kv[1])]
+        return out
+    is_mine = lambda t: (t.get("who") or "").strip().lower() in me  # noqa: E731
+    order = lambda t: (t.get("status") == "done", not (t.get("due_date") and t["due_date"] < today.isoformat()),  # noqa: E731
+                       t.get("due_date") or "9999", t["id"])
+    if kind == "tasks":
+        out["tasks"] = [brief(t) for t in sorted((t for t in tasks if me and is_mine(t)), key=order)]
+        return out
+    if kind == "waiting":
+        out["tasks"] = [brief(t) for t in sorted((t for t in tasks if me and t.get("status") != "done" and not is_mine(t)
+                                                  and (t.get("to_whom") or "").strip().lower() in me), key=order)]
+        return out
+    # a person: every meeting they spoke in (any period), the tasks on them and theirs to the user
+    name = canonical(person.strip()) if person.strip() else ""
+    out["person"] = name
+    low = name.lower()
+    seen = []
+    for m in sorted(meetings, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True):
+        names = {canonical(str((sp or {}).get("name") or "")).lower() for sp in (m.get("speakers") or {}).values() if isinstance(sp, dict)}
+        if low and low in names:
+            seen.append({"id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat(), "duration": float(m.get("duration") or 0)})
+    out["meetings"] = seen[:50]
+    out["meetings_total"] = len(seen)
+    out["owes_me"] = [brief(t) for t in sorted((t for t in tasks if t.get("status") != "done"
+                                               and canonical((t.get("who") or "").strip()).lower() == low), key=order)]
+    out["i_owe"] = [brief(t) for t in sorted((t for t in tasks if t.get("status") != "done" and is_mine(t)
+                                             and canonical((t.get("to_whom") or "").strip()).lower() == low), key=order)]
+    return out
