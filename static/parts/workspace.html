@@ -712,7 +712,7 @@
       <!-- TAB 2: ANALYSIS — sections on the left (dots: made or not), the open one on the right (app.js: renderAnalysis) -->
       <div id="wview-summary" class="hidden flex-1 flex flex-col min-h-0 tab-pane-anim">
         <div id="an-noai" class="an-noai hidden" role="status">
-          <span class="an-noai-text" data-i18n="anNoAiText">Модель анализа не подключена. Готовые разделы видны и копируются; создать новые или обновить — после подключения.</span>
+          <span class="an-noai-text" data-i18n="anNoAiText" data-i18n-title="anNoAiText">Модель анализа не подключена. Готовые разделы видны и копируются; создать новые или обновить — после подключения.</span>
           <button data-click="openLlmPicker" class="an-noai-main" data-i18n="noAiLocal">Выбрать локальную модель</button>
           <button data-click="openModal" data-click-args='["settings", "analysis"]' class="an-noai-alt" data-i18n="noAiCloud">Подключить облачную</button>
         </div>
@@ -776,15 +776,6 @@
                 <div id="analysis-estimate" class="hidden text-[11.5px] -mt-1 flex items-center gap-1.5"></div>
                 <div id="summary-content" class="an-body"></div>
               </div>
-            </div>
-            <div class="an-ask">
-              <input id="custom-summary-prompt" type="text"
-                data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "runCustomQuestion"]'
-                data-i18n-placeholder="anAskPh" placeholder="Спросите о том, что было в этой записи"
-                data-i18n-title="tipAskInput" title="Введите любой вопрос по содержанию встречи"
-                class="an-ask-input" />
-              <button data-click="runCustomQuestion" data-i18n-title="tipAskBtn" title="Отправить вопрос локальной модели ИИ"
-                class="an-ask-btn" data-i18n="askBtn">Спросить</button>
             </div>
           </div>
         </div>
