@@ -145,7 +145,7 @@ class ObsidianTest(unittest.TestCase):
                          "obsidian_filename": "{date} {title}", "obsidian_generate": "false"})
 
     def tearDown(self):
-        update_settings({"obsidian_vault": "", "obsidian_feature_folders": "true", "obsidian_filename": "{date} {title}"})
+        update_settings({"obsidian_vault": "", "obsidian_feature_folders": "true", "obsidian_filename": "{date} {title}", "date_folders": "off"})
         shutil.rmtree(self.vault, ignore_errors=True)
 
     def test_note_is_written_renamed_and_never_overwrites_others(self):
@@ -170,6 +170,26 @@ class ObsidianTest(unittest.TestCase):
         written = obsidian.export_meeting(other["id"])
         self.assertNotEqual(written, foreign)
         self.assertEqual(foreign.read_text(encoding="utf-8"), "моя заметка")
+
+    def test_notes_follow_the_date_folders_and_come_back(self):
+        """Asked by the user: «Папки по дате» turned on, the notes made before go into their date's folders;
+        turned off, they come back and the date folders left empty go."""
+        m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")
+        flat = obsidian.export_meeting(m["id"])
+        base = self.vault / "Meetings" / "2024"
+        self.assertEqual(flat.parent, base)
+        update_settings({"date_folders": "year_month"})
+        obsidian.relayout(wait=True)
+        moved = base / "2024" / "2024-05" / flat.name
+        self.assertTrue(moved.is_file())
+        self.assertFalse(flat.exists())
+        self.assertEqual(database.get_meeting(m["id"])["obsidian_path"], str(moved))
+        self.assertEqual(obsidian.export_meeting(m["id"]), moved)  # a new note goes there too
+        update_settings({"date_folders": "off"})
+        obsidian.relayout(wait=True)
+        self.assertTrue(flat.is_file())
+        self.assertFalse((base / "2024" / "2024-05").exists())
+        self.assertFalse(obsidian.relayout_status()["active"])
 
     def test_user_notes_and_edits_survive_updates(self):
         m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")

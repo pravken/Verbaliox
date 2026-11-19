@@ -179,6 +179,7 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
     was_auto = (before.get("obsidian_auto") or "false") == "true"
     was_economy = (before.get("economy_mode") or "false") == "true"
     was_threads = before.get("cpu_threads") or "auto"
+    was_layout = (before.get("date_folders") or "off", before.get("obsidian_feature_folders") or "true")
     updated = update_settings(values)
     if "economy_mode" in values and (values["economy_mode"] == "true") != was_economy:
         from app import economy
@@ -204,6 +205,16 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
             export_all(missing_only=True)
         except Exception as e:
             print(f"[obsidian] notes of the earlier recordings: {e}", flush=True)
+    now_layout = (values.get("date_folders", was_layout[0]) or "off", values.get("obsidian_feature_folders", was_layout[1]) or "true")
+    if now_layout != was_layout:
+        # the folders of the notes changed (by date, by feature): the notes made before move there, in the
+        # background (asked by the user), and back when it is turned off
+        try:
+            from app.obsidian import relayout
+
+            relayout()
+        except Exception as e:
+            print(f"[obsidian] moving the notes: {e}", flush=True)
     if "dictionary_fuzzy" in values:
         vocab.invalidate()
     if "start_with_windows" in values:
