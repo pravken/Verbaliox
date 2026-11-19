@@ -22,11 +22,21 @@ const DB_WIDGETS = {
   summary: { title: 'dbSummary', sizes: ['S', 'M', 'L', 'W'], icon: '✦' },
   recent: { title: 'homeRecent', sizes: ['S', 'M', 'L', 'W'], host: 'hm-recent', icon: '☰' },
   work: { title: 'hmInWork', sizes: ['S', 'M', 'L'], host: 'hm-queue', icon: '⟳' },
+  // asked by the user («давай делать все»): the next meeting's prep, what is due today, the free time of
+  // the day, the load of the week, the series giving nothing
+  prep: { title: 'dbPrep', sizes: ['S', 'M', 'L', 'W'], icon: '◎' },
+  due: { title: 'dbDue', sizes: ['S', 'M', 'L', 'W'], icon: '!' },
+  free: { title: 'dbFree', sizes: ['S', 'M', 'L'], icon: '◌' },
+  load: { title: 'dbLoad', sizes: ['S', 'M', 'L', 'W'], icon: '▥' },
+  dull: { title: 'dbDull', sizes: ['S', 'M', 'L', 'W'], icon: '↻' },
 };
-const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'L'], ['mytasks', 'M'], ['waiting', 'M'], ['features', 'L'],
-  ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['summary', 'M'], ['recent', 'L']];
+const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'L'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
+  ['free', 'S'], ['load', 'M'], ['features', 'L'], ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['dull', 'M'],
+  ['summary', 'M'], ['recent', 'L']];
 const DB_PERIODS = ['week', 'month', 'quarter'];
-const DB_NEW_WIDGETS = ['waiting'];  // added after the first dashboard: offered once to an existing layout
+// added after the first dashboard: offered once to an existing layout, after the widget named (removed by
+// the user, it stays out)
+const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['prep', 'week'], ['due', 'prep'], ['free', 'waiting'], ['load', 'free'], ['dull', 'decisions']];
 
 const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false };
 
@@ -39,14 +49,15 @@ function dbPrefs() {
   // removed by the user, it stays out
   const offered = Array.isArray(p.offered) ? p.offered : [];
   if (layout && layout.length) {
-    for (const id of DB_NEW_WIDGETS) {
+    for (const [id, after] of DB_NEW_WIDGETS) {
       if (offered.includes(id) || layout.some(w => w.id === id)) continue;
-      const at = layout.findIndex(w => w.id === 'mytasks');
-      layout.splice(at < 0 ? layout.length : at + 1, 0, { id, size: 'M' });
+      const at = layout.findIndex(w => w.id === after);
+      layout.splice(at < 0 ? layout.length : at + 1, 0, { id, size: DB_WIDGETS[id].sizes.includes('M') ? 'M' : DB_WIDGETS[id].sizes[0] });
     }
   }
   return DB.prefs = {
-    offered: [...new Set([...offered, ...DB_NEW_WIDGETS])],
+    offered: [...new Set([...offered, ...DB_NEW_WIDGETS.map(([id]) => id)])],
+    norm: [2, 3, 4, 5, 6].includes(Number(p.norm)) ? Number(p.norm) : 4,
     layout: layout && layout.length ? layout : DB_DEFAULT.map(([id, size]) => ({ id, size })),
     period: DB_PERIODS.includes(p.period) ? p.period : 'week',
     feature: Number(p.feature) || 0,
@@ -183,6 +194,19 @@ function dbRenderHead() {
     if (last) last.setDate(last.getDate() - 1);
     sub.textContent = d ? `${t(`dbPeriodName_${p.period}`)}: ${fmt(d.start)} – ${fmt(last.toISOString().slice(0, 10))}` : '';
   }
+  // How far the period is (asked by the user: «сколько дней прошло»): a bar and «Прошло 4 дня из 7»
+  const prog = document.getElementById('db-progress');
+  if (prog) {
+    prog.classList.toggle('hidden', !d);
+    if (d) {
+      const a = new Date(`${d.start}T00:00:00`), b = new Date(`${d.end}T00:00:00`), now = new Date();
+      const all = Math.round((b - a) / 864e5), pct = Math.max(0, Math.min(100, (now - a) / (b - a) * 100));
+      const done = Math.max(0, Math.min(all, Math.floor((now - a) / 864e5)));
+      const label = t('dbPeriodProgress').replace('{done}', () => plural(done, t('dbDayForms'))).replace('{all}', () => all);
+      prog.innerHTML = `<i class="db-progress-bar"><i style="width:${pct.toFixed(1)}%"></i></i><span>${escapeHtml(label)}</span>`;
+      prog.setAttribute('aria-label', label);
+    }
+  }
   document.getElementById('db-periods').innerHTML = DB_PERIODS.map(k =>
     `<button role="radio" aria-checked="${p.period === k}" class="tk-seg-btn${p.period === k ? ' tk-on' : ''}" data-click="setDashPeriod" data-click-args='["${k}"]'>${escapeHtml(t(`dbPeriod_${k}`))}</button>`).join('');
   const f = p.feature ? featureById(p.feature) : null;
@@ -193,14 +217,166 @@ function dbRenderHead() {
   document.getElementById('db-edit-btn').setAttribute('aria-pressed', DB.edit ? 'true' : 'false');
 }
 
-function dbNum(n) { return String(n).replace('.', state.uiLang === 'en' ? '.' : ','); }
+function dbNum(n) { return String(n); }  // a point for fractions in both languages (asked by the user)
+
+// --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
+// They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
+const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load'];
+const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load'];  // redrawn as the time goes (dbTickNow)
+
+// The meeting going on or the next one of today (not an all-day one); null when there is none left
+function dbNextMeeting() {
+  const now = Date.now();
+  const list = (typeof home !== 'undefined' ? home.events : []).filter(e => !e.all_day && e.e.getTime() > now)
+    .sort((x, y) => x.s - y.s);
+  return list[0] || null;
+}
+
+// «через 12 мин», «через 1 ч 05 мин»
+function dbIn(ms) {
+  const m = Math.max(1, Math.round(ms / 60e3));
+  return t('dbInMin').replace('{t}', () => dbHm(m * 60));
+}
+
+// On the line of «now» of the week: « · через 12 мин» to the next meeting of today, « · идёт» during one
+function dbNextIn() {
+  const e = dbNextMeeting();
+  if (!e) return '';
+  const now = Date.now();
+  // short: the pill stands on a narrow day column
+  return `<span class="db-now-next"> → ${escapeHtml(e.s.getTime() <= now ? t('dbNowLive') : dbHm((e.s.getTime() - now) / 1000))}</span>`;
+}
+
+// «Перед встречей»: the next meeting, when, who, and what is open from the last time (series.before_meeting)
+function dbPrepHtml(size) {
+  if (typeof home === 'undefined' || !home.calConfigured) return `<div class="db-note">${escapeHtml(t('hmCalOff'))}</div>`;
+  const e = dbNextMeeting();
+  if (!e) return `<div class="db-note">${escapeHtml(t('dbNoMoreMeetings'))}</div>`;
+  const now = Date.now(), pad = n => String(n).padStart(2, '0');
+  const live = e.s.getTime() <= now;
+  const when = live ? t('dbLiveLeft').replace('{t}', () => dbHm((e.e.getTime() - now) / 1000)) : dbIn(e.s.getTime() - now);
+  const soon = !live && e.s.getTime() - now <= 5 * 60e3;
+  const people = (e.attendees || []).map(a => String(a).replace(/@.*$/, '')).filter(Boolean);
+  const bf = e.before;
+  const tasks = bf && (bf.tasks || []).length
+    ? `<div class="db-prep-sec">${escapeHtml(t('dbPrepOpen').replace('{n}', () => bf.open_tasks))}</div>`
+      + bf.tasks.slice(0, size === 'S' ? 2 : 5).map(x => `<div class="db-prep-task"><span class="db-prep-what">${escapeHtml(x.what)}</span>`
+        + `<span class="db-prep-who">${escapeHtml([x.who, x.to_whom ? `→ ${x.to_whom}` : ''].filter(Boolean).join(' '))}</span></div>`).join('')
+    : '';
+  const last = bf
+    ? `<button class="db-more" data-click="openMeeting" data-click-args='[${Number(bf.last.id)}]'>${escapeHtml(t('dbPrepLast').replace('{title}', () => bf.last.title).replace('{date}', () => dbAgo(bf.last.date, DB.data ? DB.data.today : bf.last.date)))}</button>`
+    : `<span class="db-note">${escapeHtml(t('dbPrepFirst'))}</span>`;
+  const brief = bf
+    ? `<button class="tk-btn tk-btn-sm" data-click="openBriefFor" data-click-args='${escapeHtml(JSON.stringify(bf.series_id ? ['series', bf.series_id] : ['person', bf.person]))}'>${escapeHtml(t('dbPrepBrief'))}</button>` : '';
+  return `<div class="db-prep${soon ? ' soon' : ''}${live ? ' live' : ''}">`
+    + `<div class="db-prep-when"><b>${escapeHtml(when)}</b><span>${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}</span></div>`
+    + `<div class="db-prep-title">${escapeHtml(e.title || t('hmUntitled'))}</div>`
+    + `<div class="db-prep-people">${escapeHtml(people.length ? people.slice(0, 6).join(', ') + (people.length > 6 ? ` +${people.length - 6}` : '') : (e.online ? t('hmOnline') : (e.location || t('hmInPerson'))))}</div>`
+    + tasks + `<div class="db-prep-foot">${last}<span class="flex-1"></span>${brief}</div></div>`;
+}
+
+// «Горит сегодня»: the tasks due today or overdue, mine and those promised to me, overdue first
+function dbDueHtml(d, size) {
+  if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))} <button class="db-more" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button></div>`;
+  const today = d.today;
+  const hot = x => x.due_date && x.due_date <= today;
+  const list = [...(d.tasks || []).filter(hot).map(x => ({ ...x, mine: true })), ...(d.waiting || []).filter(hot).map(x => ({ ...x, mine: false }))]
+    .sort((x, y) => (x.due_date < y.due_date ? -1 : x.due_date > y.due_date ? 1 : 0));
+  if (!list.length) return `<div class="db-note db-ok">${escapeHtml(t('dbDueNone'))}</div>`;
+  const n = size === 'S' ? 3 : size === 'W' ? 10 : 6;
+  return list.slice(0, n).map(x => `<div class="db-task db-task-due">`
+    + (x.mine ? `<button class="db-ck" data-click="dashTaskDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
+    + `<button class="db-tt" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'>${escapeHtml(x.what)}`
+    + `<small>${escapeHtml(x.mine ? t('dbDueMine') : t('dbDueFrom').replace('{who}', () => x.who || '—'))}</small></button>`
+    + `${dbDue(x, today)}</div>`).join('') + (list.length > n ? `<div class="db-note">${escapeHtml(t('dbMoreN').replace('{n}', () => list.length - n))}</div>` : '');
+}
+
+// The busy times of a list of [start, end] (ms), merged
+function dbMerge(spans) {
+  const out = [];
+  for (const [a, b] of spans.filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b); else out.push([a, b]);
+  }
+  return out;
+}
+
+// «Свободное время»: the windows of 30 minutes or more left in the working day between the meetings
+function dbFreeHtml() {
+  if (typeof home === 'undefined' || !home.calConfigured) return `<div class="db-note">${escapeHtml(t('hmCalOff'))}</div>`;
+  const d = hmDay(), now = Date.now();
+  const from = Math.max(now, d.from.getTime()), to = d.to.getTime();
+  if (from >= to) return `<div class="db-note">${escapeHtml(t('dbDayOver'))}</div>`;
+  const busy = dbMerge(home.events.filter(e => !e.all_day).map(e => [Math.max(e.s.getTime(), from), Math.min(e.e.getTime(), to)]));
+  const gaps = [];
+  let at = from;
+  for (const [a, b] of busy) { if (a - at >= 30 * 60e3) gaps.push([at, a]); at = Math.max(at, b); }
+  if (to - at >= 30 * 60e3) gaps.push([at, to]);
+  if (!gaps.length) return `<div class="db-note">${escapeHtml(t('dbNoFree'))}</div>`;
+  const pad = n => String(n).padStart(2, '0'), clock = ms => { const x = new Date(ms); return `${pad(x.getHours())}:${pad(x.getMinutes())}`; };
+  const total = gaps.reduce((sum, [a, b]) => sum + (b - a), 0);
+  return `<div class="db-free-sum">${escapeHtml(t('dbFreeSum').replace('{t}', () => dbHm(total / 1000)))}</div>`
+    + gaps.map(([a, b]) => `<div class="db-free-row${a <= now + 60e3 ? ' now' : ''}"><span class="db-free-t">${clock(a)}–${clock(b)}</span>`
+      + `<span class="db-free-len">${escapeHtml(dbHm((b - a) / 1000))}</span></div>`).join('');
+}
+
+// «Нагрузка недели»: the hours of meetings of each day of the week against the user's norm (a click on
+// the norm changes it: 2–6 h, kept on this computer). The calendar's meetings, or the recordings without one
+function dbLoadHtml() {
+  const w = DB.week;
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', today = calKey(new Date());
+  const norm = dbPrefs().norm;
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const x = new Date(a); x.setDate(a.getDate() + i);
+    const k = calKey(x);
+    const spans = [...(w.events || []).filter(e => !e.all_day).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()]),
+      ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
+      .filter(([s]) => calKey(new Date(s)) === k);
+    const hours = dbMerge(spans).reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
+    if (i < 5 || hours) days.push({ x, k, hours });
+  }
+  const top = Math.max(norm * 1.5, ...days.map(d => d.hours));
+  const sum = days.reduce((s, d) => s + d.hours, 0);
+  return `<div class="db-load-head">${escapeHtml(t('dbLoadSum').replace('{h}', () => dbNum(Math.round(sum * 10) / 10)))}`
+    + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
+    + `<div class="db-load"><i class="db-load-norm" style="bottom:${Math.round(norm / top * 100)}%"></i>` + days.map(d => {
+      const over = d.hours > norm;
+      return `<div class="db-load-day${d.k === today ? ' today' : ''}${d.k < today ? ' past' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(d.hours * 10) / 10)} ${t('dbHoursShort')}`)}">`
+        + `<span class="db-load-v">${d.hours ? dbNum(Math.round(d.hours * 10) / 10) : ''}</span>`
+        + `<i class="db-load-bar${over ? ' over' : ''}" style="height:${Math.round(d.hours / top * 100)}%"></i>`
+        + `<span class="db-load-d">${escapeHtml(d.x.toLocaleDateString(lang, { weekday: 'short' }))}</span></div>`;
+    }).join('') + '</div>';
+}
+
+function dbCycleNorm() {
+  const norms = [2, 3, 4, 5, 6];
+  dbSave({ norm: norms[(norms.indexOf(dbPrefs().norm) + 1) % norms.length] });
+  renderDashboard();
+}
+
+// «Серии без отдачи»: series whose last meetings, three or more in a row, gave no decision and no task
+// (app/dashboard._dull_series); a click opens the latest one
+function dbDullHtml(d) {
+  const list = d.dull_series || [];
+  if (!list.length) return `<div class="db-note db-ok">${escapeHtml(t('dbDullNone'))}</div>`;
+  return list.map(x => `<button class="db-dull" data-click="openMeeting" data-click-args='[${Number(x.last.id)}]' title="${escapeHtml(t('dbDullTip'))}">`
+    + `<span class="db-dull-name">${escapeHtml(x.name)}</span>`
+    + `<span class="db-dull-sub">${escapeHtml(t('dbDullStreak').replace('{n}', () => x.streak).replace('{h}', () => dbNum(x.hours)))}</span></button>`).join('');
+}
 
 function dbWidgetHtml(id, size) {
   const d = DB.data;
-  if (!d && id !== 'week') return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  if (!d && !DB_LOCAL_WIDGETS.includes(id)) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
   switch (id) {
     case 'kpis': return dbKpis(d);
     case 'week': return dbWeek();
+    case 'prep': return dbPrepHtml(size);
+    case 'due': return dbDueHtml(d, size);
+    case 'free': return dbFreeHtml();
+    case 'load': return dbLoadHtml();
+    case 'dull': return dbDullHtml(d);
     case 'mytasks': return dbTasks(d, size);
     case 'waiting': return dbWaitingHtml(d, size);
     case 'features': return dbFeatures(d, size);
@@ -293,7 +469,7 @@ function dbWeek() {
     if (k === today) {
       const begun = list.filter(it => it.at.getTime() <= now), ahead = list.filter(it => it.at.getTime() > now);
       return `<div class="db-day today"><div class="db-past">${head}${begun.map(item).join('')}</div>`
-        + `<div class="db-now"><b>${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}</b></div>${ahead.map(item).join('')}</div>`;
+        + `<div class="db-now"><b>${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}${dbNextIn()}</b></div>${ahead.map(item).join('')}</div>`;
     }
     return `<div class="db-day${k < today ? ' db-day-past' : ''}">${head}${list.map(item).join('')}</div>`;
   }).join('') + '</div>';
@@ -664,7 +840,14 @@ function dbTickNow() {
   if (state.appView !== 'dashboard') return;
   const day = new Date().toDateString();
   if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
-  if (!DB.edit && !DB.drag) document.querySelectorAll('#db-grid .db-w-week .db-c').forEach(c => { c.innerHTML = dbWeek(); });
+  if (!DB.edit && !DB.drag) {
+    dbPrefs().layout.forEach((w, i) => {
+      if (!DB_TIME_WIDGETS.includes(w.id)) return;
+      const c = document.querySelector(`#db-grid .db-w[data-i="${i}"] .db-c`);
+      if (c) c.innerHTML = dbWidgetHtml(w.id, dbSize(w));
+    });
+  }
+  dbRenderHead();
   if (typeof renderHomeNow === 'function') renderHomeNow();
 }
 setInterval(dbTickNow, 30000);

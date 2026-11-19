@@ -23,6 +23,7 @@ class BeforeMeetingTest(unittest.TestCase):
         info = series.before_meeting("Планёрка отдела 19.11", [])
         self.assertEqual(info["series_id"], sid)
         self.assertEqual(info["last"]["id"], m["id"])
+        self.assertEqual((info["open_tasks"], info["tasks"]), (0, []))  # the tasks themselves for the dashboard
         self.assertIsNone(series.before_meeting("Совсем другое", []))
 
         now = datetime(2026, 11, 19, 9, 55)
