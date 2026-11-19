@@ -1463,7 +1463,16 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .as-a-failed .as-actions { margin: 0; }
 .as-pill-off { background: rgba(255, 179, 64, 0.14); color: #FFC56B; cursor: pointer; }
 .an-noai.hidden { display: none; }
-.an-noai-text { flex: 1 1 360px; }
+.an-noai-text { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-noai { flex-wrap: nowrap; padding-top: 7px; padding-bottom: 7px; }
+/* the head keeps «Пересоздать», «Копировать» and «⋯»: the rest is in «⋯» (static/js/app.js openAnalysisMenu);
+   these buttons only keep the state of what applies */
+#an-cfg-btn, #an-edit-btn, #an-exp-btn, #an-wavy-btn { display: none !important; }
+/* the model is a quiet word by the title, not a button among the buttons */
+#an-model-btn { border: 0; background: none; padding: 0 4px; height: 24px; color: var(--hc-dim, #8E8E93); }
+#an-model-btn:hover { color: #F5F5F7; }
+/* a section not made yet is quieter than the made ones */
+.an-navi:has(.an-dot-empty):not(.an-navi-on) .an-navi-label { opacity: 0.6; }
 .an-noai-main, .an-noai-alt { height: 28px; padding: 0 12px; border-radius: 7px; font-size: var(--fs-ui); }
 .an-noai-main { background: #FF9F0A; color: #1C1C1E; font-weight: 600; }
 .an-noai-alt { border: 1px solid rgba(255, 159, 10, 0.5); color: #FFD08A; }
