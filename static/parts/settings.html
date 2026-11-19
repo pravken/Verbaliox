@@ -166,6 +166,21 @@
           </div>
           <button id="ffmpeg-download-btn" data-click="installFfmpeg" class="hidden ui-btn ui-btn-primary shrink-0" data-i18n="ffmpegDownloadBtn">Скачать FFmpeg</button>
         </div>
+        <!-- Theme: the accent and the background from presets (applyTheme in static/js/core.js) -->
+        <div class="settings-card space-y-3">
+          <div>
+            <h4 class="text-[13px] font-semibold text-white" data-i18n="themeTitle">Оформление</h4>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="themeDesc">Цвет выделенных кнопок и отметок и цвет фона. Меняется сразу.</p>
+          </div>
+          <div>
+            <div class="text-[11.5px] text-apple-secondary mb-1.5" data-i18n="themeAccent">Акцент</div>
+            <div id="theme-accents" class="theme-row" role="radiogroup" data-i18n-aria="themeAccent" aria-label="Акцент"></div>
+          </div>
+          <div>
+            <div class="text-[11.5px] text-apple-secondary mb-1.5" data-i18n="themeBg">Фон</div>
+            <div id="theme-bgs" class="theme-row" role="radiogroup" data-i18n-aria="themeBg" aria-label="Фон"></div>
+          </div>
+        </div>
         <!-- Interface scale: CSS zoom on the page (applyUiScale in static/js/core.js) -->
         <div class="settings-card !space-y-0 flex items-center justify-between gap-3">
           <div class="min-w-0">

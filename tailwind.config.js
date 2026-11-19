@@ -8,15 +8,16 @@ module.exports = {
         sans: ['"Inter Variable"', '"Segoe UI Variable Text"', '"Segoe UI"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono Variable"', '"Cascadia Mono"', 'Consolas', 'monospace'],
       },
+      // the theme's colours are variables (static/styles.css :root, set by applyTheme in static/js/core.js)
       colors: {
         apple: {
-          bg: '#141416',
-          sidebar: '#1C1C1E',
-          card: '#242426',
-          elevated: '#2C2C2E',
+          bg: 'rgb(var(--bg-rgb) / <alpha-value>)',
+          sidebar: 'rgb(var(--sidebar-rgb) / <alpha-value>)',
+          card: 'rgb(var(--card-rgb) / <alpha-value>)',
+          elevated: 'rgb(var(--elevated-rgb) / <alpha-value>)',
           border: 'rgba(255, 255, 255, 0.08)',
-          blue: '#0A84FF',
-          blueHover: '#0070E0',
+          blue: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          blueHover: 'rgb(var(--accent-lo-rgb) / <alpha-value>)',
           red: '#FF453A',
           green: '#30D158',
           amber: '#FF9F0A',

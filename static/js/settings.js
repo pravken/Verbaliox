@@ -83,6 +83,35 @@ async function setUiScale(v) {
   if (state.system) state.system.settings = data.settings;
 }
 
+// Settings → General → «Оформление»: the accent and the background, applied at once and saved
+function renderThemeChoices() {
+  const set = (state.system && state.system.settings) || {};
+  const accent = THEME_ACCENTS[set.ui_accent] ? set.ui_accent : 'blue', bg = THEME_BGS[set.ui_bg] ? set.ui_bg : 'graphite';
+  const box = (id, list, cur, kind, color) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = Object.keys(list).map(k => `<button role="radio" aria-checked="${k === cur}" class="theme-sw${k === cur ? ' on' : ''}" `
+      + `data-click="setTheme" data-click-args='["${kind}", "${k}"]' title="${escapeHtml(t(`theme_${kind}_${k}`))}" aria-label="${escapeHtml(t(`theme_${kind}_${k}`))}">`
+      + `<i style="background:${color(list[k])}"></i><span>${escapeHtml(t(`theme_${kind}_${k}`))}</span></button>`).join('');
+  };
+  box('theme-accents', THEME_ACCENTS, accent, 'accent', c => c[0]);
+  box('theme-bgs', THEME_BGS, bg, 'bg', c => `linear-gradient(135deg, ${c[0]} 0 50%, ${c[3]} 50% 100%)`);
+}
+
+async function setTheme(kind, value) {
+  const set = (state.system && state.system.settings) || {};
+  const accent = kind === 'accent' ? value : (set.ui_accent || 'blue'), bg = kind === 'bg' ? value : (set.ui_bg || 'graphite');
+  applyTheme(accent, bg);
+  if (state.system) state.system.settings = { ...set, ui_accent: accent, ui_bg: bg };
+  renderThemeChoices();
+  const res = await fetch('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { ui_accent: accent, ui_bg: bg } }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { showError(data.detail); return; }
+  if (state.system) state.system.settings = data.settings;
+}
+
 // The computer's device in the interface language: the server names the processor in Russian
 function hwDeviceLabel(hw) {
   return hw && hw.cuda_available ? (hw.device_name || '—') : t('hwCpuName');
@@ -104,6 +133,8 @@ async function loadSystemInfo() {
       setUiScale(near);
     } else applyUiScale(ownScale);
     renderUiScaleButtons();
+    applyTheme((data.settings || {}).ui_accent, (data.settings || {}).ui_bg);
+    renderThemeChoices();
 
     const hw = data.hardware;
     document.getElementById('hw-text').textContent = hw.cuda_available

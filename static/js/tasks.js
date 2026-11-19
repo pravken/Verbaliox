@@ -911,11 +911,11 @@ function renderTasksReport() {
     .map(([v, l, c]) => `<div class="tk-kpi"><div class="tk-kpi-v ${c}">${escapeHtml(String(v))}</div><div class="tk-dim tk-small">${escapeHtml(l)}</div></div>`).join('')}
       </section>
       <section class="tk-rsec"><div class="tk-cap tk-legend">${escapeHtml(t('tkByPeopleCap'))}<span class="tk-grow"></span>
-          <span><i class="tk-sw" style="background:#30D158"></i>${escapeHtml(t('tkLDone'))}</span><span><i class="tk-sw" style="background:#0A84FF"></i>${escapeHtml(t('tkLOpen'))}</span><span><i class="tk-sw" style="background:#FF6961"></i>${escapeHtml(t('tkLOver'))}</span></div>
+          <span><i class="tk-sw" style="background:#30D158"></i>${escapeHtml(t('tkLDone'))}</span><span><i class="tk-sw" style="background:var(--accent)"></i>${escapeHtml(t('tkLOpen'))}</span><span><i class="tk-sw" style="background:#FF6961"></i>${escapeHtml(t('tkLOver'))}</span></div>
         ${who.length ? who.map(r => `<button class="tk-bar-row${TK.people.length === 1 && TK.people[0] === r.k ? ' tk-on' : ''}" ${pageCall('click', 'pickTasksPerson', [r.k])}
             title="${escapeHtml(t('tkBarTitle').replace('{name}', () => r.name).replace('{d}', () => r.d).replace('{w}', () => r.w).replace('{o}', () => r.o))}">
             <span class="tk-ell">${escapeHtml(r.name)}</span>
-            <span class="tk-bars"><span style="width:${(r.d / max) * 100}%;background:#30D158"></span><span style="width:${(r.w / max) * 100}%;background:#0A84FF"></span><span style="width:${(r.o / max) * 100}%;background:#FF6961"></span></span>
+            <span class="tk-bars"><span style="width:${(r.d / max) * 100}%;background:#30D158"></span><span style="width:${(r.w / max) * 100}%;background:var(--accent)"></span><span style="width:${(r.o / max) * 100}%;background:#FF6961"></span></span>
             <span class="tk-ratio">${r.d}/${r.n}</span></button>`).join('') : `<span class="tk-hint">${escapeHtml(t('tkNoTasksInPeriod'))}</span>`}
         ${who.length ? `<span class="tk-hint">${escapeHtml(t('tkBarHint'))}</span>` : ''}</section>
       <section class="tk-rsec"><div class="tk-cap">${escapeHtml(t('tkTextCap'))}</div>
