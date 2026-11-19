@@ -111,6 +111,54 @@ def parse_moments(answer: str, duration: float) -> List[Dict[str, Any]]:
     return out
 
 
+DIGEST_SEC = 300.0  # «Выжимка»: about five minutes
+_TIME_RE = re.compile(r"\[?(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\]?")
+
+
+def analysis_moments(m: Dict[str, Any], budget: float = DIGEST_SEC) -> List[Dict[str, Any]]:
+    """«Выжимка» of a meeting from what its analysis already found (asked by the user: for whoever missed it),
+    no new request to a model: the moments of its decisions (the times the overview's «Решения» link to),
+    of its tasks (the moment each was said), the starts of its chapters; about `budget` seconds, the
+    decisions first, then the tasks, then the chapters; in the order of the recording."""
+    from app.features import decisions_of
+
+    duration = float(m.get("duration") or 0) or max((float(s.get("end") or 0) for s in m.get("segments") or []), default=0.0)
+    summaries = m.get("summaries") or {}
+    found: List[tuple] = []  # (priority, start, end, title)
+
+    def at(text: str) -> Optional[float]:
+        t = _TIME_RE.search(text or "")
+        return None if not t else _sec(t.group(1), t.group(2), t.group(3))
+
+    for d in decisions_of(summaries.get("protocol") or ""):
+        s = at(d)
+        if s is not None:
+            found.append((0, s - 8, s + 25, re.sub(r"\s*\[[^\]]*\]\s*", " ", d).strip()))
+    try:
+        from app import commitments
+
+        for t in commitments.for_meetings([int(m["id"])]) if m.get("id") else []:
+            if t.get("at") is not None:
+                found.append((1, float(t["at"]) - 8, float(t["at"]) + 20, f"{t.get('who') or ''}: {t.get('what') or ''}".strip(": ")))
+    except Exception:
+        pass
+    for line in (summaries.get("chapters") or "").splitlines():
+        s = at(line)
+        if s is not None:
+            found.append((2, s, s + 15, _TIME_RE.sub("", line).strip(" -*•—–|")))
+    chosen: List[Dict[str, Any]] = []
+    used = 0.0
+    for prio, a, b, title in sorted(found, key=lambda x: (x[0], x[1])):
+        a, b = max(0.0, a), min(b, duration or b)
+        if b - a < 3 or any(a < c["end"] and c["start"] < b for c in chosen):
+            continue  # too short, or the same place said again
+        if used + (b - a) > budget:
+            continue
+        chosen.append({"start": a, "end": b, "title": title[:120], "kind": ("decision", "task", "chapter")[prio]})
+        used += b - a
+    return sorted(chosen, key=lambda x: x["start"])
+
+
 def pick_highlights(m: Dict[str, Any], model_name: Optional[str] = None, answer_lang: str = "ru") -> List[Dict[str, Any]]:
     from app.database import is_local_only
     from app.llm import target
