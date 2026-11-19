@@ -34,6 +34,9 @@ CHOICES = {"llm_provider": {"ollama", "cloud"}, "date_folders": {"off", "day", "
            # the memory left to the system (app/mem_reserve.py)
            # GigaAM / Parakeet on the video card or always on the processor (app/onnx_gpu.gpu_for_job)
            "economy_for": {"0", "30", "60", "120", "240", "day"},
+           # the theme (static/js/core.js THEME_ACCENTS, THEME_BGS)
+           "ui_accent": {"blue", "indigo", "purple", "pink", "teal", "mint", "graphite"},
+           "ui_bg": {"graphite", "black", "midnight", "forest", "warm"},
            "cpu_threads": {"auto", "2", "4", "6", "8", "12", "16", "all"},
            "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},

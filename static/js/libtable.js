@@ -68,7 +68,7 @@ function ltStatus(m) {
   if (m.status === 'cleared') return [t('statusClearedShort'), '#8E8E93', 4];
   if (m.status === 'added') return [t('statusAddedShort'), '#8E8E93', 5];
   if (m.has_summary) return [t('ltAnalysed'), '#30D158', 7];
-  return [t('ltTranscribed'), '#0A84FF', 6];
+  return [t('ltTranscribed'), 'var(--accent)', 6];  // the theme's accent
 }
 
 // Open tasks of each recording (the tasks page's list, loaded when the column is shown)
