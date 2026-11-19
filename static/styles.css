@@ -921,6 +921,16 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-rec-on .tb-rec-dot, .tb-rec-busy .tb-rec-dot { width: 9px; height: 9px; }
 .tb-rec-on .tb-rec-dot { animation: tb-blink 1s steps(2, start) infinite; }
 .tb-rec-wrap .tb-pop { left: auto; right: 0; }
+.tb-rec-wrap { display: inline-flex; align-items: center; gap: 3px; }
+.tb-rec-more { height: 34px; width: 22px; border-radius: 0 17px 17px 0; margin-left: -1px; color: #FF8A80; background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.6); font-size: 10px; line-height: 1; }
+.tb-rec-more:hover { background: rgba(255, 69, 58, 0.24); }
+.tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+.tb-tab.hidden, .tb-rec-more.hidden { display: none; }
+.tb-tab-live, .tb-tab-live:hover { color: #FF8A80; }
+.rec-mh { padding: 4px 10px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8E8E93); }
+.rec-mi { display: flex; align-items: center; gap: 8px; }
+.rec-mi-mark { width: 16px; flex: none; text-align: center; color: #4DA3FF; }
+.rec-mi-key { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
 .tb-rec-clock { font-family: var(--font-mono); font-weight: 500; font-size: var(--fs-ui); color: #FFFFFF; }
 @keyframes tb-blink { 50% { opacity: 0.35; } }
 /* While recording: the microphone and the computer sound, each an icon with three bars that move

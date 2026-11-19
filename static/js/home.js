@@ -102,7 +102,8 @@ function renderHomeNow() {
   document.getElementById('hm-weekday').textContent = `${now.toLocaleDateString(loc, { weekday: 'long' })} · ${now.getFullYear()}`.toUpperCase();
   const h = now.getHours();
   document.getElementById('hm-greeting').textContent = t(h < 5 ? 'hmNight' : h < 12 ? 'hmMorning' : h < 18 ? 'homeHello' : 'hmEvening');
-  document.getElementById('hm-dict-key').textContent = hmSettings().dictation_hotkey || 'Ctrl+Alt+D';
+  const dk = document.getElementById('hm-dict-key');
+  if (dk) dk.textContent = hmSettings().dictation_hotkey || 'Ctrl+Alt+D';
   renderHomeRecent();
   const meetings = renderHomeMeetings();
   const queue = renderHomeQueue();
@@ -629,12 +630,12 @@ function hmDictShow(mode, text) {
   document.getElementById('hm-dict-done').classList.toggle('hidden', mode !== 'listen');
   document.getElementById('hm-dict-copy').classList.toggle('hidden', mode !== 'done');
   document.getElementById('hm-dict-cancel').textContent = t(mode === 'done' ? 'close' : 'cancel');
-  document.getElementById('hm-dict-btn').classList.toggle('hm-qa-on', mode === 'listen');
+  document.getElementById('hm-dict-btn')?.classList.toggle('hm-qa-on', mode === 'listen');
 }
 
 function hmDictHide() {
   document.getElementById('hm-dict').classList.add('hidden');
-  document.getElementById('hm-dict-btn').classList.remove('hm-qa-on');
+  document.getElementById('hm-dict-btn')?.classList.remove('hm-qa-on');
 }
 
 async function hmDictCancel() {
