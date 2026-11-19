@@ -652,6 +652,25 @@ function renderDashDrawer() {
   grid.addEventListener('dragend', () => { DB.drag = null; grid.querySelectorAll('.db-dragging, .db-drop').forEach(x => x.classList.remove('db-dragging', 'db-drop')); });
 })();
 
+// The time on the dashboard follows by itself (reported by the user: the «now» of the week and of the
+// day froze, above all after the window was restored from the tray or the taskbar). Every 30 s while it is
+// seen, and at once when the window comes back: the week's widget is redrawn from what is loaded (no
+// request), the day's meetings by home.js; a new day loads its week and numbers again. The open calendar
+// window follows too (its past meetings and today)
+let _dbDay = new Date().toDateString();
+function dbTickNow() {
+  if (document.hidden) return;
+  if (document.getElementById('cal-view') && typeof renderCalendarView === 'function') renderCalendarView();
+  if (state.appView !== 'dashboard') return;
+  const day = new Date().toDateString();
+  if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
+  if (!DB.edit && !DB.drag) document.querySelectorAll('#db-grid .db-w-week .db-c').forEach(c => { c.innerHTML = dbWeek(); });
+  if (typeof renderHomeNow === 'function') renderHomeNow();
+}
+setInterval(dbTickNow, 30000);
+document.addEventListener('visibilitychange', dbTickNow);
+window.addEventListener('focus', dbTickNow);
+
 registerView('dashboard', {
   show: () => {
     // the greeting and the date of the former home page in the head of the dashboard
