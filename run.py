@@ -694,23 +694,21 @@ class TrayController:
 
     # ---- menu
     def menu_items(self):
+        """Only what is used from the tray (asked by the user: the menu had too much): the window, recording,
+        dictation, the two modes, exit. Importing, the last recording, settings and the rest are in the window;
+        the quiet mode in Settings → Общие."""
         st = self._status
+        status = [(st["text"], None, self._mf_grayed)] if st.get("text") and st.get("state") != "idle" else []
         return [
             ("Открыть Verbaliox", "open", self._mf_default),
+            *status,
             (None, None, 0),
-            (st.get("text") or "Готово к работе", None, self._mf_grayed),
             *self._quick_record_item(st),
             *self._record_items(st),
-            ("Импорт файлов…", "import", 0),
             *self._dictation_item(st),
-            ("Открыть последнюю запись", "last", 0),
-            ("Вопрос по медиатеке…", "ask", 0),
             (None, None, 0),
-            ("Тихий режим (без уведомлений)", "quiet", 0x8 if self._quiet() else 0),  # MF_CHECKED
-            ("Не мешать на встречах", "meetings_quiet", 0x8 if self._meetings_quiet() else 0),
+            ("Не мешать на встречах", "meetings_quiet", 0x8 if self._meetings_quiet() else 0),  # MF_CHECKED
             *self._economy_items(),
-            ("Настройки…", "settings", 0),
-            ("Открыть папку данных", "data", 0),
             (None, None, 0),
             ("Выход", "quit", 0),
         ]
@@ -732,7 +730,7 @@ class TrayController:
         return [("Диктовка" + (f"\t{key}" if key else ""), "hotkey_dictation", 0)]
 
     def _record_items(self, st):
-        """One entry per recording preset (app.js BUILTIN_PRESETS + the user's own)."""
+        """The recording presets (app.js BUILTIN_PRESETS + the user's own) in one submenu."""
         if st.get("recording"):
             key = getattr(self, "_hotkey_spec", "")
             return [("■ Остановить запись" + (f"\t{key}" if key else ""), "record", 0)]
@@ -748,8 +746,8 @@ class TrayController:
         except ValueError:
             pass
         default = settings.get("record_default_preset") or "call"
-        return [(f"Запись: {name}" + ("  ★" if pid == default else ""), f"record:{pid}", 0)
-                for pid, name in presets[:12]]
+        return [("Запись с настройкой", [(name + ("  ★" if pid == default else ""), f"record:{pid}", 0)
+                                          for pid, name in presets[:12]], 0)]
 
     def on_command(self, cmd: str) -> None:
         if cmd == "quiet":

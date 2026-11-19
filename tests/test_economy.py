@@ -99,6 +99,22 @@ class EconomyTest(unittest.TestCase):
         self.assertEqual(get_all_settings()["economy_mode"], "false")
         self.assertEqual(get_all_settings()["economy_until"], "")
 
+    def test_the_tray_menu_holds_only_what_is_used(self):
+        """Asked by the user: the tray menu had too much. The window, recording, dictation, the two modes, exit."""
+        import run
+
+        tc = run.TrayController.__new__(run.TrayController)
+        tc._status = {"state": "idle", "text": "Готово к работе", "recording": False}
+        tc._mf_default, tc._mf_grayed = 0x1000, 0x1
+        tc._hotkey_spec, tc._dictation_spec = "Ctrl+Alt+R", "Ctrl+Alt+D"
+        labels = [label for label, _cmd, _f in tc.menu_items() if label]
+        self.assertEqual(labels, ["Открыть Verbaliox", "● Начать запись\tCtrl+Alt+R", "Запись с настройкой",
+                                  "Диктовка\tCtrl+Alt+D", "Не мешать на встречах", "Только запись", "Выход"])
+        presets = next(cmd for label, cmd, _f in tc.menu_items() if label == "Запись с настройкой")
+        self.assertIn(("Созвон  ★", "record:call", 0), presets)  # a submenu
+        tc._status = {"state": "busy", "text": "Распознавание 45%", "recording": False}
+        self.assertIn("Распознавание 45%", [label for label, _c, _f in tc.menu_items()])  # what goes on, when it does
+
     def test_processor_threads(self):
         with mock.patch("os.cpu_count", return_value=20):
             self.assertEqual(asr_onnx.cpu_threads({"cpu_threads": "auto"}), 8)  # not all 20 (100 % in a meeting)
