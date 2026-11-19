@@ -714,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
   setInterval(hmCallEndTick, 5000);
   // the clock line and the processing on the page follow by themselves
-  setInterval(() => { if (hmShown() && !document.hidden) renderHomeNow(); }, 30000);
+  setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);  // the dashboard: dbTickNow
 });
 
 
