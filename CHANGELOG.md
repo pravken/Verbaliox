@@ -6,6 +6,11 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.22 — English
+
+- **Agent access (MCP) on Windows**: the Russian text no longer comes to the agent as «�», and a search in
+  Russian finds the meetings (the server now talks UTF-8 whatever the system's code page).
+
 ## 0.8.21 — English
 
 - **Dashboard details**: every number and widget opens a panel with what it is made of — the meetings of
@@ -642,6 +647,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.22
+
+- **Доступ агента (MCP) на Windows**: русский текст больше не приходит агенту знаками «�», а поиск
+  по-русски находит встречи (сервер теперь всегда говорит в UTF-8, какая бы кодировка ни стояла в системе).
 
 ## 0.8.21
 
