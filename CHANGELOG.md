@@ -6,6 +6,25 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.21 — English
+
+- **Dashboard details**: every number and widget opens a panel with what it is made of — the meetings of
+  the period (decisions, tasks, how much you spoke, hours by feature), every decision, your tasks, a person
+  (meetings together, who owes whom).
+- **«Waiting on others»**: a widget and a list of what others promised you, how many days it has been open.
+- **Meetings without outcome**: no decision and no task, you hardly spoke, a series giving nothing — counted
+  on the dashboard and filtered in the list of meetings.
+- **Agent access (MCP)**: Claude or another agent searches your meetings and reads their sections, decisions
+  and tasks itself; read only, the «local only» recordings are not given. Settings → Export has the lines for
+  Claude Desktop and Claude Code.
+- **«Digest (~5 min)»** in the export menu: the moments of the decisions and tasks and the starts of the
+  chapters in one file, made from the analysis.
+- **Tasks read better**: the second look at each task writes it as one clear action or drops it.
+- **The queue**: «Pause» / «Resume» and «Cancel all»; a waiting job of any kind can be cancelled at once.
+- **Two modes**: «Do not disturb in meetings» (the analysis waits only during a meeting) and «Recording only»
+  (everywhere until off, or for 30 min – the rest of the day), both in the tray menu; the tray menu is short.
+- **Mouse back / forward buttons** move between the places of the app instead of the loading page.
+
 ## 0.8.20 — English
 
 - **Dashboard: the time already past is filled.** Today: the scale up to «now», a thicker line with the time,
@@ -623,6 +642,25 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.21
+
+- **Подробности на дэшборде**: каждая цифра и виджет открывают панель с тем, из чего они состоят — встречи
+  периода (решения, задачи, сколько вы говорили, часы по фичам), все решения, мои задачи, человек (встречи
+  вместе, кто кому должен).
+- **«Жду от других»**: виджет и список того, что обещали вам, сколько дней висит.
+- **Встречи без итогов**: без решений и задач, вы почти молчали, серия без отдачи — счётчик на дэшборде и
+  фильтр в списке встреч.
+- **Доступ агента (MCP)**: Claude или другой агент сам ищет по встречам, читает разделы, решения и задачи;
+  только чтение, записи «только локально» не отдаются. В Настройках → Экспорт готовые строки для Claude
+  Desktop и Claude Code.
+- **«Выжимка (~5 мин)»** в меню экспорта: моменты решений, задач и начала глав одним файлом, из анализа.
+- **Задачи читаются понятнее**: проверка каждой задачи переписывает её одним понятным действием или
+  отбрасывает.
+- **Очередь**: «Пауза» / «Продолжить» и «Отменить все»; ждущую задачу любого вида можно убрать сразу.
+- **Два режима**: «Не мешать на встречах» (анализ ждёт только во время встречи) и «Только запись» (везде,
+  пока не выключите, или на 30 мин – до конца дня), оба в меню трея; меню трея стало коротким.
+- **Кнопки мыши «Назад» / «Вперёд»** ходят по экранам программы, а не на страницу загрузки.
 
 ## 0.8.20
 
