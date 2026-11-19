@@ -162,6 +162,7 @@ function renderTopbar() {
   };
   set('nav-tasks', view === 'dashboard' || view === 'tasks');  // the tasks' page opens from the dashboard
   set('nav-studio', view === 'studio');
+  updateRecordButtonState();  // the recording's tab: shown while it records or its settings are open
   set('nav-ask', view === 'ask');
   const m = state.activeMeeting;
   // Audit 8.5: the tabs of a recording appear once you have opened one, not for the one picked at start
@@ -330,8 +331,66 @@ function updateRecordButtonState() {
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
   btn.title = recording ? t('tipTbRecordStop') : t('tipTbRecord');
   btn.setAttribute('aria-label', btn.title);  // in its idle state the button is a dot without words
+  // The recording's screen (the former «Студия» tab) is in the bar only while it records or its settings are open
+  const studio = document.getElementById('nav-studio');
+  studio.classList.toggle('hidden', !recording && state.appView !== 'studio');
+  studio.classList.toggle('tb-tab-live', recording);
   document.getElementById('nav-studio-dot').classList.toggle('hidden', !recording);
-  document.getElementById('nav-studio-label').textContent = recording ? `${t('navStudio')} · ${timer}` : t('navStudio');
+  document.getElementById('nav-studio-label').textContent = recording ? t('navRecording') : t('navRecSetup');
+  document.getElementById('tb-rec-more').classList.toggle('hidden', recording || starting);
+}
+
+// The red button's menu (asked by the user: one place for recording instead of a «Студия» tab, its card on
+// the dashboard and the dictation card): record with a preset, with the captions, dictate, the settings
+function openRecMenu(e) {
+  e.stopPropagation();
+  document.getElementById('rec-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'rec-menu';
+  menu.className = 'fixed w-80 macos-menu z-50';
+  menu.setAttribute('role', 'menu');
+  const def = defaultRecordPresetId();
+  const key = state.system?.settings?.record_hotkey ?? 'Ctrl+Alt+R';  // empty: the hotkey is off
+  const dkey = state.system?.settings?.dictation_hotkey ?? 'Ctrl+Alt+D';
+  const item = (fn, args, label, mark = '', hint = '') => `<button class="macos-menu-item rec-mi" role="menuitem" data-fn="${fn}" data-args='${escapeHtml(JSON.stringify(args))}'>`
+    + `<span class="rec-mi-mark" aria-hidden="true">${mark}</span><span class="flex-1 min-w-0 truncate">${escapeHtml(label)}</span>${hint ? `<kbd class="rec-mi-key">${escapeHtml(hint)}</kbd>` : ''}</button>`;
+  menu.innerHTML = `<div class="rec-mh">${escapeHtml(t('recMenuHead'))}</div>`
+    + recordPresets().map(p => item('recMenuPreset', [p.id], presetLabel(p), p.id === def ? '✓' : '', p.id === def ? key : '')).join('')
+    + '<div class="my-1 h-px bg-white/10"></div>'
+    + item('recMenuLive', [], t('recMenuLive'), '◉')
+    + item('recMenuDictate', [], t('hmDict'), '🎙', dkey)
+    + '<div class="my-1 h-px bg-white/10"></div>'
+    + item('recMenuSettings', [], t('tbRecSettings') + '…', '⚙');
+  menu.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-fn]');
+    if (!b) return;
+    menu.remove();
+    window[b.dataset.fn](...JSON.parse(b.dataset.args || '[]'));
+  });
+  document.body.appendChild(menu);
+  const r = e.currentTarget.getBoundingClientRect();
+  placeMenuAt(menu, { clientX: r.right, clientY: r.bottom + 6 });
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+}
+
+// A preset of the menu: recorded at once, where the user is (as the red button)
+async function recMenuPreset(id) {
+  state.recPresetId = id;
+  await shellQuickRecord();
+}
+
+// With the captions and the translation: the recording's screen opens
+async function recMenuLive() {
+  await quickRecord(state.recPresetId || defaultRecordPresetId());
+}
+
+async function recMenuDictate() {
+  switchAppView('dashboard');  // its text shows there
+  await hmDictToggle();
+}
+
+async function recMenuSettings() {
+  await openRecordModal(state.recPresetId || defaultRecordPresetId());
 }
 
 // --- The settings: a page of the main area. The settings window moves into it the first time ---

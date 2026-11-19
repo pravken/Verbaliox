@@ -12,17 +12,7 @@
               <p id="hm-line" class="hm-line"></p>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2.5">
-            <!-- Audit 8.6: the import is the sidebar's «+ Импорт»; here, what the sidebar does not offer -->
-            <button data-click="switchAppView" data-click-args='["studio"]' class="hm-qa hm-qa-main">
-              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 10.5l5-3v9l-5-3"/></svg>
-              <span class="flex flex-col items-start"><b data-i18n="navStudio">Студия</b><span class="hm-qa-sub" data-i18n="homeStudioSub">запись с субтитрами</span></span>
-            </button>
-            <button id="hm-dict-btn" data-click="hmDictToggle" class="hm-qa" data-i18n-title="hmDictTip" title="Говорите — текст появится здесь и сохранится в «Диктовки»">
-              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg>
-              <span class="flex flex-col items-start"><b data-i18n="hmDict">Диктовка</b><span id="hm-dict-key" class="hm-qa-sub hm-mono"></span></span>
-            </button>
-          </div>
+          <!-- the recording and the dictation are in the red button's menu (static/js/shell.js openRecMenu) -->
         </div>
 
         <div class="hm-cols">
