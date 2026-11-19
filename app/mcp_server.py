@@ -262,22 +262,32 @@ def client_config() -> Dict[str, Any]:
 
 
 def main() -> None:
-    proto = sys.stdout
+    # The protocol is UTF-8 both ways. On Windows a pipe is read and written in the locale's code page
+    # (cp1251...): the client got the Cyrillic as U+FFFD and a Russian query came broken, so the bytes are
+    # read and written here as UTF-8 whatever the console is.
+    proto = sys.stdout.buffer
+    try:
+        sys.stderr.reconfigure(errors="backslashreplace")
+    except Exception:
+        pass
     sys.stdout = sys.stderr  # what the app prints goes to the log of the client, not into the protocol
-    for line in sys.stdin:
-        line = line.strip()
+
+    def send(answer: Dict[str, Any]) -> None:
+        proto.write((json.dumps(answer, ensure_ascii=False) + "\n").encode("utf-8"))
+        proto.flush()
+
+    for raw in sys.stdin.buffer:
+        line = raw.decode("utf-8", errors="replace").strip().lstrip("\ufeff")
         if not line:
             continue
         try:
             msg = json.loads(line)
         except ValueError:
-            proto.write(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}) + "\n")
-            proto.flush()
+            send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
             continue
         answer = handle(msg) if isinstance(msg, dict) else None
         if answer is not None:
-            proto.write(json.dumps(answer, ensure_ascii=False) + "\n")
-            proto.flush()
+            send(answer)
 
 
 if __name__ == "__main__":
