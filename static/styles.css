@@ -743,6 +743,8 @@ label.settings-toggle { display: flex; }
 
 /* Parts of the app: tabs along the top of the main area */
 #studio-view.studio-focus .studio-settings { display: none; }
+/* recording: the presets and the sources fold away; the meeting card stays (its people are clicked while they speak) */
+#studio-view.st-live .st-presets, #studio-view.st-live #side-studio .st-card:not(.st-card-meet) { display: none; }
 
 /* Signal on the input: one dot of a fixed size, so nothing jumps when it changes */
 .signal-dot {
