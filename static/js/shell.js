@@ -338,6 +338,8 @@ function updateRecordButtonState() {
   document.getElementById('nav-studio-dot').classList.toggle('hidden', !recording);
   document.getElementById('nav-studio-label').textContent = recording ? t('navRecording') : t('navRecSetup');
   document.getElementById('tb-rec-more').classList.toggle('hidden', recording || starting);
+  // While it records, its screen is the text, the notes and the people: the presets and the sources fold away
+  document.getElementById('studio-view')?.classList.toggle('st-live', recording);
 }
 
 // The red button's menu (asked by the user: one place for recording instead of a «Студия» tab, its card on
