@@ -190,6 +190,8 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     idleSel.value = [...idleSel.options].some(o => o.value === String(s.idle_unload_minutes)) ? String(s.idle_unload_minutes) : '10';
     fillMemReserve(s);
     fillObsidianSettings(s);
+    document.getElementById('set-mcp-local-only').checked = s.mcp_local_only === 'true';
+    loadMcpConfig();
     fillDubSettings(s);
     renderRecordSaveHint();
     state.liveModelSetting = s.live_whisper_model || 'auto';
@@ -2536,6 +2538,7 @@ function settingsFormValues() {
     close_to_tray: String(document.getElementById('set-close-to-tray').checked),
     quiet_mode: String(document.getElementById('set-quiet-mode').checked),
     economy_mode: String(document.getElementById('set-economy-mode').checked),
+    mcp_local_only: String(document.getElementById('set-mcp-local-only').checked),
     economy_for: document.getElementById('set-economy-for').value || '0',
     live_captions_auto: String(document.getElementById('set-live-captions-auto').checked),
     cpu_threads: document.getElementById('set-cpu-threads').value || 'auto',
@@ -3059,7 +3062,7 @@ const SETTINGS_RESET = {
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
 };
 const SETTINGS_DEFAULTS = {
-  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', economy_for: '0', live_captions_auto: 'true', cpu_threads: 'auto',
+  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', economy_for: '0', mcp_local_only: 'false', live_captions_auto: 'true', cpu_threads: 'auto',
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
@@ -3460,3 +3463,24 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   closeModal('settings');
 });
+
+
+// --- The agent's access (Settings → Экспорт, app/mcp_server.py): the lines to paste into its client ---
+const mcpConfig = { desktop: '', code: '' };
+
+async function loadMcpConfig() {
+  const data = await fetch('/api/mcp/config').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!data) return;
+  mcpConfig.desktop = data.claude_desktop || '';
+  mcpConfig.code = data.claude_code || '';
+  const a = document.getElementById('mcp-desktop'), b = document.getElementById('mcp-code');
+  if (a) a.textContent = mcpConfig.desktop;
+  if (b) b.textContent = mcpConfig.code;
+}
+
+function copyMcpConfig(which) {
+  const text = mcpConfig[which] || '';
+  if (!text) return;
+  copyPlain(text);
+  showToast(t('copied'), null, 'success');
+}

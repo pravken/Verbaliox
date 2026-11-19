@@ -3209,3 +3209,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-task-wait { grid-template-columns: minmax(56px, 110px) minmax(0, 1fr) 96px; }
 .db-who { min-width: 0; font-size: var(--fs-label); color: #C7C7CC; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Settings → Доступ агента: the lines to paste (static/js/settings.js loadMcpConfig) */
+.mcp-code { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: #C7C7CC; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; user-select: text; }
+
