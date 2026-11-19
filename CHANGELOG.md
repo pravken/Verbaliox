@@ -18,6 +18,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   titles; a point for fractions.
 - The time on the dashboard follows by itself, also after the window is restored; «In a minute: …» goes
   once the recording is on.
+- **Obsidian notes in date folders**: with «Folders by date» on, the notes go into their date's folders, the
+  ones made before move by themselves (the tray shows it) and come back when it is off.
+- «Auto-import folder» is now «Auto-import folder for audio and video».
 
 ## 0.8.23 — English
 
@@ -683,6 +686,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   целиком; дроби через точку.
 - Время на дэшборде идёт само, в том числе после разворачивания окна; «Через минуту: …» исчезает, когда
   пошла запись.
+- **Заметки Obsidian по папкам с датой**: с «Папками по дате» заметки ложатся в папку своей даты, созданные
+  раньше переносятся сами (ход виден в трее) и возвращаются, если выключить.
+- «Папка автоимпорта» теперь называется «Папка автоимпорта аудио и видео».
 
 ## 0.8.23
 
