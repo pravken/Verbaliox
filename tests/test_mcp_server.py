@@ -88,18 +88,28 @@ class McpServerTest(unittest.TestCase):
         self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
 
     def test_it_runs_on_stdio_as_a_script(self):
+        """In UTF-8 both ways whatever the console's code page: on Windows a pipe is cp1251 and the agent got
+        the Cyrillic as U+FFFD (found by the user)."""
         script = Path(mcp_server.__file__)
         env = dict(os.environ)
         env["PYTHONPATH"] = os.pathsep.join(p for p in (env.get("PYTHONPATH", ""), str(Path("tests/stubs").resolve())) if p)
+        env["PYTHONIOENCODING"] = "cp1251"  # the Windows pipe
+        env.pop("PYTHONUTF8", None)
         lines = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
                  {"jsonrpc": "2.0", "method": "notifications/initialized"},
-                 {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "list_features", "arguments": {}}}]
-        out = subprocess.run([sys.executable, str(script)], input="\n".join(json.dumps(x) for x in lines) + "\n",
-                             capture_output=True, text=True, encoding="utf-8", timeout=60, env=env)
-        answers = [json.loads(x) for x in out.stdout.splitlines() if x.strip()]
-        self.assertEqual([a["id"] for a in answers], [1, 2], out.stderr[-2000:])
+                 {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "list_features", "arguments": {}}},
+                 {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "search_meetings", "arguments": {"query": "туман"}}},
+                 {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "get_meeting", "arguments": {"id": self.mid, "sections": ["decisions"]}}}]
+        data = ("\n".join(json.dumps(x, ensure_ascii=False) for x in lines) + "\n").encode("utf-8")
+        out = subprocess.run([sys.executable, str(script)], input=data, capture_output=True, timeout=60, env=env)
+        answers = [json.loads(x) for x in out.stdout.decode("utf-8").splitlines() if x.strip()]
+        self.assertEqual([a["id"] for a in answers], [1, 2, 3, 4], out.stderr.decode("utf-8", "replace")[-2000:])
         self.assertFalse(answers[1]["result"]["isError"])
-
+        found = json.loads(answers[2]["result"]["content"][0]["text"])
+        self.assertEqual([m["title"] for m in found["meetings"]], ["Синк по туману"])  # the query came whole
+        meeting = json.loads(answers[3]["result"]["content"][0]["text"])
+        self.assertIn("Выпускать в пятницу", meeting["text"])
+        self.assertNotIn("\ufffd", out.stdout.decode("utf-8"))
 
 if __name__ == "__main__":
     unittest.main()
