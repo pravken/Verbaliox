@@ -740,6 +740,14 @@ class TaskPruneTest(unittest.TestCase):
 
         self.assertEqual(len(verify(items, m, Mute())), 3)  # no readable answer: the first pass stands
 
+        class Reword:  # reported by the user: tasks read as words of the talk glued together
+            def chat(self, system, user, short=False):
+                return "1: да — прислать отчёт по проекту завтра\n2: нет\n3: да — x"
+
+        got = verify(items, m, Reword())
+        self.assertEqual([x["what"] for x in got], ["Прислать отчёт по проекту завтра", "Обсудить бюджет"])  # «x»: too short, kept as it was
+        self.assertEqual(got[0]["quote"], "я отправлю отчёт завтра")  # the words of the recording stay
+
     def test_rename_moves_the_tasks(self):
         from app import commitments
         from app.database import create_meeting, init_db
