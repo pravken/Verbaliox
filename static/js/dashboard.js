@@ -14,6 +14,7 @@ const DB_WIDGETS = {
   today: { title: 'hmMeetings', sizes: ['S', 'M', 'L', 'W'], host: 'hm-timeline', icon: '◷' },
   week: { title: 'dbWeek', sizes: ['M', 'L', 'W'], icon: '▤' },
   mytasks: { title: 'hmMyTasks', sizes: ['S', 'M', 'L', 'W'], icon: '☑' },
+  waiting: { title: 'dbWaiting', sizes: ['S', 'M', 'L', 'W'], icon: '⧗' },
   features: { title: 'dbFeatures', sizes: ['M', 'L', 'W'], icon: '◆' },
   time: { title: 'dbTime', sizes: ['S', 'M', 'L', 'W'], icon: '▮' },
   people: { title: 'dbPeople', sizes: ['S', 'M', 'L'], icon: '☺' },
@@ -22,9 +23,10 @@ const DB_WIDGETS = {
   recent: { title: 'homeRecent', sizes: ['S', 'M', 'L', 'W'], host: 'hm-recent', icon: '☰' },
   work: { title: 'hmInWork', sizes: ['S', 'M', 'L'], host: 'hm-queue', icon: '⟳' },
 };
-const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'L'], ['mytasks', 'M'], ['features', 'L'],
+const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'L'], ['mytasks', 'M'], ['waiting', 'M'], ['features', 'L'],
   ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['summary', 'M'], ['recent', 'L']];
 const DB_PERIODS = ['week', 'month', 'quarter'];
+const DB_NEW_WIDGETS = ['waiting'];  // added after the first dashboard: offered once to an existing layout
 
 const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false };
 
@@ -33,7 +35,18 @@ function dbPrefs() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(DB_KEY) || '{}') || {}; } catch (e) {}
   const layout = Array.isArray(p.layout) ? p.layout.filter(w => w && DB_WIDGETS[w.id]) : null;
+  // a widget added in a later version comes once into a layout made before it (after «Мои задачи»);
+  // removed by the user, it stays out
+  const offered = Array.isArray(p.offered) ? p.offered : [];
+  if (layout && layout.length) {
+    for (const id of DB_NEW_WIDGETS) {
+      if (offered.includes(id) || layout.some(w => w.id === id)) continue;
+      const at = layout.findIndex(w => w.id === 'mytasks');
+      layout.splice(at < 0 ? layout.length : at + 1, 0, { id, size: 'M' });
+    }
+  }
   return DB.prefs = {
+    offered: [...new Set([...offered, ...DB_NEW_WIDGETS])],
     layout: layout && layout.length ? layout : DB_DEFAULT.map(([id, size]) => ({ id, size })),
     period: DB_PERIODS.includes(p.period) ? p.period : 'week',
     feature: Number(p.feature) || 0,
@@ -152,7 +165,10 @@ function dbParkHosts() {
 
 function dbLink(id) {
   const link = (fn, args, key) => `<button class="db-more" data-click="${fn}" data-click-args='${JSON.stringify(args)}'>${escapeHtml(t(key))}</button>`;
-  if (id === 'mytasks') return link('switchAppView', ['tasks'], 'hmAllTasks');
+  if (id === 'mytasks') return link('dbOpenDetail', ['tasks'], 'dbAllLink');
+  if (id === 'waiting') return link('dbOpenDetail', ['waiting'], 'dbAllLink');
+  if (id === 'decisions') return link('dbOpenDetail', ['decisions'], 'dbAllLink');
+  if (id === 'time') return link('dbOpenDetail', ['meetings'], 'dbAllLink');
   if (id === 'week') return link('openCalendarView', [], 'dbCalendarLink');
   if (id === 'summary') return DB.summaryBusy ? '' : link('makeDashSummary', [], dbPrefs().summary ? 'dbSummaryRedo' : 'dbSummaryMake');
   return '';
@@ -186,6 +202,7 @@ function dbWidgetHtml(id, size) {
     case 'kpis': return dbKpis(d);
     case 'week': return dbWeek();
     case 'mytasks': return dbTasks(d, size);
+    case 'waiting': return dbWaitingHtml(d, size);
     case 'features': return dbFeatures(d, size);
     case 'time': return dbTime(d);
     case 'people': return dbPeople(d);
@@ -202,14 +219,19 @@ function dbKpis(d) {
     if (!before && !now) return `<span>${escapeHtml(t('dbNothingYet'))}</span>`;
     return `<b class="${x < 0 ? 'neg' : ''}">${x > 0 ? '+' : ''}${dbNum(x)}${unit}</b> ${escapeHtml(t(`dbVsBefore_${d.period}`))}`;
   };
-  const tile = (key, value, line) => `<div class="db-kpi"><div class="db-kpi-k">${escapeHtml(t(key))}</div><div class="db-kpi-v">${value}</div><div class="db-kpi-d">${line}</div></div>`;
+  // every tile opens its details (asked by the user: a number could not be looked into)
+  const tile = (key, value, line, kind, extra = '') => `<div class="db-kpi"><button class="db-kpi-open" data-click="dbOpenDetail" data-click-args='["${kind}"]' title="${escapeHtml(t('dbOpenDetailTip'))}">`
+    + `<div class="db-kpi-k">${escapeHtml(t(key))}<span class="db-kpi-go" aria-hidden="true">→</span></div><div class="db-kpi-v">${value}</div><div class="db-kpi-d">${line}</div></button>${extra}</div>`;
+  // the meetings without an outcome (no decision, no task; the user silent; a series giving nothing)
+  const useless = `<button class="db-kpi-x${k.useless ? '' : ' db-kpi-x-none'}" data-click="dbOpenDetail" data-click-args='["useless"]'>${escapeHtml(k.useless
+    ? t('dbUselessN').replace('{n}', () => k.useless).replace('{h}', () => dbNum(k.useless_hours)) : t('dbUselessNone'))}</button>`;
   return `<div class="db-kpis">`
-    + tile('dbKpiMeetings', k.meetings, delta(k.meetings, k.meetings_before))
-    + tile('dbKpiHours', `${dbNum(k.hours)} ${escapeHtml(t('dbHoursShort'))}`, delta(k.hours, k.hours_before, ` ${t('dbHoursShort')}`))
+    + tile('dbKpiMeetings', k.meetings, delta(k.meetings, k.meetings_before), 'meetings', useless)
+    + tile('dbKpiHours', `${dbNum(k.hours)} ${escapeHtml(t('dbHoursShort'))}`, delta(k.hours, k.hours_before, ` ${t('dbHoursShort')}`), 'meetings')
     + (d.needs_me
-      ? tile('dbKpiMyTasks', '—', `<button class="db-more" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button>`)
-      : tile('dbKpiMyTasks', k.open, k.overdue ? `<b class="neg">${escapeHtml(t('dbOverdueN').replace('{n}', () => k.overdue))}</b>` : `<span>${escapeHtml(t('dbNoneOverdue'))}</span>`))
-    + tile('dbKpiDecisions', k.decisions, k.decisions ? escapeHtml(t('dbInMeetings').replace('{n}', () => k.decision_meetings)) : `<span>${escapeHtml(t('dbNoDecisions'))}</span>`)
+      ? `<div class="db-kpi"><div class="db-kpi-k">${escapeHtml(t('dbKpiMyTasks'))}</div><div class="db-kpi-v">—</div><div class="db-kpi-d"><button class="db-more" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button></div></div>`
+      : tile('dbKpiMyTasks', k.open, k.overdue ? `<b class="neg">${escapeHtml(t('dbOverdueN').replace('{n}', () => k.overdue))}</b>` : `<span>${escapeHtml(t('dbNoneOverdue'))}</span>`, 'tasks'))
+    + tile('dbKpiDecisions', k.decisions, k.decisions ? escapeHtml(t('dbInMeetings').replace('{n}', () => k.decision_meetings)) : `<span>${escapeHtml(t('dbNoDecisions'))}</span>`, 'decisions')
     + '</div>';
 }
 
@@ -322,7 +344,7 @@ function dbPeople(d) {
   const max = Math.max(...d.people.map(p => p.meetings));
   return d.people.slice(0, 5).map((p, i) => {
     const c = /^#[0-9A-Fa-f]{6}$/.test(p.color || '') ? p.color : TK_COLORS[i % TK_COLORS.length];
-    return `<button class="db-person" data-click="openPersonCard" data-click-args='[${JSON.stringify(p.name)}]'>`
+    return `<button class="db-person" data-click="dbOpenDetail" data-click-args='["person", ${JSON.stringify(p.name)}]'>`
       + `<span class="db-av" style="--av:${c}">${escapeHtml(p.name.charAt(0).toUpperCase())}</span>`
       + `<span class="db-person-n">${escapeHtml(p.name)}<small>${escapeHtml(plural(p.meetings, t('dbMeetingForms')))}</small></span>`
       + `<span class="db-meter"><i style="width:${Math.round(100 * p.meetings / max)}%"></i></span></button>`;
@@ -369,16 +391,22 @@ async function makeDashSummary() {
 }
 
 // --- Actions ---
+function dbRefreshDetail() {
+  if (DB_DETAIL.kind) dbOpenDetail(DB_DETAIL.kind, DB_DETAIL.person);
+}
+
 function setDashPeriod(period) {
   dbSave({ period });
   loadDashboard();
   renderDashboard();
+  dbRefreshDetail();
 }
 
 function setDashFeature(id) {
   dbSave({ feature: Number(id) || 0 });
   loadDashboard();
   renderDashboard();
+  dbRefreshDetail();
 }
 
 function openDashFeatureMenu(e) {
@@ -414,6 +442,122 @@ function dashOpenSummary(meetingId) {
   openMeeting(meetingId);
   setTimeout(() => openRecordTab('summary'), 300);
 }
+
+// --- «Жду от других»: what others promised the user (asked by the user) ---
+function dbWaitingHtml(d, size) {
+  if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div><button class="tk-btn tk-btn-sm" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button>`;
+  const list = d.waiting || [];
+  if (!list.length) return `<div class="db-note">${escapeHtml(t('dbNoWaiting'))}</div>`;
+  const n = size === 'S' ? 4 : size === 'W' ? 10 : 6;
+  return list.slice(0, n).map(x => `<div class="db-task db-task-wait">`
+    + `<span class="db-who" title="${escapeHtml(x.who)}">${escapeHtml(x.who || '—')}</span>`
+    + `<button class="db-task-t" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]' title="${escapeHtml(x.meeting_title ? `${x.what} — ${x.meeting_title}` : x.what)}">${escapeHtml(x.what)}</button>`
+    + (x.due_date ? dbDue(x, d.today) : `<span class="db-due">${escapeHtml(t('dbDaysWaiting').replace('{n}', () => x.days || 0))}</span>`) + '</div>').join('');
+}
+
+// --- The details of a number or a widget (asked by the user: hours, tasks, decisions could not be opened):
+// a panel on the right with what it is made of, by /api/dashboard/detail (app/dashboard.detail) ---
+const DB_DETAIL = { kind: '', person: '', data: null, filter: 'all' };
+
+async function dbOpenDetail(kind, person = '') {
+  const p = dbPrefs();
+  Object.assign(DB_DETAIL, { kind, person, data: null, filter: kind === 'useless' ? 'useless' : 'all' });
+  dbRenderDetail();
+  const q = new URLSearchParams({ kind, period: p.period, feature: p.feature || 0, person });
+  const data = await fetch(`/api/dashboard/detail?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (DB_DETAIL.kind !== kind || DB_DETAIL.person !== person) return;  // another one opened meanwhile
+  DB_DETAIL.data = data || { error: true };
+  dbRenderDetail();
+}
+
+function dbCloseDetail() {
+  DB_DETAIL.kind = '';
+  document.getElementById('db-detail')?.classList.add('hidden');
+}
+
+function dbDetailFilter(f) {
+  DB_DETAIL.filter = f;
+  dbRenderDetail();
+}
+
+function dbHm(sec) {
+  const m = Math.round((sec || 0) / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} ${t('dbHoursShort')} ${String(m % 60).padStart(2, '0')} ${t('dbMinShort')}` : `${m} ${t('dbMinShort')}`;
+}
+
+function dbDetailMeetings(d) {
+  const rows = DB_DETAIL.filter === 'useless' ? d.meetings.filter(r => r.reasons.length) : d.meetings;
+  const total = rows.reduce((s, r) => s + r.duration, 0);
+  const chips = (d.by_feature || []).slice(0, 6).map(x => {
+    const f = x.feature ? featureById(x.feature) : null;
+    return `<span class="db-dt-chip">${f ? featureChipHtml(f) : escapeHtml(t('dbNoFeature'))} ${dbNum(x.hours)} ${escapeHtml(t('dbHoursShort'))}</span>`;
+  }).join('');
+  const seg = `<div class="tk-seg db-dt-seg" role="radiogroup">${['all', 'useless'].map(k => `<button role="radio" aria-checked="${DB_DETAIL.filter === k}" class="tk-seg-btn${DB_DETAIL.filter === k ? ' tk-on' : ''}" data-click="dbDetailFilter" data-click-args='["${k}"]'>${escapeHtml(t(k === 'all' ? 'dbDtAll' : 'dbDtUseless'))}${k === 'useless' ? ` · ${d.meetings.filter(r => r.reasons.length).length}` : ''}</button>`).join('')}</div>`;
+  const reason = r => r.reasons.map(x => `<span class="db-dt-why" title="${escapeHtml(t(`dbWhy_${x}_tip`))}">${escapeHtml(t(`dbWhy_${x}`))}</span>`).join('');
+  const list = rows.map(r => {
+    const f = (r.features || []).map(featureById).filter(Boolean)[0];
+    return `<button class="db-dt-row" data-click="dashOpenSummary" data-click-args='[${r.id}]'>`
+      + `<span class="db-dt-when">${escapeHtml(dbAgo(r.date, DB.data ? DB.data.today : r.date))}${r.time ? ` ${escapeHtml(r.time)}` : ''}</span>`
+      + `<span class="db-dt-main"><b>${escapeHtml(r.title || t('hmUntitled'))}</b><small>${f ? featureChipHtml(f) : ''}${reason(r)}</small></span>`
+      + `<span class="db-dt-num" title="${escapeHtml(t('dbDtDecTip'))}">${r.decisions}</span>`
+      + `<span class="db-dt-num" title="${escapeHtml(t('dbDtTaskTip'))}">${r.tasks}</span>`
+      + `<span class="db-dt-num" title="${escapeHtml(t('dbDtShareTip'))}">${r.my_share == null ? '—' : `${Math.round(r.my_share)}%`}</span>`
+      + `<span class="db-dt-dur">${escapeHtml(dbHm(r.duration))}</span></button>`;
+  }).join('');
+  return `<div class="db-dt-sum">${escapeHtml(t('dbDtMeetingsSum').replace('{n}', () => rows.length).replace('{h}', () => dbHm(total)))}</div>`
+    + (chips ? `<div class="db-dt-chips">${chips}</div>` : '') + seg
+    + (rows.length ? `<div class="db-dt-head"><span></span><span></span><span>${escapeHtml(t('dbDtDec'))}</span><span>${escapeHtml(t('dbDtTasks'))}</span><span>${escapeHtml(t('dbDtShare'))}</span><span></span></div>${list}`
+      : `<div class="db-note">${escapeHtml(t(DB_DETAIL.filter === 'useless' ? 'dbUselessNone' : 'dbNoMeetingsYet'))}</div>`);
+}
+
+function dbDetailTasks(list, today, mine) {
+  if (!list.length) return `<div class="db-note">${escapeHtml(t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'))}</div>`;
+  return list.map(x => `<div class="db-dt-task${x.status === 'done' ? ' done' : ''}">`
+    + (mine && x.status !== 'done' ? `<button class="db-ck" data-click="dbDetailDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
+    + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><b>${escapeHtml(x.what)}</b>`
+    + `<small>${escapeHtml([mine ? (x.to ? `→ ${x.to}` : '') : x.who, x.meeting_title ? `«${x.meeting_title}»` : '', x.meeting_date ? dbAgo(x.meeting_date, today) : ''].filter(Boolean).join(' · '))}</small></button>`
+    + (x.due_date ? dbDue(x, today) : `<span class="db-due">${escapeHtml(mine ? t('tkNoDue') : t('dbDaysWaiting').replace('{n}', () => x.days || 0))}</span>`) + '</div>').join('');
+}
+
+async function dbDetailDone(id) {
+  await dashTaskDone(id);
+  dbOpenDetail(DB_DETAIL.kind, DB_DETAIL.person);
+}
+
+function dbRenderDetail() {
+  const box = document.getElementById('db-detail');
+  if (!box) return;
+  const { kind, person, data: d } = DB_DETAIL;
+  box.classList.toggle('hidden', !kind);
+  if (!kind) return;
+  const today = DB.data ? DB.data.today : new Date().toISOString().slice(0, 10);
+  const title = kind === 'person' ? person : t(`dbDt_${kind}`);
+  const period = DB.data && kind !== 'person' ? `<div class="db-dt-period">${escapeHtml(document.getElementById('db-sub')?.textContent || '')}</div>` : '';
+  let body;
+  if (!d) body = `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
+  else if (d.error) body = `<div class="db-note">${escapeHtml(t('dbNoData'))}</div>`;
+  else if (kind === 'meetings' || kind === 'useless') body = dbDetailMeetings(d);
+  else if (kind === 'decisions') {
+    body = d.decisions.length ? d.decisions.map(x => {
+      const f = (x.features || []).map(featureById).filter(Boolean)[0];
+      return `<button class="db-dt-row db-dt-dec" data-click="dashOpenSummary" data-click-args='[${x.meeting_id}]'><span class="db-dt-main"><b>${escapeHtml(x.text)}</b>`
+        + `<small>${f ? featureChipHtml(f) : ''}«${escapeHtml(x.title)}» · ${escapeHtml(dbAgo(x.date, today))}</small></span></button>`;
+    }).join('') : `<div class="db-note">${escapeHtml(t('dbNoDecisionsYet'))}</div>`;
+  } else if (kind === 'tasks' || kind === 'waiting') {
+    body = d.needs_me ? `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div>` : dbDetailTasks(d.tasks, today, kind === 'tasks');
+  } else {  // a person
+    body = `<div class="db-dt-sec">${escapeHtml(t('dbDtOwesMe'))}</div>${dbDetailTasks(d.owes_me || [], today, false)}`
+      + `<div class="db-dt-sec">${escapeHtml(t('dbDtIOwe'))}</div>${dbDetailTasks(d.i_owe || [], today, true)}`
+      + `<div class="db-dt-sec">${escapeHtml(t('dbDtTheirMeetings').replace('{n}', () => d.meetings_total || 0))}</div>`
+      + ((d.meetings || []).map(m => `<button class="db-dt-row" data-click="dashOpenSummary" data-click-args='[${m.id}]'><span class="db-dt-when">${escapeHtml(dbAgo(m.date, today))}</span>`
+        + `<span class="db-dt-main"><b>${escapeHtml(m.title || t('hmUntitled'))}</b></span><span class="db-dt-dur">${escapeHtml(dbHm(m.duration))}</span></button>`).join('')
+        || `<div class="db-note">${escapeHtml(t('dbNoMeetingsYet'))}</div>`)
+      + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${JSON.stringify(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
+  }
+  box.innerHTML = `<div class="db-dt-top"><h2>${escapeHtml(title)}</h2><button class="hm-x" data-click="dbCloseDetail" title="${escapeHtml(t('close'))}" aria-label="${escapeHtml(t('close'))}">✕</button></div>${period}<div class="db-dt-body">${body}</div>`;
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && DB_DETAIL.kind) dbCloseDetail(); });
 
 // --- «Настроить»: drag, sizes, remove, add ---
 function toggleDashEdit() {

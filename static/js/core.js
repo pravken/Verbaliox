@@ -836,6 +836,7 @@ window.addEventListener('click', e => {
 
 function switchWorkspaceTab(tab) {
   state.activeWorkspaceTab = tab;
+  if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
   if (tab === 'info') loadMeetingInfo();
   if (tab === 'summary') renderAnalysisEstimate();

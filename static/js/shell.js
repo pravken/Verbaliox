@@ -66,7 +66,82 @@ function switchAppView(view) {
   VIEW_HOOKS[view]?.show?.();
   updateRecordButtonState();
   renderTopbar();
+  navRecord();
 }
+
+// --- «Назад» / «Вперёд» of the mouse (and Alt+← / Alt+→) inside the app (reported by the user: the window
+// went back to its loading page). The places visited: the page, the recording open and its tab ---
+const NAV = { back: [], fwd: [], last: null, moving: false, at: 0 };
+
+function navPlace() {
+  return { view: state.appView || 'dashboard', meeting: state.activeMeeting ? state.activeMeeting.id : 0,
+    tab: state.activeWorkspaceTab || 'transcript' };
+}
+
+function navSame(a, b) {
+  if (!a || !b || a.view !== b.view) return false;
+  return a.view !== 'library' || (a.meeting === b.meeting && a.tab === b.tab);
+}
+
+function navRecord() {
+  if (NAV.moving) return;
+  const p = navPlace();
+  p.t = Date.now();
+  if (navSame(NAV.last, p)) { NAV.last = p; return; }
+  // a step on the way (the library shown, then the recording opened in it a moment later): one place
+  if (NAV.last && NAV.last.view === p.view && p.t - NAV.last.t < 600) { NAV.last = p; return; }
+  if (NAV.last) {
+    NAV.back.push(NAV.last);
+    if (NAV.back.length > 50) NAV.back.shift();
+    NAV.fwd = [];
+  }
+  NAV.last = p;
+}
+
+async function navGo(dir) {
+  const from = dir < 0 ? NAV.back : NAV.fwd, to = dir < 0 ? NAV.fwd : NAV.back;
+  // an open menu or window goes first («Назад» closes it), the page after
+  if (dir < 0 && document.getElementById('tk-pop')) { tkClosePop(); return; }
+  const modal = document.querySelector('[id^="modal-"]:not(#modal-settings):not(.hidden)');
+  if (dir < 0 && modal) { closeModal(modal.id.slice(6)); return; }
+  const p = from.pop();
+  if (!p) return;
+  if (NAV.last) to.push(NAV.last);
+  NAV.moving = true;
+  try {
+    if (p.view === 'library' && p.meeting && (!state.activeMeeting || state.activeMeeting.id !== p.meeting)
+        && (state.meetings || []).some(m => m.id === p.meeting)) {
+      await selectMeeting(p.meeting, true);
+    }
+    switchAppView(p.view);
+    if (p.view === 'library' && p.tab && state.activeWorkspaceTab !== p.tab) switchWorkspaceTab(p.tab);
+  } finally {
+    NAV.moving = false;
+    NAV.last = Object.assign(navPlace(), { t: 0 });
+  }
+}
+
+// The mouse's side buttons: 3 back, 4 forward. Their default (the WebView's history) is stopped.
+for (const type of ['mousedown', 'mouseup', 'auxclick']) {
+  document.addEventListener(type, e => {
+    if (e.button !== 3 && e.button !== 4) return;
+    e.preventDefault();
+    if (type === 'mouseup') { NAV.at = Date.now(); navGo(e.button === 3 ? -1 : 1); }
+  });
+}
+document.addEventListener('keydown', e => {
+  if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  e.preventDefault();
+  NAV.at = Date.now();
+  navGo(e.key === 'ArrowLeft' ? -1 : 1);
+});
+// Should the WebView go back in its history all the same, it stays on this page: an entry of its own is
+// kept on top, and a «back» to it is taken as the app's «Назад»
+history.pushState({ vx: 1 }, '', location.href);
+window.addEventListener('popstate', () => {
+  history.pushState({ vx: 1 }, '', location.href);
+  if (Date.now() - NAV.at > 400) navGo(-1);  // not when the mouse handler did it already
+});
 
 // The tabs of the open recording, in the top bar: transcript | summary (analysis) | speakers | info
 function openRecordTab(tab) {
@@ -280,7 +355,9 @@ function leaveSettingsPage() {
 // --- The status bar: the queue (the load of the computer is in the sidebar) ---
 // The economy mode (app/economy.py): recording only; set in Settings → Общие or the tray icon's menu
 function economyOn() {
-  return String(((state.system && state.system.settings) || {}).economy_mode) === 'true';
+  const s = (state.system && state.system.settings) || {};
+  const end = Number(s.economy_until || 0);
+  return String(s.economy_mode) === 'true' && !(end && Date.now() / 1000 >= end);
 }
 
 async function economyOff() {
@@ -291,7 +368,10 @@ async function economyOff() {
 }
 
 function onEconomyEvent(ev) {
-  if (state.system && state.system.settings) state.system.settings.economy_mode = ev.on ? 'true' : 'false';
+  if (state.system && state.system.settings) {
+    state.system.settings.economy_mode = ev.on ? 'true' : 'false';
+    state.system.settings.economy_until = ev.until ? String(ev.until) : '';
+  }
   const box = document.getElementById('set-economy-mode');
   if (box) box.checked = !!ev.on;
   if (ev.on && typeof stopLiveCaptions === 'function' && liveCap.session) {
@@ -304,7 +384,14 @@ function onEconomyEvent(ev) {
 }
 
 function renderStatusbar() {
-  document.getElementById('sb-economy')?.classList.toggle('hidden', !economyOn());
+  const eco = document.getElementById('sb-economy');
+  if (eco) {
+    eco.classList.toggle('hidden', !economyOn());
+    // for a time: when it ends (the server turns it off then)
+    const end = Number(((state.system && state.system.settings) || {}).economy_until || 0);
+    const label = t('sbEconomy') + (end ? ` · ${t('sbEconomyUntil').replace('{time}', () => new Date(end * 1000).toLocaleTimeString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }))}` : '');
+    if (eco.textContent !== label) eco.textContent = label;
+  }
   // Audit 6.4: a model downloading in the background is seen from every page
   const dl = document.getElementById('sb-dl');
   const downloads = typeof modelDownloadsNow === 'function' ? modelDownloadsNow() : [];
@@ -332,7 +419,7 @@ function renderStatusbar() {
   const more = items.length - (run ? 1 : 0);
   q.textContent = run
     ? `${queueKindLabel(run)} · ${pct}% — «${run.title}»${more ? ` · ${t('sbQueueMore').replace('{n}', () => more)}` : ''}`
-    : t('sbQueueWaiting').replace('{n}', () => items.length);
+    : state.queuePaused ? t('sbQueuePaused').replace('{n}', () => items.length) : t('sbQueueWaiting').replace('{n}', () => items.length);
   q.classList.add('sb-queue-busy');
 }
 

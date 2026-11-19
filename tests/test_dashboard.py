@@ -82,5 +82,31 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(d["tasks"], [])
 
 
+    def test_details_without_outcome_waiting_decisions_and_a_person(self):
+        """Asked by the user: every number of the dashboard opens its details; «Жду от других»; «Без итогов»."""
+        good = self._meeting("Синк", "2026-11-17", protocol="## Решения\n- Выпускать в пятницу\n")
+        empty = self._meeting("Болтовня", "2026-11-18", protocol="## Обзор\n- Поговорили\n")
+        commitments.create("Прислать смету", "Мария", meeting_id=good)
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE commitments SET to_whom = 'Олег' WHERE what = 'Прислать смету'")
+            conn.commit()
+            conn.close()
+        d = dashboard.build("week", today=self.TODAY)
+        self.assertEqual((d["kpi"]["useless"], d["kpi"]["waiting"]), (1, 1))
+        self.assertEqual(d["waiting"][0]["what"], "Прислать смету")
+        rows = dashboard.detail("meetings", "week", today=self.TODAY)["meetings"]
+        by_id = {r["id"]: r for r in rows}
+        self.assertEqual(by_id[good]["decisions"], 1)
+        self.assertEqual(by_id[good]["tasks"], 1)
+        self.assertEqual(by_id[empty]["reasons"], ["no_outcome"])
+        self.assertEqual([r["id"] for r in dashboard.detail("useless", "week", today=self.TODAY)["meetings"]], [empty])
+        self.assertEqual([x["text"] for x in dashboard.detail("decisions", "week", today=self.TODAY)["decisions"]], ["Выпускать в пятницу"])
+        self.assertEqual([t["what"] for t in dashboard.detail("waiting", "week", today=self.TODAY)["tasks"]], ["Прислать смету"])
+        person = dashboard.detail("person", person="Мария", today=self.TODAY)
+        self.assertEqual({m["id"] for m in person["meetings"]}, {good, empty})
+        self.assertEqual([t["what"] for t in person["owes_me"]], ["Прислать смету"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -59,6 +59,33 @@ def api_queue() -> List[Dict[str, Any]]:
 
     return queue_snapshot()
 
+class QueuePausePayload(BaseModel):
+    paused: bool = True
+
+
+@router.get("/api/queue/paused")
+def api_queue_paused() -> Dict[str, Any]:
+    from app.transcriber import queue_paused
+
+    return {"paused": queue_paused()}
+
+
+@router.post("/api/queue/pause")
+def api_queue_pause(payload: QueuePausePayload) -> Dict[str, Any]:
+    """«Пауза» / «Продолжить» of the whole queue: the job running finishes, the next ones wait."""
+    from app.transcriber import pause_queue
+
+    return {"paused": pause_queue(payload.paused)}
+
+
+@router.post("/api/queue/cancel-all")
+def api_queue_cancel_all() -> Dict[str, Any]:
+    """«Отменить все»: every job of the queue, the waiting ones at once, the running one broken off."""
+    from app.transcriber import cancel_all
+
+    return cancel_all()
+
+
 @router.post("/api/dub/setup")
 def api_dub_setup() -> Dict[str, Any]:
     """Installs the optional dubbing environment (.venv-dub) after the user confirmed it in the UI."""
@@ -367,7 +394,7 @@ class CutPayload(BaseModel):
 @router.post("/api/meetings/{meeting_id}/cut")
 def api_meeting_cut(meeting_id: int, payload: CutPayload) -> Dict[str, Any]:
     """A shorter copy of the recording (app/media_cut.py), saved where the user picks."""
-    from app.media_cut import kept_seconds, merge, pick_highlights, speech_intervals
+    from app.media_cut import analysis_moments, kept_seconds, merge, pick_highlights, speech_intervals
     from app.naming import base_name
     from app.transcriber import enqueue_cut_job
     from app.video_subtitles import output_extension, probe_media
@@ -394,16 +421,20 @@ def api_meeting_cut(meeting_id: int, payload: CutPayload) -> Dict[str, Any]:
     elif payload.kind == "clean":
         intervals = speech_intervals(m.get("segments") or [], duration)
     else:
-        try:
-            moments = pick_highlights(m, payload.model, payload.lang)
-        except (ValueError, RuntimeError) as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        # «Выжимка»: the decisions, tasks and chapters the analysis found (no new request to a model);
+        # without them the model picks the moments, as before
+        moments = analysis_moments(m)
+        if len(moments) < 2:
+            try:
+                moments = pick_highlights(m, payload.model, payload.lang)
+            except (ValueError, RuntimeError) as e:
+                raise HTTPException(status_code=400, detail=str(e))
         intervals = merge([(x["start"], x["end"]) for x in moments])
     if not intervals:
         raise HTTPException(status_code=400, detail="В записи не найдено речи")
     has_video = bool(probe_media(media)["has_video"])
     ext = output_extension(media) if has_video else ".m4a"
-    suffix = {"highlights": ".highlights", "denoise": ".clean-sound"}.get(payload.kind, ".clean")
+    suffix = {"highlights": ".digest", "denoise": ".clean-sound"}.get(payload.kind, ".clean")
     chosen = _pick_export_path(m, f"{base_name(m)}{suffix}{ext}", ext.lstrip("."))
     if not chosen:
         return {"ok": False, "cancelled": True}

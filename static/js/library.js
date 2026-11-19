@@ -149,11 +149,33 @@ function scheduleQueueReload() {
 }
 
 async function loadQueue() {
-  const res = await fetch('/api/queue');
+  const [res, paused] = await Promise.all([fetch('/api/queue'),
+    fetch('/api/queue/paused').then(r => (r.ok ? r.json() : null)).catch(() => null)]);
   if (!res.ok) return;
   state.queue = await readJson(res);
+  if (paused) state.queuePaused = !!paused.paused;
   renderQueuePanel();
   renderStatusbar();
+}
+
+async function toggleQueuePause() {
+  const res = await fetch('/api/queue/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paused: !state.queuePaused }) }).catch(() => null);
+  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  state.queuePaused = !!(await res.json()).paused;
+  renderQueuePanel();
+  renderStatusbar();
+}
+
+async function cancelWholeQueue() {
+  const n = (state.queue || []).length;
+  if (!n) return;
+  if (!await confirmDialog(t('queueCancelAllTitle'), t('queueCancelAllText').replace('{n}', () => n), t('queueCancelAllOk'))) return;
+  const res = await fetch('/api/queue/cancel-all', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  showToast(t('uiCancelling'));
+  await loadMeetingsList().catch(() => {});
+  loadQueue();
 }
 
 function queueKindLabel(q) {
@@ -173,6 +195,18 @@ function renderQueuePanel() {
   const items = state.queue || [];
   panel.classList.toggle('hidden', items.length === 0);
   document.getElementById('queue-count').textContent = items.length ? `(${items.length})` : '';
+  // «Пауза» / «Продолжить» and «Отменить все»: the whole queue at once
+  const paused = !!state.queuePaused;
+  const pauseBtn = document.getElementById('queue-pause-btn');
+  if (pauseBtn) {
+    const label = t(paused ? 'queueResume' : 'queuePause');
+    pauseBtn.innerHTML = (paused
+      ? '<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>'
+      : '<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>')
+      + `<span>${escapeHtml(label)}</span>`;
+    pauseBtn.title = t(paused ? 'queueResumeTip' : 'queuePauseTip');
+    pauseBtn.classList.toggle('q-tool-on', paused);
+  }
   document.getElementById('queue-list').innerHTML = items.map(q => {
     // Live progress comes from SSE updates of the library list
     const m = state.meetings.find(x => x.id === q.id) || {};
@@ -180,7 +214,8 @@ function renderQueuePanel() {
     const pct = running ? (m.progress ?? q.progress ?? 0) : 0;
     const detail = q.cancelling
       ? t('queueCancelling')
-      : running ? serverText(m.stage_text || q.stage_text || '') : t('queueWaiting').replace('{n}', () => q.position);
+      : running ? serverText(m.stage_text || q.stage_text || '')
+      : paused ? t('queuePausedItem') : t('queueWaiting').replace('{n}', () => q.position);
     const timing = running && !q.cancelling ? formatTiming(jobTiming(q, pct)) : '';
     return `
       <div data-click="openMeeting" data-click-args='[${q.id}, true]' tabindex="0" role="button" title="${escapeHtml(detail)}"
