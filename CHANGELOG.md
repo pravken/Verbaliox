@@ -6,6 +6,22 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.24 — English
+
+- **The next meeting in sight**: under the greeting a card «Next in 12 min · title» (orange in its last 5
+  minutes, «on · 25 min left» during it) with the day's counts; «→ 12 min» on the week's «now».
+- **New widgets**: «Before the meeting» (who, when, what is open from the last meetings, the brief),
+  «Due today», «Free time» (windows of 30 min or more), «Load of the week» (hours a day against your norm),
+  «Series giving nothing».
+- **Themes**: Settings → General → Appearance — the accent colour and the background from presets.
+- The period's progress next to its dates; the date tile opens this week's calendar; the week shows whole
+  titles; a point for fractions.
+- The time on the dashboard follows by itself, also after the window is restored; «In a minute: …» goes
+  once the recording is on.
+- **Obsidian notes in date folders**: with «Folders by date» on, the notes go into their date's folders, the
+  ones made before move by themselves (the tray shows it) and come back when it is off.
+- «Auto-import folder» is now «Auto-import folder for audio and video».
+
 ## 0.8.23 — English
 
 - **One red button for recording**: its ▾ menu records with a preset, with captions and translation, starts
@@ -658,6 +674,21 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.24
+
+- **Следующая встреча на виду**: под приветствием карточка «Следующая через 12 мин · название» (оранжевая
+  за 5 минут, во время встречи — «идёт · осталось 25 мин») и цифры дня; на линии «сейчас» недели — «→ 12 мин».
+- **Новые виджеты**: «Перед встречей» (кто, когда, что открыто с прошлых встреч, бриф), «Горит сегодня»,
+  «Свободное время» (окна от 30 минут), «Нагрузка недели» (часы по дням и ваша норма), «Серии без отдачи».
+- **Темы оформления**: Настройки → Общие → Оформление — цвет акцента и фона из наборов.
+- Прогресс периода рядом с датами; плитка с датой открывает календарь недели; на неделе названия встреч
+  целиком; дроби через точку.
+- Время на дэшборде идёт само, в том числе после разворачивания окна; «Через минуту: …» исчезает, когда
+  пошла запись.
+- **Заметки Obsidian по папкам с датой**: с «Папками по дате» заметки ложатся в папку своей даты, созданные
+  раньше переносятся сами (ход виден в трее) и возвращаются, если выключить.
+- «Папка автоимпорта» теперь называется «Папка автоимпорта аудио и видео».
 
 ## 0.8.23
 
