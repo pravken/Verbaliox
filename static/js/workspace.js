@@ -34,6 +34,7 @@ async function selectMeeting(id, reloadPlayer = true) {
   const prevId = state.activeMeeting ? state.activeMeeting.id : null;
   state.activeMeeting = m;
   if (prevId !== m.id) state.speakerFilter = null;
+  if (prevId !== m.id && typeof navRecord === 'function') navRecord();  // «Назад» of the mouse comes back here
 
   document.getElementById('workspace-empty').classList.add('hidden');
   document.getElementById('workspace-content').classList.remove('hidden');

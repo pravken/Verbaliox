@@ -3165,3 +3165,50 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .obs-rx-hint { display: block; margin-top: 2px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
 .obs-rx-go { display: flex; justify-content: flex-end; padding: 6px 8px 4px; }
 
+/* the whole queue at once (static/js/library.js toggleQueuePause, cancelWholeQueue) */
+.q-tool { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 500; color: var(--hc-dim, #A1A1A6); background: rgba(255, 255, 255, 0.05); }
+.q-tool:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.1); }
+.q-tool-on { color: #FFB340; background: rgba(255, 159, 10, 0.14); }
+.q-tool-danger:hover { color: #FF8A80; background: rgba(255, 69, 58, 0.14); }
+
+/* the details of a number or a widget of the dashboard (static/js/dashboard.js dbOpenDetail) */
+.db-detail { width: 460px; max-width: 48vw; flex: none; overflow: auto; background: #1A1B20; border-left: 1px solid rgba(255, 255, 255, 0.1); padding: 16px 18px 24px; }
+.db-detail.hidden { display: none; }
+.db-dt-top { display: flex; align-items: center; gap: 8px; }
+.db-dt-top h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 650; color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-dt-period { margin: 2px 0 10px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.db-dt-body { display: flex; flex-direction: column; gap: 2px; }
+.db-dt-sum { font-size: var(--fs-ui); color: #E5E5EA; margin-bottom: 6px; }
+.db-dt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.db-dt-chip { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-label); color: var(--hc-dim, #A1A1A6); }
+.db-dt-seg { margin: 2px 0 8px; align-self: flex-start; }
+.db-dt-head, .db-dt-row:not(.db-dt-dec) { display: grid; grid-template-columns: 92px minmax(0, 1fr) 30px 30px 38px 62px; align-items: center; gap: 6px; }
+.db-dt-head { font-size: 10.5px; color: var(--hc-dim, #8E8E93); padding: 0 6px 4px; text-align: center; }
+.db-dt-row { width: 100%; text-align: left; padding: 7px 6px; border-radius: 8px; background: none; border: 0; color: #E5E5EA; cursor: pointer; }
+.db-dt-row:hover, .db-dt-task:hover { background: rgba(255, 255, 255, 0.06); }
+.db-dt-when { font-size: 10.5px; color: var(--hc-dim, #8E8E93); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-dt-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; }
+.db-dt-main b { font-weight: 550; font-size: var(--fs-ui); color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.db-dt-main small { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.db-dt-num { text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: #C7C7CC; }
+.db-dt-dur { text-align: right; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--hc-dim, #A1A1A6); white-space: nowrap; }
+.db-dt-why { padding: 0 6px; border-radius: 6px; background: rgba(255, 159, 10, 0.14); color: #FFB340; font-size: 10.5px; line-height: 1.6; }
+.db-dt-task { display: flex; align-items: flex-start; gap: 8px; padding: 7px 6px; border-radius: 8px; }
+.db-dt-task .db-dt-main { flex: 1; }
+.db-dt-task.done { opacity: 0.55; }
+.db-ck-gap { width: 16px; flex: none; }
+.db-dt-sec { margin: 12px 0 4px; font-size: var(--fs-label); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--hc-dim, #A1A1A6); }
+.db-dt-card { margin-top: 12px; align-self: flex-start; }
+/* the numbers open their details */
+.db-kpi { display: flex; flex-direction: column; }
+.db-kpi-open { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; }
+.db-kpi-go { margin-left: 6px; opacity: 0; transition: opacity 0.15s; color: #4DA3FF; }
+.db-kpi:hover .db-kpi-go, .db-kpi-open:focus-visible .db-kpi-go { opacity: 1; }
+.db-kpi-x { margin-top: 6px; align-self: flex-start; padding: 1px 8px; border-radius: 8px; background: rgba(255, 159, 10, 0.14); color: #FFB340; font-size: var(--fs-label); border: 0; cursor: pointer; }
+.db-kpi-x-none { background: rgba(48, 209, 88, 0.1); color: #7EE787; }
+.db-task-wait { grid-template-columns: minmax(56px, 110px) minmax(0, 1fr) 96px; }
+.db-who { min-width: 0; font-size: var(--fs-label); color: #C7C7CC; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Settings → Доступ агента: the lines to paste (static/js/settings.js loadMcpConfig) */
+.mcp-code { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: #C7C7CC; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; user-select: text; }
+

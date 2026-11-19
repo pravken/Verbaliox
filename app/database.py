@@ -164,7 +164,10 @@ def init_db() -> None:
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "analysis_after_meetings": "true",
-            "economy_mode": "false",  # recording only, no model works (app/economy.py; the tray menu)
+            "mcp_local_only": "false",  # the agent (app/mcp_server.py) also gets the recordings marked «только локально»
+            "economy_mode": "false",  # «Только запись»: no model works (app/economy.py; the tray menu)
+            "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
+            "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
             "live_captions_auto": "true",  # captions start with a recording (the studio's switch as last set)
             "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",

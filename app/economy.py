@@ -1,6 +1,7 @@
 """
-«Режим экономии» (asked by the user, from the tray icon's menu or Settings → Общие): only recording works,
-no model takes the processor or the memory. While it is on:
+«Только запись» (the setting economy_mode; asked by the user, from the tray icon's menu or Settings → Общие):
+only recording works, no model takes the processor or the memory, until it is turned off or for a time
+(economy_until: 30 minutes, an hour, two, four, the end of the day). While it is on:
 - the job queue does not start the next job (a transcription, a translation...): they wait for the mode to end;
   the job running when it was turned on finishes;
 - the analysis waits as during a meeting (app/meeting_guard.busy says "economy"): one running is broken off,
@@ -24,15 +25,65 @@ def on(settings: Optional[Dict[str, str]] = None) -> bool:
             settings = get_all_settings()
         except Exception:
             return False
-    return (settings.get("economy_mode") or "false").lower() == "true"
+    if (settings.get("economy_mode") or "false").lower() != "true":
+        return False
+    return not expired(settings)
 
 
-def set_mode(enabled: bool) -> bool:
+DURATIONS = {"0": 0, "30": 30, "60": 60, "120": 120, "240": 240, "day": -1}
+
+
+def until_for(choice: str, now: Optional[float] = None) -> float:
+    """The moment «Только запись» ends for a choice of its time ("0": when turned off; "day": midnight)."""
+    import time
+    from datetime import datetime, timedelta
+
+    now = time.time() if now is None else now
+    minutes = DURATIONS.get(str(choice or "0"), 0)
+    if minutes == 0:
+        return 0.0
+    if minutes < 0:
+        d = datetime.fromtimestamp(now)
+        return (datetime(d.year, d.month, d.day) + timedelta(days=1)).timestamp()
+    return now + minutes * 60
+
+
+def until(settings: Optional[Dict[str, str]] = None) -> float:
+    if settings is None:
+        from app.database import get_all_settings
+
+        settings = get_all_settings()
+    try:
+        return float(settings.get("economy_until") or 0)
+    except ValueError:
+        return 0.0
+
+
+def expired(settings: Optional[Dict[str, str]] = None) -> bool:
+    import time
+
+    end = until(settings)
+    return bool(end) and time.time() >= end
+
+
+def set_mode(enabled: bool, choice: str = "0") -> bool:
+    """On (for a time: DURATIONS) or off."""
     from app.database import update_settings
 
-    update_settings({"economy_mode": "true" if enabled else "false"})
+    end = until_for(choice) if enabled else 0.0
+    update_settings({"economy_mode": "true" if enabled else "false", "economy_until": f"{end:.0f}" if end else ""})
     applied(enabled)
     return bool(enabled)
+
+
+def tick() -> None:
+    """Its time is over: turned off, the queue and the analysis go on (app/meeting_guard's loop)."""
+    from app.database import get_all_settings
+
+    settings = get_all_settings()
+    if (settings.get("economy_mode") or "false").lower() == "true" and expired(settings):
+        print("[economy] its time is over", flush=True)
+        set_mode(False)
 
 
 def applied(enabled: bool) -> None:
@@ -40,7 +91,7 @@ def applied(enabled: bool) -> None:
     print(f"[economy] {'on: recording only' if enabled else 'off'}", flush=True)
     from app import events, meeting_guard, transcriber
 
-    events.publish({"type": "economy", "on": bool(enabled)})  # the page: the status bar, the captions
+    events.publish({"type": "economy", "on": bool(enabled), "until": until() if enabled else 0})  # the page: the status bar, the captions
     transcriber.wake_queue()  # off: the waiting jobs start
     meeting_guard.kick()  # on: the analysis is broken off and its models unloaded; off: it follows
     if enabled:

@@ -54,8 +54,16 @@ _CHECK = (
     "файл, «сейчас покажу»), особенно если по репликам рядом видно, что оно сделано тут же («вижу экран», «да, "
     "пришло»); обсуждение, мнение, рассказ о том, что человек делает сейчас или уже сделал, предложение, "
     "с которым не согласились, вопрос, пересказ факта, общий план без конкретного действия. "
-    "Ответ — по строке на задачу, в виде «номер: да» или «номер: нет», без пояснений."
+    "Если да — сразу после «да» через « — » перепиши задачу одним понятным действием: что сделать, 4–12 слов, "
+    "начиная с глагола («Прислать смету юристам до пятницы»), только по смыслу слов записи, своими словами, без "
+    "обрывков реплик, слов-паразитов и имени исполнителя. Если понятное действие из этих слов не складывается — "
+    "это «нет». "
+    "Ответ — по строке на задачу, в виде «номер: да — переписанная задача» или «номер: нет», без пояснений."
 )
+# Reported by the user: the tasks often read as words of the talk glued together, while the overview of the
+# same meeting was clear. The small model writes «what» from the words around; the second look (verify) reads
+# each task with its words and the lines around and writes it anew as one clear action, or drops it.
+_REWRITE_MIN_WORDS, _REWRITE_MAX_CHARS = 2, 200
 # The organizer's meeting follow-up (MFU), pasted into the recording: a list people agreed on, so every
 # action in it is a task, taken as written; the transcript only adds the moment it was said
 _SYSTEM_MFU = (
@@ -237,12 +245,19 @@ def verify(items: List[Dict[str, Any]], m: Dict[str, Any], llm: Any, batch: int 
         except Exception:
             kept.extend(part)
             continue
-        verdict = {int(n): v.casefold().startswith(("да", "yes")) for n, v in
-                   re.findall(r"(?m)^\s*(\d+)\s*[:.)\-–—]\s*(да|нет|yes|no)", answer or "", flags=re.I)}
+        found = re.findall(r"(?m)^\s*(\d+)\s*[:.)\-–—]\s*(да|нет|yes|no)\b[ \t]*(?:[—–\-:|][ \t]*(.+))?$", answer or "", flags=re.I)
+        verdict = {int(n): v.casefold().startswith(("да", "yes")) for n, v, _w in found}
         if not verdict:
             kept.extend(part)
             continue
-        kept.extend(x for i, x in enumerate(part, 1) if verdict.get(i, True))
+        reworded = {int(n): (w or "").strip().strip("«»\"'. ") for n, v, w in found}
+        for i, x in enumerate(part, 1):
+            if not verdict.get(i, True):
+                continue
+            better = reworded.get(i) or ""
+            if len(better.split()) >= _REWRITE_MIN_WORDS and len(better) <= _REWRITE_MAX_CHARS:
+                x = {**x, "what": better[0].upper() + better[1:]}  # one clear action instead of the words around
+            kept.append(x)
     return kept
 
 
