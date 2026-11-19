@@ -6,6 +6,17 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.23 — English
+
+- **One red button for recording**: its ▾ menu records with a preset, with captions and translation, starts
+  the dictation and opens the recording settings. The «Studio» tab and the dashboard's big buttons are gone;
+  the recording's screen shows in the bar only while it records, with the text, the notes and the people.
+- **The transcript starts right under the title**: the recognition is one button «versions and actions ▾»,
+  the chapters are on the player's wave only, «No fillers» and «Auto-scroll» are in the view menu.
+- **Analysis**: three buttons over a section — «Regenerate», «Copy», «⋯»; the export, the overview's
+  settings, the doubtful words and the question about the recording are in «⋯».
+- **Dashboard details**: decisions grouped by meeting, quieter rows; the period's numbers on one line.
+
 ## 0.8.22 — English
 
 - **Agent access (MCP) on Windows**: the Russian text no longer comes to the agent as «�», and a search in
@@ -647,6 +658,18 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.23
+
+- **Одна красная кнопка для записи**: её меню ▾ записывает с набором, с субтитрами и переводом, включает
+  диктовку и открывает настройки записи. Вкладки «Студия» и больших кнопок на дэшборде больше нет; экран
+  записи виден в верхней панели только пока она идёт — с текстом, заметками и участниками.
+- **Расшифровка начинается сразу под заголовком**: распознавание — одна кнопка «версии и действия ▾»,
+  главы только на дорожке плеера, «Без запинок» и «Автопрокрутка» — в меню вида.
+- **Анализ**: над разделом три кнопки — «Пересоздать», «Копировать», «⋯»; экспорт, настройка обзора,
+  сомнительные слова и вопрос о записи — в «⋯».
+- **Подробности на дэшборде**: решения сгруппированы по встречам, строки спокойнее; цифры периода на одной
+  линии.
 
 ## 0.8.22
 
