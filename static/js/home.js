@@ -486,6 +486,7 @@ async function hmAutoTick() {
   await hmLoadEvents(false);
   const now = Date.now();
   if (hmAutoRec && !isRecording() && !_quickRecBusy) hmAutoRec = null;  // the user stopped it: it stays stopped
+  hmAskExpire();
   if (hmAutoRec && now > hmAutoRec.end + 60e3) {
     const rec = hmAutoRec;
     hmAutoRec = null;
@@ -566,6 +567,18 @@ async function hmSetNever(e, on) {
   if (!await hmSave({ meet_never: JSON.stringify(list), meet_overrides: JSON.stringify(hmPruneOverrides(ov)) })) return false;
   if (hmShown()) renderHomeNow();
   return true;
+}
+
+// The question goes by itself once it has no point (reported by the user: «Через минуту: …» stayed while the
+// meeting was recorded): a recording going on (started by any way), or the start window over (the tick
+// records nothing later than 5 minutes in). Unanswered: nothing is saved for the meeting
+function hmAskExpire() {
+  const e = hmAskEvent;
+  if (!e) return;
+  const now = Date.now();
+  if (!isRecording() && now < e.s.getTime() + 5 * 60e3 && now < e.e.getTime()) return;
+  hmAskEvent = null;
+  document.getElementById('hm-ask')?.classList.add('hidden');
 }
 
 async function hmAskNever() {
