@@ -102,12 +102,16 @@ function renderTxModelBar() {
   if (state.txModelFor !== m.id) { state.txModelFor = m.id; state.txModelPick = null; state.txBarOpen = false; }
   const { list, done } = txModelChoices(m);
   const shown = (m.segments || []).length ? (m.transcript_model || '') : '';
-  // The row stays in sight, framed apart: folded into a mark it was not clear it could be opened
-  const folded = false;
+  // With a text there and nothing at work, the row folds into one button (asked by the user: two rows of
+  // models and actions always in sight for what is done once). Its words say it opens («версии и
+  // действия ▾»): a bare mark of the model was not seen as a button before (audit 8.4)
+  const busyNow = !DONE_STATUSES.includes(m.status);
+  const folded = !!shown && !busyNow && !state.txBarOpen;
   bar.classList.toggle('hidden', folded);
-  chip.classList.add('hidden');
+  chip.classList.toggle('hidden', !shown);
   chip.setAttribute('aria-expanded', String(!folded));
-  chip.innerHTML = `<span class="tx-model-chip-dot" aria-hidden="true"></span><span>${escapeHtml(formatModelName(shown))}</span><span aria-hidden="true">${folded ? '▾' : '▴'}</span>`;
+  chip.innerHTML = `<span class="tx-model-chip-dot" aria-hidden="true"></span><span>${escapeHtml(formatModelName(shown))}</span>`
+    + `<span class="tx-model-chip-more">· ${escapeHtml(t('txVersionsActions'))} ${folded ? '▾' : '▴'}</span>`;
   const pick = state.txModelPick || shown || m.model_name || (list[0] && list[0].id) || '';
   const lang = String(m.language || '').slice(0, 2);
   const sel = document.getElementById('tx-model-select');
@@ -1281,7 +1285,8 @@ function renderTranslationControls() {
   const langs = Object.keys(meetingTranslations(m));
   // Always offered for finished recordings: the language list also starts a new translation
   const canTranslate = !!m && m.status === 'completed' && (m.segments || []).length > 0;
-  document.getElementById('tx-view-controls').classList.toggle('hidden', !canTranslate && !langs.length);
+  const hasText = !!m && (m.segments || []).length > 0;
+  document.getElementById('tx-view-controls').classList.toggle('hidden', !hasText && !langs.length);
   if (langs.length && !langs.includes(state.txLang)) state.txLang = langs[0];
   if (!langs.length && state.txView && state.txView !== 'orig') state.txView = 'orig';
   const view = state.txView || 'orig';
@@ -1305,6 +1310,13 @@ function renderTranslationControls() {
   if (canTranslate) html += sep + item(['setTxViewChoice', '__new'], '＋', t('txTranslateNew').replace(/^＋\s*/, ''));
   // Clearing: one translation, or everything the processing made
   if (langs.length) html += sep + langs.map(c => item(['deleteTranslationFromMenu', c], '✕', `${t('txDeleteTr')}: ${langName(c)}`)).join('');
+  // How the text is shown (they were two buttons of the bar that did not show they were on or off)
+  const f = typeof rp !== 'undefined' && rp.fillers;
+  const fillers = state.noFillers && f && f.count ? `${t('rdPlyrNoFillers')} · ${t('rdPlyrHiddenN').replace('{n}', () => f.count)}` : t('rdPlyrNoFillers');
+  if (hasText) {
+    html += sep + item(['txViewToggle', 'fillers'], state.noFillers ? '✓' : '', fillers)
+      + item(['txViewToggle', 'scroll'], state.autoScroll !== false ? '✓' : '', t('txAutoScroll'));
+  }
   document.getElementById('tx-view-menu').innerHTML = html;
   renderExportTranslatedMenu();
 }
@@ -1333,6 +1345,12 @@ function toggleTxViewMenu(e) {
   hideTranslateMenu();
   document.getElementById('export-menu')?.classList.add('hidden');
   document.getElementById('tx-view-menu').classList.toggle('hidden');
+}
+
+function txViewToggle(which) {
+  hideTxViewMenu();
+  if (which === 'fillers') rpToggleNoFillers(); else toggleAutoScroll();
+  renderTranslationControls();
 }
 
 function hideTxViewMenu() {
