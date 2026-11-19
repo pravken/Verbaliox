@@ -113,7 +113,17 @@ function renderHomeNow() {
   if (home.calConfigured) parts.push(`${plural(meetings.length, t('hmMeetingForms'))}${meetings.length ? `, ${t('hmAhead').replace('{n}', () => ahead)}` : ''}`);
   if (queue) parts.push(t('hmLineWork').replace('{n}', () => queue));
   parts.push(plural(tasks, t('hmTaskForms')));
-  document.getElementById('hm-line').textContent = parts.join(' · ');
+  // A card, not a grey line (asked by the user: the text was not noticed): the meeting going on or the
+  // next one with the time to it (orange in its last 5 minutes), then the counts of the day
+  const nx = typeof dbNextMeeting === 'function' && home.calConfigured ? dbNextMeeting() : null;
+  let next = '';
+  if (nx) {
+    const live = nx.s <= now, soon = !live && nx.s - now <= 5 * 60e3;
+    const when = live ? t('dbLiveLeft').replace('{t}', () => dbHm((nx.e - now) / 1000)) : t('hmNextIn').replace('{t}', () => dbIn(nx.s - now));
+    next = `<span class="hm-next${live ? ' live' : ''}${soon ? ' soon' : ''}"><i aria-hidden="true"></i><b>${escapeHtml(when)}</b>`
+      + `<span class="hm-next-t">${escapeHtml(nx.title || t('hmUntitled'))}</span></span>`;
+  }
+  document.getElementById('hm-line').innerHTML = next + parts.map(x => `<span class="hm-line-part">${escapeHtml(x)}</span>`).join('');
 }
 
 // --- The latest recordings ---
@@ -486,6 +496,7 @@ async function hmAutoTick() {
   await hmLoadEvents(false);
   const now = Date.now();
   if (hmAutoRec && !isRecording() && !_quickRecBusy) hmAutoRec = null;  // the user stopped it: it stays stopped
+  hmAskExpire();
   if (hmAutoRec && now > hmAutoRec.end + 60e3) {
     const rec = hmAutoRec;
     hmAutoRec = null;
@@ -566,6 +577,18 @@ async function hmSetNever(e, on) {
   if (!await hmSave({ meet_never: JSON.stringify(list), meet_overrides: JSON.stringify(hmPruneOverrides(ov)) })) return false;
   if (hmShown()) renderHomeNow();
   return true;
+}
+
+// The question goes by itself once it has no point (reported by the user: «Через минуту: …» stayed while the
+// meeting was recorded): a recording going on (started by any way), or the start window over (the tick
+// records nothing later than 5 minutes in). Unanswered: nothing is saved for the meeting
+function hmAskExpire() {
+  const e = hmAskEvent;
+  if (!e) return;
+  const now = Date.now();
+  if (!isRecording() && now < e.s.getTime() + 5 * 60e3 && now < e.e.getTime()) return;
+  hmAskEvent = null;
+  document.getElementById('hm-ask')?.classList.add('hidden');
 }
 
 async function hmAskNever() {
@@ -701,7 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
   setInterval(hmCallEndTick, 5000);
   // the clock line and the processing on the page follow by themselves
-  setInterval(() => { if (hmShown() && !document.hidden) renderHomeNow(); }, 30000);
+  setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);  // the dashboard: dbTickNow
 });
 
 
@@ -726,6 +749,12 @@ function calRange() {
   const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
   const b = calAddDays(calMonday(last), 7);
   return { a, b, month: anchor.getMonth() };
+}
+
+// The date tile of the dashboard: the calendar on this week (the user's week or month choice stays theirs)
+function hmOpenWeek() {
+  calView.mode = 'week';
+  openCalendarView();
 }
 
 function openCalendarView() {

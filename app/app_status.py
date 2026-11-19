@@ -109,6 +109,14 @@ def background() -> List[str]:
     # a stopped recording whose tracks are being mixed: closing the app now loses the mix, its title
     # and notes (its parts come back only as separate recordings)
     check("Сведение дорожек записи", lambda: bool(mixing))
+    try:  # the notes moved to their folders (app/obsidian.relayout), with how far it is
+        from app import obsidian
+
+        mv = obsidian._move_state
+        if mv.get("active"):
+            out.append(f"Перемещение заметок Obsidian {mv.get('done', 0)} из {mv.get('total', 0)}")
+    except Exception:
+        pass
     return out
 
 

@@ -166,6 +166,21 @@
           </div>
           <button id="ffmpeg-download-btn" data-click="installFfmpeg" class="hidden ui-btn ui-btn-primary shrink-0" data-i18n="ffmpegDownloadBtn">Скачать FFmpeg</button>
         </div>
+        <!-- Theme: the accent and the background from presets (applyTheme in static/js/core.js) -->
+        <div class="settings-card space-y-3">
+          <div>
+            <h4 class="text-[13px] font-semibold text-white" data-i18n="themeTitle">Оформление</h4>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="themeDesc">Цвет выделенных кнопок и отметок и цвет фона. Меняется сразу.</p>
+          </div>
+          <div>
+            <div class="text-[11.5px] text-apple-secondary mb-1.5" data-i18n="themeAccent">Акцент</div>
+            <div id="theme-accents" class="theme-row" role="radiogroup" data-i18n-aria="themeAccent" aria-label="Акцент"></div>
+          </div>
+          <div>
+            <div class="text-[11.5px] text-apple-secondary mb-1.5" data-i18n="themeBg">Фон</div>
+            <div id="theme-bgs" class="theme-row" role="radiogroup" data-i18n-aria="themeBg" aria-label="Фон"></div>
+          </div>
+        </div>
         <!-- Interface scale: CSS zoom on the page (applyUiScale in static/js/core.js) -->
         <div class="settings-card !space-y-0 flex items-center justify-between gap-3">
           <div class="min-w-0">
@@ -985,7 +1000,7 @@
           <div class="flex items-center gap-2 pt-1">
             <span class="text-[11.5px] text-apple-secondary" data-i18n="dateFoldersLabel">Папки по дате</span>
             <select id="set-date-folders" data-change="updateFileNamePreview" data-i18n-title="tipDateFolders"
-              title="Записи из студии и экспорты раскладываются по папкам с датой записи. Имена вида 2026-10-21 сортируются в Проводнике по порядку"
+              title="Записи, экспорты и заметки Obsidian раскладываются по папкам с датой записи"
               class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
               <option value="off" data-i18n="dateFoldersOff">Не создавать</option>
               <option value="day" data-i18n="dateFoldersDay">По дням — 2026-10-21</option>
@@ -1015,7 +1030,7 @@
         <div class="settings-card">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="watchTitle">Папка автоимпорта</h4>
+              <h4 class="text-[13px] font-semibold text-white" data-i18n="watchTitle">Папка автоимпорта аудио и видео</h4>
               <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="watchDesc">Новые аудио и видео, которые появятся в этой папке (синхронизация с телефона, диктофон, записи Zoom), добавятся в медиатеку и расшифруются сами. Файлы, которые уже лежат в папке, не трогаются.</p>
             </div>
           </div>

@@ -107,6 +107,21 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual({m["id"] for m in person["meetings"]}, {good, empty})
         self.assertEqual([t["what"] for t in person["owes_me"]], ["Прислать смету"])
 
+    def test_a_series_giving_nothing_lately(self):
+        """Asked by the user: «Серии без отдачи» — the newest meetings of a series, three in a row, gave
+        no decision and no task; one with a decision before them does not count."""
+        from app import series
+
+        sid = series.create_series("Еженедельный синк")
+        good = self._meeting("Синк 1", "2026-11-03", protocol="## Решения\n- Выпускать\n")
+        dull = [self._meeting(f"Синк {i}", f"2026-11-{9 + i:02d}", protocol="## Обзор\n- Поговорили\n") for i in (2, 3, 4)]
+        for mid in [good, *dull]:
+            database.update_meeting_fields(mid, series_id=sid)
+        d = dashboard.build("week", today=self.TODAY)
+        self.assertEqual([(x["name"], x["streak"], x["last"]["id"]) for x in d["dull_series"]], [("Еженедельный синк", 3, dull[-1])])
+        commitments.create("Прислать отчёт", "Мария", meeting_id=dull[-1])  # the newest one gave a task
+        self.assertEqual(dashboard.build("week", today=self.TODAY)["dull_series"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

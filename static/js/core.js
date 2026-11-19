@@ -68,6 +68,45 @@ function applyUiScale(pct) {
 // Before anything is drawn: the last scale, so the window does not jump when the settings arrive
 (() => { let v = null; try { v = localStorage.getItem('verbaliox_ui_scale'); } catch (e) {} applyUiScale(v || '100'); })();
 
+// --- Themes (asked by the user): the accent colour and the background, from presets (Settings → Общие →
+// Оформление; ui_accent, ui_bg). Every colour of the page reads the variables of static/styles.css :root ---
+const THEME_ACCENTS = {
+  blue: ['#0A84FF', '#4DA3FF', '#0071E3'], indigo: ['#5E5CE6', '#8583FF', '#4A48C9'], purple: ['#BF5AF2', '#D38CF7', '#A243D3'],
+  pink: ['#FF375F', '#FF6E8A', '#DE2A50'], teal: ['#30B0C7', '#5CCADD', '#2595A9'], mint: ['#00B8A9', '#3AD3C6', '#00998D'],
+  graphite: ['#8E8E93', '#B4B4B9', '#76767B'],
+};
+// page, sidebar, panel, card, raised
+const THEME_BGS = {
+  graphite: ['#141416', '#1C1C1E', '#1C1D21', '#242426', '#2C2C2E'],
+  black: ['#000000', '#0E0E10', '#111114', '#18181B', '#212124'],
+  midnight: ['#0E1320', '#141A2A', '#161C2B', '#1C2335', '#242C41'],
+  forest: ['#0F1613', '#151D19', '#17201B', '#1D2621', '#252F29'],
+  warm: ['#17140F', '#1E1B16', '#201C17', '#27231D', '#302B24'],
+};
+function hexChannels(h) { return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(' '); }
+// a colour mixed with white (k > 0) or black (k < 0), as #RRGGBB
+function hexMix(h, k) {
+  const to = k > 0 ? 255 : 0, f = Math.abs(k);
+  return '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - f) + to * f).toString(16).padStart(2, '0')).join('');
+}
+function applyTheme(accent, bg) {
+  const a = THEME_ACCENTS[accent] || THEME_ACCENTS.blue, b = THEME_BGS[bg] || THEME_BGS.graphite;
+  const st = document.documentElement.style;
+  [['accent', a[0]], ['accent-hi', a[1]], ['accent-lo', a[2]], ['bg', b[0]], ['sidebar', b[1]], ['panel', b[2]], ['card', b[3]], ['elevated', b[4]]]
+    .forEach(([k, v]) => { st.setProperty(`--${k}`, v); st.setProperty(`--${k}-rgb`, hexChannels(v)); });
+  // the shades made from the accent: pressed, a text on the dark, a very light one
+  st.setProperty('--accent-deep', hexMix(a[2], -0.12));
+  st.setProperty('--accent-text', hexMix(a[0], 0.45));
+  st.setProperty('--accent-pale', hexMix(a[0], 0.78));
+  document.documentElement.dataset.accent = THEME_ACCENTS[accent] ? accent : 'blue';
+  document.documentElement.dataset.bg = THEME_BGS[bg] ? bg : 'graphite';
+  try { localStorage.setItem('verbaliox_theme', JSON.stringify([accent, bg])); } catch (e) {}
+}
+// the accent as a colour for a canvas (it cannot read a CSS variable)
+function accentColor() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0A84FF'; }
+// Before anything is drawn: the last theme, so the window does not flash the default one
+(() => { let v = null; try { v = JSON.parse(localStorage.getItem('verbaliox_theme') || 'null'); } catch (e) {} if (Array.isArray(v)) applyTheme(v[0], v[1]); })();
+
 // --- Events without inline handlers ---
 // The page's Content-Security-Policy runs no inline script, so markup does not say onclick="…".
 // An element names a page function in data-<event> and its arguments, as a JSON list, in

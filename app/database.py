@@ -176,6 +176,8 @@ def init_db() -> None:
             "audio_enhance": "true",
             "clean_fillers": "true",
             "ui_scale": "100",  # the interface scale of the page, % (static/js/core.js applyUiScale)
+            "ui_accent": "blue",  # the theme: the accent and the background (static/js/core.js applyTheme)
+            "ui_bg": "graphite",
             "record_source_mode": "both",
             "record_mic_device": "",
             "batched_inference": "true",  # faster-whisper BatchedInferencePipeline on GPU

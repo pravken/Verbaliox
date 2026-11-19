@@ -240,6 +240,17 @@ await step('library table', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a double click did not open the recording');
 });
 
+// «Через минуту: …» goes by itself once a recording is going on (reported by the user: it stayed)
+await step('meeting question expires', async () => {
+  await page.evaluate(() => switchAppView('dashboard'));
+  await sleep(500);
+  await page.evaluate(() => hmShowAsk({ key: 'x', title: 'Синк', s: new Date(Date.now() + 60e3), e: new Date(Date.now() + 3600e3) }));
+  expect(await page.isVisible('#hm-ask'), 'the question did not show');
+  await page.evaluate(() => { window._realIsRecording = isRecording; window.isRecording = () => true; updateRecordButtonState(); });
+  expect(!(await page.isVisible('#hm-ask')), 'the question stays while recording');
+  await page.evaluate(() => { window.isRecording = window._realIsRecording; updateRecordButtonState(); });
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => switchAppView('dashboard'));

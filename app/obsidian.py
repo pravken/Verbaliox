@@ -11,6 +11,7 @@ leaving a copy behind. Exports run automatically after processing when "obsidian
 import re
 
 from app.grounding import readable_summaries
+import shutil
 import threading
 import traceback
 from datetime import datetime
@@ -372,6 +373,90 @@ def vault_dir(settings: Optional[Dict[str, str]] = None) -> Optional[Path]:
     return Path(vault).expanduser().joinpath(*parts)
 
 
+def note_folder(m: Dict[str, Any], settings: Optional[Dict[str, str]] = None, base: Optional[Path] = None) -> Path:
+    """Where the note of a recording goes: the vault's folder, the feature's folder (obsidian_feature_folders),
+    then the folder of its date («Папки по дате», date_folders: asked by the user, the notes follow it as the
+    recordings and the exports do)."""
+    from app.naming import date_folder
+
+    settings = settings or _settings()
+    folder = base if base is not None else vault_dir(settings)
+    if _on(settings, "obsidian_feature_folders"):
+        # a folder per feature (asked by the user): the notes of one feature together, its first one
+        feature = (feature_names(m) or [""])[0]
+        if feature:
+            folder = folder / safe_filename(feature, 80)
+    sub = date_folder(meeting_datetime(m), settings.get("date_folders") or "off")
+    return folder.joinpath(*sub.split("/")) if sub else folder
+
+
+# The notes moved to the folders the settings now give (asked by the user: «Папки по дате» turned on, the
+# notes made before go into their date's folders; turned off, they come back), in the background; the tray
+# and the status line say it is going on (app/app_status.background)
+_move_state: Dict[str, Any] = {"active": False, "done": 0, "total": 0, "moved": 0}
+_move_lock = threading.Lock()
+
+
+def relayout_status() -> Dict[str, Any]:
+    return dict(_move_state)
+
+
+def relayout(wait: bool = False) -> Dict[str, Any]:
+    from app.database import get_meeting, list_meetings, update_meeting_fields
+    from app.naming import _DATE_NAME_RE
+
+    root = vault_dir()
+    if root is None:
+        return relayout_status()
+    with _move_lock:
+        if _move_state["active"]:
+            return relayout_status()
+        ids = [m["id"] for m in list_meetings() if m.get("obsidian_path") and Path(m["obsidian_path"]).is_file()]
+        _move_state.update(active=True, done=0, total=len(ids), moved=0)
+
+    def run() -> None:
+        left: set = set()
+        try:
+            settings = _settings()
+            for mid in ids:
+                try:
+                    with _lock:  # not while a note is written
+                        m = get_meeting(mid) or {}
+                        old = Path(m.get("obsidian_path") or "")
+                        if not old.is_file():
+                            continue
+                        folder = note_folder(m, settings, root)
+                        if old.parent.resolve() == folder.resolve():
+                            continue
+                        folder.mkdir(parents=True, exist_ok=True)
+                        target = folder / old.name
+                        if target.exists():
+                            target = _unique(target)
+                        shutil.move(str(old), str(target))
+                        update_meeting_fields(mid, obsidian_path=str(target))
+                        left.add(old.parent)
+                        _move_state["moved"] += 1
+                except Exception as e:
+                    print(f"[obsidian] moving the note of meeting {mid}: {e}", flush=True)
+                finally:
+                    _move_state["done"] += 1
+            # the date folders left empty go (only those: a folder of the user's is never removed)
+            for d in sorted(left, key=lambda p: len(p.parts), reverse=True):
+                while d != root and _DATE_NAME_RE.match(d.name) and d.is_dir() and not any(d.iterdir()):
+                    d.rmdir()
+                    d = d.parent
+            if _move_state["moved"]:
+                print(f"[obsidian] {_move_state['moved']} note(s) moved to their folders", flush=True)
+        finally:
+            _move_state["active"] = False
+
+    if wait:
+        run()
+    else:
+        threading.Thread(target=run, daemon=True, name="obsidian_relayout").start()
+    return relayout_status()
+
+
 def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[str, Any]:
     """Makes what the note needs and is missing: a title from the content, the overview and tasks."""
     from app.database import get_meeting, save_meeting_results
@@ -430,11 +515,7 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
             raise LookupError("Встреча не найдена")
         if (m.get("status") != "completed" and not in_job) or not m.get("segments"):
             raise ValueError("Запись ещё не расшифрована")
-        if _on(settings, "obsidian_feature_folders"):
-            # a folder per feature (asked by the user): the notes of one feature together, its first one
-            feature = (feature_names(m) or [""])[0]
-            if feature:
-                folder = folder / safe_filename(feature, 80)
+        folder = note_folder(m, settings, folder)
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / note_filename(m, settings.get("obsidian_filename") or "")
         old = Path(m.get("obsidian_path") or "")

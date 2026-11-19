@@ -292,12 +292,14 @@ function drawLiveSoundCloudBars(canvasId, historyArr, activeColor = '#FF453A') {
     ctx.fill();
 
     ctx.fillStyle = isSignal ? 'rgba(255, 69, 58, 0.38)' : 'rgba(255, 255, 255, 0.10)';
-    if (activeColor === '#0A84FF' && isSignal) {
-      ctx.fillStyle = 'rgba(10, 132, 255, 0.38)';
+    if (activeColor === accentColor() && isSignal) {  // the theme's accent, its reflection a shade lighter
+      ctx.globalAlpha = 0.38;
+      ctx.fillStyle = activeColor;
     }
     ctx.beginPath();
     ctx.roundRect(x, midY + 1.5, barW, botH, 1);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   ctx.restore();
@@ -344,7 +346,7 @@ async function toggleSettingsAudioTest() {
       _settingsWaveHistory.push(visualAmp);
       if (_settingsWaveHistory.length > 68) _settingsWaveHistory.shift();
 
-      drawLiveSoundCloudBars('settings-waveform-canvas', _settingsWaveHistory, '#0A84FF');
+      drawLiveSoundCloudBars('settings-waveform-canvas', _settingsWaveHistory, accentColor());
       document.getElementById('settings-db-readout').textContent = `${db} dB`;
 
       const hasSound = db > -44;
@@ -2484,7 +2486,7 @@ async function studioMicTest() {
       const { db, visualAmp } = computeRmsAndDb(analyser, buf);
       loudest = Math.max(loudest, db);
       history.push(visualAmp); history.shift();
-      drawLiveSoundCloudBars('record-waveform-canvas', history, '#0A84FF');
+      drawLiveSoundCloudBars('record-waveform-canvas', history, accentColor());
       document.getElementById('record-level-bar').style.width = `${Math.min(100, Math.max(2, Math.round(((db + 60) / 60) * 100)))}%`;
       document.getElementById('record-db-display').textContent = `${db} dB`;
       document.getElementById('record-signal-dot').classList.toggle('on', db > -44);

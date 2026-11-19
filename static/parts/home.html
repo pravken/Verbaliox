@@ -5,7 +5,8 @@
       <div class="hm-wrap">
         <div class="hm-head">
           <div class="hm-hello">
-            <div class="hm-tile" aria-hidden="true"><div id="hm-tile-mon" class="hm-tile-mon"></div><div id="hm-tile-day" class="hm-tile-day"></div></div>
+            <!-- the date opens the calendar of this week, earlier and later ones a click away (asked by the user) -->
+            <button class="hm-tile" data-click="hmOpenWeek" data-i18n-title="hmTileTip" title="Календарь этой недели" data-i18n-aria="hmTileTip" aria-label="Календарь этой недели"><span id="hm-tile-mon" class="hm-tile-mon"></span><span id="hm-tile-day" class="hm-tile-day"></span></button>
             <div class="flex flex-col gap-1.5 min-w-0">
               <span id="hm-weekday" class="hm-weekday"></span>
               <h1 id="hm-greeting" class="hm-greeting" data-i18n="homeHello">Добрый день</h1>

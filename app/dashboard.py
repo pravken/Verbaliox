@@ -23,6 +23,9 @@ NO_OUTCOME_MIN_SEC = 10 * 60
 SILENT_SHARE = 5.0  # % of the talk
 SILENT_MIN_SEC = 30 * 60
 SERIES_MIN = 3
+# «Серии без отдачи» (asked by the user): a series whose last analysed meetings, this many at least in a row,
+# gave no decision and no task, looked at among its last SERIES_LOOK meetings (whatever the period)
+SERIES_LOOK = 6
 
 
 def _facts(full: Dict[str, Any], me: set, task_counts: Dict[int, int]) -> Dict[str, Any]:
@@ -62,6 +65,38 @@ def _series_reasons(rows: List[Dict[str, Any]]) -> None:
         if len(group) >= SERIES_MIN and all("no_outcome" in r["reasons"] for r in group):
             for r in group:
                 r["reasons"].append("series")
+
+
+def _dull_series(meetings: List[Dict[str, Any]], me: set, fmap: Dict[int, List[int]]) -> List[Dict[str, Any]]:
+    """The series giving nothing lately: their newest analysed meetings, SERIES_MIN or more in a row, ended
+    without a decision or a task. Most such meetings first."""
+    try:
+        from app.series import list_series
+
+        names = {s["id"]: s.get("name") or "" for s in list_series()}
+    except Exception:
+        names = {}
+    by: Dict[int, List[Dict[str, Any]]] = {}
+    for m in meetings:
+        if m.get("series_id"):
+            by.setdefault(m["series_id"], []).append(m)
+    out = []
+    for sid, group in by.items():
+        if len(group) < SERIES_MIN:
+            continue
+        last = sorted(group, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True)[:SERIES_LOOK]
+        rows = [r for r in _meeting_rows(last, me, fmap) if r["analysed"]]
+        streak = 0
+        for r in rows:  # newest first
+            if "no_outcome" not in r["reasons"]:
+                break
+            streak += 1
+        if streak >= SERIES_MIN:
+            out.append({"series_id": sid, "name": names.get(sid) or rows[0]["title"], "streak": streak,
+                        "hours": round(sum(r["duration"] for r in rows[:streak]) / 3600, 1),
+                        "last": {"id": rows[0]["id"], "title": rows[0]["title"], "date": rows[0]["date"]}})
+    out.sort(key=lambda x: (-x["streak"], -x["hours"]))
+    return out[:6]
 
 
 def _bounds(period: str, today: date) -> Tuple[date, date, date]:
@@ -210,6 +245,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
             waiting, key=lambda t: (not (t.get("due_date") and t["due_date"] < iso), t.get("due_date") or "9999", t["id"]))[:8]],
         "buckets": buckets, "features": feats, "people": people,
         "decisions": decisions[:12], "tasks": [task_brief(t) for t in focus[:10]], "needs_me": not me,
+        "dull_series": _dull_series(meetings, me, fmap),
         "recent": [{"id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat(), "duration": m.get("duration") or 0,
                     "status": m.get("status"), "has_summary": bool(m.get("has_summary")), "features": fmap.get(m["id"], [])}
                    for m in recent],
