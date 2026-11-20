@@ -87,9 +87,9 @@ def home_country() -> str:
 
 
 def _language(cls_obj, lang: str) -> str:
-    """The names in the language of the page when the country has it, else English, else its own."""
+    """The names in English (asked by the user, whatever the language of the page), else the country's own."""
     langs = tuple(getattr(cls_obj, "supported_languages", ()) or ())
-    for want in (("ru",) if lang == "ru" else ()) + ("en_US", "en_GB", "en"):
+    for want in ("en_US", "en_GB", "en"):
         if want in langs:
             return want
     return ""
