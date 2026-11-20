@@ -242,11 +242,29 @@ def _download_current() -> bool:
                                                        or dl.get("version") == latest.get("version"))
 
 
+FAILED_NAME = "update-failed.json"  # in the data folder: the archive whose install failed (its sum)
+
+
+def failed_before() -> bool:
+    """The archive downloaded is the one whose install failed (found in the audit: little disk space or a
+    proxy made every automatic attempt fail, and the app restarted and said so every five minutes).
+    It is not installed by itself again; a click in the window still installs it, a newer release too."""
+    from app.paths import DATA_DIR
+
+    with _lock:
+        sha = (_state.get("download") or {}).get("sha256") or ""
+    try:
+        failed = json.loads((DATA_DIR / FAILED_NAME).read_text(encoding="utf-8")).get("sha256") or ""
+    except (OSError, ValueError, AttributeError):
+        return False
+    return bool(sha) and sha.lower() == failed.lower()
+
+
 def ready_to_install() -> bool:
     """A downloaded update that automatic updates would install now."""
     with _lock:
         done = _download_current()
-    return done and auto_enabled() and not is_git_checkout()
+    return done and auto_enabled() and not is_git_checkout() and not failed_before()
 
 
 def install_on_exit() -> bool:
@@ -254,7 +272,7 @@ def install_on_exit() -> bool:
     try:
         with _lock:
             path = _state["download"].get("path") if _download_current() else ""
-        if not path or not auto_enabled() or is_git_checkout():
+        if not path or not auto_enabled() or is_git_checkout() or failed_before():
             return False
         launch_installer(restart=False)
         return True
@@ -681,10 +699,16 @@ def _main(argv: List[str]) -> int:
                 raise UpdateFailed("Архив обновления изменился после проверки — обновление отменено")
             apply_update(Path(a.zip), app_dir, data_dir, ui.set)
             ui.set("Готово." if a.no_restart else "Готово. Запуск Verbaliox…")
+            (data_dir / FAILED_NAME).unlink(missing_ok=True)
         except Exception as e:
             ok, message = False, f"{e}\n{OUTCOME_TEXT[getattr(e, 'outcome', 'untouched')]}"
             with open(data_dir / "logs" / "update.log", "a", encoding="utf-8") as lf:
                 lf.write(traceback.format_exc())
+            try:  # this archive is not installed by itself again (failed_before)
+                (data_dir / FAILED_NAME).write_text(json.dumps({"sha256": a.sha256 or _sha256(Path(a.zip)),
+                                                                "at": time.time(), "error": str(e)[:300]}), encoding="utf-8")
+            except OSError:
+                pass
         finally:
             launcher = app_dir / "Verbaliox.exe"
             pythonw = app_dir / ".venv" / "Scripts" / "pythonw.exe"
