@@ -200,6 +200,9 @@ if (Test-Path $uninstallKey) {
 }
 $shortcuts = @(
     (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Verbaliox.lnk"),
+    # the installer's own «remove completely» shortcut, in either language of the installer
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Удалить Verbaliox полностью.lnk"),
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Remove Verbaliox completely.lnk"),
     (Join-Path ([Environment]::GetFolderPath("Desktop")) "Verbaliox.lnk"),
     (Join-Path ([Environment]::GetFolderPath("Desktop")) "VerbaScribe.lnk")
 )
