@@ -571,6 +571,20 @@ class FailedUpdateTest(unittest.TestCase):
             self.assertTrue(updater.ready_to_install())
 
 
+class CaseRenameTest(unittest.TestCase):
+    def test_a_file_renamed_only_in_letter_case_is_not_stale(self):
+        import tempfile
+        from pathlib import Path
+
+        from app import updater
+
+        app = Path(tempfile.mkdtemp())
+        (app / "app").mkdir()
+        (app / "app" / "Foo.py").write_text("old")
+        (app / "app" / "gone.py").write_text("old")
+        self.assertEqual(updater._stale_code_files(app, ["app/foo.py", "app/main.py"]), ["app/gone.py"])
+
+
 if __name__ == "__main__":
     unittest.main()
 
