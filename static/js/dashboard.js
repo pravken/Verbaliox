@@ -574,7 +574,8 @@ function dbFeatures(d, size) {
   return `<div class="db-feats">` + d.features.slice(0, n).map(f => {
     const c = /^#[0-9A-Fa-f]{6}$/.test(f.color || '') ? f.color : '#8E8E93';
     const max = Math.max(1, ...f.spark);
-    return `<button class="db-feat" style="--ft:${c}" data-click="setDashFeature" data-click-args='[${f.id}]' title="${escapeHtml(t('dbFeatureOnly').replace('{name}', () => f.name))}">`
+    // a click opens the feature's card (asked by the user); the filter of «Главная» is in «Все фичи ▾»
+    return `<button class="db-feat" style="--ft:${c}" data-click="openFeaturePage" data-click-args='[${f.id}]' title="${escapeHtml(t('dbFeatureOpenTip').replace('{name}', () => f.name))}">`
       + `<span class="db-feat-n"><i></i>${escapeHtml(f.name)}</span>`
       + `<span class="db-feat-row"><span><b>${f.meetings}</b> ${escapeHtml(plural(f.meetings, t('dbMeetingForms')).replace(/^\d+\s/, ''))}</span>`
       + (d.needs_me ? '' : `<span><b>${f.open}</b> ${escapeHtml(t('dbMyTasksShort'))}</span>`)

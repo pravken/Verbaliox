@@ -255,7 +255,16 @@ await step('feature card', async () => {
   await page.evaluate(id => openFeaturePage(id), fid);
   await sleep(800);
   expect(await page.locator('#feature-page .fp-week').count() === 12, 'no 12 weeks on the card');
+  expect(await page.locator('#feature-page .fp-now .fp-box').count() === 3, 'no «Сейчас» on the card');
+  expect(await page.locator('#feature-page .fp-stats3 .fp-stat').count() === 3, 'not three numbers');
   expect(await page.locator('#feature-page .fp-person').count() > 0, 'no people on the card');
+  // «Главная»'s widget «Фичи» opens the card (asked by the user)
+  await page.evaluate(() => { document.getElementById('feature-page')?.remove(); switchAppView('dashboard'); });
+  await page.evaluate(() => { const l = dbPrefs().layout.filter(w => w.id !== 'features'); dbSave({ layout: [{ id: 'features', size: 'L' }, ...l] }); return loadDashboard(); });
+  await sleep(800);
+  await page.click(`#db-grid .db-feat[data-click-args='[${fid}]']`);
+  await sleep(800);
+  expect(await page.$('#feature-page'), 'the widget does not open the card');
   await page.evaluate(id => { document.getElementById('feature-page')?.remove(); return fetch('/api/features/' + id, { method: 'DELETE' }); }, fid);
 });
 

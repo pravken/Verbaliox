@@ -237,61 +237,163 @@ async function deleteDictFeature(id) {
   scheduleSidebarRender();
 }
 
-// --- The page of a feature: what it is, its meetings with their decisions, its open tasks, and the
-// assistant asked about it ---
+// --- The card of a feature (asked by the user; opened from the widget «Фичи» on «Главная», a feature's chip,
+// the tasks, the dictionary): what is going on now (its next meeting from the calendar, what changed in a
+// week, «Где мы» from the analysis model on a click), three numbers, its weeks and people, the last decisions,
+// the open tasks as rows and the meetings by month. Sections with nothing in them are left out ---
+const FP = { all: {} };  // the sections shown in full («Все решения», «Ещё», «Показать все»), per feature
+
 async function openFeaturePage(id) {
   if (typeof tkClosePop === "function") tkClosePop();
   const res = await fetch(`/api/features/${id}`);
   const data = await readJson(res);
   if (!res.ok) { showError(data.detail); return; }
   const before = document.getElementById('feature-page');
-  const scroll = before?.querySelector('.overflow-y-auto')?.scrollTop || 0;  // redrawn after a change: stays where it was
+  const scroll = before?.querySelector('.fp-body')?.scrollTop || 0;  // redrawn after a change: stays where it was
   before?.remove();
   const f = data.feature;
+  const color = /^#[0-9A-Fa-f]{6}$/.test(f.color || '') ? f.color : '#8E8E93';
+  const all = FP.all[f.id] || (FP.all[f.id] = {});
   const tasks = data.tasks || [];
   const open = tasks.filter(x => x.status !== 'done');
   const over = open.filter(x => tkIsOver(x)).length;
-  const done = tasks.length - open.length;
-  const stat = (n, label, tone = '') => `<div class="fp-stat"><b class="${tone}">${n}</b><span>${escapeHtml(label)}</span></div>`;
-  const decisions = data.meetings.filter(m => m.decisions.length);
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
   const wrap = document.createElement('div');
   wrap.id = 'feature-page';
   wrap.dataset.fid = String(f.id);
   wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
-  wrap.innerHTML = `<div class="w-full max-w-3xl max-h-[88vh] flex flex-col bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
-      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-start justify-between gap-3">
-        <div class="min-w-0 space-y-1.5">${featureChipHtml(f)}
-          ${f.description ? `<p class="text-[12.5px] text-apple-label leading-snug">${escapeHtml(f.description)}</p>` : ''}
-          ${f.keywords ? `<p class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('ftKeywords'))}: ${escapeHtml(f.keywords)}</p>` : ''}</div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button class="an-btn an-btn-primary" ${pageCall('click', 'askAboutFeature', [f.id])}>✦ ${escapeHtml(t('fpAsk'))}</button>
+  wrap.setAttribute('aria-label', f.name);
+  const more = (key, n, label) => n > 0 ? `<button class="fp-more" ${pageCall('click', 'fpShowAll', [f.id, key])}>${escapeHtml(label)}</button>` : '';
+  // decisions: the latest first, each with its meeting's date
+  const decisions = data.meetings.flatMap(m => m.decisions.map(d => ({ d, m })));
+  const decShown = all.decisions ? decisions : decisions.slice(0, 3);
+  // tasks: overdue first, then by due date, those without one last
+  const sorted = open.slice().sort((x, y) => (tkIsOver(y) - tkIsOver(x)) || String(x.due_date || '9999').localeCompare(String(y.due_date || '9999')));
+  const taskShown = all.tasks ? sorted : sorted.slice(0, 4);
+  const today = new Date().toISOString().slice(0, 10);
+  const meetShown = all.meetings ? data.meetings : data.meetings.slice(0, 5);
+  let month = '';
+  const meetings = meetShown.map(m => {
+    const k = m.date.slice(0, 7);
+    // «Ноябрь», with the year when it is not this one
+    const d = new Date(`${k}-15T12:00:00`), name = d.toLocaleDateString(lang, { month: 'long' });
+    const label = name.charAt(0).toUpperCase() + name.slice(1) + (d.getFullYear() !== new Date().getFullYear() ? ` ${d.getFullYear()}` : '');
+    const head = k !== month ? `<div class="fp-month">${escapeHtml(label)}</div>` : '';
+    month = k;
+    return head + `<button class="fp-meet2" ${pageCall('click', 'openMeetingFromFeature', [m.id])}>
+      <span class="fp-meet2-t">${escapeHtml(m.title || t('tkUntitled'))}</span><span class="fp-meet2-d">${escapeHtml(tkShortDate(m.date.slice(0, 10)))} · ${formatTime(m.duration)}</span>
+      ${m.tldr ? `<span class="fp-meet2-l">${escapeHtml(m.tldr)}</span>` : ''}</button>`;
+  }).join('');
+  wrap.innerHTML = `<div class="fp-card modal-card" style="--ft:${color}">
+      <div class="fp-head">
+        <div class="fp-sw" aria-hidden="true">${escapeHtml((f.name || '?').slice(0, 1).toUpperCase())}</div>
+        <div class="fp-ht"><h2 class="fp-title">${escapeHtml(f.name)}</h2>
+          ${f.description ? `<p class="fp-desc">${escapeHtml(f.description)}</p>` : `<button class="fp-adddesc" ${pageCall('click', 'editFeatureFromPage')}>+ ${escapeHtml(t('fpAddDesc'))}</button>`}</div>
+        <div class="fp-hb">
+          <button class="an-btn an-btn-primary" ${pageCall('click', 'askAboutFeature', [f.id])}>✦ ${escapeHtml(t('fpAskShort'))}</button>
           <button class="an-btn" ${pageCall('click', 'editFeatureFromPage')}>${escapeHtml(t('fpEdit'))}</button>
           <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        <div class="fp-stats">${stat(data.meetings.length, t('fpMeetings'))}${stat(dbNum(data.hours || 0), t('fpHours'))}${stat(open.length, t('fpOpenCount'))}${stat(over, t('fpOverdue'), over ? 'tk-red' : '')}${stat(done, t('fpDone'), done ? 'tk-green' : '')}</div>
-        ${fpActivityHtml(data)}
+      <div class="fp-body">
+        ${fpNowHtml(data)}
+        <div class="fp-stats3">
+          <div class="fp-stat"><b>${data.meetings.length}</b><span>${escapeHtml(plural(data.meetings.length, t('dbMeetingForms')).replace(/^\d+\s/, ''))}</span></div>
+          <div class="fp-stat"><b>${escapeHtml(dbNum(data.hours || 0))}</b><span>${escapeHtml(t('fpHours'))}</span></div>
+          <div class="fp-stat"><b>${open.length}</b><span>${escapeHtml(t('fpOpenCount'))}</span>${over ? `<em class="fp-over">${escapeHtml(t('fpOverdueN').replace('{n}', () => over))}</em>` : ''}</div>
+        </div>
+        ${data.meetings.length ? fpActivityHtml(data) : ''}
         ${fpPeopleHtml(data)}
-        <section><h4 class="fp-h">${escapeHtml(t('fpDecisions'))}</h4>
-          ${decisions.length ? decisions.map(m => `<div class="fp-dec"><button class="fp-meet-link" ${pageCall('click', 'openMeetingFromFeature', [m.id])}>${escapeHtml(m.title || t('tkUntitled'))} · ${escapeHtml(tkShortDate(m.date.slice(0, 10)))}</button>
-              <ul>${m.decisions.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`).join('')
-            : `<p class="fp-empty">${escapeHtml(t('fpNoDecisions'))}</p>`}</section>
-        <section><h4 class="fp-h">${escapeHtml(t('fpOpenTasks'))}</h4>
-          ${open.length ? `<div class="an-tasks">${open.map(c => commitmentRowHtml(c, true)).join('')}</div>` : `<p class="fp-empty">${escapeHtml(t('fpNoTasks'))}</p>`}</section>
-        <section><h4 class="fp-h">${escapeHtml(t('fpMeetingsList'))}</h4>
-          ${data.meetings.length ? data.meetings.map(m => `<button class="fp-meet" ${pageCall('click', 'openMeetingFromFeature', [m.id])}>
-              <span class="fp-meet-title">${escapeHtml(m.title || t('tkUntitled'))}</span><span class="fp-meet-date">${escapeHtml(tkShortDate(m.date.slice(0, 10)))} · ${formatTime(m.duration)}</span>
-              ${m.tldr ? `<span class="fp-meet-tldr">${escapeHtml(m.tldr)}</span>` : ''}</button>`).join('')
-            : `<p class="fp-empty">${escapeHtml(t('fpNoMeetings'))}</p>`}</section>
+        ${decisions.length ? `<section><h4 class="fp-h">${escapeHtml(t('fpDecisions'))}</h4><div class="fp-decs">${decShown.map(x =>
+          `<div class="fp-dec2"><span class="fp-dec2-d">${escapeHtml(tkShortDate(x.m.date.slice(0, 10)))}</span><span>${escapeHtml(x.d)}</span></div>`).join('')}</div>
+          ${all.decisions ? '' : more('decisions', decisions.length - 3, t('fpAllDecisions').replace('{n}', () => decisions.length))}</section>` : ''}
+        ${open.length ? `<section><h4 class="fp-h">${escapeHtml(t('fpOpenTasks'))}</h4><div class="fp-tasks">${taskShown.map(x =>
+          `<div class="db-task"><button class="db-ck" ${pageCall('click', 'fpTaskDone', [x.id])} title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>`
+          + `<button class="db-task-t" ${pageCall('click', 'openMeetingFromFeature', [Number(x.meeting_id) || 0])} title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</button>`
+          + `<span class="fp-task-who">${escapeHtml(x.who || '')}</span>${dbDue(x, today)}</div>`).join('')}</div>
+          ${all.tasks ? '' : more('tasks', open.length - 4, t('fpMoreN').replace('{n}', () => open.length - 4))}</section>` : ''}
+        ${data.meetings.length ? `<section><h4 class="fp-h">${escapeHtml(t('fpMeetingsList'))}</h4>${meetings}
+          ${all.meetings ? '' : more('meetings', data.meetings.length - 5, t('fpShowAllN').replace('{n}', () => data.meetings.length))}</section>`
+          : `<p class="fp-empty">${escapeHtml(t('fpNoMeetings'))}</p>`}
       </div>
     </div>`;
   wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-a="close"]')) wrap.remove(); });
   document.body.appendChild(wrap);
-  const body = wrap.querySelector('.overflow-y-auto');
+  wrap.querySelector('.fp-card').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+  const body = wrap.querySelector('.fp-body');
   if (body) body.scrollTop = scroll;
+}
+
+// «Сейчас»: the next meeting of the feature (with «Подключиться» when the invitation has a call), what
+// changed in 7 days, and «Где мы» (kept on this computer; the model is asked only on a click)
+function fpNowHtml(data) {
+  const f = data.feature, n = data.next, w = data.week || {};
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  let next = `<div class="fp-box"><div class="fp-k">${escapeHtml(t('fpNext'))}</div><div class="fp-none">${escapeHtml(t(n === null && !(state.system?.settings?.calendar_ics) ? 'fpNoCalendar' : 'fpNoNext'))}</div></div>`;
+  if (n) {
+    const s = new Date(n.start), d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const days = Math.round((new Date(s.getFullYear(), s.getMonth(), s.getDate()) - d0) / 864e5);
+    const day = days === 0 ? t('tkTodayLow') : days === 1 ? t('tkTomorrowLow') : s.toLocaleDateString(lang, { weekday: 'short', day: 'numeric', month: 'short' });
+    const who = (n.attendees || []).slice(0, 2).join(', ') + ((n.attendees || []).length > 2 ? ` ${t('fpAndMore').replace('{n}', () => n.attendees.length - 2)}` : '');
+    next = `<div class="fp-box"><div class="fp-k">${escapeHtml(t('fpNext'))}</div><div class="fp-next">
+      <div class="min-w-0"><div class="fp-when">${escapeHtml(day)} ${escapeHtml(s.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' }))}</div>
+        <div class="fp-next-t">${escapeHtml(n.title)}</div>${who ? `<div class="fp-next-w">${escapeHtml(who)}</div>` : ''}</div>
+      ${n.join ? `<button class="an-btn an-btn-primary" ${pageCall('click', 'joinMeetingCall', [n.join])}>${escapeHtml(t('hmJoin'))}</button>` : ''}</div></div>`;
+  }
+  const row = (v, label, sign) => `<div class="fp-chg-r"><b class="${v ? sign : ''}">${v ? (sign === 'plus' ? '+' : '−') + v : '0'}</b><span>${escapeHtml(label)}</span></div>`;
+  const week = `<div class="fp-box"><div class="fp-k">${escapeHtml(t('fpWeek7'))}</div><div class="fp-chg">
+    ${row(w.decisions || 0, t('fpChgDecisions'), 'plus')}${row(w.tasks_new || 0, t('fpChgNew'), 'plus')}${row(w.tasks_done || 0, t('fpChgDone'), 'minus')}</div></div>`;
+  const kept = fpWhere(f.id);
+  const busy = FP.whereBusy === f.id;
+  const where = `<div class="fp-box fp-where"><div class="min-w-0 flex-1"><div class="fp-k"><span class="fp-ai">✦</span> ${escapeHtml(t('fpWhere'))}</div>
+      <p class="fp-where-t">${busy ? escapeHtml(t('fpWhereBusy')) : kept ? escapeHtml(kept.text) : escapeHtml(t('fpWhereNone'))}</p>
+      ${kept && !busy ? `<div class="fp-where-at">${escapeHtml(t('fpWhereAt').replace('{date}', () => new Date(kept.at).toLocaleDateString(lang, { day: 'numeric', month: 'short' })))}</div>` : ''}</div>
+    ${data.meetings.length ? `<button class="an-btn" ${busy ? 'disabled' : ''} ${pageCall('click', 'fpAskWhere', [f.id])}>${escapeHtml(t(kept ? 'fpWhereRefresh' : 'fpWhereAsk'))}</button>` : ''}</div>`;
+  return `<section><h4 class="fp-h">${escapeHtml(t('fpNow'))}</h4><div class="fp-now">${next}${week}${where}</div></section>`;
+}
+
+function fpWhere(id) {
+  try { const v = JSON.parse(localStorage.getItem(`vx-feature-where-${id}`) || 'null'); return v && v.text ? v : null; } catch (e) { return null; }
+}
+
+// «Где мы»: two or three sentences from the transcripts of the feature's meetings (the assistant's answer)
+async function fpAskWhere(id) {
+  const f = featureById(id);
+  const page = await fetch(`/api/features/${id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!page) return;
+  FP.whereBusy = id;
+  openFeaturePage(id);
+  try {
+    const res = await fetch('/api/library/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: t('fpWhereQuestion').replace('{name}', () => (f || page.feature).name), lang: state.uiLang === 'en' ? 'en' : 'ru',
+        meeting_ids: page.meetings.slice(0, 30).map(m => m.id) }) });
+    const data = await readJson(res);
+    if (!res.ok) throw new Error(errorText(data, res));
+    const text = String(data.answer || '').replace(/\s?\[\d+(?:\s*[,–-]\s*\d+)*\]/g, '').replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim();
+    try { localStorage.setItem(`vx-feature-where-${id}`, JSON.stringify({ text, at: Date.now() })); } catch (e) {}
+  } catch (e) {
+    showError(serverText(e.message));
+  } finally {
+    FP.whereBusy = 0;
+    if (document.getElementById('feature-page')?.dataset.fid === String(id)) openFeaturePage(id);
+  }
+}
+
+function fpShowAll(id, key) {
+  (FP.all[id] = FP.all[id] || {})[key] = true;
+  openFeaturePage(id);
+}
+
+async function fpTaskDone(id) {
+  const res = await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'done' }) });
+  if (!res.ok) { showToast(errorText(await readJson(res), res)); return; }
+  refreshFeaturePage();
+  showToast(t('dbTaskDone'), { label: t('spUndo'), onClick: async () => {
+    await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'open' }) });
+    refreshFeaturePage();
+  } }, 'success');
 }
 
 // The card's activity: the meetings of each of the last 12 weeks (the bar's height: their hours), and
@@ -340,6 +442,7 @@ document.addEventListener('keydown', e => {
 
 function openMeetingFromFeature(id) {
   document.getElementById('feature-page')?.remove();
+  if (!id) return;
   switchAppView('library');
   openMeeting(id);
 }
