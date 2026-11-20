@@ -212,15 +212,13 @@ def people() -> List[Dict[str, Any]]:
             "SELECT id, title, recorded_at, created_at, speakers_json FROM meetings WHERE status = 'completed'"
         ).fetchall()
         conn.close()
-    from app.database import speaker_seconds
+    from app.database import _list_speakers, speaker_seconds
 
     talk = speaker_seconds(r["id"] for r in rows)
     by_name: Dict[str, Dict[str, Any]] = {}
     for r in rows:
-        try:
-            speakers = json.loads(r["speakers_json"] or "{}")
-        except ValueError:
-            continue
+        # names only: the library list's cache, without parsing the voice prints of every recording
+        speakers = _list_speakers(int(r["id"]), r["speakers_json"] or "{}")
         seconds = talk.get(r["id"], {})
         for spk_id, meta in speakers.items():
             name = str((meta or {}).get("name") or "").strip()
