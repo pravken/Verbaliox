@@ -39,6 +39,10 @@ def mark_requirements(app_dir: Path, only_if_missing: bool = False) -> None:
         pass
 
 
+# Where setup.bat unpacks the pinned uv release archive when winget gives no uv
+APP_UV = Path(__file__).resolve().parent.parent / ".uv" / "uv.exe"
+
+
 def find_uv() -> Optional[str]:
     """A uv that runs: on PATH or where its installers put it (the app may start without the updated
     PATH). The shortcut winget leaves may point nowhere, or a policy may block programs in AppData:
@@ -46,7 +50,7 @@ def find_uv() -> Optional[str]:
     home = Path(os.environ.get("USERPROFILE") or Path.home())
     local = Path(os.environ.get("LOCALAPPDATA") or home)
     on_path = shutil.which("uv")  # found by which: it exists
-    files = [home / ".local" / "bin" / "uv.exe", home / ".cargo" / "bin" / "uv.exe",
+    files = [APP_UV, home / ".local" / "bin" / "uv.exe", home / ".cargo" / "bin" / "uv.exe",
              local / "Microsoft" / "WinGet" / "Links" / "uv.exe",
              *sorted((local / "Microsoft" / "WinGet" / "Packages").glob("astral-sh.uv*/uv.exe"))]
     candidates = ([on_path] if on_path else []) + [str(f) for f in files if f.is_file()]

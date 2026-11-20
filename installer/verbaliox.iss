@@ -114,6 +114,7 @@ Type: filesandordirs; Name: "{app}\static"
 Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\__pycache__"
 Type: filesandordirs; Name: "{app}\.uv-cache"
+Type: filesandordirs; Name: "{app}\.uv"
 Type: filesandordirs; Name: "{app}\python"
 
 [Code]
