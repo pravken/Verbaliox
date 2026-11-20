@@ -327,7 +327,13 @@ class SetupWindowTest(unittest.TestCase):
         # A uv that is found but does not run is skipped, and an environment uv made whose Python does
         # not run (a policy blocking programs in AppData) is made again on Python 3.11 of python.org
         self.assertIn('"%~1" --version >nul 2>nul', text)
-        self.assertEqual(text.count("call :venv_runs"), 2)
+        # twice where the environment is made, once for a kept one and once after mending its link (a moved
+        # program folder, found in the audit: the environment is mended or made again, not left failing)
+        self.assertEqual(text.count("call :venv_runs"), 4)
+        moved = text.split("if defined UPDATE (")[1].split("\r\n)\r\n")[0]
+        self.assertIn("call :venv_relink", moved)
+        self.assertIn('rmdir /s /q ".venv"', moved)
+        self.assertIn("UTF8Encoding $false", text)  # pyvenv.cfg stays UTF-8 without a BOM
         fallback = text.split("uv could not make a working environment")[1]
         self.assertIn('set "UV="', fallback[:fallback.index("if defined UV (")])
         self.assertIn("--accept-package-agreements\r\n", text)  # winget's answer goes to the log, not to nul
