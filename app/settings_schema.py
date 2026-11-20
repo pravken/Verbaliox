@@ -144,6 +144,8 @@ def clean(key: str, value: Any) -> str:
         return _meet_ignore(text_s)
     if key == "setup_done":  # the steps of the setup after an update already answered (static/js/settings.js)
         return _setup_done(text_s)
+    if key == "days_off":  # the user's own days off and vacations (app/holidays_cal.py)
+        return _days_off(text_s)
     if key == "holiday_country":  # ISO code of the country of the public holidays (app/holidays_cal.py)
         if text_s and not re.fullmatch(r"[A-Za-z]{2}", text_s):
             raise ValueError(f"{key}: недопустимое значение")
@@ -167,6 +169,27 @@ def _meet_overrides(text: str) -> str:
             any(not isinstance(k, str) or len(k) > 300 or v not in ("rec", "skip") for k, v in data.items()):
         raise ValueError("meet_overrides: нужен объект JSON")
     return json.dumps(data, ensure_ascii=False)
+
+
+def _days_off(text: str) -> str:
+    """[{from, to, title}]: the user's own days off and vacations, dates YYYY-MM-DD, `to` not before `from`."""
+    import json
+    from datetime import date
+
+    try:
+        data = json.loads(text or "[]")
+        if not isinstance(data, list) or len(data) > 300:
+            raise ValueError
+        out = []
+        for x in data:
+            a, b = date.fromisoformat(x["from"]), date.fromisoformat(x.get("to") or x["from"])
+            title = str(x.get("title") or "")
+            if b < a or (b - a).days > 366 or len(title) > 80:
+                raise ValueError
+            out.append({"from": a.isoformat(), "to": b.isoformat(), "title": title})
+    except (ValueError, TypeError, KeyError):
+        raise ValueError("days_off: нужен список периодов")
+    return json.dumps(sorted(out, key=lambda x: x["from"]), ensure_ascii=False)
 
 
 def _setup_done(text: str) -> str:

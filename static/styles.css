@@ -3074,6 +3074,17 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .frw-kicker { padding: 20px 24px 0; margin-bottom: -14px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-hi); }
 .frw-hol { display: flex; gap: 8px; margin-top: 10px; }
 .frw-hol-plain { margin-top: 0; }
+/* Settings → Календарь: the user's own days off and vacations */
+.dayoff { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.dayoff-list { display: grid; gap: 4px; }
+.dayoff-row { display: grid; grid-template-columns: 13rem 1fr 24px; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); font-size: 12px; }
+.dayoff-row.past { opacity: 0.55; }
+.dayoff-dates { font-variant-numeric: tabular-nums; color: #F5F5F7; }
+.dayoff-t { color: #A1A1A6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dayoff-x { width: 24px; height: 24px; border-radius: 6px; color: #8E8E93; font-size: 16px; line-height: 1; }
+.dayoff-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
+.dayoff-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dayoff-name { flex: 1 1 8rem; min-width: 8rem; }
 .frw-hol .frw-select { flex: 1 1 0; min-width: 0; }
 .frw-later { margin-right: auto; padding: 0; font-size: 13px; color: #8E8E93; }
 .frw-later:hover { color: #F5F5F7; }

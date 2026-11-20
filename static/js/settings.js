@@ -3202,6 +3202,49 @@ function fillWorkdaySettings(s) {
   if (b) b.checked = s.meet_ask_inperson !== 'false';
   syncWorkdayHint();
   fillHolidaySettings(s);
+  renderDaysOff(s.days_off);
+}
+
+// --- The user's own days off and vacations (days_off): days off like holidays, saved at once ---
+let daysOff = [];
+function renderDaysOff(raw) {
+  if (raw !== undefined) { try { daysOff = JSON.parse(raw || '[]'); } catch (e) { daysOff = []; } if (!Array.isArray(daysOff)) daysOff = []; }
+  const box = document.getElementById('dayoff-list');
+  if (!box) return;
+  const today = calKey(new Date());
+  const fmt = d => uiDateText(d);
+  box.innerHTML = daysOff.length ? daysOff.map((x, i) => `<div class="dayoff-row${x.to < today ? ' past' : ''}">
+      <span class="dayoff-dates">${escapeHtml(x.from === x.to ? fmt(x.from) : `${fmt(x.from)} – ${fmt(x.to)}`)}</span>
+      <span class="dayoff-t">${escapeHtml(x.title || t('dayOffDefault'))}</span>
+      <button class="dayoff-x" data-click="removeDayOff" data-click-args='[${i}]' title="${escapeHtml(t('dayOffRemove'))}" aria-label="${escapeHtml(t('dayOffRemove'))}">×</button></div>`).join('')
+    : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('dayOffNone'))}</div>`;
+}
+
+async function saveDaysOff(list) {
+  const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { days_off: JSON.stringify(list) } }) }).catch(() => null);
+  if (!r || !r.ok) { const err = r ? await r.json().catch(() => ({})) : {}; showError(serverText(err.detail) || t('errorGeneric')); return false; }
+  daysOff = list.slice().sort((a, b) => a.from.localeCompare(b.from));
+  if (state.system && state.system.settings) state.system.settings.days_off = JSON.stringify(daysOff);
+  renderDaysOff();
+  if (typeof loadDashboard === 'function') loadDashboard();
+  return true;
+}
+
+async function addDayOff() {
+  const a = document.getElementById('dayoff-from'), b = document.getElementById('dayoff-to'), n = document.getElementById('dayoff-title');
+  const from = a.value, to = b.value || a.value;
+  if (!from) { showError(t('dayOffNeedDate')); return; }
+  if (to < from) { showError(t('dayOffOrder')); return; }
+  // without a name: «Выходной» in the language of the page, the same in the list and on the week
+  if (await saveDaysOff([...daysOff, { from, to, title: n.value.trim() || t('dayOffDefault') }])) {
+    a.value = b.value = n.value = '';
+    syncDateField(a); syncDateField(b);
+  }
+}
+
+function removeDayOff(i) {
+  saveDaysOff(daysOff.filter((_, k) => k !== i));
 }
 
 // --- Public holidays: the country and its region (app/holidays_cal.py) ---

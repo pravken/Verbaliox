@@ -529,6 +529,18 @@
             </select>
           </div>
           <div id="holiday-status" class="text-[11.5px] text-apple-tertiary"></div>
+          <!-- The user's own days off and vacations: counted as holidays (saved at once, days_off) -->
+          <div class="dayoff">
+            <div class="text-xs text-apple-label font-medium" data-i18n="dayOffTitle">Свои выходные и отпуск</div>
+            <div id="dayoff-list" class="dayoff-list"></div>
+            <div class="dayoff-add">
+              <input id="dayoff-from" type="date" class="sx-time" data-i18n-title="dayOffFrom" title="С" aria-label="С" />
+              <span class="text-apple-tertiary">–</span>
+              <input id="dayoff-to" type="date" class="sx-time" data-i18n-title="dayOffTo" title="По" aria-label="По" />
+              <input id="dayoff-title" type="text" maxlength="80" class="sx-time dayoff-name" data-i18n-placeholder="dayOffNamePh" placeholder="Отпуск" />
+              <button class="ui-btn ui-btn-subtle h-7" data-click="addDayOff" data-i18n="dayOffAdd">Добавить</button>
+            </div>
+          </div>
         </div>
 
         <!-- The working day of «Встречи сегодня» on the home page and the recording of every meeting -->

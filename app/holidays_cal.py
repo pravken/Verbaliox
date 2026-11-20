@@ -5,7 +5,8 @@ Offline, from the `holidays` package (MIT): its rules cover about 250 countries 
 A holiday counts as a day off: «Главная» leaves it out of the working days of the period, marks it on
 the week and in the calendar, and «Свободное время» does not offer its hours.
 
-Settings: holiday_country (ISO code, "" = off), holiday_subdiv (the region's code, "" = the country).
+Settings: holiday_country (ISO code, "" = off), holiday_subdiv (the region's code, "" = the country);
+days_off: the user's own days off and vacations, [{from, to, title}] (dates included), counted the same way.
 Without the package (an old environment before it moves to Python 3.11) there are no holidays.
 """
 
@@ -116,17 +117,44 @@ def chosen() -> Tuple[str, str]:
     return (s.get("holiday_country") or "").strip().upper(), (s.get("holiday_subdiv") or "").strip()
 
 
-def between(start: date, end: date, lang: str = "ru", country: str = None, subdiv: str = None) -> Dict[str, str]:
-    """{"YYYY-MM-DD": name} of the holidays in start…end (end not included)."""
+def own_days_off() -> List[Dict[str, str]]:
+    import json
+
+    from app.database import get_all_settings
+
+    try:
+        data = json.loads(get_all_settings().get("days_off") or "[]")
+    except ValueError:
+        return []
+    return [x for x in data if isinstance(x, dict)] if isinstance(data, list) else []
+
+
+def between(start: date, end: date, lang: str = "ru", country: str = None, subdiv: str = None,
+            own: List[Dict[str, str]] = None) -> Dict[str, str]:
+    """{"YYYY-MM-DD": name} of the holidays and the user's own days off in start…end (end not included).
+    A day that is both has both names."""
     if country is None:
         country, subdiv = chosen()
-    if not country or end <= start or (end - start).days > 800:
+    if own is None:
+        own = own_days_off()
+    if end <= start or (end - start).days > 800:
         return {}
     out: Dict[str, str] = {}
-    for y in range(start.year, (end - timedelta(days=1)).year + 1):
-        for k, n in _year(country, subdiv or "", y, lang):
-            if start.isoformat() <= k < end.isoformat():
-                out[k] = n
+    if country:
+        for y in range(start.year, (end - timedelta(days=1)).year + 1):
+            for k, n in _year(country, subdiv or "", y, lang):
+                if start.isoformat() <= k < end.isoformat():
+                    out[k] = n
+    for x in own:
+        try:
+            a, b = date.fromisoformat(x.get("from", "")), date.fromisoformat(x.get("to") or x.get("from", ""))
+        except ValueError:
+            continue
+        d = max(a, start)
+        while d <= b and d < end:
+            k, n = d.isoformat(), (x.get("title") or "").strip() or "Day off"
+            out[k] = f"{out[k]} · {n}" if k in out and n not in out[k] else out.get(k, n)
+            d += timedelta(days=1)
     return out
 
 

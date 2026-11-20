@@ -19,7 +19,7 @@ class HolidaysTest(unittest.TestCase):
         init_db()
 
     def tearDown(self):
-        update_settings({"holiday_country": "", "holiday_subdiv": ""})
+        update_settings({"holiday_country": "", "holiday_subdiv": "", "days_off": "[]"})
 
     def test_the_countries_asked_for_are_there_with_their_regions(self):
         by = {c["code"]: c for c in holidays_cal.countries()}
@@ -50,6 +50,22 @@ class HolidaysTest(unittest.TestCase):
         bavaria = holidays_cal.between(*span, country="DE", subdiv="BY")
         self.assertNotIn("2026-01-06", whole)
         self.assertIn("2026-01-06", bavaria)  # Epiphany in Bavaria only
+
+    def test_own_days_off_count_like_holidays(self):
+        """Asked by the user: days off and a vacation marked by hand."""
+        own = [{"from": "2026-01-06", "to": "2026-01-08", "title": "Vacation"}, {"from": "2026-01-01", "to": "2026-01-01", "title": ""}]
+        days = holidays_cal.between(date(2026, 1, 1), date(2026, 1, 10), country="", own=own)
+        self.assertEqual(days, {"2026-01-01": "Day off", "2026-01-06": "Vacation", "2026-01-07": "Vacation", "2026-01-08": "Vacation"})
+        both = holidays_cal.between(date(2026, 1, 7), date(2026, 1, 8), country="RS", own=own)
+        self.assertEqual(both["2026-01-07"].split(" · ")[1], "Vacation")  # a holiday that is also a vacation: both names
+        from app.settings_schema import clean
+
+        self.assertIn("2026-01-06", clean("days_off", '[{"from": "2026-01-06", "to": "2026-01-08"}]'))
+        for bad in ('[{"from": "2026-01-08", "to": "2026-01-06"}]', '[{"from": "x"}]', '{"a": 1}'):
+            with self.assertRaises(ValueError):
+                clean("days_off", bad)
+        update_settings({"days_off": clean("days_off", '[{"from": "2026-03-02", "to": "2026-03-03", "title": "Отпуск"}]')})
+        self.assertEqual(holidays_cal.between(date(2026, 3, 1), date(2026, 3, 9)), {"2026-03-02": "Отпуск", "2026-03-03": "Отпуск"})
 
     def test_the_settings_take_only_codes(self):
         from app.settings_schema import clean
