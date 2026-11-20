@@ -113,6 +113,11 @@ def remove() -> None:
     shutil.rmtree(model_dir(), ignore_errors=True)
 
 
+def loaded() -> bool:
+    with _lock:
+        return _model["model"] is not None
+
+
 def unload() -> None:
     with _lock:
         was = _model["model"] is not None
