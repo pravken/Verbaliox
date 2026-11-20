@@ -7,7 +7,8 @@
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 const DB_KEY = 'vx-dashboard';
-const DB_SIZES = { S: 4, M: 5, L: 7, W: 12 };
+// of 12 columns: two M, an S and an L, three S fill a row (reported by the user: M and M left a hole)
+const DB_SIZES = { S: 4, M: 6, L: 8, W: 12 };
 // Every widget: its title key, the sizes it takes, and the block of the home page it shows (host)
 const DB_WIDGETS = {
   kpis: { title: 'dbKpis', sizes: ['L', 'W'], icon: '▦' },
@@ -30,9 +31,10 @@ const DB_WIDGETS = {
   load: { title: 'dbLoad', sizes: ['S', 'M', 'L', 'W'], icon: '▥' },
   dull: { title: 'dbDull', sizes: ['S', 'M', 'L', 'W'], icon: '↻' },
 };
-const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'L'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
-  ['free', 'S'], ['load', 'M'], ['features', 'L'], ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['dull', 'M'],
-  ['summary', 'M'], ['recent', 'L']];
+// rows that add up to 12: W · S+L · M+M · M+M · S+L · L+S · S+S+S · M+M
+const DB_DEFAULT = [['kpis', 'W'], ['today', 'S'], ['week', 'L'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
+  ['free', 'S'], ['load', 'L'], ['features', 'L'], ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['dull', 'S'],
+  ['summary', 'M'], ['recent', 'M']];
 const DB_PERIODS = ['week', 'month', 'quarter'];
 // added after the first dashboard: offered once to an existing layout, after the widget named (removed by
 // the user, it stays out)
@@ -58,6 +60,7 @@ function dbPrefs() {
   return DB.prefs = {
     offered: [...new Set([...offered, ...DB_NEW_WIDGETS.map(([id]) => id)])],
     norm: [2, 3, 4, 5, 6].includes(Number(p.norm)) ? Number(p.norm) : 4,
+    days: p.days === 'work' ? 'work' : 'cal',
     layout: layout && layout.length ? layout : DB_DEFAULT.map(([id, size]) => ({ id, size })),
     period: DB_PERIODS.includes(p.period) ? p.period : 'week',
     feature: Number(p.feature) || 0,
