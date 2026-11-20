@@ -2932,7 +2932,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .ft-color-any { width: 26px; height: 20px; padding: 0; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.2)); border-radius: 6px; background: transparent; cursor: pointer; }
 .ft-swatches { align-items: center; flex-wrap: wrap; }
 /* The page of a feature (static/js/features.js openFeaturePage) */
-.fp-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.fp-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .fp-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
 .fp-stat b { font-size: 20px; line-height: 1.1; color: #F5F5F7; }
 .fp-stat span { font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); }
@@ -3487,3 +3487,20 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .cal-col-head .cal-day-more, .cal-cell-head .cal-day-more { margin-left: auto; }
 .cal-wk + .cal-day-more { margin-left: 4px !important; }
 @media (hover: none) { .cal-day-more { opacity: 1; } }
+
+/* The feature's card: its weeks and its people (asked by the user) */
+.fp-h-sub { margin-left: 8px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--hc-dim, #8E8E93); }
+.fp-weeks { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; height: 72px; align-items: end; }
+.fp-week { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  border-radius: 6px; background: rgba(255, 255, 255, 0.03); }
+.fp-week i { display: block; width: 100%; border-radius: 6px; background: var(--ft, var(--accent)); opacity: 0.75; }
+.fp-week.now i { opacity: 1; }
+.fp-week span { position: absolute; top: 4px; font-size: 10.5px; color: #A1A1A6; font-variant-numeric: tabular-nums; }
+.fp-weeks-axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
+.fp-people { display: flex; flex-wrap: wrap; gap: 6px; }
+.fp-person { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); color: #F5F5F7; font-size: 12.5px; }
+.fp-person:hover { background: rgba(255, 255, 255, 0.09); }
+.fp-person i { width: 8px; height: 8px; border-radius: 50%; background: var(--pc); }
+.fp-person b { font-weight: 500; color: #A1A1A6; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .fp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

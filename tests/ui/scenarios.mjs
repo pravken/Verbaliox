@@ -245,6 +245,20 @@ await step('join a meeting call', async () => {
   expect(sent.length === 1 && sent[0].url.startsWith('https://teams.microsoft.com/'), `the call was not opened: ${JSON.stringify(sent)}`);
 });
 
+// The card of a feature: its weeks, its people (asked by the user)
+await step('feature card', async () => {
+  const fid = await page.evaluate(async () => {
+    const f = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Карточка' }) }).then(r => r.json());
+    await fetch('/api/meetings/1/features', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [f.id] }) });
+    return f.id;
+  });
+  await page.evaluate(id => openFeaturePage(id), fid);
+  await sleep(800);
+  expect(await page.locator('#feature-page .fp-week').count() === 12, 'no 12 weeks on the card');
+  expect(await page.locator('#feature-page .fp-person').count() > 0, 'no people on the card');
+  await page.evaluate(id => { document.getElementById('feature-page')?.remove(); return fetch('/api/features/' + id, { method: 'DELETE' }); }, fid);
+});
+
 // The calendar window: a day marked a day off from its «⋯», then taken back (asked by the user)
 await step('day off from the calendar', async () => {
   await page.evaluate(() => { calView.mode = 'month'; openCalendarView(); });

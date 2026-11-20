@@ -272,7 +272,9 @@ async function openFeaturePage(id) {
         </div>
       </div>
       <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        <div class="fp-stats">${stat(data.meetings.length, t('fpMeetings'))}${stat(open.length, t('fpOpenCount'))}${stat(over, t('fpOverdue'), over ? 'tk-red' : '')}${stat(done, t('fpDone'), done ? 'tk-green' : '')}</div>
+        <div class="fp-stats">${stat(data.meetings.length, t('fpMeetings'))}${stat(dbNum(data.hours || 0), t('fpHours'))}${stat(open.length, t('fpOpenCount'))}${stat(over, t('fpOverdue'), over ? 'tk-red' : '')}${stat(done, t('fpDone'), done ? 'tk-green' : '')}</div>
+        ${fpActivityHtml(data)}
+        ${fpPeopleHtml(data)}
         <section><h4 class="fp-h">${escapeHtml(t('fpDecisions'))}</h4>
           ${decisions.length ? decisions.map(m => `<div class="fp-dec"><button class="fp-meet-link" ${pageCall('click', 'openMeetingFromFeature', [m.id])}>${escapeHtml(m.title || t('tkUntitled'))} · ${escapeHtml(tkShortDate(m.date.slice(0, 10)))}</button>
               <ul>${m.decisions.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`).join('')
@@ -290,6 +292,37 @@ async function openFeaturePage(id) {
   document.body.appendChild(wrap);
   const body = wrap.querySelector('.overflow-y-auto');
   if (body) body.scrollTop = scroll;
+}
+
+// The card's activity: the meetings of each of the last 12 weeks (the bar's height: their hours), and
+// when the last one was
+function fpActivityHtml(data) {
+  const weeks = data.weeks || [];
+  if (!weeks.length) return '';
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  const top = Math.max(0.01, ...weeks.map(w => w.hours));  // the busiest week fills its column
+  const label = s => new Date(`${s}T12:00:00`).toLocaleDateString(lang, { day: 'numeric', month: 'short' }).replace('.', '');
+  const last = data.last ? t('fpLast').replace('{date}', () => tkShortDate(data.last)) : t('fpNoMeetings');
+  return `<section><h4 class="fp-h">${escapeHtml(t('fpActivity'))}<span class="fp-h-sub">${escapeHtml(last)}</span></h4>
+    <div class="fp-weeks" style="--ft:${/^#[0-9A-Fa-f]{6}$/.test(data.feature.color || '') ? data.feature.color : 'var(--accent)'}">${weeks.map((w, i) => `<div class="fp-week${i === weeks.length - 1 ? ' now' : ''}" title="${escapeHtml(`${t('fpWeekOf').replace('{date}', () => label(w.start))}: ${plural(w.meetings, t('dbMeetingForms'))} · ${dbNum(w.hours)} ${t('dbHoursShort')}`)}">`
+      + `<i style="height:${w.meetings ? Math.max(8, Math.round(w.hours / top * 100)) : 0}%"></i><span>${w.meetings || ''}</span></div>`).join('')}</div>
+    <div class="fp-weeks-axis"><span>${escapeHtml(label(weeks[0].start))}</span><span>${escapeHtml(t('fpThisWeek'))}</span></div></section>`;
+}
+
+// The people met in the feature's meetings, most first: a click opens the person's card
+function fpPeopleHtml(data) {
+  const people = data.people || [];
+  if (!people.length) return '';
+  return `<section><h4 class="fp-h">${escapeHtml(t('fpPeople'))}</h4><div class="fp-people">${people.map(p => {
+    const c = /^#[0-9A-Fa-f]{6}$/.test(p.color || '') ? p.color : '#8E8E93';
+    return `<button class="fp-person" style="--pc:${c}" ${pageCall('click', 'openPersonFromFeature', [p.name])} title="${escapeHtml(t('fpPersonTip').replace('{n}', () => p.meetings).replace('{date}', () => tkShortDate(p.last)))}">`
+      + `<i></i><span>${escapeHtml(p.name)}</span><b>${p.meetings}</b></button>`;
+  }).join('')}</div></section>`;
+}
+
+function openPersonFromFeature(name) {
+  document.getElementById('feature-page')?.remove();
+  openPersonCard(name);
 }
 
 // A task changed on the open page (its person, due date, done): the counts and the cards follow
