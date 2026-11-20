@@ -20,6 +20,7 @@ class PeopleDirectoryTest(unittest.TestCase):
             conn.execute("DELETE FROM meetings")
             conn.commit()
             conn.close()
+        database.forget_settings()
 
     def _meeting(self, title="Встреча", names=("Мария", "Участник 2"), notes="", texts=None):
         m = database.create_meeting(title, "a.wav", "a.wav")

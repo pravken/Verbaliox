@@ -56,5 +56,31 @@ class SettingsSchemaTest(unittest.TestCase):
         self.assertTrue(uses_cloud({"llm_provider": "cloud", "llm_cloud_consent": "true"}))
 
 
+class SettingsCacheTest(unittest.TestCase):
+    """The settings are read once and kept until they are changed."""
+
+    def test_read_once_copied_and_changed_by_update(self):
+        from unittest import mock
+
+        from app import database
+
+        database.init_db()
+        database.update_settings({"cache_probe": "a"})
+        self.assertEqual(database.get_all_settings()["cache_probe"], "a")
+        mine = database.get_all_settings()
+        mine["cache_probe"] = "changed by a caller"
+        with mock.patch.object(database, "get_connection", side_effect=AssertionError("read again")):
+            self.assertEqual(database.get_all_settings()["cache_probe"], "a")  # kept, and not the caller's copy
+        self.assertEqual(database.update_settings({"cache_probe": "b"})["cache_probe"], "b")
+        self.assertEqual(database.get_all_settings()["cache_probe"], "b")
+        # a change of the table by other means (a restored backup, the start) is read again after forget_settings
+        conn = database.get_connection()
+        conn.execute("UPDATE settings SET value = 'c' WHERE key = 'cache_probe'")
+        conn.commit()
+        conn.close()
+        database.init_db()
+        self.assertEqual(database.get_all_settings()["cache_probe"], "c")
+
+
 if __name__ == "__main__":
     unittest.main()
