@@ -57,17 +57,27 @@ def _teams_app() -> bool:
         return False
 
 
-def open_link(url: str) -> Optional[str]:
-    """Opens the call. Returns the link opened, None when it is no link of a call service."""
+def launch_target(url: str) -> Optional[str]:
+    """What opens the call: msteams:… for a Teams link when the Teams app is there, else the link itself.
+    None when it is no link of a call service."""
     link = find(url)
     if not link or link != (url or "").strip().rstrip(".,;)>]"):
         return None
     if service(link) == "Teams" and "teams.microsoft.com" in link.lower() and _teams_app():
-        target = "msteams:" + link.split("teams.microsoft.com", 1)[1]
+        return "msteams:" + link.split("teams.microsoft.com", 1)[1]
+    return link
+
+
+def open_link(url: str) -> Optional[str]:
+    """Opens the call. Returns what was opened, None when it is no link of a call service."""
+    target = launch_target(url)
+    if not target:
+        return None
+    if target.startswith("msteams:"):
         try:
             os.startfile(target)  # noqa: S606 - the Teams app, with a link of the user's calendar
             return target
         except OSError:
-            pass
-    webbrowser.open(link)
-    return link
+            target = find(url)
+    webbrowser.open(target)
+    return target

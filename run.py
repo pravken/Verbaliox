@@ -515,6 +515,16 @@ class TrayController:
         if not self._quiet():
             self.tray.notify(title, text, warning=warning, target=target)
 
+    def _join_toast(self, n: dict) -> None:
+        """The start of a calendar meeting: a Windows toast whose «Подключиться» opens the call
+        (app/toast.py); where a toast cannot be shown, the tray's notification, whose click joins."""
+        from app import meeting_join, toast
+
+        link = meeting_join.launch_target(n["target"][5:])
+        if link and toast.show(n["title"], n["text"], [("Подключиться", link)], launch=link, stay=True, icon=ICO_PATH):
+            return
+        self.tray.notify(n["title"], n["text"], target=n["target"])
+
     def open_target(self, target: str) -> None:
         """A click on a notification: the window comes up at the place it was about (static/js/home.js
         openFromNotice); without a place, as it was."""
@@ -664,6 +674,9 @@ class TrayController:
                 from app.app_status import take_notices
 
                 for n in take_notices():  # a recording started or stopped by itself: never silent
+                    if n.get("target", "").startswith("join:"):  # a meeting starting: a toast with «Подключиться»
+                        threading.Thread(target=self._join_toast, args=(n,), daemon=True).start()
+                        continue
                     self.tray.notify(n["title"], n["text"], target=n.get("target", ""))
                 self._check_hotkey_result(st)
                 self.tray.set_status(st["state"], st["text"])

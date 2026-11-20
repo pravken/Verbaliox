@@ -84,7 +84,8 @@ Name: "desktopicon"; Description: "{cm:DesktopIcon}"; Flags: unchecked
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"
+; AppUserModelID: the window's own (run.py), so its Windows toasts carry the app's name (app/toast.py)
+Name: "{autoprograms}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"; AppUserModelID: "Verbaliox.Desktop.Studio.1"
 Name: "{autodesktop}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 ; Everything the program made, the shared tools asked about (uninstall.ps1)
 Name: "{autoprograms}\{cm:FullRemove}"; Filename: "{app}\uninstall.bat"
@@ -96,6 +97,8 @@ Filename: "{app}\Verbaliox.exe"; Description: "{cm:RunAfter}"; Flags: nowait pos
 ; "Start with Windows" (app/autostart.py) is removed with the program; nothing is written at install
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Verbaliox"; Flags: uninsdeletevalue dontcreatekey
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "VerbaScribe"; Flags: uninsdeletevalue dontcreatekey
+; the name and icon of the app's Windows toasts, written by the app (app/toast.py)
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\Verbaliox.Desktop.Studio.1"; Flags: uninsdeletekey dontcreatekey
 
 [UninstallDelete]
 ; What the program made next to itself: the environment, caches, the dubbing environment, the launcher
