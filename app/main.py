@@ -63,7 +63,8 @@ SUPPORTED_EXTENSIONS = MEDIA_EXTENSIONS
 # --- Local session security ---
 # The server only listens on localhost, but any web page open in a browser can still send
 # requests to 127.0.0.1. Every launch therefore gets a random session token: the desktop
-# window opens /?token=..., receives it as an HttpOnly SameSite=Strict cookie, and every
+# window gets it from the launcher (POST /api/session), a browser through a one-time /?boot=...
+# address; it comes back as an HttpOnly SameSite=Strict cookie, and every
 # other request without that cookie is rejected. Requests with a foreign Host header
 # (DNS rebinding) are rejected as well, and so are requests other pages send (_foreign_page):
 # the cookie is sent along from any port of 127.0.0.1.
@@ -136,6 +137,35 @@ def _foreign_page(request: Request) -> bool:
 
 def _token_valid(value: Optional[str]) -> bool:
     return bool(value) and hmac.compare_digest(value, SESSION_TOKEN)
+
+
+# The browser (when the window cannot open) signs in through a one-time address /?boot=<nonce>: the
+# launcher asks for a nonce with the token (POST /api/session/boot) and opens that. The long-lived
+# token never stands in an address, which the browser keeps in its history; a nonce left there is
+# spent at once and dies within a minute anyway.
+BOOT_TTL_SEC = 60.0
+_boot_nonces: Dict[str, float] = {}
+
+
+def issue_boot_nonce() -> str:
+    import time as _time
+
+    now = _time.monotonic()
+    for k in [k for k, until in _boot_nonces.items() if until < now]:
+        _boot_nonces.pop(k, None)
+    while len(_boot_nonces) >= 20:  # a burst of launches: the oldest go
+        _boot_nonces.pop(next(iter(_boot_nonces)))
+    nonce = secrets.token_urlsafe(24)
+    _boot_nonces[nonce] = now + BOOT_TTL_SEC
+    return nonce
+
+
+def _boot_nonce_valid(value: Optional[str]) -> bool:
+    """Spends the nonce: valid once, within BOOT_TTL_SEC."""
+    import time as _time
+
+    until = _boot_nonces.pop(value or "", None)
+    return until is not None and _time.monotonic() <= until
 
 
 def _is_proactor_connection_reset(context: Dict[str, Any]) -> bool:
@@ -317,23 +347,34 @@ async def local_session_guard(request: Request, call_next):
     path = request.url.path
     if not path.startswith(_PUBLIC_PREFIXES) and _foreign_page(request):
         return Response('{"detail":"Forbidden origin"}', status_code=403, media_type="application/json")
-    if path == "/api/session" and request.method == "POST":
-        # The app window signs in without the token in an address (see _LOCKED_PAGE)
+    if path in ("/api/session", "/api/session/boot") and request.method == "POST":
+        # The app window signs in without the token in an address (see _LOCKED_PAGE); the launcher
+        # trades it for a one-time browser address (issue_boot_nonce)
         try:
             token = (await request.json()).get("token")
         except Exception:
             token = None
         if not isinstance(token, str) or not _token_valid(token):
             return Response('{"detail":"Unauthorized"}', status_code=401, media_type="application/json")
+        if path == "/api/session/boot":
+            import json as _json
+
+            return Response(_json.dumps({"boot": issue_boot_nonce()}), media_type="application/json",
+                            headers={"Cache-Control": "no-store"})
         resp = Response(status_code=204)
         resp.set_cookie(_cookie_name(request), SESSION_TOKEN, httponly=True, samesite="strict", path="/")
         return resp
     if path == "/":
+        # ?token= stays for the launcher's check that the server is ours (probe_server, no browser) and
+        # for tests; the app opens a browser only with ?boot=
         query_token = request.query_params.get("token")
-        if _token_valid(query_token):
+        boot = request.query_params.get("boot")
+        if _token_valid(query_token) or (boot is not None and _boot_nonce_valid(boot)):
             resp = RedirectResponse("/", status_code=303)
             resp.set_cookie(_cookie_name(request), SESSION_TOKEN, httponly=True, samesite="strict", path="/")
             return resp
+        if boot is not None:  # spent or expired: the address is cleaned all the same
+            return RedirectResponse("/", status_code=303)
         if not _token_valid(request.cookies.get(_cookie_name(request))):
             return HTMLResponse(_LOCKED_PAGE, status_code=401)
         return await call_next(request)

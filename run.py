@@ -186,8 +186,27 @@ def window_url(host: str, port: int) -> str:
 
 
 def app_url(host: str, port: int) -> str:
+    """The address a browser opens: a one-time /?boot=... the server trades for the session cookie.
+    The session token itself never goes into an address (the browser keeps those in its history)."""
+    import http.client
+    import json
+
+    base = f"http://{host}:{port}/"
     token = read_session_token()
-    return f"http://{host}:{port}/?token={token}" if token else f"http://{host}:{port}/"
+    if not token:
+        return base
+    try:
+        conn = http.client.HTTPConnection(host, port, timeout=5)
+        try:
+            conn.request("POST", "/api/session/boot", body=json.dumps({"token": token}),
+                         headers={"Content-Type": "application/json"})
+            resp = conn.getresponse()
+            boot = json.loads(resp.read() or b"{}").get("boot") if resp.status == 200 else ""
+        finally:
+            conn.close()
+    except (OSError, ValueError, http.client.HTTPException):
+        boot = ""
+    return f"{base}?boot={boot}" if boot else base
 
 
 # Why the server thread ended, if it did (shown in the window instead of "connection refused")
@@ -1081,7 +1100,9 @@ def main() -> None:
             register_cuda_dlls()
             threading.Thread(
                 target=lambda: wait_for_server(args.host, args.port)
-                and print(f"Verbaliox: {app_url(args.host, args.port)}", flush=True),
+                # printed for whoever runs it by hand, who may open it much later than a one-time
+                # address lives: this mode keeps the token address
+                and print(f"Verbaliox: http://{args.host}:{args.port}/?token={read_session_token()}", flush=True),
                 daemon=True,
             ).start()
             uvicorn.run("app.main:app", host=args.host, port=args.port, log_level="info", access_log=False,  # the address holds the session token
