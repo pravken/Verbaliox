@@ -70,42 +70,72 @@ function applyUiScale(pct) {
 
 // --- Themes (asked by the user): the accent colour and the background, from presets (Settings → Общие →
 // Оформление; ui_accent, ui_bg). Every colour of the page reads the variables of static/styles.css :root ---
+// Chosen with the user on the try-on page: muted colours, readable white text on a filled one (the fill is
+// darkened until it is, 4.8:1 and more), and dark grounds with a slight tint
 const THEME_ACCENTS = {
-  blue: ['#0A84FF', '#4DA3FF', '#0071E3'], indigo: ['#5E5CE6', '#8583FF', '#4A48C9'], purple: ['#BF5AF2', '#D38CF7', '#A243D3'],
-  pink: ['#FF375F', '#FF6E8A', '#DE2A50'], teal: ['#30B0C7', '#5CCADD', '#2595A9'], mint: ['#00B8A9', '#3AD3C6', '#00998D'],
-  graphite: ['#8E8E93', '#B4B4B9', '#76767B'],
+  steel: '#4C7FD9', azure: '#3E95C9', ice: '#78A8D0', turquoise: '#43A6B4',
+  emerald: '#3F9E78', olive: '#8F9A55', ochre: '#C09A4D', cherry: '#A8324A',
 };
-// page, sidebar, panel, card, raised
 const THEME_BGS = {
-  graphite: ['#141416', '#1C1C1E', '#1C1D21', '#242426', '#2C2C2E'],
-  black: ['#000000', '#0E0E10', '#111114', '#18181B', '#212124'],
-  midnight: ['#0E1320', '#141A2A', '#161C2B', '#1C2335', '#242C41'],
-  forest: ['#0F1613', '#151D19', '#17201B', '#1D2621', '#252F29'],
-  warm: ['#17140F', '#1E1B16', '#201C17', '#27231D', '#302B24'],
+  slate: '#121418', deepblue: '#10141C', petrol: '#0E1617', moss: '#121411',
+  pine: '#0F1513', gunmetal: '#15181A', coal: '#0B0C0E', black: '#000000',
 };
+const THEME_FILLS = ['solid', 'soft', 'outline'];
+// the presets of 0.8.24, for a theme chosen then
+const THEME_FORMER = { blue: 'steel', indigo: 'steel', purple: 'cherry', pink: 'cherry', teal: 'turquoise', mint: 'emerald', graphite: 'ice',
+  midnight: 'deepblue', forest: 'pine', warm: 'coal' };
 function hexChannels(h) { return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(' '); }
 // a colour mixed with white (k > 0) or black (k < 0), as #RRGGBB
 function hexMix(h, k) {
   const to = k > 0 ? 255 : 0, f = Math.abs(k);
   return '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - f) + to * f).toString(16).padStart(2, '0')).join('');
 }
-function applyTheme(accent, bg) {
-  const a = THEME_ACCENTS[accent] || THEME_ACCENTS.blue, b = THEME_BGS[bg] || THEME_BGS.graphite;
+// two colours mixed: k of b into a
+function hexBlend(a, b, k) {
+  return '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+}
+function hexContrast(x, y) {
+  const lum = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+    .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const a = lum(x), b = lum(y);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+// the fill under a white text: the accent darkened step by step until white reads on it
+function readableFill(c) {
+  let k = 0.1, d = hexMix(c, -k);
+  while (hexContrast('#ffffff', d) < 4.8 && k < 0.8) { k += 0.04; d = hexMix(c, -k); }
+  return d;
+}
+function themeKey(v, list, def) { v = THEME_FORMER[v] || v; return list[v] ? v : def; }
+function applyTheme(accent, bg, fill) {
+  accent = themeKey(accent, THEME_ACCENTS, 'steel');
+  bg = themeKey(bg, THEME_BGS, 'slate');
+  fill = THEME_FILLS.includes(fill) ? fill : 'solid';
+  const a = THEME_ACCENTS[accent], page = THEME_BGS[bg], lo = readableFill(a);
   const st = document.documentElement.style;
-  [['accent', a[0]], ['accent-hi', a[1]], ['accent-lo', a[2]], ['bg', b[0]], ['sidebar', b[1]], ['panel', b[2]], ['card', b[3]], ['elevated', b[4]]]
+  // the accent and its shades: light (marks, links), the fill under white text, pressed; the page and four
+  // steps lighter keeping its tint (sidebar, panel, card, raised)
+  [['accent', a], ['accent-hi', hexMix(a, 0.36)], ['accent-lo', lo],
+    ['bg', page], ['sidebar', hexMix(page, 0.035)], ['panel', hexMix(page, 0.045)], ['card', hexMix(page, 0.075)], ['elevated', hexMix(page, 0.11)]]
     .forEach(([k, v]) => { st.setProperty(`--${k}`, v); st.setProperty(`--${k}-rgb`, hexChannels(v)); });
-  // the shades made from the accent: pressed, a text on the dark, a very light one
-  st.setProperty('--accent-deep', hexMix(a[2], -0.12));
-  st.setProperty('--accent-text', hexMix(a[0], 0.45));
-  st.setProperty('--accent-pale', hexMix(a[0], 0.78));
-  document.documentElement.dataset.accent = THEME_ACCENTS[accent] ? accent : 'blue';
-  document.documentElement.dataset.bg = THEME_BGS[bg] ? bg : 'graphite';
-  try { localStorage.setItem('verbaliox_theme', JSON.stringify([accent, bg])); } catch (e) {}
+  st.setProperty('--accent-deep', hexMix(lo, -0.14));
+  st.setProperty('--accent-text', hexMix(a, 0.45));
+  st.setProperty('--accent-pale', hexMix(a, 0.78));
+  // «Заливка выделенного»: solid (white text on the darkened accent), soft (a tint of it, its light text),
+  // outline (a frame and the light text)
+  const fills = {
+    solid: [lo, hexMix(lo, -0.14), '#FFFFFF', 'transparent'],
+    soft: [hexBlend(page, a, 0.24), hexBlend(page, a, 0.32), hexMix(a, 0.45), 'transparent'],
+    outline: ['transparent', hexBlend(page, a, 0.14), hexMix(a, 0.45), a],
+  }[fill];
+  ['fill-bg', 'fill-bg-hover', 'fill-fg', 'fill-ring'].forEach((k, i) => st.setProperty(`--${k}`, fills[i]));
+  Object.assign(document.documentElement.dataset, { accent, bg, fill });
+  try { localStorage.setItem('verbaliox_theme', JSON.stringify([accent, bg, fill])); } catch (e) {}
 }
 // the accent as a colour for a canvas (it cannot read a CSS variable)
 function accentColor() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0A84FF'; }
 // Before anything is drawn: the last theme, so the window does not flash the default one
-(() => { let v = null; try { v = JSON.parse(localStorage.getItem('verbaliox_theme') || 'null'); } catch (e) {} if (Array.isArray(v)) applyTheme(v[0], v[1]); })();
+(() => { let v = null; try { v = JSON.parse(localStorage.getItem('verbaliox_theme') || 'null'); } catch (e) {} applyTheme(...(Array.isArray(v) ? v : [])); })();
 
 // --- Events without inline handlers ---
 // The page's Content-Security-Policy runs no inline script, so markup does not say onclick="…".
