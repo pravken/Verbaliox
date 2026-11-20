@@ -30,5 +30,37 @@ class SessionEndTest(unittest.TestCase):
         self.assertTrue(app.quitting)
 
 
+class WebView2Test(unittest.TestCase):
+    """Found in the audit: without the WebView2 Runtime the window stayed on «Запуск…» (the old IE engine)."""
+
+    def _fake_winreg(self, pv):
+        import types
+
+        reg = types.SimpleNamespace(HKEY_LOCAL_MACHINE=1, HKEY_CURRENT_USER=2)
+
+        class Key:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def open_key(root, path):
+            if pv is None:
+                raise OSError("no key")
+            return Key()
+
+        reg.OpenKey = open_key
+        reg.QueryValueEx = lambda k, name: (pv, 1)
+        return reg
+
+    def test_the_runtime_is_found_by_its_version(self):
+        import run
+
+        for pv, want in (("131.0.2903.70", True), ("0.0.0.0", False), (None, False)):
+            with mock.patch.object(run.sys, "platform", "win32"), mock.patch.dict(sys.modules, {"winreg": self._fake_winreg(pv)}):
+                self.assertEqual(run.webview2_installed(), want, pv)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -960,6 +960,50 @@ def _attach_native_drop(window) -> None:
 _update_launched = False
 
 
+WEBVIEW2_CLIENT = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+
+
+def webview2_installed() -> bool:
+    """The Microsoft Edge WebView2 Runtime the window needs (its version in the registry, as Microsoft
+    documents). Unsure (no registry here, an error): taken as installed, the window is tried."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import winreg
+    except ImportError:
+        return True
+    places = [(winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\" + WEBVIEW2_CLIENT),
+              (winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\" + WEBVIEW2_CLIENT),
+              (winreg.HKEY_CURRENT_USER, "Software\\" + WEBVIEW2_CLIENT)]
+    try:
+        for root, path in places:
+            try:
+                with winreg.OpenKey(root, path) as k:
+                    pv = str(winreg.QueryValueEx(k, "pv")[0] or "")
+                    if pv and pv != "0.0.0.0":
+                        return True
+            except OSError:
+                continue
+        return False
+    except Exception:
+        return True
+
+
+def _tell_no_webview2() -> None:
+    """Said once, without stopping the start: the browser opens meanwhile."""
+    def show() -> None:
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None, "Для окна Verbaliox нужен компонент Microsoft Edge WebView2 Runtime, его нет на этом компьютере.\n\n"
+                      "Программа откроется в браузере. Чтобы работать в своём окне, установите WebView2 Runtime "
+                      "с сайта Microsoft (поиск: «WebView2 Runtime») и запустите Verbaliox снова.",
+                "Verbaliox", 0x40 | 0x40000)  # information, on top
+        except Exception:
+            pass
+
+    threading.Thread(target=show, daemon=True).start()
+
+
 def session_ending() -> bool:
     """Windows is shutting down or signing the user out (SM_SHUTTINGDOWN)."""
     try:
@@ -1087,6 +1131,11 @@ def main() -> None:
         try:
             import webview
 
+            if not webview2_installed():
+                # Found in the audit: without the WebView2 Runtime pywebview falls back to the old IE engine
+                # in silence, and the window stays on «Запуск…». The app opens in the browser, and says why
+                _tell_no_webview2()
+                raise RuntimeError("Microsoft Edge WebView2 Runtime is not installed")
             if not already_running:
                 # The database before the tray and «Start with Windows», which read the settings: the server
                 # made it a moment later, and the first start said «no such table: settings» (no tray icon)
