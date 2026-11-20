@@ -424,6 +424,44 @@ await step('dashboard', async () => {
   await page.click('#db-drawer .db-lib-add >> nth=0');
   expect(await page.locator('#db-grid .db-w').count() === before, 'a widget was not added');
   await page.click('#db-drawer button:has-text("Вернуть как было")');
+  // dragged, a widget lifts and a slot of its size shows where it lands, live; the drop keeps that order
+  const ids = () => page.evaluate(() => dbPrefs().layout.map(w => w.id));
+  const order0 = await ids();
+  const box = async k => page.locator('#db-grid > .db-w').nth(k).boundingBox();
+  const toTop = async () => {  // «Добавить» scrolled to the new widget, smoothly: wait until the grid is back at its top
+    for (let k = 0, still = 0; k < 40 && still < 3; k++) {
+      still = (await page.evaluate(() => { const g = document.getElementById('db-grid'); const was = g.scrollTop; g.scrollTop = 0; return was === 0; })) ? still + 1 : 0;
+      await sleep(100);
+    }
+  };
+  await toTop();
+  const a = await box(0), b = await box(2);
+  await page.mouse.move(a.x + 30, a.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 40, a.y + 30, { steps: 3 });
+  await page.mouse.move(b.x + b.width - 20, b.y + b.height / 2, { steps: 12 });
+  await sleep(300);
+  expect(await page.locator('#db-grid > .db-slot').count() === 1, 'no slot while dragging');
+  expect(await page.evaluate(() => [...document.querySelectorAll('#db-grid > .db-w:not(.db-lifted), #db-grid > .db-slot')]
+    .findIndex(x => x.classList.contains('db-slot'))) === 2, 'the slot did not move to the third place');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/db-drag.png` });
+  await page.mouse.up();
+  await sleep(400);
+  const order1 = await ids();
+  expect(order1[2] === order0[0] && order1[0] === order0[1] && order1[1] === order0[2], `the drop did not keep the slot's place: ${order1.slice(0, 3)}`);
+  expect(await page.locator('#db-grid > .db-slot, #db-grid > .db-lifted').count() === 0, 'the slot stayed after the drop');
+  // Esc while dragging puts it back
+  await toTop();
+  const c = await box(0);
+  await page.mouse.move(c.x + 30, c.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 300, c.y + 200, { steps: 10 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await sleep(300);
+  expect(JSON.stringify(await ids()) === JSON.stringify(order1), 'Esc did not cancel the drag');
+  expect(await page.isVisible('#dashboard-view'), 'Esc while dragging left the dashboard');
+  await page.click('#db-drawer button:has-text("Вернуть как было")');
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
   await sleep(600);

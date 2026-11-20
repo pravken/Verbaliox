@@ -3142,7 +3142,8 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 28px 12px; border-bottom: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
 .db-body { flex: 1; min-height: 0; display: flex; position: relative; }
 .db-grid { flex: 1; min-width: 0; overflow: auto; padding: 16px 28px 28px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; align-content: start; }
-.db-grid:not(.db-editing) { grid-auto-flow: row dense; }  /* a hole a widget fits in is filled (not while arranging) */
+.db-grid { position: relative; grid-auto-flow: row dense; }  /* a hole a widget fits in is filled — while arranging too, so
+   the slot of a dragged widget stands where it will be after «Готово» */
 .db-w { position: relative; min-width: 0; background: var(--bg); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); border-radius: 14px; padding: 14px 16px; }
 .db-h { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #A1A1A6); text-transform: uppercase; letter-spacing: 0.05em; }
 .db-more { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--accent-hi); font-weight: 500; font-size: var(--fs-label); background: none; border: 0; cursor: pointer; padding: 0; }
@@ -3271,8 +3272,13 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-sizes { position: absolute; bottom: 8px; right: 10px; display: flex; gap: 2px; }
 .db-sizes button { font-size: 10.5px; padding: 1px 6px; border-radius: 6px; border: 0; background: rgba(255, 255, 255, 0.08); color: var(--hc-dim, #AEAEB2); cursor: pointer; }
 .db-sizes button.on { background: var(--accent); color: #FFFFFF; }
-.db-dragging { opacity: 0.4; }
-.db-drop { outline: 2px solid var(--accent) !important; }
+.db-editing .db-w { user-select: none; touch-action: none; }
+.db-editing .db-w:active { cursor: grabbing; }
+/* the widget being dragged follows the pointer above the grid; its slot shows where it lands */
+.db-w.db-lifted { position: fixed !important; z-index: 80; margin: 0; pointer-events: none; cursor: grabbing;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 0 0 1.5px rgb(var(--accent-rgb) / 0.8); outline: none !important; animation: none !important; }
+.db-slot { border-radius: 14px; border: 2px dashed rgb(var(--accent-rgb) / 0.7); background: rgb(var(--accent-rgb) / 0.08); }
+body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-drawer { width: 320px; flex: none; overflow: auto; background: var(--panel); border-left: 1px solid rgba(255, 255, 255, 0.1); padding: 18px; }
 .db-drawer.hidden { display: none; }
 .db-drawer h2 { margin: 0 0 4px; font-size: 16px; color: #F5F5F7; }
