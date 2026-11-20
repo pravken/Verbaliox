@@ -3453,3 +3453,7 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
   .vx-in, .db-wave > .db-w { animation: none; }
   .tb-ind { transition: none; }
 }
+
+/* a day off (a holiday, a vacation): hatched, on the week, the load and in the calendar (asked by the user) */
+.db-day.db-day-off, .db-day.db-day-off .db-past, .cal-col.cal-holday, .cal-cell.cal-holday, .db-load-day.hol {
+  background-image: repeating-linear-gradient(135deg, rgba(255, 159, 138, 0.07) 0 6px, transparent 6px 12px); }

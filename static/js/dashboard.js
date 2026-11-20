@@ -503,10 +503,10 @@ function dbWeek() {
     // line of "now", which stands after the last thing already begun, never over a card
     if (k === today) {
       const begun = list.filter(it => it.at.getTime() <= now), ahead = list.filter(it => it.at.getTime() > now);
-      return `<div class="db-day today"><div class="db-past">${head}${begun.map(item).join('')}</div>`
+      return `<div class="db-day today${hol ? ' db-day-off' : ''}"><div class="db-past">${head}${begun.map(item).join('')}</div>`
         + `<div class="db-now"><b>${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}${dbNextIn()}</b></div>${ahead.map(item).join('')}</div>`;
     }
-    return `<div class="db-day${k < today ? ' db-day-past' : ''}">${head}${list.map(item).join('')}</div>`;
+    return `<div class="db-day${k < today ? ' db-day-past' : ''}${hol ? ' db-day-off' : ''}">${head}${list.map(item).join('')}</div>`;
   }).join('') + '</div>';
 }
 
