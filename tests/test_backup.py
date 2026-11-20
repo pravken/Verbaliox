@@ -53,6 +53,22 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(moved.read_bytes(), b"sound")
         self.assertTrue(DB_PATH.exists())
 
+    def test_only_the_newest_databases_put_aside_are_kept(self):
+        from app.paths import DATA_DIR
+
+        for p in DATA_DIR.glob("meetings.before-restore-*.db"):  # of other tests
+            p.unlink()
+        names = [f"meetings.before-restore-2026010{i}-120000.db" for i in range(1, 6)]
+        for n in names:
+            (DATA_DIR / n).write_bytes(b"x")
+        try:
+            backup._prune_before_restore()
+            left = sorted(p.name for p in DATA_DIR.glob("meetings.before-restore-2026010*.db"))
+            self.assertEqual(left, names[2:])
+        finally:
+            for n in names:
+                (DATA_DIR / n).unlink(missing_ok=True)
+
     def test_restore_of_a_foreign_copy(self):
         """A copy someone sent: it may not write files where it likes nor change where data goes."""
         import json
