@@ -463,23 +463,29 @@ def relayout(wait: bool = False) -> Dict[str, Any]:
 # with the automatic export on, its text is brought up to date too
 _follow_ids: set = set()
 _follow_cv = threading.Condition()
+_follow_running = False  # set and cleared under _follow_cv: a worker about to end is not counted on
 
 
 def follow(meeting_id: int) -> None:
+    global _follow_running
     with _follow_cv:
         _follow_ids.add(int(meeting_id))
         _follow_cv.notify()
-    if not any(t.name == "obsidian_follow" for t in threading.enumerate()):
-        threading.Thread(target=_follow_worker, daemon=True, name="obsidian_follow").start()
+        if _follow_running:
+            return
+        _follow_running = True
+    threading.Thread(target=_follow_worker, daemon=True, name="obsidian_follow").start()
 
 
 def _follow_worker() -> None:
     import time
 
+    global _follow_running
     while True:
         time.sleep(0.5)  # a few changes in a row (features, then the title) make one move
         with _follow_cv:
             if not _follow_ids:
+                _follow_running = False
                 return
             ids = list(_follow_ids)
             _follow_ids.clear()

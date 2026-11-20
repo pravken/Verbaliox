@@ -15,11 +15,11 @@ import threading
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Set
+from typing import Dict
 
 CHECK_SEC = 5.0        # the notices come within seconds of their time
 LATE_SEC = 120         # a notice more than this late (the app was closed, the computer asleep) is not sent
-_told: Set[str] = set()  # notices sent already: "before|key" and "start|key"
+_told: Dict[str, datetime] = {}  # notices sent already ("before|key", "start|key") and the meeting's start
 
 
 def _lead_sec(settings) -> int:
@@ -70,7 +70,7 @@ def check(now: datetime = None) -> int:
     now = now or datetime.now()
     n = 0
     for kind, key, e in due(now, _lead_sec(s)):
-        _told.add(f"{kind}|{key}")
+        _told[f"{kind}|{key}"] = e["start"]
         when = e["start"].strftime("%H:%M")
         title = e["title"][:60]
         join = e.get("join") or ""
@@ -92,8 +92,9 @@ def check(now: datetime = None) -> int:
             parts.append(f"Ссылка на {service(join)} придёт в начале встречи")
         app_status.add_notice(f"В {when} — «{title}»", " ".join(parts), target)
         n += 1
-    if len(_told) > 1000:
-        _told.clear()
+    # meetings started more than a day ago are not asked about again: their notices are forgotten
+    for k in [k for k, at in _told.items() if at < now - timedelta(days=1)]:
+        del _told[k]
     return n
 
 
