@@ -482,6 +482,27 @@ class Win32TypesTest(unittest.TestCase):
         self.assertNotIn("windll.user32.", source)
 
 
+class ConsoleHideTest(unittest.TestCase):
+    def test_only_a_console_of_its_own_is_hidden(self):
+        """Found in the audit: started from an open command prompt, the app hid the prompt's window for good."""
+        try:
+            from ctypes import wintypes  # noqa: F401
+        except (ImportError, ValueError):
+            self.skipTest("no ctypes.wintypes here")
+        import run
+
+        for attached, hidden in ((1, True), (2, False)):
+            kernel32, user32 = mock.Mock(), mock.Mock()
+            kernel32.GetConsoleWindow.return_value = 0x1234
+            kernel32.GetConsoleProcessList.return_value = attached
+            with mock.patch.object(run.sys, "platform", "win32"), \
+                    mock.patch.object(run.ctypes, "WinDLL", side_effect=lambda name: kernel32, create=True), \
+                    mock.patch.object(run, "_user32", return_value=user32), \
+                    mock.patch.object(run, "ICO_PATH", Path("/nonexistent/icon.ico")):
+                run.apply_native_window_icon_and_hide_console()
+            self.assertEqual(user32.ShowWindow.called, hidden, attached)
+
+
 class PyEnvTest(unittest.TestCase):
     def test_missing_pip_is_bootstrapped_with_ensurepip(self):
         from app import pyenv
