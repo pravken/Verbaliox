@@ -532,7 +532,7 @@ def current_meeting(at: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     """The meeting going on now (or starting within 10 minutes): the shortest one if several."""
     at = at or datetime.now()
     found = [e for e in window(at - timedelta(hours=12), at + timedelta(minutes=10))
-             if e["start"] - timedelta(minutes=10) <= at < e["end"]]
+             if e["start"] - timedelta(minutes=10) <= at < e["end"] and is_meeting(e)]
     return min(found, key=lambda e: e["end"] - e["start"]) if found else None
 
 
@@ -540,7 +540,33 @@ def upcoming(hours: int = 36, limit: int = 8) -> List[Dict[str, Any]]:
     now = datetime.now()
     return [{"title": e["title"], "start": e["start"].isoformat(timespec="minutes"), "end": e["end"].isoformat(timespec="minutes"),
              "attendees": e["attendees"][:20]}
-            for e in window(now - timedelta(minutes=30), now + timedelta(hours=hours))[:limit] if e["end"] > now]
+            for e in [e for e in window(now - timedelta(minutes=30), now + timedelta(hours=hours)) if is_meeting(e)][:limit] if e["end"] > now]
+
+
+# A calendar block this long or longer (a night, a day off, a reminder) is no meeting
+BLOCK_HOURS = 6
+
+
+def event_key(e: Dict[str, Any]) -> str:
+    return f"{e.get('uid') or e['title']}|{e['start'].isoformat(timespec='minutes')}"
+
+
+def is_meeting(e: Dict[str, Any], ignored: Optional[List[Dict[str, str]]] = None) -> bool:
+    """A meeting to count, to record, to pause the analysis for: not a long block, not one the user said is
+    no meeting (asked by the user: «не считать встречей», one or a whole series; meet_ignore)."""
+    if e["end"] - e["start"] >= timedelta(hours=BLOCK_HOURS):
+        return False
+    if ignored is None:
+        import json
+
+        from app.database import get_all_settings
+
+        try:
+            ignored = json.loads(get_all_settings().get("meet_ignore") or "[]")
+        except ValueError:
+            ignored = []
+    key, series = event_key(e), (e.get("uid") or e["title"])
+    return not any((x.get("key") and x["key"] == key) or (not x.get("key") and x.get("id") == series) for x in ignored or [])
 
 
 def day(start: datetime, end: datetime) -> List[Dict[str, Any]]:

@@ -21,6 +21,13 @@ function hmIsNever(e) {
   const id = hmSeries(e), title = (e.title || '').trim().toLowerCase();
   return hmNeverList().some(x => (x.id && x.id === id) || (title && (x.title || '').trim().toLowerCase() === title));
 }
+// Calendar events that are no meeting (asked by the user): one, or a whole series (meet_ignore; the server's
+// app/calendar_ics.is_meeting): not counted, not recorded, not a countdown, no pause of the analysis
+function hmIgnoreList() { try { const v = JSON.parse(hmSettings().meet_ignore || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function hmIsIgnored(e) {
+  const id = hmSeries(e);
+  return hmIgnoreList().some(x => (x.key ? x.key === e.key : x.id && x.id === id));
+}
 function hmOverrides() { try { return JSON.parse(hmSettings().meet_overrides || '{}') || {}; } catch (e) { return {}; } }
 function hmLocale() { return state.uiLang === 'en' ? 'en-GB' : 'ru-RU'; }
 function hmPad(n) { return String(n).padStart(2, '0'); }
@@ -179,6 +186,7 @@ function renderHomeRecent() {
 // --- The meetings of the working day ---
 // on: it will be recorded; ask: it will be asked about first (an in-person meeting); off: not recorded
 function hmMeetingState(ev) {
+  if (hmIsIgnored(ev)) return 'ignored';
   const all = hmOn('meet_auto_all', false), askIn = hmOn('meet_ask_inperson', true);
   const ov = hmOverrides()[ev.key];
   if (ov === 'rec') return 'on';
@@ -211,9 +219,10 @@ function renderHomeMeetings() {
     }
   }
   const meetings = shown.filter(e => e.e.getTime() > a && e.s.getTime() < b);
+  const real = meetings.filter(e => !hmIsIgnored(e) && e.e - e.s < 6 * 3600e3);  // what counts as meetings
   const count = document.getElementById('hm-mt-count');
-  count.textContent = String(meetings.length);
-  count.classList.toggle('hidden', !meetings.length || !home.calConfigured);
+  count.textContent = String(real.length);
+  count.classList.toggle('hidden', !real.length || !home.calConfigured);
 
   // the switch "record every meeting" and what it means today
   const all = hmOn('meet_auto_all', false);
@@ -222,7 +231,7 @@ function renderHomeMeetings() {
   document.getElementById('hm-auto').classList.toggle('hm-auto-on', all);
   document.getElementById('hm-ask-wrap').classList.toggle('hidden', !all);
   document.getElementById('hm-ask-inperson').checked = hmOn('meet_ask_inperson', true);
-  const up = meetings.filter(e => e.e > now);
+  const up = real.filter(e => e.e > now);
   const states = up.map(hmMeetingState);
   const rec = states.filter(s => s === 'on').length, ask = states.filter(s => s === 'ask').length;
   document.getElementById('hm-auto-sub').textContent = !all
@@ -294,7 +303,7 @@ function renderHomeMeetings() {
       // half-way through: not started by itself any more (hmAutoTick), but one click records the rest
       action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmRecordNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordNow'))}</span></button>`;
     } else {
-      const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever' }[st];
+      const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever', ignored: 'hmStateIgnored' }[st];
       action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" aria-label="${escapeHtml(t(label))}" title="${escapeHtml(`${t(label)}. ${t('hmMeetingTip')}`)}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t(label))}</span></button>`;
     }
     // A meeting ahead that continues a series: what is open from last time, and the brief on a click
@@ -315,13 +324,36 @@ function renderHomeMeetings() {
           <span class="flex items-baseline gap-1.5 min-w-0">${narrow && hpx < 40 ? `<span class="hm-mt-time">${escapeHtml(clock(e.s.getTime()))}</span>` : ''}<span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
           ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span>${live ? liveSub : ` · ${escapeHtml(who)}`}</span>` : ''}
           ${narrow && hpx >= 40 ? `<span class="hm-mt-sub hm-mono">${escapeHtml(time)}</span>` : ''}
-        </span>${narrow ? '' : brief}${action}
+        </span>${narrow ? '' : brief}${action}${narrow ? '' : `<button ${pageCall('click', 'hmMeetingMenu', [e.key, { $: 'el' }])} class="hm-mt-more" title="${escapeHtml(t('hmMeetingMenuTip'))}" aria-label="${escapeHtml(t('hmMeetingMenuTip'))}">⋯</button>`}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
   if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t">${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
   box.innerHTML = html.join('');
-  return meetings;
+  return real;  // the header counts the meetings, not the blocks and the events that are none
+}
+
+// «⋯» on a meeting of the day: no meeting (this one or its whole series), or a meeting again
+async function hmSetIgnored(key, scope) {
+  const ev = home.events.find(e => e.key === key);
+  if (!ev) return;
+  const id = hmSeries(ev);
+  const list = hmIgnoreList().filter(x => !(x.key === ev.key || (!x.key && x.id === id)));
+  if (scope === 'one') list.push({ id: '', key: ev.key, title: ev.title || '' });
+  if (scope === 'series') list.push({ id, key: '', title: ev.title || '' });
+  if (!await hmSave({ meet_ignore: JSON.stringify(list.slice(-300)) })) return;
+  renderHomeNow();
+  if (state.appView === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+}
+
+function hmMeetingMenu(key, el) {
+  const ev = home.events.find(e => e.key === key);
+  if (!ev) return;
+  const r = el.getBoundingClientRect();
+  const items = hmIsIgnored(ev)
+    ? [{ label: t('hmMeetingAgain'), run: () => hmSetIgnored(key, null) }]
+    : [{ label: t('hmIgnoreOne'), run: () => hmSetIgnored(key, 'one') }, { label: t('hmIgnoreSeries'), run: () => hmSetIgnored(key, 'series') }];
+  setTimeout(() => openTextMenuAt(items, r.right, r.bottom + 4, { right: true }), 0);
 }
 
 // A meeting going on: record the rest of it, stopped with the meeting like an automatic one
@@ -339,6 +371,7 @@ async function hmToggleMeeting(key) {
   if (!ev) return;
   const ov = hmOverrides();
   const st = hmMeetingState(ev);
+  if (st === 'ignored') { await hmSetIgnored(key, null); return; }  // «Не встреча» taken back
   if (st === 'never') { await hmSetNever(ev, false); return; }  // «Никогда» taken back: as the others again
   // asking → recorded → left out → recorded …; without "all": recorded ↔ not
   if (st === 'on') { if (hmOn('meet_auto_all', false)) ov[key] = 'skip'; else delete ov[key]; }

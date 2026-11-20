@@ -254,7 +254,7 @@ const DB_BLOCK_MS = 6 * 3600e3;  // a calendar block this long or longer is no m
 function dbNextMeeting() {
   const now = Date.now(), rec = typeof isRecording === 'function' && isRecording();
   const list = (typeof home !== 'undefined' ? home.events : [])
-    .filter(e => !e.all_day && e.e.getTime() > now && e.e - e.s < DB_BLOCK_MS && (e.s.getTime() > now || rec))
+    .filter(e => !e.all_day && e.e.getTime() > now && e.e - e.s < DB_BLOCK_MS && !hmIsIgnored(e) && (e.s.getTime() > now || rec))
     .sort((x, y) => x.s - y.s);
   return list[0] || null;
 }
@@ -335,7 +335,7 @@ function dbFreeHtml() {
   const from = Math.max(now, d.from.getTime()), to = d.to.getTime();
   if (from >= to) return `<div class="db-note">${escapeHtml(t('dbDayOver'))}</div>`;
   // a block of six hours or more (a night, a day off) is no meeting (reported by the user: «The End» 17:00–08:30)
-  const busy = dbMerge(home.events.filter(e => !e.all_day && e.e - e.s < DB_BLOCK_MS).map(e => [Math.max(e.s.getTime(), from), Math.min(e.e.getTime(), to)]));
+  const busy = dbMerge(home.events.filter(e => !e.all_day && e.e - e.s < DB_BLOCK_MS && !hmIsIgnored(e)).map(e => [Math.max(e.s.getTime(), from), Math.min(e.e.getTime(), to)]));
   const gaps = [];
   let at = from;
   for (const [a, b] of busy) { if (a - at >= 30 * 60e3) gaps.push([at, a]); at = Math.max(at, b); }
@@ -359,7 +359,7 @@ function dbLoadHtml() {
   for (let i = 0; i < 7; i++) {
     const x = new Date(a); x.setDate(a.getDate() + i);
     const k = calKey(x);
-    const spans = [...(w.events || []).filter(e => !e.all_day).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
+    const spans = [...(w.events || []).filter(e => !e.all_day && !hmIsIgnored(e)).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
         .filter(([a, b]) => b - a < DB_BLOCK_MS),  // a night or a day off is not hours of meetings
       ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
       .filter(([s]) => calKey(new Date(s)) === k);

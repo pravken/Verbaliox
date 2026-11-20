@@ -140,6 +140,8 @@ def clean(key: str, value: Any) -> str:
         return _meet_overrides(text_s)
     if key == "meet_never":
         return _meet_never(text_s)
+    if key == "meet_ignore":
+        return _meet_ignore(text_s)
     return text
 
 
@@ -155,6 +157,22 @@ def _meet_overrides(text: str) -> str:
             any(not isinstance(k, str) or len(k) > 300 or v not in ("rec", "skip") for k, v in data.items()):
         raise ValueError("meet_overrides: нужен объект JSON")
     return json.dumps(data, ensure_ascii=False)
+
+
+def _meet_ignore(text: str) -> str:
+    """[{id, key, title}]: calendar events that are no meeting (asked by the user): one (key: its id and
+    start) or a whole series (id: its id in the calendar, or its title). app/calendar_ics.is_meeting."""
+    import json
+
+    try:
+        data = json.loads(text or "[]")
+    except ValueError:
+        raise ValueError("meet_ignore: нужен список JSON")
+    if not isinstance(data, list) or len(data) > 300 or any(
+            not isinstance(x, dict) or any(not isinstance(x.get(k, ""), str) or len(x.get(k, "")) > 300 for k in ("id", "key", "title"))
+            for x in data):
+        raise ValueError("meet_ignore: нужен список JSON")
+    return json.dumps([{"id": x.get("id", ""), "key": x.get("key", ""), "title": x.get("title", "")} for x in data], ensure_ascii=False)
 
 
 def _meet_never(text: str) -> str:
