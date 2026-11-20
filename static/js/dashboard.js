@@ -7,7 +7,8 @@
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 const DB_KEY = 'vx-dashboard';
-const DB_SIZES = { S: 4, M: 5, L: 7, W: 12 };
+// of 12 columns: two M, an S and an L, three S fill a row (reported by the user: M and M left a hole)
+const DB_SIZES = { S: 4, M: 6, L: 8, W: 12 };
 // Every widget: its title key, the sizes it takes, and the block of the home page it shows (host)
 const DB_WIDGETS = {
   kpis: { title: 'dbKpis', sizes: ['L', 'W'], icon: '▦' },
@@ -29,14 +30,17 @@ const DB_WIDGETS = {
   free: { title: 'dbFree', sizes: ['S', 'M', 'L'], icon: '◌' },
   load: { title: 'dbLoad', sizes: ['S', 'M', 'L', 'W'], icon: '▥' },
   dull: { title: 'dbDull', sizes: ['S', 'M', 'L', 'W'], icon: '↻' },
+  // asked by the user: how long the working day lasted (app/worktime.py), against the norm
+  worked: { title: 'dbWorked', sizes: ['S', 'M', 'L', 'W'], icon: '⏱' },
 };
-const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'L'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
-  ['free', 'S'], ['load', 'M'], ['features', 'L'], ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['dull', 'M'],
-  ['summary', 'M'], ['recent', 'L']];
+// rows that add up to 12: W · M+M · M+M · M+M · S+L · L+S · S+S+S · M+M
+const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'M'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
+  ['free', 'S'], ['load', 'L'], ['features', 'L'], ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['dull', 'S'],
+  ['summary', 'M'], ['recent', 'M']];
 const DB_PERIODS = ['week', 'month', 'quarter'];
 // added after the first dashboard: offered once to an existing layout, after the widget named (removed by
 // the user, it stays out)
-const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['prep', 'week'], ['due', 'prep'], ['free', 'waiting'], ['load', 'free'], ['dull', 'decisions']];
+const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['prep', 'week'], ['due', 'prep'], ['free', 'waiting'], ['load', 'free'], ['dull', 'decisions'], ['worked', 'kpis']];
 
 const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false };
 
@@ -58,6 +62,7 @@ function dbPrefs() {
   return DB.prefs = {
     offered: [...new Set([...offered, ...DB_NEW_WIDGETS.map(([id]) => id)])],
     norm: [2, 3, 4, 5, 6].includes(Number(p.norm)) ? Number(p.norm) : 4,
+    days: p.days === 'work' ? 'work' : 'cal',
     layout: layout && layout.length ? layout : DB_DEFAULT.map(([id, size]) => ({ id, size })),
     period: DB_PERIODS.includes(p.period) ? p.period : 'week',
     feature: Number(p.feature) || 0,
@@ -67,7 +72,27 @@ function dbPrefs() {
 
 function dbSave(changes) {
   DB.prefs = { ...dbPrefs(), ...changes };
-  try { localStorage.setItem(DB_KEY, JSON.stringify(DB.prefs)); } catch (e) {}
+  const text = JSON.stringify(DB.prefs);
+  try { localStorage.setItem(DB_KEY, text); } catch (e) {}
+  // the server keeps the layout too (ui_dashboard): localStorage is per port, see syncUiPrefsFromServer
+  clearTimeout(DB.saveTimer);
+  DB.saveTimer = setTimeout(() => saveUiSetting('ui_dashboard', text), 800);
+}
+
+// The layout kept on the server wins over this origin's copy (another port had none, or an older one)
+function dbPrefsFromServer(settings) {
+  let local = null;
+  try { local = localStorage.getItem(DB_KEY); } catch (e) {}
+  const server = settings.ui_dashboard;
+  if (!server) {
+    if (local) saveUiSetting('ui_dashboard', local);  // made before the server kept it
+    return;
+  }
+  if (server === local) return;
+  try { const v = JSON.parse(server); if (!v || typeof v !== 'object') return; } catch (e) { return; }
+  try { localStorage.setItem(DB_KEY, server); } catch (e) {}
+  DB.prefs = null;
+  if (state.appView === 'dashboard') loadDashboard();
 }
 
 function dbSize(w) {
@@ -78,16 +103,20 @@ function dbSize(w) {
 // --- Data ---
 async function loadDashboard() {
   const p = dbPrefs();
+  const seq = (DB.seq = (DB.seq || 0) + 1);  // a period switched quickly: only the last answer is shown
   DB.loading = true;
-  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}`;
+  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
   const [data, week, untx] = await Promise.all([
     fetch(`/api/dashboard?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
     dbLoadWeek(),
     fetch('/api/untranscribed').then(r => (r.ok ? r.json() : null)).catch(() => null),
+    dbLoadWork(),
   ]);
+  if (seq !== DB.seq) return;
   DB.loading = false;
-  DB.data = data;
-  DB.week = week;
+  // a failed request keeps what was shown rather than an empty «Главная»
+  DB.data = data || (DB.data && DB.data.period === p.period ? DB.data : null);
+  if (week) DB.week = week;
   DB.untx = (untx && untx.items) || [];
   if (state.appView === 'dashboard') renderDashboard();
 }
@@ -98,10 +127,23 @@ function dbMonday(d = new Date()) {
   return x;
 }
 
+// The hours worked of this week (app/worktime.py): asked again at each tick, the minutes go on
+async function dbLoadWork() {
+  const a = dbMonday(), b = new Date(a);
+  b.setDate(a.getDate() + 7);
+  const w = await fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (w) DB.work = w;
+}
+
+// «7 ч 45» for a day's head: the hours worked, short
+function dbWorkedShort(min) {
+  return min ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}` : '';
+}
+
 async function dbLoadWeek() {
   const a = dbMonday(), b = new Date(a);
   b.setDate(a.getDate() + 7);
-  return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
+  return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
 }
 
@@ -192,18 +234,27 @@ function dbRenderHead() {
   if (sub) {
     const last = d ? new Date(`${d.end}T12:00:00`) : null;
     if (last) last.setDate(last.getDate() - 1);
-    sub.textContent = d ? `${t(`dbPeriodName_${p.period}`)}: ${fmt(d.start)} – ${fmt(last.toISOString().slice(0, 10))}` : '';
+    sub.textContent = d ? `${t(`dbPeriodName_${p.period}`)}: ${fmt(d.start)} – ${fmt(calKey(last))}` : '';
   }
   // How far the period is (asked by the user: «сколько дней прошло»): a bar and «Прошло 4 дня из 7»
   const prog = document.getElementById('db-progress');
   if (prog) {
     prog.classList.toggle('hidden', !d);
     if (d) {
+      // calendar days, or working days (Monday to Friday) as the user chose with the gear (asked by the user);
+      // a public holiday of the country chosen in the settings is no working day
+      const work = dbPrefs().days === 'work', hol = d.holidays || {};
       const a = new Date(`${d.start}T00:00:00`), b = new Date(`${d.end}T00:00:00`), now = new Date();
-      const all = Math.round((b - a) / 864e5), pct = Math.max(0, Math.min(100, (now - a) / (b - a) * 100));
-      const done = Math.max(0, Math.min(all, Math.floor((now - a) / 864e5)));
-      const label = t('dbPeriodProgress').replace('{done}', () => plural(done, t('dbDayForms'))).replace('{all}', () => all);
-      prog.innerHTML = `<i class="db-progress-bar"><i style="width:${pct.toFixed(1)}%"></i></i><span>${escapeHtml(label)}</span>`;
+      const days = [];
+      for (let x = new Date(a); x < b; x.setDate(x.getDate() + 1)) if (!work || ((x.getDay() + 6) % 7 < 5 && !hol[calKey(x)])) days.push(new Date(x));
+      const all = days.length;
+      const done = days.filter(x => x.getTime() + 864e5 <= now.getTime()).length;  // the days over
+      const today = days.find(x => x <= now && now < new Date(x.getTime() + 864e5));
+      const pct = all ? Math.max(0, Math.min(100, (done + (today ? (now - today) / 864e5 : 0)) / all * 100)) : 0;
+      const label = t(work ? 'dbPeriodProgressWork' : 'dbPeriodProgress').replace('{done}', () => plural(done, t(work ? 'dbWorkDayForms' : 'dbDayForms'))).replace('{all}', () => all);
+      prog.innerHTML = `<i class="db-progress-bar"><i style="width:${pct.toFixed(1)}%"></i></i><span>${escapeHtml(label)}</span>`
+        + `<button class="db-prog-cfg" data-click="dbProgressMenu" data-click-args='[{"$": "el"}]' title="${escapeHtml(t('dbDaysTip'))}" aria-label="${escapeHtml(t('dbDaysTip'))}">`
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>';
       prog.setAttribute('aria-label', label);
     }
   }
@@ -217,17 +268,33 @@ function dbRenderHead() {
   document.getElementById('db-edit-btn').setAttribute('aria-pressed', DB.edit ? 'true' : 'false');
 }
 
+// the gear of the period's progress: calendar or working days
+function dbProgressMenu(el) {
+  const r = el.getBoundingClientRect(), cur = dbPrefs().days === 'work' ? 'work' : 'cal';
+  const pick = days => { dbSave({ days }); dbRenderHead(); };
+  setTimeout(() => openTextMenuAt([
+    { label: `${cur === 'cal' ? '✓ ' : '   '}${t('dbDaysCal')}`, run: () => pick('cal') },
+    { label: `${cur === 'work' ? '✓ ' : '   '}${t('dbDaysWork')}`, run: () => pick('work') },
+  ], r.left, r.bottom + 6), 0);
+}
+
 function dbNum(n) { return String(n); }  // a point for fractions in both languages (asked by the user)
 
 // --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
 // They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
-const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load'];
-const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load'];  // redrawn as the time goes (dbTickNow)
+const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load', 'worked'];
+const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load', 'worked'];  // redrawn as the time goes (dbTickNow)
 
 // The meeting going on or the next one of today (not an all-day one); null when there is none left
+// A meeting begun counts as going on only while a recording runs (asked by the user: a block over the whole
+// night in the calendar showed «идёт встреча» on the dashboard): otherwise the next one ahead is shown. A block
+// of six hours or more (a night, a day off, a reminder) is never a meeting to count down to
+const DB_BLOCK_MS = 6 * 3600e3;  // a calendar block this long or longer is no meeting
+
 function dbNextMeeting() {
-  const now = Date.now();
-  const list = (typeof home !== 'undefined' ? home.events : []).filter(e => !e.all_day && e.e.getTime() > now)
+  const now = Date.now(), rec = typeof isRecording === 'function' && isRecording();
+  const list = (typeof home !== 'undefined' ? home.events : [])
+    .filter(e => !e.all_day && e.e.getTime() > now && e.e - e.s < DB_BLOCK_MS && !hmIsIgnored(e) && (e.s.getTime() > now || rec))
     .sort((x, y) => x.s - y.s);
   return list[0] || null;
 }
@@ -304,10 +371,14 @@ function dbMerge(spans) {
 // «Свободное время»: the windows of 30 minutes or more left in the working day between the meetings
 function dbFreeHtml() {
   if (typeof home === 'undefined' || !home.calConfigured) return `<div class="db-note">${escapeHtml(t('hmCalOff'))}</div>`;
+  // a public holiday (Settings → Календарь → Праздники) is no working day
+  const hol = ((DB.week && DB.week.holidays) || {})[calKey(new Date())];
+  if (hol) return `<div class="db-note">${escapeHtml(t('dbHolidayToday').replace('{name}', () => hol))}</div>`;
   const d = hmDay(), now = Date.now();
   const from = Math.max(now, d.from.getTime()), to = d.to.getTime();
   if (from >= to) return `<div class="db-note">${escapeHtml(t('dbDayOver'))}</div>`;
-  const busy = dbMerge(home.events.filter(e => !e.all_day).map(e => [Math.max(e.s.getTime(), from), Math.min(e.e.getTime(), to)]));
+  // a block of six hours or more (a night, a day off) is no meeting (reported by the user: «The End» 17:00–08:30)
+  const busy = dbMerge(home.events.filter(e => !e.all_day && e.e - e.s < DB_BLOCK_MS && !hmIsIgnored(e)).map(e => [Math.max(e.s.getTime(), from), Math.min(e.e.getTime(), to)]));
   const gaps = [];
   let at = from;
   for (const [a, b] of busy) { if (a - at >= 30 * 60e3) gaps.push([at, a]); at = Math.max(at, b); }
@@ -331,11 +402,12 @@ function dbLoadHtml() {
   for (let i = 0; i < 7; i++) {
     const x = new Date(a); x.setDate(a.getDate() + i);
     const k = calKey(x);
-    const spans = [...(w.events || []).filter(e => !e.all_day).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()]),
+    const spans = [...(w.events || []).filter(e => !e.all_day && !hmIsIgnored(e)).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
+        .filter(([a, b]) => b - a < DB_BLOCK_MS),  // a night or a day off is not hours of meetings
       ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
       .filter(([s]) => calKey(new Date(s)) === k);
     const hours = dbMerge(spans).reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
-    if (i < 5 || hours) days.push({ x, k, hours });
+    if (i < 5 || hours) days.push({ x, k, hours, hol: (w.holidays || {})[k] || '' });
   }
   const top = Math.max(norm * 1.5, ...days.map(d => d.hours));
   const sum = days.reduce((s, d) => s + d.hours, 0);
@@ -343,11 +415,50 @@ function dbLoadHtml() {
     + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
     + `<div class="db-load"><i class="db-load-norm" style="bottom:${Math.round(norm / top * 100)}%"></i>` + days.map(d => {
       const over = d.hours > norm;
-      return `<div class="db-load-day${d.k === today ? ' today' : ''}${d.k < today ? ' past' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(d.hours * 10) / 10)} ${t('dbHoursShort')}`)}">`
+      return `<div class="db-load-day${d.k === today ? ' today' : ''}${d.k < today ? ' past' : ''}${d.hol ? ' hol' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(d.hours * 10) / 10)} ${t('dbHoursShort')}${d.hol ? ` · ${d.hol}` : ''}`)}">`
         + `<span class="db-load-v">${d.hours ? dbNum(Math.round(d.hours * 10) / 10) : ''}</span>`
         + `<i class="db-load-bar${over ? ' over' : ''}" style="height:${Math.round(d.hours / top * 100)}%"></i>`
         + `<span class="db-load-d">${escapeHtml(d.x.toLocaleDateString(lang, { weekday: 'short' }))}</span></div>`;
     }).join('') + '</div>';
+}
+
+// «Рабочий день»: the hours worked today against the norm (the reminder's hours), when it began, the breaks,
+// and the days of the week (app/worktime.py: the minutes this computer was in use)
+function dbWorkedHtml(size) {
+  const w = DB.work;
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  if (!w.supported) return `<div class="db-note">${escapeHtml(t('dbWorkedNoSupport'))}</div>`;
+  if (!w.enabled) return `<div class="db-note">${escapeHtml(t('dbWorkedOff'))} <button class="db-more" data-click="openWorkSettings">${escapeHtml(t('newsOpenSettings'))}</button></div>`;
+  const today = w.days[w.today] || { worked: 0, start: '', end: '', breaks: 0 };
+  const norm = (w.norm || 8) * 60, pct = Math.min(100, today.worked / norm * 100);
+  const over = today.worked >= norm;
+  let html = `<div class="db-wk-head"><b class="db-wk-big${over ? ' over' : ''}">${escapeHtml(dbHm(today.worked * 60))}</b>`
+    + `<span class="db-wk-of">${escapeHtml(t('dbWorkedOf').replace('{h}', () => dbNum(w.norm || 8)))}</span></div>`
+    + `<div class="db-wk-bar${over ? ' over' : ''}"><i style="width:${pct.toFixed(1)}%"></i></div>`
+    + `<div class="db-wk-sub">${escapeHtml(today.start ? [t('dbWorkedSince').replace('{t}', () => today.start), today.breaks >= 15 ? t('dbWorkedBreaks').replace('{t}', () => dbHm(today.breaks * 60)) : ''].filter(Boolean).join(' · ') : t('dbWorkedNone'))}</div>`;
+  if (size !== 'S') {
+    const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const x = new Date(a); x.setDate(a.getDate() + i);
+      const k = calKey(x), d = w.days[k];
+      if (i < 5 || d) days.push({ x, k, min: d ? d.worked : 0, d });
+    }
+    const top = Math.max(norm * 1.25, ...days.map(d => d.min));
+    const sum = days.reduce((s, d) => s + d.min, 0);
+    html += `<div class="db-load-head">${escapeHtml(t('dbWorkedWeek').replace('{t}', () => dbHm(sum * 60)))}</div>`
+      + `<div class="db-load db-wk-week"><i class="db-load-norm" style="bottom:${Math.round(norm / top * 100)}%"></i>` + days.map(d =>
+        `<div class="db-load-day${d.k === w.today ? ' today' : ''}${d.k < w.today ? ' past' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbHm(d.min * 60)}${d.d && d.d.start ? ` (${d.d.start}–${d.d.end})` : ''}`)}">`
+        + `<span class="db-load-v">${escapeHtml(dbWorkedShort(d.min))}</span>`
+        + `<i class="db-load-bar${d.min > norm ? ' over' : ''}" style="height:${Math.round(d.min / top * 100)}%"></i>`
+        + `<span class="db-load-d">${escapeHtml(d.x.toLocaleDateString(lang, { weekday: 'short' }))}</span></div>`).join('') + '</div>';
+  }
+  return html;
+}
+
+function openWorkSettings() {
+  openModal('settings', 'general');
+  selectSettingsTab('calendar');
 }
 
 function dbCycleNorm() {
@@ -376,6 +487,7 @@ function dbWidgetHtml(id, size) {
     case 'due': return dbDueHtml(d, size);
     case 'free': return dbFreeHtml();
     case 'load': return dbLoadHtml();
+    case 'worked': return dbWorkedHtml(size);
     case 'dull': return dbDullHtml(d);
     case 'mytasks': return dbTasks(d, size);
     case 'waiting': return dbWaitingHtml(d, size);
@@ -458,20 +570,24 @@ function dbWeek() {
     const live = !done && it.at.getTime() <= now;
     const pct = live ? Math.round((now - it.at) / Math.max(1, it.end - it.at) * 100) : 0;
     return `<button class="db-ev${done ? ' done' : ''}${live ? ' live' : ''}${it.own ? ' own' : ''}" ${it.rec ? `data-click="openMeeting" data-click-args='[${it.rec}]'` : 'disabled'} title="${escapeHtml(it.title)}">`
-      + `<span class="db-tm">${pad(it.at.getHours())}:${pad(it.at.getMinutes())}</span>${escapeHtml(it.title)}${live ? `<i class="db-ev-prog" style="width:${pct}%"></i>` : ''}</button>`;
+      + `<span class="db-tm">${pad(it.at.getHours())}:${pad(it.at.getMinutes())}</span> <span class="db-ev-t">${escapeHtml(it.title)}</span>${live ? `<i class="db-ev-prog" style="width:${pct}%"></i>` : ''}</button>`;
   };
   const nowDate = new Date(now);
   return `<div class="db-cal" style="grid-template-columns:repeat(${shown.length}, minmax(0, 1fr))">` + shown.map(x => {
     const k = calKey(x), list = (items[k] || []).sort((p, q) => p.at - q.at);
-    const head = `<div class="db-dn"><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}</div>`;
+    const hol = (w.holidays || {})[k];
+    const wk = DB.work && DB.work.enabled && DB.work.days[k] ? DB.work.days[k].worked : 0;  // the hours worked that day (app/worktime.py)
+    const head = `<div class="db-dn${hol ? ' hol' : ''}"${hol ? ` title="${escapeHtml(hol)}"` : ''}><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}`
+      + (wk ? `<span class="db-dn-wk" title="${escapeHtml(t('dbWorkedTip').replace('{t}', () => dbHm(wk * 60)))}">${escapeHtml(dbWorkedShort(wk))}</span>` : '') + '</div>'
+      + (hol ? `<div class="db-hol">${escapeHtml(hol)}</div>` : '');
     // The time already past is filled (asked by the user): a day before today whole; today down to the
     // line of "now", which stands after the last thing already begun, never over a card
     if (k === today) {
       const begun = list.filter(it => it.at.getTime() <= now), ahead = list.filter(it => it.at.getTime() > now);
-      return `<div class="db-day today"><div class="db-past">${head}${begun.map(item).join('')}</div>`
+      return `<div class="db-day today${hol ? ' db-day-off' : ''}"><div class="db-past">${head}${begun.map(item).join('')}</div>`
         + `<div class="db-now"><b>${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}${dbNextIn()}</b></div>${ahead.map(item).join('')}</div>`;
     }
-    return `<div class="db-day${k < today ? ' db-day-past' : ''}">${head}${list.map(item).join('')}</div>`;
+    return `<div class="db-day${k < today ? ' db-day-past' : ''}${hol ? ' db-day-off' : ''}">${head}${list.map(item).join('')}</div>`;
   }).join('') + '</div>';
 }
 
@@ -481,7 +597,8 @@ function dbFeatures(d, size) {
   return `<div class="db-feats">` + d.features.slice(0, n).map(f => {
     const c = /^#[0-9A-Fa-f]{6}$/.test(f.color || '') ? f.color : '#8E8E93';
     const max = Math.max(1, ...f.spark);
-    return `<button class="db-feat" style="--ft:${c}" data-click="setDashFeature" data-click-args='[${f.id}]' title="${escapeHtml(t('dbFeatureOnly').replace('{name}', () => f.name))}">`
+    // a click opens the feature's card (asked by the user); the filter of «Главная» is in «Все фичи ▾»
+    return `<button class="db-feat" style="--ft:${c}" data-click="openFeaturePage" data-click-args='[${f.id}]' title="${escapeHtml(t('dbFeatureOpenTip').replace('{name}', () => f.name))}">`
       + `<span class="db-feat-n"><i></i>${escapeHtml(f.name)}</span>`
       + `<span class="db-feat-row"><span><b>${f.meetings}</b> ${escapeHtml(plural(f.meetings, t('dbMeetingForms')).replace(/^\d+\s/, ''))}</span>`
       + (d.needs_me ? '' : `<span><b>${f.open}</b> ${escapeHtml(t('dbMyTasksShort'))}</span>`)
@@ -592,7 +709,9 @@ function openDashFeatureMenu(e) {
   const tick = (on, label) => `${on ? '✓' : ' '}  ${label}`;
   e.stopPropagation();
   const r = e.currentTarget.getBoundingClientRect();
-  openTextMenuAt([{ label: tick(!p.feature, t('dbAllFeatures')), run: () => setDashFeature(0) }, { sep: true },
+  const cur = p.feature ? featureById(p.feature) : null;
+  openTextMenuAt([...(cur ? [{ label: `↗  ${t('dbFeatureCard').replace('{name}', () => cur.name)}`, run: () => openFeaturePage(cur.id) }, { sep: true }] : []),
+    { label: tick(!p.feature, t('dbAllFeatures')), run: () => setDashFeature(0) }, { sep: true },
     ...feats.map(f => ({ label: tick(p.feature === f.id, f.name), run: () => setDashFeature(f.id) }))], r.left, r.bottom + 4);
 }
 
@@ -706,7 +825,7 @@ function dbRenderDetail() {
   const { kind, person, data: d } = DB_DETAIL;
   box.classList.toggle('hidden', !kind);
   if (!kind) return;
-  const today = DB.data ? DB.data.today : new Date().toISOString().slice(0, 10);
+  const today = DB.data ? DB.data.today : calKey(new Date());
   const title = kind === 'person' ? person : t(`dbDt_${kind}`);
   const period = DB.data && kind !== 'person' ? `<div class="db-dt-period">${escapeHtml(document.getElementById('db-sub')?.textContent || '')}</div>` : '';
   let body;
@@ -840,6 +959,13 @@ function dbTickNow() {
   if (state.appView !== 'dashboard') return;
   const day = new Date().toDateString();
   if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
+  else if (dbPrefs().layout.some(w => w.id === 'worked')) dbLoadWork().then(() => {
+    dbPrefs().layout.forEach((w, i) => {
+      if (w.id !== 'worked' || DB.edit || DB.drag) return;
+      const c = document.querySelector(`#db-grid .db-w[data-i="${i}"] .db-c`);
+      if (c) c.innerHTML = dbWidgetHtml(w.id, dbSize(w));
+    });
+  });
   if (!DB.edit && !DB.drag) {
     dbPrefs().layout.forEach((w, i) => {
       if (!DB_TIME_WIDGETS.includes(w.id)) return;
@@ -862,6 +988,14 @@ registerView('dashboard', {
     const qa = document.querySelector('#home-view .hm-head > .flex'), qslot = document.getElementById('db-qa');
     if (qa && qslot && !qslot.contains(qa)) qslot.appendChild(qa);
     renderDashboard();
+    // the widgets come in one after another as Главная opens (not on every redraw)
+    const grid = document.getElementById('db-grid');
+    if (grid) {
+      grid.querySelectorAll(':scope > .db-w').forEach((w, i) => { w.style.animationDelay = `${Math.min(i, 12) * 40}ms`; });
+      grid.classList.remove('db-wave'); void grid.offsetWidth; grid.classList.add('db-wave');
+      clearTimeout(DB.waveTimer);
+      DB.waveTimer = setTimeout(() => grid.classList.remove('db-wave'), 1000);
+    }
     if (typeof renderHome === 'function') renderHome();
     loadDashboard();
   },

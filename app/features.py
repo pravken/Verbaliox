@@ -208,6 +208,12 @@ def set_meeting_features(meeting_id: int, feature_ids: List[int], for_series: bo
                                  [(row["series_id"], f) for f in ids])
         conn.commit()
         conn.close()
+    try:  # its Obsidian note goes to the feature's folder (app/obsidian.follow)
+        from app import obsidian
+
+        obsidian.follow(meeting_id)
+    except Exception:
+        pass
     return ids
 
 
@@ -245,11 +251,38 @@ def accept_suggestion(meeting_id: int, feature_id: int) -> List[int]:
 
 
 def _mentions(text: str, phrase: str) -> bool:
-    """The phrase as whole words of the text, any letter case («Платежи» in «Синк: платежи и возвраты»)."""
+    """The phrase as whole words of the text, any letter case («Платежи» in «Синк: платежи и возвраты»),
+    in any of their forms: «Синк по платежам» is about «Платежи» too (_same_word)."""
     phrase = phrase.strip()
     if len(phrase) < 2:
         return False
-    return re.search(r"(?<!\w)" + re.escape(phrase.casefold()) + r"(?!\w)", text.casefold()) is not None
+    if re.search(r"(?<!\w)" + re.escape(phrase.casefold()) + r"(?!\w)", text.casefold()):
+        return True
+    if re.search(r"[^\w\s-]", phrase):  # «C++», «Q3/Q4»: as written only
+        return False
+    want, words = _words(phrase), _words(text)
+    return bool(want) and any(all(_same_word(w, t) for w, t in zip(want, words[i:i + len(want)]))
+                              for i in range(len(words) - len(want) + 1))
+
+
+def _words(text: str) -> List[str]:
+    return re.findall(r"\w+", text.casefold().replace("ё", "е"))
+
+
+def _same_word(word: str, other: str) -> bool:
+    """One word in another form (платежи / платежам / платежей, отчёты / отчётам, report / reports): a word
+    of 5 letters or more and the other share all of it but an ending of up to 2 letters, the other's ending
+    up to 3. Shorter words only as they are: «пла» is no «платежи», «план» no «планёрка»."""
+    if word == other:
+        return True
+    if len(word) < 5:
+        return False
+    k = 0
+    for a, b in zip(word, other):
+        if a != b:
+            break
+        k += 1
+    return k >= max(4, len(word) - 2) and len(other) - k <= 3
 
 
 def suggest_by_title(meeting_id: int) -> List[int]:
@@ -380,9 +413,10 @@ def decisions_of(summary_md: str) -> List[str]:
     return out[:DECISIONS_PER_MEETING]
 
 
-def overview(feature_id: int) -> Optional[Dict[str, Any]]:
+def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:
     """Everything of one feature: its meetings (newest first) with the decisions of their summaries,
-    and the tasks of those meetings. None when there is no such feature."""
+    and the tasks of those meetings; the card (asked by the user) adds the people met in them, the
+    meetings and hours of each of the last WEEKS weeks, the hours in all. None when there is no such feature."""
     from app import commitments
     from app.database import _loads_dict
 
@@ -392,7 +426,7 @@ def overview(feature_id: int) -> Optional[Dict[str, Any]]:
     with _db_lock:
         conn = _conn()
         rows = conn.execute(
-            "SELECT m.id, m.title, m.recorded_at, m.created_at, m.duration, m.summaries_json FROM meetings m "
+            "SELECT m.id, m.title, m.recorded_at, m.created_at, m.duration, m.summaries_json, m.speakers_json FROM meetings m "
             "JOIN meeting_features mf ON mf.meeting_id = m.id WHERE mf.feature_id = ?", (int(feature_id),)).fetchall()
         conn.close()
     meetings = []
@@ -403,4 +437,87 @@ def overview(feature_id: int) -> Optional[Dict[str, Any]]:
                          "decisions": decisions_of(sums.get("protocol") or "")})
     meetings.sort(key=lambda m: m["date"], reverse=True)
     tasks = commitments.for_meetings([m["id"] for m in meetings]) if meetings else []
-    return {"feature": f, "meetings": meetings, "tasks": tasks}
+    return {"feature": f, "meetings": meetings, "tasks": tasks, **_card(rows, meetings, today),
+            "next": next_meeting(f, [m["id"] for m in meetings]), "week": _week(meetings, tasks, today)}
+
+
+def _week(meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]], today=None) -> Dict[str, int]:
+    """What changed in the last 7 days: decisions of the meetings recorded then, tasks made and done then."""
+    from datetime import date, timedelta
+
+    since = ((today or date.today()) - timedelta(days=6)).isoformat()
+    return {"decisions": sum(len(m["decisions"]) for m in meetings if m["date"][:10] >= since),
+            "tasks_new": sum(1 for t in tasks if str(t.get("created_at") or "")[:10] >= since),
+            "tasks_done": sum(1 for t in tasks if t.get("status") == "done" and str(t.get("done_at") or "")[:10] >= since)}
+
+
+def next_meeting(f: Dict[str, Any], meeting_ids: List[int]) -> Optional[Dict[str, Any]]:
+    """The feature's next calendar meeting within two weeks: its title names the feature (its name or a
+    keyword), or it continues a series whose recordings are the feature's. None without a calendar."""
+    try:
+        from app import calendar_ics, series
+        from app.database import get_all_settings, list_meetings
+
+        if not (get_all_settings().get("calendar_ics") or "").strip():
+            return None
+        ours = set(meeting_ids)
+        done = [r for r in list_meetings() if r.get("status") == "completed"]
+        series_ids = {r.get("series_id") for r in done if r["id"] in ours and r.get("series_id")}
+        phrases = [f["name"], *split_list(f.get("keywords"))]
+        for e in calendar_ics.upcoming(hours=24 * 14, limit=60):
+            if any(_mentions(e["title"], p) for p in phrases) or \
+                    (series_ids and series.match_event(e["title"], [], done).get("series_id") in series_ids):
+                return e
+    except Exception:
+        return None
+    return None
+
+
+WEEKS = 12
+
+
+def _card(rows, meetings: List[Dict[str, Any]], today=None) -> Dict[str, Any]:
+    """The people met in the feature's meetings (most first; not the user), each of the last WEEKS weeks
+    (from Monday: meetings and hours), the hours in all and the last meeting's date."""
+    from datetime import date, timedelta
+
+    from app.database import _loads_dict
+    from app.people import _rows, canonical, my_names
+    from app.voice_profiles import is_default_name
+
+    today = today or date.today()
+    week0 = today - timedelta(days=today.weekday())
+    weeks = [{"start": (week0 - timedelta(days=7 * k)).isoformat(), "meetings": 0, "hours": 0.0} for k in range(WEEKS - 1, -1, -1)]
+    try:
+        directory = _rows()
+    except Exception:
+        directory = []
+    me = set(my_names())
+    met: Dict[str, Dict[str, Any]] = {}
+    speakers = {r["id"]: r["speakers_json"] for r in rows}
+    for m in meetings:
+        try:
+            day = date.fromisoformat(m["date"][:10])
+        except ValueError:
+            day = None
+        if day:
+            for w in weeks:
+                a = date.fromisoformat(w["start"])
+                if a <= day < a + timedelta(days=7):
+                    w["meetings"] += 1
+                    w["hours"] = round(w["hours"] + float(m["duration"] or 0) / 3600, 2)
+        seen = set()
+        for sp in _loads_dict(speakers.get(m["id"])).values():
+            n = (sp or {}).get("name") if isinstance(sp, dict) else ""
+            if not n or is_default_name(n):
+                continue
+            n = canonical(n, directory)
+            if n.lower() in seen or n.lower() in me:
+                continue
+            seen.add(n.lower())
+            e = met.setdefault(n.lower(), {"name": n, "color": (sp or {}).get("color") or "", "meetings": 0, "last": ""})
+            e["meetings"] += 1
+            e["last"] = max(e["last"], m["date"][:10])
+    people = sorted(met.values(), key=lambda x: (-x["meetings"], x["name"].lower()))[:12]
+    return {"people": people, "weeks": weeks, "hours": round(sum(float(m["duration"] or 0) for m in meetings) / 3600, 1),
+            "last": meetings[0]["date"][:10] if meetings else ""}

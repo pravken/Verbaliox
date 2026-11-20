@@ -136,8 +136,7 @@ async function loadTasks() {
   TK.data = await res.json();
   if (TK.pendingDelete && TK.pendingDelete.size) TK.data.tasks = TK.data.tasks.filter(x => !TK.pendingDelete.has(x.id));  // removed, «Отменить» still open
   TK.loaded = true;
-  const open = TK.data.tasks.filter(x => !tkIsDone(x)).length;
-  badge('nav-tasks-n', open);
+  refreshTasksCount(true);  // the badge counts the user's own tasks, as the top bar does (found in the audit)
 }
 
 async function renderTasksPage() {
@@ -394,7 +393,7 @@ async function toggleTaskDone(id, checked) {
   const task = await tkPatch(id, { status: checked ? 'done' : 'open' });
   if (!task) { renderTasks(); return; }
   TK.report = null;
-  badge('nav-tasks-n', TK.data.tasks.filter(x => !tkIsDone(x)).length);
+  refreshTasksCount(true);
   renderTasks();
 }
 

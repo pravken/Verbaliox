@@ -1,7 +1,8 @@
 """
 Dictation into any program: a system-wide hotkey (Ctrl+Alt+D by default) starts recording the
 microphone; the same keys again stop it, the speech is recognized and the text is typed into the
-window that has the focus (through the clipboard and Ctrl+V; the clipboard is put back after).
+window that has the focus (through the clipboard and Ctrl+V; the clipboard is put back after; with an
+image or copied files in the clipboard, as keystrokes, the clipboard untouched).
 
 Recognition uses the models already downloaded: GigaAM v3 for Russian, Parakeet for other
 languages (both on the CPU, a second or two), otherwise the live-caption Whisper worker. Each
@@ -19,7 +20,7 @@ import sys
 import threading
 import time
 import traceback
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -262,6 +263,31 @@ def save_to_library(audio: np.ndarray, text: str, model: str, translated_to: str
 
 
 # ---- typing into the focused window (Windows) ----
+# Clipboard formats only text is put back from: an image (bitmap, DIB, metafile) or copied files (HDROP).
+# With one of them in the clipboard the text is typed as keystrokes instead, and the clipboard is not
+# touched (saving every format of another program would make it render all its delayed formats)
+_NON_TEXT_FORMATS = {2, 3, 8, 14, 15, 17}  # CF_BITMAP, CF_METAFILEPICT, CF_DIB, CF_ENHMETAFILE, CF_HDROP, CF_DIBV5
+
+
+def _clipboard_holds_more_than_text(formats: List[int]) -> bool:
+    return any(f in _NON_TEXT_FORMATS for f in formats)
+
+
+def _unicode_keystrokes(text: str) -> List[Tuple[int, int, int]]:
+    """(virtual key, UTF-16 unit, flags) of the key presses that type the text: each UTF-16 unit as a
+    KEYEVENTF_UNICODE press and release (a character outside the BMP is two), a line break as Enter."""
+    KEYUP, UNICODE, VK_RETURN = 0x0002, 0x0004, 0x0D
+    out: List[Tuple[int, int, int]] = []
+    for line_no, line in enumerate(text.replace("\r\n", "\n").replace("\r", "\n").split("\n")):
+        if line_no:
+            out += [(VK_RETURN, 0, 0), (VK_RETURN, 0, KEYUP)]
+        data = line.encode("utf-16-le")
+        for i in range(0, len(data), 2):
+            unit = int.from_bytes(data[i:i + 2], "little")
+            out += [(0, unit, UNICODE), (0, unit, UNICODE | KEYUP)]
+    return out
+
+
 def type_text(text: str) -> None:
     if sys.platform != "win32":
         return
@@ -279,7 +305,48 @@ def type_text(text: str) -> None:
     user32.SetClipboardData.restype = wintypes.HANDLE
     user32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
     user32.RegisterClipboardFormatW.restype = wintypes.UINT
+    user32.EnumClipboardFormats.argtypes = [wintypes.UINT]
+    user32.EnumClipboardFormats.restype = wintypes.UINT
     CF_UNICODETEXT, GMEM_MOVEABLE = 13, 0x0002
+
+    def clip_formats() -> Optional[List[int]]:
+        """The formats in the clipboard, without asking their owner to render any."""
+        if not user32.OpenClipboard(None):
+            return None
+        try:
+            out, fmt = [], 0
+            while True:
+                fmt = user32.EnumClipboardFormats(fmt)
+                if not fmt:
+                    return out
+                out.append(fmt)
+        finally:
+            user32.CloseClipboard()
+
+    def send_keystrokes(value: str) -> None:
+        class KEYBDINPUT(ctypes.Structure):
+            _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
+                        ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+        class MOUSEINPUT(ctypes.Structure):  # the largest member: it sets the size of INPUT
+            _fields_ = [("dx", wintypes.LONG), ("dy", wintypes.LONG), ("mouseData", wintypes.DWORD),
+                        ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+        class _U(ctypes.Union):
+            _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
+
+        class INPUT(ctypes.Structure):
+            _anonymous_ = ("u",)
+            _fields_ = [("type", wintypes.DWORD), ("u", _U)]
+
+        keys = _unicode_keystrokes(value)
+        arr = (INPUT * len(keys))()
+        for i, (vk, unit, flags) in enumerate(keys):
+            arr[i].type = 1  # INPUT_KEYBOARD
+            arr[i].ki = KEYBDINPUT(vk, unit, flags, 0, 0)
+        user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+        user32.SendInput.restype = wintypes.UINT
+        user32.SendInput(len(keys), arr, ctypes.sizeof(INPUT))
 
     def read_clip() -> Optional[str]:
         if not user32.OpenClipboard(None):
@@ -329,10 +396,17 @@ def type_text(text: str) -> None:
             user32.CloseClipboard()
         return True
 
+    VK_CONTROL, VK_V, KEYUP = 0x11, 0x56, 0x0002
+    formats = clip_formats()
+    if formats and _clipboard_holds_more_than_text(formats):
+        # An image or copied files: only text would come back, so the clipboard is left alone
+        for vk in (0x12, 0x10):  # Alt and Shift of the hotkey may still be held
+            user32.keybd_event(vk, 0, KEYUP, 0)
+        send_keystrokes(text + " ")
+        return
     previous = read_clip()
     if not write_clip(text + " "):
         return
-    VK_CONTROL, VK_V, KEYUP = 0x11, 0x56, 0x0002
     for vk in (0x12, 0x10):  # Alt and Shift of the hotkey may still be held
         user32.keybd_event(vk, 0, KEYUP, 0)
     user32.keybd_event(VK_CONTROL, 0, 0, 0)

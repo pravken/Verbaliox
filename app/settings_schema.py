@@ -24,19 +24,18 @@ BOOLS = {
     "obsidian_transcript", "obsidian_generate", "obsidian_feature_folders", "obsidian_more", "obsidian_stats", "llm_cloud_consent", "watch_folder_recursive",
     "dub_keep_original_track", "dub_denoise", "dub_room_tone", "dub_keep_workdir", "dictation_translate_cloud", "dictation_save",
     "start_with_windows", "close_to_tray", "ask_import_params", "proc_denoise", "proc_loudnorm", "proc_leveling",
-    "meet_auto_all", "meet_ask_inperson", "work_day_fit", "device_auto",
+    "meet_auto_all", "meet_ask_inperson", "meet_notify", "worktime_track", "work_day_fit", "device_auto",
 }
 INTS = {"num_speakers": (0, 20), "idle_unload_minutes": (0, 24 * 60), "media_retention_days": (0, 3650),
         "onnx_gpu_batch": (1, 256), "work_day_start": (0, 23), "work_day_end": (0, 24)}
-FLOATS = {"dub_voice_cfg": (1.0, 3.0)}  # VoxCPM2 guidance (cfg_value)
+FLOATS = {"dub_voice_cfg": (1.0, 3.0), "work_remind_hours": (0.0, 16.0)}  # VoxCPM2 guidance (cfg_value)
 CHOICES = {"llm_provider": {"ollama", "cloud"}, "date_folders": {"off", "day", "month", "year_month"},
            "record_source_mode": {"mic", "system", "both"}, "ui_scale": {"75", "90", "100", "115", "130", "150"},
            # the memory left to the system (app/mem_reserve.py)
            # GigaAM / Parakeet on the video card or always on the processor (app/onnx_gpu.gpu_for_job)
            "economy_for": {"0", "30", "60", "120", "240", "day"},
-           # the theme (static/js/core.js THEME_ACCENTS, THEME_BGS)
-           "ui_accent": {"blue", "indigo", "purple", "pink", "teal", "mint", "graphite"},
-           "ui_bg": {"graphite", "black", "midnight", "forest", "warm"},
+           # how long before a calendar meeting its reminder comes, seconds (app/brief_notice.py)
+           "meet_notify_before": {"0", "30", "60", "120", "300", "600", "900"},
            "cpu_threads": {"auto", "2", "4", "6", "8", "12", "16", "all"},
            "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},
@@ -143,6 +142,20 @@ def clean(key: str, value: Any) -> str:
         return _meet_overrides(text_s)
     if key == "meet_never":
         return _meet_never(text_s)
+    if key == "meet_ignore":
+        return _meet_ignore(text_s)
+    if key == "setup_done":  # the steps of the setup after an update already answered (static/js/settings.js)
+        return _setup_done(text_s)
+    if key == "days_off":  # the user's own days off and vacations (app/holidays_cal.py)
+        return _days_off(text_s)
+    if key == "holiday_country":  # ISO code of the country of the public holidays (app/holidays_cal.py)
+        if text_s and not re.fullmatch(r"[A-Za-z]{2}", text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s.upper()
+    if key == "holiday_subdiv":
+        if text_s and not re.fullmatch(r"[A-Za-z0-9-]{1,10}", text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
     return text
 
 
@@ -158,6 +171,55 @@ def _meet_overrides(text: str) -> str:
             any(not isinstance(k, str) or len(k) > 300 or v not in ("rec", "skip") for k, v in data.items()):
         raise ValueError("meet_overrides: нужен объект JSON")
     return json.dumps(data, ensure_ascii=False)
+
+
+def _days_off(text: str) -> str:
+    """[{from, to, title}]: the user's own days off and vacations, dates YYYY-MM-DD, `to` not before `from`."""
+    import json
+    from datetime import date
+
+    try:
+        data = json.loads(text or "[]")
+        if not isinstance(data, list) or len(data) > 300:
+            raise ValueError
+        out = []
+        for x in data:
+            a, b = date.fromisoformat(x["from"]), date.fromisoformat(x.get("to") or x["from"])
+            title = str(x.get("title") or "")
+            if b < a or (b - a).days > 366 or len(title) > 80:
+                raise ValueError
+            out.append({"from": a.isoformat(), "to": b.isoformat(), "title": title})
+    except (ValueError, TypeError, KeyError):
+        raise ValueError("days_off: нужен список периодов")
+    return json.dumps(sorted(out, key=lambda x: x["from"]), ensure_ascii=False)
+
+
+def _setup_done(text: str) -> str:
+    import json
+
+    try:
+        data = json.loads(text or "[]")
+    except ValueError:
+        raise ValueError("setup_done: нужен список JSON")
+    if not isinstance(data, list) or len(data) > 100 or any(not isinstance(x, str) or not re.fullmatch(r"[a-z0-9_-]{1,40}", x) for x in data):
+        raise ValueError("setup_done: нужен список JSON")
+    return json.dumps(data)
+
+
+def _meet_ignore(text: str) -> str:
+    """[{id, key, title}]: calendar events that are no meeting (asked by the user): one (key: its id and
+    start) or a whole series (id: its id in the calendar, or its title). app/calendar_ics.is_meeting."""
+    import json
+
+    try:
+        data = json.loads(text or "[]")
+    except ValueError:
+        raise ValueError("meet_ignore: нужен список JSON")
+    if not isinstance(data, list) or len(data) > 300 or any(
+            not isinstance(x, dict) or any(not isinstance(x.get(k, ""), str) or len(x.get(k, "")) > 300 for k in ("id", "key", "title"))
+            for x in data):
+        raise ValueError("meet_ignore: нужен список JSON")
+    return json.dumps([{"id": x.get("id", ""), "key": x.get("key", ""), "title": x.get("title", "")} for x in data], ensure_ascii=False)
 
 
 def _meet_never(text: str) -> str:

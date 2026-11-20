@@ -132,6 +132,71 @@ class SearchIndexTest(unittest.TestCase):
         res = {r["meeting_id"]: r for r in database.search_all_meetings("капуст борщ")}
         self.assertEqual([h["segment_id"] for h in res[mid]["hits"]], [1])
 
+    def _index_rows(self, mid):
+        conn = database.get_connection()
+        try:
+            fts = sorted((r[0], r[1]) for r in conn.execute(
+                "SELECT segment_id, text FROM segments_fts WHERE meeting_id = ?", (mid,)))
+            listed = conn.execute("SELECT count(*) FROM segments_fts_rows WHERE meeting_id = ?", (mid,)).fetchone()[0]
+            return fts, listed, database._fts_rows_match(conn)
+        finally:
+            conn.close()
+
+    def test_an_edit_replaces_only_its_lines_in_the_index(self):
+        mid = self._meeting("Правка", ["первая строка", "вторая строка", "третья строка"])
+
+        def change(m):
+            m["segments"][1]["text"] = "исправленная строка"
+            return ("segments",)
+
+        database.edit_meeting(mid, change)
+        fts, listed, match = self._index_rows(mid)
+        self.assertEqual(fts, [(1, "первая строка"), (2, "исправленная строка"), (3, "третья строка")])
+        self.assertEqual(listed, 3)
+        self.assertTrue(match)
+        self.assertEqual([h["segment_id"] for h in {r["meeting_id"]: r for r in
+                          database.search_all_meetings("исправленн")}[mid]["hits"]], [2])
+        self.assertNotIn(mid, [r["meeting_id"] for r in database.search_all_meetings("вторая")])
+        database.clear_results(mid)
+        self.assertEqual(self._index_rows(mid)[:2], ([], 0))
+
+    def test_rowid_list_of_an_older_index_is_made_at_start(self):
+        """A library indexed before segments_fts_rows existed (or by an older version) gets it listed."""
+        mid = self._meeting("Старый индекс", ["слово один", "слово два"])
+        conn = database.get_connection()
+        conn.execute("DELETE FROM segments_fts_rows")
+        conn.commit()
+        conn.close()
+        database.init_db()
+        fts, listed, match = self._index_rows(mid)
+        self.assertEqual(listed, 2)
+        self.assertTrue(match)
+
+        def change(m):
+            m["segments"][0]["text"] = "другое"
+            return ("segments",)
+
+        database.edit_meeting(mid, change)
+        self.assertEqual(self._index_rows(mid)[0], [(1, "другое"), (2, "слово два")])
+
+    def test_search_does_not_wait_for_a_change_in_progress(self):
+        """A search reads without the lock every change holds (with WAL), names of the hits only."""
+        import threading
+
+        mid = self._meeting("Без очереди", ["Сварили суп из чечевицы"])
+        conn = database.get_connection()
+        conn.close()
+        if not database._wal_on:
+            self.skipTest("the data folder has no WAL")
+        out = []
+        with database._db_lock:
+            t = threading.Thread(target=lambda: out.append(database.search_all_meetings("чевиц")), daemon=True)
+            t.start()
+            t.join(10)
+        self.assertTrue(out)
+        res = {r["meeting_id"]: r for r in out[0]}
+        self.assertEqual([(h["segment_id"], h["speaker"]) for h in res[mid]["hits"]], [(1, "Анна")])
+
     def test_hits_are_capped_per_meeting(self):
         mid = self._meeting("cap", [f"повтор {i}" for i in range(10)])
         res = {r["meeting_id"]: r for r in database.search_all_meetings("повтор")}
@@ -166,6 +231,27 @@ class EventBusTest(unittest.TestCase):
         database.update_meeting_fields(m["id"], transcript_verified=1)
         database.stash_transcript_for(m["id"], "gigaam-v3")  # transcribed again with the same model
         self.assertFalse(database.get_meeting(m["id"])["transcript_verified"])
+
+    def test_a_damaged_version_is_skipped_not_an_error(self):
+        database.init_db()
+        m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav")
+        database.save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "text": "a", "speaker": "S"}],
+                                      speakers={}, transcript_model="gigaam-v3")
+        database.save_transcript_version(m["id"], "large-v3", {"segments": [{"id": 0, "start": 0, "end": 1, "text": "b"}],
+                                                            "speakers": {}})
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("INSERT INTO transcript_versions (meeting_id, model, data) VALUES (?, ?, ?)",
+                         (m["id"], "merged", "{не json"))
+            conn.commit()
+            conn.close()
+        self.assertFalse(database.switch_transcript_version(m["id"], "merged"))
+        self.assertEqual(database.get_meeting(m["id"])["transcript_model"], "gigaam-v3")  # left as it was
+        # deleting the one shown: the damaged «merged» is passed over for the next good one
+        self.assertTrue(database.delete_transcript_version(m["id"], "gigaam-v3"))
+        got = database.get_meeting(m["id"])
+        self.assertEqual(got["transcript_model"], "large-v3")
+        self.assertEqual([s["text"] for s in got["segments"]], ["b"])
 
     def test_versions_are_listed_without_reading_them_whole(self):
         database.init_db()
@@ -488,7 +574,9 @@ class SegmentsTableTest(unittest.TestCase):
 
         with mock.patch.object(database, "get_connection", side_effect=counting):
             database.edit_meeting(m["id"], change)
-        self.assertEqual(len(writes), 3, writes)  # the line, and its search entry deleted and added
+        # the line, and its search entry deleted and added (each with its place in segments_fts_rows)
+        self.assertEqual(len(writes), 5, writes)
+        self.assertTrue(any(w.startswith("DELETE FROM segments_fts WHERE rowid") for w in writes), writes)
         got = database.get_meeting(m["id"])["segments"]
         hits = [h for h in database.search_all_meetings("правка") if h["meeting_id"] == m["id"]]
         self.assertTrue(hits)

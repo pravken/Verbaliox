@@ -45,3 +45,5 @@ httpx2>=2.13.1
 httpcore2>=2.13.1
 # Time zones of calendar events (zoneinfo): Python on Windows has no tz database of its own
 tzdata>=2026.6
+# Public holidays of a country and its regions, offline (Settings → Календарь → Праздники; app/holidays_cal.py), MIT
+holidays>=0.109

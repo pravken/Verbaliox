@@ -21,6 +21,13 @@ function hmIsNever(e) {
   const id = hmSeries(e), title = (e.title || '').trim().toLowerCase();
   return hmNeverList().some(x => (x.id && x.id === id) || (title && (x.title || '').trim().toLowerCase() === title));
 }
+// Calendar events that are no meeting (asked by the user): one, or a whole series (meet_ignore; the server's
+// app/calendar_ics.is_meeting): not counted, not recorded, not a countdown, no pause of the analysis
+function hmIgnoreList() { try { const v = JSON.parse(hmSettings().meet_ignore || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function hmIsIgnored(e) {
+  const id = hmSeries(e);
+  return hmIgnoreList().some(x => (x.key ? x.key === e.key : x.id && x.id === id));
+}
 function hmOverrides() { try { return JSON.parse(hmSettings().meet_overrides || '{}') || {}; } catch (e) { return {}; } }
 function hmLocale() { return state.uiLang === 'en' ? 'en-GB' : 'ru-RU'; }
 function hmPad(n) { return String(n).padStart(2, '0'); }
@@ -179,6 +186,7 @@ function renderHomeRecent() {
 // --- The meetings of the working day ---
 // on: it will be recorded; ask: it will be asked about first (an in-person meeting); off: not recorded
 function hmMeetingState(ev) {
+  if (hmIsIgnored(ev)) return 'ignored';
   const all = hmOn('meet_auto_all', false), askIn = hmOn('meet_ask_inperson', true);
   const ov = hmOverrides()[ev.key];
   if (ov === 'rec') return 'on';
@@ -211,9 +219,10 @@ function renderHomeMeetings() {
     }
   }
   const meetings = shown.filter(e => e.e.getTime() > a && e.s.getTime() < b);
+  const real = meetings.filter(e => !hmIsIgnored(e) && e.e - e.s < 6 * 3600e3);  // what counts as meetings
   const count = document.getElementById('hm-mt-count');
-  count.textContent = String(meetings.length);
-  count.classList.toggle('hidden', !meetings.length || !home.calConfigured);
+  count.textContent = String(real.length);
+  count.classList.toggle('hidden', !real.length || !home.calConfigured);
 
   // the switch "record every meeting" and what it means today
   const all = hmOn('meet_auto_all', false);
@@ -222,7 +231,7 @@ function renderHomeMeetings() {
   document.getElementById('hm-auto').classList.toggle('hm-auto-on', all);
   document.getElementById('hm-ask-wrap').classList.toggle('hidden', !all);
   document.getElementById('hm-ask-inperson').checked = hmOn('meet_ask_inperson', true);
-  const up = meetings.filter(e => e.e > now);
+  const up = real.filter(e => e.e > now);
   const states = up.map(hmMeetingState);
   const rec = states.filter(s => s === 'on').length, ask = states.filter(s => s === 'ask').length;
   document.getElementById('hm-auto-sub').textContent = !all
@@ -294,7 +303,7 @@ function renderHomeMeetings() {
       // half-way through: not started by itself any more (hmAutoTick), but one click records the rest
       action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmRecordNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordNow'))}</span></button>`;
     } else {
-      const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever' }[st];
+      const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever', ignored: 'hmStateIgnored' }[st];
       action = `<button ${pageCall('click', 'hmToggleMeeting', [e.key])} class="hm-mt-btn hm-mt-${st}" aria-pressed="${st === 'on'}" aria-label="${escapeHtml(t(label))}" title="${escapeHtml(`${t(label)}. ${t('hmMeetingTip')}`)}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t(label))}</span></button>`;
     }
     // A meeting ahead that continues a series: what is open from last time, and the brief on a click
@@ -303,6 +312,10 @@ function renderHomeMeetings() {
       ? `<button ${pageCall('click', 'openBriefFor', bf.series_id ? ['series', bf.series_id] : ['person', bf.person])} class="hm-mt-link"
           title="${escapeHtml(t('hmBriefTip').replace('{n}', () => bf.open_tasks).replace('{title}', () => bf.last.title).replace('{date}', () => bf.last.date))}">${escapeHtml(
           bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
+      : '';
+    // the call of the meeting, from its invitation (Teams, Zoom, Meet, Webex): one click joins, from now to its end
+    const join = !past && e.join && e.s - now < 15 * 60e3
+      ? `<button ${pageCall('click', 'joinMeetingCall', [e.join])} class="hm-mt-link hm-mt-join" title="${escapeHtml(t('hmJoinTip'))}">${escapeHtml(t('hmJoin'))}</button>`
       : '';
     const title = e.title || t('hmUntitled');
     // a meeting going on: how far it is, filled in its card, and the minutes left
@@ -315,13 +328,36 @@ function renderHomeMeetings() {
           <span class="flex items-baseline gap-1.5 min-w-0">${narrow && hpx < 40 ? `<span class="hm-mt-time">${escapeHtml(clock(e.s.getTime()))}</span>` : ''}<span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
           ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span>${live ? liveSub : ` · ${escapeHtml(who)}`}</span>` : ''}
           ${narrow && hpx >= 40 ? `<span class="hm-mt-sub hm-mono">${escapeHtml(time)}</span>` : ''}
-        </span>${narrow ? '' : brief}${action}
+        </span>${join}${narrow ? '' : brief}${action}${narrow ? '' : `<button ${pageCall('click', 'hmMeetingMenu', [e.key, { $: 'el' }])} class="hm-mt-more" title="${escapeHtml(t('hmMeetingMenuTip'))}" aria-label="${escapeHtml(t('hmMeetingMenuTip'))}">⋯</button>`}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
   if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t">${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
   box.innerHTML = html.join('');
-  return meetings;
+  return real;  // the header counts the meetings, not the blocks and the events that are none
+}
+
+// «⋯» on a meeting of the day: no meeting (this one or its whole series), or a meeting again
+async function hmSetIgnored(key, scope) {
+  const ev = home.events.find(e => e.key === key);
+  if (!ev) return;
+  const id = hmSeries(ev);
+  const list = hmIgnoreList().filter(x => !(x.key === ev.key || (!x.key && x.id === id)));
+  if (scope === 'one') list.push({ id: '', key: ev.key, title: ev.title || '' });
+  if (scope === 'series') list.push({ id, key: '', title: ev.title || '' });
+  if (!await hmSave({ meet_ignore: JSON.stringify(list.slice(-300)) })) return;
+  renderHomeNow();
+  if (state.appView === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+}
+
+function hmMeetingMenu(key, el) {
+  const ev = home.events.find(e => e.key === key);
+  if (!ev) return;
+  const r = el.getBoundingClientRect();
+  const items = hmIsIgnored(ev)
+    ? [{ label: t('hmMeetingAgain'), run: () => hmSetIgnored(key, null) }]
+    : [{ label: t('hmIgnoreOne'), run: () => hmSetIgnored(key, 'one') }, { label: t('hmIgnoreSeries'), run: () => hmSetIgnored(key, 'series') }];
+  setTimeout(() => openTextMenuAt(items, r.right, r.bottom + 4, { right: true }), 0);
 }
 
 // A meeting going on: record the rest of it, stopped with the meeting like an automatic one
@@ -339,6 +375,7 @@ async function hmToggleMeeting(key) {
   if (!ev) return;
   const ov = hmOverrides();
   const st = hmMeetingState(ev);
+  if (st === 'ignored') { await hmSetIgnored(key, null); return; }  // «Не встреча» taken back
   if (st === 'never') { await hmSetNever(ev, false); return; }  // «Никогда» taken back: as the others again
   // asking → recorded → left out → recorded …; without "all": recorded ↔ not
   if (st === 'on') { if (hmOn('meet_auto_all', false)) ov[key] = 'skip'; else delete ov[key]; }
@@ -685,7 +722,14 @@ async function openLastRecording() {
 // A click on a Windows notification (run.py App.open_target): the place it was about. "meeting:ID:KIND"
 // opens the recording (a finished transcription on its text), "studio" the recording running, "last"
 // the newest recording, "settings:TAB" that part of the settings
+// The call of a calendar meeting: the server opens it (Teams in its app), only a link of a call service
+async function joinMeetingCall(url) {
+  const r = await fetch('/api/meeting/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }).catch(() => null);
+  if (r && r.ok) showToast(t('hmJoining')); else showError(t('hmJoinFailed'));
+}
+
 async function openFromNotice(target) {
+  if (String(target || '').startsWith('join:')) { joinMeetingCall(String(target).slice(5)); return; }
   const [kind, a, b] = String(target || '').split(':');
   if (kind === 'meeting' && Number(a)) {
     if (!(state.meetings || []).length) await loadMeetingsList().catch(() => {});
@@ -783,11 +827,54 @@ function openCalendarView() {
       try { localStorage.setItem('verbaliox_cal_mode', act); } catch (err) {}
       calLoad();
     } else if (act === 'day') { calView.mode = 'week'; calView.anchor = new Date(b.dataset.day); calLoad(); }
+    else if (act === 'dayoff') { const r = b.getBoundingClientRect(); calDayMenu(b.dataset.day, r.left, r.bottom + 4); }
     else if (act === 'rec') { closeCalendarView(); openMeeting(Number(b.dataset.id)); }
+  });
+  // a right click on a day: mark it a day off, or not (asked by the user)
+  wrap.addEventListener('contextmenu', e => {
+    const cell = e.target.closest('[data-daykey]');
+    if (!cell) return;
+    e.preventDefault();
+    calDayMenu(cell.dataset.daykey, e.clientX, e.clientY);
   });
   document.addEventListener('keydown', calKeydown, true);
   document.body.appendChild(wrap);
   calLoad();
+}
+
+// A day of the calendar: a day off of one's own, marked or taken back here (days_off, as in Settings → Календарь)
+function calDayMenu(day, x, y) {
+  let list = [];
+  try { list = JSON.parse(((state.system && state.system.settings) || {}).days_off || '[]'); } catch (e) {}
+  if (!Array.isArray(list)) list = [];
+  const hit = list.find(p => p.from <= day && day <= (p.to || p.from));
+  const save = async next => {
+    if (typeof saveDaysOff === 'function' && await saveDaysOff(next)) calLoad();
+  };
+  const shift = (k, n) => { const d = new Date(`${k}T12:00:00`); d.setDate(d.getDate() + n); return calKey(d); };
+  const items = [];
+  if (hit) {
+    items.push({ info: true, label: hit.title || t('dayOffDefault') });
+    // one day out of a period: the period is split around it
+    items.push({ label: t('calDayOffRemove'), run: () => save(list.flatMap(p => p !== hit ? [p] : [
+      ...(p.from < day ? [{ ...p, to: shift(day, -1) }] : []), ...((p.to || p.from) > day ? [{ ...p, from: shift(day, 1) }] : [])])) });
+    if (hit.from !== (hit.to || hit.from)) items.push({ label: t('calDayOffRemoveAll'), run: () => save(list.filter(p => p !== hit)) });
+  } else {
+    items.push({ label: t('calDayOffMark'), run: () => save([...list, { from: day, to: day, title: t('dayOffDefault') }]) });
+    items.push({ label: t('calVacationFrom'), run: () => {
+      closeCalendarView();
+      openModal('settings', 'general');
+      selectSettingsTab('calendar');
+      setTimeout(() => {
+        const a = document.getElementById('dayoff-from'), b = document.getElementById('dayoff-to'), n = document.getElementById('dayoff-title');
+        if (!a) return;
+        a.value = day; b.value = shift(day, 6); n.value = t('dayOffNamePh');
+        syncDateField(a); syncDateField(b);
+        a.scrollIntoView({ block: 'center' });
+      }, 300);
+    } });
+  }
+  setTimeout(() => openTextMenuAt(items, x, y), 0);
 }
 
 function calKeydown(e) {
@@ -801,10 +888,16 @@ function closeCalendarView() {
 
 async function calLoad() {
   const { a, b } = calRange();
+  const seq = (calView.seq = (calView.seq || 0) + 1);  // a quick ‹ › : only the last answer is shown (found in the audit)
   calView.loading = true;
   renderCalendarView();
-  const data = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
-    .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  const [data, work] = await Promise.all([
+    fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
+      .then(r => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+  ]);
+  if (seq !== calView.seq) return;
+  calView.work = work && work.enabled ? work.days : {};
   calView.loading = false;
   calView.data = data;
   renderCalendarView();
@@ -854,11 +947,17 @@ function renderCalendarView() {
   for (let d = new Date(a); d < b; d = calAddDays(d, 1)) days.push(d);
   const weekday = d => d.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
   let body;
+  const hols = (calView.data && calView.data.holidays) || {};  // public holidays (Settings → Календарь → Праздники)
+  // «⋯» of a day: mark it a day off (shown on hover; a right click does the same)
+  const dayBtn = d => `<button data-cal="dayoff" data-day="${calKey(d)}" class="cal-day-more" title="${escapeHtml(t('calDayMenuTip'))}" aria-label="${escapeHtml(t('calDayMenuTip'))}">⋯</button>`;
+  // the hours worked of a day, by fact (app/worktime.py)
+  const wkTag = d => { const w = (calView.work || {})[calKey(d)]; return w && w.worked ? `<span class="cal-wk" title="${escapeHtml(`${t('dbWorkedTip').replace('{t}', () => dbHm(w.worked * 60))} · ${w.start}–${w.end}`)}">${escapeHtml(dbWorkedShort(w.worked))}</span>` : ''; };
+  const holTag = d => hols[calKey(d)] ? `<span class="cal-hol" title="${escapeHtml(hols[calKey(d)])}">${escapeHtml(hols[calKey(d)])}</span>` : '';
   if (calView.mode === 'week') {
     body = `<div class="cal-week">${days.map(d => {
       const list = items[calKey(d)] || [];
-      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}">
-        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b></div>
+      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}" data-daykey="${calKey(d)}">
+        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
         <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
     }).join('')}</div>`;
   } else {
@@ -866,8 +965,8 @@ function renderCalendarView() {
     body = `<div class="cal-month">${heads}${days.map(d => {
       const list = items[calKey(d)] || [];
       const more = list.length - 3;
-      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}">
-        <button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>
+      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}" data-daykey="${calKey(d)}">
+        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
         ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
         ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
     }).join('')}</div>`;

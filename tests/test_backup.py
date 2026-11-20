@@ -53,6 +53,54 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(moved.read_bytes(), b"sound")
         self.assertTrue(DB_PATH.exists())
 
+    def test_caches_of_numbers_that_change_hands_are_dropped(self):
+        from app.audio_utils import peaks_file
+        from app.paths import THUMBS_DIR
+
+        tmp = Path(tempfile.mkdtemp())
+
+        def db(name, rows):
+            p = tmp / name
+            conn = sqlite3.connect(str(p))
+            conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, created_at TEXT, media_path TEXT)")
+            conn.executemany("INSERT INTO meetings VALUES (?, ?, ?)", rows)
+            conn.commit()
+            conn.close()
+            return p
+
+        old = db("old.db", [(901, "2026-01-01", "a.m4a"), (902, "2026-02-01", "b.m4a"), (903, "2026-03-01", "c.m4a")])
+        new = db("new.db", [(901, "2026-01-01", "a.m4a"), (902, "2026-01-15", "x.m4a")])
+        THUMBS_DIR.mkdir(parents=True, exist_ok=True)
+        files = {mid: (THUMBS_DIR / f"{mid}.jpg", peaks_file(mid)) for mid in (901, 902, 903)}
+        for pair in files.values():
+            for f in pair:
+                f.write_text("[1]")
+        try:
+            backup._drop_stale_caches(old, new)
+            self.assertTrue(all(f.exists() for f in files[901]))  # the same recording in both
+            self.assertFalse(any(f.exists() for f in files[902]))  # another recording under this number
+            self.assertFalse(any(f.exists() for f in files[903]))  # a number the next recording will get
+        finally:
+            for pair in files.values():
+                for f in pair:
+                    f.unlink(missing_ok=True)
+
+    def test_only_the_newest_databases_put_aside_are_kept(self):
+        from app.paths import DATA_DIR
+
+        for p in DATA_DIR.glob("meetings.before-restore-*.db"):  # of other tests
+            p.unlink()
+        names = [f"meetings.before-restore-2026010{i}-120000.db" for i in range(1, 6)]
+        for n in names:
+            (DATA_DIR / n).write_bytes(b"x")
+        try:
+            backup._prune_before_restore()
+            left = sorted(p.name for p in DATA_DIR.glob("meetings.before-restore-2026010*.db"))
+            self.assertEqual(left, names[2:])
+        finally:
+            for n in names:
+                (DATA_DIR / n).unlink(missing_ok=True)
+
     def test_restore_of_a_foreign_copy(self):
         """A copy someone sent: it may not write files where it likes nor change where data goes."""
         import json
@@ -163,6 +211,29 @@ class BackupTest(unittest.TestCase):
             z.writestr("hello.txt", "hi")
         with self.assertRaises(ValueError):
             backup.restore(bad)
+
+
+class DamagedRestoreTest(unittest.TestCase):
+    def test_a_damaged_database_is_replaced_by_the_restore(self):
+        """Found in the audit: a damaged database could not be checkpointed, and the restore failed at every start."""
+        from unittest import mock
+
+        d = Path(tempfile.mkdtemp())
+        db, pending = d / "meetings.db", d / "meetings.restore.db"
+        db.write_bytes(b"not a database" * 100)
+        conn = sqlite3.connect(str(pending))
+        conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, title TEXT)")
+        conn.execute("INSERT INTO meetings (title) VALUES ('Из копии')")
+        conn.commit()
+        conn.close()
+        with mock.patch.object(backup, "DB_PATH", db), mock.patch.object(backup, "PENDING", pending), \
+                mock.patch.object(backup, "DATA_DIR", d):
+            kept = backup.apply_pending()
+        self.assertTrue(Path(kept).is_file())
+        self.assertEqual(Path(kept).read_bytes()[:14], b"not a database")  # the damaged one is kept aside
+        conn = sqlite3.connect(str(db))
+        self.assertEqual(conn.execute("SELECT title FROM meetings").fetchone()[0], "Из копии")
+        conn.close()
 
 
 if __name__ == "__main__":

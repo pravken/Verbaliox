@@ -186,6 +186,12 @@ def _parse_dt(value: str, params: str) -> Optional[datetime]:
 _LINK_RE = re.compile(r"https?://", re.I)
 
 
+def _join(value: str) -> str:
+    from app.meeting_join import find
+
+    return find(_unescape(value))
+
+
 def _split_property(line: str) -> Tuple[str, str]:
     """NAME;PARAMS and the value: at the first colon outside quotes (TZID="(UTC+01:00) Amsterdam")."""
     quoted = False
@@ -198,8 +204,9 @@ def _split_property(line: str) -> Tuple[str, str]:
 
 
 def parse(text: str) -> List[Dict[str, Any]]:
-    """Events as dicts: {uid, title, start, end, attendees, rrule, exdates, all_day, location, online}.
-    `online`: the event has a link (in its place, description or URL): a call, not a room."""
+    """Events as dicts: {uid, title, start, end, attendees, rrule, exdates, all_day, location, online, join}.
+    `online`: the event has a link (in its place, description or URL): a call, not a room; `join`: the
+    link to its call (Teams, Zoom, Meet, Webex: app/meeting_join.py), "" when none is known."""
     events: List[Dict[str, Any]] = []
     cur: Optional[Dict[str, Any]] = None
     moved: List[tuple] = []  # (uid, the time of the series it replaces): a moved or cancelled meeting
@@ -244,7 +251,7 @@ def parse(text: str) -> List[Dict[str, Any]]:
             continue
         if line == "BEGIN:VEVENT":
             cur = {"uid": "", "title": "", "start": None, "end": None, "attendees": [], "rrule": "", "exdates": [],
-                   "all_day": False, "status": "", "location": "", "online": False, "recurrence_id": None}
+                   "all_day": False, "status": "", "location": "", "online": False, "join": "", "recurrence_id": None}
             continue
         if line == "END:VEVENT":
             if cur and cur["recurrence_id"] and cur["uid"]:
@@ -271,8 +278,13 @@ def parse(text: str) -> List[Dict[str, Any]]:
         elif name == "LOCATION":
             cur["location"] = _unescape(value).strip()[:200]
             cur["online"] = cur["online"] or bool(_LINK_RE.search(value))
+            cur["join"] = cur["join"] or _join(value)
         elif name in ("DESCRIPTION", "URL") or name.endswith("MEETINGURL") or name == "X-GOOGLE-CONFERENCE":
             cur["online"] = cur["online"] or bool(_LINK_RE.search(value))
+            # the meeting URL of the service first; the description's link only when there is no other
+            found = _join(value)
+            if found and (not cur["join"] or name != "DESCRIPTION"):
+                cur["join"] = found
         elif name == "STATUS":
             cur["status"] = value.strip()
         elif name in ("DTSTART", "DTEND"):
@@ -288,6 +300,13 @@ def parse(text: str) -> List[Dict[str, Any]]:
                         cur["tz"], cur["src_start"] = tz, datetime.strptime(value.strip()[:15], "%Y%m%dT%H%M%S")
                     except ValueError:
                         pass
+            elif name == "DTSTART" and dt is not None and value.strip().endswith("Z") and not cur.get("all_day"):
+                # A series given in UTC repeats at the same UTC time: expanded at a fixed local wall time
+                # it was an hour off after the viewer's clocks changed
+                try:
+                    cur["tz"], cur["src_start"] = timezone.utc, datetime.strptime(value.strip()[:15], "%Y%m%dT%H%M%S")
+                except ValueError:
+                    pass
         elif name == "RRULE":
             cur["rrule"] = value.strip()
         elif name == "RECURRENCE-ID":
@@ -364,7 +383,7 @@ def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict
             dur = ev["end"] - ev["start"]
             src = {**ev, "start": ev["src_start"], "end": ev["src_start"] + dur, "exdates": [wall(x) for x in ev["exdates"]]}
             found: List[Dict[str, Any]] = []
-            _expand(src, wall(start) - timedelta(days=1), wall(end) + timedelta(days=1), found)
+            _expand(src, wall(start) - timedelta(days=1), wall(end) + timedelta(days=1), found, to_wall=wall)
             for o in found:
                 s_local = o["start"].replace(tzinfo=tz).astimezone().replace(tzinfo=None)
                 if s_local + dur > start and s_local < end:
@@ -376,7 +395,8 @@ def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict
     return out
 
 
-def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[str, Any]]) -> None:
+def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[str, Any]], to_wall=None) -> None:
+    """to_wall: the series is walked at its zone's wall time; UNTIL (local time here) is brought to it."""
     dur = ev["end"] - ev["start"]
 
     def add(s: datetime) -> None:
@@ -394,6 +414,13 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
         return
     count = int(rule["COUNT"]) if rule.get("COUNT", "").isdigit() else None
     until = _parse_dt(rule["UNTIL"], "") if rule.get("UNTIL") else None
+    if until is not None:
+        # found in the audit: a date alone («UNTIL=20261104») takes in that whole day, its meeting too;
+        # a UTC time (local here) is the series' wall time in its zone, or its last meeting was lost
+        if len(rule["UNTIL"].strip()) == 8:
+            until = until.replace(hour=23, minute=59, second=59)
+        elif to_wall is not None and rule["UNTIL"].strip().upper().endswith("Z"):
+            until = to_wall(until)
     days = [_DAYS[d[-2:]] for d in rule.get("BYDAY", "").upper().split(",") if d[-2:] in _DAYS]
     n = 0
     cursor = ev["start"]
@@ -452,7 +479,17 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
             except ValueError:  # the 31st in a short month: skipped, as calendars do
                 cursor = cursor.replace(year=year, month=month % 12 + 1, day=28)
         elif freq == "YEARLY":
-            cursor = cursor.replace(year=cursor.year + step)
+            # a series from 29 February meets in the leap years only (found in the audit: it raised and the
+            # whole series was lost)
+            year = cursor.year + step
+            for _ in range(8):
+                try:
+                    cursor = ev["start"].replace(year=year)
+                    break
+                except ValueError:
+                    year += step
+            else:
+                break
         else:
             break
 
@@ -510,6 +547,10 @@ def events(force: bool = False) -> List[Dict[str, Any]]:
         return parsed
     except Exception as e:
         with _lock:
+            if _cache["source"] != source:
+                # another calendar's events are not this one's: after switching to a link that fails,
+                # the previous calendar went on showing until the next read
+                _cache["events"] = []
             _cache.update(source=source, at=time.time(), error=str(e)[:200])
             return list(_cache["events"])
 
@@ -532,15 +573,41 @@ def current_meeting(at: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     """The meeting going on now (or starting within 10 minutes): the shortest one if several."""
     at = at or datetime.now()
     found = [e for e in window(at - timedelta(hours=12), at + timedelta(minutes=10))
-             if e["start"] - timedelta(minutes=10) <= at < e["end"]]
+             if e["start"] - timedelta(minutes=10) <= at < e["end"] and is_meeting(e)]
     return min(found, key=lambda e: e["end"] - e["start"]) if found else None
 
 
 def upcoming(hours: int = 36, limit: int = 8) -> List[Dict[str, Any]]:
     now = datetime.now()
     return [{"title": e["title"], "start": e["start"].isoformat(timespec="minutes"), "end": e["end"].isoformat(timespec="minutes"),
-             "attendees": e["attendees"][:20]}
-            for e in window(now - timedelta(minutes=30), now + timedelta(hours=hours))[:limit] if e["end"] > now]
+             "attendees": e["attendees"][:20], "join": e.get("join", "")}
+            for e in [e for e in window(now - timedelta(minutes=30), now + timedelta(hours=hours)) if is_meeting(e)][:limit] if e["end"] > now]
+
+
+# A calendar block this long or longer (a night, a day off, a reminder) is no meeting
+BLOCK_HOURS = 6
+
+
+def event_key(e: Dict[str, Any]) -> str:
+    return f"{e.get('uid') or e['title']}|{e['start'].isoformat(timespec='minutes')}"
+
+
+def is_meeting(e: Dict[str, Any], ignored: Optional[List[Dict[str, str]]] = None) -> bool:
+    """A meeting to count, to record, to pause the analysis for: not a long block, not one the user said is
+    no meeting (asked by the user: «не считать встречей», one or a whole series; meet_ignore)."""
+    if e["end"] - e["start"] >= timedelta(hours=BLOCK_HOURS):
+        return False
+    if ignored is None:
+        import json
+
+        from app.database import get_all_settings
+
+        try:
+            ignored = json.loads(get_all_settings().get("meet_ignore") or "[]")
+        except ValueError:
+            ignored = []
+    key, series = event_key(e), (e.get("uid") or e["title"])
+    return not any((x.get("key") and x["key"] == key) or (not x.get("key") and x.get("id") == series) for x in ignored or [])
 
 
 def day(start: datetime, end: datetime) -> List[Dict[str, Any]]:
@@ -548,7 +615,8 @@ def day(start: datetime, end: datetime) -> List[Dict[str, Any]]:
     `key` names one meeting of a series: its id and its start."""
     return [{"key": f"{e['uid'] or e['title']}|{e['start'].isoformat(timespec='minutes')}", "title": e["title"],
              "start": e["start"].isoformat(timespec="minutes"), "end": e["end"].isoformat(timespec="minutes"),
-             "attendees": e["attendees"][:20], "location": e.get("location", ""), "online": bool(e.get("online"))}
+             "attendees": e["attendees"][:20], "location": e.get("location", ""), "online": bool(e.get("online")),
+             "join": e.get("join", "")}
             for e in window(start, end)]
 
 

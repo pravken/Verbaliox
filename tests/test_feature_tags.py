@@ -130,6 +130,22 @@ class FeatureTagsTest(unittest.TestCase):
         f = next(x for x in features.list_features() if x["id"] == search["id"])
         self.assertEqual(f["keywords"], "search, выдача, поиск")  # cleaned, each once
 
+    def test_a_feature_is_found_in_other_forms_of_its_words(self):
+        m = features._mentions
+        for text in ("Синк по платежам", "Разбор платежей", "ПЛАТЕЖИ", "платежа нет"):
+            self.assertTrue(m(text, "Платежи"), text)
+        self.assertTrue(m("Сверка по отчетам", "Отчёты"))
+        self.assertTrue(m("Weekly reports review", "Report"))
+        self.assertTrue(m("Обзор мобильных платежей", "Мобильные платежи"))  # word by word
+        self.assertFalse(m("Мобильные игры и платежи", "Мобильные платежи"))  # the words together only
+        self.assertFalse(m("Синк по платежам", "пла"))  # short words only as they are
+        self.assertFalse(m("Платформа", "Платежи"))
+        self.assertFalse(m("Поисковик для HR", "Поиск"))
+        self.assertFalse(m("Сборка C# и Go", "C++"))
+        self.assertTrue(m("Итоги по C++", "C++"))
+        pay = features.create_feature("Платежи")
+        self.assertEqual(features.suggest_by_title(self._meeting("Синк по платежам")), [pay["id"]])
+
     def test_what_a_feature_is_reaches_the_models_and_recognition(self):
         pay = features.create_feature("Платежи")
         features.update_feature(pay["id"], description="Экран оплаты и возвраты", keywords="эквайринг",
@@ -166,6 +182,27 @@ class FeatureTagsTest(unittest.TestCase):
         self.assertEqual(page["meetings"][0]["decisions"], ["Запускаем возвраты в декабре", "Stripe остаётся"])
         self.assertEqual([x["what"] for x in page["tasks"]], ["обновить экран оплаты"])
         self.assertIsNone(features.overview(999999))
+        # the card (asked by the user): the people met, the weeks, the hours
+        from datetime import date
+
+        save_meeting_results(mid, speakers={"S1": {"name": "Анна", "color": "#5AC8FA"}, "S2": {"name": "Участник 2"}})
+        page = features.overview(pay["id"], today=date.today())
+        self.assertEqual([p["name"] for p in page["people"]], ["Анна"])  # not an unnamed voice
+        self.assertEqual(len(page["weeks"]), features.WEEKS)
+        self.assertEqual(page["weeks"][-1]["meetings"], 1)  # made this week
+        self.assertEqual(page["last"], page["meetings"][0]["date"][:10])
+        self.assertEqual(page["week"]["decisions"], 2)  # the meeting is of this week
+        self.assertEqual(page["week"]["tasks_new"], 1)
+        self.assertIsNone(page["next"])  # no calendar
+        # the next calendar meeting: one whose title names the feature
+        from datetime import datetime, timedelta
+
+        ev = {"title": "Синк: платежи и возвраты", "start": (datetime.now() + timedelta(days=1)).isoformat(timespec="minutes"),
+              "end": (datetime.now() + timedelta(days=1, hours=1)).isoformat(timespec="minutes"), "attendees": [], "join": ""}
+        other = dict(ev, title="Обед")
+        with mock.patch("app.calendar_ics.upcoming", return_value=[other, ev]), \
+                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook"}):
+            self.assertEqual(features.next_meeting(pay, [mid])["title"], "Синк: платежи и возвраты")
         self.assertEqual(features.decisions_of("## Decisions\n1. Ship it\n## Next\n- x"), ["Ship it"])
         self.assertEqual(features.decisions_of("**Решения**\n- Да\n**Итог**\n- нет"), ["Да"])
         from app.ollama_client import SUMMARY_TEMPLATES

@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import re
@@ -38,6 +39,10 @@ def get_connection() -> sqlite3.Connection:
 
 _wal_on = False  # remembered once true (init_db turns WAL on after the first connections of a new database)
 
+# How many times init_db has run: the tables a module makes on first use (app/commitments.py) are made
+# once per database opened, not before every query
+schema_epoch = 0
+
 
 def _check_wal(conn: sqlite3.Connection) -> bool:
     global _wal_on
@@ -56,6 +61,7 @@ def init_db() -> None:
     except Exception as e:
         print(f"[backup] restore failed: {e}", flush=True)
     hw = get_hardware_info()
+    forget_settings()  # the defaults and the one-time changes below write the table directly
     with _db_lock:
         conn = get_connection()
         # WAL lets the UI read while the worker writes progress updates
@@ -176,8 +182,6 @@ def init_db() -> None:
             "audio_enhance": "true",
             "clean_fillers": "true",
             "ui_scale": "100",  # the interface scale of the page, % (static/js/core.js applyUiScale)
-            "ui_accent": "blue",  # the theme: the accent and the background (static/js/core.js applyTheme)
-            "ui_bg": "graphite",
             "record_source_mode": "both",
             "record_mic_device": "",
             "batched_inference": "true",  # faster-whisper BatchedInferencePipeline on GPU
@@ -252,6 +256,16 @@ def init_db() -> None:
             "work_day_fit": "true",  # ...stretched for a meeting that runs a little past its edges
             "meet_auto_all": "false",  # record every calendar meeting by itself (static/js/home.js)
             "meet_ask_inperson": "true",  # ...but ask first for a meeting without a link to a call
+            "meet_notify": "true",  # Windows notifications of calendar meetings: a reminder, the call at the start (app/brief_notice.py)
+            "meet_notify_before": "300",  # ...the reminder this many seconds ahead; 0 = only the call at the start
+            "holiday_country": "",  # public holidays of this country count as days off (app/holidays_cal.py); "" = none
+            "holiday_subdiv": "",  # ...and of its region
+            "days_off": "[]",  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)
+            "worktime_track": "true",  # count the minutes this computer is in use: the working day (app/worktime.py)
+            "work_remind_hours": "8",  # ...and tell when this many hours are worked; 0 = never
+            "work_reminded_day": "",  # the working day told about already
+            "setup_done": "[]",  # the steps of the setup after an update already answered (static/js/settings.js SETUP_STEPS)
+            "meet_ignore": "[]",  # calendar events that are no meeting: [{id: series, key: one, title}] (calendar_ics.is_meeting)
             "meet_never": "[]",  # calendar meetings never recorded or asked about: [{id: series, title}], JSON
             "meet_overrides": "{}",  # per meeting of the calendar: "rec" (record it) or "skip", JSON
         }
@@ -305,6 +319,8 @@ def init_db() -> None:
             )
             """
         )
+        cur.execute(_FTS_ROWS_DDL)
+        cur.execute(_FTS_ROWS_INDEX)
         # The transcript: one row per line (see _write_segments), not one JSON in the recording's row
         cur.execute(_SEGMENTS_DDL)
         cur.execute(_VERSIONS_DDL)
@@ -329,11 +345,21 @@ def init_db() -> None:
         if cur.execute("PRAGMA user_version").fetchone()[0] < _FTS_SCHEMA_VERSION:
             # First start with the index (or a newer index format): build it from stored transcripts
             cur.execute("DELETE FROM segments_fts")
+            cur.execute("DELETE FROM segments_fts_rows")
             for row in cur.execute("SELECT id FROM meetings").fetchall():
                 _reindex_segments(conn, row["id"], _read_segments(conn, row["id"]))
             cur.execute(f"PRAGMA user_version = {_FTS_SCHEMA_VERSION}")
+        elif not _fts_rows_match(conn):
+            # The index made before this table (or changed by an older version after a downgrade):
+            # its rows listed again, once (under a second for a library of 300 000 lines)
+            cur.execute("DELETE FROM segments_fts_rows")
+            cur.execute("INSERT INTO segments_fts_rows (id, meeting_id, segment_id) "
+                        "SELECT rowid, meeting_id, segment_id FROM segments_fts")
 
         conn.commit()
+        forget_settings()
+        global schema_epoch
+        schema_epoch += 1
         if moved:
             # The transcripts' old place is free space in the file: given back to the disk once
             try:
@@ -344,6 +370,62 @@ def init_db() -> None:
 
 
 _FTS_SCHEMA_VERSION = 1
+
+# Where each line of a recording is in segments_fts (its rowid): the index stores meeting_id and
+# segment_id UNINDEXED, so deleting by them scanned the whole index (an edit of 300 lines took 16 s
+# under the lock); a delete by the rowid found here is a lookup
+_FTS_ROWS_DDL = """CREATE TABLE IF NOT EXISTS segments_fts_rows (
+    id INTEGER PRIMARY KEY,
+    meeting_id INTEGER NOT NULL,
+    segment_id INTEGER NOT NULL
+)"""
+_FTS_ROWS_INDEX = "CREATE INDEX IF NOT EXISTS segments_fts_rows_line ON segments_fts_rows (meeting_id, segment_id)"
+
+
+def _fts_count(conn: sqlite3.Connection) -> int:
+    try:  # the index's own row sizes, one per row: counted without reading the texts
+        return int(conn.execute("SELECT count(*) FROM segments_fts_docsize").fetchone()[0])
+    except sqlite3.Error:
+        return int(conn.execute("SELECT count(*) FROM segments_fts").fetchone()[0])
+
+
+def _fts_last(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT rowid FROM segments_fts ORDER BY rowid DESC LIMIT 1").fetchone()
+    return int(row[0]) if row else 0
+
+
+def _fts_rows_match(conn: sqlite3.Connection) -> bool:
+    """Whether segments_fts_rows lists the index as it is (same number of rows, same last rowid)."""
+    count, last = conn.execute("SELECT count(*), COALESCE(max(id), 0) FROM segments_fts_rows").fetchone()
+    return _fts_count(conn) == int(count) and _fts_last(conn) == int(last)
+
+
+def _fts_delete(conn: sqlite3.Connection, meeting_id: int, segment_ids: Optional[List[int]] = None) -> None:
+    """Deletes the index rows of a recording (or of its lines with these ids) by their rowids."""
+    if segment_ids is None:
+        rows = conn.execute("SELECT id FROM segments_fts_rows WHERE meeting_id = ?", (meeting_id,)).fetchall()
+    else:
+        rows = []
+        ids = sorted(set(segment_ids))
+        for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+            part = ids[i:i + 500]
+            rows += conn.execute(f"SELECT id FROM segments_fts_rows WHERE meeting_id = ? AND segment_id IN "
+                                 f"({','.join('?' * len(part))})", (meeting_id, *part)).fetchall()
+    rowids = [(r[0],) for r in rows]
+    conn.executemany("DELETE FROM segments_fts WHERE rowid = ?", rowids)
+    conn.executemany("DELETE FROM segments_fts_rows WHERE id = ?", rowids)
+
+
+def _fts_insert(conn: sqlite3.Connection, rows: List[tuple]) -> None:
+    """Adds index rows (text, meeting_id, segment_id, start, speaker), each listed in segments_fts_rows."""
+    if not rows:
+        return
+    mine = conn.execute("SELECT COALESCE(max(id), 0) FROM segments_fts_rows").fetchone()[0]
+    first = max(_fts_last(conn), int(mine)) + 1
+    conn.executemany("INSERT INTO segments_fts (rowid, text, meeting_id, segment_id, start, speaker) VALUES (?, ?, ?, ?, ?, ?)",
+                     [(first + i, *r) for i, r in enumerate(rows)])
+    conn.executemany("INSERT INTO segments_fts_rows (id, meeting_id, segment_id) VALUES (?, ?, ?)",
+                     [(first + i, r[1], r[2]) for i, r in enumerate(rows)])
 
 # Columns added after the first release, with their SQL type and default
 _MEETING_EXTRA_COLUMNS = {
@@ -566,15 +648,14 @@ def _reindex_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[
         if len(set(ids)) == len(ids) and len(set(old_ids)) == len(old_ids):
             rows = _segment_rows(segments)
             changed = [i for i, (r, o) in enumerate(zip(rows, before)) if r != o]
-            conn.executemany("DELETE FROM segments_fts WHERE meeting_id = ? AND segment_id = ?",
-                             [(meeting_id, old_ids[i]) for i in changed])
+            _fts_delete(conn, meeting_id, [old_ids[i] for i in changed])
             lines = [segments[i] for i in changed]
         else:
             before = None
     if before is None or len(before) != len(segments):
-        conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
-    conn.executemany(
-        "INSERT INTO segments_fts (text, meeting_id, segment_id, start, speaker) VALUES (?, ?, ?, ?, ?)",
+        _fts_delete(conn, meeting_id)
+    _fts_insert(
+        conn,
         [
             (
                 seg.get("text") or "",
@@ -590,24 +671,46 @@ def _reindex_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[
 
 
 # Settings helpers
+# The settings as last read: about a hundred places read them, some every few seconds (call detection,
+# the calendar per event), each with a new connection. Only update_settings, init_db and a restored
+# backup (forget_settings) change the table.
+_settings_cache: Optional[Dict[str, str]] = None
+
+
+def forget_settings() -> None:
+    """The settings are read again at the next get_all_settings (the table was changed some other way)."""
+    global _settings_cache
+    with _db_lock:
+        _settings_cache = None
+
+
 def get_all_settings() -> Dict[str, str]:
+    global _settings_cache
+    cached = _settings_cache
+    if cached is not None:
+        return dict(cached)  # a copy: a caller changing it does not change the settings
     with _db_lock:
         conn = get_connection()
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         conn.close()
-        return {r["key"]: r["value"] for r in rows}
+        _settings_cache = {r["key"]: r["value"] for r in rows}
+        return dict(_settings_cache)
 
 
 def update_settings(new_settings: Dict[str, Any]) -> Dict[str, str]:
+    global _settings_cache
     with _db_lock:
         conn = get_connection()
-        for k, v in new_settings.items():
-            conn.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (k, str(v)),
-            )
-        conn.commit()
-        conn.close()
+        try:
+            for k, v in new_settings.items():
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (k, str(v)),
+                )
+            conn.commit()
+        finally:
+            _settings_cache = None
+            conn.close()
     return get_all_settings()
 
 
@@ -1012,14 +1115,28 @@ def switch_transcript_version(meeting_id: int, model: str) -> bool:
                 return True
             got = conn.execute("SELECT data FROM transcript_versions WHERE meeting_id = ? AND model = ?",
                                (meeting_id, model)).fetchone()
-            if not got:
+            data = _version_data(meeting_id, model, got["data"]) if got else None
+            if data is None:
                 return False
             _stash_active(conn, meeting_id)
-            _show_version(conn, meeting_id, model, json.loads(got["data"]))
+            _show_version(conn, meeting_id, model, data)
             conn.commit()
             return True
         finally:
             conn.close()
+
+
+def _version_data(meeting_id: int, model: str, raw: Optional[str]) -> Optional[Dict[str, Any]]:
+    """A stored version read back; None (and a line in the log) for a damaged one: one bad row made
+    switching or deleting versions fail with an error."""
+    try:
+        data = json.loads(raw or "")
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        print(f"[db] the transcript version «{model}» of meeting {meeting_id} is damaged: skipped", flush=True)
+        return None
+    return data
 
 
 def _show_version(conn: sqlite3.Connection, meeting_id: int, model: str, data: Dict[str, Any]) -> None:
@@ -1062,8 +1179,9 @@ def delete_transcript_version(meeting_id: int, model: str) -> bool:
             others = {r["model"]: r["data"] for r in conn.execute(
                 "SELECT model, data FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))}
             order = ([MERGED] if MERGED in others else []) + ranked([m for m in others if m != MERGED], row["language"] or "")
-            if order:
-                _show_version(conn, meeting_id, order[0], json.loads(others[order[0]]))
+            best = next(((m, d) for m in order if (d := _version_data(meeting_id, m, others[m])) is not None), None)
+            if best:
+                _show_version(conn, meeting_id, best[0], best[1])
             else:
                 conn.execute("UPDATE meetings SET transcript_model = '', transcript_at = '', speakers_json = '{}', "
                              "segments_backup_json = '', translations_json = '{}', transcript_verified = 0, "
@@ -1256,6 +1374,13 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
         conn.commit()
         conn.close()
     events.publish({"type": "list"})
+    if "title" in fields:
+        try:  # its Obsidian note takes the new name (app/obsidian.follow)
+            from app import obsidian
+
+            obsidian.follow(meeting_id)
+        except Exception:
+            pass
 
 
 def relink_media(meeting_id: int, path: str) -> None:
@@ -1806,7 +1931,7 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
         _speaker_seconds_cache.pop(meeting_id, None)
         conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))
-        conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
+        _fts_delete(conn, meeting_id)
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))
         # its tasks, the tasks deleted from it (they were examples for the model: a recording kept to
@@ -1846,7 +1971,7 @@ def clear_results(meeting_id: int) -> bool:
         _speaker_seconds_cache.pop(meeting_id, None)
         # the Teams captions stay: read during the recording, they cannot be made again
         conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model != 'teams'", (meeting_id,))
-        conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
+        _fts_delete(conn, meeting_id)
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))
         try:
@@ -1972,17 +2097,21 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
 
 
 def _substring_hits(conn: sqlite3.Connection, q_fold: str, max_hits_per_meeting: int) -> List[sqlite3.Row]:
-    """Slow path: plain substring search over the stored segment texts (no JSON parsing)."""
-    hits: List[sqlite3.Row] = []
-    per_meeting: Dict[int, int] = {}
-    for r in conn.execute(
-        "SELECT meeting_id, segment_id, start, speaker, text FROM segments_fts ORDER BY meeting_id DESC, start"
-    ):
-        mid = int(r["meeting_id"])
-        if per_meeting.get(mid, 0) < max_hits_per_meeting and q_fold in (r["text"] or "").casefold():
-            hits.append(r)
-            per_meeting[mid] = per_meeting.get(mid, 0) + 1
-    return hits
+    """Slow path: plain substring search over the stored segment texts (no JSON parsing). Matched
+    inside SQLite (Python's casefold: SQLite's lower() folds only Latin letters), and only the first
+    lines of each recording come back, not every line of the library to be looked at here."""
+    conn.create_function("vx_has", 2, lambda text, q: q in (text or "").casefold(), deterministic=True)
+    return conn.execute(
+        """
+        SELECT meeting_id, segment_id, start, speaker, text FROM (
+            SELECT meeting_id, segment_id, start, speaker, text,
+                   ROW_NUMBER() OVER (PARTITION BY meeting_id ORDER BY start) AS rn
+            FROM segments_fts WHERE vx_has(text, ?)
+        ) WHERE rn <= ?
+        ORDER BY meeting_id DESC, start
+        """,
+        (q_fold, max_hits_per_meeting),
+    ).fetchall()
 
 
 def _fts_match_expression(query: str) -> str:
@@ -2006,11 +2135,11 @@ def search_all_meetings(query: str, max_hits_per_meeting: int = 4) -> List[Dict[
     match = _fts_match_expression(q)
     q_fold = q.casefold()
 
-    with _db_lock:
-        conn = get_connection()
-        meetings = conn.execute(
-            "SELECT id, title, duration, status, speakers_json FROM meetings ORDER BY id DESC"
-        ).fetchall()
+    conn = get_connection()
+    # Read without the lock that every change waits for (a search of a large library takes most of a
+    # second at each keystroke): with WAL a reader sees the last commit and blocks no writer
+    with (contextlib.nullcontext() if _wal_on else _db_lock):
+        meetings = conn.execute("SELECT id, title, duration, status FROM meetings ORDER BY id DESC").fetchall()
         hit_rows = []
         if match:
             hit_rows = conn.execute(
@@ -2028,11 +2157,18 @@ def search_all_meetings(query: str, max_hits_per_meeting: int = 4) -> List[Dict[
             # The index matches whole words and word beginnings only. For fragments from the middle
             # of a word ("рщ с") fall back to a case-insensitive substring scan of the indexed text.
             hit_rows = _substring_hits(conn, q_fold, max_hits_per_meeting)
-        conn.close()
-
-    hits_by_meeting: Dict[int, List[sqlite3.Row]] = {}
-    for r in hit_rows:
-        hits_by_meeting.setdefault(int(r["meeting_id"]), []).append(r)
+        hits_by_meeting: Dict[int, List[sqlite3.Row]] = {}
+        for r in hit_rows:
+            hits_by_meeting.setdefault(int(r["meeting_id"]), []).append(r)
+        # the names of the participants, of the recordings with hits only (as the list keeps them,
+        # without parsing their voice prints)
+        names: Dict[int, Dict[str, Any]] = {}
+        found = sorted(hits_by_meeting)
+        for i in range(0, len(found), 500):  # SQLite's limit on the number of parameters
+            part = found[i:i + 500]
+            for r in conn.execute(f"SELECT id, speakers_json FROM meetings WHERE id IN ({','.join('?' * len(part))})", part):
+                names[int(r["id"])] = _list_speakers(int(r["id"]), r["speakers_json"] or "{}")
+    conn.close()
 
     results: List[Dict[str, Any]] = []
     for m in meetings:
@@ -2040,10 +2176,7 @@ def search_all_meetings(query: str, max_hits_per_meeting: int = 4) -> List[Dict[
         rows = hits_by_meeting.get(mid, [])
         if not rows and q_fold not in (m["title"] or "").casefold():
             continue
-        try:
-            speakers = json.loads(m["speakers_json"] or "{}")
-        except Exception:
-            speakers = {}
+        speakers = names.get(mid) or {}
         results.append(
             {
                 "meeting_id": mid,

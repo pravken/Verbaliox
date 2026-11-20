@@ -83,47 +83,35 @@ async function setUiScale(v) {
   if (state.system) state.system.settings = data.settings;
 }
 
-// Settings → General → «Оформление»: the accent and the background, applied at once and saved
-function renderThemeChoices() {
-  const set = (state.system && state.system.settings) || {};
-  const accent = THEME_ACCENTS[set.ui_accent] ? set.ui_accent : 'blue', bg = THEME_BGS[set.ui_bg] ? set.ui_bg : 'graphite';
-  const box = (id, list, cur, kind, color) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = Object.keys(list).map(k => `<button role="radio" aria-checked="${k === cur}" class="theme-sw${k === cur ? ' on' : ''}" `
-      + `data-click="setTheme" data-click-args='["${kind}", "${k}"]' title="${escapeHtml(t(`theme_${kind}_${k}`))}" aria-label="${escapeHtml(t(`theme_${kind}_${k}`))}">`
-      + `<i style="background:${color(list[k])}"></i><span>${escapeHtml(t(`theme_${kind}_${k}`))}</span></button>`).join('');
-  };
-  box('theme-accents', THEME_ACCENTS, accent, 'accent', c => c[0]);
-  box('theme-bgs', THEME_BGS, bg, 'bg', c => `linear-gradient(135deg, ${c[0]} 0 50%, ${c[3]} 50% 100%)`);
-}
-
-async function setTheme(kind, value) {
-  const set = (state.system && state.system.settings) || {};
-  const accent = kind === 'accent' ? value : (set.ui_accent || 'blue'), bg = kind === 'bg' ? value : (set.ui_bg || 'graphite');
-  applyTheme(accent, bg);
-  if (state.system) state.system.settings = { ...set, ui_accent: accent, ui_bg: bg };
-  renderThemeChoices();
-  const res = await fetch('/api/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { ui_accent: accent, ui_bg: bg } }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { showError(data.detail); return; }
-  if (state.system) state.system.settings = data.settings;
-}
-
 // The computer's device in the interface language: the server names the processor in Russian
 function hwDeviceLabel(hw) {
   return hw && hw.cuda_available ? (hw.device_name || '—') : t('hwCpuName');
 }
 
+// The form is filled again from the server (after a download, a save...): a field being typed in keeps
+// what is typed (found in the audit: a model download ended and the calendar path typed went back)
 async function loadSystemInfo() {
+  const el = document.activeElement;
+  const typing = el && el.closest && el.closest('#modal-settings') && el.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')
+    ? { el, value: el.value, start: el.selectionStart, end: el.selectionEnd } : null;
+  try {
+    await fillSystemInfo();
+  } finally {
+    if (typing && document.activeElement === typing.el && typing.el.value !== typing.value) {
+      typing.el.value = typing.value;
+      try { typing.el.setSelectionRange(typing.start, typing.end); } catch (e) {}
+    }
+  }
+}
+
+async function fillSystemInfo() {
   // a change of the last 450 ms is saved before the form is filled again from the server
   if (_settingsSaveTimer) { clearTimeout(_settingsSaveTimer); _settingsSaveTimer = null; await saveAllSettings(); }
   try {
     const res = await fetch('/api/system');
     const data = await readJson(res);
     state.system = data;
+    syncUiPrefsFromServer(data.settings);
     // Audit 5.5: with no scale chosen yet, the first one follows «Text size» of Windows
     const ownScale = (data.settings || {}).ui_scale;
     let asked = true;
@@ -133,8 +121,6 @@ async function loadSystemInfo() {
       setUiScale(near);
     } else applyUiScale(ownScale);
     renderUiScaleButtons();
-    applyTheme((data.settings || {}).ui_accent, (data.settings || {}).ui_bg);
-    renderThemeChoices();
 
     const hw = data.hardware;
     document.getElementById('hw-text').textContent = hw.cuda_available
@@ -267,6 +253,9 @@ ${t('modelsFolder')}: ${data.paths.models}`;
       if (data.models.needs_first_run_setup && !window._firstRunShown) {
         window._firstRunShown = true;
         openFirstRunWizard(data);
+      } else if (!data.models.needs_first_run_setup && !window._setupStepsShown) {
+        window._setupStepsShown = true;
+        openSetupSteps(s);
       }
     }
     syncSidebarDownloadWidget();
@@ -862,8 +851,8 @@ function updateWhisperModelsUI(models) {
   if (dlPanel && (st.active || (st.logs && st.logs.length > 0))) {
     dlPanel.classList.remove('hidden');
     const wPullStatusEl = document.getElementById('whisper-pull-status');
-    wPullStatusEl.textContent = st.status || '';
-    wPullStatusEl.title = st.status || '';
+    wPullStatusEl.textContent = serverText(st.status || '');  // in English too (found in the audit)
+    wPullStatusEl.title = serverText(st.status || '');
     document.getElementById('whisper-pull-pct').textContent = `${st.progress || 0}%`;
     document.getElementById('whisper-pull-bar').style.width = `${st.progress || 0}%`;
 
@@ -1016,7 +1005,9 @@ function openFirstRunWizard(data) {
   const picks = firstRunPicks(data, state.uiLang);
   const st = { page: 'ai', preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
     calls: false, apps: new Set(['zoom', 'teams', 'telegram']), cal: false, calSource: '', allMeet: false,
-    startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '' };
+    startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '', country: null, subdiv: '' };
+  // the country of the public holidays: the one of this computer's region, offered on the calendar step
+  holidayCountries().then(() => { if (st.country === null) st.country = holidayHomeCountry(); if (document.body.contains(wrap) && st.page === 'cal') draw(); });
   // the pages in order; «calls» only where the program can watch for calls (Windows)
   const pages = () => ['ai', 'sound', env.calls && 'calls', 'cal', 'sum'].filter(Boolean);
   // The microphones, asked when the sound step opens (the names come with the permission to listen)
@@ -1137,7 +1128,8 @@ function openFirstRunWizard(data) {
           <label class="frw-auto-row frw-sub-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwCalAll'))}</span>
             <span class="frw-opt-desc">${escapeHtml(t('frwCalAllD'))}</span></span>
           <input type="checkbox" role="switch" class="vs-switch" data-auto="allMeet" ${st.allMeet ? 'checked' : ''} /></label></div>` : '';
-      body = `<div class="frw-autos">${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}</div>`;
+      body = `<div class="frw-autos">${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}</div>
+        <div class="frw-autos frw-after">${holidayPickHtml(st.country || '', st.subdiv)}</div>`;
     } else if (st.page === 'ai') {
       title = t('frwAiQ');
       sub = t('frwAiSub');
@@ -1191,6 +1183,8 @@ function openFirstRunWizard(data) {
     if (e.target.matches('input[data-cal-src]')) st.calSource = e.target.value;
   });
   wrap.addEventListener('change', e => {
+    if (e.target.matches('select[data-hol-country]')) { st.country = e.target.value; st.subdiv = ''; draw(); return; }
+    if (e.target.matches('select[data-hol-subdiv]')) { st.subdiv = e.target.value; return; }
     if (!e.target.matches('select[data-mic]')) return;
     st.mic = e.target.value;
     if (meter.stream) startMeter();  // the check follows the chosen microphone
@@ -1226,7 +1220,14 @@ function openFirstRunWizard(data) {
       return;
     }
     if (b.dataset.a === 'meter') { if (meter.stream) { stopMeter(); draw(); } else startMeter(); return; }
-    if (b.dataset.a === 'later') { stopMeter(); wrap.remove(); openModal('settings', 'recognition'); return; }
+    if (b.dataset.a === 'later') {
+      stopMeter(); wrap.remove();
+      // a new install: what earlier versions did not have is no news (the settings among them stay to ask)
+      const news = SETUP_STEPS.filter(x => x.kind === 'news').map(x => x.id);
+      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { setup_done: JSON.stringify(news) } }) }).catch(() => null);
+      openModal('settings', 'recognition');
+      return;
+    }
     if (b.dataset.a === 'back' || (b.dataset.a === 'next' && st.page !== 'sum')) {
       stopMeter();
       const list = pages();
@@ -1248,6 +1249,9 @@ function openFirstRunWizard(data) {
         record_source_mode: st.source,
         ...(st.mic && st.source !== 'system' ? { record_mic_device: st.mic } : {}),
         ...(env.filter && !st.filter ? { rec_voice_filter: 'false' } : {}),
+        ...(st.country ? { holiday_country: st.country, holiday_subdiv: st.subdiv } : {}),
+        // the steps of the setup after an update are this wizard's already: not asked again
+        setup_done: JSON.stringify(SETUP_STEPS.map(x => x.id)),
       };
       await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech(), automation, !!filterMb());
     }
@@ -1300,9 +1304,14 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
     if (!id) return;
     startWhisperModelDownload(id, id !== roles.main);
     // the next one when this download ends (the app downloads one Whisper model at a time)
+    // One question at a time: two slow answers would both see the end and skip a queued model
+    let busy = false, done = false;
     const wait = setInterval(async () => {
+      if (busy || done) return;
+      busy = true;
       const m = await fetch('/api/models/status').then(r => r.json()).catch(() => null);
-      if (m && !(m.setup_state || {}).active) { clearInterval(wait); nextWhisper(); }
+      busy = false;
+      if (!done && m && !(m.setup_state || {}).active) { done = true; clearInterval(wait); nextWhisper(); }
     }, 3000);
   };
   nextWhisper();
@@ -1361,13 +1370,19 @@ async function deleteOllamaModel(name) {
 
 function startWhisperPollingLoop(modelId) {
   clearInterval(window._whisperPollTimer);
-  window._whisperPollTimer = setInterval(async () => {
+  // One request at a time, and only for the current loop: a slow answer must not toast twice or
+  // stop a loop started after it
+  let busy = false;
+  const timer = window._whisperPollTimer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
     try {
       const res = await fetch('/api/models/status');
       const data = await readJson(res);
+      if (window._whisperPollTimer !== timer) return;
       updateWhisperModelsUI(data);
       if (!data.setup_state || !data.setup_state.active) {
-        clearInterval(window._whisperPollTimer);
+        clearInterval(timer);
         window._whisperPollTimer = null;
         await loadSystemInfo();
         if (data.setup_state && data.setup_state.progress === 100) {
@@ -1375,7 +1390,7 @@ function startWhisperPollingLoop(modelId) {
           showToast(t('modelReadyToast').replace('{name}', () => pretty));
         }
       }
-    } catch (e) {}
+    } catch (e) {} finally { busy = false; }
   }, 800);
 }
 
@@ -2690,13 +2705,19 @@ function pullCustomOllamaModel() {
 
 function startOllamaPollingLoop(model) {
   clearInterval(window._ollamaPollTimer);
-  window._ollamaPollTimer = setInterval(async () => {
+  // One request at a time, and only for the current loop: a slow answer must not toast twice or
+  // stop a loop started after it
+  let busy = false;
+  const timer = window._ollamaPollTimer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
     try {
       const res = await fetch('/api/ollama/status');
       const data = await readJson(res);
+      if (window._ollamaPollTimer !== timer) return;
       updateOllamaUI(data);
       if (!data.pull_state || !data.pull_state.active) {
-        clearInterval(window._ollamaPollTimer);
+        clearInterval(timer);
         window._ollamaPollTimer = null;
         await loadSystemInfo();
         if (data.pull_state && data.pull_state.progress === 100) {
@@ -2704,7 +2725,7 @@ function startOllamaPollingLoop(model) {
           showToast(t('llmReadyToast').replace('{name}', () => pretty));
         }
       }
-    } catch (e) {}
+    } catch (e) {} finally { busy = false; }
   }, 900);
 }
 
@@ -3083,7 +3104,8 @@ const SETTINGS_RESET = {
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
     ['set-semantic', 'semantic_search', 'check']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
-    ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check']],
+    ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check'],
+    ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
@@ -3099,6 +3121,7 @@ const SETTINGS_DEFAULTS = {
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
+  holiday_country: '', holiday_subdiv: '', meet_notify: 'true', meet_notify_before: '300', worktime_track: 'true', work_remind_hours: '8',
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',
   file_name_template: '{date} {title}', date_folders: 'off',
@@ -3218,7 +3241,254 @@ function fillWorkdaySettings(s) {
   if (a) a.checked = s.meet_auto_all === 'true';
   const b = document.getElementById('set-meetings-ask-inperson');
   if (b) b.checked = s.meet_ask_inperson !== 'false';
+  const nt = document.getElementById('set-meet-notify');
+  if (nt) nt.checked = s.meet_notify !== 'false';
+  const nb = document.getElementById('set-meet-notify-before');
+  if (nb) nb.value = [...nb.options].some(o => o.value === String(s.meet_notify_before)) ? String(s.meet_notify_before) : '300';
+  const wt = document.getElementById('set-worktime-track');
+  if (wt) wt.checked = s.worktime_track !== 'false';
+  const wr = document.getElementById('set-work-remind');
+  if (wr) {
+    const h = String(Math.round(Number(s.work_remind_hours ?? 8)));
+    if (![...wr.options].some(o => o.value === h)) wr.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(h)}">${escapeHtml(h)} ${escapeHtml(t('dbHoursShort'))}</option>`);
+    wr.value = h;
+  }
   syncWorkdayHint();
+  fillHolidaySettings(s);
+  renderDaysOff(s.days_off);
+}
+
+// --- The user's own days off and vacations (days_off): days off like holidays, saved at once ---
+let daysOff = [];
+let daysOffSaved = 0;  // when the list was last saved here: a fill of the form asked for before keeps it
+function renderDaysOff(raw) {
+  // the settings filled again from an answer older than the last save would bring back what was just
+  // removed (seen on a slow computer): the list saved here wins for a few seconds
+  if (raw !== undefined && Date.now() - daysOffSaved > 5000) {
+    try { daysOff = JSON.parse(raw || '[]'); } catch (e) { daysOff = []; }
+    if (!Array.isArray(daysOff)) daysOff = [];
+  }
+  const box = document.getElementById('dayoff-list');
+  if (!box) return;
+  const today = calKey(new Date());
+  const fmt = d => uiDateText(d);
+  box.innerHTML = daysOff.length ? daysOff.map((x, i) => `<div class="dayoff-row${x.to < today ? ' past' : ''}">
+      <span class="dayoff-dates">${escapeHtml(x.from === x.to ? fmt(x.from) : `${fmt(x.from)} – ${fmt(x.to)}`)}</span>
+      <span class="dayoff-t">${escapeHtml(x.title || t('dayOffDefault'))}</span>
+      <button class="dayoff-x" data-click="removeDayOff" data-click-args='[${i}]' title="${escapeHtml(t('dayOffRemove'))}" aria-label="${escapeHtml(t('dayOffRemove'))}">×</button></div>`).join('')
+    : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('dayOffNone'))}</div>`;
+}
+
+async function saveDaysOff(list) {
+  const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { days_off: JSON.stringify(list) } }) }).catch(() => null);
+  if (!r || !r.ok) { const err = r ? await r.json().catch(() => ({})) : {}; showError(serverText(err.detail) || t('errorGeneric')); return false; }
+  daysOff = list.slice().sort((a, b) => a.from.localeCompare(b.from));
+  daysOffSaved = Date.now();
+  if (state.system && state.system.settings) state.system.settings.days_off = JSON.stringify(daysOff);
+  renderDaysOff();
+  if (typeof loadDashboard === 'function') loadDashboard();
+  return true;
+}
+
+async function addDayOff() {
+  const a = document.getElementById('dayoff-from'), b = document.getElementById('dayoff-to'), n = document.getElementById('dayoff-title');
+  const from = a.value, to = b.value || a.value;
+  if (!from) { showError(t('dayOffNeedDate')); return; }
+  if (to < from) { showError(t('dayOffOrder')); return; }
+  if ((new Date(`${to}T12:00:00`) - new Date(`${from}T12:00:00`)) / 864e5 > 366) { showError(t('dayOffTooLong')); return; }
+  // without a name: «Выходной» in the language of the page, the same in the list and on the week
+  if (await saveDaysOff([...daysOff, { from, to, title: n.value.trim() || t('dayOffDefault') }])) {
+    a.value = b.value = n.value = '';
+    syncDateField(a); syncDateField(b);
+  }
+}
+
+function removeDayOff(i) {
+  saveDaysOff(daysOff.filter((_, k) => k !== i));
+}
+
+// --- Public holidays: the country and its region (app/holidays_cal.py) ---
+const HOLIDAYS = { list: null, want: { country: '', subdiv: '' } };
+
+// The countries the app knows the holidays of, asked once
+async function holidayCountries() {
+  if (!HOLIDAYS.list) {
+    const data = await fetch('/api/holidays/countries').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    if (!data) return HOLIDAYS.list || [];  // asked again next time; the saved choice is kept meanwhile
+    HOLIDAYS.list = data.countries || [];
+    HOLIDAYS.available = !!(data && data.available);
+    HOLIDAYS.home = (data && data.home) || '';
+  }
+  return HOLIDAYS.list;
+}
+
+// The country of this computer's region (Windows: «Регион», told by the server), else of the browser's
+// language, if the app knows it
+function holidayHomeCountry() {
+  let mine = HOLIDAYS.home || '';
+  if (!mine) try { mine = (new Intl.Locale(navigator.language).region || '').toUpperCase(); } catch (e) {}
+  return (HOLIDAYS.list || []).some(c => c.code === mine) ? mine : '';
+}
+
+// <option>s of the countries: in the language of the page (the browser knows the names by the code),
+// the country of this computer's region first
+function holidayCountryOptions() {
+  let names = null;
+  try { names = new Intl.DisplayNames([state.uiLang === 'en' ? 'en' : 'ru'], { type: 'region' }); } catch (e) {}
+  const name = c => { try { return (names && names.of(c.code)) || c.name; } catch (e) { return c.name; } };
+  const mine = holidayHomeCountry();
+  const list = (HOLIDAYS.list || []).map(c => ({ ...c, label: name(c) })).sort((a, b) => a.label.localeCompare(b.label, state.uiLang === 'en' ? 'en' : 'ru'));
+  const top = list.filter(c => c.code === mine);
+  const opt = c => `<option value="${escapeHtml(c.code)}">${escapeHtml(c.label)}</option>`;
+  return `<option value="">${escapeHtml(t('holNone'))}</option>` + (top.length ? top.map(opt).join('') + '<option disabled>──────</option>' : '') + list.map(opt).join('');
+}
+
+function holidaySubdivs(code) {
+  const c = (HOLIDAYS.list || []).find(x => x.code === code);
+  return (c && c.subdivs) || [];
+}
+
+function holidaySubdivOptions(code) {
+  return `<option value="">${escapeHtml(t('holWholeCountry'))}</option>`
+    + holidaySubdivs(code).map(x => `<option value="${escapeHtml(x.code)}">${escapeHtml(x.name === x.code ? x.code : `${x.name} (${x.code})`)}</option>`).join('');
+}
+
+async function fillHolidaySettings(s) {
+  HOLIDAYS.want = { country: String(s.holiday_country || '').toUpperCase(), subdiv: String(s.holiday_subdiv || '') };
+  await holidayCountries();
+  const sel = document.getElementById('set-holiday-country');
+  if (!sel) return;
+  sel.innerHTML = holidayCountryOptions();
+  sel.value = HOLIDAYS.list.some(c => c.code === HOLIDAYS.want.country) ? HOLIDAYS.want.country : '';
+  syncHolidaySubdivs(true);
+}
+
+function syncHolidaySubdivs(keep) {
+  const sel = document.getElementById('set-holiday-country'), sub = document.getElementById('set-holiday-subdiv');
+  if (!sel || !sub) return;
+  const subs = holidaySubdivs(sel.value);
+  sub.innerHTML = holidaySubdivOptions(sel.value);
+  sub.value = keep === true && subs.some(x => x.code === HOLIDAYS.want.subdiv) ? HOLIDAYS.want.subdiv : '';
+  sub.classList.toggle('hidden', !subs.length);
+  document.getElementById('holiday-subdiv-label')?.classList.toggle('hidden', !subs.length);
+  const st = document.getElementById('holiday-status');
+  if (st) st.textContent = HOLIDAYS.list && !HOLIDAYS.available ? t('holUnavailable') : '';
+}
+
+// The country (and region) of the public holidays, as a wizard shows it: select[data-hol-country],
+// select[data-hol-subdiv]
+function holidayPickHtml(country, subdiv, plain = false) {
+  const subs = holidaySubdivs(country);
+  const pick = (html, value) => html.replace(`value="${escapeHtml(value)}"`, `value="${escapeHtml(value)}" selected`);
+  // plain: the step already says what it is (after an update), only the choice
+  return `<div class="frw-toggle">${plain ? '' : `<span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('holTitle'))}</span>
+      <span class="frw-opt-desc">${escapeHtml(t('frwHolD'))}</span></span>`}
+    <div class="frw-hol${plain ? ' frw-hol-plain' : ''}">
+      <select class="frw-input frw-select" data-hol-country aria-label="${escapeHtml(t('holCountry'))}">${HOLIDAYS.list ? pick(holidayCountryOptions(), country) : '<option value="">…</option>'}</select>
+      ${subs.length ? `<select class="frw-input frw-select" data-hol-subdiv aria-label="${escapeHtml(t('holRegion'))}">${pick(holidaySubdivOptions(country), subdiv)}</select>` : ''}
+    </div></div>`;
+}
+
+// --- After an update: «Новое после обновления», one small wizard for what a new version brings ---
+// Two kinds of step: «setup» asks a setting (body() draws it, apply() gives the settings to save, and
+// «Не нужно» skips it), «news» tells a new feature (its points, and a button to where it lives). A step is
+// shown once: Позже leaves it for the next start, the other buttons put its id in setup_done. A new
+// install answers them in the first-run wizard. Add a version's steps at the end of the list.
+const SETUP_STEPS = [
+  { id: 'holidays', kind: 'setup', since: '0.8.25', needed: s => !String(s.holiday_country || '').trim() && HOLIDAYS.available,
+    title: 'setupHolQ', text: 'setupHolSub',
+    body: st => `<div class="frw-autos">${holidayPickHtml(st.country, st.subdiv, true)}</div>`,
+    apply: st => (st.country ? { holiday_country: st.country, holiday_subdiv: st.subdiv } : {}) },
+  { id: 'days-off', kind: 'news', since: '0.8.25', title: 'newsDaysOffT', text: 'newsDaysOffD',
+    points: ['newsDaysOffP1', 'newsDaysOffP2'], open: { label: 'newsOpenSettings', run: () => { openModal('settings', 'general'); selectSettingsTab('calendar'); } } },
+  { id: 'worktime', kind: 'news', since: '0.8.25', title: 'newsWorkT', text: 'newsWorkD',
+    points: ['newsWorkP1', 'newsWorkP2', 'newsWorkP3'], open: { label: 'newsOpenSettings', run: () => openWorkSettings() } },
+  { id: 'join-call', kind: 'news', since: '0.8.25', title: 'newsJoinT', text: 'newsJoinD',
+    points: ['newsJoinP1', 'newsJoinP2'], open: { label: 'newsOpenSettings', run: () => { openModal('settings', 'general'); selectSettingsTab('calendar'); } } },
+];
+
+function setupDoneList(s) {
+  try { const v = JSON.parse(s.setup_done || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+
+async function openSetupSteps(s) {
+  if (document.getElementById('first-run-wizard') || document.getElementById('setup-steps')) return;
+  const done = setupDoneList(s);
+  if (!SETUP_STEPS.some(x => !done.includes(x.id))) return;
+  await holidayCountries();
+  const steps = SETUP_STEPS.filter(x => !done.includes(x.id) && (!x.needed || x.needed(s)));
+  if (!steps.length) return;
+  const st = { at: 0, country: holidayHomeCountry(), subdiv: '' };
+  const wrap = document.createElement('div');
+  wrap.id = 'setup-steps';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.setAttribute('aria-label', t('setupStepsTitle'));
+  const save = async (ids, extra = {}) => {
+    const settings = { ...extra, setup_done: JSON.stringify([...new Set([...setupDoneList(s), ...ids])]) };
+    const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }) }).catch(() => null);
+    if (!r || !r.ok) showError(t('errorGeneric'));
+    else { Object.assign(s, settings); if (state.system && state.system.settings) Object.assign(state.system.settings, settings); }
+  };
+  const draw = () => {
+    const step = steps[st.at], last = st.at === steps.length - 1;
+    const dots = steps.length > 1 ? `<span class="frw-dots" aria-label="${st.at + 1} / ${steps.length}">${steps.map((_, i) => `<span class="frw-dot${i === st.at ? ' is-on' : ''}"></span>`).join('')}</span>` : '';
+    const body = step.kind === 'setup' ? step.body(st)
+      : `<ul class="frw-points">${(step.points || []).map(k => `<li>${escapeHtml(t(k))}</li>`).join('')}</ul>`;
+    const second = step.kind === 'setup' ? `<button data-a="skip" class="ui-btn ui-btn-subtle">${escapeHtml(t('setupSkip'))}</button>`
+      : step.open ? `<button data-a="open" class="ui-btn ui-btn-subtle">${escapeHtml(t(step.open.label))}</button>` : '';
+    wrap.innerHTML = `<div class="frw" id="setup-steps-dialog" data-step="${escapeHtml(step.id)}">
+      <div class="frw-kicker">${escapeHtml(t(step.kind === 'setup' ? 'setupStepsTitle' : 'setupNewsTitle'))}</div>
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(t(step.title))}</h2>${dots}</div>
+      <p class="frw-sub">${escapeHtml(t(step.text))}</p>
+      <div class="frw-body">${body}</div>
+      <div class="frw-foot">
+        <button data-a="later" class="frw-later" title="${escapeHtml(t('setupLaterTip'))}">${escapeHtml(t('setupLater'))}</button>
+        ${second}
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(t(!last ? 'frNext' : step.kind === 'setup' ? 'setupDone' : 'setupGotIt'))}</button>
+      </div></div>`;
+    wrap.querySelector('#setup-steps-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+  };
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape' && document.body.contains(wrap)) { e.stopPropagation(); close(); } };
+  wrap.addEventListener('change', e => {
+    if (e.target.matches('select[data-hol-country]')) { st.country = e.target.value; st.subdiv = ''; draw(); }
+    else if (e.target.matches('select[data-hol-subdiv]')) st.subdiv = e.target.value;
+  });
+  wrap.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-a]');
+    if (!b || st.busy) return;
+    const step = steps[st.at];
+    if (b.dataset.a === 'later') { close(); return; }  // asked again at the next start
+    st.busy = true;  // a double click does not skip a step
+    wrap.querySelectorAll('.frw-foot button').forEach(x => { x.disabled = true; });
+    // «Не нужно»: not asked again (Settings keep it); «Далее»/«Готово»: the choice is saved; «Открыть»: seen,
+    // and the wizard gives way to the place the feature lives
+    const extra = b.dataset.a === 'next' && step.apply ? step.apply(st) : {};
+    await save([step.id], extra);
+    if (Object.keys(extra).length && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
+    st.busy = false;
+    if (b.dataset.a === 'open') { close(); step.open.run(); return; }
+    if (st.at < steps.length - 1) { st.at += 1; draw(); } else close();
+  });
+  document.addEventListener('keydown', onKey, true);
+  draw();
+  document.body.appendChild(wrap);
+}
+
+// The country and region chosen; the saved ones as they are while the list is not there or does not hold them
+// (a request failed, a region renamed by an update of the holidays package): a save never erases them
+function holidayPayload() {
+  const known = code => (HOLIDAYS.list || []).some(c => c.code === code);
+  const sel = document.getElementById('set-holiday-country'), sub = document.getElementById('set-holiday-subdiv');
+  if (!HOLIDAYS.list || !HOLIDAYS.list.length || !sel || (HOLIDAYS.want.country && !known(HOLIDAYS.want.country) && !sel.value)) {
+    return { holiday_country: HOLIDAYS.want.country, holiday_subdiv: HOLIDAYS.want.subdiv };
+  }
+  const subs = holidaySubdivs(sel.value);
+  const keepSub = sel.value === HOLIDAYS.want.country && HOLIDAYS.want.subdiv && !subs.some(x => x.code === HOLIDAYS.want.subdiv);
+  return { holiday_country: sel.value || '', holiday_subdiv: keepSub ? HOLIDAYS.want.subdiv : (sub?.value || '') };
 }
 
 function workdaySettingsPayload() {
@@ -3228,6 +3498,12 @@ function workdaySettingsPayload() {
     work_day_end: String(parseInt(v('set-workday-end', '18:00'), 10)),
     meet_auto_all: String(!!document.getElementById('set-meetings-autorecord')?.checked),
     meet_ask_inperson: String(document.getElementById('set-meetings-ask-inperson')?.checked !== false),
+    meet_notify: String(document.getElementById('set-meet-notify')?.checked !== false),
+    meet_notify_before: document.getElementById('set-meet-notify-before')?.value || '300',
+    worktime_track: String(document.getElementById('set-worktime-track')?.checked !== false),
+    work_remind_hours: document.getElementById('set-work-remind')?.value || '8',
+    // before the list of countries came, the saved choice stays as it is
+    ...holidayPayload(),
   };
 }
 

@@ -190,6 +190,9 @@ foreach ($name in @("Verbaliox", "VerbaScribe")) {
         Write-Host "  убран автозапуск $name"
     }
 }
+# the name and icon of the app's Windows toasts (app/toast.py)
+$toastKey = "HKCU:\Software\Classes\AppUserModelId\Verbaliox.Desktop.Studio.1"
+if (Test-Path $toastKey) { Remove-Item -Path $toastKey -Recurse -Force -ErrorAction SilentlyContinue }
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2C1B8E-4E7A-4C3B-9A51-7D0E2B5C9F14}_is1"
 if (Test-Path $uninstallKey) {
     Remove-Item -Path $uninstallKey -Recurse -Force -ErrorAction SilentlyContinue
@@ -197,6 +200,9 @@ if (Test-Path $uninstallKey) {
 }
 $shortcuts = @(
     (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Verbaliox.lnk"),
+    # the installer's own «remove completely» shortcut, in either language of the installer
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Удалить Verbaliox полностью.lnk"),
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Remove Verbaliox completely.lnk"),
     (Join-Path ([Environment]::GetFolderPath("Desktop")) "Verbaliox.lnk"),
     (Join-Path ([Environment]::GetFolderPath("Desktop")) "VerbaScribe.lnk")
 )

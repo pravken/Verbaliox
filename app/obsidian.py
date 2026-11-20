@@ -457,6 +457,84 @@ def relayout(wait: bool = False) -> Dict[str, Any]:
     return relayout_status()
 
 
+# A note follows its recording (asked by the user: a feature given to a recording whose note was made
+# before left the note where it was; «все такие должны быть автоматизированы»): when the features or the
+# title of a recording change, its note moves to the folder and the name they give now, in the background;
+# with the automatic export on, its text is brought up to date too
+_follow_ids: set = set()
+_follow_cv = threading.Condition()
+_follow_running = False  # set and cleared under _follow_cv: a worker about to end is not counted on
+
+
+def follow(meeting_id: int) -> None:
+    global _follow_running
+    with _follow_cv:
+        _follow_ids.add(int(meeting_id))
+        _follow_cv.notify()
+        if _follow_running:
+            return
+        _follow_running = True
+    threading.Thread(target=_follow_worker, daemon=True, name="obsidian_follow").start()
+
+
+def _follow_worker() -> None:
+    import time
+
+    global _follow_running
+    while True:
+        time.sleep(0.5)  # a few changes in a row (features, then the title) make one move
+        with _follow_cv:
+            if not _follow_ids:
+                _follow_running = False
+                return
+            ids = list(_follow_ids)
+            _follow_ids.clear()
+        for mid in ids:
+            try:
+                follow_now(mid)
+            except Exception as e:
+                print(f"[obsidian] the note of meeting {mid} did not follow: {e}", flush=True)
+
+
+def follow_now(meeting_id: int) -> Optional[Path]:
+    """Moves (and renames) the note of a recording to where the settings put it now; None without a note."""
+    from app.database import get_meeting, update_meeting_fields
+
+    settings = _settings()
+    root = vault_dir(settings)
+    if root is None:
+        return None
+    with _lock:  # read under the lock: an export running now changes the note's path
+        m = get_meeting(meeting_id) or {}
+        old = Path(m.get("obsidian_path") or "")
+        if not old.name or not old.is_file():
+            return None
+        target = note_folder(m, settings, root) / note_filename(m, settings.get("obsidian_filename") or "")
+        if old.resolve() != target.resolve():
+            if target.exists() and not _is_ours(target, meeting_id):
+                target = _unique(target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(target))
+            update_meeting_fields(meeting_id, obsidian_path=str(target))
+            _drop_empty(old.parent, root)
+            print(f"[obsidian] note of meeting {meeting_id} moved to {target}", flush=True)
+    if _on(settings, "obsidian_auto", "false") and m.get("status") == "completed":
+        export_meeting(meeting_id, explicit=False)  # its properties and title as they are now
+    return target
+
+
+def _drop_empty(folder: Path, root: Path) -> None:
+    """The folders a note was taken out of, when nothing is left in them (never the vault's folder itself)."""
+    try:
+        root = root.resolve()
+        folder = folder.resolve()
+        while folder != root and root in folder.parents and folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+            folder = folder.parent
+    except OSError:
+        pass
+
+
 def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[str, Any]:
     """Makes what the note needs and is missing: a title from the content, the overview and tasks."""
     from app.database import get_meeting, save_meeting_results
@@ -519,22 +597,70 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / note_filename(m, settings.get("obsidian_filename") or "")
         old = Path(m.get("obsidian_path") or "")
-        if old.name and old.is_file() and old.resolve() != target.resolve() and not target.exists():
+        moving = bool(old.name) and old.is_file() and old.resolve() != target.resolve()
+        if target.exists() and not (old.name and old.resolve() == target.resolve()) and not _is_ours(target, meeting_id):
+            # Another note already has this name: never overwrite it. The note already written beside
+            # it under a numbered name («… (2).md») stays where it is
+            if moving and old.parent.resolve() == target.parent.resolve() \
+                    and re.fullmatch(re.escape(target.stem) + r" \(\d+\)" + re.escape(target.suffix), old.name):
+                target, moving = old, False
+            else:
+                target = _unique(target)
+        if moving and not target.exists():
             # The title (or the template) changed: move the note instead of leaving the old one
             old.replace(target)
-        elif target.exists() and (not old.name or old.resolve() != target.resolve()) and not _is_ours(target, meeting_id):
-            # Another note already has this name: never overwrite it
-            target = _unique(target)
+            moving = False
         existing = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
         ours, notes = split_user_notes(existing)
         if in_job is False and not explicit and existing and m.get("obsidian_hash") and _hash(ours) != m["obsidian_hash"]:
             # Changed in Obsidian above the user's section: an automatic update must not undo that
             print(f"[obsidian] {target.name} was edited in Obsidian: not updated automatically", flush=True)
             return target
+        if moving:
+            # A note of this recording is already at the new name (left by an earlier export): the old
+            # note's own section is carried over into it, not lost with the old file
+            notes = _merge_user_notes(notes, split_user_notes(old.read_text(encoding="utf-8", errors="replace"))[1], m)
         body = build_note(m, settings).rstrip() + "\n"
-        target.write_text(body + "\n" + (notes or _notes_section(m)), encoding="utf-8")
+        _write_atomic(target, body + "\n" + (notes or _notes_section(m)))
         update_meeting_fields(meeting_id, obsidian_path=str(target), obsidian_hash=_hash(body))
+        if moving:
+            try:
+                old.unlink()
+                print(f"[obsidian] {old.name}: its notes moved into {target.name}, the old note removed", flush=True)
+            except OSError as e:
+                print(f"[obsidian] {old.name} could not be removed after moving its notes: {e}", flush=True)
         return target
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """The note is written whole or not at all: a write broken off midway (the file locked by OneDrive, a
+    full disk) left it cut, and the user's section at its end lost. A temporary file in the same folder
+    (hidden: Obsidian does not list it) takes the note's place in one step."""
+    import os
+
+    tmp = path.with_name(f".{path.name}.verbaliox-tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:  # line ends as write_text gave them
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _merge_user_notes(notes: str, old_notes: str, m: Dict[str, Any]) -> str:
+    """The user's section of the note kept, with what the user wrote in the old note's section added."""
+    empty = _notes_section(m).strip()
+    if not old_notes.strip() or old_notes.strip() == empty or old_notes.strip() == (notes or "").strip():
+        return notes
+    if not notes.strip() or notes.strip() == empty:
+        return old_notes
+    return notes.rstrip() + "\n\n" + old_notes[len(NOTES_MARKER):].strip() + "\n"
 
 
 # The end of every note belongs to the user: Verbaliox rewrites what is above this heading and

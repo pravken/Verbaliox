@@ -68,6 +68,19 @@ def _clean(name: Any) -> str:
     return re.sub(r"\s+", " ", str(name or "")).strip()[:MAX_NAME]
 
 
+def _aliases(row: Any) -> List[str]:
+    """The variants of a name stored in a row; a damaged value counts as none (and a line in the log):
+    one bad row made renaming or merging people fail with an error."""
+    try:
+        got = json.loads(row["aliases"] or "[]")
+    except ValueError:
+        got = None
+    if not isinstance(got, list):
+        print(f"[people] the variants of «{row['name']}» are damaged: ignored", flush=True)
+        return []
+    return [a for a in got if isinstance(a, str)]
+
+
 def _rows() -> List[Dict[str, Any]]:
     init_table()
     with _db_lock:
@@ -128,23 +141,26 @@ def _library_meetings() -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def _commitment_names() -> List[str]:
+def _commitment_names(skip: frozenset = frozenset()) -> List[str]:
     from app.commitments import _init
 
     _init()
     with _db_lock:
         conn = get_connection()
-        rows = conn.execute("SELECT who, to_whom FROM commitments").fetchall()
+        rows = conn.execute("SELECT meeting_id, who, to_whom FROM commitments").fetchall()
         conn.close()
     names: List[str] = []
     for r in rows:
-        names.extend([r["who"], r["to_whom"]])
+        if r["meeting_id"] not in skip:
+            names.extend([r["who"], r["to_whom"]])
     return [n for n in (_clean(x) for x in names) if n]
 
 
-def directory() -> List[Dict[str, Any]]:
+def directory(skip: Iterable[int] = ()) -> List[Dict[str, Any]]:
     """Everyone, most present first: [{id, name, kind, role, aliases, is_me, recordings, seconds,
-    voice, tasks, calendar, sources}]. id is None for a person nobody edited yet."""
+    voice, tasks, calendar, sources}]. id is None for a person nobody edited yet. skip: the recordings
+    to count nothing from (the agent does not get the local-only ones, nor the names heard only there)."""
+    skip = frozenset(int(i) for i in skip)
     rows = _rows()
     alias = _alias_map(rows)
     by_key: Dict[str, Dict[str, Any]] = {}
@@ -167,17 +183,26 @@ def directory() -> List[Dict[str, Any]]:
                  aliases=list(r["aliases"]), is_me=r["is_me"])
         source(e, "manual")
     for p in _library_people():
+        recs = p.get("recordings") or []
+        seconds = float(p.get("total_seconds") or 0)
+        if skip:
+            recs = [x for x in recs if x.get("meeting_id") not in skip]
+            if not recs:
+                continue
+            seconds = sum(float(x.get("seconds") or 0) for x in recs)
         e = entry(p["name"])
-        e["recordings"] += len(p.get("recordings") or [])
-        e["seconds"] = round(e["seconds"] + float(p.get("total_seconds") or 0), 1)
+        e["recordings"] += len(recs)
+        e["seconds"] = round(e["seconds"] + seconds, 1)
         e["voice"] = e["voice"] or bool(p.get("profile"))
         source(e, "records")
     for m in _library_meetings():
+        if m["id"] in skip:
+            continue
         for name in calendar_attendees(m):
             e = entry(name)
             e["calendar"] += 1
             source(e, "calendar")
-    for name in _commitment_names():
+    for name in _commitment_names(skip):
         e = entry(name)
         e["tasks"] += 1
         source(e, "tasks")
@@ -250,7 +275,7 @@ def update(name: str, role: Optional[str] = None, kind: Optional[str] = None, is
                 if _find(conn, nn):
                     raise ValueError("Такое имя уже есть в справочнике: объедините записи")
                 row = _find(conn, name)
-                aliases = [a for a in json.loads(row["aliases"] or "[]") if a.lower() != nn.lower()]
+                aliases = [a for a in _aliases(row) if a.lower() != nn.lower()]
                 aliases.append(name)
                 conn.execute("UPDATE people_directory SET name = ?, aliases = ? WHERE id = ?",
                              (nn, json.dumps(aliases, ensure_ascii=False), pid))
@@ -282,13 +307,13 @@ def merge(names: List[str]) -> Dict[str, Any]:
         try:
             pid = _ensure(conn, keep)
             row = _find(conn, keep)
-            aliases = list(json.loads(row["aliases"] or "[]"))
+            aliases = _aliases(row)
             role, me = row["role"], bool(row["is_me"])
             for low in others:
                 other = next((n for n in names if n.lower() == low), low)
                 orow = _find(conn, other)
                 if orow:
-                    aliases.extend(json.loads(orow["aliases"] or "[]"))
+                    aliases.extend(_aliases(orow))
                     role = role or orow["role"]
                     me = me or bool(orow["is_me"])
                     conn.execute("DELETE FROM people_directory WHERE id = ?", (orow["id"],))

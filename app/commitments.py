@@ -269,9 +269,14 @@ _KIND_WORDS = {"participant": "part", "speaker": "part", "outside": "ext", "ment
 
 
 _KIND_NAMES_FIXED: List[bool] = []
+_READY_AT: List[int] = []  # database.schema_epoch when the tables were made: _init ran before every query
 
 
 def _init() -> None:
+    from app import database
+
+    if _READY_AT and _READY_AT[0] == database.schema_epoch:
+        return
     with _db_lock:
         conn = get_connection()
         conn.execute(
@@ -309,6 +314,7 @@ def _init() -> None:
                          "AND source != 'manual' AND edited = 0")
         conn.commit()
         conn.close()
+        _READY_AT[:] = [database.schema_epoch]
 
 
 def norm_kind(value: Any) -> str:
@@ -361,7 +367,14 @@ def parse_due(text: str, base: date) -> Optional[date]:
         return base + timedelta(days=1)
     if "сегодня" in s or "today" in s or "tonight" in s:
         return base
-    m = re.search(r"\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b", s)
+    # «через 1.5 недели», «in 2.5 days»: a number with a fraction, before the date pattern took «1.5» for
+    # the 1st of May
+    m = re.search(r"(?:через|in)\s+(\d+[.,]\d+)\s+(дн|день|недел|месяц|day|week|month)", s)
+    if m:
+        unit = m.group(2)
+        days = float(m.group(1).replace(",", ".")) * (7 if unit.startswith(("недел", "week")) else 30 if unit.startswith(("месяц", "month")) else 1)
+        return base + timedelta(days=max(1, round(days)))
+    m = re.search(r"\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b(?!\s*(?:дн|день|недел|месяц|час|day|week|month|hour))", s)
     if m:
         d, mo, y = int(m.group(1)), int(m.group(2)), m.group(3)
         if y:
@@ -392,9 +405,17 @@ def parse_due(text: str, base: date) -> Optional[date]:
         return date(base.year + (base.month == 12), base.month % 12 + 1, 1) - timedelta(days=1)
     if re.search(r"конц\w*\s+недел|на этой неделе|end of (the )?week|this week", s):
         return base + timedelta(days=max(0, 4 - base.weekday()))  # its Friday
+    # A weekday as a word of its own: «сред» inside «средства» or «среди» is no Wednesday. The day named
+    # on that same weekday is the next week's one («в среду», «до среды», «к среде» said on a Wednesday:
+    # a deadline for today is said «сегодня», handled above), unless the phrase says «эту»/«this»
     for i, (ru, en) in enumerate(_WEEKDAYS):
-        if ru in s or en in s:
-            return base + timedelta(days=(i - base.weekday()) % 7 or 7)
+        ru_re = r"сред(?:а|у|ы|е|ой|ам|ами|ах)?\b" if ru == "сред" else ru
+        m = re.search(r"(?<![а-яa-z])(?:" + ru_re + r"|" + en + r")", s)
+        if m:
+            ahead = (i - base.weekday()) % 7
+            if not ahead and not re.search(r"(?:\bэт(?:у|от|а|ой)|\bthis)\s+$", s[:m.start()]):
+                ahead = 7
+            return base + timedelta(days=ahead)
     return None
 
 
@@ -514,8 +535,13 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
+    unreadable = False  # an answer with no list in it: the model failed, not «no tasks» (found in the audit)
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
-        found += parse_answer(llm.chat(system, head + "Расшифровка:\n" + part))
+        answer = llm.chat(system, head + "Расшифровка:\n" + part)
+        got = parse_answer(answer)
+        if not got and (answer or "").strip() and "{" not in answer and "[" not in answer:
+            unreadable = True
+        found += got
     mfu = (m.get("mfu") or "").strip()
     from_mfu: List[Dict[str, Any]] = []
     if mfu:  # the organizer's list: its tasks as written, none checked against the transcript
@@ -580,6 +606,12 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
         kept = {r["what"].casefold() for r in rows}
         kept_quotes = {(r["quote"] or "").strip().casefold() for r in rows} - {""}
         kept_at = [r["at"] for r in rows if r["source"] != "manual" and r["at"] is not None]
+        if unreadable and not items and conn.execute(
+                "SELECT 1 FROM commitments WHERE meeting_id = ? AND source != 'manual' AND edited = 0", (meeting_id,)).fetchone():
+            # the model's answer could not be read: the tasks found before stay rather than all vanish
+            conn.close()
+            print(f"[commitments] meeting {meeting_id}: the model's answer had no tasks list; the tasks are kept", flush=True)
+            return for_meetings([meeting_id])
         conn.execute("DELETE FROM commitments WHERE meeting_id = ? AND source != 'manual' AND edited = 0", (meeting_id,))
         for x in items:
             if (x["what"].casefold() in kept or (x["quote"] or "").strip().casefold() in kept_quotes
@@ -620,19 +652,20 @@ def for_meetings(ids: List[int], status: Optional[str] = None) -> List[Dict[str,
 
 def meeting_briefs(ids: Any) -> Dict[int, Dict[str, Any]]:
     """Title, dates and speakers of the given recordings, in one query: the task lists need no
-    transcripts (get_meeting would read every segment of every recording)."""
+    transcripts (get_meeting would read every segment of every recording). The speakers as the library
+    list keeps them: names and colours, without parsing the voice prints of every recording."""
+    from app.database import _list_speakers
+
     ids = sorted({int(i) for i in ids if i})
     out: Dict[int, Dict[str, Any]] = {}
     for start in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
         part = ids[start:start + 500]
         for r in _rows(f"SELECT id, title, recorded_at, created_at, speakers_json FROM meetings WHERE id IN ({','.join('?' * len(part))})",
                        tuple(part)):
-            try:
-                speakers = json.loads(r.get("speakers_json") or "{}")
-            except ValueError:
-                speakers = {}
+            speakers = _list_speakers(r["id"], r.get("speakers_json") or "{}")
             out[r["id"]] = {"id": r["id"], "title": r.get("title") or "", "recorded_at": r.get("recorded_at"),
-                            "created_at": r.get("created_at"), "speakers": speakers if isinstance(speakers, dict) else {}}
+                            "created_at": r.get("created_at"),
+                            "speakers": {k: dict(v) if isinstance(v, dict) else v for k, v in speakers.items()}}
     return out
 
 

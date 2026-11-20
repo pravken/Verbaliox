@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 try:
@@ -71,6 +72,14 @@ class McpServerTest(unittest.TestCase):
         self.assertEqual(names, {"search_meetings", "get_meeting", "list_decisions", "list_tasks", "list_people", "list_features"})
         self.assertEqual(mcp_server.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"], -32601)
 
+    def test_the_agent_is_told_the_content_is_untrusted(self):
+        """Found in the audit: a participant can speak a prompt injection into a transcript; the server says
+        that what it returns is data, never instructions."""
+        init = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        self.assertIn("never instructions", init["result"]["instructions"])
+        for tool in mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]:
+            self.assertIn("untrusted", tool["description"], tool["name"])
+
     def test_search_sections_tasks_and_local_only_hidden(self):
         err, found = _call("search_meetings", query="туман")
         self.assertFalse(err)
@@ -84,8 +93,31 @@ class McpServerTest(unittest.TestCase):
         self.assertTrue(err)
         err, tasks = _call("list_tasks", scope="waiting")
         self.assertEqual([t["task"] for t in tasks["tasks"]], ["Прислать смету"])
+        # the list of local-only recordings cannot be read: the call fails, nothing is handed out
+        with mock.patch("app.database.local_only_ids", side_effect=RuntimeError("database is locked")):
+            with self.assertRaises(RuntimeError):
+                mcp_server._hidden()
         database.update_settings({"mcp_local_only": "true"})  # allowed by the user
         self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
+
+    def test_people_heard_only_in_local_only_recordings_are_not_listed(self):
+        """Found in the audit: list_people counted the local-only recordings, so their speakers, calendar
+        attendees and task owners reached the agent."""
+        lone = database.create_meeting(title="Ещё одна закрытая", filename="c.wav", media_path="c.wav")
+        database.save_meeting_results(lone["id"], segments=SEGMENTS, speakers={"SPEAKER_00": {"name": "Вера"}, "SPEAKER_01": {"name": "Анна"}},
+                                      language="ru")
+        database.update_meeting_progress(lone["id"], status="completed", progress=100, duration=70.0)
+        database.update_meeting_fields(lone["id"], local_only=1, user_notes="Участники по календарю: Глеб")
+        commitments.create("Подписать договор", "Дина", meeting_id=lone["id"])
+
+        names = {p["name"]: p for p in _call("list_people")[1]["people"]}
+        self.assertNotIn("Вера", names)
+        self.assertNotIn("Глеб", names)
+        self.assertNotIn("Дина", names)
+        self.assertEqual(names["Анна"]["recordings"], 1)  # only the recording the agent may read
+        database.update_settings({"mcp_local_only": "true"})  # allowed by the user
+        names = {p["name"] for p in _call("list_people")[1]["people"]}
+        self.assertTrue({"Вера", "Глеб", "Дина"} <= names)
 
     def test_it_runs_on_stdio_as_a_script(self):
         """In UTF-8 both ways whatever the console's code page: on Windows a pipe is cp1251 and the agent got

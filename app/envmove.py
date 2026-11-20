@@ -183,6 +183,16 @@ def move(app_dir: Path, data_dir: Path, report) -> None:
     if not py.is_file():
         raise RuntimeError("Новое окружение не создано")
     _preflight(app_dir, 9_000_000_000)  # the packages (~6 GB) next to the old environment
+    # the old environment can be renamed (nothing holds its files open) before gigabytes are installed for
+    # nothing (found in the audit: a held .venv made the 6 GB install fail at the end, every 24 hours)
+    probe = app_dir / ".venv-move-probe"
+    try:
+        cur.rename(probe)
+        probe.rename(cur)
+    except OSError:
+        if probe.exists() and not cur.exists():
+            probe.rename(cur)
+        raise RuntimeError("Окружение Python занято другой программой — закройте её и запустите Verbaliox снова")
     report("Установка библиотек Python 3.11 (несколько гигабайт, обычно 5–15 минут)…")
     uv = find_uv()
     req = str(app_dir / "requirements.txt")

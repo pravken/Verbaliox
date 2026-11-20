@@ -37,6 +37,30 @@ class SessionAndSearchApiTest(unittest.TestCase):
             self.assertIn("vs_session_8790=", r.headers["set-cookie"])
             self.assertEqual(c.get("/api/meetings").status_code, 200)
 
+    def test_browser_signs_in_with_a_one_time_address(self):
+        """Found in the audit: the browser mode opened /?token=..., which stays in the browser's history.
+        The launcher trades the token for a nonce that works once and for a minute only."""
+        from unittest import mock
+
+        with self._client(8790) as c:
+            self.assertEqual(c.post("/api/session/boot", json={"token": "wrong"}).status_code, 401)
+            self.assertEqual(c.post("/api/session/boot", json={"token": main.SESSION_TOKEN},
+                                    headers={"Sec-Fetch-Site": "cross-site"}).status_code, 403)
+            boot = c.post("/api/session/boot", json={"token": main.SESSION_TOKEN}).json()["boot"]
+            self.assertNotIn(main.SESSION_TOKEN, boot)
+            r = c.get(f"/?boot={boot}", follow_redirects=False)
+            self.assertEqual((r.status_code, r.headers["location"]), (303, "/"))
+            self.assertIn("vs_session_8790=", r.headers["set-cookie"])
+            self.assertEqual(c.get("/api/meetings").status_code, 200)
+        with self._client(8790) as c:  # spent: the address is cleaned, no session
+            r = c.get(f"/?boot={boot}", follow_redirects=False)
+            self.assertEqual(r.status_code, 303)
+            self.assertNotIn("set-cookie", r.headers)
+            self.assertEqual(c.get("/").status_code, 401)
+            late = main.issue_boot_nonce()
+            with mock.patch("time.monotonic", return_value=10**9):  # past its minute
+                self.assertNotIn("set-cookie", c.get(f"/?boot={late}", follow_redirects=False).headers)
+
     def test_requests_of_other_pages_are_refused(self):
         """Another local program's page gets the cookie sent along (same site): it is told by its headers."""
         with self._client(8790) as c:

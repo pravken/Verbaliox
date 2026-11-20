@@ -140,13 +140,91 @@ class ApplyUpdateTest(unittest.TestCase):
         self.assertEqual((self.app / "requirements.txt").read_text(), "same")
         self.assertFalse((self.app / "app" / "new.py").exists())
 
+    def test_packages_come_back_from_the_previous_requirements_with_hashes(self):
+        """Found in the audit: the rollback installed a pip freeze list without hashes from several indexes;
+        the previous version's requirements.txt (in the backup) is installed with --require-hashes instead."""
+        _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
+        calls = []
+
+        def run(cmd, *a, **k):
+            calls.append([str(x) for x in cmd])
+            return mock.Mock(returncode=1, stdout="torch==2.6.0\n")
+
+        with mock.patch.object(updater.subprocess, "run", side_effect=run), \
+                mock.patch.object(updater, "find_uv", return_value="uv.exe"):
+            with self.assertRaises(RuntimeError):
+                updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
+        restore = [c for c in calls if "requirements-before-update.txt" in " ".join(c)]
+        self.assertEqual(len(restore), 1)
+        self.assertIn("--require-hashes", restore[0])
+        self.assertEqual((self.data / "updates" / "requirements-before-update.txt").read_text(), "same")
+        self.assertFalse([c for c in calls if "packages-before-update.txt" in " ".join(c)])
+
+    def test_packages_fall_back_to_the_installed_list_without_the_previous_requirements(self):
+        backup = self.data / "updates" / "backup.zip"
+        with zipfile.ZipFile(backup, "w") as bz:
+            bz.writestr("app/main.py", "old main")
+        frozen = self.data / "updates" / "packages-before-update.txt"
+        frozen.write_text("torch==2.6.0\n")
+        (self.data / "logs").mkdir()
+        with mock.patch.object(updater.subprocess, "run") as run:
+            updater._reinstall(self.app / "python.exe", "uv.exe", frozen, self.data / "logs", backup)
+        cmd = [str(x) for x in run.call_args.args[0]]
+        self.assertIn(str(frozen), cmd)
+        self.assertNotIn("--require-hashes", cmd)
+        self.assertIn("without hashes", (self.data / "logs" / "update.log").read_text(encoding="utf-8"))
+
     def test_failed_restore_is_reported_as_broken(self):
         _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
         with mock.patch.object(updater.subprocess, "run", return_value=mock.Mock(returncode=1)), \
-                mock.patch.object(updater.zipfile.ZipFile, "extractall", side_effect=PermissionError("locked")):
+                mock.patch.object(updater, "_restore", return_value=["app/main.py"]):
             with self.assertRaises(updater.UpdateFailed) as cm:
                 updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
         self.assertEqual(cm.exception.outcome, "broken")
+        self.assertFalse((self.data / updater.IN_PROGRESS).exists())
+
+    def test_a_locked_file_does_not_stop_the_restore_of_the_others(self):
+        """Found in the audit: the first file held open ended the restore."""
+        import zipfile as zf
+
+        backup = self.data / "b.zip"
+        with zf.ZipFile(backup, "w") as z:
+            z.writestr("app/main.py", "old main")
+            z.writestr("Verbaliox.exe", "old exe")
+        (self.app / "app" / "main.py").write_text("new main")
+        real_open = open
+
+        def locked(path, *a, **k):
+            if str(path).endswith("Verbaliox.exe") and "w" in (a[0] if a else k.get("mode", "r")):
+                raise PermissionError("in use")
+            return real_open(path, *a, **k)
+
+        with mock.patch("builtins.open", side_effect=locked), mock.patch.object(updater.time, "sleep"):
+            failed = updater._restore(backup, self.app, [], self.data)
+        self.assertEqual(failed, ["Verbaliox.exe"])
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+
+    def test_an_update_cut_off_half_way_is_put_back_at_the_next_start(self):
+        """Found in the audit: a switched-off computer during an update left two versions mixed."""
+        _release_zip(self.zip, {"app/main.py": "new main", "app/new.py": "added"})
+        real = updater.shutil.copyfileobj
+        calls = []
+
+        def cut(src, out, *a):
+            calls.append(1)
+            if len(calls) == 2:  # the process dies after the first file
+                raise SystemExit("power off")
+            return real(src, out, *a)
+
+        with mock.patch.object(updater.shutil, "copyfileobj", side_effect=cut):
+            with self.assertRaises(SystemExit):
+                updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
+        self.assertTrue((self.data / updater.IN_PROGRESS).exists())
+        self.assertTrue(updater.recover_interrupted(self.app, self.data))
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+        self.assertFalse((self.app / "app" / "new.py").exists())
+        self.assertFalse((self.data / updater.IN_PROGRESS).exists())
+        self.assertFalse(updater.recover_interrupted(self.app, self.data))
 
     def test_files_the_new_version_dropped_are_removed_and_come_back_on_failure(self):
         (self.app / "app" / "gone.py").write_text("old module")
@@ -319,6 +397,110 @@ class PortChoiceTest(unittest.TestCase):
             self.assertEqual(run.choose_port("127.0.0.1", foreign), (foreign + 2, False))
         with mock.patch.object(run, "read_session_token", return_value="tok"):
             self.assertEqual(run.choose_port("127.0.0.1", ours), (ours, True))
+
+
+class BrowserAddressTest(unittest.TestCase):
+    def test_the_browser_gets_a_one_time_address_not_the_token(self):
+        """Found in the audit: the browser mode opened /?token=..., kept in the browser's history."""
+        import http.server
+        import json
+        import threading
+
+        import run
+
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                seen.append((self.path, json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
+                body = json.dumps({"boot": "once"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        port = srv.server_address[1]
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"):
+            url = run.app_url("127.0.0.1", port)
+        self.assertEqual(url, f"http://127.0.0.1:{port}/?boot=once")
+        self.assertEqual(seen, [("/api/session/boot", {"token": "secret-token"})])
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"):
+            self.assertNotIn("secret-token", run.app_url("127.0.0.1", 1))  # nothing answers: the plain address
+
+
+class WindowBridgeTest(unittest.TestCase):
+    def test_the_token_goes_only_to_the_app_own_page(self):
+        """Found in the audit: window.pywebview.api.session_token() answered any document in the window."""
+        import sys
+        import types
+
+        import run
+
+        api = run.WindowApi("127.0.0.1", 8765)
+        win = mock.Mock()
+        fake = types.SimpleNamespace(windows=[win])
+        with mock.patch.dict(sys.modules, {"webview": fake}), \
+                mock.patch.object(run, "read_session_token", return_value="tok"):
+            for url, token in [("http://127.0.0.1:8765/", "tok"), ("http://127.0.0.1:8765/?x=1", "tok"),
+                               ("http://127.0.0.1:8766/", ""), ("https://evil.example/", ""),
+                               ("http://127.0.0.1.evil.example:8765/", ""), (None, ""), ("http://127.0.0.1:99999/", "")]:
+                win.get_current_url.return_value = url
+                self.assertEqual(api.session_token(), token, url)
+            win.get_current_url.side_effect = RuntimeError("closing")
+            self.assertEqual(api.session_token(), "")
+
+
+class Win32TypesTest(unittest.TestCase):
+    def test_user32_functions_get_handle_types(self):
+        """Found in the audit: user32 was called with HWND/HICON values without argtypes; a handle with bit
+        31 set raised OverflowError on 64-bit Windows."""
+        try:
+            from ctypes import wintypes
+        except (ImportError, ValueError):
+            self.skipTest("no ctypes.wintypes here")
+        import run
+
+        lib = mock.Mock()
+        with mock.patch.dict(run._WIN_API, clear=True), mock.patch.object(run.ctypes, "WinDLL", return_value=lib, create=True) as dll:
+            self.assertIs(run._user32(), lib)
+            self.assertIs(run._user32(), lib)  # set up once
+        dll.assert_called_once_with("user32")
+        self.assertEqual(lib.SendMessageW.argtypes, [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM])
+        self.assertEqual(lib.LoadImageW.restype, wintypes.HANDLE)
+        for name in ("ShowWindow", "IsIconic", "IsWindowVisible", "SetForegroundWindow", "MessageBoxW", "FindWindowExW"):
+            self.assertIs(getattr(lib, name).argtypes[0], wintypes.HWND, name)
+        self.assertIs(lib.GetForegroundWindow.restype, wintypes.HWND)
+        # every user32 call of run.py goes through it
+        source = Path(run.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("windll.user32.", source)
+
+
+class ConsoleHideTest(unittest.TestCase):
+    def test_only_a_console_of_its_own_is_hidden(self):
+        """Found in the audit: started from an open command prompt, the app hid the prompt's window for good."""
+        try:
+            from ctypes import wintypes  # noqa: F401
+        except (ImportError, ValueError):
+            self.skipTest("no ctypes.wintypes here")
+        import run
+
+        for attached, hidden in ((1, True), (2, False)):
+            kernel32, user32 = mock.Mock(), mock.Mock()
+            kernel32.GetConsoleWindow.return_value = 0x1234
+            kernel32.GetConsoleProcessList.return_value = attached
+            with mock.patch.object(run.sys, "platform", "win32"), \
+                    mock.patch.object(run.ctypes, "WinDLL", side_effect=lambda name: kernel32, create=True), \
+                    mock.patch.object(run, "_user32", return_value=user32), \
+                    mock.patch.object(run, "ICO_PATH", Path("/nonexistent/icon.ico")):
+                run.apply_native_window_icon_and_hide_console()
+            self.assertEqual(user32.ShowWindow.called, hidden, attached)
 
 
 class PyEnvTest(unittest.TestCase):
@@ -497,6 +679,48 @@ class ReleaseSignatureTest(unittest.TestCase):
             again = subprocess.run([sys.executable, str(root / "tools" / "release_key.py"), "generate", "--out", str(key)],
                                    capture_output=True, text=True)
             self.assertNotEqual(again.returncode, 0)  # a key is never overwritten
+
+
+class FailedUpdateTest(unittest.TestCase):
+    """Found in the audit: an update failing for good (little disk space, a proxy) was installed by itself
+    again every few minutes, the app restarting and saying so each time."""
+
+    def test_an_archive_whose_install_failed_is_not_installed_by_itself_again(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from app import updater
+
+        d = Path(tempfile.mkdtemp())
+        zipf = d / "Verbaliox.zip"
+        zipf.write_bytes(b"zip")
+        state = {"download": {"done": True, "path": str(zipf), "version": "9.9.9", "sha256": "ab" * 32}, "latest": {"version": "9.9.9"}}
+        with mock.patch.dict(updater._state, state), mock.patch("app.paths.DATA_DIR", d), \
+                mock.patch.object(updater, "auto_enabled", return_value=True), mock.patch.object(updater, "is_git_checkout", return_value=False):
+            self.assertTrue(updater.ready_to_install())
+            (d / updater.FAILED_NAME).write_text(json.dumps({"sha256": "AB" * 32}), encoding="utf-8")
+            self.assertFalse(updater.ready_to_install())
+            with mock.patch.object(updater, "launch_installer") as go:
+                self.assertFalse(updater.install_on_exit())
+                go.assert_not_called()
+            updater._state["download"] = {**state["download"], "sha256": "cd" * 32}  # a newer archive
+            self.assertTrue(updater.ready_to_install())
+
+
+class CaseRenameTest(unittest.TestCase):
+    def test_a_file_renamed_only_in_letter_case_is_not_stale(self):
+        import tempfile
+        from pathlib import Path
+
+        from app import updater
+
+        app = Path(tempfile.mkdtemp())
+        (app / "app").mkdir()
+        (app / "app" / "Foo.py").write_text("old")
+        (app / "app" / "gone.py").write_text("old")
+        self.assertEqual(updater._stale_code_files(app, ["app/foo.py", "app/main.py"]), ["app/gone.py"])
 
 
 if __name__ == "__main__":

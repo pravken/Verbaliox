@@ -47,6 +47,7 @@ function switchAppView(view) {
   document.getElementById('sb-settings-btn')?.classList.toggle('sb-on', view === 'settings');
   // The sidebar always shows the library; the main area shows the chosen part
   for (const v of APP_VIEWS) document.getElementById(`${v}-view`)?.classList.toggle('hidden', v !== view);
+  if (prev && prev !== view) animateIn(document.getElementById(`${view}-view`));  // it fades in
   if (view === 'ask') loadPeople();
   hideContextMenu();
   hideFolderMenu();
@@ -179,7 +180,26 @@ function renderTopbar() {
     badge('nav-speakers-n', Object.keys(m.speakers || {}).length);
   }
   scheduleFitTopbar();
+  placeTabIndicators();
 }
+
+// The highlight of the chosen tab in a group moves to it (chosen with the user): one element under the
+// tabs, placed on the chosen one; none chosen in the group (a recording open, under the app's views), it fades
+function placeTabIndicators() {
+  requestAnimationFrame(() => {
+    for (const g of document.querySelectorAll('#tb-main, #tb-record')) {
+      let ind = g.querySelector(':scope > .tb-ind');
+      if (!ind) { ind = document.createElement('i'); ind.className = 'tb-ind'; ind.setAttribute('aria-hidden', 'true'); g.prepend(ind); g.classList.add('has-ind'); }
+      const on = g.querySelector(':scope > .tb-active');
+      if (!on || !on.offsetWidth) { ind.style.opacity = '0'; continue; }
+      const first = ind.style.opacity !== '1';  // appearing: in place at once, no ride from where it was
+      if (first) ind.classList.add('tb-ind-still');
+      Object.assign(ind.style, { left: `${on.offsetLeft}px`, top: `${on.offsetTop}px`, width: `${on.offsetWidth}px`, height: `${on.offsetHeight}px`, opacity: '1' });
+      if (first) requestAnimationFrame(() => ind.classList.remove('tb-ind-still'));
+    }
+  });
+}
+window.addEventListener('resize', placeTabIndicators);
 
 // While the analysis of the open recording runs (a section asked for here, or the analysis after the
 // transcription), the mark of «Анализ» in the bar turns and a dot pulses beside it (asked by the user)
@@ -240,7 +260,17 @@ async function refreshTasksCount(force) {
   if (!Array.isArray(items)) return;
   // the user's own open tasks (the dashboard tracks only those); everyone's while «Это я» is not set
   const me = String(((state.system || {}).settings || {}).my_name || '').split(',').map(n => n.trim().toLocaleLowerCase()).filter(Boolean);
-  badge('nav-tasks-n', me.length ? items.filter(x => me.includes(String(x.who || '').trim().toLocaleLowerCase())).length : items.length);
+  const mine = me.length ? items.filter(x => me.includes(String(x.who || '').trim().toLocaleLowerCase())) : items;
+  badge('nav-tasks-n', mine.length);
+  // what needs the user today stands out (asked by the user: the count was barely seen): overdue or due
+  // today, the badge turns orange and says how many
+  const today = new Date().toLocaleDateString('sv');
+  const hot = mine.filter(x => x.status !== 'done' && x.due_date && String(x.due_date) <= today).length;
+  const el = document.getElementById('nav-tasks-n');
+  if (el) {
+    el.classList.toggle('tb-badge-hot', hot > 0);
+    el.title = hot ? t('tbTasksHot').replace('{n}', () => hot) : t('tbTasksOpen').replace('{n}', () => mine.length);
+  }
 }
 
 // The open recording changes in many places; the bar follows it without each of them calling it

@@ -5,6 +5,7 @@ import re
 import threading
 import time
 import traceback
+import functools
 import heapq
 import itertools
 from concurrent.futures import Future
@@ -183,9 +184,11 @@ def request_cancel(meeting_id: int) -> bool:
     return True
 
 
-# Jobs taken out of the queue before they began: the worker skips them when their turn comes (the
-# executor runs in the order jobs were given, so a count per recording is enough)
-_dropped: Dict[int, int] = {}
+# Queue entries (their token, the entry's "n") taken out of the queue before they began: the worker
+# skips them when their turn comes. A token per entry, not a count per recording: the executor takes
+# jobs by priority, so a translation queued after a cancelled dub of the same recording runs before
+# the dub's stale run, and a count let the translation be skipped and the cancelled dub run
+_dropped: Set[int] = set()
 
 
 def cancel_waiting(meeting_id: int) -> bool:
@@ -199,7 +202,7 @@ def cancel_waiting(meeting_id: int) -> bool:
         _queue[:] = [q for q in _queue if q["id"] != meeting_id]
         _active_jobs.discard(meeting_id)
         _cancel_requested.discard(meeting_id)
-        _dropped[meeting_id] = _dropped.get(meeting_id, 0) + 1
+        _dropped.add(entry["n"])
     from app.database import update_meeting_progress
 
     if entry["kind"] == "transcribe":
@@ -218,22 +221,18 @@ def cancel_waiting(meeting_id: int) -> bool:
     return True
 
 
-def _skip_dropped(meeting_id: int) -> bool:
-    """True: this run was cancelled while it waited. Otherwise the job is marked begun in the same step
-    (started_at), so a cancel coming now is an ordinary one, of a running job: one that came between the
-    check and the start ran the job anyway and left the count to skip its next run."""
+def _skip_dropped(meeting_id: int, token: Optional[int] = None) -> bool:
+    """True: this run (its queue entry `token`) was cancelled while it waited. Otherwise the job is marked
+    begun in the same step (started_at), so a cancel coming now is an ordinary one, of a running job: one
+    that came between the check and the start ran the job anyway."""
     with _jobs_lock:
-        n = _dropped.get(meeting_id, 0)
-        if not n:
-            for q in _queue:
-                if q["id"] == meeting_id:
-                    q["started_at"] = q.get("started_at") or time.time()
-            return False
-        if n == 1:
-            _dropped.pop(meeting_id)
-        else:
-            _dropped[meeting_id] = n - 1
-        return True
+        if token is not None and token in _dropped:
+            _dropped.discard(token)
+            return True
+        for q in _queue:
+            if q["id"] == meeting_id and (token is None or q.get("n") == token):
+                q["started_at"] = q.get("started_at") or time.time()
+        return False
 
 
 def _publish_queue_changed() -> None:
@@ -242,10 +241,18 @@ def _publish_queue_changed() -> None:
     events.publish({"type": "queue"})
 
 
-def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> None:
-    """Call with _jobs_lock held."""
+def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> int:
+    """Call with _jobs_lock held. Returns the entry's token, which its run carries (see _skip_dropped)."""
+    n = next(_queue_seq)
     _queue.append({"id": meeting_id, "kind": kind, "lang": lang, "queued_at": time.time(), "started_at": None,
-                   "prio": KIND_PRIORITY.get(kind, 2), "n": next(_queue_seq)})
+                   "prio": KIND_PRIORITY.get(kind, 2), "n": n})
+    return n
+
+
+def _submit_job(token: int, fn: Callable, *args: Any) -> None:
+    """Gives the job to the executor with its queue entry's token (a keyword, so the job's own arguments
+    and its priority stay as they were)."""
+    _executor.submit(functools.partial(fn, token=token), *args, priority=_job_priority(fn, args))
 
 
 def _queue_start(meeting_id: int) -> None:
@@ -391,14 +398,14 @@ def enqueue_meeting_job(meeting_id: int) -> bool:
             return False
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
-        _queue_add(meeting_id, "transcribe")
-    _executor.submit(_run_job, meeting_id)
+        token = _queue_add(meeting_id, "transcribe")
+    _submit_job(token, _run_job, meeting_id)
     _publish_queue_changed()
     return True
 
 
-def _run_job(meeting_id: int) -> None:
-    if _skip_dropped(meeting_id):  # cancelled while it waited
+def _run_job(meeting_id: int, token: Optional[int] = None) -> None:
+    if _skip_dropped(meeting_id, token):  # cancelled while it waited
         return
     _queue_start(meeting_id)
     try:
@@ -448,20 +455,20 @@ def enqueue_dub_job(meeting_id: int, target_lang: str) -> bool:
             return False
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
-        _queue_add(meeting_id, "dub", target_lang)
+        token = _queue_add(meeting_id, "dub", target_lang)
     back = _status_to_return(meeting_id)
     update_meeting_progress(
         meeting_id, status="dubbing", progress=0, stage_text="Дубляж в очереди...", error_message=""
     )
-    _executor.submit(_run_dub_job, meeting_id, target_lang, back)
+    _submit_job(token, _run_dub_job, meeting_id, target_lang, back)
     _publish_queue_changed()
     return True
 
 
-def _run_dub_job(meeting_id: int, target_lang: str, back: str = "completed") -> None:
+def _run_dub_job(meeting_id: int, target_lang: str, back: str = "completed", token: Optional[int] = None) -> None:
     from app.dubbing import run_dub_job
 
-    if _skip_dropped(meeting_id):  # taken out of the queue while it waited (cancel_waiting)
+    if _skip_dropped(meeting_id, token):  # taken out of the queue while it waited (cancel_waiting)
         return
 
     def _progress(pct: int, text: str) -> None:
@@ -514,18 +521,18 @@ def _enqueue_side_job(meeting_id: int, kind: str, lang: str, status: str, queued
             return False
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
-        _queue_add(meeting_id, kind, lang)
+        token = _queue_add(meeting_id, kind, lang)
     back = _status_to_return(meeting_id)
     update_meeting_progress(meeting_id, status=status, progress=0, stage_text=queued_text, error_message="")
-    _executor.submit(_run_side_job, meeting_id, back, runner, *args)
+    _submit_job(token, _run_side_job, meeting_id, back, runner, *args)
     _publish_queue_changed()
     return True
 
 
-def _run_side_job(meeting_id: int, back: str, runner, *args) -> None:
+def _run_side_job(meeting_id: int, back: str, runner, *args, token: Optional[int] = None) -> None:
     # Like a dub, these jobs never invalidate the transcript: the recording goes back to the status it
     # had (`back`) and the outcome (done, cancelled, error) is reported in stage_text / error_message.
-    if _skip_dropped(meeting_id):  # taken out of the queue while it waited (cancel_waiting)
+    if _skip_dropped(meeting_id, token):  # taken out of the queue while it waited (cancel_waiting)
         return
     _queue_start(meeting_id)
     try:

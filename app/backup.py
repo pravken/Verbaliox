@@ -313,6 +313,30 @@ def _carry_secrets(old_db: Path, new_db: Path) -> None:
         conn.close()
 
 
+def _meeting_keys(db: Path) -> Dict[int, tuple]:
+    conn = sqlite3.connect(str(db))
+    try:
+        return {int(r[0]): (r[1], r[2]) for r in conn.execute("SELECT id, created_at, media_path FROM meetings")}
+    finally:
+        conn.close()
+
+
+def _drop_stale_caches(old_db: Path, new_db: Path) -> None:
+    """The files kept per recording number (the video thumbnail, the waveform kept after the WAV went) of
+    every number that is not the same recording in the restored database: an older copy gives its numbers
+    again to the recordings made next, which showed the waveform and the picture of another recording."""
+    from app.audio_utils import peaks_file
+    from app.paths import THUMBS_DIR
+
+    old, new = _meeting_keys(old_db), _meeting_keys(new_db)
+    stale = [mid for mid in set(old) | set(new) if old.get(mid) != new.get(mid)]
+    for mid in stale:
+        for f in (THUMBS_DIR / f"{mid}.jpg", peaks_file(mid)):
+            f.unlink(missing_ok=True)
+    if stale:
+        print(f"[backup] the thumbnails and waveforms of {len(stale)} recording number(s) dropped", flush=True)
+
+
 def apply_pending() -> Optional[str]:
     """At start, before the database is opened: a restored copy replaces it (the old one is kept)."""
     if not PENDING.is_file():
@@ -320,18 +344,50 @@ def apply_pending() -> Optional[str]:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     kept = DATA_DIR / f"meetings.before-restore-{stamp}.db"
     if DB_PATH.exists():
-        conn = sqlite3.connect(str(DB_PATH))  # the last changes may still be in the -wal file
+        # the last changes may still be in the -wal file. A damaged database (the case a restore is for,
+        # found in the audit) cannot be checkpointed: it is kept as it is and replaced all the same
         try:
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        finally:
-            conn.close()
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            finally:
+                conn.close()
+        except sqlite3.DatabaseError as e:
+            print(f"[backup] the current database could not be checkpointed ({e}); kept as it is", flush=True)
+            for suffix in ("-wal", "-shm"):
+                side = Path(str(DB_PATH) + suffix)
+                if side.exists():
+                    shutil.copyfile(side, Path(str(kept) + suffix))
         shutil.copyfile(DB_PATH, kept)
         try:
             _carry_secrets(kept, PENDING)
         except sqlite3.DatabaseError as e:
             print(f"[backup] the API keys were not carried over: {e}", flush=True)
+        try:
+            _drop_stale_caches(kept, PENDING)
+        except (sqlite3.DatabaseError, OSError) as e:
+            print(f"[backup] the caches of the recordings were not checked: {e}", flush=True)
     for suffix in ("-wal", "-shm"):
         Path(str(DB_PATH) + suffix).unlink(missing_ok=True)
     PENDING.replace(DB_PATH)
+    from app.database import forget_settings
+
+    forget_settings()  # the settings of the restored copy
     print(f"[backup] restored the library from a backup; the previous database is {kept.name}", flush=True)
+    _prune_before_restore()
     return str(kept)
+
+
+KEEP_BEFORE_RESTORE = 3
+
+
+def _prune_before_restore() -> None:
+    """The databases put aside by restores: the newest KEEP_BEFORE_RESTORE stay, older ones go (each is the
+    whole library: they were never removed and added up)."""
+    old = sorted(DATA_DIR.glob("meetings.before-restore-*.db"), key=lambda p: p.name, reverse=True)
+    for p in old[KEEP_BEFORE_RESTORE:]:  # the date in the name sorts them
+        try:
+            p.unlink()
+            print(f"[backup] removed {p.name}: an older database put aside by a restore", flush=True)
+        except OSError as e:
+            print(f"[backup] {p.name} could not be removed: {e}", flush=True)

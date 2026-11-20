@@ -34,8 +34,14 @@ if not exist ".git" (
     goto :fail
 )
 
+rem The app runs as the Python of this folder, not as Verbaliox.exe (found in the audit: pip then wrote
+rem over libraries in use): both are looked for
+set "VS_RUNNING="
 tasklist /fi "imagename eq Verbaliox.exe" 2>nul | find /i "Verbaliox.exe" >nul
-if not errorlevel 1 (
+if not errorlevel 1 set "VS_RUNNING=1"
+powershell -NoProfile -Command "if (Get-Process -Name python,pythonw -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($env:VS_UPDATE_DIR, [StringComparison]::OrdinalIgnoreCase) }) { exit 1 }" >nul 2>nul
+if errorlevel 1 set "VS_RUNNING=1"
+if defined VS_RUNNING (
     echo Verbaliox is running. Close it ^(also in the tray^), then press any key.
     pause >nul
 )
@@ -83,7 +89,7 @@ git diff --quiet %OLD% %NEW% -- requirements.txt
 if errorlevel 1 (
     if not exist ".venv\Scripts\python.exe" (
         echo       No .venv yet: running setup.bat...
-        call "%~dp0setup.bat"
+        call "%VS_UPDATE_DIR%setup.bat"
     ) else (
         rem An environment made on Python 3.10 is moved to 3.11 (app/envmove.py): a new .venv is
         rem made next to it and replaces it only when every package is installed
@@ -117,6 +123,9 @@ exit /b 0
 :move_env
 echo       Moving the Python environment to Python 3.11 ^(several GB, once^)...
 set "BASEPY="
+rem a Cyrillic path in Python's answer: read as UTF-8 (found in the audit: the console's code page garbled it)
+chcp 65001 >nul
+set "PYTHONIOENCODING=utf-8"
 for /f "delims=" %%p in ('".venv\Scripts\python.exe" -m app.envmove prepare') do set "BASEPY=%%p"
 if not defined BASEPY (
     echo Could not create the Python 3.11 environment: see logs\update.log in the data folder.

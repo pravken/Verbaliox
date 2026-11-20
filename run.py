@@ -18,6 +18,51 @@ WINDOW_TITLE = "Verbaliox"  # the launcher (build_exe.py) closes its splash when
 # incomplete .venv (setup interrupted, a blocked .pyd) then shows a message instead of nothing at all
 
 
+_WIN_API = {}
+
+
+def _user32():
+    """user32 with the argument and result types of the functions used here, set once. Without them
+    ctypes passes a Python int as a 32-bit C int: a window or icon handle with bit 31 set (handles are
+    sign-extended on 64-bit Windows) raised OverflowError. An own instance, so the types set here do
+    not change ctypes.windll.user32 for other modules."""
+    if "user32" not in _WIN_API:
+        from ctypes import wintypes
+
+        u = ctypes.WinDLL("user32")
+        for name, args, res in [
+            ("ShowWindow", [wintypes.HWND, ctypes.c_int], wintypes.BOOL),
+            ("IsIconic", [wintypes.HWND], wintypes.BOOL),
+            ("IsWindowVisible", [wintypes.HWND], wintypes.BOOL),
+            ("SetForegroundWindow", [wintypes.HWND], wintypes.BOOL),
+            ("GetForegroundWindow", [], wintypes.HWND),
+            ("SendMessageW", [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM], wintypes.LPARAM),
+            ("LoadImageW", [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int, ctypes.c_int,
+                            wintypes.UINT], wintypes.HANDLE),
+            ("MessageBoxW", [wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT], ctypes.c_int),
+            ("FindWindowExW", [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR], wintypes.HWND),
+            ("GetClassNameW", [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
+            ("GetWindowThreadProcessId", [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)], wintypes.DWORD),
+            ("GetSystemMetrics", [ctypes.c_int], ctypes.c_int),
+        ]:
+            fn = getattr(u, name)
+            fn.argtypes, fn.restype = args, res
+        _WIN_API["user32"] = u
+    return _WIN_API["user32"]
+
+
+def _console_is_ours_alone() -> bool:
+    """The console belongs to this process only (started by a double click or a shortcut). Started
+    from an open command prompt, the console is the prompt's: hiding it would hide the user's window."""
+    from ctypes import wintypes
+
+    k = ctypes.WinDLL("kernel32")
+    k.GetConsoleProcessList.argtypes = [ctypes.POINTER(wintypes.DWORD), wintypes.DWORD]
+    k.GetConsoleProcessList.restype = wintypes.DWORD
+    pids = (wintypes.DWORD * 4)()
+    return k.GetConsoleProcessList(pids, len(pids)) == 1
+
+
 def set_app_user_model_id() -> None:
     """
     Sets an explicit Windows AppUserModelID so the taskbar groups the window
@@ -34,21 +79,25 @@ def set_app_user_model_id() -> None:
 
 def apply_native_window_icon_and_hide_console() -> None:
     """
-    Hides the console window and applies assets/icon.ico directly to the native
+    Hides the console window (only one this process has alone) and applies assets/icon.ico directly to the native
     Win32 window handle (both ICON_SMALL and ICON_BIG) so the taskbar and titlebar
     display the Willow icon instead of the default Python icon.
     """
     if sys.platform == "win32":
         try:
-            hwnd_console = ctypes.windll.kernel32.GetConsoleWindow()
-            if hwnd_console:
-                ctypes.windll.user32.ShowWindow(hwnd_console, 0)  # SW_HIDE = 0
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32")
+            kernel32.GetConsoleWindow.restype = wintypes.HWND
+            hwnd_console = kernel32.GetConsoleWindow()
+            if hwnd_console and _console_is_ours_alone():
+                _user32().ShowWindow(hwnd_console, 0)  # SW_HIDE = 0
         except Exception:
             pass
 
         if ICO_PATH.exists():
             try:
-                user32 = ctypes.windll.user32
+                user32 = _user32()
                 LR_LOADFROMFILE = 0x00000010
                 IMAGE_ICON = 1
                 WM_SETICON = 0x0080
@@ -56,10 +105,10 @@ def apply_native_window_icon_and_hide_console() -> None:
                 ICON_BIG = 1
 
                 hicon_big = user32.LoadImageW(
-                    0, str(ICO_PATH), IMAGE_ICON, 256, 256, LR_LOADFROMFILE
+                    None, str(ICO_PATH), IMAGE_ICON, 256, 256, LR_LOADFROMFILE
                 )
                 hicon_small = user32.LoadImageW(
-                    0, str(ICO_PATH), IMAGE_ICON, 32, 32, LR_LOADFROMFILE
+                    None, str(ICO_PATH), IMAGE_ICON, 32, 32, LR_LOADFROMFILE
                 )
 
                 for _ in range(25):
@@ -87,11 +136,7 @@ def find_app_window(pid: Optional[int] = None) -> int:
         return 0
     from ctypes import wintypes
 
-    user32 = ctypes.WinDLL("user32")
-    user32.FindWindowExW.argtypes = [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
-    user32.FindWindowExW.restype = wintypes.HWND
-    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32 = _user32()
     hwnd = None
     name = ctypes.create_unicode_buffer(256)
     owner = wintypes.DWORD()
@@ -186,8 +231,27 @@ def window_url(host: str, port: int) -> str:
 
 
 def app_url(host: str, port: int) -> str:
+    """The address a browser opens: a one-time /?boot=... the server trades for the session cookie.
+    The session token itself never goes into an address (the browser keeps those in its history)."""
+    import http.client
+    import json
+
+    base = f"http://{host}:{port}/"
     token = read_session_token()
-    return f"http://{host}:{port}/?token={token}" if token else f"http://{host}:{port}/"
+    if not token:
+        return base
+    try:
+        conn = http.client.HTTPConnection(host, port, timeout=5)
+        try:
+            conn.request("POST", "/api/session/boot", body=json.dumps({"token": token}),
+                         headers={"Content-Type": "application/json"})
+            resp = conn.getresponse()
+            boot = json.loads(resp.read() or b"{}").get("boot") if resp.status == 200 else ""
+        finally:
+            conn.close()
+    except (OSError, ValueError, http.client.HTTPException):
+        boot = ""
+    return f"{base}?boot={boot}" if boot else base
 
 
 # Why the server thread ended, if it did (shown in the window instead of "connection refused")
@@ -284,8 +348,26 @@ class WindowApi:
         self._host, self._port = host, port
 
     def session_token(self) -> str:
-        """The session token for the "locked" page, which signs in with it (POST /api/session)."""
-        return read_session_token()
+        """The session token for the "locked" page, which signs in with it (POST /api/session). The
+        bridge answers whatever document the window shows, so only the app's own address gets it, not
+        a page the window was led to by a link."""
+        import webview
+
+        try:
+            url = webview.windows[0].get_current_url() if webview.windows else None
+        except Exception:
+            url = None
+        return read_session_token() if self._is_own(url) else ""
+
+    def _is_own(self, url: Optional[str]) -> bool:
+        from urllib.parse import urlsplit
+
+        try:
+            u = urlsplit(url or "")
+            return (u.scheme == "http" and (u.hostname or "") == self._host.strip("[]").lower()
+                    and u.port == self._port)
+        except ValueError:  # a port out of range
+            return False
 
     def toggle_fullscreen(self) -> bool:
         """WebView2 inside pywebview ignores the Fullscreen API, so the native window is toggled."""
@@ -435,13 +517,13 @@ def recover_stuck_instance() -> bool:
     pid = stuck_instance_pid()
     MB_YESNO, MB_ICONWARNING, IDYES = 0x4, 0x30, 6
     if not pid:  # which process it is is not known for sure: ending a guess could hit another program
-        ctypes.windll.user32.MessageBoxW(
+        _user32().MessageBoxW(
             None,
             "Verbaliox уже запущен, но его окно не отвечает.\n\n"
             "Завершите процесс python.exe программы Verbaliox в Диспетчере задач или перезагрузите компьютер.",
             "Verbaliox", MB_ICONWARNING | MB_ON_TOP)
         return False
-    answer = ctypes.windll.user32.MessageBoxW(
+    answer = _user32().MessageBoxW(
         None,
         "Verbaliox уже запущен, но его окно не отвечает.\n\n"
         "Завершить зависший процесс и открыть программу заново? Незавершённая обработка будет прервана.",
@@ -464,7 +546,7 @@ def activate_existing_window(timeout: float = 30.0) -> bool:
     """Brings the already open Verbaliox window to the front (it may still be starting)."""
     if sys.platform != "win32":
         return False
-    user32 = ctypes.windll.user32
+    user32 = _user32()
     SW_RESTORE = 9
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -495,7 +577,8 @@ class TrayController:
         self._status = {"state": "idle", "text": "", "recording": False, "queue": []}
         self._running: dict = {}
         self._mf_default, self._mf_grayed = MF_DEFAULT, MF_GRAYED
-        self.tray = Tray(ICO_PATH, self.menu_items, self.on_command, self.show_window, on_notice=self.open_target)
+        self.tray = Tray(ICO_PATH, self.menu_items, self.on_command, self.show_window, on_notice=self.open_target,
+                         on_session_end=self.on_session_end)
         window.events.closing += self.on_closing
 
     def start(self) -> None:
@@ -515,9 +598,24 @@ class TrayController:
         if not self._quiet():
             self.tray.notify(title, text, warning=warning, target=target)
 
+    def _join_toast(self, n: dict) -> None:
+        """The start of a calendar meeting: a Windows toast whose «Подключиться» opens the call
+        (app/toast.py); where a toast cannot be shown, the tray's notification, whose click joins."""
+        from app import meeting_join, toast
+
+        link = meeting_join.launch_target(n["target"][5:])
+        if link and toast.show(n["title"], n["text"], [("Подключиться", link)], launch=link, stay=True, icon=ICO_PATH):
+            return
+        self.tray.notify(n["title"], n["text"], target=n["target"])
+
     def open_target(self, target: str) -> None:
         """A click on a notification: the window comes up at the place it was about (static/js/home.js
         openFromNotice); without a place, as it was."""
+        if target.startswith("join:"):  # the call of a calendar meeting (app/brief_notice.py): no window
+            from app import meeting_join
+
+            if meeting_join.open_link(target[5:]):
+                return
         self.show_window()
         if target:
             import json
@@ -659,6 +757,9 @@ class TrayController:
                 from app.app_status import take_notices
 
                 for n in take_notices():  # a recording started or stopped by itself: never silent
+                    if n.get("target", "").startswith("join:"):  # a meeting starting: a toast with «Подключиться»
+                        threading.Thread(target=self._join_toast, args=(n,), daemon=True).start()
+                        continue
                     self.tray.notify(n["title"], n["text"], target=n.get("target", ""))
                 self._check_hotkey_result(st)
                 self.tray.set_status(st["state"], st["text"])
@@ -688,7 +789,7 @@ class TrayController:
             self._notify(f"{label} завершено", title, target=where)
 
     def _window_in_front(self) -> bool:
-        user32 = ctypes.windll.user32
+        user32 = _user32()
         hwnd = find_app_window(os.getpid())
         return bool(hwnd) and user32.GetForegroundWindow() == hwnd and bool(user32.IsWindowVisible(hwnd))
 
@@ -814,7 +915,7 @@ class TrayController:
         if st.get("state") != "idle":
             MB_YESNO, MB_ICONWARNING, IDYES = 0x4, 0x30, 6
             what = "Идёт запись" if st.get("recording") else "Идёт обработка"
-            answer = ctypes.windll.user32.MessageBoxW(
+            answer = _user32().MessageBoxW(
                 None, f"{what}. Выйти из Verbaliox? Незавершённая работа будет прервана.", "Verbaliox",
                 MB_YESNO | MB_ICONWARNING | MB_ON_TOP)
             if answer != IDYES:
@@ -822,11 +923,21 @@ class TrayController:
         self.quitting = True
         self.window.destroy()
 
+    def on_session_end(self) -> None:
+        """Windows shuts down or the user signs out: the recordings are finished (FFmpeg and the system
+        sound close their files), the window may close. No update is installed now."""
+        self.quitting = True
+        print("[exit] Windows is shutting down: finishing the work")
+        _stop_work()
+
     def on_closing(self) -> bool:
         from app.database import get_all_settings
 
+        if self.quitting or session_ending():  # Windows shuts down: never vetoed (found in the audit)
+            self.quitting = True
+            return True
         to_tray = (get_all_settings().get("close_to_tray") or "false").lower() == "true"
-        if self.quitting or (self._status.get("state") == "idle" and not to_tray):
+        if self._status.get("state") == "idle" and not to_tray:
             self.quitting = True
             return True
         # Something runs, or the app stays in the tray by choice (Settings → General): the window hides
@@ -847,7 +958,7 @@ class TrayController:
         if self.quitting or self._status.get("state") != "idle" or not updater.ready_to_install():
             return
         hwnd = find_app_window(os.getpid())
-        if hwnd and ctypes.windll.user32.IsWindowVisible(hwnd):
+        if hwnd and _user32().IsWindowVisible(hwnd):
             return  # someone works in the window: on its closing, as before
         print("[update] installing the downloaded update in the background")
         try:
@@ -931,6 +1042,58 @@ def _attach_native_drop(window) -> None:
 _update_launched = False
 
 
+WEBVIEW2_CLIENT = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+
+
+def webview2_installed() -> bool:
+    """The Microsoft Edge WebView2 Runtime the window needs (its version in the registry, as Microsoft
+    documents). Unsure (no registry here, an error): taken as installed, the window is tried."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import winreg
+    except ImportError:
+        return True
+    places = [(winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\" + WEBVIEW2_CLIENT),
+              (winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\" + WEBVIEW2_CLIENT),
+              (winreg.HKEY_CURRENT_USER, "Software\\" + WEBVIEW2_CLIENT)]
+    try:
+        for root, path in places:
+            try:
+                with winreg.OpenKey(root, path) as k:
+                    pv = str(winreg.QueryValueEx(k, "pv")[0] or "")
+                    if pv and pv != "0.0.0.0":
+                        return True
+            except OSError:
+                continue
+        return False
+    except Exception:
+        return True
+
+
+def _tell_no_webview2() -> None:
+    """Said once, without stopping the start: the browser opens meanwhile."""
+    def show() -> None:
+        try:
+            _user32().MessageBoxW(
+                None, "Для окна Verbaliox нужен компонент Microsoft Edge WebView2 Runtime, его нет на этом компьютере.\n\n"
+                      "Программа откроется в браузере. Чтобы работать в своём окне, установите WebView2 Runtime "
+                      "с сайта Microsoft (поиск: «WebView2 Runtime») и запустите Verbaliox снова.",
+                "Verbaliox", 0x40 | 0x40000)  # information, on top
+        except Exception:
+            pass
+
+    threading.Thread(target=show, daemon=True).start()
+
+
+def session_ending() -> bool:
+    """Windows is shutting down or signing the user out (SM_SHUTTINGDOWN)."""
+    try:
+        return sys.platform == "win32" and bool(_user32().GetSystemMetrics(0x2000))
+    except Exception:
+        return False
+
+
 def _stop_work() -> None:
     """Before the process ends: recordings finished, work processes ended (app/shutdown.py)."""
     remove_pid_file()
@@ -943,9 +1106,10 @@ def _stop_work() -> None:
 
 
 def _install_update_on_exit() -> None:
-    """A downloaded update (automatic updates on) is installed when the app closes."""
+    """A downloaded update (automatic updates on) is installed when the app closes; not while Windows
+    shuts down (it would be cut off half-way)."""
     global _update_launched
-    if _update_launched:
+    if _update_launched or session_ending():
         return
     _update_launched = True
     try:
@@ -962,7 +1126,7 @@ def show_error_box(text: str) -> None:
     if sys.platform == "win32" and "--headless" not in sys.argv:
         try:
             MB_ICONERROR = 0x10
-            ctypes.windll.user32.MessageBoxW(None, text, "Verbaliox", MB_ICONERROR | MB_ON_TOP)
+            _user32().MessageBoxW(None, text, "Verbaliox", MB_ICONERROR | MB_ON_TOP)
             return
         except Exception:
             pass
@@ -999,7 +1163,9 @@ def main() -> None:
             register_cuda_dlls()
             threading.Thread(
                 target=lambda: wait_for_server(args.host, args.port)
-                and print(f"Verbaliox: {app_url(args.host, args.port)}", flush=True),
+                # printed for whoever runs it by hand, who may open it much later than a one-time
+                # address lives: this mode keeps the token address
+                and print(f"Verbaliox: http://{args.host}:{args.port}/?token={read_session_token()}", flush=True),
                 daemon=True,
             ).start()
             uvicorn.run("app.main:app", host=args.host, port=args.port, log_level="info", access_log=False,  # the address holds the session token
@@ -1014,6 +1180,15 @@ def main() -> None:
             print(f"Another Verbaliox instance: {outcome}")
             if outcome == "activated" or (outcome == "timeout" and not recover_stuck_instance()):
                 return
+        # An update cut off half-way (the computer switched off): the previous version back first
+        try:
+            from app import updater as _upd
+            from app.paths import APP_DIR as _APP, DATA_DIR as _DATA
+
+            if _upd.recover_interrupted(_APP, _DATA):
+                print("[update] an update cut off half-way: the previous version was put back")
+        except Exception as e:
+            print(f"[update] recovery: {e}", file=sys.stderr)
         # An installation made on Python 3.10 moves its environment to 3.11 once (app/envmove.py):
         # that runs outside this environment, so the app quits and is started again by it
         from app import envmove
@@ -1040,6 +1215,11 @@ def main() -> None:
         try:
             import webview
 
+            if not webview2_installed():
+                # Found in the audit: without the WebView2 Runtime pywebview falls back to the old IE engine
+                # in silence, and the window stays on «Запуск…». The app opens in the browser, and says why
+                _tell_no_webview2()
+                raise RuntimeError("Microsoft Edge WebView2 Runtime is not installed")
             if not already_running:
                 # The database before the tray and «Start with Windows», which read the settings: the server
                 # made it a moment later, and the first start said «no such table: settings» (no tray icon)
