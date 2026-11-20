@@ -240,7 +240,17 @@ async function refreshTasksCount(force) {
   if (!Array.isArray(items)) return;
   // the user's own open tasks (the dashboard tracks only those); everyone's while «Это я» is not set
   const me = String(((state.system || {}).settings || {}).my_name || '').split(',').map(n => n.trim().toLocaleLowerCase()).filter(Boolean);
-  badge('nav-tasks-n', me.length ? items.filter(x => me.includes(String(x.who || '').trim().toLocaleLowerCase())).length : items.length);
+  const mine = me.length ? items.filter(x => me.includes(String(x.who || '').trim().toLocaleLowerCase())) : items;
+  badge('nav-tasks-n', mine.length);
+  // what needs the user today stands out (asked by the user: the count was barely seen): overdue or due
+  // today, the badge turns orange and says how many
+  const today = new Date().toLocaleDateString('sv');
+  const hot = mine.filter(x => x.status !== 'done' && x.due_date && String(x.due_date) <= today).length;
+  const el = document.getElementById('nav-tasks-n');
+  if (el) {
+    el.classList.toggle('tb-badge-hot', hot > 0);
+    el.title = hot ? t('tbTasksHot').replace('{n}', () => hot) : t('tbTasksOpen').replace('{n}', () => mine.length);
+  }
 }
 
 // The open recording changes in many places; the bar follows it without each of them calling it
