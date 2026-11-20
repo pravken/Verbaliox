@@ -225,9 +225,13 @@ const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load'];
 const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load'];  // redrawn as the time goes (dbTickNow)
 
 // The meeting going on or the next one of today (not an all-day one); null when there is none left
+// A meeting begun counts as going on only while a recording runs (asked by the user: a block over the whole
+// night in the calendar showed «идёт встреча» on the dashboard): otherwise the next one ahead is shown. A block
+// of six hours or more (a night, a day off, a reminder) is never a meeting to count down to
 function dbNextMeeting() {
-  const now = Date.now();
-  const list = (typeof home !== 'undefined' ? home.events : []).filter(e => !e.all_day && e.e.getTime() > now)
+  const now = Date.now(), rec = typeof isRecording === 'function' && isRecording();
+  const list = (typeof home !== 'undefined' ? home.events : [])
+    .filter(e => !e.all_day && e.e.getTime() > now && e.e - e.s < 6 * 3600e3 && (e.s.getTime() > now || rec))
     .sort((x, y) => x.s - y.s);
   return list[0] || null;
 }
