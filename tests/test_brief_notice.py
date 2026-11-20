@@ -60,7 +60,7 @@ class JoinTest(unittest.TestCase):
             self.assertTrue(meeting_join.open_link("https://meet.google.com/abc-defg-hij"))
             op.assert_called_once()
 
-    def test_an_ics_event_carries_its_link_and_the_notice_joins_it(self):
+    def test_an_ics_event_carries_its_link_and_the_call_comes_at_the_start(self):
         from app import calendar_ics
 
         ics = ("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:j1\r\nSUMMARY:Синк с командой\r\nDTSTART:20261119T100000\r\n"
@@ -71,27 +71,45 @@ class JoinTest(unittest.TestCase):
         self.assertTrue(ev["online"])
         init_db()
         app_status.take_notices()
-        now = datetime(2026, 11, 19, 9, 55)
+        brief_notice._told.clear()
+        start = datetime(2026, 11, 19, 10, 0)
         with mock.patch("app.calendar_ics.window", return_value=[ev]), \
-                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook"}):
-            self.assertEqual(brief_notice.check(now), 1)
-        note = app_status.take_notices()[-1]
-        self.assertEqual(note["target"], f"join:{self.TEAMS}")
-        self.assertIn("Teams", note["text"])
+                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook", "meet_notify_before": "60"}):
+            self.assertEqual(brief_notice.check(start - timedelta(minutes=5)), 0)   # not yet: 1 minute ahead was chosen
+            self.assertEqual(brief_notice.check(start - timedelta(seconds=58)), 1)  # the reminder
+            self.assertEqual(brief_notice.check(start - timedelta(seconds=30)), 0)  # once
+            self.assertEqual(brief_notice.check(start + timedelta(seconds=3)), 1)   # the call, at the start
+            self.assertEqual(brief_notice.check(start + timedelta(seconds=8)), 0)
+        before, call = app_status.take_notices()[-2:]
+        self.assertIn("Через 58 секунд", before["text"])
+        self.assertNotEqual(before["target"].split(":")[0], "join")
+        self.assertEqual(call["target"], f"join:{self.TEAMS}")
+        self.assertIn("Teams", call["text"])
 
-    def test_a_meeting_without_link_or_history_is_still_reminded_unless_turned_off(self):
-        now = datetime(2026, 11, 19, 13, 55)
-        ev = {"uid": "r1", "title": "Встреча без ссылки", "start": now + timedelta(minutes=5),
-              "end": now + timedelta(minutes=35), "attendees": [], "join": ""}
+    def test_the_reminder_ahead_as_chosen_or_none_and_no_late_notices(self):
+        start = datetime(2026, 11, 19, 14, 0)
+        ev = {"uid": "r1", "title": "Встреча без ссылки", "start": start, "end": start + timedelta(minutes=30), "attendees": [], "join": ""}
         init_db()
         app_status.take_notices()
-        with mock.patch("app.calendar_ics.window", return_value=[ev]), \
-                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook", "meet_notify": "false"}):
-            self.assertEqual(brief_notice.check(now), 0)
-        with mock.patch("app.calendar_ics.window", return_value=[ev]), \
-                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook"}):
-            self.assertEqual(brief_notice.check(now), 1)
+        brief_notice._told.clear()
+        settings = {"calendar_ics": "outlook", "meet_notify_before": "30"}
+        with mock.patch("app.calendar_ics.window", return_value=[ev]), mock.patch("app.database.get_all_settings", return_value=settings):
+            self.assertEqual(brief_notice.check(start - timedelta(seconds=40)), 0)
+            self.assertEqual(brief_notice.check(start - timedelta(seconds=29)), 1)
+            self.assertEqual(brief_notice.check(start + timedelta(seconds=2)), 0)  # no link: nothing at the start
         self.assertEqual(app_status.take_notices()[-1]["target"], "dashboard")
+        brief_notice._told.clear()
+        for opts in ({"meet_notify": "false"}, {"meet_notify_before": "0"}):
+            with mock.patch("app.calendar_ics.window", return_value=[ev]), \
+                    mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook", **opts}):
+                self.assertEqual(brief_notice.check(start - timedelta(seconds=20)), 0)
+        # the app started 10 minutes into the meeting: no call notice that late
+        with mock.patch("app.calendar_ics.window", return_value=[dict(ev, join=self.TEAMS)]), \
+                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook"}):
+            self.assertEqual(brief_notice.check(start + timedelta(minutes=10)), 0)
+        self.assertEqual(brief_notice._ahead_text(120), "Через 2 минуты")
+        self.assertEqual(brief_notice._ahead_text(300), "Через 5 минут")
+        self.assertEqual(brief_notice._ahead_text(61), "Через 1 минуту")
 
 
 if __name__ == "__main__":

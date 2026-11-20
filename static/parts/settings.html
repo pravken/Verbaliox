@@ -568,10 +568,22 @@
             <input type="checkbox" role="switch" class="vs-switch" id="set-meetings-ask-inperson" checked />
           </label>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="rdSasNotify">Напоминать за 5 минут до встречи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasNotifyHint">Уведомление Windows. Если в приглашении есть ссылка на Teams, Zoom, Google Meet или Webex, нажатие подключает к звонку.</span></span>
+            <span><span data-i18n="rdSasNotify">Уведомления о встречах</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasNotifyHint">Уведомления Windows: напоминание заранее, а в начале встречи — подключение к звонку, если в приглашении есть ссылка на Teams, Zoom, Google Meet или Webex.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-meet-notify" checked />
           </label>
+          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap ml-6">
+            <label for="set-meet-notify-before" data-i18n="rdSasNotifyBefore">Напоминать</label>
+            <select id="set-meet-notify-before" class="sx-time">
+              <option value="30" data-i18n="rdSasBefore30s">за 30 секунд</option>
+              <option value="60" data-i18n="rdSasBefore1m">за 1 минуту</option>
+              <option value="120" data-i18n="rdSasBefore2m">за 2 минуты</option>
+              <option value="300" data-i18n="rdSasBefore5m">за 5 минут</option>
+              <option value="600" data-i18n="rdSasBefore10m">за 10 минут</option>
+              <option value="900" data-i18n="rdSasBefore15m">за 15 минут</option>
+              <option value="0" data-i18n="rdSasBeforeOff">не напоминать, только подключение</option>
+            </select>
+          </div>
           <!-- How long the working day lasted (app/worktime.py) and the reminder of the norm -->
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="rdSasWorktime">Считать отработанное время</span>

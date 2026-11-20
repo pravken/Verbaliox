@@ -34,6 +34,8 @@ CHOICES = {"llm_provider": {"ollama", "cloud"}, "date_folders": {"off", "day", "
            # the memory left to the system (app/mem_reserve.py)
            # GigaAM / Parakeet on the video card or always on the processor (app/onnx_gpu.gpu_for_job)
            "economy_for": {"0", "30", "60", "120", "240", "day"},
+           # how long before a calendar meeting its reminder comes, seconds (app/brief_notice.py)
+           "meet_notify_before": {"0", "30", "60", "120", "300", "600", "900"},
            "cpu_threads": {"auto", "2", "4", "6", "8", "12", "16", "all"},
            "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},
