@@ -205,13 +205,20 @@ await step('setup steps after an update', async () => {
   await page.waitForSelector('#setup-steps select[data-hol-country] option[value="RS"]', { state: 'attached' });
   await page.selectOption('#setup-steps select[data-hol-country]', 'RS');
   expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
-  await page.click('#setup-steps button[data-a="next"]');
-  await sleep(500);
+  // each step saved before the next shows (its buttons wait meanwhile): wait for that, not for a time
+  const next = async () => {
+    const was = await page.getAttribute('#setup-steps-dialog', 'data-step');
+    await page.click('#setup-steps button[data-a="next"]');
+    await page.waitForFunction(prev => {
+      const d = document.getElementById('setup-steps-dialog');
+      return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
+    }, was);
+  };
+  await next();
   // then the news of the version, one step each: the last one closes the wizard
   for (let i = 0; i < 5 && await page.$('#setup-steps-dialog'); i++) {
     expect(await page.$('#setup-steps .frw-points li'), 'a news step without its points');
-    await page.click('#setup-steps button[data-a="next"]');
-    await sleep(400);
+    await next();
   }
   expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
   const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
