@@ -142,6 +142,8 @@ def clean(key: str, value: Any) -> str:
         return _meet_never(text_s)
     if key == "meet_ignore":
         return _meet_ignore(text_s)
+    if key == "setup_done":  # the steps of the setup after an update already answered (static/js/settings.js)
+        return _setup_done(text_s)
     if key == "holiday_country":  # ISO code of the country of the public holidays (app/holidays_cal.py)
         if text_s and not re.fullmatch(r"[A-Za-z]{2}", text_s):
             raise ValueError(f"{key}: недопустимое значение")
@@ -165,6 +167,18 @@ def _meet_overrides(text: str) -> str:
             any(not isinstance(k, str) or len(k) > 300 or v not in ("rec", "skip") for k, v in data.items()):
         raise ValueError("meet_overrides: нужен объект JSON")
     return json.dumps(data, ensure_ascii=False)
+
+
+def _setup_done(text: str) -> str:
+    import json
+
+    try:
+        data = json.loads(text or "[]")
+    except ValueError:
+        raise ValueError("setup_done: нужен список JSON")
+    if not isinstance(data, list) or len(data) > 100 or any(not isinstance(x, str) or not re.fullmatch(r"[a-z0-9_-]{1,40}", x) for x in data):
+        raise ValueError("setup_done: нужен список JSON")
+    return json.dumps(data)
 
 
 def _meet_ignore(text: str) -> str:

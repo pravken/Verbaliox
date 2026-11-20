@@ -152,6 +152,11 @@ await step('first run wizard', async () => {
   await page.fill('#first-run-wizard input[data-cal-src]', 'https://example.com/basic.ics');
   await page.click('#first-run-wizard label:has(input[data-auto="allMeet"])');
   expect(await page.inputValue('#first-run-wizard input[data-cal-src]') === 'https://example.com/basic.ics', 'the calendar address was lost on a redraw');
+  // The country of the public holidays on the same step (asked by the user: chosen at the first start); a region where it has them
+  await page.waitForSelector('#first-run-wizard select[data-hol-country] option[value="DE"]', { state: 'attached' });
+  await page.selectOption('#first-run-wizard select[data-hol-country]', 'DE');
+  await page.selectOption('#first-run-wizard select[data-hol-subdiv]', 'BY');
+  expect(await page.inputValue('#first-run-wizard input[data-cal-src]') === 'https://example.com/basic.ics', 'the calendar address was lost when the country changed');
   await page.click('#first-run-wizard button[data-a="next"]');
   expect(await page.isChecked('#first-run-wizard input[data-auto="startup"]'), 'the start with Windows did not follow the recording of meetings');
   expect((await page.textContent('#first-run-dialog')).includes(await page.evaluate(() => t('frwShortAll'))), 'the summary does not list the automation');
@@ -172,9 +177,31 @@ await step('first run wizard', async () => {
   expect(first.language === 'auto', `language not left to detection: ${JSON.stringify(first)}`);
   expect(first.record_source_mode === 'mic', `the sound source not saved: ${JSON.stringify(first)}`);
   expect(first.start_with_windows === 'true' && first.close_to_tray === 'true', `the start with Windows not saved: ${JSON.stringify(first)}`);
+  expect(first.holiday_country === 'DE' && first.holiday_subdiv === 'BY', `the country of the holidays not saved: ${JSON.stringify(first)}`);
+  expect(JSON.parse(first.setup_done || '[]').includes('holidays'), `the steps after an update would ask again: ${JSON.stringify(first)}`);
   expect(!('calendar_ics' in first), 'the calendar went with the other settings: a refused address would lose them all');
   const cal = sent.find(x => 'calendar_ics' in x) || {};
   expect(cal.calendar_ics === 'https://example.com/basic.ics' && cal.meet_auto_all === 'true', `the calendar not saved: ${JSON.stringify(sent)}`);
+});
+
+// After an update: a small wizard asks the settings a new version brings (asked by the user), once
+await step('setup steps after an update', async () => {
+  await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
+  await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
+  await page.waitForSelector('#setup-steps select[data-hol-country] option[value="RS"]', { state: 'attached' });
+  await page.selectOption('#setup-steps select[data-hol-country]', 'RS');
+  expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
+  await page.click('#setup-steps button[data-a="next"]');
+  await sleep(500);
+  expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
+  const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+  expect(set.holiday_country === 'RS', `the country not saved: ${set.holiday_country}`);
+  // answered: not asked again
+  await page.evaluate(sv => openSetupSteps(sv), set);
+  await sleep(400);
+  expect(!(await page.$('#setup-steps')), 'asked again after it was answered');
+  await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
 });
 
 // The cloud choice keeps the speech settings: its consent is asked in Settings → Analysis (no stub here:

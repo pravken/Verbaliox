@@ -236,6 +236,9 @@ ${t('modelsFolder')}: ${data.paths.models}`;
       if (data.models.needs_first_run_setup && !window._firstRunShown) {
         window._firstRunShown = true;
         openFirstRunWizard(data);
+      } else if (!data.models.needs_first_run_setup && !window._setupStepsShown) {
+        window._setupStepsShown = true;
+        openSetupSteps(s);
       }
     }
     syncSidebarDownloadWidget();
@@ -985,7 +988,9 @@ function openFirstRunWizard(data) {
   const picks = firstRunPicks(data, state.uiLang);
   const st = { page: 'ai', preset: picks.rec, ai: picks.gpu ? 'local' : 'none', ensemble: false,
     calls: false, apps: new Set(['zoom', 'teams', 'telegram']), cal: false, calSource: '', allMeet: false,
-    startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '' };
+    startup: false, startupTouched: false, filter: true, teams: false, source: 'both', mic: '', country: null, subdiv: '' };
+  // the country of the public holidays: the one of this computer's region, offered on the calendar step
+  holidayCountries().then(() => { if (st.country === null) st.country = holidayHomeCountry(); if (document.body.contains(wrap) && st.page === 'cal') draw(); });
   // the pages in order; «calls» only where the program can watch for calls (Windows)
   const pages = () => ['ai', 'sound', env.calls && 'calls', 'cal', 'sum'].filter(Boolean);
   // The microphones, asked when the sound step opens (the names come with the permission to listen)
@@ -1106,7 +1111,8 @@ function openFirstRunWizard(data) {
           <label class="frw-auto-row frw-sub-row"><span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('frwCalAll'))}</span>
             <span class="frw-opt-desc">${escapeHtml(t('frwCalAllD'))}</span></span>
           <input type="checkbox" role="switch" class="vs-switch" data-auto="allMeet" ${st.allMeet ? 'checked' : ''} /></label></div>` : '';
-      body = `<div class="frw-autos">${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}</div>`;
+      body = `<div class="frw-autos">${sw('cal', st.cal, t('frwCal'), t(env.outlook ? 'frwCalDOutlook' : 'frwCalD'), cal)}</div>
+        <div class="frw-autos frw-after">${holidayPickHtml(st.country || '', st.subdiv)}</div>`;
     } else if (st.page === 'ai') {
       title = t('frwAiQ');
       sub = t('frwAiSub');
@@ -1160,6 +1166,8 @@ function openFirstRunWizard(data) {
     if (e.target.matches('input[data-cal-src]')) st.calSource = e.target.value;
   });
   wrap.addEventListener('change', e => {
+    if (e.target.matches('select[data-hol-country]')) { st.country = e.target.value; st.subdiv = ''; draw(); return; }
+    if (e.target.matches('select[data-hol-subdiv]')) { st.subdiv = e.target.value; return; }
     if (!e.target.matches('select[data-mic]')) return;
     st.mic = e.target.value;
     if (meter.stream) startMeter();  // the check follows the chosen microphone
@@ -1217,6 +1225,9 @@ function openFirstRunWizard(data) {
         record_source_mode: st.source,
         ...(st.mic && st.source !== 'system' ? { record_mic_device: st.mic } : {}),
         ...(env.filter && !st.filter ? { rec_voice_filter: 'false' } : {}),
+        ...(st.country ? { holiday_country: st.country, holiday_subdiv: st.subdiv } : {}),
+        // the steps of the setup after an update are this wizard's already: not asked again
+        setup_done: JSON.stringify(SETUP_STEPS.map(x => x.id)),
       };
       await runFirstRunSetup(data, models(), st.ai, picks, '', st.ensemble, speech(), automation, !!filterMb());
     }
@@ -3196,42 +3207,155 @@ function fillWorkdaySettings(s) {
 // --- Public holidays: the country and its region (app/holidays_cal.py) ---
 const HOLIDAYS = { list: null, want: { country: '', subdiv: '' } };
 
-async function fillHolidaySettings(s) {
-  HOLIDAYS.want = { country: String(s.holiday_country || '').toUpperCase(), subdiv: String(s.holiday_subdiv || '') };
+// The countries the app knows the holidays of, asked once
+async function holidayCountries() {
   if (!HOLIDAYS.list) {
     const data = await fetch('/api/holidays/countries').then(r => (r.ok ? r.json() : null)).catch(() => null);
     HOLIDAYS.list = (data && data.countries) || [];
     HOLIDAYS.available = !!(data && data.available);
   }
-  const sel = document.getElementById('set-holiday-country');
-  if (!sel) return;
-  // the country in the language of the page (the browser knows the names by the code); the country of
-  // this computer's region first
+  return HOLIDAYS.list;
+}
+
+// The country of this computer's region (Windows: the format of dates and numbers), if the app knows it
+function holidayHomeCountry() {
+  let mine = '';
+  try { mine = (new Intl.Locale(navigator.language).maximize().region || '').toUpperCase(); } catch (e) {}
+  return (HOLIDAYS.list || []).some(c => c.code === mine) ? mine : '';
+}
+
+// <option>s of the countries: in the language of the page (the browser knows the names by the code),
+// the country of this computer's region first
+function holidayCountryOptions() {
   let names = null;
   try { names = new Intl.DisplayNames([state.uiLang === 'en' ? 'en' : 'ru'], { type: 'region' }); } catch (e) {}
   const name = c => { try { return (names && names.of(c.code)) || c.name; } catch (e) { return c.name; } };
-  let mine = '';
-  try { mine = (new Intl.Locale(navigator.language).maximize().region || '').toUpperCase(); } catch (e) {}
-  const list = HOLIDAYS.list.map(c => ({ ...c, label: name(c) })).sort((a, b) => a.label.localeCompare(b.label, state.uiLang === 'en' ? 'en' : 'ru'));
+  const mine = holidayHomeCountry();
+  const list = (HOLIDAYS.list || []).map(c => ({ ...c, label: name(c) })).sort((a, b) => a.label.localeCompare(b.label, state.uiLang === 'en' ? 'en' : 'ru'));
   const top = list.filter(c => c.code === mine);
   const opt = c => `<option value="${escapeHtml(c.code)}">${escapeHtml(c.label)}</option>`;
-  sel.innerHTML = `<option value="">${escapeHtml(t('holNone'))}</option>` + (top.length ? top.map(opt).join('') + '<option disabled>──────</option>' : '') + list.map(opt).join('');
-  sel.value = list.some(c => c.code === HOLIDAYS.want.country) ? HOLIDAYS.want.country : '';
+  return `<option value="">${escapeHtml(t('holNone'))}</option>` + (top.length ? top.map(opt).join('') + '<option disabled>──────</option>' : '') + list.map(opt).join('');
+}
+
+function holidaySubdivs(code) {
+  const c = (HOLIDAYS.list || []).find(x => x.code === code);
+  return (c && c.subdivs) || [];
+}
+
+function holidaySubdivOptions(code) {
+  return `<option value="">${escapeHtml(t('holWholeCountry'))}</option>`
+    + holidaySubdivs(code).map(x => `<option value="${escapeHtml(x.code)}">${escapeHtml(x.name === x.code ? x.code : `${x.name} (${x.code})`)}</option>`).join('');
+}
+
+async function fillHolidaySettings(s) {
+  HOLIDAYS.want = { country: String(s.holiday_country || '').toUpperCase(), subdiv: String(s.holiday_subdiv || '') };
+  await holidayCountries();
+  const sel = document.getElementById('set-holiday-country');
+  if (!sel) return;
+  sel.innerHTML = holidayCountryOptions();
+  sel.value = HOLIDAYS.list.some(c => c.code === HOLIDAYS.want.country) ? HOLIDAYS.want.country : '';
   syncHolidaySubdivs(true);
 }
 
 function syncHolidaySubdivs(keep) {
   const sel = document.getElementById('set-holiday-country'), sub = document.getElementById('set-holiday-subdiv');
   if (!sel || !sub) return;
-  const c = (HOLIDAYS.list || []).find(x => x.code === sel.value);
-  const subs = (c && c.subdivs) || [];
-  sub.innerHTML = `<option value="">${escapeHtml(t('holWholeCountry'))}</option>`
-    + subs.map(x => `<option value="${escapeHtml(x.code)}">${escapeHtml(x.name === x.code ? x.code : `${x.name} (${x.code})`)}</option>`).join('');
+  const subs = holidaySubdivs(sel.value);
+  sub.innerHTML = holidaySubdivOptions(sel.value);
   sub.value = keep === true && subs.some(x => x.code === HOLIDAYS.want.subdiv) ? HOLIDAYS.want.subdiv : '';
   sub.classList.toggle('hidden', !subs.length);
   document.getElementById('holiday-subdiv-label')?.classList.toggle('hidden', !subs.length);
   const st = document.getElementById('holiday-status');
   if (st) st.textContent = HOLIDAYS.list && !HOLIDAYS.available ? t('holUnavailable') : '';
+}
+
+// The country (and region) of the public holidays, as a wizard shows it: select[data-hol-country],
+// select[data-hol-subdiv]
+function holidayPickHtml(country, subdiv, plain = false) {
+  const subs = holidaySubdivs(country);
+  const pick = (html, value) => html.replace(`value="${escapeHtml(value)}"`, `value="${escapeHtml(value)}" selected`);
+  // plain: the step already says what it is (after an update), only the choice
+  return `<div class="frw-toggle">${plain ? '' : `<span class="frw-opt-text"><span class="frw-opt-title">${escapeHtml(t('holTitle'))}</span>
+      <span class="frw-opt-desc">${escapeHtml(t('frwHolD'))}</span></span>`}
+    <div class="frw-hol${plain ? ' frw-hol-plain' : ''}">
+      <select class="frw-input frw-select" data-hol-country aria-label="${escapeHtml(t('holCountry'))}">${HOLIDAYS.list ? pick(holidayCountryOptions(), country) : '<option value="">…</option>'}</select>
+      ${subs.length ? `<select class="frw-input frw-select" data-hol-subdiv aria-label="${escapeHtml(t('holRegion'))}">${pick(holidaySubdivOptions(country), subdiv)}</select>` : ''}
+    </div></div>`;
+}
+
+// --- After an update: the settings a new version brings, asked once in a small wizard ---
+// A step is asked when it is not in setup_done and its setting is not chosen yet (a new install
+// answers them in the first-run wizard). The list grows with the versions: add a step here.
+const SETUP_STEPS = [
+  { id: 'holidays', since: '0.8.25', needed: s => !String(s.holiday_country || '').trim() },
+];
+
+function setupDoneList(s) {
+  try { const v = JSON.parse(s.setup_done || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+
+async function openSetupSteps(s) {
+  if (document.getElementById('first-run-wizard') || document.getElementById('setup-steps')) return;
+  const done = setupDoneList(s);
+  const steps = SETUP_STEPS.filter(x => !done.includes(x.id) && x.needed(s));
+  if (!steps.length) return;
+  await holidayCountries();
+  if (steps.some(x => x.id === 'holidays') && !HOLIDAYS.available) steps.splice(steps.findIndex(x => x.id === 'holidays'), 1);
+  if (!steps.length) return;
+  const st = { at: 0, country: holidayHomeCountry(), subdiv: '' };
+  const wrap = document.createElement('div');
+  wrap.id = 'setup-steps';
+  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.setAttribute('aria-label', t('setupStepsTitle'));
+  const save = async (ids, extra = {}) => {
+    const settings = { ...extra, setup_done: JSON.stringify([...new Set([...setupDoneList(s), ...ids])]) };
+    const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }) }).catch(() => null);
+    if (!r || !r.ok) showError(t('errorGeneric'));
+    else Object.assign(s, settings);
+  };
+  const draw = () => {
+    const step = steps[st.at];
+    const dots = steps.length > 1 ? `<span class="frw-dots">${steps.map((_, i) => `<span class="frw-dot${i === st.at ? ' is-on' : ''}"></span>`).join('')}</span>` : '';
+    let title = '', sub = '', body = '';
+    if (step.id === 'holidays') {
+      title = t('setupHolQ');
+      sub = t('setupHolSub');
+      body = `<div class="frw-autos">${holidayPickHtml(st.country, st.subdiv, true)}</div>`;
+    }
+    wrap.innerHTML = `<div class="frw" id="setup-steps-dialog">
+      <div class="frw-kicker">${escapeHtml(t('setupStepsTitle'))}</div>
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2>${dots}</div>
+      <p class="frw-sub">${escapeHtml(sub)}</p>
+      <div class="frw-body">${body}</div>
+      <div class="frw-foot">
+        <button data-a="later" class="frw-later" title="${escapeHtml(t('setupLaterTip'))}">${escapeHtml(t('setupLater'))}</button>
+        <button data-a="skip" class="ui-btn ui-btn-subtle">${escapeHtml(t('setupSkip'))}</button>
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.at < steps.length - 1 ? t('frNext') : t('setupDone'))}</button>
+      </div></div>`;
+    wrap.querySelector('#setup-steps-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+  };
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape' && document.body.contains(wrap)) { e.stopPropagation(); close(); } };
+  wrap.addEventListener('change', e => {
+    if (e.target.matches('select[data-hol-country]')) { st.country = e.target.value; st.subdiv = ''; draw(); }
+    else if (e.target.matches('select[data-hol-subdiv]')) st.subdiv = e.target.value;
+  });
+  wrap.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-a]');
+    if (!b) return;
+    const step = steps[st.at];
+    if (b.dataset.a === 'later') { close(); return; }  // asked again at the next start
+    // «Пропустить»: not asked again (Settings keep it); «Далее»/«Готово»: the choice is saved
+    const extra = b.dataset.a === 'next' && step.id === 'holidays' && st.country ? { holiday_country: st.country, holiday_subdiv: st.subdiv } : {};
+    await save([step.id], extra);
+    if (extra.holiday_country && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
+    if (st.at < steps.length - 1) { st.at += 1; draw(); } else close();
+  });
+  document.addEventListener('keydown', onKey, true);
+  draw();
+  document.body.appendChild(wrap);
 }
 
 function workdaySettingsPayload() {
