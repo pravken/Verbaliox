@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import json
 import os
 import re
 import secrets
@@ -196,6 +197,48 @@ def _quiet_windows_connection_resets() -> None:
     loop.set_exception_handler(handler)
 
 
+# Jobs a restart takes up again; "queued" had not begun, the others were broken off while they ran
+RESUME_STATES = {"queued", "extracting_audio", "transcribing", "diarizing", "summarizing"}
+MAX_INTERRUPTED_RUNS = 2
+INTERRUPTED_KEY = "interrupted_job_runs"
+INTERRUPTED_TEXT = "Обработка дважды прервалась вместе с программой — возможно, файл повреждён. Нажмите «Повторить»"
+
+
+def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
+    """The recordings a start queues again. A recording whose processing was broken off by the end of the
+    program is counted (kept in the settings): a file that makes the program itself crash was queued at
+    every start and crashed it again, for good. After MAX_INTERRUPTED_RUNS such ends in a row it is marked
+    failed instead; «Повторить» starts it again (counted afresh: the count is kept only while it runs)."""
+    from app.database import update_settings
+
+    try:
+        counts = json.loads(get_all_settings().get(INTERRUPTED_KEY) or "{}")
+        counts = counts if isinstance(counts, dict) else {}
+    except ValueError:
+        counts = {}
+    resume, kept = set(), {}
+    for m in meetings:
+        if m.get("status") not in RESUME_STATES:
+            continue
+        mid = int(m["id"])
+        n = counts.get(str(mid))
+        n = n if isinstance(n, int) else 0
+        if m.get("status") != "queued":  # it was running when the program ended
+            n += 1
+        if n >= MAX_INTERRUPTED_RUNS:
+            print(f"[resume] meeting {mid}: processing ended with the program {n} times, not queued again", flush=True)
+            update_meeting_progress(mid, status="failed", progress=0, stage_text="", error_message=INTERRUPTED_TEXT)
+            continue
+        resume.add(mid)
+        if n:
+            kept[str(mid)] = n
+    try:
+        update_settings({INTERRUPTED_KEY: json.dumps(kept)})
+    except Exception:
+        traceback.print_exc()
+    return resume
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _quiet_windows_connection_resets()
@@ -265,10 +308,12 @@ async def lifespan(_app: FastAPI):
 
     watch_folder.start()
     # Resume recordings that were interrupted mid-processing
-    active_states = {"queued", "extracting_audio", "transcribing", "diarizing", "summarizing"}
-    for m in list_meetings():
-        if m.get("status") in active_states:
-            enqueue_meeting_job(int(m["id"]))
+    meetings = list_meetings()
+    resume_ids = _interrupted_to_resume(meetings)
+    for m in meetings:
+        if m.get("status") in RESUME_STATES:
+            if int(m["id"]) in resume_ids:
+                enqueue_meeting_job(int(m["id"]))
         elif m.get("status") == "dubbing":
             # A dub interrupted by a restart is simply dropped; the transcript itself is complete
             update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Дубляж прерван перезапуском")

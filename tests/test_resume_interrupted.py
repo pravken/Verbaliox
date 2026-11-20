@@ -1,0 +1,51 @@
+"""A recording whose processing ended together with the program is taken up again at the next start, but
+not for ever: a file that crashes the program itself is marked failed after two such ends."""
+import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
+import unittest
+
+try:
+    from app import database, main
+except ImportError:  # app dependencies are not installed (e.g. in the release CI job)
+    main = None
+
+
+@unittest.skipIf(main is None, "app dependencies not installed")
+class ResumeInterruptedTest(unittest.TestCase):
+    def setUp(self):
+        database.init_db()
+        database.update_settings({main.INTERRUPTED_KEY: "{}"})
+
+    def tearDown(self):
+        database.update_settings({main.INTERRUPTED_KEY: "{}"})
+
+    def _start(self):
+        return main._interrupted_to_resume(database.list_meetings())
+
+    def test_a_job_ending_with_the_program_twice_is_marked_failed(self):
+        crash = database.create_meeting("Сломанный файл", "c.wav", "c.wav")["id"]
+        waiting = database.create_meeting("В очереди", "q.wav", "q.wav")["id"]
+        database.update_meeting_progress(crash, status="transcribing", progress=30)
+        database.update_meeting_progress(waiting, status="queued", progress=0)
+        got = self._start()
+        self.assertIn(crash, got)  # the first time: queued again
+        self.assertIn(waiting, got)
+        database.update_meeting_progress(crash, status="diarizing", progress=60)  # and it ended again
+        got = self._start()
+        self.assertNotIn(crash, got)
+        self.assertIn(waiting, got)  # never begun: not counted
+        m = database.get_meeting(crash)
+        self.assertEqual(m["status"], "failed")
+        self.assertEqual(m["error_message"], main.INTERRUPTED_TEXT)
+
+    def test_a_job_that_finished_is_counted_afresh(self):
+        mid = database.create_meeting("Встреча", "a.wav", "a.wav")["id"]
+        database.update_meeting_progress(mid, status="transcribing", progress=30)
+        self.assertIn(mid, self._start())
+        database.update_meeting_progress(mid, status="completed", progress=100)
+        self._start()  # done: its count goes
+        database.update_meeting_progress(mid, status="transcribing", progress=30)
+        self.assertIn(mid, self._start())
+
+
+if __name__ == "__main__":
+    unittest.main()
