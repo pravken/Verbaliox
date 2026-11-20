@@ -80,16 +80,56 @@ class _PriorityExecutor:
         while True:
             with self._cv:
                 # the queue paused by the user, or the economy mode (recording only): the next job waits
-                # until it ends (wake() or 5 s); the job running goes on
-                while not self._heap or _paused[0] or economy.on():
+                # until it ends (wake() or 5 s); the job running goes on. During a meeting the
+                # transcriptions wait (app/meeting_guard.holds_queue), the user's other jobs go first
+                while True:
+                    item = None
+                    if self._heap and not _paused[0] and not economy.on():
+                        hold = _meeting_holds()
+                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3]))]
+                        if ready:
+                            item = min(ready)  # (priority, order, …): the order is unique, nothing else is compared
+                            self._heap.remove(item)
+                            heapq.heapify(self._heap)
+                    if item is not None:
+                        break
                     self._cv.wait(timeout=5.0 if self._heap else None)
-                _prio, _n, fut, fn, args = heapq.heappop(self._heap)
+                _prio, _n, fut, fn, args = item
             if not fut.set_running_or_notify_cancel():
                 continue
             try:
                 fut.set_result(fn(*args))
             except BaseException as e:  # noqa: BLE001 - kept in the future, as the pool did
                 fut.set_exception(e)
+
+
+def _waits_for_meeting(fn: Callable) -> bool:
+    """A transcription (or the load of its model) waits for the end of a meeting; what the user asked for
+    by hand otherwise (a translation, a dub, a new split) does not."""
+    fn = getattr(fn, "func", fn)  # the queue holds its jobs as functools.partial(fn, token=…) (_queue_start)
+    return fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper"
+
+
+_held_said = [False]
+
+
+def _meeting_holds() -> bool:
+    try:
+        from app import meeting_guard
+
+        held = meeting_guard.holds_queue()
+    except Exception:
+        held = False
+    if held != _held_said[0]:
+        _held_said[0] = held
+        print(f"[queue] {'transcriptions wait for the end of the meeting' if held else 'the meeting is over: transcriptions go on'}", flush=True)
+        _publish_queue_changed()
+    return held
+
+
+def meeting_holds() -> bool:
+    """For the page: the transcriptions are waiting for the end of a meeting."""
+    return _held_said[0]
 
 
 def _job_priority(fn: Callable, args: tuple) -> int:

@@ -179,7 +179,7 @@ async function loadQueue() {
     fetch('/api/queue/paused').then(r => (r.ok ? r.json() : null)).catch(() => null)]);
   if (!res.ok) return;
   state.queue = await readJson(res);
-  if (paused) state.queuePaused = !!paused.paused;
+  if (paused) { state.queuePaused = !!paused.paused; state.queueMeeting = !!paused.meeting; }
   renderQueuePanel();
   renderStatusbar();
 }
@@ -241,7 +241,8 @@ function renderQueuePanel() {
     const detail = q.cancelling
       ? t('queueCancelling')
       : running ? serverText(m.stage_text || q.stage_text || '')
-      : paused ? t('queuePausedItem') : t('queueWaiting').replace('{n}', () => q.position);
+      : paused ? t('queuePausedItem')
+      : state.queueMeeting && q.kind === 'transcribe' ? t('queueMeetingItem') : t('queueWaiting').replace('{n}', () => q.position);
     const timing = running && !q.cancelling ? formatTiming(jobTiming(q, pct)) : '';
     return `
       <div data-click="openMeeting" data-click-args='[${q.id}, true]' tabindex="0" role="button" title="${escapeHtml(detail)}"

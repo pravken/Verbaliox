@@ -605,6 +605,27 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
     return {"dest": dest, "has_video": has_video, "cleanup": cleanup}
 
 
+def _wait_for_meeting_end(meeting_id: int) -> None:
+    """The mix (the voice cleaned by DeepFilterNet, the echo, ffmpeg: minutes of a whole processor) waits for
+    the end of the meeting going on, as the transcription does («Не мешать на встречах», app/meeting_guard).
+    Reported by the user: a recording ended as the next meeting began, and the computer froze during the call.
+    The tracks wait on disk, a restart meanwhile recovers them (recover_sessions)."""
+    import time
+
+    from app import meeting_guard
+    from app.database import update_meeting_progress
+
+    said = False
+    while meeting_guard.holds_queue():
+        if not said:
+            update_meeting_progress(meeting_id, stage_text="Сведение дорожек — после встречи")
+            print(f"[record] meeting {meeting_id}: the mix waits for the end of the meeting", flush=True)
+            said = True
+        time.sleep(5.0)
+    if said:
+        update_meeting_progress(meeting_id, stage_text="Сведение дорожек записи...")
+
+
 def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path],
                        screen: Optional[Path], system_skip: float, safe_stem: str, session: Optional[str] = None) -> None:
     """The mix of a stopped recording, then its transcription queued; the recording waits as «mixing»."""
@@ -616,6 +637,7 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
 
     done: Optional[Dict[str, Any]] = None
     try:
+        _wait_for_meeting_end(meeting_id)
         done = _mix_parts(payload, page, system, screen, system_skip, safe_stem, meeting_id)
         if done is None or done.get("salvaged") is not None:  # kept part by part: they are the recordings now
             delete_meeting(meeting_id)

@@ -511,7 +511,8 @@ function renderStatusbar() {
   const more = items.length - (run ? 1 : 0);
   q.textContent = run
     ? `${queueKindLabel(run)} · ${pct}% — «${run.title}»${more ? ` · ${t('sbQueueMore').replace('{n}', () => more)}` : ''}`
-    : state.queuePaused ? t('sbQueuePaused').replace('{n}', () => items.length) : t('sbQueueWaiting').replace('{n}', () => items.length);
+    : state.queuePaused ? t('sbQueuePaused').replace('{n}', () => items.length)
+    : state.queueMeeting ? t('sbQueueMeeting').replace('{n}', () => items.length) : t('sbQueueWaiting').replace('{n}', () => items.length);
   q.classList.add('sb-queue-busy');
 }
 
