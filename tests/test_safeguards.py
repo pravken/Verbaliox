@@ -316,11 +316,22 @@ class SetupWindowTest(unittest.TestCase):
             self.assertIn(f"echo ##STEP {step}", text)
             self.assertIn(f'"##STEP {step}"', (root / "build_exe.py").read_text(encoding="utf-8"))
         self.assertIn('if not defined QUIET pause', text)
-        # uv found also where winget leaves it, installed by astral.sh when winget gives none; without uv
-        # only a Python 3.11 makes the environment (a Python 2.7 on PATH failed with "No module named venv")
+        # uv found also where winget leaves it; when winget gives none, a pinned uv release archive checked
+        # by its SHA-256 goes into the program folder (found in the audit: an unpinned script was piped to
+        # iex). Without uv only a Python 3.11 makes the environment (a Python 2.7 on PATH failed with "No
+        # module named venv")
         self.assertIn(":find_uv", text)
         self.assertIn(r"WinGet\Packages\astral-sh.uv*", text)
-        self.assertIn("astral.sh/uv/install.ps1", text)
+        self.assertNotIn("install.ps1", text)
+        self.assertNotIn("iex", text)
+        self.assertRegex(text, r'set "UV_ZIP_URL=https://github\.com/astral-sh/uv/releases/download/\d+\.\d+\.\d+/uv-x86_64-pc-windows-msvc\.zip"')
+        self.assertRegex(text, r'set "UV_ZIP_SHA256=[0-9a-f]{64}"')
+        self.assertIn("Get-FileHash -Algorithm SHA256", text)
+        self.assertIn('set "UV_DIR=%~dp0.uv"', text)
+        self.assertIn('"%UV_DIR%\\uv.exe"', text)  # :find_uv looks there
+        from app.pyenv import APP_UV
+
+        self.assertEqual(APP_UV.parent.name, ".uv")  # and so does the app (the updater installs with it)
         self.assertIn("sys.version_info[:2] == (3, 11)", text)
         self.assertNotIn("python -m venv", text)
         self.assertIn("goto :venv_failed", text)
@@ -395,7 +406,7 @@ class InstallerTest(unittest.TestCase):
             self.assertIn(f"MoveHeavy('{name}');", iss)
         self.assertIn("FixVenv('.venv');", iss)
         self.assertIn("FixOllamaModels();", iss)
-        for name in (".uv-cache", "python"):
+        for name in (".uv-cache", ".uv", "python"):
             self.assertIn(f'Name: "{{app}}\\{name}"', iss)
 
 

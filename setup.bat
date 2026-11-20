@@ -39,8 +39,12 @@ if "%SAC%"=="0x1" set "SAC=1"
 if "%SAC%"=="0x2" set "SAC=2"
 
 rem --- uv: on PATH, where its installers put it (winget may leave it in its own package folder when it
-rem --- cannot make the shortcut in WinGet\Links), else installed: winget first, then the installer of
-rem --- astral.sh. Their output goes to the log, so a failure says why
+rem --- cannot make the shortcut in WinGet\Links), else installed: winget first, then the release archive
+rem --- of uv from GitHub, a pinned version checked by its SHA-256 (never a script run from the internet),
+rem --- unpacked into the program folder. Their output goes to the log, so a failure says why
+set "UV_ZIP_URL=https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-pc-windows-msvc.zip"
+set "UV_ZIP_SHA256=0cdc5b38fe5a8168ed6a25814f5ba43c21d313dd3187314fccb37b7cec46e021"
+set "UV_DIR=%~dp0.uv"
 call :find_uv
 if not defined UV (
     echo ##STEP uv
@@ -49,8 +53,8 @@ if not defined UV (
     call :find_uv
 )
 if not defined UV (
-    echo       winget did not give uv: the installer from astral.sh
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/install.ps1 | iex"
+    echo       winget did not give uv: the uv release archive from GitHub
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; $z = $env:UV_DIR + '-download.zip'; Invoke-WebRequest -UseBasicParsing -Uri $env:UV_ZIP_URL -OutFile $z; if ((Get-FileHash -Algorithm SHA256 -LiteralPath $z).Hash -ne $env:UV_ZIP_SHA256) { Remove-Item -LiteralPath $z; throw 'uv archive: SHA-256 does not match, not unpacked' }; Expand-Archive -Force -LiteralPath $z -DestinationPath $env:UV_DIR; Remove-Item -LiteralPath $z"
     call :find_uv
 )
 if defined UV echo       uv: !UV!
@@ -184,11 +188,12 @@ for /f "delims=" %%p in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul
 )
 goto :eof
 
-rem --- uv: on PATH, in the folders its installers use, or in the package folder of winget
+rem --- uv: on PATH, in the folders its installers use (the program folder's .uv: the archive above),
+rem --- or in the package folder of winget
 :find_uv
 set "UV="
 for /f "delims=" %%u in ('where uv 2^>nul') do call :try_uv "%%u"
-for %%p in ("%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do call :try_uv "%%~p"
+for %%p in ("%UV_DIR%\uv.exe" "%USERPROFILE%\.local\bin\uv.exe" "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" "%USERPROFILE%\.cargo\bin\uv.exe") do call :try_uv "%%~p"
 for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do call :try_uv "%%~d\uv.exe"
 goto :eof
 
