@@ -43,6 +43,7 @@ def _user32():
             ("FindWindowExW", [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR], wintypes.HWND),
             ("GetClassNameW", [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
             ("GetWindowThreadProcessId", [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)], wintypes.DWORD),
+            ("GetSystemMetrics", [ctypes.c_int], ctypes.c_int),
         ]:
             fn = getattr(u, name)
             fn.argtypes, fn.restype = args, res
@@ -1074,7 +1075,7 @@ def _tell_no_webview2() -> None:
     """Said once, without stopping the start: the browser opens meanwhile."""
     def show() -> None:
         try:
-            ctypes.windll.user32.MessageBoxW(
+            _user32().MessageBoxW(
                 None, "Для окна Verbaliox нужен компонент Microsoft Edge WebView2 Runtime, его нет на этом компьютере.\n\n"
                       "Программа откроется в браузере. Чтобы работать в своём окне, установите WebView2 Runtime "
                       "с сайта Microsoft (поиск: «WebView2 Runtime») и запустите Verbaliox снова.",
@@ -1088,7 +1089,7 @@ def _tell_no_webview2() -> None:
 def session_ending() -> bool:
     """Windows is shutting down or signing the user out (SM_SHUTTINGDOWN)."""
     try:
-        return sys.platform == "win32" and bool(ctypes.windll.user32.GetSystemMetrics(0x2000))
+        return sys.platform == "win32" and bool(_user32().GetSystemMetrics(0x2000))
     except Exception:
         return False
 
