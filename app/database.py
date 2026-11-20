@@ -1257,6 +1257,13 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
         conn.commit()
         conn.close()
     events.publish({"type": "list"})
+    if "title" in fields:
+        try:  # its Obsidian note takes the new name (app/obsidian.follow)
+            from app import obsidian
+
+            obsidian.follow(meeting_id)
+        except Exception:
+            pass
 
 
 def relink_media(meeting_id: int, path: str) -> None:

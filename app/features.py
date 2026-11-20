@@ -208,6 +208,12 @@ def set_meeting_features(meeting_id: int, feature_ids: List[int], for_series: bo
                                  [(row["series_id"], f) for f in ids])
         conn.commit()
         conn.close()
+    try:  # its Obsidian note goes to the feature's folder (app/obsidian.follow)
+        from app import obsidian
+
+        obsidian.follow(meeting_id)
+    except Exception:
+        pass
     return ids
 
 
