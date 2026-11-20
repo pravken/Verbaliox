@@ -2565,6 +2565,14 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tx-model-chip-dot { width: 6px; height: 6px; border-radius: 3px; background: #30D158; }
 .tx-model-chip { height: 30px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); }
 .tx-model-chip-more { color: var(--hc-dim, #8E8E93); font-weight: 400; }
+/* the short recognition row (variant B): version, again, more, when */
+.tx-quick { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.tx-quick.hidden { display: none; }
+.tx-quick .tx-model-chip:disabled { opacity: 0.4; }
+.tx-quick .tx-more { width: 30px; padding: 0; justify-content: center; font-size: 15px; }
+.tx-quick-status { color: var(--hc-dim, #8E8E93); font-size: var(--fs-caption); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tx-quick-status:empty { display: none; }
+#text-menu .tm-danger { color: #FF6B60; }
 #clean-fillers-btn[hidden], #autoscroll-btn[hidden] { display: none; }
 /* the speaker of a line: its name opens the choice (no arrow on every line) */
 .seg-spk { appearance: none; -webkit-appearance: none; padding: 0; }
