@@ -191,6 +191,28 @@ class ObsidianTest(unittest.TestCase):
         self.assertFalse((base / "2024" / "2024-05").exists())
         self.assertFalse(obsidian.relayout_status()["active"])
 
+    def test_a_note_follows_its_recordings_feature_and_title(self):
+        """Asked by the user: a feature given to a recording whose note was made before takes the note to the
+        feature's folder by itself; a new title renames it; no feature any more, it comes back."""
+        from app import features
+
+        m = _done_meeting(title="Синк", recorded_at="2024-05-15 10:30:00")
+        first = obsidian.export_meeting(m["id"])
+        base = self.vault / "Meetings" / "2024"
+        f = features.create_feature("Конвой", "#4C7FD9")
+        features.set_meeting_features(m["id"], [f["id"]])
+        moved = obsidian.follow_now(m["id"])
+        self.assertEqual(moved, base / "Конвой" / first.name)
+        self.assertFalse(first.exists())
+        database.update_meeting_fields(m["id"], title="Синк по конвою")
+        renamed = obsidian.follow_now(m["id"])
+        self.assertEqual(renamed.name, "2024-05-15 Синк по конвою.md")
+        self.assertEqual(database.get_meeting(m["id"])["obsidian_path"], str(renamed))
+        features.set_meeting_features(m["id"], [])
+        back = obsidian.follow_now(m["id"])
+        self.assertEqual(back.parent, base)
+        self.assertFalse((base / "Конвой").exists())  # the feature's folder left empty goes
+
     def test_user_notes_and_edits_survive_updates(self):
         m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")
         path = obsidian.export_meeting(m["id"])

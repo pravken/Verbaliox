@@ -457,6 +457,76 @@ def relayout(wait: bool = False) -> Dict[str, Any]:
     return relayout_status()
 
 
+# A note follows its recording (asked by the user: a feature given to a recording whose note was made
+# before left the note where it was; «все такие должны быть автоматизированы»): when the features or the
+# title of a recording change, its note moves to the folder and the name they give now, in the background;
+# with the automatic export on, its text is brought up to date too
+_follow_ids: set = set()
+_follow_cv = threading.Condition()
+
+
+def follow(meeting_id: int) -> None:
+    with _follow_cv:
+        _follow_ids.add(int(meeting_id))
+        _follow_cv.notify()
+    if not any(t.name == "obsidian_follow" for t in threading.enumerate()):
+        threading.Thread(target=_follow_worker, daemon=True, name="obsidian_follow").start()
+
+
+def _follow_worker() -> None:
+    import time
+
+    while True:
+        time.sleep(0.5)  # a few changes in a row (features, then the title) make one move
+        with _follow_cv:
+            if not _follow_ids:
+                return
+            ids = list(_follow_ids)
+            _follow_ids.clear()
+        for mid in ids:
+            try:
+                follow_now(mid)
+            except Exception as e:
+                print(f"[obsidian] the note of meeting {mid} did not follow: {e}", flush=True)
+
+
+def follow_now(meeting_id: int) -> Optional[Path]:
+    """Moves (and renames) the note of a recording to where the settings put it now; None without a note."""
+    from app.database import get_meeting, update_meeting_fields
+
+    settings = _settings()
+    root = vault_dir(settings)
+    m = get_meeting(meeting_id) or {}
+    old = Path(m.get("obsidian_path") or "")
+    if root is None or not old.name or not old.is_file():
+        return None
+    with _lock:
+        target = note_folder(m, settings, root) / note_filename(m, settings.get("obsidian_filename") or "")
+        if old.resolve() != target.resolve():
+            if target.exists() and not _is_ours(target, meeting_id):
+                target = _unique(target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(target))
+            update_meeting_fields(meeting_id, obsidian_path=str(target))
+            _drop_empty(old.parent, root)
+            print(f"[obsidian] note of meeting {meeting_id} moved to {target}", flush=True)
+    if _on(settings, "obsidian_auto", "false") and m.get("status") == "completed":
+        export_meeting(meeting_id, explicit=False)  # its properties and title as they are now
+    return target
+
+
+def _drop_empty(folder: Path, root: Path) -> None:
+    """The folders a note was taken out of, when nothing is left in them (never the vault's folder itself)."""
+    try:
+        root = root.resolve()
+        folder = folder.resolve()
+        while folder != root and root in folder.parents and folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+            folder = folder.parent
+    except OSError:
+        pass
+
+
 def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[str, Any]:
     """Makes what the note needs and is missing: a title from the content, the overview and tasks."""
     from app.database import get_meeting, save_meeting_results
