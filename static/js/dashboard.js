@@ -72,7 +72,27 @@ function dbPrefs() {
 
 function dbSave(changes) {
   DB.prefs = { ...dbPrefs(), ...changes };
-  try { localStorage.setItem(DB_KEY, JSON.stringify(DB.prefs)); } catch (e) {}
+  const text = JSON.stringify(DB.prefs);
+  try { localStorage.setItem(DB_KEY, text); } catch (e) {}
+  // the server keeps the layout too (ui_dashboard): localStorage is per port, see syncUiPrefsFromServer
+  clearTimeout(DB.saveTimer);
+  DB.saveTimer = setTimeout(() => saveUiSetting('ui_dashboard', text), 800);
+}
+
+// The layout kept on the server wins over this origin's copy (another port had none, or an older one)
+function dbPrefsFromServer(settings) {
+  let local = null;
+  try { local = localStorage.getItem(DB_KEY); } catch (e) {}
+  const server = settings.ui_dashboard;
+  if (!server) {
+    if (local) saveUiSetting('ui_dashboard', local);  // made before the server kept it
+    return;
+  }
+  if (server === local) return;
+  try { const v = JSON.parse(server); if (!v || typeof v !== 'object') return; } catch (e) { return; }
+  try { localStorage.setItem(DB_KEY, server); } catch (e) {}
+  DB.prefs = null;
+  if (state.appView === 'dashboard') loadDashboard();
 }
 
 function dbSize(w) {
