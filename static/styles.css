@@ -3394,3 +3394,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-prog-cfg { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--hc-dim, #8E8E93); background: none; border: 0; cursor: pointer; }
 .db-prog-cfg:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.07); }
 .db-prog-cfg svg { width: 13px; height: 13px; }
+
+/* «⋯» on a meeting of the day, and a calendar event that is no meeting (dimmed, dashed) */
+.hm-mt-more { flex: none; align-self: center; width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: var(--hc-dim, #8E8E93); cursor: pointer; font-size: 13px; line-height: 1; }
+.hm-mt-more:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.08); }
+.hm-mt.hm-mt-k-ignored { opacity: 0.5; background: transparent; border-style: dashed; }
+
+.hm-chip { white-space: nowrap; flex: none; }  /* «09–18» and «Календарь» on one line in a narrow widget */

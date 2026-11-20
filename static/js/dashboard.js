@@ -31,8 +31,8 @@ const DB_WIDGETS = {
   load: { title: 'dbLoad', sizes: ['S', 'M', 'L', 'W'], icon: '▥' },
   dull: { title: 'dbDull', sizes: ['S', 'M', 'L', 'W'], icon: '↻' },
 };
-// rows that add up to 12: W · S+L · M+M · M+M · S+L · L+S · S+S+S · M+M
-const DB_DEFAULT = [['kpis', 'W'], ['today', 'S'], ['week', 'L'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
+// rows that add up to 12: W · M+M · M+M · M+M · S+L · L+S · S+S+S · M+M
+const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'M'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
   ['free', 'S'], ['load', 'L'], ['features', 'L'], ['time', 'S'], ['people', 'S'], ['decisions', 'S'], ['dull', 'S'],
   ['summary', 'M'], ['recent', 'M']];
 const DB_PERIODS = ['week', 'month', 'quarter'];
