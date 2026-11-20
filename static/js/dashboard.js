@@ -83,6 +83,7 @@ function dbSize(w) {
 // --- Data ---
 async function loadDashboard() {
   const p = dbPrefs();
+  const seq = (DB.seq = (DB.seq || 0) + 1);  // a period switched quickly: only the last answer is shown
   DB.loading = true;
   const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
   const [data, week, untx] = await Promise.all([
@@ -91,9 +92,11 @@ async function loadDashboard() {
     fetch('/api/untranscribed').then(r => (r.ok ? r.json() : null)).catch(() => null),
     dbLoadWork(),
   ]);
+  if (seq !== DB.seq) return;
   DB.loading = false;
-  DB.data = data;
-  DB.week = week;
+  // a failed request keeps what was shown rather than an empty «Главная»
+  DB.data = data || (DB.data && DB.data.period === p.period ? DB.data : null);
+  if (week) DB.week = week;
   DB.untx = (untx && untx.items) || [];
   if (state.appView === 'dashboard') renderDashboard();
 }
