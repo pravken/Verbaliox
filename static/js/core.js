@@ -369,6 +369,9 @@ function setUILanguage(lang) {
 
   renderMeetingsSidebar();
   loadDictionary();
+  // drawn by script, not by data-i18n: drawn again in the new language (found in the audit)
+  if (typeof renderMeetingFeatures === 'function') renderMeetingFeatures();
+  if (typeof refreshTasksCount === 'function') refreshTasksCount(true);
   if (typeof scheduleFitTopbar === 'function') scheduleFitTopbar();
   if (state.system) {
     const p = state.system.paths;
