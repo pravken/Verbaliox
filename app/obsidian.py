@@ -502,11 +502,13 @@ def follow_now(meeting_id: int) -> Optional[Path]:
 
     settings = _settings()
     root = vault_dir(settings)
-    m = get_meeting(meeting_id) or {}
-    old = Path(m.get("obsidian_path") or "")
-    if root is None or not old.name or not old.is_file():
+    if root is None:
         return None
-    with _lock:
+    with _lock:  # read under the lock: an export running now changes the note's path
+        m = get_meeting(meeting_id) or {}
+        old = Path(m.get("obsidian_path") or "")
+        if not old.name or not old.is_file():
+            return None
         target = note_folder(m, settings, root) / note_filename(m, settings.get("obsidian_filename") or "")
         if old.resolve() != target.resolve():
             if target.exists() and not _is_ours(target, meeting_id):
