@@ -495,7 +495,8 @@ class TrayController:
         self._status = {"state": "idle", "text": "", "recording": False, "queue": []}
         self._running: dict = {}
         self._mf_default, self._mf_grayed = MF_DEFAULT, MF_GRAYED
-        self.tray = Tray(ICO_PATH, self.menu_items, self.on_command, self.show_window, on_notice=self.open_target)
+        self.tray = Tray(ICO_PATH, self.menu_items, self.on_command, self.show_window, on_notice=self.open_target,
+                         on_session_end=self.on_session_end)
         window.events.closing += self.on_closing
 
     def start(self) -> None:
@@ -840,11 +841,21 @@ class TrayController:
         self.quitting = True
         self.window.destroy()
 
+    def on_session_end(self) -> None:
+        """Windows shuts down or the user signs out: the recordings are finished (FFmpeg and the system
+        sound close their files), the window may close. No update is installed now."""
+        self.quitting = True
+        print("[exit] Windows is shutting down: finishing the work")
+        _stop_work()
+
     def on_closing(self) -> bool:
         from app.database import get_all_settings
 
+        if self.quitting or session_ending():  # Windows shuts down: never vetoed (found in the audit)
+            self.quitting = True
+            return True
         to_tray = (get_all_settings().get("close_to_tray") or "false").lower() == "true"
-        if self.quitting or (self._status.get("state") == "idle" and not to_tray):
+        if self._status.get("state") == "idle" and not to_tray:
             self.quitting = True
             return True
         # Something runs, or the app stays in the tray by choice (Settings → General): the window hides
@@ -949,6 +960,14 @@ def _attach_native_drop(window) -> None:
 _update_launched = False
 
 
+def session_ending() -> bool:
+    """Windows is shutting down or signing the user out (SM_SHUTTINGDOWN)."""
+    try:
+        return sys.platform == "win32" and bool(ctypes.windll.user32.GetSystemMetrics(0x2000))
+    except Exception:
+        return False
+
+
 def _stop_work() -> None:
     """Before the process ends: recordings finished, work processes ended (app/shutdown.py)."""
     remove_pid_file()
@@ -961,9 +980,10 @@ def _stop_work() -> None:
 
 
 def _install_update_on_exit() -> None:
-    """A downloaded update (automatic updates on) is installed when the app closes."""
+    """A downloaded update (automatic updates on) is installed when the app closes; not while Windows
+    shuts down (it would be cut off half-way)."""
     global _update_launched
-    if _update_launched:
+    if _update_launched or session_ending():
         return
     _update_launched = True
     try:

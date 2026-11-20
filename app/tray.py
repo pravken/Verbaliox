@@ -24,6 +24,8 @@ kernel32 = ctypes.windll.kernel32 if sys.platform == "win32" else None
 
 WM_DESTROY = 0x0002
 WM_CLOSE = 0x0010
+WM_QUERYENDSESSION = 0x0011
+WM_ENDSESSION = 0x0016
 WM_COMMAND = 0x0111
 WM_USER = 0x0400
 WM_APP_TRAY = WM_USER + 20
@@ -210,8 +212,11 @@ class Tray:
 
     def __init__(self, ico_path: Path, menu_items: Callable[[], List[Tuple[Optional[str], Optional[str], int]]],
                  on_command: Callable[[str], None], on_open: Callable[[], None],
-                 on_notice: Optional[Callable[[str], None]] = None):
+                 on_notice: Optional[Callable[[str], None]] = None,
+                 on_session_end: Optional[Callable[[], None]] = None):
+        """on_session_end(): Windows is shutting down or the user signs out (the recordings are finished then)."""
         self.ico_path = ico_path
+        self.on_session_end = on_session_end
         self.menu_items = menu_items
         self.on_command = on_command
         self.on_open = on_open
@@ -412,6 +417,18 @@ class Tray:
             return 0
         if msg == getattr(self, "_taskbar_created", -1):
             self._add_icon()  # Explorer restarted: the icon has to be added again
+            return 0
+        # Windows shuts down or the user signs out (found in the audit: the app's window vetoed it, and a
+        # recording was not finished). Asked: yes, always. Told it ends: the work is finished now, within
+        # the seconds Windows gives
+        if msg == WM_QUERYENDSESSION:
+            return 1
+        if msg == WM_ENDSESSION:
+            if wparam and self.on_session_end:
+                try:
+                    self.on_session_end()
+                except Exception as e:
+                    print(f"[tray] session end: {e}", file=sys.stderr)
             return 0
         if msg == WM_CLOSE:
             user32.UnregisterHotKey(hwnd, HOTKEY_ID)
