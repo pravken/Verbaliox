@@ -3351,14 +3351,8 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-dull-name { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-dull-sub { font-size: var(--fs-label); color: #FFD08A; }
 
-/* Settings → Оформление: the swatches of the theme */
-.theme-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.theme-sw { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 11px 0 7px; border-radius: 16px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.12)); background: rgba(255, 255, 255, 0.04); color: #E5E5EA; font-size: var(--fs-ui); cursor: pointer; }
-.theme-sw:hover { background: rgba(255, 255, 255, 0.08); }
-.theme-sw i { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); flex: none; }
-.theme-sw.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: #FFFFFF; }
 
-/* «Заливка выделенного» (Settings → Оформление; static/js/core.js applyTheme): every button, tab and row
+/* «Заливка выделенного» (static/js/core.js applyTheme): every button, tab and row
    picked out takes its fill, its text and its frame from these, so solid, soft and outline change them all */
 .ui-btn-primary, .bg-apple-blue.text-white, .lib-tile-on, .tb-tab.tb-active, .tb-subtab.tb-active, .tb-pop-primary,
 .hm-dict .hm-ask-yes, .imp-btn-primary, .an-btn-primary, .sp-ask-yes, .tk-btn-primary, .as-send, .tx-chip.is-shown,
