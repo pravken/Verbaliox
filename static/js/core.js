@@ -984,6 +984,9 @@ document.addEventListener('keydown', e => {
   const open = ESC_DIALOGS.map(id => document.getElementById(id)).filter(Boolean);
   if (!open.length) return;
   const top = open.reduce((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a));
+  // A question opened over it (askConfirm, askText) answers its own Esc: the window under it stays
+  const over = [...document.querySelectorAll('.modal-backdrop')].pop();
+  if (over && over !== top && !top.contains(over) && (top.compareDocumentPosition(over) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
   const x = top.querySelector('[data-a="close"], [data-a="no"]');
   e.preventDefault();
   e.stopPropagation();
