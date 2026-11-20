@@ -167,10 +167,9 @@ def list_tasks(scope: str = "mine", person: str = "", status: str = "open") -> D
 def list_people() -> Dict[str, Any]:
     from app.people import directory
 
-    try:
-        rows = directory()
-    except Exception:
-        rows = []
+    # names heard only in local-only recordings stay out like the recordings (a failed read of that list
+    # fails the call, as everywhere here)
+    rows = directory(skip=_hidden())
     return {"people": [{"name": r.get("name"), "role": r.get("role") or "", "aliases": r.get("aliases") or [],
                         "is_me": bool(r.get("is_me")), "recordings": r.get("recordings") or 0, "open_tasks": r.get("tasks") or 0}
                        for r in rows]}

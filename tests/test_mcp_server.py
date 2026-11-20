@@ -92,6 +92,25 @@ class McpServerTest(unittest.TestCase):
         database.update_settings({"mcp_local_only": "true"})  # allowed by the user
         self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
 
+    def test_people_heard_only_in_local_only_recordings_are_not_listed(self):
+        """Found in the audit: list_people counted the local-only recordings, so their speakers, calendar
+        attendees and task owners reached the agent."""
+        lone = database.create_meeting(title="Ещё одна закрытая", filename="c.wav", media_path="c.wav")
+        database.save_meeting_results(lone["id"], segments=SEGMENTS, speakers={"SPEAKER_00": {"name": "Вера"}, "SPEAKER_01": {"name": "Анна"}},
+                                      language="ru")
+        database.update_meeting_progress(lone["id"], status="completed", progress=100, duration=70.0)
+        database.update_meeting_fields(lone["id"], local_only=1, user_notes="Участники по календарю: Глеб")
+        commitments.create("Подписать договор", "Дина", meeting_id=lone["id"])
+
+        names = {p["name"]: p for p in _call("list_people")[1]["people"]}
+        self.assertNotIn("Вера", names)
+        self.assertNotIn("Глеб", names)
+        self.assertNotIn("Дина", names)
+        self.assertEqual(names["Анна"]["recordings"], 1)  # only the recording the agent may read
+        database.update_settings({"mcp_local_only": "true"})  # allowed by the user
+        names = {p["name"] for p in _call("list_people")[1]["people"]}
+        self.assertTrue({"Вера", "Глеб", "Дина"} <= names)
+
     def test_it_runs_on_stdio_as_a_script(self):
         """In UTF-8 both ways whatever the console's code page: on Windows a pipe is cp1251 and the agent got
         the Cyrillic as U+FFFD (found by the user)."""
