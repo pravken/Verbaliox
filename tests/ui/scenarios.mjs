@@ -446,6 +446,19 @@ await step('templates editor keeps edits', async () => {
   expect(!(await page.isVisible('#templates-editor')) && !(await asked()), 'an unchanged editor did not just close');
 });
 
+// A feature page closed while its redraw is on the way stays closed (audit: closed with Esc, it came back)
+await step('feature page stays closed', async () => {
+  const id = await page.evaluate(() => fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Сценарий' }) }).then(r => r.json()).then(d => d.id));
+  await page.evaluate(id => openFeaturePage(id), id);
+  await sleep(500);
+  expect(await page.isVisible('#feature-page'), 'the feature page did not open');
+  await page.evaluate(() => { refreshFeaturePage(); document.getElementById('feature-page').remove(); });
+  await sleep(600);
+  expect(!(await page.isVisible('#feature-page')), 'the closed page came back');
+  await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }), id);
+});
+
 // The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is
 // busy the app starts on another port, whose storage is empty (audit: an English user got Russian)
 await step('language from the server', async () => {
