@@ -130,6 +130,22 @@ class FeatureTagsTest(unittest.TestCase):
         f = next(x for x in features.list_features() if x["id"] == search["id"])
         self.assertEqual(f["keywords"], "search, выдача, поиск")  # cleaned, each once
 
+    def test_a_feature_is_found_in_other_forms_of_its_words(self):
+        m = features._mentions
+        for text in ("Синк по платежам", "Разбор платежей", "ПЛАТЕЖИ", "платежа нет"):
+            self.assertTrue(m(text, "Платежи"), text)
+        self.assertTrue(m("Сверка по отчетам", "Отчёты"))
+        self.assertTrue(m("Weekly reports review", "Report"))
+        self.assertTrue(m("Обзор мобильных платежей", "Мобильные платежи"))  # word by word
+        self.assertFalse(m("Мобильные игры и платежи", "Мобильные платежи"))  # the words together only
+        self.assertFalse(m("Синк по платежам", "пла"))  # short words only as they are
+        self.assertFalse(m("Платформа", "Платежи"))
+        self.assertFalse(m("Поисковик для HR", "Поиск"))
+        self.assertFalse(m("Сборка C# и Go", "C++"))
+        self.assertTrue(m("Итоги по C++", "C++"))
+        pay = features.create_feature("Платежи")
+        self.assertEqual(features.suggest_by_title(self._meeting("Синк по платежам")), [pay["id"]])
+
     def test_what_a_feature_is_reaches_the_models_and_recognition(self):
         pay = features.create_feature("Платежи")
         features.update_feature(pay["id"], description="Экран оплаты и возвраты", keywords="эквайринг",
