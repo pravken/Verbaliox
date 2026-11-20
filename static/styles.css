@@ -3457,3 +3457,19 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 /* a day off (a holiday, a vacation): hatched, on the week, the load and in the calendar (asked by the user) */
 .db-day.db-day-off, .db-day.db-day-off .db-past, .cal-col.cal-holday, .cal-cell.cal-holday, .db-load-day.hol {
   background-image: repeating-linear-gradient(135deg, rgba(255, 159, 138, 0.07) 0 6px, transparent 6px 12px); }
+
+/* «Рабочий день» (app/worktime.py): today's hours against the norm, the week's days */
+.db-wk-head { display: flex; align-items: baseline; gap: 8px; }
+.db-wk-big { font-size: 26px; font-weight: 700; color: #F5F5F7; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.db-wk-big.over { color: #FF9F0A; }
+.db-wk-of { color: var(--hc-dim, #8E8E93); font-size: var(--fs-caption); }
+.db-wk-bar { height: 6px; margin: 8px 0 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.db-wk-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.db-wk-bar.over i { background: #FF9F0A; }
+.db-wk-sub { color: var(--hc-dim, #A1A1A6); font-size: var(--fs-caption); margin-bottom: 10px; }
+.db-wk-week { height: 96px; }
+/* the hours worked of a day in its head: the week and the calendar */
+.db-dn-wk, .cal-wk { margin-left: auto; padding: 0 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); color: #A1A1A6;
+  font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; }
+.db-dn { display: flex; align-items: baseline; gap: 2px; }
+.cal-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }

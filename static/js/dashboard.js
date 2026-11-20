@@ -30,6 +30,8 @@ const DB_WIDGETS = {
   free: { title: 'dbFree', sizes: ['S', 'M', 'L'], icon: '◌' },
   load: { title: 'dbLoad', sizes: ['S', 'M', 'L', 'W'], icon: '▥' },
   dull: { title: 'dbDull', sizes: ['S', 'M', 'L', 'W'], icon: '↻' },
+  // asked by the user: how long the working day lasted (app/worktime.py), against the norm
+  worked: { title: 'dbWorked', sizes: ['S', 'M', 'L', 'W'], icon: '⏱' },
 };
 // rows that add up to 12: W · M+M · M+M · M+M · S+L · L+S · S+S+S · M+M
 const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'M'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
@@ -38,7 +40,7 @@ const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'M'], ['prep', 'M'],
 const DB_PERIODS = ['week', 'month', 'quarter'];
 // added after the first dashboard: offered once to an existing layout, after the widget named (removed by
 // the user, it stays out)
-const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['prep', 'week'], ['due', 'prep'], ['free', 'waiting'], ['load', 'free'], ['dull', 'decisions']];
+const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['prep', 'week'], ['due', 'prep'], ['free', 'waiting'], ['load', 'free'], ['dull', 'decisions'], ['worked', 'kpis']];
 
 const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false };
 
@@ -87,6 +89,7 @@ async function loadDashboard() {
     fetch(`/api/dashboard?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
     dbLoadWeek(),
     fetch('/api/untranscribed').then(r => (r.ok ? r.json() : null)).catch(() => null),
+    dbLoadWork(),
   ]);
   DB.loading = false;
   DB.data = data;
@@ -99,6 +102,19 @@ function dbMonday(d = new Date()) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
   return x;
+}
+
+// The hours worked of this week (app/worktime.py): asked again at each tick, the minutes go on
+async function dbLoadWork() {
+  const a = dbMonday(), b = new Date(a);
+  b.setDate(a.getDate() + 7);
+  const w = await fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (w) DB.work = w;
+}
+
+// «7 ч 45» for a day's head: the hours worked, short
+function dbWorkedShort(min) {
+  return min ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}` : '';
 }
 
 async function dbLoadWeek() {
@@ -243,8 +259,8 @@ function dbNum(n) { return String(n); }  // a point for fractions in both langua
 
 // --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
 // They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
-const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load'];
-const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load'];  // redrawn as the time goes (dbTickNow)
+const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load', 'worked'];
+const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load', 'worked'];  // redrawn as the time goes (dbTickNow)
 
 // The meeting going on or the next one of today (not an all-day one); null when there is none left
 // A meeting begun counts as going on only while a recording runs (asked by the user: a block over the whole
@@ -383,6 +399,45 @@ function dbLoadHtml() {
     }).join('') + '</div>';
 }
 
+// «Рабочий день»: the hours worked today against the norm (the reminder's hours), when it began, the breaks,
+// and the days of the week (app/worktime.py: the minutes this computer was in use)
+function dbWorkedHtml(size) {
+  const w = DB.work;
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  if (!w.supported) return `<div class="db-note">${escapeHtml(t('dbWorkedNoSupport'))}</div>`;
+  if (!w.enabled) return `<div class="db-note">${escapeHtml(t('dbWorkedOff'))} <button class="db-more" data-click="openWorkSettings">${escapeHtml(t('newsOpenSettings'))}</button></div>`;
+  const today = w.days[w.today] || { worked: 0, start: '', end: '', breaks: 0 };
+  const norm = (w.norm || 8) * 60, pct = Math.min(100, today.worked / norm * 100);
+  const over = today.worked >= norm;
+  let html = `<div class="db-wk-head"><b class="db-wk-big${over ? ' over' : ''}">${escapeHtml(dbHm(today.worked * 60))}</b>`
+    + `<span class="db-wk-of">${escapeHtml(t('dbWorkedOf').replace('{h}', () => dbNum(w.norm || 8)))}</span></div>`
+    + `<div class="db-wk-bar${over ? ' over' : ''}"><i style="width:${pct.toFixed(1)}%"></i></div>`
+    + `<div class="db-wk-sub">${escapeHtml(today.start ? [t('dbWorkedSince').replace('{t}', () => today.start), today.breaks >= 15 ? t('dbWorkedBreaks').replace('{t}', () => dbHm(today.breaks * 60)) : ''].filter(Boolean).join(' · ') : t('dbWorkedNone'))}</div>`;
+  if (size !== 'S') {
+    const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const x = new Date(a); x.setDate(a.getDate() + i);
+      const k = calKey(x), d = w.days[k];
+      if (i < 5 || d) days.push({ x, k, min: d ? d.worked : 0, d });
+    }
+    const top = Math.max(norm * 1.25, ...days.map(d => d.min));
+    const sum = days.reduce((s, d) => s + d.min, 0);
+    html += `<div class="db-load-head">${escapeHtml(t('dbWorkedWeek').replace('{t}', () => dbHm(sum * 60)))}</div>`
+      + `<div class="db-load db-wk-week"><i class="db-load-norm" style="bottom:${Math.round(norm / top * 100)}%"></i>` + days.map(d =>
+        `<div class="db-load-day${d.k === w.today ? ' today' : ''}${d.k < w.today ? ' past' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbHm(d.min * 60)}${d.d && d.d.start ? ` (${d.d.start}–${d.d.end})` : ''}`)}">`
+        + `<span class="db-load-v">${escapeHtml(dbWorkedShort(d.min))}</span>`
+        + `<i class="db-load-bar${d.min > norm ? ' over' : ''}" style="height:${Math.round(d.min / top * 100)}%"></i>`
+        + `<span class="db-load-d">${escapeHtml(d.x.toLocaleDateString(lang, { weekday: 'short' }))}</span></div>`).join('') + '</div>';
+  }
+  return html;
+}
+
+function openWorkSettings() {
+  openModal('settings', 'general');
+  selectSettingsTab('calendar');
+}
+
 function dbCycleNorm() {
   const norms = [2, 3, 4, 5, 6];
   dbSave({ norm: norms[(norms.indexOf(dbPrefs().norm) + 1) % norms.length] });
@@ -409,6 +464,7 @@ function dbWidgetHtml(id, size) {
     case 'due': return dbDueHtml(d, size);
     case 'free': return dbFreeHtml();
     case 'load': return dbLoadHtml();
+    case 'worked': return dbWorkedHtml(size);
     case 'dull': return dbDullHtml(d);
     case 'mytasks': return dbTasks(d, size);
     case 'waiting': return dbWaitingHtml(d, size);
@@ -497,7 +553,9 @@ function dbWeek() {
   return `<div class="db-cal" style="grid-template-columns:repeat(${shown.length}, minmax(0, 1fr))">` + shown.map(x => {
     const k = calKey(x), list = (items[k] || []).sort((p, q) => p.at - q.at);
     const hol = (w.holidays || {})[k];
-    const head = `<div class="db-dn${hol ? ' hol' : ''}"${hol ? ` title="${escapeHtml(hol)}"` : ''}><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}</div>`
+    const wk = DB.work && DB.work.days[k] ? DB.work.days[k].worked : 0;  // the hours worked that day (app/worktime.py)
+    const head = `<div class="db-dn${hol ? ' hol' : ''}"${hol ? ` title="${escapeHtml(hol)}"` : ''}><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}`
+      + (wk ? `<span class="db-dn-wk" title="${escapeHtml(t('dbWorkedTip').replace('{t}', () => dbHm(wk * 60)))}">${escapeHtml(dbWorkedShort(wk))}</span>` : '') + '</div>'
       + (hol ? `<div class="db-hol">${escapeHtml(hol)}</div>` : '');
     // The time already past is filled (asked by the user): a day before today whole; today down to the
     // line of "now", which stands after the last thing already begun, never over a card
@@ -875,6 +933,13 @@ function dbTickNow() {
   if (state.appView !== 'dashboard') return;
   const day = new Date().toDateString();
   if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
+  else dbLoadWork().then(() => {
+    dbPrefs().layout.forEach((w, i) => {
+      if (w.id !== 'worked' || DB.edit || DB.drag) return;
+      const c = document.querySelector(`#db-grid .db-w[data-i="${i}"] .db-c`);
+      if (c) c.innerHTML = dbWidgetHtml(w.id, dbSize(w));
+    });
+  });
   if (!DB.edit && !DB.drag) {
     dbPrefs().layout.forEach((w, i) => {
       if (!DB_TIME_WIDGETS.includes(w.id)) return;

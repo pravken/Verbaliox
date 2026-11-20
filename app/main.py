@@ -189,6 +189,9 @@ async def lifespan(_app: FastAPI):
     from app import brief_notice, updater
 
     brief_notice.start()
+    from app import worktime
+
+    worktime.start()
     threading.Thread(target=updater.notice_loop, daemon=True, name="update_notice").start()
     try:
         from app.model_manager import remove_retired_models
