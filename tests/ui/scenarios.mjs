@@ -474,6 +474,36 @@ await step('library poll is cheap', async () => {
   expect(await page.locator('#meetings-list [data-mid]').count() > 0, 'the list is empty after the poll');
 });
 
+// A progress event redraws only that recording's row, not the sorted list of every recording (audit:
+// each event rebuilt all rows); a change of its status still draws the whole list
+await step('progress redraws one row', async () => {
+  await page.evaluate(() => switchAppView('library'));
+  await sleep(300);
+  const r = await page.evaluate(async () => {
+    const frame = () => new Promise(res => requestAnimationFrame(() => setTimeout(res, 0)));
+    const m = state.meetings[0];
+    const was = m.status;
+    m.status = 'transcribing';
+    m.progress = 10;
+    renderMeetingsSidebar();
+    let full = 0;
+    const real = window.renderMeetingsSidebar;
+    window.renderMeetingsSidebar = (...a) => { full++; return real(...a); };
+    handleLiveEvent({ type: 'progress', id: m.id, progress: 37, stage_text: 'x' });
+    await frame();
+    const row = document.querySelector(`#meetings-list [data-mid="${m.id}"]`);
+    const shown = row ? row.textContent.includes('37%') : false;
+    const afterRow = full;
+    handleLiveEvent({ type: 'progress', id: m.id, status: was, progress: 100 });
+    await frame();
+    window.renderMeetingsSidebar = real;
+    return { shown, afterRow, afterStatus: full };
+  });
+  expect(r.shown, 'the row does not show the new progress');
+  expect(r.afterRow === 0, 'a progress event drew the whole list');
+  expect(r.afterStatus === 1, 'a status change did not draw the list');
+});
+
 // The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is
 // busy the app starts on another port, whose storage is empty (audit: an English user got Russian)
 await step('language from the server', async () => {
