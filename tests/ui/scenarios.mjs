@@ -362,6 +362,14 @@ await step('calendar view', async () => {
   await page.click('#cal-view button[data-cal="month"]');
   await sleep(500);
   expect(await page.isVisible('#cal-view .cal-month'), 'the month did not show');
+  // today stands out in the month too (its cell rule once hid the mark)
+  const marked = await page.evaluate(() => {
+    const today = document.querySelector('#cal-view .cal-cell.cal-today');
+    const other = [...document.querySelectorAll('#cal-view .cal-cell:not(.cal-today):not(.cal-out)')][0];
+    return !!today && !!other && getComputedStyle(today).borderTopColor !== getComputedStyle(other).borderTopColor;
+  });
+  expect(marked, 'today is not marked in the month');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/cal-month.png` });
   await page.click('#cal-view button[data-cal="week"]');
   await sleep(400);
   await page.keyboard.press('Escape');
