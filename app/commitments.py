@@ -514,8 +514,13 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
     system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
+    unreadable = False  # an answer with no list in it: the model failed, not «no tasks» (found in the audit)
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
-        found += parse_answer(llm.chat(system, head + "Расшифровка:\n" + part))
+        answer = llm.chat(system, head + "Расшифровка:\n" + part)
+        got = parse_answer(answer)
+        if not got and (answer or "").strip() and "{" not in answer and "[" not in answer:
+            unreadable = True
+        found += got
     mfu = (m.get("mfu") or "").strip()
     from_mfu: List[Dict[str, Any]] = []
     if mfu:  # the organizer's list: its tasks as written, none checked against the transcript
@@ -580,6 +585,12 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
         kept = {r["what"].casefold() for r in rows}
         kept_quotes = {(r["quote"] or "").strip().casefold() for r in rows} - {""}
         kept_at = [r["at"] for r in rows if r["source"] != "manual" and r["at"] is not None]
+        if unreadable and not items and conn.execute(
+                "SELECT 1 FROM commitments WHERE meeting_id = ? AND source != 'manual' AND edited = 0", (meeting_id,)).fetchone():
+            # the model's answer could not be read: the tasks found before stay rather than all vanish
+            conn.close()
+            print(f"[commitments] meeting {meeting_id}: the model's answer had no tasks list; the tasks are kept", flush=True)
+            return for_meetings([meeting_id])
         conn.execute("DELETE FROM commitments WHERE meeting_id = ? AND source != 'manual' AND edited = 0", (meeting_id,))
         for x in items:
             if (x["what"].casefold() in kept or (x["quote"] or "").strip().casefold() in kept_quotes
