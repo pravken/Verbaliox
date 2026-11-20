@@ -1007,7 +1007,7 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-tab:hover, .tb-subtab:hover, .tb-dots:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.06); }
 /* The open view and the open tab of a recording: blue, so what is open is plain at a glance */
 .tb-tab.tb-active, .tb-subtab.tb-active { background: var(--accent); color: #FFFFFF; font-weight: 600; }
-.tb-tab.tb-active:hover, .tb-subtab.tb-active:hover { background: var(--accent-hi); color: #FFFFFF; }
+.tb-tab.tb-active:hover, .tb-subtab.tb-active:hover { background: var(--fill-bg-hover); color: var(--fill-fg); }
 .tb-active .tb-ai, .ui-btn-primary .tb-ai { fill: #FFFFFF; }  /* the gradient of the AI mark would fade on the blue */
 .tb-group.hidden { display: none; }
 .tb-group {
@@ -1023,6 +1023,14 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-subtab .tb-badge { padding: 0 5px; border-radius: 7px; font-size: var(--fs-label); line-height: 1.35; }
 .tb-active .tb-badge { background: #FFFFFF; color: var(--accent-deep); font-weight: 600; }  /* audit 2.7: opaque on the chosen tab */
 .tb-ai { width: 13px; height: 13px; flex: none; fill: url(#vs-ai-grad); }
+/* The app's views as one framed group, each with its mark (the dashboard's tiles, the assistant's stars) */
+.tb-main { gap: 2px; padding: 0 3px; }
+.tb-main .tb-tab { height: 34px; padding: 0 14px; border-radius: 17px; gap: 7px; }
+.tb-mark { width: 14px; height: 14px; flex: none; color: var(--accent-hi); }
+.tb-active .tb-mark { color: #FFFFFF; }
+/* the recording's tabs in its header: a size lower than the bar's */
+#workspace-header .tb-rec-tabs { height: 36px; padding: 0 3px; margin-left: 6px; }
+#workspace-header .tb-rec-tabs .tb-subtab { height: 30px; padding: 0 12px; font-size: var(--fs-ui); }
 .tb-subtab .tb-ai { width: 12px; height: 12px; }
 /* The analysis of the open recording is running: its mark turns, a dot pulses beside the name */
 .tb-analysing .tb-ai { animation: tb-ai-turn 2.4s linear infinite; transform-origin: 50% 50%; }
