@@ -120,6 +120,7 @@ function applyTheme(accent, bg, fill) {
     ['bg', page], ['sidebar', hexMix(page, 0.035)], ['panel', hexMix(page, 0.045)], ['card', hexMix(page, 0.075)], ['elevated', hexMix(page, 0.11)]]
     .forEach(([k, v]) => { st.setProperty(`--${k}`, v); st.setProperty(`--${k}-rgb`, hexChannels(v)); });
   st.setProperty('--accent-deep', hexMix(lo, -0.14));
+  st.setProperty('--bg-deep', hexMix(page, -0.22));  // a page under cards, a step darker
   st.setProperty('--accent-text', hexMix(a, 0.45));
   st.setProperty('--accent-pale', hexMix(a, 0.78));
   // «Заливка выделенного»: solid (white text on the darkened accent), soft (a tint of it, its light text),
