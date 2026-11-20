@@ -63,6 +63,8 @@ async function loadMeetingsList(opts = {}) {
 // cadence when it is not, never while the window is hidden.
 const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false, listEtag: '', polledAt: 0 };
 const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now'];
+// the fields no sort, group or filter of the list reads: a change of only these redraws one row
+const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now'];
 
 function startLiveUpdates() {
   if (!window.EventSource) return;
@@ -93,12 +95,25 @@ function scheduleListReload() {
   live.reloadTimer = setTimeout(() => loadMeetingsList().catch(console.error), 150);
 }
 
-function scheduleSidebarRender() {
+// rowId: only that recording's progress changed (LIVE_ROW_FIELDS), which neither moves it nor changes its
+// group: its row alone is drawn again, not the sorted and grouped list of every recording
+function scheduleSidebarRender(rowId) {
+  if (rowId == null) live.renderAll = true;
+  else {
+    live.renderRows = live.renderRows || new Set();
+    live.renderRows.add(rowId);
+  }
   if (live.renderQueued) return;
   live.renderQueued = true;
   requestAnimationFrame(() => {
     live.renderQueued = false;
-    if (!state.globalSearchQuery) renderMeetingsSidebar();
+    const all = live.renderAll, rows = live.renderRows;
+    live.renderAll = false;
+    live.renderRows = null;
+    if (!state.globalSearchQuery) {
+      if (all || !rows) renderMeetingsSidebar();
+      else for (const id of rows) if (!renderSidebarRow(id)) { renderMeetingsSidebar(); break; }
+    }
     if (state.appView === 'libtable' && typeof renderLibTable === 'function') renderLibTable();
   });
 }
@@ -269,9 +284,10 @@ function handleLiveEvent(ev) {
 
   const m = state.meetings.find(x => x.id === ev.id);
   if (!m) { scheduleListReload(); return; }
-  for (const f of LIVE_PROGRESS_FIELDS) if (f in ev) m[f] = ev[f];
+  const changed = LIVE_PROGRESS_FIELDS.filter(f => f in ev && m[f] !== ev[f]);
+  for (const f of changed) m[f] = ev[f];
   if ((state.queue || []).some(q => q.id === ev.id)) renderQueuePanel();
-  scheduleSidebarRender();
+  if (changed.length) scheduleSidebarRender(changed.every(f => LIVE_ROW_FIELDS.includes(f)) ? ev.id : undefined);
 
   const active = state.activeMeeting;
   if (!active || active.id !== ev.id) return;
@@ -1665,6 +1681,7 @@ function renderMeetingsSidebar() {
   const parts = live ? [['live', live]] : [];
   const datesCollapsed = collapsedDates();
   const dateIds = [];
+  const rowDepth = new Map();  // for renderSidebarRow
   const items = (list, depth, groupKey, byDate = prefs.group !== 'none') => {
     if (!list || !list.length) return;
     if (byDate) {
@@ -1691,7 +1708,10 @@ function renderMeetingsSidebar() {
       parts.push([`g${groupKey}`, `<div class="lib-grid" style="padding-left:${6 + depth * 14}px">${list.map(meetingTileHtml).join('')}</div>`]);
       return;
     }
-    for (const m of list) parts.push([`m${m.id}`, prefs.view === 'compact' ? meetingCompactRowHtml(m, depth) : meetingRowHtml(m, depth)]);
+    for (const m of list) {
+      rowDepth.set(m.id, depth);
+      parts.push([`m${m.id}`, prefs.view === 'compact' ? meetingCompactRowHtml(m, depth) : meetingRowHtml(m, depth)]);
+    }
   };
   const collapsed = collapsedFolders();
   const walk = (parentId, depth) => {
@@ -1711,7 +1731,30 @@ function renderMeetingsSidebar() {
   state._libDateIds = [...new Set([...(state._libDateIds || []), ...dateIds])];
   listEl.classList.toggle('lib-badges-all', prefs.badges === 'all');
   patchKeyedList(listEl, parts);
+  listEl._rowDepth = rowDepth;
   renderLibFoldButton();
+}
+
+// One recording's row drawn again in place (its progress changed). false: the list must be drawn whole
+// (not the keyed list of rows: the grid, a search, a list never drawn)
+function renderSidebarRow(id) {
+  const listEl = document.getElementById('meetings-list');
+  const m = state.meetings.find(x => x.id === id);
+  const view = libPrefs().view;
+  if (!listEl || !listEl._keyed || !listEl._rowDepth || !m || view === 'grid') return false;
+  const key = `m${id}`;
+  const el = listEl.querySelector(`:scope > [data-key="${key}"]`);
+  if (!el) return !listEl._rowDepth.has(id);  // folded or filtered out: nothing to draw
+  const depth = listEl._rowDepth.get(id) ?? 0;
+  const html = view === 'compact' ? meetingCompactRowHtml(m, depth) : meetingRowHtml(m, depth);
+  if (listEl._html.get(key) === html) return true;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html.trim();
+  const fresh = tpl.content.firstElementChild;
+  fresh.dataset.key = key;
+  el.replaceWith(fresh);
+  listEl._html.set(key, html);
+  return true;
 }
 
 // Updates a list from [key, html] parts, touching only the elements whose html changed and
