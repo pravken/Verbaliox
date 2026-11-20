@@ -33,6 +33,17 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   «Stop»; a restore replaces a damaged database; a broken answer of the model no longer deletes the tasks;
   calendar series keep their last meeting and 29 February; Settings keep what is being typed; Esc closes the
   cloud log and the template windows; the agent (MCP) gets nothing when the local-only list cannot be read.
+- **Faster on a big library**: editing lines of a transcript, search, Home, the calendar day and the people
+  list take a fraction of the time; the library list is not downloaded again while nothing changed, nor while
+  the window is hidden.
+- **More fixes from the audit**: cancelling one job of a recording no longer cancels the next one; a job
+  interrupted twice at startup stops instead of resuming forever; the Obsidian note is written whole and a
+  rename keeps your section; a damaged transcript version no longer breaks the recording; due dates read
+  weekdays as whole words; calendar series in UTC keep their times; a restore drops stale thumbnails and keeps
+  only the last 3 old databases; features find meetings by word forms («платежам» for «Платежи»); a closed
+  feature card stays closed; the template editor asks before dropping edits; the interface language is kept
+  whatever port the app starts on; the update rollback checks file hashes, uv is pinned and checked, the app
+  window opens by a one-time address.
 
 ## 0.8.24 — English
 
@@ -730,6 +741,17 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   «Стоп»; восстановление из копии заменяет повреждённую базу; сломанный ответ модели больше не стирает задачи;
   серии календаря не теряют последнюю встречу и 29 февраля; настройки не стирают вводимый текст; Esc закрывает
   журнал облака и окна шаблонов; агент (MCP) ничего не получает, если список «только локально» не прочитан.
+- **Быстрее на большой библиотеке**: правка строк расшифровки, поиск, «Главная», день календаря и список людей
+  занимают в разы меньше времени; список библиотеки не скачивается заново, пока ничего не изменилось и пока
+  окно скрыто.
+- **Ещё исправления по аудиту**: отмена одной задачи записи больше не отменяет следующую; задача, дважды
+  прерванная при запуске, останавливается, а не возобновляется бесконечно; заметка Obsidian пишется целиком, а
+  переименование сохраняет ваш раздел; повреждённая версия расшифровки не ломает запись; сроки задач читают дни
+  недели только целыми словами; серии календаря в UTC сохраняют время; восстановление из копии убирает старые
+  миниатюры и хранит только 3 прежние базы; фичи находят встречи по формам слова («платежам» для «Платежи»);
+  закрытая карточка фичи не открывается снова; редактор шаблонов спрашивает, прежде чем выбросить правки; язык
+  интерфейса сохраняется при любом порте запуска; откат обновления проверяет хеши файлов, uv закреплён и
+  проверяется, окно программы открывается по одноразовому адресу.
 
 ## 0.8.24
 
