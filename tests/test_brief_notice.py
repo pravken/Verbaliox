@@ -2,7 +2,7 @@
 app/brief_notice.py)."""
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from unittest import mock
 
 try:
@@ -10,6 +10,14 @@ try:
     from app.database import create_meeting, init_db, update_meeting_fields, update_meeting_progress
 except ImportError:  # app dependencies are not installed (e.g. in the release CI job)
     series = None
+
+# The meetings of the tests are the day after tomorrow: a notice thread left by another test (the app's own
+# loop, real time) prunes meetings a day old, and a fixed date became one (CI, the day after it was written)
+_DAY = (datetime.now() + timedelta(days=2)).date()
+
+
+def _at(h: int, m: int) -> datetime:
+    return datetime.combine(_DAY, time(h, m))
 
 
 @unittest.skipIf(series is None, "app dependencies not installed")
@@ -26,7 +34,7 @@ class BeforeMeetingTest(unittest.TestCase):
         self.assertEqual((info["open_tasks"], info["tasks"]), (0, []))  # the tasks themselves for the dashboard
         self.assertIsNone(series.before_meeting("Совсем другое", []))
 
-        now = datetime(2026, 11, 19, 9, 55)
+        now = _at(9, 55)
         ev = {"uid": "u1", "title": "Планёрка отдела 19.11", "start": now + timedelta(minutes=5),
               "end": now + timedelta(minutes=35), "attendees": []}
         app_status.take_notices()
@@ -89,8 +97,9 @@ class JoinTest(unittest.TestCase):
     def test_an_ics_event_carries_its_link_and_the_call_comes_at_the_start(self):
         from app import calendar_ics
 
-        ics = ("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:j1\r\nSUMMARY:Синк с командой\r\nDTSTART:20261119T100000\r\n"
-               "DTEND:20261119T103000\r\nLOCATION:Microsoft Teams Meeting\r\n"
+        d = _DAY.strftime("%Y%m%d")
+        ics = ("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:j1\r\nSUMMARY:Синк с командой\r\n"
+               f"DTSTART:{d}T100000\r\nDTEND:{d}T103000\r\nLOCATION:Microsoft Teams Meeting\r\n"
                f"DESCRIPTION:Присоединиться: {self.TEAMS}\\nКод: 123\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
         ev = calendar_ics.parse(ics)[0]
         self.assertEqual(ev["join"], self.TEAMS)
@@ -98,7 +107,7 @@ class JoinTest(unittest.TestCase):
         init_db()
         app_status.take_notices()
         brief_notice._told.clear()
-        start = datetime(2026, 11, 19, 10, 0)
+        start = _at(10, 0)
         with mock.patch("app.calendar_ics.window", return_value=[ev]), \
                 mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook", "meet_notify_before": "60"}):
             self.assertEqual(brief_notice.check(start - timedelta(minutes=5)), 0)   # not yet: 1 minute ahead was chosen
@@ -113,7 +122,7 @@ class JoinTest(unittest.TestCase):
         self.assertIn("Teams", call["text"])
 
     def test_the_reminder_ahead_as_chosen_or_none_and_no_late_notices(self):
-        start = datetime(2026, 11, 19, 14, 0)
+        start = _at(14, 0)
         ev = {"uid": "r1", "title": "Встреча без ссылки", "start": start, "end": start + timedelta(minutes=30), "attendees": [], "join": ""}
         init_db()
         app_status.take_notices()
