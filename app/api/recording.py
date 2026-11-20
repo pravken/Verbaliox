@@ -290,7 +290,7 @@ def finish_recording(payload: RecordFinishPayload, recovered: Optional[Dict[str,
             from app.system_audio import repair_rf64
 
             repair_rf64(system)
-    _drop_session(payload)
+    session = _drop_session(payload)
     if page is not None and (not page.is_file() or page.stat().st_size == 0):
         page.unlink(missing_ok=True)
         page = None
@@ -299,6 +299,7 @@ def finish_recording(payload: RecordFinishPayload, recovered: Optional[Dict[str,
     if screen is not None and (not screen.is_file() or screen.stat().st_size == 0):
         screen = None
     if not page and not system and not screen:
+        _end_session(session)
         raise HTTPException(status_code=404, detail="Запись пуста: звук не был получен")
 
     # The system audio begins before the page's recorder (the microphone is asked for meanwhile)
@@ -310,8 +311,16 @@ def finish_recording(payload: RecordFinishPayload, recovered: Optional[Dict[str,
     # The recording is in the library at once, «Сведение дорожек»: the echo removal and the mix (minutes
     # for an hour-long meeting) run in the background, and it queues itself for transcription when done
     settings = get_all_settings()
+    # when the recording began, not when «Стоп» was pressed (found in the audit: the calendar meeting, the
+    # day, the file name and the due dates said «from now» all count from the start)
+    from datetime import datetime
+
+    began = ""
+    if 0 < payload.started_at <= time.time() + 60 and time.time() - payload.started_at < 3 * 86400:
+        began = datetime.fromtimestamp(payload.started_at).strftime("%Y-%m-%d %H:%M:%S")
     m = create_meeting(
         title=payload.title.strip()[:300] or safe_stem,
+        recorded_at=began,
         filename=safe_stem,
         media_path="",
         language=settings.get("language", "auto"),
@@ -328,7 +337,7 @@ def finish_recording(payload: RecordFinishPayload, recovered: Optional[Dict[str,
     app_status.mixing.add(m["id"])
     update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
     _attach_recording_info(m["id"], payload)
-    threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem),
+    threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem, session),
                      daemon=True, name="record_mix").start()
     return {"created": [get_meeting(m["id"]) or m]}
 
@@ -351,10 +360,17 @@ def _sidecar(key: str) -> Path:
     return _recordings_dir() / f".rec_{key}.json"
 
 
-def _drop_session(payload: RecordFinishPayload) -> None:
+def _drop_session(payload: RecordFinishPayload) -> Optional[str]:
+    """The recording is finished: no more heartbeats are waited for. Its file of notes and parts stays
+    until the mix is over (_end_session): a crash meanwhile recovers it whole, with its notes."""
     key = _session_key(payload)
     if key:
         _beats.pop(key, None)
+    return key
+
+
+def _end_session(key: Optional[str]) -> None:
+    if key:
         try:
             _sidecar(key).unlink(missing_ok=True)
         except OSError:
@@ -461,12 +477,11 @@ def recover_sessions() -> List[Path]:
                 sc.unlink(missing_ok=True)
                 continue
             payload.title = payload.title or "Восстановленная запись"
-            finish_recording(payload, recovered=paths)
+            finish_recording(payload, recovered=paths)  # its file goes when the mix is over
             used += parts
             print(f"[record] recovered recording «{payload.title}» with its notes ({len(parts)} part(s))", flush=True)
         except Exception:
             traceback.print_exc()
-        finally:
             sc.unlink(missing_ok=True)
     return used
 
@@ -585,7 +600,7 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
 
 
 def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path],
-                       screen: Optional[Path], system_skip: float, safe_stem: str) -> None:
+                       screen: Optional[Path], system_skip: float, safe_stem: str, session: Optional[str] = None) -> None:
     """The mix of a stopped recording, then its transcription queued; the recording waits as «mixing»."""
     import traceback
 
@@ -632,6 +647,7 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
         update_meeting_progress(meeting_id, status="failed", progress=0, stage_text="",
                                 error_message=f"Не удалось свести дорожки записи: {e}"[:500])
     finally:
+        _end_session(session)  # the mix is over, one way or the other: the parts are the library's now
         app_status.mixing.discard(meeting_id)
         events.publish({"type": "list"})
 
