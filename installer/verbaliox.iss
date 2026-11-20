@@ -66,6 +66,8 @@ ru.DesktopIcon=Значок на рабочем столе
 ru.FullRemove=Удалить Verbaliox полностью
 en.FullRemove=Remove Verbaliox completely
 en.DesktopIcon=Desktop icon
+ru.OldKept=Старая папка %1 не удалена: в ней остались модели или данные, которые не удалось перенести (%2). Удалите её вручную, когда убедитесь, что всё на месте.
+en.OldKept=The old folder %1 was not removed: it still holds models or data that could not be moved (%2). Remove it by hand once you are sure everything is in place.
 ru.RunAfter=Запустить Verbaliox (дальше программа предложит установить свои компоненты)
 en.RunAfter=Start Verbaliox (it then offers to install its components)
 ru.RemoveData=Удалить также записи, настройки и скачанные модели?%n%nЗаписи и база: %1%nМодели: %2%n%nНажмите «Нет», чтобы оставить их (например, для новой установки).
@@ -171,6 +173,29 @@ begin
   Moved := True;
 end;
 
+// What of the old folder must not go with it (found in the audit: models not moved because the new place
+// had them already, robocopy that failed half-way, the data folder of a Store Python): its names, or ''
+function HeavyLeft(): String;
+var
+  Name: String;
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to 1 do
+  begin
+    case I of
+      0: Name := 'models';
+      1: Name := 'data';
+    end;
+    if DirExists(AddBackslash(OldAppDir) + Name) then
+    begin
+      if Result <> '' then
+        Result := Result + ', ';
+      Result := Result + Name;
+    end;
+  end;
+end;
+
 // pyvenv.cfg names the Python the environment was made from: a Python in the old folder (the one uv
 // installs next to the program) is now in the new one. The case of the path may differ
 procedure FixVenv(Name: String);
@@ -222,8 +247,11 @@ begin
     FixVenv('.venv');
     FixVenv('.venv-dub');
     FixOllamaModels();
-    // What is left in the old folder is the previous install; the user decides
-    if (not WizardSilent) and DirExists(OldAppDir) and
+    // What is left in the old folder is the previous install; the user decides. Never with models or data
+    // still in it: those would be lost with it
+    if (not WizardSilent) and DirExists(OldAppDir) and (HeavyLeft() <> '') then
+      MsgBox(FmtMessage(CustomMessage('OldKept'), [OldAppDir, HeavyLeft()]), mbInformation, MB_OK)
+    else if (not WizardSilent) and DirExists(OldAppDir) and
        (MsgBox(FmtMessage(CustomMessage('RemoveOld'), [ExpandConstant('{app}'), OldAppDir]),
                mbConfirmation, MB_YESNO) = IDYES) then
       DelTree(OldAppDir, True, True, True);
