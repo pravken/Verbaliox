@@ -343,4 +343,20 @@ def apply_pending() -> Optional[str]:
         Path(str(DB_PATH) + suffix).unlink(missing_ok=True)
     PENDING.replace(DB_PATH)
     print(f"[backup] restored the library from a backup; the previous database is {kept.name}", flush=True)
+    _prune_before_restore()
     return str(kept)
+
+
+KEEP_BEFORE_RESTORE = 3
+
+
+def _prune_before_restore() -> None:
+    """The databases put aside by restores: the newest KEEP_BEFORE_RESTORE stay, older ones go (each is the
+    whole library: they were never removed and added up)."""
+    old = sorted(DATA_DIR.glob("meetings.before-restore-*.db"), key=lambda p: p.name, reverse=True)
+    for p in old[KEEP_BEFORE_RESTORE:]:  # the date in the name sorts them
+        try:
+            p.unlink()
+            print(f"[backup] removed {p.name}: an older database put aside by a restore", flush=True)
+        except OSError as e:
+            print(f"[backup] {p.name} could not be removed: {e}", flush=True)
