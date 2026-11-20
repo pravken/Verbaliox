@@ -1,19 +1,21 @@
 /* Themes (asked by the user): the accent (the buttons and marks picked out) and the background, chosen
    from presets in Settings → Общие → Оформление (static/js/core.js applyTheme sets these on <html>).
    Each colour also as its channels, so that a shade of it with an opacity can be written:
-   rgb(var(--accent-rgb) / 0.2). The defaults are the graphite and the blue the app had */
+   rgb(var(--accent-rgb) / 0.2). The defaults: «Стальной синий» on «Холодный сланец», a solid fill */
 :root {
-  --accent: #0A84FF; --accent-rgb: 10 132 255;
-  --accent-hi: #4DA3FF; --accent-hi-rgb: 77 163 255;
-  --accent-lo: #0071E3; --accent-lo-rgb: 0 113 227;  /* buttons: a white text on it reads */
-  --accent-deep: #0062C4;  /* a button pressed or hovered */
-  --accent-text: #8CC4FF;  /* a text of the accent on the dark */
-  --accent-pale: #CFE6FF;  /* a very light one, on a tinted fill */
-  --bg: #141416; --bg-rgb: 20 20 22;
-  --sidebar: #1C1C1E; --sidebar-rgb: 28 28 30;
-  --panel: #1C1D21; --panel-rgb: 28 29 33;
-  --card: #242426; --card-rgb: 36 36 38;
-  --elevated: #2C2C2E; --elevated-rgb: 44 44 46;
+  --accent: #4C7FD9; --accent-rgb: 76 127 217;
+  --accent-hi: #8CADE7; --accent-hi-rgb: 140 173 231;
+  --accent-lo: #416DBB; --accent-lo-rgb: 65 109 187;
+  --bg: #121418; --bg-rgb: 18 20 24;
+  --sidebar: #1A1C20; --sidebar-rgb: 26 28 32;
+  --panel: #1D1F22; --panel-rgb: 29 31 34;
+  --card: #242629; --card-rgb: 36 38 41;
+  --elevated: #2C2E31; --elevated-rgb: 44 46 49;
+  --accent-deep: #385EA1;  /* a button pressed or hovered */
+  --accent-text: #9DB9EA;  /* a text of the accent on the dark */
+  --accent-pale: #D8E3F7;  /* a very light one, on a tinted fill */
+  /* «Заливка выделенного» (ui_fill): what a picked-out button, tab or row is filled with, its text, its frame */
+  --fill-bg: #416DBB; --fill-bg-hover: #385EA1; --fill-fg: #FFFFFF; --fill-ring: transparent;
 }
 
 /* One name for the monospace font everywhere (the vendored font is "JetBrains Mono Variable") */
@@ -1239,7 +1241,8 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-tile { display: block; padding: 0; cursor: pointer; transition: transform var(--dur-fast) ease, box-shadow var(--dur-fast) ease; }
 .hm-tile:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgb(var(--accent-hi-rgb) / 0.5); }
 .hm-tile-mon, .hm-tile-day { display: block; }
-.hm-tile-mon { height: 20px; background: linear-gradient(180deg, #FF453A, #D70015); color: #FFFFFF; font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em; line-height: 20px; }
+/* the month band of the date takes the theme's fill (asked by the user: it stayed red whatever the theme) */
+.hm-tile-mon { height: 20px; background: var(--fill-bg); box-shadow: inset 0 0 0 1.5px var(--fill-ring); color: var(--fill-fg); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em; line-height: 20px; }
 .hm-tile-day { height: 46px; font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 46px; color: #FFFFFF; }
 .hm-weekday { font-size: var(--fs-caption); line-height: 1.35; font-weight: 600; letter-spacing: 0.06em; color: var(--hc-dim, #8E8E93); }
 .hm-greeting { margin: 0; font-size: var(--fs-title-xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; color: #FFFFFF; }
@@ -3348,3 +3351,19 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .theme-sw:hover { background: rgba(255, 255, 255, 0.08); }
 .theme-sw i { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); flex: none; }
 .theme-sw.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: #FFFFFF; }
+
+/* «Заливка выделенного» (Settings → Оформление; static/js/core.js applyTheme): every button, tab and row
+   picked out takes its fill, its text and its frame from these, so solid, soft and outline change them all */
+.ui-btn-primary, .bg-apple-blue.text-white, .lib-tile-on, .tb-tab.tb-active, .tb-subtab.tb-active, .tb-pop-primary,
+.hm-dict .hm-ask-yes, .imp-btn-primary, .an-btn-primary, .sp-ask-yes, .tk-btn-primary, .as-send, .tx-chip.is-shown,
+.cap-jump, .frw-seg-btn.is-on, .db-sizes button.on, .macos-menu-item:hover {
+  background: var(--fill-bg); color: var(--fill-fg); border-color: var(--fill-bg);
+  outline: 1.5px solid var(--fill-ring); outline-offset: -1.5px;
+}
+.ui-btn-primary:hover, .bg-apple-blue.text-white:hover, .lib-tile-on:hover, .tb-pop-primary:hover, .imp-btn-primary:hover,
+.an-btn-primary:hover, .tk-btn-primary:hover, .as-send:hover { background: var(--fill-bg-hover); border-color: var(--fill-bg-hover); }
+.macos-menu-item:active { background-color: var(--fill-bg-hover); }
+/* the text inside a filled row follows the fill's (the selected recording of the library, a menu row) */
+[data-fill="soft"] .bg-apple-blue.text-white *, [data-fill="outline"] .bg-apple-blue.text-white *,
+[data-fill="soft"] .lib-tile-on *, [data-fill="outline"] .lib-tile-on * { color: inherit; }
+[data-fill="soft"] .tb-active .tb-badge, [data-fill="outline"] .tb-active .tb-badge { background: rgb(var(--accent-rgb) / 0.35); color: var(--fill-fg); }

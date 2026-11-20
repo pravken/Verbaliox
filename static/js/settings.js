@@ -83,29 +83,36 @@ async function setUiScale(v) {
   if (state.system) state.system.settings = data.settings;
 }
 
-// Settings → General → «Оформление»: the accent and the background, applied at once and saved
-function renderThemeChoices() {
+// Settings → General → «Оформление»: the accent, the background and the fill of what is picked out,
+// applied at once and saved (ui_accent, ui_bg, ui_fill)
+function themeChoice() {
   const set = (state.system && state.system.settings) || {};
-  const accent = THEME_ACCENTS[set.ui_accent] ? set.ui_accent : 'blue', bg = THEME_BGS[set.ui_bg] ? set.ui_bg : 'graphite';
-  const box = (id, list, cur, kind, color) => {
+  return { accent: themeKey(set.ui_accent, THEME_ACCENTS, 'steel'), bg: themeKey(set.ui_bg, THEME_BGS, 'slate'),
+    fill: THEME_FILLS.includes(set.ui_fill) ? set.ui_fill : 'solid' };
+}
+
+function renderThemeChoices() {
+  const cur = themeChoice();
+  const box = (id, keys, on, kind, swatch) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.innerHTML = Object.keys(list).map(k => `<button role="radio" aria-checked="${k === cur}" class="theme-sw${k === cur ? ' on' : ''}" `
-      + `data-click="setTheme" data-click-args='["${kind}", "${k}"]' title="${escapeHtml(t(`theme_${kind}_${k}`))}" aria-label="${escapeHtml(t(`theme_${kind}_${k}`))}">`
-      + `<i style="background:${color(list[k])}"></i><span>${escapeHtml(t(`theme_${kind}_${k}`))}</span></button>`).join('');
+    el.innerHTML = keys.map(k => `<button role="radio" aria-checked="${k === on}" class="theme-sw${k === on ? ' on' : ''}" `
+      + `data-click="setTheme" data-click-args='["${kind}", "${k}"]' title="${escapeHtml(t(`theme_${kind}_${k}`))}">`
+      + (swatch ? `<i style="background:${swatch(k)}"></i>` : '') + `<span>${escapeHtml(t(`theme_${kind}_${k}`))}</span></button>`).join('');
   };
-  box('theme-accents', THEME_ACCENTS, accent, 'accent', c => c[0]);
-  box('theme-bgs', THEME_BGS, bg, 'bg', c => `linear-gradient(135deg, ${c[0]} 0 50%, ${c[3]} 50% 100%)`);
+  box('theme-accents', Object.keys(THEME_ACCENTS), cur.accent, 'accent', k => THEME_ACCENTS[k]);
+  box('theme-bgs', Object.keys(THEME_BGS), cur.bg, 'bg', k => `linear-gradient(135deg, ${THEME_BGS[k]} 0 50%, ${hexMix(THEME_BGS[k], 0.11)} 50% 100%)`);
+  box('theme-fills', THEME_FILLS, cur.fill, 'fill', null);
 }
 
 async function setTheme(kind, value) {
-  const set = (state.system && state.system.settings) || {};
-  const accent = kind === 'accent' ? value : (set.ui_accent || 'blue'), bg = kind === 'bg' ? value : (set.ui_bg || 'graphite');
-  applyTheme(accent, bg);
-  if (state.system) state.system.settings = { ...set, ui_accent: accent, ui_bg: bg };
+  const next = { ...themeChoice(), [kind]: value };
+  applyTheme(next.accent, next.bg, next.fill);
+  const values = { ui_accent: next.accent, ui_bg: next.bg, ui_fill: next.fill };
+  if (state.system) state.system.settings = { ...(state.system.settings || {}), ...values };
   renderThemeChoices();
   const res = await fetch('/api/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { ui_accent: accent, ui_bg: bg } }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: values }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { showError(data.detail); return; }
@@ -133,7 +140,7 @@ async function loadSystemInfo() {
       setUiScale(near);
     } else applyUiScale(ownScale);
     renderUiScaleButtons();
-    applyTheme((data.settings || {}).ui_accent, (data.settings || {}).ui_bg);
+    applyTheme((data.settings || {}).ui_accent, (data.settings || {}).ui_bg, (data.settings || {}).ui_fill);
     renderThemeChoices();
 
     const hw = data.hardware;
