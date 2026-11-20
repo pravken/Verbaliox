@@ -111,6 +111,7 @@ async function fillSystemInfo() {
     const res = await fetch('/api/system');
     const data = await readJson(res);
     state.system = data;
+    syncUiPrefsFromServer(data.settings);
     // Audit 5.5: with no scale chosen yet, the first one follows «Text size» of Windows
     const ownScale = (data.settings || {}).ui_scale;
     let asked = true;

@@ -339,10 +339,39 @@ function enhanceDateInputs(root) {
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 
+// localStorage belongs to the page's origin, and the origin has the port: when 8765 is busy the app
+// starts on the next port, and that launch had no language (an English user got Russian). The server
+// keeps the choice too (setting ui_lang); localStorage is only its cache for the first paint.
+const UI_PREFS_STORED = (() => { try { return { lang: !!localStorage.getItem('whisper_ui_lang') }; } catch (e) { return {}; } })();
+let _uiPrefsSynced = false;
+
+// Once per page, with the first settings from the server (loadSystemInfo)
+function syncUiPrefsFromServer(settings) {
+  if (_uiPrefsSynced || !settings) return;
+  _uiPrefsSynced = true;
+  const lang = settings.ui_lang;
+  if (lang === 'ru' || lang === 'en') {
+    if (lang !== state.uiLang) setUILanguage(lang);
+  } else if (UI_PREFS_STORED.lang) {
+    saveUiSetting('ui_lang', state.uiLang);  // chosen before the server kept it: it does from now on
+  }
+  if (typeof dbPrefsFromServer === 'function') dbPrefsFromServer(settings);
+}
+
+// A preference of the page kept on the server (and in state.system.settings, so it is not sent twice)
+function saveUiSetting(key, value) {
+  const set = (state.system && state.system.settings) || null;
+  if (set) { if (set[key] === value) return; set[key] = value; }
+  fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => {});
+}
+
 function setUILanguage(lang) {
   state.uiLang = lang;
   document.documentElement.lang = lang;
   try { localStorage.setItem('whisper_ui_lang', lang); } catch (e) { /* the server keeps it too */ }
+  // the first call (at load) is before the server's settings: it does not overwrite them
+  if (_uiPrefsSynced) saveUiSetting('ui_lang', lang);
   // The launcher's splash screen speaks the same language (see /api/ui/lang)
   fetch('/api/ui/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang }) }).catch(() => {});
 

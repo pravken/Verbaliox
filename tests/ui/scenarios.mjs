@@ -446,6 +446,23 @@ await step('templates editor keeps edits', async () => {
   expect(!(await page.isVisible('#templates-editor')) && !(await asked()), 'an unchanged editor did not just close');
 });
 
+// The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is
+// busy the app starts on another port, whose storage is empty (audit: an English user got Russian)
+await step('language from the server', async () => {
+  await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { ui_lang: 'en', ui_dashboard: JSON.stringify({ period: 'month' }) } }) }));
+  await page.evaluate(() => localStorage.clear());  // a launch on another port
+  await page.reload();
+  let lang = '';
+  for (let i = 0; i < 40 && lang !== 'en'; i++) { await sleep(150); lang = await page.evaluate(() => state.uiLang); }
+  expect(lang === 'en', 'the language of the server was not taken');
+  expect(await page.evaluate(() => dbPrefs().period) === 'month', 'the dashboard layout of the server was not taken');
+  await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ period: 'week' }); });
+  await sleep(1200);
+  const kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
+  expect(kept[0] === 'ru' && kept[1] === 'week', `a choice on the page was not kept on the server: ${kept}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
