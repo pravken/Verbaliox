@@ -192,7 +192,6 @@ class VerbalioxLauncher
     [DllImport("shell32.dll", SetLastError = true)]
     static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
-    [STAThread]
     // .venv\verbaliox-requirements.sha256 (app/pyenv.py) against requirements.txt; no mark: an environment
     // from before the mark, which the program marks as current at its start
     static bool RequirementsChanged(string baseDir)
@@ -211,6 +210,7 @@ class VerbalioxLauncher
         catch { return false; }
     }
 
+    [STAThread]  // on Main (found in the audit: it sat on another method, and the launcher's windows ran MTA)
     static void Main(string[] args)
     {
         try
