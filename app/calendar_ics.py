@@ -376,7 +376,7 @@ def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict
             dur = ev["end"] - ev["start"]
             src = {**ev, "start": ev["src_start"], "end": ev["src_start"] + dur, "exdates": [wall(x) for x in ev["exdates"]]}
             found: List[Dict[str, Any]] = []
-            _expand(src, wall(start) - timedelta(days=1), wall(end) + timedelta(days=1), found)
+            _expand(src, wall(start) - timedelta(days=1), wall(end) + timedelta(days=1), found, to_wall=wall)
             for o in found:
                 s_local = o["start"].replace(tzinfo=tz).astimezone().replace(tzinfo=None)
                 if s_local + dur > start and s_local < end:
@@ -388,7 +388,8 @@ def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict
     return out
 
 
-def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[str, Any]]) -> None:
+def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[str, Any]], to_wall=None) -> None:
+    """to_wall: the series is walked at its zone's wall time; UNTIL (local time here) is brought to it."""
     dur = ev["end"] - ev["start"]
 
     def add(s: datetime) -> None:
@@ -406,6 +407,13 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
         return
     count = int(rule["COUNT"]) if rule.get("COUNT", "").isdigit() else None
     until = _parse_dt(rule["UNTIL"], "") if rule.get("UNTIL") else None
+    if until is not None:
+        # found in the audit: a date alone («UNTIL=20261104») takes in that whole day, its meeting too;
+        # a UTC time (local here) is the series' wall time in its zone, or its last meeting was lost
+        if len(rule["UNTIL"].strip()) == 8:
+            until = until.replace(hour=23, minute=59, second=59)
+        elif to_wall is not None:
+            until = to_wall(until)
     days = [_DAYS[d[-2:]] for d in rule.get("BYDAY", "").upper().split(",") if d[-2:] in _DAYS]
     n = 0
     cursor = ev["start"]
@@ -464,7 +472,17 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
             except ValueError:  # the 31st in a short month: skipped, as calendars do
                 cursor = cursor.replace(year=year, month=month % 12 + 1, day=28)
         elif freq == "YEARLY":
-            cursor = cursor.replace(year=cursor.year + step)
+            # a series from 29 February meets in the leap years only (found in the audit: it raised and the
+            # whole series was lost)
+            year = cursor.year + step
+            for _ in range(8):
+                try:
+                    cursor = ev["start"].replace(year=year)
+                    break
+                except ValueError:
+                    year += step
+            else:
+                break
         else:
             break
 
