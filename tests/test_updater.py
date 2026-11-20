@@ -143,10 +143,54 @@ class ApplyUpdateTest(unittest.TestCase):
     def test_failed_restore_is_reported_as_broken(self):
         _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
         with mock.patch.object(updater.subprocess, "run", return_value=mock.Mock(returncode=1)), \
-                mock.patch.object(updater.zipfile.ZipFile, "extractall", side_effect=PermissionError("locked")):
+                mock.patch.object(updater, "_restore", return_value=["app/main.py"]):
             with self.assertRaises(updater.UpdateFailed) as cm:
                 updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
         self.assertEqual(cm.exception.outcome, "broken")
+        self.assertFalse((self.data / updater.IN_PROGRESS).exists())
+
+    def test_a_locked_file_does_not_stop_the_restore_of_the_others(self):
+        """Found in the audit: the first file held open ended the restore."""
+        import zipfile as zf
+
+        backup = self.data / "b.zip"
+        with zf.ZipFile(backup, "w") as z:
+            z.writestr("app/main.py", "old main")
+            z.writestr("Verbaliox.exe", "old exe")
+        (self.app / "app" / "main.py").write_text("new main")
+        real_open = open
+
+        def locked(path, *a, **k):
+            if str(path).endswith("Verbaliox.exe") and "w" in (a[0] if a else k.get("mode", "r")):
+                raise PermissionError("in use")
+            return real_open(path, *a, **k)
+
+        with mock.patch("builtins.open", side_effect=locked), mock.patch.object(updater.time, "sleep"):
+            failed = updater._restore(backup, self.app, [], self.data)
+        self.assertEqual(failed, ["Verbaliox.exe"])
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+
+    def test_an_update_cut_off_half_way_is_put_back_at_the_next_start(self):
+        """Found in the audit: a switched-off computer during an update left two versions mixed."""
+        _release_zip(self.zip, {"app/main.py": "new main", "app/new.py": "added"})
+        real = updater.shutil.copyfileobj
+        calls = []
+
+        def cut(src, out, *a):
+            calls.append(1)
+            if len(calls) == 2:  # the process dies after the first file
+                raise SystemExit("power off")
+            return real(src, out, *a)
+
+        with mock.patch.object(updater.shutil, "copyfileobj", side_effect=cut):
+            with self.assertRaises(SystemExit):
+                updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
+        self.assertTrue((self.data / updater.IN_PROGRESS).exists())
+        self.assertTrue(updater.recover_interrupted(self.app, self.data))
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+        self.assertFalse((self.app / "app" / "new.py").exists())
+        self.assertFalse((self.data / updater.IN_PROGRESS).exists())
+        self.assertFalse(updater.recover_interrupted(self.app, self.data))
 
     def test_files_the_new_version_dropped_are_removed_and_come_back_on_failure(self):
         (self.app / "app" / "gone.py").write_text("old module")

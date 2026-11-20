@@ -1052,6 +1052,15 @@ def main() -> None:
             print(f"Another Verbaliox instance: {outcome}")
             if outcome == "activated" or (outcome == "timeout" and not recover_stuck_instance()):
                 return
+        # An update cut off half-way (the computer switched off): the previous version back first
+        try:
+            from app import updater as _upd
+            from app.paths import APP_DIR as _APP, DATA_DIR as _DATA
+
+            if _upd.recover_interrupted(_APP, _DATA):
+                print("[update] an update cut off half-way: the previous version was put back")
+        except Exception as e:
+            print(f"[update] recovery: {e}", file=sys.stderr)
         # An installation made on Python 3.10 moves its environment to 3.11 once (app/envmove.py):
         # that runs outside this environment, so the app quits and is started again by it
         from app import envmove

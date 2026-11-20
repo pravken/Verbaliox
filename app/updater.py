@@ -580,6 +580,71 @@ def archive_files(names: List[str], app_dir: Path) -> List[Tuple[str, str]]:
     return out
 
 
+IN_PROGRESS = Path("updates") / "in-progress.json"  # in the data folder while files are being replaced
+
+
+def _restore(backup: Path, app_dir: Path, added: List[str], log_dir: Path) -> List[str]:
+    """The previous version's files back from the backup and the files the new version added removed,
+    file by file: one held open (Verbaliox.exe still closing) does not stop the others (found in the
+    audit: the first locked file ended the restore and the user was told to reinstall). Returns the
+    files that could not be put back."""
+    failed: List[str] = []
+    kept = set()
+    with zipfile.ZipFile(backup) as bz:
+        for info in bz.infolist():
+            rel = info.filename
+            kept.add(rel)
+            dest = app_dir / rel
+            for attempt in range(5):
+                try:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with bz.open(info) as src, open(dest, "wb") as out:
+                        shutil.copyfileobj(src, out)
+                    break
+                except OSError:
+                    if attempt == 4:
+                        failed.append(rel)
+                    else:
+                        time.sleep(1.0)
+    for rel in added:
+        if rel not in kept:
+            try:
+                (app_dir / rel).unlink(missing_ok=True)
+            except OSError:
+                failed.append(rel)
+    if failed:
+        with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+            lf.write("not put back: " + ", ".join(failed[:50]) + "\n")
+    return failed
+
+
+def recover_interrupted(app_dir: Path, data_dir: Path) -> bool:
+    """At start: an update cut off while it replaced files (the computer switched off, the process
+    killed) left two versions mixed (found in the audit). The previous version is put back from the
+    backup; libraries half installed are installed again by the launcher (setup.bat). True when done."""
+    marker = data_dir / IN_PROGRESS
+    if not marker.is_file():
+        return False
+    log_dir = data_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        info = json.loads(marker.read_text(encoding="utf-8"))
+        backup = Path(info.get("backup") or "")
+        if backup.is_file():
+            _restore(backup, app_dir, list(info.get("added") or []), log_dir)
+        if info.get("packages"):  # pip was at work: the launcher installs the previous libraries again
+            mark = app_dir / ".venv" / "verbaliox-requirements.sha256"
+            if mark.parent.is_dir():
+                mark.write_text("interrupted-update", encoding="ascii")
+        with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+            lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} an update cut off half-way: the previous version put back\n")
+    except Exception:
+        with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+            lf.write("recovery of an interrupted update failed:\n" + traceback.format_exc())
+    marker.unlink(missing_ok=True)
+    return True
+
+
 def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable[[str], None]) -> None:
     log_dir = data_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -603,6 +668,14 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 if p.is_file():
                     bz.write(p, rel)
                     replaced.append(rel)
+        kept_before = set(replaced)
+        added = [rel for _n, rel in files if rel not in kept_before]
+        marker = data_dir / IN_PROGRESS
+
+        def mark(packages: bool = False) -> None:  # read at the next start if this process is cut off
+            marker.write_text(json.dumps({"backup": str(backup), "added": added, "packages": packages}), encoding="utf-8")
+
+        mark()
         try:
             report("Замена файлов программы…")
             for i, (n, rel) in enumerate(files):
@@ -623,6 +696,7 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 (app_dir / rel).unlink(missing_ok=True)
             if _sha256(app_dir / "requirements.txt") != old_req:
                 report("Установка библиотек Python (может занять несколько минут)…")
+                mark(packages=True)
                 py = app_dir / ".venv" / "Scripts" / "python.exe"
                 uv = find_uv()
                 # What is installed now: put back if the new libraries fail half way
@@ -644,17 +718,14 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 mark_requirements(app_dir)
             if _dub_requirements_hash(app_dir) != old_dub_req:
                 _mark_dub_outdated(app_dir, old_dub_req)
+            marker.unlink(missing_ok=True)
         except Exception as e:
             report("Ошибка — восстановление прежней версии…")
             outcome = "restored"
             # Each step on its own: a failure here must not hide the original error
             try:
-                with zipfile.ZipFile(backup) as bz:
-                    bz.extractall(app_dir)
-                kept = set(replaced)
-                for _n, rel in files:  # files the new version added
-                    if rel not in kept:
-                        (app_dir / rel).unlink(missing_ok=True)
+                if _restore(backup, app_dir, added, log_dir):
+                    outcome = "broken"
             except Exception:
                 outcome = "broken"
                 with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
@@ -667,6 +738,7 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                     outcome = "broken"
                     with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
                         lf.write("restore of the Python packages failed:\n" + traceback.format_exc())
+            marker.unlink(missing_ok=True)  # put back here (or told broken): nothing for the next start
             raise UpdateFailed(str(e), outcome) from e
 
 
