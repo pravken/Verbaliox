@@ -481,6 +481,9 @@ def _stale_code_files(app_dir: Path, new_files: List[str]) -> List[str]:
     new = set(new_files)
     if not any(rel.startswith("app/") for rel in new):  # not a full program archive: remove nothing
         return []
+    # compared without letter case: on Windows «Foo.py» renamed «foo.py» is one file, written by the new
+    # version, which would be deleted as stale (found in the audit)
+    new = {rel.casefold() for rel in new}
     out = []
     for top in CODE_DIRS:
         base = app_dir / top
@@ -489,7 +492,7 @@ def _stale_code_files(app_dir: Path, new_files: List[str]) -> List[str]:
         for p in base.rglob("*"):
             if p.suffix.lower() in CODE_SUFFIXES and p.is_file() and "__pycache__" not in p.parts:
                 rel = p.relative_to(app_dir).as_posix()
-                if rel not in new:
+                if rel.casefold() not in new:
                     out.append(rel)
     return sorted(out)
 
