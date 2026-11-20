@@ -269,9 +269,14 @@ _KIND_WORDS = {"participant": "part", "speaker": "part", "outside": "ext", "ment
 
 
 _KIND_NAMES_FIXED: List[bool] = []
+_READY_AT: List[int] = []  # database.schema_epoch when the tables were made: _init ran before every query
 
 
 def _init() -> None:
+    from app import database
+
+    if _READY_AT and _READY_AT[0] == database.schema_epoch:
+        return
     with _db_lock:
         conn = get_connection()
         conn.execute(
@@ -309,6 +314,7 @@ def _init() -> None:
                          "AND source != 'manual' AND edited = 0")
         conn.commit()
         conn.close()
+        _READY_AT[:] = [database.schema_epoch]
 
 
 def norm_kind(value: Any) -> str:
@@ -646,19 +652,20 @@ def for_meetings(ids: List[int], status: Optional[str] = None) -> List[Dict[str,
 
 def meeting_briefs(ids: Any) -> Dict[int, Dict[str, Any]]:
     """Title, dates and speakers of the given recordings, in one query: the task lists need no
-    transcripts (get_meeting would read every segment of every recording)."""
+    transcripts (get_meeting would read every segment of every recording). The speakers as the library
+    list keeps them: names and colours, without parsing the voice prints of every recording."""
+    from app.database import _list_speakers
+
     ids = sorted({int(i) for i in ids if i})
     out: Dict[int, Dict[str, Any]] = {}
     for start in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
         part = ids[start:start + 500]
         for r in _rows(f"SELECT id, title, recorded_at, created_at, speakers_json FROM meetings WHERE id IN ({','.join('?' * len(part))})",
                        tuple(part)):
-            try:
-                speakers = json.loads(r.get("speakers_json") or "{}")
-            except ValueError:
-                speakers = {}
+            speakers = _list_speakers(r["id"], r.get("speakers_json") or "{}")
             out[r["id"]] = {"id": r["id"], "title": r.get("title") or "", "recorded_at": r.get("recorded_at"),
-                            "created_at": r.get("created_at"), "speakers": speakers if isinstance(speakers, dict) else {}}
+                            "created_at": r.get("created_at"),
+                            "speakers": {k: dict(v) if isinstance(v, dict) else v for k, v in speakers.items()}}
     return out
 
 
