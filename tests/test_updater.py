@@ -435,6 +435,28 @@ class BrowserAddressTest(unittest.TestCase):
             self.assertNotIn("secret-token", run.app_url("127.0.0.1", 1))  # nothing answers: the plain address
 
 
+class WindowBridgeTest(unittest.TestCase):
+    def test_the_token_goes_only_to_the_app_own_page(self):
+        """Found in the audit: window.pywebview.api.session_token() answered any document in the window."""
+        import sys
+        import types
+
+        import run
+
+        api = run.WindowApi("127.0.0.1", 8765)
+        win = mock.Mock()
+        fake = types.SimpleNamespace(windows=[win])
+        with mock.patch.dict(sys.modules, {"webview": fake}), \
+                mock.patch.object(run, "read_session_token", return_value="tok"):
+            for url, token in [("http://127.0.0.1:8765/", "tok"), ("http://127.0.0.1:8765/?x=1", "tok"),
+                               ("http://127.0.0.1:8766/", ""), ("https://evil.example/", ""),
+                               ("http://127.0.0.1.evil.example:8765/", ""), (None, ""), ("http://127.0.0.1:99999/", "")]:
+                win.get_current_url.return_value = url
+                self.assertEqual(api.session_token(), token, url)
+            win.get_current_url.side_effect = RuntimeError("closing")
+            self.assertEqual(api.session_token(), "")
+
+
 class PyEnvTest(unittest.TestCase):
     def test_missing_pip_is_bootstrapped_with_ensurepip(self):
         from app import pyenv
