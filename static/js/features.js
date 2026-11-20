@@ -243,12 +243,14 @@ async function deleteDictFeature(id) {
 // the open tasks as rows and the meetings by month. Sections with nothing in them are left out ---
 const FP = { all: {} };  // the sections shown in full («Все решения», «Ещё», «Показать все»), per feature
 
-async function openFeaturePage(id) {
+async function openFeaturePage(id, refresh = false) {
   if (typeof tkClosePop === "function") tkClosePop();
   const res = await fetch(`/api/features/${id}`);
   const data = await readJson(res);
-  if (!res.ok) { showError(data.detail); return; }
   const before = document.getElementById('feature-page');
+  // A redraw after a change: the page may have been closed (Esc, a link) while the answer came — it stays closed
+  if (refresh && before?.dataset.fid !== String(id)) return;
+  if (!res.ok) { showError(data.detail); return; }
   const scroll = before?.querySelector('.fp-body')?.scrollTop || 0;  // redrawn after a change: stays where it was
   before?.remove();
   const f = data.feature;
@@ -364,7 +366,7 @@ async function fpAskWhere(id) {
   const page = await fetch(`/api/features/${id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
   if (!page) return;
   FP.whereBusy = id;
-  openFeaturePage(id);
+  openFeaturePage(id, true);
   try {
     const res = await fetch('/api/library/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: t('fpWhereQuestion').replace('{name}', () => (f || page.feature).name), lang: state.uiLang === 'en' ? 'en' : 'ru',
@@ -377,13 +379,13 @@ async function fpAskWhere(id) {
     showError(serverText(e.message));
   } finally {
     FP.whereBusy = 0;
-    if (document.getElementById('feature-page')?.dataset.fid === String(id)) openFeaturePage(id);
+    if (document.getElementById('feature-page')?.dataset.fid === String(id)) openFeaturePage(id, true);
   }
 }
 
 function fpShowAll(id, key) {
   (FP.all[id] = FP.all[id] || {})[key] = true;
-  openFeaturePage(id);
+  openFeaturePage(id, true);
 }
 
 async function fpTaskDone(id) {
@@ -430,7 +432,7 @@ function openPersonFromFeature(name) {
 // A task changed on the open page (its person, due date, done): the counts and the cards follow
 function refreshFeaturePage() {
   const page = document.getElementById('feature-page');
-  if (page) openFeaturePage(Number(page.dataset.fid));
+  if (page) openFeaturePage(Number(page.dataset.fid), true);
 }
 
 document.addEventListener('keydown', e => {
