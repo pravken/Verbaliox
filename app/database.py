@@ -39,6 +39,10 @@ def get_connection() -> sqlite3.Connection:
 
 _wal_on = False  # remembered once true (init_db turns WAL on after the first connections of a new database)
 
+# How many times init_db has run: the tables a module makes on first use (app/commitments.py) are made
+# once per database opened, not before every query
+schema_epoch = 0
+
 
 def _check_wal(conn: sqlite3.Connection) -> bool:
     global _wal_on
@@ -354,6 +358,8 @@ def init_db() -> None:
 
         conn.commit()
         forget_settings()
+        global schema_epoch
+        schema_epoch += 1
         if moved:
             # The transcripts' old place is free space in the file: given back to the disk once
             try:

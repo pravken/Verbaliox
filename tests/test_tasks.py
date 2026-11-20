@@ -211,6 +211,33 @@ class TasksTest(unittest.TestCase):
         mail = commitments.report(tasks, "2026-10-19", "2026-10-25", ["done", "open", "over"], "mail", "en", THURSDAY)
         self.assertTrue(mail["title"].startswith("Summary for"))
 
+    def test_tables_are_made_once_and_names_come_without_voice_prints(self):
+        """The tasks' tables are checked once per opened database, not before every query; the names of
+        the speakers come without parsing their voice prints."""
+        from app import commitments, database
+
+        database.edit_meeting(self.m["id"], lambda m: (m["speakers"]["S1"].update(embedding=[0.5] * 192), ("speakers",))[1])
+        commitments.for_meetings([self.m["id"]])
+        made = []
+        real = database.get_connection
+
+        def watched():
+            conn = real()
+            conn.set_trace_callback(lambda sql: made.append(sql) if "CREATE TABLE" in sql or "PRAGMA table_info" in sql else None)
+            return conn
+
+        with mock.patch("app.commitments.get_connection", side_effect=watched):
+            commitments.for_meetings([self.m["id"]])
+            commitments.all_tasks()
+        self.assertEqual(made, [])
+        brief = commitments.meeting_briefs([self.m["id"]])[self.m["id"]]
+        self.assertEqual(commitments.participants(brief), ["Анна", "Олег"])
+        self.assertNotIn("embedding", brief["speakers"]["S1"])
+        database.init_db()  # a database opened again (a restored backup): its tables are checked again
+        with mock.patch("app.commitments.get_connection", side_effect=watched):
+            commitments.for_meetings([self.m["id"]])
+        self.assertTrue(made)
+
 
 @unittest.skipIf(main is None, "fastapi and app dependencies not installed")
 class TasksApiTest(unittest.TestCase):
