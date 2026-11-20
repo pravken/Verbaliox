@@ -300,6 +300,13 @@ def parse(text: str) -> List[Dict[str, Any]]:
                         cur["tz"], cur["src_start"] = tz, datetime.strptime(value.strip()[:15], "%Y%m%dT%H%M%S")
                     except ValueError:
                         pass
+            elif name == "DTSTART" and dt is not None and value.strip().endswith("Z") and not cur.get("all_day"):
+                # A series given in UTC repeats at the same UTC time: expanded at a fixed local wall time
+                # it was an hour off after the viewer's clocks changed
+                try:
+                    cur["tz"], cur["src_start"] = timezone.utc, datetime.strptime(value.strip()[:15], "%Y%m%dT%H%M%S")
+                except ValueError:
+                    pass
         elif name == "RRULE":
             cur["rrule"] = value.strip()
         elif name == "RECURRENCE-ID":
@@ -412,7 +419,7 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
         # a UTC time (local here) is the series' wall time in its zone, or its last meeting was lost
         if len(rule["UNTIL"].strip()) == 8:
             until = until.replace(hour=23, minute=59, second=59)
-        elif to_wall is not None:
+        elif to_wall is not None and rule["UNTIL"].strip().upper().endswith("Z"):
             until = to_wall(until)
     days = [_DAYS[d[-2:]] for d in rule.get("BYDAY", "").upper().split(",") if d[-2:] in _DAYS]
     n = 0
@@ -540,6 +547,10 @@ def events(force: bool = False) -> List[Dict[str, Any]]:
         return parsed
     except Exception as e:
         with _lock:
+            if _cache["source"] != source:
+                # another calendar's events are not this one's: after switching to a link that fails,
+                # the previous calendar went on showing until the next read
+                _cache["events"] = []
             _cache.update(source=source, at=time.time(), error=str(e)[:200])
             return list(_cache["events"])
 

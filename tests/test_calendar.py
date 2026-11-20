@@ -154,6 +154,21 @@ class OutlookCalendarTest(unittest.TestCase):
             calendar_ics.events()  # cached: Outlook is not asked again
         fetch.assert_called_once()
 
+    def test_a_failing_new_link_does_not_show_the_previous_calendar(self):
+        ev = {"uid": "A", "title": "Старый", "start": datetime(2026, 10, 26, 10), "end": datetime(2026, 10, 26, 11),
+              "attendees": [], "rrule": "", "exdates": [], "all_day": False, "status": ""}
+        calendar_ics._cache.update(source="https://a.example/cal.ics", at=0.0, events=[ev], error="")
+        with mock.patch.object(calendar_ics, "_source", return_value="https://b.example/cal.ics"), \
+             mock.patch.object(calendar_ics, "_load_text", side_effect=OSError("нет связи")):
+            self.assertEqual(calendar_ics.events(force=True), [])
+        self.assertEqual(calendar_ics.status()["count"], 0)
+        # the same link failing for a while keeps what it showed
+        calendar_ics._cache.update(source="https://b.example/cal.ics", at=0.0, events=[ev], error="")
+        with mock.patch.object(calendar_ics, "_source", return_value="https://b.example/cal.ics"), \
+             mock.patch.object(calendar_ics, "_load_text", side_effect=OSError("нет связи")):
+            self.assertEqual(len(calendar_ics.events(force=True)), 1)
+        calendar_ics._cache.update(source="", at=0.0, events=[], error="")
+
 
 if __name__ == "__main__":
     unittest.main()
