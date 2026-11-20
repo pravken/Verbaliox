@@ -42,19 +42,19 @@ def _register(icon: Optional[Path]) -> None:
 
 
 def script(xml: str) -> str:
+    """The script that shows the toast. The XML (an invitation's title and link are untrusted text) goes
+    in as base64 and is decoded by the script: no quote of any kind in it can end a string and run code
+    (PowerShell takes the typographic ‘ ’ for quotes as well)."""
+    data = base64.b64encode(xml.encode("utf-8")).decode("ascii")
     return (
         "$ErrorActionPreference = 'Stop'\n"  # an error ends the script with an exit code: the balloon then
         "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null\n"
         "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null\n"
         "$x = New-Object Windows.Data.Xml.Dom.XmlDocument\n"
-        f"$x.LoadXml({_ps_string(xml)})\n"
+        f"$x.LoadXml([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{data}')))\n"
         "$t = New-Object Windows.UI.Notifications.ToastNotification $x\n"
-        f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier({_ps_string(APP_ID)}).Show($t)\n"
+        f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{APP_ID}').Show($t)\n"
     )
-
-
-def _ps_string(s: str) -> str:
-    return "'" + s.replace("'", "''") + "'"
 
 
 def show(title: str, text: str, buttons: List[Tuple[str, str]], launch: str = "", stay: bool = False,

@@ -27,8 +27,19 @@ class ToastTest(unittest.TestCase):
 
     def test_the_script_keeps_quotes_and_the_balloon_is_used_off_windows(self):
         s = toast.script(toast.toast_xml("It's", "x", [("Go", "https://zoom.us/j/1")]))
-        self.assertIn("It''s", s)  # a single quote doubled inside the PowerShell string
         self.assertIn(toast.APP_ID, s)
+        # an invitation's title with a typographic quote (PowerShell takes ’ for ') cannot end a string
+        # and run code: the text is not in the script, only its base64
+        evil = "Sync’); Start-Process calc; #"
+        s = toast.script(toast.toast_xml(evil, "x", [("Join", "https://zoom.us/j/1")]))
+        self.assertNotIn("Start-Process", s)
+        self.assertNotIn("’", s)
+        enc = s.split("FromBase64String('")[1].split("')")[0]
+        self.assertIn(evil, base64.b64decode(enc).decode("utf-8"))
+        from app import meeting_join
+
+        self.assertIsNone(meeting_join.launch_target("https://zoom.us/j/1’);calc;#"))
+        self.assertEqual(meeting_join.find("https://zoom.us/j/1’);calc;#"), "https://zoom.us/j/1")
         if sys.platform != "win32":
             self.assertFalse(toast.show("a", "b", [("Go", "https://zoom.us/j/1")]))
         with mock.patch.object(toast.sys, "platform", "win32"), mock.patch.object(toast, "_register"), \
@@ -37,7 +48,8 @@ class ToastTest(unittest.TestCase):
             self.assertTrue(toast.show("a", "b", [("Go", "https://zoom.us/j/1")]))
             args = run.call_args[0][0]
             self.assertIn("-EncodedCommand", args)
-            self.assertIn("zoom.us", base64.b64decode(args[-1]).decode("utf-16-le"))
+            ps = base64.b64decode(args[-1]).decode("utf-16-le")
+            self.assertIn("zoom.us", base64.b64decode(ps.split("FromBase64String('")[1].split("')")[0]).decode("utf-8"))
 
 
 if __name__ == "__main__":
