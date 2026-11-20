@@ -12,7 +12,7 @@ again on their next use.
 import threading
 import time
 import traceback
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import httpx
 
@@ -67,11 +67,10 @@ def _busy() -> bool:
     return live.has_sessions()
 
 
-def unload_now(force: bool = False) -> Dict[str, Any]:
-    """Releases everything the app holds; returns what was released. force (the button): every model
-    Ollama has in memory too, also one loaded before this start or by another program, waiting until it
-    is really gone (app/vram.ollama_unload)."""
-    from app import live, transcriber
+def release_speech_models() -> List[str]:
+    """The models of transcription out of memory: Whisper, GigaAM / Parakeet, the speaker models (ECAPA and
+    Nemotron, which no unload reached before: it stayed until the app ended). Returns what was released."""
+    from app import asr_onnx, nemotron_diar, transcriber
     from app.diarizer import ecapa_loaded_on, unload_diarizer
 
     released = []
@@ -81,11 +80,22 @@ def unload_now(force: bool = False) -> Dict[str, Any]:
     if ecapa_loaded_on():
         unload_diarizer()
         released.append("speakers")
-    from app import asr_onnx
-
+    if nemotron_diar.loaded():
+        nemotron_diar.unload()
+        released.append("nemotron")
     if asr_onnx.loaded_models():
         asr_onnx.release()  # GigaAM / Parakeet: up to 3 GB of RAM or VRAM
         released.append("onnx")
+    return released
+
+
+def unload_now(force: bool = False) -> Dict[str, Any]:
+    """Releases everything the app holds; returns what was released. force (the button): every model
+    Ollama has in memory too, also one loaded before this start or by another program, waiting until it
+    is really gone (app/vram.ollama_unload)."""
+    from app import live
+
+    released = release_speech_models()
     worker = live._worker
     if worker is not None and worker.proc is not None:
         with worker.lock:
