@@ -827,11 +827,54 @@ function openCalendarView() {
       try { localStorage.setItem('verbaliox_cal_mode', act); } catch (err) {}
       calLoad();
     } else if (act === 'day') { calView.mode = 'week'; calView.anchor = new Date(b.dataset.day); calLoad(); }
+    else if (act === 'dayoff') { const r = b.getBoundingClientRect(); calDayMenu(b.dataset.day, r.left, r.bottom + 4); }
     else if (act === 'rec') { closeCalendarView(); openMeeting(Number(b.dataset.id)); }
+  });
+  // a right click on a day: mark it a day off, or not (asked by the user)
+  wrap.addEventListener('contextmenu', e => {
+    const cell = e.target.closest('[data-daykey]');
+    if (!cell) return;
+    e.preventDefault();
+    calDayMenu(cell.dataset.daykey, e.clientX, e.clientY);
   });
   document.addEventListener('keydown', calKeydown, true);
   document.body.appendChild(wrap);
   calLoad();
+}
+
+// A day of the calendar: a day off of one's own, marked or taken back here (days_off, as in Settings → Календарь)
+function calDayMenu(day, x, y) {
+  let list = [];
+  try { list = JSON.parse(((state.system && state.system.settings) || {}).days_off || '[]'); } catch (e) {}
+  if (!Array.isArray(list)) list = [];
+  const hit = list.find(p => p.from <= day && day <= (p.to || p.from));
+  const save = async next => {
+    if (typeof saveDaysOff === 'function' && await saveDaysOff(next)) calLoad();
+  };
+  const shift = (k, n) => { const d = new Date(`${k}T12:00:00`); d.setDate(d.getDate() + n); return calKey(d); };
+  const items = [];
+  if (hit) {
+    items.push({ info: true, label: hit.title || t('dayOffDefault') });
+    // one day out of a period: the period is split around it
+    items.push({ label: t('calDayOffRemove'), run: () => save(list.flatMap(p => p !== hit ? [p] : [
+      ...(p.from < day ? [{ ...p, to: shift(day, -1) }] : []), ...((p.to || p.from) > day ? [{ ...p, from: shift(day, 1) }] : [])])) });
+    if (hit.from !== (hit.to || hit.from)) items.push({ label: t('calDayOffRemoveAll'), run: () => save(list.filter(p => p !== hit)) });
+  } else {
+    items.push({ label: t('calDayOffMark'), run: () => save([...list, { from: day, to: day, title: t('dayOffDefault') }]) });
+    items.push({ label: t('calVacationFrom'), run: () => {
+      closeCalendarView();
+      openModal('settings', 'general');
+      selectSettingsTab('calendar');
+      setTimeout(() => {
+        const a = document.getElementById('dayoff-from'), b = document.getElementById('dayoff-to'), n = document.getElementById('dayoff-title');
+        if (!a) return;
+        a.value = day; b.value = shift(day, 6); n.value = t('dayOffNamePh');
+        syncDateField(a); syncDateField(b);
+        a.scrollIntoView({ block: 'center' });
+      }, 300);
+    } });
+  }
+  setTimeout(() => openTextMenuAt(items, x, y), 0);
 }
 
 function calKeydown(e) {
@@ -903,14 +946,16 @@ function renderCalendarView() {
   const weekday = d => d.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
   let body;
   const hols = (calView.data && calView.data.holidays) || {};  // public holidays (Settings → Календарь → Праздники)
+  // «⋯» of a day: mark it a day off (shown on hover; a right click does the same)
+  const dayBtn = d => `<button data-cal="dayoff" data-day="${calKey(d)}" class="cal-day-more" title="${escapeHtml(t('calDayMenuTip'))}" aria-label="${escapeHtml(t('calDayMenuTip'))}">⋯</button>`;
   // the hours worked of a day, by fact (app/worktime.py)
   const wkTag = d => { const w = (calView.work || {})[calKey(d)]; return w && w.worked ? `<span class="cal-wk" title="${escapeHtml(`${t('dbWorkedTip').replace('{t}', () => dbHm(w.worked * 60))} · ${w.start}–${w.end}`)}">${escapeHtml(dbWorkedShort(w.worked))}</span>` : ''; };
   const holTag = d => hols[calKey(d)] ? `<span class="cal-hol" title="${escapeHtml(hols[calKey(d)])}">${escapeHtml(hols[calKey(d)])}</span>` : '';
   if (calView.mode === 'week') {
     body = `<div class="cal-week">${days.map(d => {
       const list = items[calKey(d)] || [];
-      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}">
-        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b>${wkTag(d)}</div>${holTag(d)}
+      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}" data-daykey="${calKey(d)}">
+        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
         <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
     }).join('')}</div>`;
   } else {
@@ -918,8 +963,8 @@ function renderCalendarView() {
     body = `<div class="cal-month">${heads}${days.map(d => {
       const list = items[calKey(d)] || [];
       const more = list.length - 3;
-      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}">
-        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${wkTag(d)}</div>${holTag(d)}
+      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}" data-daykey="${calKey(d)}">
+        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
         ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
         ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
     }).join('')}</div>`;

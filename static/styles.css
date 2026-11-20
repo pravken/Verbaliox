@@ -3479,3 +3479,11 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-ev { overflow-wrap: normal; word-break: normal; hyphens: manual; }
 .db-ev .db-tm { display: block; margin: 0 0 1px; }
 .db-ev-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; text-overflow: ellipsis; }
+
+/* the calendar's day: «⋯» to mark it a day off, seen on hover or focus */
+.cal-day-more { margin-left: 4px; width: 20px; height: 18px; border-radius: 5px; color: #8E8E93; font-size: 13px; line-height: 1; opacity: 0; }
+.cal-col:hover .cal-day-more, .cal-cell:hover .cal-day-more, .cal-day-more:focus-visible { opacity: 1; }
+.cal-day-more:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
+.cal-col-head .cal-day-more, .cal-cell-head .cal-day-more { margin-left: auto; }
+.cal-wk + .cal-day-more { margin-left: 4px !important; }
+@media (hover: none) { .cal-day-more { opacity: 1; } }

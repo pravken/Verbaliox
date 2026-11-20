@@ -245,6 +245,25 @@ await step('join a meeting call', async () => {
   expect(sent.length === 1 && sent[0].url.startsWith('https://teams.microsoft.com/'), `the call was not opened: ${JSON.stringify(sent)}`);
 });
 
+// The calendar window: a day marked a day off from its «⋯», then taken back (asked by the user)
+await step('day off from the calendar', async () => {
+  await page.evaluate(() => { calView.mode = 'month'; openCalendarView(); });
+  await sleep(800);
+  const day = await page.evaluate(() => calKey(new Date()));
+  await page.hover(`#cal-view [data-daykey="${day}"]`);
+  await page.click(`#cal-view [data-daykey="${day}"] .cal-day-more`);
+  await sleep(200);
+  await page.click('#text-menu button:has-text("Отметить выходным")');
+  await sleep(800);
+  expect(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`), 'the day is not marked');
+  await page.click(`#cal-view [data-daykey="${day}"]`, { button: 'right' });
+  await sleep(200);
+  await page.click('#text-menu button:has-text("Убрать выходной")');
+  await sleep(800);
+  expect(!(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`)), 'the day off is not taken back');
+  await page.evaluate(() => closeCalendarView());
+});
+
 // Settings → Календарь: a vacation marked by hand is saved at once and listed (asked by the user)
 await step('own days off', async () => {
   await page.evaluate(() => { openModal('settings', 'general'); selectSettingsTab('calendar'); });
