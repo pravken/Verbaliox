@@ -551,12 +551,30 @@ TORCH_INDEX = "https://download.pytorch.org/whl/cu126"
 OLDER_TORCH_INDEXES = ["https://download.pytorch.org/whl/cu124"]
 
 
-def _reinstall(py: Path, uv: Optional[str], frozen_file: Path, log_dir: Path) -> None:
+def _reinstall(py: Path, uv: Optional[str], frozen_file: Optional[Path], log_dir: Path, backup: Path) -> None:
+    """Put back the packages of the previous version: from its own requirements.txt (in the backup),
+    checked by its hashes like any install. The list of what was installed (pip freeze, no hashes, from
+    any of the indexes) is the last resort, for a backup without that file."""
     indexes = [a for url in [TORCH_INDEX, *OLDER_TORCH_INDEXES] for a in ("--extra-index-url", url)]
-    cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(frozen_file),
-            "--index-strategy", "unsafe-best-match", *indexes]
-           if uv else [str(py), "-m", "pip", "install", "-r", str(frozen_file), *indexes])
+    req, hashes = None, ["--require-hashes"]
+    try:
+        with zipfile.ZipFile(backup) as bz:
+            data = bz.read("requirements.txt")
+        req = backup.parent / "requirements-before-update.txt"
+        req.write_bytes(data)
+    except (OSError, KeyError, zipfile.BadZipFile):
+        req, hashes = frozen_file, []
     with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+        if req is None:
+            lf.write("restore of the Python packages: no previous requirements.txt and no list of the installed ones\n")
+            return
+        if not hashes:
+            lf.write("restore of the Python packages: no previous requirements.txt in the backup, "
+                     "installing the list of the packages that were installed (without hashes)\n")
+        lf.flush()
+        cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(req), *hashes,
+                "--index-strategy", "unsafe-best-match", *indexes]
+               if uv else [str(py), "-m", "pip", "install", "-r", str(req), *hashes, *indexes])
         subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, creationflags=_NO_WINDOW)
 
 
@@ -704,10 +722,11 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 uv = find_uv()
                 # What is installed now: put back if the new libraries fail half way
                 frozen = _freeze(py, uv)
+                frozen_file: Optional[Path] = None
                 if frozen:
                     frozen_file = data_dir / "updates" / "packages-before-update.txt"
                     frozen_file.write_text(frozen, encoding="utf-8")
-                    restore_packages = (lambda: _reinstall(py, uv, frozen_file, log_dir))
+                restore_packages = (lambda: _reinstall(py, uv, frozen_file, log_dir, backup))
                 cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(app_dir / "requirements.txt"),
                         "--require-hashes", "--index-strategy", "unsafe-best-match", "--extra-index-url", TORCH_INDEX]
                        if uv else

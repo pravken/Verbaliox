@@ -140,6 +140,40 @@ class ApplyUpdateTest(unittest.TestCase):
         self.assertEqual((self.app / "requirements.txt").read_text(), "same")
         self.assertFalse((self.app / "app" / "new.py").exists())
 
+    def test_packages_come_back_from_the_previous_requirements_with_hashes(self):
+        """Found in the audit: the rollback installed a pip freeze list without hashes from several indexes;
+        the previous version's requirements.txt (in the backup) is installed with --require-hashes instead."""
+        _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
+        calls = []
+
+        def run(cmd, *a, **k):
+            calls.append([str(x) for x in cmd])
+            return mock.Mock(returncode=1, stdout="torch==2.6.0\n")
+
+        with mock.patch.object(updater.subprocess, "run", side_effect=run), \
+                mock.patch.object(updater, "find_uv", return_value="uv.exe"):
+            with self.assertRaises(RuntimeError):
+                updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
+        restore = [c for c in calls if "requirements-before-update.txt" in " ".join(c)]
+        self.assertEqual(len(restore), 1)
+        self.assertIn("--require-hashes", restore[0])
+        self.assertEqual((self.data / "updates" / "requirements-before-update.txt").read_text(), "same")
+        self.assertFalse([c for c in calls if "packages-before-update.txt" in " ".join(c)])
+
+    def test_packages_fall_back_to_the_installed_list_without_the_previous_requirements(self):
+        backup = self.data / "updates" / "backup.zip"
+        with zipfile.ZipFile(backup, "w") as bz:
+            bz.writestr("app/main.py", "old main")
+        frozen = self.data / "updates" / "packages-before-update.txt"
+        frozen.write_text("torch==2.6.0\n")
+        (self.data / "logs").mkdir()
+        with mock.patch.object(updater.subprocess, "run") as run:
+            updater._reinstall(self.app / "python.exe", "uv.exe", frozen, self.data / "logs", backup)
+        cmd = [str(x) for x in run.call_args.args[0]]
+        self.assertIn(str(frozen), cmd)
+        self.assertNotIn("--require-hashes", cmd)
+        self.assertIn("without hashes", (self.data / "logs" / "update.log").read_text(encoding="utf-8"))
+
     def test_failed_restore_is_reported_as_broken(self):
         _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
         with mock.patch.object(updater.subprocess, "run", return_value=mock.Mock(returncode=1)), \
