@@ -303,8 +303,26 @@ class WindowApi:
         self._host, self._port = host, port
 
     def session_token(self) -> str:
-        """The session token for the "locked" page, which signs in with it (POST /api/session)."""
-        return read_session_token()
+        """The session token for the "locked" page, which signs in with it (POST /api/session). The
+        bridge answers whatever document the window shows, so only the app's own address gets it, not
+        a page the window was led to by a link."""
+        import webview
+
+        try:
+            url = webview.windows[0].get_current_url() if webview.windows else None
+        except Exception:
+            url = None
+        return read_session_token() if self._is_own(url) else ""
+
+    def _is_own(self, url: Optional[str]) -> bool:
+        from urllib.parse import urlsplit
+
+        try:
+            u = urlsplit(url or "")
+            return (u.scheme == "http" and (u.hostname or "") == self._host.strip("[]").lower()
+                    and u.port == self._port)
+        except ValueError:  # a port out of range
+            return False
 
     def toggle_fullscreen(self) -> bool:
         """WebView2 inside pywebview ignores the Fullscreen API, so the native window is toggled."""
