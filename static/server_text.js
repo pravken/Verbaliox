@@ -204,6 +204,7 @@ const SERVER_TEXT_EN = {
   "Обновление недоступно для установки": "The update cannot be installed",
   "Обработка отменена": "Processing cancelled",
   "Сведение дорожек записи...": "Mixing the recording's tracks...",
+  "Сведение дорожек — после встречи": "Mixing the tracks — after the meeting",
   "Сведение дорожек записи": "Mixing a recording's tracks",
   "Дорожки записи ещё сводятся — удалите её через минуту.": "The recording's tracks are still being mixed: delete it in a minute.",
   "Сетевые пути не открываются": "Network paths are not opened",
