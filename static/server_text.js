@@ -208,6 +208,8 @@ const SERVER_TEXT_EN = {
   "Дорожки записи ещё сводятся — удалите её через минуту.": "The recording's tracks are still being mixed: delete it in a minute.",
   "Сетевые пути не открываются": "Network paths are not opened",
   "Обработка отменена: показана часть, распознанная до отмены": "Processing cancelled: the part recognized before it is shown",
+  "Установка успешно завершена!": "Installed",
+  "Ожидание": "Waiting",
   "Ожидание: видеопамять занята субтитрами идущей записи...": "Waiting: the video memory is used by the captions of a recording...",
   "Окружение дубляжа не установлено. Установите его в окне «Дубляж».": "The dubbing environment is not installed. Install it in the Dub window.",
   "Отмена обработки...": "Cancelling...",
@@ -340,6 +342,9 @@ const SERVER_TEXT_EN = {
 // Messages with values in them: {} in the Russian text, {0} {1} … in the English one
 const SERVER_PATTERNS_EN = [
   ["Перемещение заметок Obsidian {} из {}", "Moving the Obsidian notes {0} of {1}"],
+  ["Подготовка к скачиванию {}", "Preparing to download {0}"],
+  ["Ошибка загрузки: {}", "Download failed: {0}"],
+  ["{}: {} МБ из {} МБ ({}%)", "{0}: {1} MB of {2} MB ({3}%)"],
   ["Формирование обзора записи ({}): часть {} из {}...", "Writing the overview ({0}): part {1} of {2}..."],
   ["Видеокарта занята: Ollama выгрузит модель {}, как только освободится — программа повторяет попытку", "The video card is busy: Ollama will unload the model {0} as soon as it is free — the app keeps trying"],
   ["Для дубляжа записи длиной {} ч нужно около {} ГБ памяти, а в компьютере {} ГБ. Сделайте дубляж частей записи (Нарезка) или более короткой записи.", "Dubbing a {0} h recording needs about {1} GB of memory, and this computer has {2} GB. Dub parts of the recording (Cut) or a shorter recording."],

@@ -850,8 +850,8 @@ function updateWhisperModelsUI(models) {
   if (dlPanel && (st.active || (st.logs && st.logs.length > 0))) {
     dlPanel.classList.remove('hidden');
     const wPullStatusEl = document.getElementById('whisper-pull-status');
-    wPullStatusEl.textContent = st.status || '';
-    wPullStatusEl.title = st.status || '';
+    wPullStatusEl.textContent = serverText(st.status || '');  // in English too (found in the audit)
+    wPullStatusEl.title = serverText(st.status || '');
     document.getElementById('whisper-pull-pct').textContent = `${st.progress || 0}%`;
     document.getElementById('whisper-pull-bar').style.width = `${st.progress || 0}%`;
 
