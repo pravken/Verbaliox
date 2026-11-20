@@ -24,7 +24,7 @@ BOOLS = {
     "obsidian_transcript", "obsidian_generate", "obsidian_feature_folders", "obsidian_more", "obsidian_stats", "llm_cloud_consent", "watch_folder_recursive",
     "dub_keep_original_track", "dub_denoise", "dub_room_tone", "dub_keep_workdir", "dictation_translate_cloud", "dictation_save",
     "start_with_windows", "close_to_tray", "ask_import_params", "proc_denoise", "proc_loudnorm", "proc_leveling",
-    "meet_auto_all", "meet_ask_inperson", "work_day_fit", "device_auto",
+    "meet_auto_all", "meet_ask_inperson", "meet_notify", "work_day_fit", "device_auto",
 }
 INTS = {"num_speakers": (0, 20), "idle_unload_minutes": (0, 24 * 60), "media_retention_days": (0, 3650),
         "onnx_gpu_batch": (1, 256), "work_day_start": (0, 23), "work_day_end": (0, 24)}

@@ -250,6 +250,7 @@ def init_db() -> None:
             "work_day_fit": "true",  # ...stretched for a meeting that runs a little past its edges
             "meet_auto_all": "false",  # record every calendar meeting by itself (static/js/home.js)
             "meet_ask_inperson": "true",  # ...but ask first for a meeting without a link to a call
+            "meet_notify": "true",  # a Windows notification 5 minutes before a calendar meeting (app/brief_notice.py)
             "holiday_country": "",  # public holidays of this country count as days off (app/holidays_cal.py); "" = none
             "holiday_subdiv": "",  # ...and of its region
             "days_off": "[]",  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)

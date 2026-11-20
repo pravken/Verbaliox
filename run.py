@@ -518,6 +518,11 @@ class TrayController:
     def open_target(self, target: str) -> None:
         """A click on a notification: the window comes up at the place it was about (static/js/home.js
         openFromNotice); without a place, as it was."""
+        if target.startswith("join:"):  # the call of a calendar meeting (app/brief_notice.py): no window
+            from app import meeting_join
+
+            if meeting_join.open_link(target[5:]):
+                return
         self.show_window()
         if target:
             import json

@@ -186,6 +186,12 @@ def _parse_dt(value: str, params: str) -> Optional[datetime]:
 _LINK_RE = re.compile(r"https?://", re.I)
 
 
+def _join(value: str) -> str:
+    from app.meeting_join import find
+
+    return find(_unescape(value))
+
+
 def _split_property(line: str) -> Tuple[str, str]:
     """NAME;PARAMS and the value: at the first colon outside quotes (TZID="(UTC+01:00) Amsterdam")."""
     quoted = False
@@ -198,8 +204,9 @@ def _split_property(line: str) -> Tuple[str, str]:
 
 
 def parse(text: str) -> List[Dict[str, Any]]:
-    """Events as dicts: {uid, title, start, end, attendees, rrule, exdates, all_day, location, online}.
-    `online`: the event has a link (in its place, description or URL): a call, not a room."""
+    """Events as dicts: {uid, title, start, end, attendees, rrule, exdates, all_day, location, online, join}.
+    `online`: the event has a link (in its place, description or URL): a call, not a room; `join`: the
+    link to its call (Teams, Zoom, Meet, Webex: app/meeting_join.py), "" when none is known."""
     events: List[Dict[str, Any]] = []
     cur: Optional[Dict[str, Any]] = None
     moved: List[tuple] = []  # (uid, the time of the series it replaces): a moved or cancelled meeting
@@ -244,7 +251,7 @@ def parse(text: str) -> List[Dict[str, Any]]:
             continue
         if line == "BEGIN:VEVENT":
             cur = {"uid": "", "title": "", "start": None, "end": None, "attendees": [], "rrule": "", "exdates": [],
-                   "all_day": False, "status": "", "location": "", "online": False, "recurrence_id": None}
+                   "all_day": False, "status": "", "location": "", "online": False, "join": "", "recurrence_id": None}
             continue
         if line == "END:VEVENT":
             if cur and cur["recurrence_id"] and cur["uid"]:
@@ -271,8 +278,13 @@ def parse(text: str) -> List[Dict[str, Any]]:
         elif name == "LOCATION":
             cur["location"] = _unescape(value).strip()[:200]
             cur["online"] = cur["online"] or bool(_LINK_RE.search(value))
+            cur["join"] = cur["join"] or _join(value)
         elif name in ("DESCRIPTION", "URL") or name.endswith("MEETINGURL") or name == "X-GOOGLE-CONFERENCE":
             cur["online"] = cur["online"] or bool(_LINK_RE.search(value))
+            # the meeting URL of the service first; the description's link only when there is no other
+            found = _join(value)
+            if found and (not cur["join"] or name != "DESCRIPTION"):
+                cur["join"] = found
         elif name == "STATUS":
             cur["status"] = value.strip()
         elif name in ("DTSTART", "DTEND"):
@@ -539,7 +551,7 @@ def current_meeting(at: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
 def upcoming(hours: int = 36, limit: int = 8) -> List[Dict[str, Any]]:
     now = datetime.now()
     return [{"title": e["title"], "start": e["start"].isoformat(timespec="minutes"), "end": e["end"].isoformat(timespec="minutes"),
-             "attendees": e["attendees"][:20]}
+             "attendees": e["attendees"][:20], "join": e.get("join", "")}
             for e in [e for e in window(now - timedelta(minutes=30), now + timedelta(hours=hours)) if is_meeting(e)][:limit] if e["end"] > now]
 
 
@@ -574,7 +586,8 @@ def day(start: datetime, end: datetime) -> List[Dict[str, Any]]:
     `key` names one meeting of a series: its id and its start."""
     return [{"key": f"{e['uid'] or e['title']}|{e['start'].isoformat(timespec='minutes')}", "title": e["title"],
              "start": e["start"].isoformat(timespec="minutes"), "end": e["end"].isoformat(timespec="minutes"),
-             "attendees": e["attendees"][:20], "location": e.get("location", ""), "online": bool(e.get("online"))}
+             "attendees": e["attendees"][:20], "location": e.get("location", ""), "online": bool(e.get("online")),
+             "join": e.get("join", "")}
             for e in window(start, end)]
 
 
