@@ -3076,6 +3076,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .frw-kicker { padding: 20px 24px 0; margin-bottom: -14px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-hi); }
 .frw-hol { display: flex; gap: 8px; margin-top: 10px; }
 .frw-hol-plain { margin-top: 0; }
+/* «Что нового»: the points of a new feature */
+.frw-points { list-style: disc; margin: 0; padding: 12px 16px 12px 32px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); display: grid; gap: 6px; color: #D1D1D6; font-size: 13px; line-height: 1.45; }
+.frw-points li::marker { color: var(--accent-hi); }
 /* Settings → Календарь: the user's own days off and vacations */
 .dayoff { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .dayoff-list { display: grid; gap: 4px; }
