@@ -88,7 +88,23 @@ function hwDeviceLabel(hw) {
   return hw && hw.cuda_available ? (hw.device_name || '—') : t('hwCpuName');
 }
 
+// The form is filled again from the server (after a download, a save...): a field being typed in keeps
+// what is typed (found in the audit: a model download ended and the calendar path typed went back)
 async function loadSystemInfo() {
+  const el = document.activeElement;
+  const typing = el && el.closest && el.closest('#modal-settings') && el.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')
+    ? { el, value: el.value, start: el.selectionStart, end: el.selectionEnd } : null;
+  try {
+    await fillSystemInfo();
+  } finally {
+    if (typing && document.activeElement === typing.el && typing.el.value !== typing.value) {
+      typing.el.value = typing.value;
+      try { typing.el.setSelectionRange(typing.start, typing.end); } catch (e) {}
+    }
+  }
+}
+
+async function fillSystemInfo() {
   // a change of the last 450 ms is saved before the form is filled again from the server
   if (_settingsSaveTimer) { clearTimeout(_settingsSaveTimer); _settingsSaveTimer = null; await saveAllSettings(); }
   try {
