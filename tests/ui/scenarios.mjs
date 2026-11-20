@@ -409,6 +409,27 @@ await step('meeting question expires', async () => {
   await page.evaluate(() => { window.isRecording = window._realIsRecording; updateRecordButtonState(); });
 });
 
+// Главная opens with its widgets rising once: the fresh numbers drawn a moment later do not start the rise
+// over (reported by the user: every card jerked twice)
+await step('dashboard rises once', async () => {
+  await page.evaluate(() => switchAppView('home'));
+  await sleep(400);
+  const dips = await page.evaluate(() => new Promise(done => {
+    switchAppView('dashboard');
+    setTimeout(() => renderDashboard(), 150);  // as the fresh numbers do
+    const seen = [];
+    const t0 = performance.now();
+    (function look() {
+      const w = document.querySelector('#db-grid > .db-w');
+      if (w) seen.push(Number(getComputedStyle(w).opacity));
+      if (performance.now() - t0 < 900) requestAnimationFrame(look); else done(seen);
+    })();
+  }));
+  let top = 0, dip = 0;
+  for (const o of dips) { top = Math.max(top, o); dip = Math.max(dip, top - o); }
+  expect(dip < 0.2, `a widget faded out again while rising (by ${dip.toFixed(2)})`);
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => switchAppView('dashboard'));
