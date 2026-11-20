@@ -3381,3 +3381,7 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 [data-fill="soft"] .bg-apple-blue.text-white *, [data-fill="outline"] .bg-apple-blue.text-white *,
 [data-fill="soft"] .lib-tile-on *, [data-fill="outline"] .lib-tile-on * { color: inherit; }
 [data-fill="soft"] .tb-active .tb-badge, [data-fill="outline"] .tb-active .tb-badge { background: rgb(var(--accent-rgb) / 0.35); color: var(--fill-fg); }
+
+.db-prog-cfg { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--hc-dim, #8E8E93); background: none; border: 0; cursor: pointer; }
+.db-prog-cfg:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.07); }
+.db-prog-cfg svg { width: 13px; height: 13px; }

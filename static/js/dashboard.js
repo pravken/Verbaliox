@@ -202,11 +202,19 @@ function dbRenderHead() {
   if (prog) {
     prog.classList.toggle('hidden', !d);
     if (d) {
+      // calendar days, or working days (Monday to Friday) as the user chose with the gear (asked by the user)
+      const work = dbPrefs().days === 'work';
       const a = new Date(`${d.start}T00:00:00`), b = new Date(`${d.end}T00:00:00`), now = new Date();
-      const all = Math.round((b - a) / 864e5), pct = Math.max(0, Math.min(100, (now - a) / (b - a) * 100));
-      const done = Math.max(0, Math.min(all, Math.floor((now - a) / 864e5)));
-      const label = t('dbPeriodProgress').replace('{done}', () => plural(done, t('dbDayForms'))).replace('{all}', () => all);
-      prog.innerHTML = `<i class="db-progress-bar"><i style="width:${pct.toFixed(1)}%"></i></i><span>${escapeHtml(label)}</span>`;
+      const days = [];
+      for (let x = new Date(a); x < b; x.setDate(x.getDate() + 1)) if (!work || (x.getDay() + 6) % 7 < 5) days.push(new Date(x));
+      const all = days.length;
+      const done = days.filter(x => x.getTime() + 864e5 <= now.getTime()).length;  // the days over
+      const today = days.find(x => x <= now && now < new Date(x.getTime() + 864e5));
+      const pct = all ? Math.max(0, Math.min(100, (done + (today ? (now - today) / 864e5 : 0)) / all * 100)) : 0;
+      const label = t(work ? 'dbPeriodProgressWork' : 'dbPeriodProgress').replace('{done}', () => plural(done, t(work ? 'dbWorkDayForms' : 'dbDayForms'))).replace('{all}', () => all);
+      prog.innerHTML = `<i class="db-progress-bar"><i style="width:${pct.toFixed(1)}%"></i></i><span>${escapeHtml(label)}</span>`
+        + `<button class="db-prog-cfg" data-click="dbProgressMenu" data-click-args='[{"$": "el"}]' title="${escapeHtml(t('dbDaysTip'))}" aria-label="${escapeHtml(t('dbDaysTip'))}">`
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>';
       prog.setAttribute('aria-label', label);
     }
   }
@@ -218,6 +226,16 @@ function dbRenderHead() {
   fb.classList.toggle('lt-btn-on', !!f);
   document.getElementById('db-edit-label').textContent = t(DB.edit ? 'dbDone' : 'dbEdit');
   document.getElementById('db-edit-btn').setAttribute('aria-pressed', DB.edit ? 'true' : 'false');
+}
+
+// the gear of the period's progress: calendar or working days
+function dbProgressMenu(el) {
+  const r = el.getBoundingClientRect(), cur = dbPrefs().days === 'work' ? 'work' : 'cal';
+  const pick = days => { dbSave({ days }); dbRenderHead(); };
+  setTimeout(() => openTextMenuAt([
+    { label: `${cur === 'cal' ? '✓ ' : '   '}${t('dbDaysCal')}`, run: () => pick('cal') },
+    { label: `${cur === 'work' ? '✓ ' : '   '}${t('dbDaysWork')}`, run: () => pick('work') },
+  ], r.left, r.bottom + 6), 0);
 }
 
 function dbNum(n) { return String(n); }  // a point for fractions in both languages (asked by the user)
