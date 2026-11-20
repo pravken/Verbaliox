@@ -254,10 +254,10 @@ def init_db() -> None:
             "meet_notify_before": "300",  # ...the reminder this many seconds ahead; 0 = only the call at the start
             "holiday_country": "",  # public holidays of this country count as days off (app/holidays_cal.py); "" = none
             "holiday_subdiv": "",  # ...and of its region
-            "days_off": "[]",
+            "days_off": "[]",  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)
             "worktime_track": "true",  # count the minutes this computer is in use: the working day (app/worktime.py)
             "work_remind_hours": "8",  # ...and tell when this many hours are worked; 0 = never
-            "work_reminded_day": "",  # the working day told about already  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)
+            "work_reminded_day": "",  # the working day told about already
             "setup_done": "[]",  # the steps of the setup after an update already answered (static/js/settings.js SETUP_STEPS)
             "meet_ignore": "[]",  # calendar events that are no meeting: [{id: series, key: one, title}] (calendar_ics.is_meeting)
             "meet_never": "[]",  # calendar meetings never recorded or asked about: [{id: series, title}], JSON
