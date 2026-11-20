@@ -193,6 +193,12 @@ await step('setup steps after an update', async () => {
   expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
   await page.click('#setup-steps button[data-a="next"]');
   await sleep(500);
+  // then the news of the version, one step each: the last one closes the wizard
+  for (let i = 0; i < 5 && await page.$('#setup-steps-dialog'); i++) {
+    expect(await page.$('#setup-steps .frw-points li'), 'a news step without its points');
+    await page.click('#setup-steps button[data-a="next"]');
+    await sleep(400);
+  }
   expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
   const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(set.holiday_country === 'RS', `the country not saved: ${set.holiday_country}`);

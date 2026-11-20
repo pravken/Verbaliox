@@ -1203,7 +1203,14 @@ function openFirstRunWizard(data) {
       return;
     }
     if (b.dataset.a === 'meter') { if (meter.stream) { stopMeter(); draw(); } else startMeter(); return; }
-    if (b.dataset.a === 'later') { stopMeter(); wrap.remove(); openModal('settings', 'recognition'); return; }
+    if (b.dataset.a === 'later') {
+      stopMeter(); wrap.remove();
+      // a new install: what earlier versions did not have is no news (the settings among them stay to ask)
+      const news = SETUP_STEPS.filter(x => x.kind === 'news').map(x => x.id);
+      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { setup_done: JSON.stringify(news) } }) }).catch(() => null);
+      openModal('settings', 'recognition');
+      return;
+    }
     if (b.dataset.a === 'back' || (b.dataset.a === 'next' && st.page !== 'sum')) {
       stopMeter();
       const list = pages();
@@ -3330,11 +3337,20 @@ function holidayPickHtml(country, subdiv, plain = false) {
     </div></div>`;
 }
 
-// --- After an update: the settings a new version brings, asked once in a small wizard ---
-// A step is asked when it is not in setup_done and its setting is not chosen yet (a new install
-// answers them in the first-run wizard). The list grows with the versions: add a step here.
+// --- After an update: «Новое после обновления», one small wizard for what a new version brings ---
+// Two kinds of step: «setup» asks a setting (body() draws it, apply() gives the settings to save, and
+// «Не нужно» skips it), «news» tells a new feature (its points, and a button to where it lives). A step is
+// shown once: Позже leaves it for the next start, the other buttons put its id in setup_done. A new
+// install answers them in the first-run wizard. Add a version's steps at the end of the list.
 const SETUP_STEPS = [
-  { id: 'holidays', since: '0.8.25', needed: s => !String(s.holiday_country || '').trim() },
+  { id: 'holidays', kind: 'setup', since: '0.8.25', needed: s => !String(s.holiday_country || '').trim() && HOLIDAYS.available,
+    title: 'setupHolQ', text: 'setupHolSub',
+    body: st => `<div class="frw-autos">${holidayPickHtml(st.country, st.subdiv, true)}</div>`,
+    apply: st => (st.country ? { holiday_country: st.country, holiday_subdiv: st.subdiv } : {}) },
+  { id: 'days-off', kind: 'news', since: '0.8.25', title: 'newsDaysOffT', text: 'newsDaysOffD',
+    points: ['newsDaysOffP1', 'newsDaysOffP2'], open: { label: 'newsOpenSettings', run: () => { openModal('settings', 'general'); selectSettingsTab('calendar'); } } },
+  { id: 'join-call', kind: 'news', since: '0.8.25', title: 'newsJoinT', text: 'newsJoinD',
+    points: ['newsJoinP1', 'newsJoinP2'], open: { label: 'newsOpenSettings', run: () => { openModal('settings', 'general'); selectSettingsTab('calendar'); } } },
 ];
 
 function setupDoneList(s) {
@@ -3344,10 +3360,9 @@ function setupDoneList(s) {
 async function openSetupSteps(s) {
   if (document.getElementById('first-run-wizard') || document.getElementById('setup-steps')) return;
   const done = setupDoneList(s);
-  const steps = SETUP_STEPS.filter(x => !done.includes(x.id) && x.needed(s));
-  if (!steps.length) return;
+  if (!SETUP_STEPS.some(x => !done.includes(x.id))) return;
   await holidayCountries();
-  if (steps.some(x => x.id === 'holidays') && !HOLIDAYS.available) steps.splice(steps.findIndex(x => x.id === 'holidays'), 1);
+  const steps = SETUP_STEPS.filter(x => !done.includes(x.id) && (!x.needed || x.needed(s)));
   if (!steps.length) return;
   const st = { at: 0, country: holidayHomeCountry(), subdiv: '' };
   const wrap = document.createElement('div');
@@ -3360,26 +3375,24 @@ async function openSetupSteps(s) {
     const settings = { ...extra, setup_done: JSON.stringify([...new Set([...setupDoneList(s), ...ids])]) };
     const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }) }).catch(() => null);
     if (!r || !r.ok) showError(t('errorGeneric'));
-    else Object.assign(s, settings);
+    else { Object.assign(s, settings); if (state.system && state.system.settings) Object.assign(state.system.settings, settings); }
   };
   const draw = () => {
-    const step = steps[st.at];
-    const dots = steps.length > 1 ? `<span class="frw-dots">${steps.map((_, i) => `<span class="frw-dot${i === st.at ? ' is-on' : ''}"></span>`).join('')}</span>` : '';
-    let title = '', sub = '', body = '';
-    if (step.id === 'holidays') {
-      title = t('setupHolQ');
-      sub = t('setupHolSub');
-      body = `<div class="frw-autos">${holidayPickHtml(st.country, st.subdiv, true)}</div>`;
-    }
-    wrap.innerHTML = `<div class="frw" id="setup-steps-dialog">
-      <div class="frw-kicker">${escapeHtml(t('setupStepsTitle'))}</div>
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2>${dots}</div>
-      <p class="frw-sub">${escapeHtml(sub)}</p>
+    const step = steps[st.at], last = st.at === steps.length - 1;
+    const dots = steps.length > 1 ? `<span class="frw-dots" aria-label="${st.at + 1} / ${steps.length}">${steps.map((_, i) => `<span class="frw-dot${i === st.at ? ' is-on' : ''}"></span>`).join('')}</span>` : '';
+    const body = step.kind === 'setup' ? step.body(st)
+      : `<ul class="frw-points">${(step.points || []).map(k => `<li>${escapeHtml(t(k))}</li>`).join('')}</ul>`;
+    const second = step.kind === 'setup' ? `<button data-a="skip" class="ui-btn ui-btn-subtle">${escapeHtml(t('setupSkip'))}</button>`
+      : step.open ? `<button data-a="open" class="ui-btn ui-btn-subtle">${escapeHtml(t(step.open.label))}</button>` : '';
+    wrap.innerHTML = `<div class="frw" id="setup-steps-dialog" data-step="${escapeHtml(step.id)}">
+      <div class="frw-kicker">${escapeHtml(t(step.kind === 'setup' ? 'setupStepsTitle' : 'setupNewsTitle'))}</div>
+      <div class="frw-head"><h2 class="frw-title">${escapeHtml(t(step.title))}</h2>${dots}</div>
+      <p class="frw-sub">${escapeHtml(t(step.text))}</p>
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
         <button data-a="later" class="frw-later" title="${escapeHtml(t('setupLaterTip'))}">${escapeHtml(t('setupLater'))}</button>
-        <button data-a="skip" class="ui-btn ui-btn-subtle">${escapeHtml(t('setupSkip'))}</button>
-        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(st.at < steps.length - 1 ? t('frNext') : t('setupDone'))}</button>
+        ${second}
+        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(t(!last ? 'frNext' : step.kind === 'setup' ? 'setupDone' : 'setupGotIt'))}</button>
       </div></div>`;
     wrap.querySelector('#setup-steps-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;
   };
@@ -3394,10 +3407,12 @@ async function openSetupSteps(s) {
     if (!b) return;
     const step = steps[st.at];
     if (b.dataset.a === 'later') { close(); return; }  // asked again at the next start
-    // «Пропустить»: not asked again (Settings keep it); «Далее»/«Готово»: the choice is saved
-    const extra = b.dataset.a === 'next' && step.id === 'holidays' && st.country ? { holiday_country: st.country, holiday_subdiv: st.subdiv } : {};
+    // «Не нужно»: not asked again (Settings keep it); «Далее»/«Готово»: the choice is saved; «Открыть»: seen,
+    // and the wizard gives way to the place the feature lives
+    const extra = b.dataset.a === 'next' && step.apply ? step.apply(st) : {};
     await save([step.id], extra);
-    if (extra.holiday_country && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
+    if (Object.keys(extra).length && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
+    if (b.dataset.a === 'open') { close(); step.open.run(); return; }
     if (st.at < steps.length - 1) { st.at += 1; draw(); } else close();
   });
   document.addEventListener('keydown', onKey, true);
