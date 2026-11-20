@@ -459,6 +459,21 @@ await step('feature page stays closed', async () => {
   await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }), id);
 });
 
+// The background poll of the library sends the list's ETag back and an unchanged list answers 304, not
+// the whole JSON again (audit: megabytes every 30 s)
+await step('library poll is cheap', async () => {
+  expect(await page.evaluate(() => !!live.listEtag), 'the list came without an ETag');
+  const statuses = [];
+  const seen = r => { if (/\/api\/meetings$/.test(r.url())) statuses.push(r.status()); };
+  page.on('response', seen);
+  await page.evaluate(() => loadMeetingsList({ poll: true }));
+  await page.evaluate(() => loadMeetingsList());
+  await sleep(300);
+  page.off('response', seen);
+  expect(statuses[0] === 304 && statuses[1] === 200, `poll ${statuses[0]}, full ${statuses[1]}`);
+  expect(await page.locator('#meetings-list [data-mid]').count() > 0, 'the list is empty after the poll');
+});
+
 // The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is
 // busy the app starts on another port, whose storage is empty (audit: an English user got Russian)
 await step('language from the server', async () => {

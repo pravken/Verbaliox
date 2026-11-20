@@ -1,5 +1,6 @@
 """The library: recordings, search, import, backup, comparison, calendar, the GPU build."""
 
+import hashlib
 import os
 import re
 import shutil
@@ -7,7 +8,8 @@ import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import File, Form, HTTPException, UploadFile
+from fastapi import File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from app import __version__
@@ -27,8 +29,16 @@ router = APIRouter()
 
 # --- Meetings & Batch Processing ---
 @router.get("/api/meetings")
-def api_list_meetings() -> List[Dict[str, Any]]:
-    return list_meetings()
+def api_list_meetings(request: Request) -> Response:
+    """The whole list, with an ETag of its body: the page's background poll sends it back
+    (If-None-Match) and gets 304 when nothing changed, not megabytes of the same JSON to parse and
+    draw again. A hash of the answer itself, so no write anywhere can be missed."""
+    resp = JSONResponse(list_meetings(), headers={"Cache-Control": "no-cache"})
+    etag = '"' + hashlib.blake2b(resp.body, digest_size=12).hexdigest() + '"'
+    if etag in [t.strip() for t in request.headers.get("if-none-match", "").split(",")]:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
+    resp.headers["ETag"] = etag
+    return resp
 
 @router.get("/api/meetings/search")
 def api_search_meetings(q: str = "") -> List[Dict[str, Any]]:

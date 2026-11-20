@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     scheduleVramRefresh(100);
-    loadMeetingsList().then(loadQueue).catch(console.error);  // what changed while the window was in the tray
+    loadMeetingsList({ poll: true }).then(loadQueue).catch(console.error);  // what changed while the window was in the tray
   });
   startLiveUpdates();
   loadQueue().catch(console.error);
