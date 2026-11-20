@@ -320,11 +320,20 @@ def apply_pending() -> Optional[str]:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     kept = DATA_DIR / f"meetings.before-restore-{stamp}.db"
     if DB_PATH.exists():
-        conn = sqlite3.connect(str(DB_PATH))  # the last changes may still be in the -wal file
+        # the last changes may still be in the -wal file. A damaged database (the case a restore is for,
+        # found in the audit) cannot be checkpointed: it is kept as it is and replaced all the same
         try:
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        finally:
-            conn.close()
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            finally:
+                conn.close()
+        except sqlite3.DatabaseError as e:
+            print(f"[backup] the current database could not be checkpointed ({e}); kept as it is", flush=True)
+            for suffix in ("-wal", "-shm"):
+                side = Path(str(DB_PATH) + suffix)
+                if side.exists():
+                    shutil.copyfile(side, Path(str(kept) + suffix))
         shutil.copyfile(DB_PATH, kept)
         try:
             _carry_secrets(kept, PENDING)

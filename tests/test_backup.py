@@ -165,5 +165,28 @@ class BackupTest(unittest.TestCase):
             backup.restore(bad)
 
 
+class DamagedRestoreTest(unittest.TestCase):
+    def test_a_damaged_database_is_replaced_by_the_restore(self):
+        """Found in the audit: a damaged database could not be checkpointed, and the restore failed at every start."""
+        from unittest import mock
+
+        d = Path(tempfile.mkdtemp())
+        db, pending = d / "meetings.db", d / "meetings.restore.db"
+        db.write_bytes(b"not a database" * 100)
+        conn = sqlite3.connect(str(pending))
+        conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, title TEXT)")
+        conn.execute("INSERT INTO meetings (title) VALUES ('Из копии')")
+        conn.commit()
+        conn.close()
+        with mock.patch.object(backup, "DB_PATH", db), mock.patch.object(backup, "PENDING", pending), \
+                mock.patch.object(backup, "DATA_DIR", d):
+            kept = backup.apply_pending()
+        self.assertTrue(Path(kept).is_file())
+        self.assertEqual(Path(kept).read_bytes()[:14], b"not a database")  # the damaged one is kept aside
+        conn = sqlite3.connect(str(db))
+        self.assertEqual(conn.execute("SELECT title FROM meetings").fetchone()[0], "Из копии")
+        conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()
