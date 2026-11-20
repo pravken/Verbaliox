@@ -73,16 +73,16 @@ function applyUiScale(pct) {
 // Chosen with the user on the try-on page: muted colours, readable white text on a filled one (the fill is
 // darkened until it is, 4.8:1 and more), and dark grounds with a slight tint
 const THEME_ACCENTS = {
-  steel: '#4C7FD9', azure: '#3E95C9', ice: '#78A8D0', turquoise: '#43A6B4',
-  emerald: '#3F9E78', olive: '#8F9A55', ochre: '#C09A4D', cherry: '#A8324A',
+  steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
+  emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#A8324A',
 };
 const THEME_BGS = {
   slate: '#121418', deepblue: '#10141C', petrol: '#0E1617', moss: '#121411',
-  pine: '#0F1513', gunmetal: '#15181A', coal: '#0B0C0E', black: '#000000',
+  pine: '#0F1513', steel: '#111518', coal: '#0B0C0E', black: '#000000',
 };
 const THEME_FILLS = ['solid', 'soft', 'outline'];
 // the presets of 0.8.24, for a theme chosen then
-const THEME_FORMER = { blue: 'steel', indigo: 'steel', purple: 'cherry', pink: 'cherry', teal: 'turquoise', mint: 'emerald', graphite: 'ice',
+const THEME_FORMER = { blue: 'steel', indigo: 'lavender', purple: 'lavender', pink: 'cherry', teal: 'turquoise', mint: 'emerald', graphite: 'slate',
   midnight: 'deepblue', forest: 'pine', warm: 'coal' };
 function hexChannels(h) { return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(' '); }
 // a colour mixed with white (k > 0) or black (k < 0), as #RRGGBB
