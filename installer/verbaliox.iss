@@ -182,7 +182,7 @@ begin
   Cfg := ExpandConstant('{app}\') + Name + '\pyvenv.cfg';
   if not LoadStringFromFile(Cfg, Text) then
     Exit;
-  S := String(Text);
+  S := UTF8Decode(Text);  // pyvenv.cfg is UTF-8: a Cyrillic folder was read and written in the ANSI code page (audit)
   OldD := RemoveBackslash(OldAppDir);
   OldL := Lowercase(OldD);
   NewD := RemoveBackslash(ExpandConstant('{app}'));
@@ -194,7 +194,7 @@ begin
     S := Copy(S, P + Length(OldD), Length(S));
     P := Pos(OldL, Lowercase(S));
   end;
-  SaveStringToFile(Cfg, AnsiString(Done + S), False);
+  SaveStringToFile(Cfg, UTF8Encode(Done + S), False);
 end;
 
 // OLLAMA_MODELS set by the program into its folder follows the move
