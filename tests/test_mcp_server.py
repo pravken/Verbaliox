@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 try:
@@ -84,6 +85,10 @@ class McpServerTest(unittest.TestCase):
         self.assertTrue(err)
         err, tasks = _call("list_tasks", scope="waiting")
         self.assertEqual([t["task"] for t in tasks["tasks"]], ["Прислать смету"])
+        # the list of local-only recordings cannot be read: the call fails, nothing is handed out
+        with mock.patch("app.database.local_only_ids", side_effect=RuntimeError("database is locked")):
+            with self.assertRaises(RuntimeError):
+                mcp_server._hidden()
         database.update_settings({"mcp_local_only": "true"})  # allowed by the user
         self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
 
