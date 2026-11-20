@@ -1,6 +1,7 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -60,6 +61,7 @@ class UntranscribedTest(unittest.TestCase):
 
     def test_a_notice_once_a_day_and_never_during_a_meeting(self):
         self._rec("Синк", "cancelled")
+        untranscribed._state.update(checked=time.time(), noticed=0.0)  # the meeting watch of another test ticked
         with mock.patch("app.meeting_guard.busy", return_value="recording"):
             self.assertFalse(untranscribed.notice_tick(now=1_000_000.0))
         with mock.patch("app.meeting_guard.busy", return_value=""):
