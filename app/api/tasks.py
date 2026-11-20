@@ -48,7 +48,7 @@ def api_holiday_countries() -> Dict[str, Any]:
     """The countries (and their regions) whose public holidays the app knows (app/holidays_cal.py)."""
     from app import holidays_cal
 
-    return {"available": holidays_cal.available(), "countries": holidays_cal.countries()}
+    return {"available": holidays_cal.available(), "countries": holidays_cal.countries(), "home": holidays_cal.home_country()}
 
 
 @router.get("/api/dashboard/detail")

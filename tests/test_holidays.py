@@ -29,6 +29,10 @@ class HolidaysTest(unittest.TestCase):
         self.assertIn({"code": "BY", "name": "Bayern"}, by["DE"]["subdivs"])
         self.assertEqual(by["US"]["name"], "United States")
 
+    def test_the_home_country_is_a_code_or_nothing(self):
+        code = holidays_cal.home_country()
+        self.assertTrue(code == "" or (len(code) == 2 and code.isupper()))
+
     def test_none_until_a_country_is_chosen_then_its_days(self):
         span = (date(2026, 1, 1), date(2026, 1, 10))
         self.assertEqual(holidays_cal.between(*span), {})

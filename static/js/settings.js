@@ -3213,14 +3213,16 @@ async function holidayCountries() {
     const data = await fetch('/api/holidays/countries').then(r => (r.ok ? r.json() : null)).catch(() => null);
     HOLIDAYS.list = (data && data.countries) || [];
     HOLIDAYS.available = !!(data && data.available);
+    HOLIDAYS.home = (data && data.home) || '';
   }
   return HOLIDAYS.list;
 }
 
-// The country of this computer's region (Windows: the format of dates and numbers), if the app knows it
+// The country of this computer's region (Windows: «Регион», told by the server), else of the browser's
+// language, if the app knows it
 function holidayHomeCountry() {
-  let mine = '';
-  try { mine = (new Intl.Locale(navigator.language).maximize().region || '').toUpperCase(); } catch (e) {}
+  let mine = HOLIDAYS.home || '';
+  if (!mine) try { mine = (new Intl.Locale(navigator.language).region || '').toUpperCase(); } catch (e) {}
   return (HOLIDAYS.list || []).some(c => c.code === mine) ? mine : '';
 }
 
