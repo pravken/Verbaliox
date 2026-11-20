@@ -685,7 +685,9 @@ function openDashFeatureMenu(e) {
   const tick = (on, label) => `${on ? '✓' : ' '}  ${label}`;
   e.stopPropagation();
   const r = e.currentTarget.getBoundingClientRect();
-  openTextMenuAt([{ label: tick(!p.feature, t('dbAllFeatures')), run: () => setDashFeature(0) }, { sep: true },
+  const cur = p.feature ? featureById(p.feature) : null;
+  openTextMenuAt([...(cur ? [{ label: `↗  ${t('dbFeatureCard').replace('{name}', () => cur.name)}`, run: () => openFeaturePage(cur.id) }, { sep: true }] : []),
+    { label: tick(!p.feature, t('dbAllFeatures')), run: () => setDashFeature(0) }, { sep: true },
     ...feats.map(f => ({ label: tick(p.feature === f.id, f.name), run: () => setDashFeature(f.id) }))], r.left, r.bottom + 4);
 }
 

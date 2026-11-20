@@ -166,6 +166,15 @@ class FeatureTagsTest(unittest.TestCase):
         self.assertEqual(page["meetings"][0]["decisions"], ["Запускаем возвраты в декабре", "Stripe остаётся"])
         self.assertEqual([x["what"] for x in page["tasks"]], ["обновить экран оплаты"])
         self.assertIsNone(features.overview(999999))
+        # the card (asked by the user): the people met, the weeks, the hours
+        from datetime import date
+
+        save_meeting_results(mid, speakers={"S1": {"name": "Анна", "color": "#5AC8FA"}, "S2": {"name": "Участник 2"}})
+        page = features.overview(pay["id"], today=date.today())
+        self.assertEqual([p["name"] for p in page["people"]], ["Анна"])  # not an unnamed voice
+        self.assertEqual(len(page["weeks"]), features.WEEKS)
+        self.assertEqual(page["weeks"][-1]["meetings"], 1)  # made this week
+        self.assertEqual(page["last"], page["meetings"][0]["date"][:10])
         self.assertEqual(features.decisions_of("## Decisions\n1. Ship it\n## Next\n- x"), ["Ship it"])
         self.assertEqual(features.decisions_of("**Решения**\n- Да\n**Итог**\n- нет"), ["Да"])
         from app.ollama_client import SUMMARY_TEMPLATES

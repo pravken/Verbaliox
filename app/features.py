@@ -386,9 +386,10 @@ def decisions_of(summary_md: str) -> List[str]:
     return out[:DECISIONS_PER_MEETING]
 
 
-def overview(feature_id: int) -> Optional[Dict[str, Any]]:
+def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:
     """Everything of one feature: its meetings (newest first) with the decisions of their summaries,
-    and the tasks of those meetings. None when there is no such feature."""
+    and the tasks of those meetings; the card (asked by the user) adds the people met in them, the
+    meetings and hours of each of the last WEEKS weeks, the hours in all. None when there is no such feature."""
     from app import commitments
     from app.database import _loads_dict
 
@@ -398,7 +399,7 @@ def overview(feature_id: int) -> Optional[Dict[str, Any]]:
     with _db_lock:
         conn = _conn()
         rows = conn.execute(
-            "SELECT m.id, m.title, m.recorded_at, m.created_at, m.duration, m.summaries_json FROM meetings m "
+            "SELECT m.id, m.title, m.recorded_at, m.created_at, m.duration, m.summaries_json, m.speakers_json FROM meetings m "
             "JOIN meeting_features mf ON mf.meeting_id = m.id WHERE mf.feature_id = ?", (int(feature_id),)).fetchall()
         conn.close()
     meetings = []
@@ -409,4 +410,54 @@ def overview(feature_id: int) -> Optional[Dict[str, Any]]:
                          "decisions": decisions_of(sums.get("protocol") or "")})
     meetings.sort(key=lambda m: m["date"], reverse=True)
     tasks = commitments.for_meetings([m["id"] for m in meetings]) if meetings else []
-    return {"feature": f, "meetings": meetings, "tasks": tasks}
+    return {"feature": f, "meetings": meetings, "tasks": tasks, **_card(rows, meetings, today)}
+
+
+WEEKS = 12
+
+
+def _card(rows, meetings: List[Dict[str, Any]], today=None) -> Dict[str, Any]:
+    """The people met in the feature's meetings (most first; not the user), each of the last WEEKS weeks
+    (from Monday: meetings and hours), the hours in all and the last meeting's date."""
+    from datetime import date, timedelta
+
+    from app.database import _loads_dict
+    from app.people import _rows, canonical, my_names
+    from app.voice_profiles import is_default_name
+
+    today = today or date.today()
+    week0 = today - timedelta(days=today.weekday())
+    weeks = [{"start": (week0 - timedelta(days=7 * k)).isoformat(), "meetings": 0, "hours": 0.0} for k in range(WEEKS - 1, -1, -1)]
+    try:
+        directory = _rows()
+    except Exception:
+        directory = []
+    me = set(my_names())
+    met: Dict[str, Dict[str, Any]] = {}
+    speakers = {r["id"]: r["speakers_json"] for r in rows}
+    for m in meetings:
+        try:
+            day = date.fromisoformat(m["date"][:10])
+        except ValueError:
+            day = None
+        if day:
+            for w in weeks:
+                a = date.fromisoformat(w["start"])
+                if a <= day < a + timedelta(days=7):
+                    w["meetings"] += 1
+                    w["hours"] = round(w["hours"] + float(m["duration"] or 0) / 3600, 2)
+        seen = set()
+        for sp in _loads_dict(speakers.get(m["id"])).values():
+            n = (sp or {}).get("name") if isinstance(sp, dict) else ""
+            if not n or is_default_name(n):
+                continue
+            n = canonical(n, directory)
+            if n.lower() in seen or n.lower() in me:
+                continue
+            seen.add(n.lower())
+            e = met.setdefault(n.lower(), {"name": n, "color": (sp or {}).get("color") or "", "meetings": 0, "last": ""})
+            e["meetings"] += 1
+            e["last"] = max(e["last"], m["date"][:10])
+    people = sorted(met.values(), key=lambda x: (-x["meetings"], x["name"].lower()))[:12]
+    return {"people": people, "weeks": weeks, "hours": round(sum(float(m["duration"] or 0) for m in meetings) / 3600, 1),
+            "last": meetings[0]["date"][:10] if meetings else ""}
