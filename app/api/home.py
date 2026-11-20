@@ -3,7 +3,7 @@ day from the calendar, the dictation button."""
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
@@ -77,6 +77,10 @@ def _recorded_local(m: Dict[str, Any]) -> Any:
     return t
 
 
+# a recording begun a little before its meeting (joined early) is still that meeting's
+EARLY = timedelta(minutes=10)
+
+
 @router.get("/api/calendar/range")
 def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = "ru") -> Dict[str, Any]:
     """The calendar's meetings and the recordings of a week or a month (start…end, local time): a
@@ -94,7 +98,7 @@ def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = 
     used = set()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
-        hit = next((m for t, m in made if s.replace(second=0) <= t < e and m["id"] not in used), None)
+        hit = next((m for t, m in made if s.replace(second=0) - EARLY <= t < e and m["id"] not in used), None)
         it["recording"] = {"id": hit["id"], "title": hit.get("title") or "", "status": hit.get("status")} if hit else None
         if hit:
             used.add(hit["id"])
@@ -156,7 +160,7 @@ def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, A
     now = datetime.now()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
-        hit = next((m for t, m in made if s.replace(second=0) <= t < e), None)
+        hit = next((m for t, m in made if s.replace(second=0) - EARLY <= t < e), None)
         it["recording"] = {"id": hit["id"], "status": hit.get("status"), "progress": hit.get("progress")} if hit else None
         # A meeting ahead that continues a series: its last time and the tasks still open (the brief)
         it["before"] = series.before_meeting(it["title"], it.get("attendees") or [], done) if e > now else None
