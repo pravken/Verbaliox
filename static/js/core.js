@@ -942,3 +942,18 @@ function toggleExportMenu(e) {
 function hideExportMenu() {
   document.getElementById('export-menu')?.classList.add('hidden');
 }
+
+// Esc closes the dialogs made on the fly that have no keyboard handling of their own (found in the audit:
+// Esc closed Settings under the cloud log and left the log open). Their own ✕ is pressed, so a dialog
+// that asks before closing still asks; the event goes no further, the window below stays
+const ESC_DIALOGS = ['cloud-log', 'templates-editor', 'an-tpl-dlg', 'open-commitments'];
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  const open = ESC_DIALOGS.map(id => document.getElementById(id)).filter(Boolean);
+  if (!open.length) return;
+  const top = open.reduce((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a));
+  const x = top.querySelector('[data-a="close"], [data-a="no"]');
+  e.preventDefault();
+  e.stopPropagation();
+  if (x) x.click(); else top.remove();
+}, true);
