@@ -209,6 +209,7 @@ const SERVER_TEXT_EN = {
   "Сетевые пути не открываются": "Network paths are not opened",
   "Обработка отменена: показана часть, распознанная до отмены": "Processing cancelled: the part recognized before it is shown",
   "Установка успешно завершена!": "Installed",
+  "Окружение Python занято другой программой — закройте её и запустите Verbaliox снова": "The Python environment is in use by another program: close it and start Verbaliox again",
   "Ожидание": "Waiting",
   "Ожидание: видеопамять занята субтитрами идущей записи...": "Waiting: the video memory is used by the captions of a recording...",
   "Окружение дубляжа не установлено. Установите его в окне «Дубляж».": "The dubbing environment is not installed. Install it in the Dub window.",
