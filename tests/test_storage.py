@@ -167,6 +167,27 @@ class EventBusTest(unittest.TestCase):
         database.stash_transcript_for(m["id"], "gigaam-v3")  # transcribed again with the same model
         self.assertFalse(database.get_meeting(m["id"])["transcript_verified"])
 
+    def test_a_damaged_version_is_skipped_not_an_error(self):
+        database.init_db()
+        m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav")
+        database.save_meeting_results(m["id"], segments=[{"id": 0, "start": 0, "end": 1, "text": "a", "speaker": "S"}],
+                                      speakers={}, transcript_model="gigaam-v3")
+        database.save_transcript_version(m["id"], "large-v3", {"segments": [{"id": 0, "start": 0, "end": 1, "text": "b"}],
+                                                            "speakers": {}})
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("INSERT INTO transcript_versions (meeting_id, model, data) VALUES (?, ?, ?)",
+                         (m["id"], "merged", "{не json"))
+            conn.commit()
+            conn.close()
+        self.assertFalse(database.switch_transcript_version(m["id"], "merged"))
+        self.assertEqual(database.get_meeting(m["id"])["transcript_model"], "gigaam-v3")  # left as it was
+        # deleting the one shown: the damaged «merged» is passed over for the next good one
+        self.assertTrue(database.delete_transcript_version(m["id"], "gigaam-v3"))
+        got = database.get_meeting(m["id"])
+        self.assertEqual(got["transcript_model"], "large-v3")
+        self.assertEqual([s["text"] for s in got["segments"]], ["b"])
+
     def test_versions_are_listed_without_reading_them_whole(self):
         database.init_db()
         m = database.create_meeting(title="t", filename="t.wav", media_path="t.wav")

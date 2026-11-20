@@ -68,6 +68,19 @@ def _clean(name: Any) -> str:
     return re.sub(r"\s+", " ", str(name or "")).strip()[:MAX_NAME]
 
 
+def _aliases(row: Any) -> List[str]:
+    """The variants of a name stored in a row; a damaged value counts as none (and a line in the log):
+    one bad row made renaming or merging people fail with an error."""
+    try:
+        got = json.loads(row["aliases"] or "[]")
+    except ValueError:
+        got = None
+    if not isinstance(got, list):
+        print(f"[people] the variants of «{row['name']}» are damaged: ignored", flush=True)
+        return []
+    return [a for a in got if isinstance(a, str)]
+
+
 def _rows() -> List[Dict[str, Any]]:
     init_table()
     with _db_lock:
@@ -262,7 +275,7 @@ def update(name: str, role: Optional[str] = None, kind: Optional[str] = None, is
                 if _find(conn, nn):
                     raise ValueError("Такое имя уже есть в справочнике: объедините записи")
                 row = _find(conn, name)
-                aliases = [a for a in json.loads(row["aliases"] or "[]") if a.lower() != nn.lower()]
+                aliases = [a for a in _aliases(row) if a.lower() != nn.lower()]
                 aliases.append(name)
                 conn.execute("UPDATE people_directory SET name = ?, aliases = ? WHERE id = ?",
                              (nn, json.dumps(aliases, ensure_ascii=False), pid))
@@ -294,13 +307,13 @@ def merge(names: List[str]) -> Dict[str, Any]:
         try:
             pid = _ensure(conn, keep)
             row = _find(conn, keep)
-            aliases = list(json.loads(row["aliases"] or "[]"))
+            aliases = _aliases(row)
             role, me = row["role"], bool(row["is_me"])
             for low in others:
                 other = next((n for n in names if n.lower() == low), low)
                 orow = _find(conn, other)
                 if orow:
-                    aliases.extend(json.loads(orow["aliases"] or "[]"))
+                    aliases.extend(_aliases(orow))
                     role = role or orow["role"]
                     me = me or bool(orow["is_me"])
                     conn.execute("DELETE FROM people_directory WHERE id = ?", (orow["id"],))

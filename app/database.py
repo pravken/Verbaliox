@@ -1020,14 +1020,28 @@ def switch_transcript_version(meeting_id: int, model: str) -> bool:
                 return True
             got = conn.execute("SELECT data FROM transcript_versions WHERE meeting_id = ? AND model = ?",
                                (meeting_id, model)).fetchone()
-            if not got:
+            data = _version_data(meeting_id, model, got["data"]) if got else None
+            if data is None:
                 return False
             _stash_active(conn, meeting_id)
-            _show_version(conn, meeting_id, model, json.loads(got["data"]))
+            _show_version(conn, meeting_id, model, data)
             conn.commit()
             return True
         finally:
             conn.close()
+
+
+def _version_data(meeting_id: int, model: str, raw: Optional[str]) -> Optional[Dict[str, Any]]:
+    """A stored version read back; None (and a line in the log) for a damaged one: one bad row made
+    switching or deleting versions fail with an error."""
+    try:
+        data = json.loads(raw or "")
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        print(f"[db] the transcript version «{model}» of meeting {meeting_id} is damaged: skipped", flush=True)
+        return None
+    return data
 
 
 def _show_version(conn: sqlite3.Connection, meeting_id: int, model: str, data: Dict[str, Any]) -> None:
@@ -1070,8 +1084,9 @@ def delete_transcript_version(meeting_id: int, model: str) -> bool:
             others = {r["model"]: r["data"] for r in conn.execute(
                 "SELECT model, data FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))}
             order = ([MERGED] if MERGED in others else []) + ranked([m for m in others if m != MERGED], row["language"] or "")
-            if order:
-                _show_version(conn, meeting_id, order[0], json.loads(others[order[0]]))
+            best = next(((m, d) for m in order if (d := _version_data(meeting_id, m, others[m])) is not None), None)
+            if best:
+                _show_version(conn, meeting_id, best[0], best[1])
             else:
                 conn.execute("UPDATE meetings SET transcript_model = '', transcript_at = '', speakers_json = '{}', "
                              "segments_backup_json = '', translations_json = '{}', transcript_verified = 0, "
