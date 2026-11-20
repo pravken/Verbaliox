@@ -249,7 +249,7 @@ function openSupport() { openExternal(SUPPORT_URL); }
 function runAll(...calls) { for (const [name, ...args] of calls) callPage(name, ...args); }
 
 let state = {
-  uiLang: localStorage.getItem('whisper_ui_lang') || 'ru',
+  uiLang: (() => { try { return localStorage.getItem('whisper_ui_lang') || 'ru'; } catch (e) { return 'ru'; } })(),
   meetings: [],
   activeMeeting: null,
   contextMeetingId: null,
@@ -269,7 +269,7 @@ let state = {
   voicePreviewTimer: null,
   playerPeaks: [],
   playerHoverRatio: -1,
-  volume: Number(localStorage.getItem('verbaliox_volume') ?? 100),
+  volume: (() => { try { return Number(localStorage.getItem('verbaliox_volume') ?? 100); } catch (e) { return 100; } })(),
   muted: false,
   txView: (() => { try { return localStorage.getItem('verbaliox_tx_view') || 'orig'; } catch (e) { return 'orig'; } })(),
   txLang: null,
@@ -342,7 +342,7 @@ function enhanceDateInputs(root) {
 function setUILanguage(lang) {
   state.uiLang = lang;
   document.documentElement.lang = lang;
-  localStorage.setItem('whisper_ui_lang', lang);
+  try { localStorage.setItem('whisper_ui_lang', lang); } catch (e) { /* the server keeps it too */ }
   // The launcher's splash screen speaks the same language (see /api/ui/lang)
   fetch('/api/ui/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang }) }).catch(() => {});
 
