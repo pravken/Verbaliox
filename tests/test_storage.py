@@ -179,6 +179,24 @@ class SearchIndexTest(unittest.TestCase):
         database.edit_meeting(mid, change)
         self.assertEqual(self._index_rows(mid)[0], [(1, "другое"), (2, "слово два")])
 
+    def test_search_does_not_wait_for_a_change_in_progress(self):
+        """A search reads without the lock every change holds (with WAL), names of the hits only."""
+        import threading
+
+        mid = self._meeting("Без очереди", ["Сварили суп из чечевицы"])
+        conn = database.get_connection()
+        conn.close()
+        if not database._wal_on:
+            self.skipTest("the data folder has no WAL")
+        out = []
+        with database._db_lock:
+            t = threading.Thread(target=lambda: out.append(database.search_all_meetings("чевиц")), daemon=True)
+            t.start()
+            t.join(10)
+        self.assertTrue(out)
+        res = {r["meeting_id"]: r for r in out[0]}
+        self.assertEqual([(h["segment_id"], h["speaker"]) for h in res[mid]["hits"]], [(1, "Анна")])
+
     def test_hits_are_capped_per_meeting(self):
         mid = self._meeting("cap", [f"повтор {i}" for i in range(10)])
         res = {r["meeting_id"]: r for r in database.search_all_meetings("повтор")}
