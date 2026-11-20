@@ -128,23 +128,26 @@ def _library_meetings() -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def _commitment_names() -> List[str]:
+def _commitment_names(skip: frozenset = frozenset()) -> List[str]:
     from app.commitments import _init
 
     _init()
     with _db_lock:
         conn = get_connection()
-        rows = conn.execute("SELECT who, to_whom FROM commitments").fetchall()
+        rows = conn.execute("SELECT meeting_id, who, to_whom FROM commitments").fetchall()
         conn.close()
     names: List[str] = []
     for r in rows:
-        names.extend([r["who"], r["to_whom"]])
+        if r["meeting_id"] not in skip:
+            names.extend([r["who"], r["to_whom"]])
     return [n for n in (_clean(x) for x in names) if n]
 
 
-def directory() -> List[Dict[str, Any]]:
+def directory(skip: Iterable[int] = ()) -> List[Dict[str, Any]]:
     """Everyone, most present first: [{id, name, kind, role, aliases, is_me, recordings, seconds,
-    voice, tasks, calendar, sources}]. id is None for a person nobody edited yet."""
+    voice, tasks, calendar, sources}]. id is None for a person nobody edited yet. skip: the recordings
+    to count nothing from (the agent does not get the local-only ones, nor the names heard only there)."""
+    skip = frozenset(int(i) for i in skip)
     rows = _rows()
     alias = _alias_map(rows)
     by_key: Dict[str, Dict[str, Any]] = {}
@@ -167,17 +170,26 @@ def directory() -> List[Dict[str, Any]]:
                  aliases=list(r["aliases"]), is_me=r["is_me"])
         source(e, "manual")
     for p in _library_people():
+        recs = p.get("recordings") or []
+        seconds = float(p.get("total_seconds") or 0)
+        if skip:
+            recs = [x for x in recs if x.get("meeting_id") not in skip]
+            if not recs:
+                continue
+            seconds = sum(float(x.get("seconds") or 0) for x in recs)
         e = entry(p["name"])
-        e["recordings"] += len(p.get("recordings") or [])
-        e["seconds"] = round(e["seconds"] + float(p.get("total_seconds") or 0), 1)
+        e["recordings"] += len(recs)
+        e["seconds"] = round(e["seconds"] + seconds, 1)
         e["voice"] = e["voice"] or bool(p.get("profile"))
         source(e, "records")
     for m in _library_meetings():
+        if m["id"] in skip:
+            continue
         for name in calendar_attendees(m):
             e = entry(name)
             e["calendar"] += 1
             source(e, "calendar")
-    for name in _commitment_names():
+    for name in _commitment_names(skip):
         e = entry(name)
         e["tasks"] += 1
         source(e, "tasks")
