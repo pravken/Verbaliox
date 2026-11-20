@@ -12,6 +12,18 @@ set "QUIET="
 if /i "%~1"=="/quiet" set "QUIET=1"
 set "UPDATE="
 if exist ".venv\Scripts\python.exe" set "UPDATE=1"
+rem The program folder moved (another drive, a renamed user folder): the environment still points at the
+rem Python of the old place and does not run. Its link is mended when that Python came with the program;
+rem otherwise the environment is made again (found in the audit: setup ended in "failed")
+if defined UPDATE (
+    call :venv_runs
+    if not defined VENV_OK call :venv_relink
+    if not defined VENV_OK (
+        echo       The environment belongs to another folder: it is made again
+        rmdir /s /q ".venv"
+        set "UPDATE="
+    )
+)
 
 echo ==============================================================
 echo   Verbaliox - First-Run Environment Setup
@@ -206,6 +218,16 @@ if exist .venv rmdir /s /q .venv
 goto :eof
 
 rem --- The environment's Python runs (it exists and is not blocked)
+:venv_relink
+set "MOVED_PY="
+for /d %%d in ("%~dp0python\cpython-3.11*") do if exist "%%~fd\python.exe" set "MOVED_PY=%%~fd"
+if not defined MOVED_PY goto :eof
+echo       The program folder moved: the environment is linked to !MOVED_PY!
+set "VS_HOME=!MOVED_PY!"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = '.venv\pyvenv.cfg'; $t = [IO.File]::ReadAllText($f); $t = [Text.RegularExpressions.Regex]::Replace($t, '(?m)^home\s*=.*$', 'home = ' + $env:VS_HOME); [IO.File]::WriteAllText($f, $t, (New-Object Text.UTF8Encoding $false))"
+call :venv_runs
+goto :eof
+
 :venv_runs
 set "VENV_OK="
 if not exist ".venv\Scripts\python.exe" goto :eof
