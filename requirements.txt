@@ -488,6 +488,10 @@ hf-xet==1.7.0 \
     # via
     #   -c D:/vs-pc-data/pins.txt
     #   huggingface-hub
+holidays==0.109 ; python_version >= "3.11" \
+    --hash=sha256:7d39c910167116d41fa6aae18d5e72b4541700cdd37743d799c83db3419201b0 \
+    --hash=sha256:b1ebc71e8fdb62c7cbf043f781f19e2ea1c69c02ecff5c13dcfda4ebd1d3bb69
+    # via -r requirements.in
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
     --hash=sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8
@@ -1197,6 +1201,10 @@ pyreadline3==3.5.6 \
     # via
     #   -c D:/vs-pc-data/pins.txt
     #   humanfriendly
+python-dateutil==2.9.0.post0 \
+    --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
+    --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+    # via holidays
 python-docx==1.2.0 \
     --hash=sha256:3fd478f3250fbbbfd3b94fe1e985955737c145627498896a8a6bf81f4baf66c7 \
     --hash=sha256:7bc9d7b7d8a69c9c02ca09216118c86552704edc23bac179283f2e38f86220ce
@@ -1699,6 +1707,10 @@ shellingham==1.5.4 ; python_version >= "3.11" \
     --hash=sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686 \
     --hash=sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de
     # via typer
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
+    --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
+    # via python-dateutil
 soundcard==0.4.6 \
     --hash=sha256:9b46d64a26f97cd7d88bcfc385c97c069f97c5ec3404e4e7c23771598a8cf47b \
     --hash=sha256:ab44b8c1033ac6ec49c5d618ce096dab9b60c7d7a427c92bef15856e5ebb3e09

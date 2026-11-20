@@ -836,7 +836,7 @@ async function calLoad() {
   const { a, b } = calRange();
   calView.loading = true;
   renderCalendarView();
-  const data = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
+  const data = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
   calView.loading = false;
   calView.data = data;
@@ -887,11 +887,13 @@ function renderCalendarView() {
   for (let d = new Date(a); d < b; d = calAddDays(d, 1)) days.push(d);
   const weekday = d => d.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
   let body;
+  const hols = (calView.data && calView.data.holidays) || {};  // public holidays (Settings → Календарь → Праздники)
+  const holTag = d => hols[calKey(d)] ? `<span class="cal-hol" title="${escapeHtml(hols[calKey(d)])}">${escapeHtml(hols[calKey(d)])}</span>` : '';
   if (calView.mode === 'week') {
     body = `<div class="cal-week">${days.map(d => {
       const list = items[calKey(d)] || [];
-      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}">
-        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b></div>
+      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}">
+        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b></div>${holTag(d)}
         <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
     }).join('')}</div>`;
   } else {
@@ -899,8 +901,8 @@ function renderCalendarView() {
     body = `<div class="cal-month">${heads}${days.map(d => {
       const list = items[calKey(d)] || [];
       const more = list.length - 3;
-      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}">
-        <button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>
+      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}">
+        <button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${holTag(d)}
         ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
         ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
     }).join('')}</div>`;

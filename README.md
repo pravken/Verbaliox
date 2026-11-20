@@ -196,6 +196,9 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | PyTorch, torchaudio | BSD-3 |
 | SoundCard (system audio recording) | BSD-3 |
 | tzdata (time zones of calendar events) | Apache 2.0 |
+| holidays (public holidays of a country and its regions, offline) | MIT |
+| python-dateutil (needed by holidays) | Apache 2.0 / BSD-3-Clause |
+| six (needed by python-dateutil) | MIT |
 | yt-dlp (installed when you first import by link) | Unlicense |
 | FFmpeg (downloaded at the first start when missing, Gyan.dev essentials build) | GPL v3 |
 | [DeepFilterNet 3](https://github.com/Rikorose/DeepFilterNet) `deep-filter.exe` (optional microphone cleanup, downloaded in Settings → Recording) | MIT or Apache 2.0 (code and weights) |

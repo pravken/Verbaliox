@@ -510,6 +510,27 @@
           <div id="calendar-status" class="text-[11.5px] text-apple-tertiary"></div>
         </div>
 
+        <!-- Public holidays of a country and its region (app/holidays_cal.py): days off on «Главная» and in the calendar -->
+        <div class="settings-card">
+          <div class="min-w-0">
+            <h4 class="text-[13px] font-semibold text-white" data-i18n="holTitle">Праздники</h4>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="holDesc">Государственные праздники выбранной страны — выходные дни: «Главная» не считает их рабочими, неделя и календарь их отмечают. Работает без интернета.</p>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
+            <label for="set-holiday-country" data-i18n="holCountry">Страна</label>
+            <select id="set-holiday-country" data-change="syncHolidaySubdivs"
+              class="h-7 max-w-[16rem] bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
+              <option value="" data-i18n="holNone">Не учитывать</option>
+            </select>
+            <label for="set-holiday-subdiv" id="holiday-subdiv-label" class="hidden" data-i18n="holRegion">Регион</label>
+            <select id="set-holiday-subdiv"
+              class="hidden h-7 max-w-[14rem] bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
+              <option value="" data-i18n="holWholeCountry">Вся страна</option>
+            </select>
+          </div>
+          <div id="holiday-status" class="text-[11.5px] text-apple-tertiary"></div>
+        </div>
+
         <!-- The working day of «Встречи сегодня» on the home page and the recording of every meeting -->
         <div class="settings-card">
           <div class="min-w-0">

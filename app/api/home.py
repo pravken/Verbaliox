@@ -78,7 +78,7 @@ def _recorded_local(m: Dict[str, Any]) -> Any:
 
 
 @router.get("/api/calendar/range")
-def api_calendar_range(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
+def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = "ru") -> Dict[str, Any]:
     """The calendar's meetings and the recordings of a week or a month (start…end, local time): a
     meeting carries the recording made during it, the other recordings come on their own."""
     from app import calendar_ics
@@ -102,7 +102,17 @@ def api_calendar_range(start: str, end: str, refresh: bool = False) -> Dict[str,
                    "duration": m.get("duration") or 0, "status": m.get("status")}
                   for t, m in made if m["id"] not in used]
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
-            "recordings": recordings, **calendar_ics.status()}
+            "recordings": recordings, "holidays": _holidays(a, b, lang), **calendar_ics.status()}
+
+
+def _holidays(a: datetime, b: datetime, lang: str) -> Dict[str, str]:
+    """{"YYYY-MM-DD": name}: the public holidays of the days of a…b (Settings → Календарь → Праздники)."""
+    from datetime import timedelta
+
+    from app import holidays_cal
+
+    last = b.date() if b == datetime.combine(b.date(), datetime.min.time()) else b.date() + timedelta(days=1)
+    return holidays_cal.between(a.date(), last, "en" if lang == "en" else "ru")
 
 
 @router.get("/api/calendar/day")

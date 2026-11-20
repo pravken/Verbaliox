@@ -3052,7 +3052,8 @@ const SETTINGS_RESET = {
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
     ['set-semantic', 'semantic_search', 'check']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
-    ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check']],
+    ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check'],
+    ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
@@ -3068,6 +3069,7 @@ const SETTINGS_DEFAULTS = {
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
+  holiday_country: '', holiday_subdiv: '',
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',
   file_name_template: '{date} {title}', date_folders: 'off',
@@ -3188,6 +3190,48 @@ function fillWorkdaySettings(s) {
   const b = document.getElementById('set-meetings-ask-inperson');
   if (b) b.checked = s.meet_ask_inperson !== 'false';
   syncWorkdayHint();
+  fillHolidaySettings(s);
+}
+
+// --- Public holidays: the country and its region (app/holidays_cal.py) ---
+const HOLIDAYS = { list: null, want: { country: '', subdiv: '' } };
+
+async function fillHolidaySettings(s) {
+  HOLIDAYS.want = { country: String(s.holiday_country || '').toUpperCase(), subdiv: String(s.holiday_subdiv || '') };
+  if (!HOLIDAYS.list) {
+    const data = await fetch('/api/holidays/countries').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    HOLIDAYS.list = (data && data.countries) || [];
+    HOLIDAYS.available = !!(data && data.available);
+  }
+  const sel = document.getElementById('set-holiday-country');
+  if (!sel) return;
+  // the country in the language of the page (the browser knows the names by the code); the country of
+  // this computer's region first
+  let names = null;
+  try { names = new Intl.DisplayNames([state.uiLang === 'en' ? 'en' : 'ru'], { type: 'region' }); } catch (e) {}
+  const name = c => { try { return (names && names.of(c.code)) || c.name; } catch (e) { return c.name; } };
+  let mine = '';
+  try { mine = (new Intl.Locale(navigator.language).maximize().region || '').toUpperCase(); } catch (e) {}
+  const list = HOLIDAYS.list.map(c => ({ ...c, label: name(c) })).sort((a, b) => a.label.localeCompare(b.label, state.uiLang === 'en' ? 'en' : 'ru'));
+  const top = list.filter(c => c.code === mine);
+  const opt = c => `<option value="${escapeHtml(c.code)}">${escapeHtml(c.label)}</option>`;
+  sel.innerHTML = `<option value="">${escapeHtml(t('holNone'))}</option>` + (top.length ? top.map(opt).join('') + '<option disabled>──────</option>' : '') + list.map(opt).join('');
+  sel.value = list.some(c => c.code === HOLIDAYS.want.country) ? HOLIDAYS.want.country : '';
+  syncHolidaySubdivs(true);
+}
+
+function syncHolidaySubdivs(keep) {
+  const sel = document.getElementById('set-holiday-country'), sub = document.getElementById('set-holiday-subdiv');
+  if (!sel || !sub) return;
+  const c = (HOLIDAYS.list || []).find(x => x.code === sel.value);
+  const subs = (c && c.subdivs) || [];
+  sub.innerHTML = `<option value="">${escapeHtml(t('holWholeCountry'))}</option>`
+    + subs.map(x => `<option value="${escapeHtml(x.code)}">${escapeHtml(x.name === x.code ? x.code : `${x.name} (${x.code})`)}</option>`).join('');
+  sub.value = keep === true && subs.some(x => x.code === HOLIDAYS.want.subdiv) ? HOLIDAYS.want.subdiv : '';
+  sub.classList.toggle('hidden', !subs.length);
+  document.getElementById('holiday-subdiv-label')?.classList.toggle('hidden', !subs.length);
+  const st = document.getElementById('holiday-status');
+  if (st) st.textContent = HOLIDAYS.list && !HOLIDAYS.available ? t('holUnavailable') : '';
 }
 
 function workdaySettingsPayload() {
@@ -3197,6 +3241,9 @@ function workdaySettingsPayload() {
     work_day_end: String(parseInt(v('set-workday-end', '18:00'), 10)),
     meet_auto_all: String(!!document.getElementById('set-meetings-autorecord')?.checked),
     meet_ask_inperson: String(document.getElementById('set-meetings-ask-inperson')?.checked !== false),
+    // before the list of countries came, the saved choice stays as it is
+    holiday_country: HOLIDAYS.list ? (document.getElementById('set-holiday-country')?.value || '') : HOLIDAYS.want.country,
+    holiday_subdiv: HOLIDAYS.list ? (document.getElementById('set-holiday-subdiv')?.value || '') : HOLIDAYS.want.subdiv,
   };
 }
 
