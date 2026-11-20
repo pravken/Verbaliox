@@ -69,6 +69,7 @@ def check(now: datetime = None) -> int:
         return 0
     now = now or datetime.now()
     n = 0
+    index = None
     for kind, key, e in due(now, _lead_sec(s)):
         _told[f"{kind}|{key}"] = e["start"]
         when = e["start"].strftime("%H:%M")
@@ -78,7 +79,8 @@ def check(now: datetime = None) -> int:
             app_status.add_notice(f"Начинается — «{title}»", f"Нажмите — подключиться в {service(join)}", f"join:{join}")
             n += 1
             continue
-        info = series.before_meeting(e["title"], e.get("attendees") or [])
+        index = index or series.EventIndex()  # the library read once for the meetings starting together
+        info = series.before_meeting(e["title"], e.get("attendees") or [], index=index)
         parts = [f"{_ahead_text((e['start'] - now).total_seconds())}."]
         if info:
             tasks = info["open_tasks"]
