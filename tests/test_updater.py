@@ -457,6 +457,31 @@ class WindowBridgeTest(unittest.TestCase):
             self.assertEqual(api.session_token(), "")
 
 
+class Win32TypesTest(unittest.TestCase):
+    def test_user32_functions_get_handle_types(self):
+        """Found in the audit: user32 was called with HWND/HICON values without argtypes; a handle with bit
+        31 set raised OverflowError on 64-bit Windows."""
+        try:
+            from ctypes import wintypes
+        except (ImportError, ValueError):
+            self.skipTest("no ctypes.wintypes here")
+        import run
+
+        lib = mock.Mock()
+        with mock.patch.dict(run._WIN_API, clear=True), mock.patch.object(run.ctypes, "WinDLL", return_value=lib, create=True) as dll:
+            self.assertIs(run._user32(), lib)
+            self.assertIs(run._user32(), lib)  # set up once
+        dll.assert_called_once_with("user32")
+        self.assertEqual(lib.SendMessageW.argtypes, [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM])
+        self.assertEqual(lib.LoadImageW.restype, wintypes.HANDLE)
+        for name in ("ShowWindow", "IsIconic", "IsWindowVisible", "SetForegroundWindow", "MessageBoxW", "FindWindowExW"):
+            self.assertIs(getattr(lib, name).argtypes[0], wintypes.HWND, name)
+        self.assertIs(lib.GetForegroundWindow.restype, wintypes.HWND)
+        # every user32 call of run.py goes through it
+        source = Path(run.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("windll.user32.", source)
+
+
 class PyEnvTest(unittest.TestCase):
     def test_missing_pip_is_bootstrapped_with_ensurepip(self):
         from app import pyenv

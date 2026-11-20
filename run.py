@@ -18,6 +18,38 @@ WINDOW_TITLE = "Verbaliox"  # the launcher (build_exe.py) closes its splash when
 # incomplete .venv (setup interrupted, a blocked .pyd) then shows a message instead of nothing at all
 
 
+_WIN_API = {}
+
+
+def _user32():
+    """user32 with the argument and result types of the functions used here, set once. Without them
+    ctypes passes a Python int as a 32-bit C int: a window or icon handle with bit 31 set (handles are
+    sign-extended on 64-bit Windows) raised OverflowError. An own instance, so the types set here do
+    not change ctypes.windll.user32 for other modules."""
+    if "user32" not in _WIN_API:
+        from ctypes import wintypes
+
+        u = ctypes.WinDLL("user32")
+        for name, args, res in [
+            ("ShowWindow", [wintypes.HWND, ctypes.c_int], wintypes.BOOL),
+            ("IsIconic", [wintypes.HWND], wintypes.BOOL),
+            ("IsWindowVisible", [wintypes.HWND], wintypes.BOOL),
+            ("SetForegroundWindow", [wintypes.HWND], wintypes.BOOL),
+            ("GetForegroundWindow", [], wintypes.HWND),
+            ("SendMessageW", [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM], wintypes.LPARAM),
+            ("LoadImageW", [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int, ctypes.c_int,
+                            wintypes.UINT], wintypes.HANDLE),
+            ("MessageBoxW", [wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT], ctypes.c_int),
+            ("FindWindowExW", [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR], wintypes.HWND),
+            ("GetClassNameW", [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
+            ("GetWindowThreadProcessId", [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)], wintypes.DWORD),
+        ]:
+            fn = getattr(u, name)
+            fn.argtypes, fn.restype = args, res
+        _WIN_API["user32"] = u
+    return _WIN_API["user32"]
+
+
 def set_app_user_model_id() -> None:
     """
     Sets an explicit Windows AppUserModelID so the taskbar groups the window
@@ -40,15 +72,19 @@ def apply_native_window_icon_and_hide_console() -> None:
     """
     if sys.platform == "win32":
         try:
-            hwnd_console = ctypes.windll.kernel32.GetConsoleWindow()
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32")
+            kernel32.GetConsoleWindow.restype = wintypes.HWND
+            hwnd_console = kernel32.GetConsoleWindow()
             if hwnd_console:
-                ctypes.windll.user32.ShowWindow(hwnd_console, 0)  # SW_HIDE = 0
+                _user32().ShowWindow(hwnd_console, 0)  # SW_HIDE = 0
         except Exception:
             pass
 
         if ICO_PATH.exists():
             try:
-                user32 = ctypes.windll.user32
+                user32 = _user32()
                 LR_LOADFROMFILE = 0x00000010
                 IMAGE_ICON = 1
                 WM_SETICON = 0x0080
@@ -56,10 +92,10 @@ def apply_native_window_icon_and_hide_console() -> None:
                 ICON_BIG = 1
 
                 hicon_big = user32.LoadImageW(
-                    0, str(ICO_PATH), IMAGE_ICON, 256, 256, LR_LOADFROMFILE
+                    None, str(ICO_PATH), IMAGE_ICON, 256, 256, LR_LOADFROMFILE
                 )
                 hicon_small = user32.LoadImageW(
-                    0, str(ICO_PATH), IMAGE_ICON, 32, 32, LR_LOADFROMFILE
+                    None, str(ICO_PATH), IMAGE_ICON, 32, 32, LR_LOADFROMFILE
                 )
 
                 for _ in range(25):
@@ -87,11 +123,7 @@ def find_app_window(pid: Optional[int] = None) -> int:
         return 0
     from ctypes import wintypes
 
-    user32 = ctypes.WinDLL("user32")
-    user32.FindWindowExW.argtypes = [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
-    user32.FindWindowExW.restype = wintypes.HWND
-    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32 = _user32()
     hwnd = None
     name = ctypes.create_unicode_buffer(256)
     owner = wintypes.DWORD()
@@ -472,13 +504,13 @@ def recover_stuck_instance() -> bool:
     pid = stuck_instance_pid()
     MB_YESNO, MB_ICONWARNING, IDYES = 0x4, 0x30, 6
     if not pid:  # which process it is is not known for sure: ending a guess could hit another program
-        ctypes.windll.user32.MessageBoxW(
+        _user32().MessageBoxW(
             None,
             "Verbaliox уже запущен, но его окно не отвечает.\n\n"
             "Завершите процесс python.exe программы Verbaliox в Диспетчере задач или перезагрузите компьютер.",
             "Verbaliox", MB_ICONWARNING | MB_ON_TOP)
         return False
-    answer = ctypes.windll.user32.MessageBoxW(
+    answer = _user32().MessageBoxW(
         None,
         "Verbaliox уже запущен, но его окно не отвечает.\n\n"
         "Завершить зависший процесс и открыть программу заново? Незавершённая обработка будет прервана.",
@@ -501,7 +533,7 @@ def activate_existing_window(timeout: float = 30.0) -> bool:
     """Brings the already open Verbaliox window to the front (it may still be starting)."""
     if sys.platform != "win32":
         return False
-    user32 = ctypes.windll.user32
+    user32 = _user32()
     SW_RESTORE = 9
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -744,7 +776,7 @@ class TrayController:
             self._notify(f"{label} завершено", title, target=where)
 
     def _window_in_front(self) -> bool:
-        user32 = ctypes.windll.user32
+        user32 = _user32()
         hwnd = find_app_window(os.getpid())
         return bool(hwnd) and user32.GetForegroundWindow() == hwnd and bool(user32.IsWindowVisible(hwnd))
 
@@ -870,7 +902,7 @@ class TrayController:
         if st.get("state") != "idle":
             MB_YESNO, MB_ICONWARNING, IDYES = 0x4, 0x30, 6
             what = "Идёт запись" if st.get("recording") else "Идёт обработка"
-            answer = ctypes.windll.user32.MessageBoxW(
+            answer = _user32().MessageBoxW(
                 None, f"{what}. Выйти из Verbaliox? Незавершённая работа будет прервана.", "Verbaliox",
                 MB_YESNO | MB_ICONWARNING | MB_ON_TOP)
             if answer != IDYES:
@@ -913,7 +945,7 @@ class TrayController:
         if self.quitting or self._status.get("state") != "idle" or not updater.ready_to_install():
             return
         hwnd = find_app_window(os.getpid())
-        if hwnd and ctypes.windll.user32.IsWindowVisible(hwnd):
+        if hwnd and _user32().IsWindowVisible(hwnd):
             return  # someone works in the window: on its closing, as before
         print("[update] installing the downloaded update in the background")
         try:
@@ -1081,7 +1113,7 @@ def show_error_box(text: str) -> None:
     if sys.platform == "win32" and "--headless" not in sys.argv:
         try:
             MB_ICONERROR = 0x10
-            ctypes.windll.user32.MessageBoxW(None, text, "Verbaliox", MB_ICONERROR | MB_ON_TOP)
+            _user32().MessageBoxW(None, text, "Verbaliox", MB_ICONERROR | MB_ON_TOP)
             return
         except Exception:
             pass
