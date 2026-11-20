@@ -31,6 +31,29 @@ class DueWordsTest(unittest.TestCase):
         for words in ("", "когда-нибудь", "как получится"):
             self.assertIsNone(parse_due(words, THURSDAY), words)
 
+    def test_words_that_only_look_like_a_day(self):
+        from app.commitments import parse_due
+
+        wednesday = date(2026, 10, 21)
+        cases = [
+            ("выделить средства на закупку", THURSDAY, None),  # «сред» inside a word is no Wednesday
+            ("один среди многих", THURSDAY, None),
+            ("через 1.5 недели", THURSDAY, "2026-11-01"),  # a fraction, not the 1st of May
+            ("через 2,5 дня", THURSDAY, "2026-10-24"),
+            ("in 1.5 weeks", THURSDAY, "2026-11-01"),
+            # the weekday named on that same weekday: the next week's one, unless «эту»/«this»
+            ("в среду", wednesday, "2026-10-28"),
+            ("до среды", wednesday, "2026-10-28"),
+            ("к среде", wednesday, "2026-10-28"),
+            ("в эту среду", wednesday, "2026-10-21"),
+            ("сегодня, в среду", wednesday, "2026-10-21"),
+            ("до среды", date(2026, 10, 19), "2026-10-21"),  # said on Monday: this week's
+            ("by Wednesday", date(2026, 10, 19), "2026-10-21"),
+        ]
+        for words, base, want in cases:
+            got = parse_due(words, base)
+            self.assertEqual(str(got) if got else None, want, words)
+
     def test_guess_names_and_day(self):
         from app.commitments import guess
 

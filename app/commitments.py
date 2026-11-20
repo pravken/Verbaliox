@@ -361,7 +361,14 @@ def parse_due(text: str, base: date) -> Optional[date]:
         return base + timedelta(days=1)
     if "сегодня" in s or "today" in s or "tonight" in s:
         return base
-    m = re.search(r"\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b", s)
+    # «через 1.5 недели», «in 2.5 days»: a number with a fraction, before the date pattern took «1.5» for
+    # the 1st of May
+    m = re.search(r"(?:через|in)\s+(\d+[.,]\d+)\s+(дн|день|недел|месяц|day|week|month)", s)
+    if m:
+        unit = m.group(2)
+        days = float(m.group(1).replace(",", ".")) * (7 if unit.startswith(("недел", "week")) else 30 if unit.startswith(("месяц", "month")) else 1)
+        return base + timedelta(days=max(1, round(days)))
+    m = re.search(r"\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b(?!\s*(?:дн|день|недел|месяц|час|day|week|month|hour))", s)
     if m:
         d, mo, y = int(m.group(1)), int(m.group(2)), m.group(3)
         if y:
@@ -392,9 +399,17 @@ def parse_due(text: str, base: date) -> Optional[date]:
         return date(base.year + (base.month == 12), base.month % 12 + 1, 1) - timedelta(days=1)
     if re.search(r"конц\w*\s+недел|на этой неделе|end of (the )?week|this week", s):
         return base + timedelta(days=max(0, 4 - base.weekday()))  # its Friday
+    # A weekday as a word of its own: «сред» inside «средства» or «среди» is no Wednesday. The day named
+    # on that same weekday is the next week's one («в среду», «до среды», «к среде» said on a Wednesday:
+    # a deadline for today is said «сегодня», handled above), unless the phrase says «эту»/«this»
     for i, (ru, en) in enumerate(_WEEKDAYS):
-        if ru in s or en in s:
-            return base + timedelta(days=(i - base.weekday()) % 7 or 7)
+        ru_re = r"сред(?:а|у|ы|е|ой|ам|ами|ах)?\b" if ru == "сред" else ru
+        m = re.search(r"(?<![а-яa-z])(?:" + ru_re + r"|" + en + r")", s)
+        if m:
+            ahead = (i - base.weekday()) % 7
+            if not ahead and not re.search(r"(?:\bэт(?:у|от|а|ой)|\bthis)\s+$", s[:m.start()]):
+                ahead = 7
+            return base + timedelta(days=ahead)
     return None
 
 
