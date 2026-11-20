@@ -66,6 +66,8 @@ ru.DesktopIcon=Значок на рабочем столе
 ru.FullRemove=Удалить Verbaliox полностью
 en.FullRemove=Remove Verbaliox completely
 en.DesktopIcon=Desktop icon
+ru.OldKept=Старая папка %1 не удалена: в ней остались модели или данные, которые не удалось перенести (%2). Удалите её вручную, когда убедитесь, что всё на месте.
+en.OldKept=The old folder %1 was not removed: it still holds models or data that could not be moved (%2). Remove it by hand once you are sure everything is in place.
 ru.RunAfter=Запустить Verbaliox (дальше программа предложит установить свои компоненты)
 en.RunAfter=Start Verbaliox (it then offers to install its components)
 ru.RemoveData=Удалить также записи, настройки и скачанные модели?%n%nЗаписи и база: %1%nМодели: %2%n%nНажмите «Нет», чтобы оставить их (например, для новой установки).
@@ -84,7 +86,8 @@ Name: "desktopicon"; Description: "{cm:DesktopIcon}"; Flags: unchecked
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"
+; AppUserModelID: the window's own (run.py), so its Windows toasts carry the app's name (app/toast.py)
+Name: "{autoprograms}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"; AppUserModelID: "Verbaliox.Desktop.Studio.1"
 Name: "{autodesktop}\Verbaliox"; Filename: "{app}\Verbaliox.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 ; Everything the program made, the shared tools asked about (uninstall.ps1)
 Name: "{autoprograms}\{cm:FullRemove}"; Filename: "{app}\uninstall.bat"
@@ -96,6 +99,8 @@ Filename: "{app}\Verbaliox.exe"; Description: "{cm:RunAfter}"; Flags: nowait pos
 ; "Start with Windows" (app/autostart.py) is removed with the program; nothing is written at install
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Verbaliox"; Flags: uninsdeletevalue dontcreatekey
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "VerbaScribe"; Flags: uninsdeletevalue dontcreatekey
+; the name and icon of the app's Windows toasts, written by the app (app/toast.py)
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\Verbaliox.Desktop.Studio.1"; Flags: uninsdeletekey dontcreatekey
 
 [UninstallDelete]
 ; What the program made next to itself: the environment, caches, the dubbing environment, the launcher
@@ -109,6 +114,7 @@ Type: filesandordirs; Name: "{app}\static"
 Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\__pycache__"
 Type: filesandordirs; Name: "{app}\.uv-cache"
+Type: filesandordirs; Name: "{app}\.uv"
 Type: filesandordirs; Name: "{app}\python"
 
 [Code]
@@ -168,6 +174,29 @@ begin
   Moved := True;
 end;
 
+// What of the old folder must not go with it (found in the audit: models not moved because the new place
+// had them already, robocopy that failed half-way, the data folder of a Store Python): its names, or ''
+function HeavyLeft(): String;
+var
+  Name: String;
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to 1 do
+  begin
+    case I of
+      0: Name := 'models';
+      1: Name := 'data';
+    end;
+    if DirExists(AddBackslash(OldAppDir) + Name) then
+    begin
+      if Result <> '' then
+        Result := Result + ', ';
+      Result := Result + Name;
+    end;
+  end;
+end;
+
 // pyvenv.cfg names the Python the environment was made from: a Python in the old folder (the one uv
 // installs next to the program) is now in the new one. The case of the path may differ
 procedure FixVenv(Name: String);
@@ -179,7 +208,7 @@ begin
   Cfg := ExpandConstant('{app}\') + Name + '\pyvenv.cfg';
   if not LoadStringFromFile(Cfg, Text) then
     Exit;
-  S := String(Text);
+  S := UTF8Decode(Text);  // pyvenv.cfg is UTF-8: a Cyrillic folder was read and written in the ANSI code page (audit)
   OldD := RemoveBackslash(OldAppDir);
   OldL := Lowercase(OldD);
   NewD := RemoveBackslash(ExpandConstant('{app}'));
@@ -191,7 +220,7 @@ begin
     S := Copy(S, P + Length(OldD), Length(S));
     P := Pos(OldL, Lowercase(S));
   end;
-  SaveStringToFile(Cfg, AnsiString(Done + S), False);
+  SaveStringToFile(Cfg, UTF8Encode(Done + S), False);
 end;
 
 // OLLAMA_MODELS set by the program into its folder follows the move
@@ -219,8 +248,11 @@ begin
     FixVenv('.venv');
     FixVenv('.venv-dub');
     FixOllamaModels();
-    // What is left in the old folder is the previous install; the user decides
-    if (not WizardSilent) and DirExists(OldAppDir) and
+    // What is left in the old folder is the previous install; the user decides. Never with models or data
+    // still in it: those would be lost with it
+    if (not WizardSilent) and DirExists(OldAppDir) and (HeavyLeft() <> '') then
+      MsgBox(FmtMessage(CustomMessage('OldKept'), [OldAppDir, HeavyLeft()]), mbInformation, MB_OK)
+    else if (not WizardSilent) and DirExists(OldAppDir) and
        (MsgBox(FmtMessage(CustomMessage('RemoveOld'), [ExpandConstant('{app}'), OldAppDir]),
                mbConfirmation, MB_YESNO) = IDYES) then
       DelTree(OldAppDir, True, True, True);

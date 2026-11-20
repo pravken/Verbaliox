@@ -78,6 +78,8 @@ def notice_tick(now: float = 0.0) -> bool:
     """Called by the meeting watch (app/meeting_guard): a Windows notification at most once a day, when
     there are such recordings and no meeting is going on. True when one was given."""
     now = now or time.time()
+    if now < _state["checked"] or now < _state["noticed"]:  # the clock was set back: not silent until it catches up
+        _state["checked"] = _state["noticed"] = 0.0
     if now - _state["checked"] < CHECK_EVERY_SEC or now - _state["noticed"] < NOTICE_EVERY_SEC:
         return False
     _state["checked"] = now

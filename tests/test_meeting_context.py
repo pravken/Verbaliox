@@ -65,5 +65,16 @@ class MeetingContextTest(unittest.TestCase):
             commitments.extract(self.mid)
         self.assertIn("what пиши по-английски", llm.chat.call_args_list[-1][0][1])
 
+    def test_an_answer_that_cannot_be_read_keeps_the_tasks(self):
+        """Found in the audit: a model's answer without its list deleted every task found before."""
+        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm.chat.return_value = '{"who": "Ольга", "what": "провести обход этажа", "due": "в четверг", "time": "00:00", "quote": "В четверг проведём обход этажа"}'
+        with mock.patch("app.llm.target", return_value=llm), mock.patch.object(commitments, "verify", side_effect=lambda items, m, llm: items):
+            self.assertEqual(len(commitments.extract(self.mid)), 1)
+            llm.chat.return_value = "Извините, я не могу выполнить эту задачу."
+            self.assertEqual([x["what"] for x in commitments.extract(self.mid)], ["провести обход этажа"])
+            llm.chat.return_value = "[]"  # the model says there are none: they go
+            self.assertEqual(commitments.extract(self.mid), [])
+
 if __name__ == "__main__":
     unittest.main()

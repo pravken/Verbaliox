@@ -3,7 +3,7 @@ day from the calendar, the dictation button."""
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
@@ -77,8 +77,12 @@ def _recorded_local(m: Dict[str, Any]) -> Any:
     return t
 
 
+# a recording begun a little before its meeting (joined early) is still that meeting's
+EARLY = timedelta(minutes=10)
+
+
 @router.get("/api/calendar/range")
-def api_calendar_range(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
+def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = "ru") -> Dict[str, Any]:
     """The calendar's meetings and the recordings of a week or a month (start…end, local time): a
     meeting carries the recording made during it, the other recordings come on their own."""
     from app import calendar_ics
@@ -94,7 +98,7 @@ def api_calendar_range(start: str, end: str, refresh: bool = False) -> Dict[str,
     used = set()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
-        hit = next((m for t, m in made if s.replace(second=0) <= t < e and m["id"] not in used), None)
+        hit = next((m for t, m in made if s.replace(second=0) - EARLY <= t < e and m["id"] not in used), None)
         it["recording"] = {"id": hit["id"], "title": hit.get("title") or "", "status": hit.get("status")} if hit else None
         if hit:
             used.add(hit["id"])
@@ -102,7 +106,27 @@ def api_calendar_range(start: str, end: str, refresh: bool = False) -> Dict[str,
                    "duration": m.get("duration") or 0, "status": m.get("status")}
                   for t, m in made if m["id"] not in used]
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
-            "recordings": recordings, **calendar_ics.status()}
+            "recordings": recordings, "holidays": _holidays(a, b, lang), **calendar_ics.status()}
+
+
+def _holidays(a: datetime, b: datetime, lang: str) -> Dict[str, str]:
+    """{"YYYY-MM-DD": name}: the public holidays of the days of a…b (Settings → Календарь → Праздники)."""
+    from datetime import timedelta
+
+    from app import holidays_cal
+
+    last = b.date() if b == datetime.combine(b.date(), datetime.min.time()) else b.date() + timedelta(days=1)
+    return holidays_cal.between(a.date(), last, "en" if lang == "en" else "ru")
+
+
+@router.post("/api/meeting/join")
+def api_meeting_join(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Joins the call of a calendar meeting (app/meeting_join.py): only a link of Teams, Zoom, Meet or Webex."""
+    from app import meeting_join
+
+    if not meeting_join.open_link(str(payload.get("url") or "")):
+        raise HTTPException(status_code=400, detail="Это не ссылка на звонок")
+    return {"ok": True}
 
 
 @router.get("/api/calendar/day")
@@ -119,7 +143,8 @@ def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, A
         calendar_ics.events(force=True)
     items = calendar_ics.day(a, b)
     made = []
-    for m in list_meetings():
+    library = list_meetings()
+    for m in library:
         at = str(m.get("recorded_at") or "")
         try:
             t = datetime.fromisoformat(at.replace("Z", "+00:00")) if at else None
@@ -131,15 +156,14 @@ def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, A
             made.append((t, m))
     from app import series
 
-    done = sorted((m for m in list_meetings() if m.get("status") == "completed"),
-                  key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
+    index = series.EventIndex(library) if items else None  # made once for all the events of the day
     now = datetime.now()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
-        hit = next((m for t, m in made if s.replace(second=0) <= t < e), None)
+        hit = next((m for t, m in made if s.replace(second=0) - EARLY <= t < e), None)
         it["recording"] = {"id": hit["id"], "status": hit.get("status"), "progress": hit.get("progress")} if hit else None
         # A meeting ahead that continues a series: its last time and the tasks still open (the brief)
-        it["before"] = series.before_meeting(it["title"], it.get("attendees") or [], done) if e > now else None
+        it["before"] = series.before_meeting(it["title"], it.get("attendees") or [], index=index) if e > now else None
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
             **calendar_ics.status()}
 

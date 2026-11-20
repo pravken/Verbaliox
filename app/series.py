@@ -220,31 +220,91 @@ def brief(series_id: Optional[int] = None, person: Optional[str] = None, model_n
             "mode": "brief", "count": len(meetings), "excluded_local": excluded}
 
 
-def match_event(title: str, attendees: List[str], done: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+class EventIndex:
+    """What match_event and before_meeting look up, made once for all the events of a request: a day of
+    fifteen meetings read the library three times per event and gathered everyone met in it again for
+    each. `library`: list_meetings() (read when a series' meetings are needed and none was given);
+    `done`: its completed recordings, newest first."""
+
+    def __init__(self, library: Optional[List[Dict[str, Any]]] = None, done: Optional[List[Dict[str, Any]]] = None):
+        self._library = library
+        if done is None:
+            done = _done(self.library())
+        self.series_by_key: Dict[str, Any] = {}  # the newest recording with this title key in a series
+        self.known: Set[str] = set()
+        self.by_person: Dict[str, List[Dict[str, Any]]] = {}  # completed, oldest first
+        for r in done:
+            if r.get("series_id"):
+                self.series_by_key.setdefault(title_key(r.get("title") or ""), r["series_id"])
+            names = people(r)
+            self.known |= names
+            if r.get("status") == "completed":
+                for n in names:
+                    self.by_person.setdefault(n, []).append(r)
+        for rows in self.by_person.values():
+            rows.sort(key=_when)
+        self._by_series: Optional[Dict[Any, List[Dict[str, Any]]]] = None
+
+    def library(self) -> List[Dict[str, Any]]:
+        if self._library is None:
+            self._library = list_meetings()
+        return self._library
+
+    def series_rows(self, series_id: int) -> List[Dict[str, Any]]:
+        """The recordings of a series, oldest first (series_meetings)."""
+        if self._by_series is None:
+            self._by_series = {}
+            for r in self.library():
+                if r.get("series_id"):
+                    self._by_series.setdefault(r["series_id"], []).append(r)
+            for rows in self._by_series.values():
+                rows.sort(key=_when)
+        return self._by_series.get(series_id, [])
+
+
+def _done(library: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted((r for r in library if r.get("status") == "completed"),
+                  key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
+
+
+_last_index: List[Any] = []  # (done, its EventIndex): the events of one request come with the same list
+
+
+def _index_for(done: Optional[List[Dict[str, Any]]]) -> EventIndex:
+    if done is None:
+        return EventIndex()
+    if _last_index and _last_index[0] is done:  # the list itself is held here, so its id is not reused
+        return _last_index[1]
+    index = EventIndex(done=done)
+    _last_index[:] = [done, index]
+    return index
+
+
+def match_event(title: str, attendees: List[str], done: Optional[List[Dict[str, Any]]] = None,
+                index: Optional[EventIndex] = None) -> Dict[str, Any]:
     """The series a calendar meeting continues (same title without its dates), or else a person of it
     already met in the recordings: {"series_id", "person"} (either may be None)."""
-    if done is None:
-        done = sorted((r for r in list_meetings() if r.get("status") == "completed"),
-                      key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
+    index = index or _index_for(done)
     key = title_key(title)
-    same = next((r for r in done if r.get("series_id") and len(key) >= 6 and title_key(r.get("title") or "") == key), None)
-    known = {n for r in done for n in people(r)}
-    person = next((a for a in attendees or [] if a.strip().lower() in known), None)
-    return {"series_id": same.get("series_id") if same else None, "person": person}
+    series_id = index.series_by_key.get(key) if len(key) >= 6 else None
+    person = next((a for a in attendees or [] if a.strip().lower() in index.known), None)
+    return {"series_id": series_id, "person": person}
 
 
-def before_meeting(title: str, attendees: List[str], done: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
+def before_meeting(title: str, attendees: List[str], done: Optional[List[Dict[str, Any]]] = None,
+                   index: Optional[EventIndex] = None) -> Optional[Dict[str, Any]]:
     """What there is to know before a calendar meeting, without the analysis model: the series (or the
-    person) it continues, its last recording and the tasks still open. None when it continues nothing."""
+    person) it continues, its last recording and the tasks still open. None when it continues nothing.
+    `index`: EventIndex of the library, for several events at once."""
     from app import commitments
 
-    hit = match_event(title, attendees, done)
+    index = index or _index_for(done)
+    hit = match_event(title, attendees, index=index)
     if hit["series_id"]:
-        rows = series_meetings(int(hit["series_id"]))
-        tasks = commitments.open_for_series(int(hit["series_id"]))
+        rows = index.series_rows(hit["series_id"])
+        tasks = commitments.for_meetings([r["id"] for r in rows], status="open") if rows else []  # open_for_series
     elif hit["person"]:
-        p = hit["person"].strip().lower()
-        rows = sorted((r for r in (done or list_meetings()) if r.get("status") == "completed" and p in people(r)), key=_when)
+        rows = index.by_person.get(hit["person"].strip().lower(), [])
         tasks = commitments.for_meetings([r["id"] for r in rows[-BRIEF_MEETINGS:]], status="open") if rows else []
     else:
         return None

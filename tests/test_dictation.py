@@ -286,3 +286,22 @@ class AnalysisWithOllamaStoppedTest(unittest.TestCase):
                 mock.patch.object(ollama_client, "find_ollama_executable", return_value="C:/ollama.exe"):
             self.assertFalse(llm.available())  # Ollama on another computer is not started from here
         update_settings({"ollama_url": "http://127.0.0.1:11434"})
+
+
+class TypingKeepsTheClipboardTest(unittest.TestCase):
+    """Found in the audit: dictation typed through the clipboard and put back only text, so a copied
+    image or file list was lost. With such content the text is typed as keystrokes instead."""
+
+    def test_an_image_or_files_in_the_clipboard_are_left_alone(self):
+        self.assertTrue(dictation._clipboard_holds_more_than_text([8, 17, 2]))  # an image
+        self.assertTrue(dictation._clipboard_holds_more_than_text([15, 0xC0A1]))  # files from Explorer
+        self.assertFalse(dictation._clipboard_holds_more_than_text([13, 1, 7, 16, 0xC0B2]))  # text, HTML
+        self.assertFalse(dictation._clipboard_holds_more_than_text([]))
+
+    def test_keystrokes_type_every_utf16_unit_and_enter_for_a_line_break(self):
+        keys = dictation._unicode_keystrokes("Да😀\nb")
+        units = [u for vk, u, f in keys if f == 0x0004]
+        self.assertEqual(units, [ord("Д"), ord("а"), 0xD83D, 0xDE00, ord("b")])
+        self.assertIn((0x0D, 0, 0), keys)
+        self.assertEqual(len(keys), 2 * 6)  # each press is released
+        self.assertEqual(dictation._unicode_keystrokes(""), [])

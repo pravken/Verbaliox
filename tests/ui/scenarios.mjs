@@ -61,11 +61,25 @@ await step('read a recording', async () => {
   await sleep(1500);
   expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
   expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
-  expect(/версии и действия/.test(await page.textContent('#tx-model-chip')), 'the button does not say it opens');
+  // one short row (variant B): «Версия: … ▾», «Расшифровать заново», «⋯» and when the text was made
+  expect(/Версия:/.test(await page.textContent('#tx-model-chip')), 'no version button');
+  expect(await page.isVisible('#tx-redo-btn') && await page.isVisible('#tx-more-btn'), 'the row lacks its buttons');
   await page.click('#tx-model-chip');
-  expect(await page.isVisible('#tx-model-bar'), 'the button does not open the row');
+  await sleep(200);
+  const versions = await page.$$eval('#text-menu button', els => els.map(e => e.textContent));
+  expect(versions.some(x => x.includes('✓')), `the version shown is not marked: ${versions.join(' | ')}`);
+  await page.keyboard.press('Escape');
+  await page.click('#tx-more-btn');
+  await sleep(200);
+  const more = await page.$$eval('#text-menu button', els => els.map(e => e.textContent));
+  expect(more.some(x => /Удалить эту версию/.test(x)) && more.some(x => /Все модели и параметры/.test(x)), `the «⋯» menu: ${more.join(' | ')}`);
+  await page.click('#text-menu button:has-text("Все модели и параметры")');
+  expect(await page.isVisible('#tx-model-bar'), '«Все модели и параметры» does not open the row');
   expect(await page.locator('#tx-model-select option[value="precise"]').count() === 1, 'no precise mode in the list');
-  await page.click('#tx-model-chip');
+  await page.click('#tx-more-btn');
+  await sleep(200);
+  await page.click('#text-menu button:has-text("Свернуть панель моделей")');
+  expect(!(await page.isVisible('#tx-model-bar')), 'the row does not fold back');
   expect(!(await page.isVisible('#chapters-bar')), 'the chapters are shown twice');
   await page.click('#tx-view-btn');
   const items = await page.$$eval('#tx-view-menu button', els => els.map(e => e.textContent.trim()));
@@ -152,6 +166,11 @@ await step('first run wizard', async () => {
   await page.fill('#first-run-wizard input[data-cal-src]', 'https://example.com/basic.ics');
   await page.click('#first-run-wizard label:has(input[data-auto="allMeet"])');
   expect(await page.inputValue('#first-run-wizard input[data-cal-src]') === 'https://example.com/basic.ics', 'the calendar address was lost on a redraw');
+  // The country of the public holidays on the same step (asked by the user: chosen at the first start); a region where it has them
+  await page.waitForSelector('#first-run-wizard select[data-hol-country] option[value="DE"]', { state: 'attached' });
+  await page.selectOption('#first-run-wizard select[data-hol-country]', 'DE');
+  await page.selectOption('#first-run-wizard select[data-hol-subdiv]', 'BY');
+  expect(await page.inputValue('#first-run-wizard input[data-cal-src]') === 'https://example.com/basic.ics', 'the calendar address was lost when the country changed');
   await page.click('#first-run-wizard button[data-a="next"]');
   expect(await page.isChecked('#first-run-wizard input[data-auto="startup"]'), 'the start with Windows did not follow the recording of meetings');
   expect((await page.textContent('#first-run-dialog')).includes(await page.evaluate(() => t('frwShortAll'))), 'the summary does not list the automation');
@@ -172,9 +191,140 @@ await step('first run wizard', async () => {
   expect(first.language === 'auto', `language not left to detection: ${JSON.stringify(first)}`);
   expect(first.record_source_mode === 'mic', `the sound source not saved: ${JSON.stringify(first)}`);
   expect(first.start_with_windows === 'true' && first.close_to_tray === 'true', `the start with Windows not saved: ${JSON.stringify(first)}`);
+  expect(first.holiday_country === 'DE' && first.holiday_subdiv === 'BY', `the country of the holidays not saved: ${JSON.stringify(first)}`);
+  expect(JSON.parse(first.setup_done || '[]').includes('holidays'), `the steps after an update would ask again: ${JSON.stringify(first)}`);
   expect(!('calendar_ics' in first), 'the calendar went with the other settings: a refused address would lose them all');
   const cal = sent.find(x => 'calendar_ics' in x) || {};
   expect(cal.calendar_ics === 'https://example.com/basic.ics' && cal.meet_auto_all === 'true', `the calendar not saved: ${JSON.stringify(sent)}`);
+});
+
+// After an update: a small wizard asks the settings a new version brings (asked by the user), once
+await step('setup steps after an update', async () => {
+  await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
+  await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
+  await page.waitForSelector('#setup-steps select[data-hol-country] option[value="RS"]', { state: 'attached' });
+  await page.selectOption('#setup-steps select[data-hol-country]', 'RS');
+  expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
+  // each step saved before the next shows (its buttons wait meanwhile): wait for that, not for a time
+  const next = async () => {
+    const was = await page.getAttribute('#setup-steps-dialog', 'data-step');
+    await page.click('#setup-steps button[data-a="next"]');
+    // polled with evaluate: waitForFunction is refused by the page's CSP (no eval) in CI's Playwright
+    for (let i = 0; i < 80; i++) {
+      const moved = await page.evaluate(prev => {
+        const d = document.getElementById('setup-steps-dialog');
+        return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
+      }, was);
+      if (moved) break;
+      await sleep(100);
+    }
+  };
+  await next();
+  // then the news of the version, one step each: the last one closes the wizard
+  for (let i = 0; i < 5 && await page.$('#setup-steps-dialog'); i++) {
+    expect(await page.$('#setup-steps .frw-points li'), 'a news step without its points');
+    await next();
+  }
+  expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
+  const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+  expect(set.holiday_country === 'RS', `the country not saved: ${set.holiday_country}`);
+  // answered: not asked again
+  await page.evaluate(sv => openSetupSteps(sv), set);
+  await sleep(400);
+  expect(!(await page.$('#setup-steps')), 'asked again after it was answered');
+  await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
+});
+
+// A calendar meeting about to start with a Teams link: «Подключиться» on its card joins the call (asked by the user)
+await step('join a meeting call', async () => {
+  const sent = [];
+  await page.route('**/api/meeting/join', r => { sent.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await page.evaluate(() => {
+    switchAppView('dashboard');
+    Object.assign(state.system.settings, { work_day_start: '0', work_day_end: '24' });  // the meeting is in the day shown, whatever the time
+    const s = new Date(Date.now() + 5 * 60e3), e = new Date(s.getTime() + 30 * 60e3);
+    home.calConfigured = true;
+    home.events = [{ key: 'j|1', title: 'Синк с командой', start: s.toISOString(), end: e.toISOString(), s, e, attendees: [], online: true,
+      join: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0' }];
+    home.eventsAt = Date.now();
+    renderHomeNow();
+  });
+  await sleep(300);
+  await page.click('.hm-mt-join');
+  await sleep(300);
+  await page.unroute('**/api/meeting/join');
+  expect(sent.length === 1 && sent[0].url.startsWith('https://teams.microsoft.com/'), `the call was not opened: ${JSON.stringify(sent)}`);
+});
+
+// The card of a feature: its weeks, its people (asked by the user)
+await step('feature card', async () => {
+  const fid = await page.evaluate(async () => {
+    const f = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Карточка' }) }).then(r => r.json());
+    await fetch('/api/meetings/1/features', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [f.id] }) });
+    return f.id;
+  });
+  await page.evaluate(id => openFeaturePage(id), fid);
+  await sleep(800);
+  expect(await page.locator('#feature-page .fp-week').count() === 12, 'no 12 weeks on the card');
+  expect(await page.locator('#feature-page .fp-now .fp-box').count() === 3, 'no «Сейчас» on the card');
+  expect(await page.locator('#feature-page .fp-stats3 .fp-stat').count() === 3, 'not three numbers');
+  expect(await page.locator('#feature-page .fp-person').count() > 0, 'no people on the card');
+  // «Главная»'s widget «Фичи» opens the card (asked by the user)
+  await page.evaluate(() => { document.getElementById('feature-page')?.remove(); switchAppView('dashboard'); });
+  await page.evaluate(() => { const l = dbPrefs().layout.filter(w => w.id !== 'features'); dbSave({ layout: [{ id: 'features', size: 'L' }, ...l] }); return loadDashboard(); });
+  await sleep(800);
+  await page.click(`#db-grid .db-feat[data-click-args='[${fid}]']`);
+  await sleep(800);
+  expect(await page.$('#feature-page'), 'the widget does not open the card');
+  await page.evaluate(id => { document.getElementById('feature-page')?.remove(); return fetch('/api/features/' + id, { method: 'DELETE' }); }, fid);
+});
+
+// The calendar window: a day marked a day off from its «⋯», then taken back (asked by the user)
+await step('day off from the calendar', async () => {
+  await page.evaluate(() => { calView.mode = 'month'; openCalendarView(); });
+  await sleep(800);
+  const day = await page.evaluate(() => calKey(new Date()));
+  await page.hover(`#cal-view [data-daykey="${day}"]`);
+  await page.click(`#cal-view [data-daykey="${day}"] .cal-day-more`);
+  await sleep(200);
+  await page.click('#text-menu button:has-text("Отметить выходным")');
+  await sleep(800);
+  expect(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`), 'the day is not marked');
+  await page.click(`#cal-view [data-daykey="${day}"]`, { button: 'right' });
+  await sleep(200);
+  await page.click('#text-menu button:has-text("Убрать выходной")');
+  await sleep(800);
+  expect(!(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`)), 'the day off is not taken back');
+  await page.evaluate(() => closeCalendarView());
+});
+
+// Settings → Календарь: a vacation marked by hand is saved at once and listed (asked by the user)
+await step('own days off', async () => {
+  await page.evaluate(() => { openModal('settings', 'general'); selectSettingsTab('calendar'); });
+  await sleep(400);
+  await page.evaluate(() => {
+    document.getElementById('dayoff-from').value = '2026-03-02';
+    document.getElementById('dayoff-to').value = '2026-03-04';
+    document.getElementById('dayoff-title').value = 'Отпуск';
+  });
+  // waited for, not timed: a slow computer (CI) saves later
+  const listed = async want => {
+    for (let i = 0; i < 50; i++) {
+      if ((await page.textContent('#dayoff-list')).includes('Отпуск') === want) return true;
+      await sleep(100);
+    }
+    return false;
+  };
+  await page.click('button[data-click="addDayOff"]');
+  expect(await listed(true), 'the vacation is not listed');
+  const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+  expect(JSON.parse(set.days_off)[0].to === '2026-03-04', `not saved: ${set.days_off}`);
+  await page.click('#dayoff-list button[data-click="removeDayOff"]');
+  expect(await listed(false), 'the vacation was not removed');
+  await sleep(1500);  // a fill of the settings asked for before must not bring it back
+  expect(!(await page.textContent('#dayoff-list')).includes('Отпуск'), 'the vacation came back');
+  await page.evaluate(() => closeModal('settings'));
 });
 
 // The cloud choice keeps the speech settings: its consent is asked in Settings → Analysis (no stub here:
@@ -272,6 +422,103 @@ await step('dashboard', async () => {
   expect((await page.textContent('#db-sub')).startsWith('Месяц'), 'the period did not change');
   await page.click('#db-periods button >> nth=0');
   await sleep(300);
+});
+
+// The templates editor: a click beside it asks before dropping unsaved edits, and closes at once when
+// nothing changed (audit: edits were lost to a stray click)
+await step('templates editor keeps edits', async () => {
+  await page.evaluate(() => openTemplatesEditor());
+  await sleep(300);
+  await page.click('#templates-editor button[data-add]');
+  await page.mouse.click(5, 5);
+  await sleep(300);
+  const asked = () => page.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].some(d => d.id !== 'templates-editor' && /без сохранения/.test(d.textContent)));
+  expect(await asked(), 'no question before dropping the edits');
+  expect(await page.isVisible('#templates-editor'), 'the editor closed without asking');
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  expect(await page.isVisible('#templates-editor'), '«Отмена» in the question closed the editor');
+  await page.evaluate(() => document.getElementById('templates-editor').remove());
+  await page.evaluate(() => openTemplatesEditor());
+  await sleep(300);
+  await page.mouse.click(5, 5);
+  await sleep(300);
+  expect(!(await page.isVisible('#templates-editor')) && !(await asked()), 'an unchanged editor did not just close');
+});
+
+// A feature page closed while its redraw is on the way stays closed (audit: closed with Esc, it came back)
+await step('feature page stays closed', async () => {
+  const id = await page.evaluate(() => fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Сценарий' }) }).then(r => r.json()).then(d => d.id));
+  await page.evaluate(id => openFeaturePage(id), id);
+  await sleep(500);
+  expect(await page.isVisible('#feature-page'), 'the feature page did not open');
+  await page.evaluate(() => { refreshFeaturePage(); document.getElementById('feature-page').remove(); });
+  await sleep(600);
+  expect(!(await page.isVisible('#feature-page')), 'the closed page came back');
+  await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }), id);
+});
+
+// The background poll of the library sends the list's ETag back and an unchanged list answers 304, not
+// the whole JSON again (audit: megabytes every 30 s)
+await step('library poll is cheap', async () => {
+  expect(await page.evaluate(() => !!live.listEtag), 'the list came without an ETag');
+  const statuses = [];
+  const seen = r => { if (/\/api\/meetings$/.test(r.url())) statuses.push(r.status()); };
+  page.on('response', seen);
+  await page.evaluate(() => loadMeetingsList({ poll: true }));
+  await page.evaluate(() => loadMeetingsList());
+  await sleep(300);
+  page.off('response', seen);
+  expect(statuses[0] === 304 && statuses[1] === 200, `poll ${statuses[0]}, full ${statuses[1]}`);
+  expect(await page.locator('#meetings-list [data-mid]').count() > 0, 'the list is empty after the poll');
+});
+
+// A progress event redraws only that recording's row, not the sorted list of every recording (audit:
+// each event rebuilt all rows); a change of its status still draws the whole list
+await step('progress redraws one row', async () => {
+  await page.evaluate(() => switchAppView('library'));
+  await sleep(300);
+  const r = await page.evaluate(async () => {
+    const frame = () => new Promise(res => requestAnimationFrame(() => setTimeout(res, 0)));
+    const m = state.meetings[0];
+    const was = m.status;
+    m.status = 'transcribing';
+    m.progress = 10;
+    renderMeetingsSidebar();
+    let full = 0;
+    const real = window.renderMeetingsSidebar;
+    window.renderMeetingsSidebar = (...a) => { full++; return real(...a); };
+    handleLiveEvent({ type: 'progress', id: m.id, progress: 37, stage_text: 'x' });
+    await frame();
+    const row = document.querySelector(`#meetings-list [data-mid="${m.id}"]`);
+    const shown = row ? row.textContent.includes('37%') : false;
+    const afterRow = full;
+    handleLiveEvent({ type: 'progress', id: m.id, status: was, progress: 100 });
+    await frame();
+    window.renderMeetingsSidebar = real;
+    return { shown, afterRow, afterStatus: full };
+  });
+  expect(r.shown, 'the row does not show the new progress');
+  expect(r.afterRow === 0, 'a progress event drew the whole list');
+  expect(r.afterStatus === 1, 'a status change did not draw the list');
+});
+
+// The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is
+// busy the app starts on another port, whose storage is empty (audit: an English user got Russian)
+await step('language from the server', async () => {
+  await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { ui_lang: 'en', ui_dashboard: JSON.stringify({ period: 'month' }) } }) }));
+  await page.evaluate(() => localStorage.clear());  // a launch on another port
+  await page.reload();
+  let lang = '';
+  for (let i = 0; i < 40 && lang !== 'en'; i++) { await sleep(150); lang = await page.evaluate(() => state.uiLang); }
+  expect(lang === 'en', 'the language of the server was not taken');
+  expect(await page.evaluate(() => dbPrefs().period) === 'month', 'the dashboard layout of the server was not taken');
+  await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ period: 'week' }); });
+  await sleep(1200);
+  const kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
+  expect(kept[0] === 'ru' && kept[1] === 'week', `a choice on the page was not kept on the server: ${kept}`);
 });
 
 await browser.close();

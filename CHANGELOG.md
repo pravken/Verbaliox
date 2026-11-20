@@ -6,6 +6,45 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.25 — English
+
+- **Join a meeting from the notification**: when a meeting starts, a Windows notification with
+  «Join» opens its call (Teams in its app, Zoom, Google Meet, Webex — the link from the invitation); it stays
+  until answered. The reminder ahead comes when you choose: 30 seconds to 15 minutes before, or not at all.
+  On Home a meeting about to start has «Join».
+- **Public holidays of your country**: Settings → Calendar → Holidays, a country (about 250) and its region;
+  asked at the first start and after this update. **Your own days off and vacations** there and right in the
+  calendar (a day's «⋯» or a right click). Days off are hatched and are no working days on Home.
+- **How long the working day lasted**: the time at the computer (keyboard and mouse, a recording, a call),
+  like the Teams status; the «Working day» widget, the hours of each day in the calendar, and a reminder
+  after 8 hours (or as set). Only on this computer, can be turned off.
+- **The card of a feature**, from the «Features» widget on Home: its next meeting with «Join», what changed in
+  a week, «Where we are» from the analysis model on a click, its weeks, people, decisions, tasks and meetings.
+- **What's new after an update**: a small window with the new settings and features, shown once.
+- **The recognition row is one line**: «Version: … ▾», «Transcribe again», «⋯» and when the text was made.
+- **Home** (was «Dashboard»): one look, steel blue on cold slate; the views framed together at the top; widgets
+  fill their rows; the period's progress in calendar or working days; the week's cards keep words whole.
+- A calendar event can be «no meeting» (one or the whole series); long blocks and unrecorded meetings are not
+  counted as going on.
+- Obsidian: a note follows its recording's features and title.
+- Smooth switching between tabs and views.
+- **Fixes from a code audit**: a recording recovered after a crash is no longer deleted at the same start,
+  and a crash during the mix recovers it whole with its notes; a recording is dated by its start, not by
+  «Stop»; a restore replaces a damaged database; a broken answer of the model no longer deletes the tasks;
+  calendar series keep their last meeting and 29 February; Settings keep what is being typed; Esc closes the
+  cloud log and the template windows; the agent (MCP) gets nothing when the local-only list cannot be read.
+- **Faster on a big library**: editing lines of a transcript, search, Home, the calendar day and the people
+  list take a fraction of the time; the library list is not downloaded again while nothing changed, nor while
+  the window is hidden.
+- **More fixes from the audit**: cancelling one job of a recording no longer cancels the next one; a job
+  interrupted twice at startup stops instead of resuming forever; the Obsidian note is written whole and a
+  rename keeps your section; a damaged transcript version no longer breaks the recording; due dates read
+  weekdays as whole words; calendar series in UTC keep their times; a restore drops stale thumbnails and keeps
+  only the last 3 old databases; features find meetings by word forms («платежам» for «Платежи»); a closed
+  feature card stays closed; the template editor asks before dropping edits; the interface language is kept
+  whatever port the app starts on; the update rollback checks file hashes, uv is pinned and checked, the app
+  window opens by a one-time address.
+
 ## 0.8.24 — English
 
 - **The next meeting in sight**: under the greeting a card «Next in 12 min · title» (orange in its last 5
@@ -674,6 +713,45 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.25
+
+- **Подключение к встрече из уведомления**: в начале встречи приходит уведомление Windows с кнопкой
+  «Подключиться» — она открывает звонок по ссылке из приглашения (Teams в своём приложении, Zoom, Google Meet,
+  Webex); уведомление не исчезает, пока не ответишь. Напоминание заранее — когда выберешь: от 30 секунд до 15
+  минут или не напоминать. На «Главной» у начинающейся встречи есть «Подключиться».
+- **Государственные праздники своей страны**: «Настройки → Календарь → Праздники», страна (около 250) и регион;
+  спрашиваются при первом запуске и после этого обновления. Там же и прямо в календаре («⋯» у дня или правый
+  клик) — **свои выходные и отпуск**. Выходные заштрихованы и не считаются рабочими днями на «Главной».
+- **Сколько длился рабочий день**: время за компьютером (клавиатура и мышь, запись, звонок) — как статус в
+  Teams; виджет «Рабочий день», часы каждого дня в календаре и напоминание через 8 часов (или сколько задано).
+  Только на этом компьютере, можно выключить.
+- **Карточка фичи** — из виджета «Фичи» на «Главной»: ближайшая встреча с «Подключиться», что изменилось за
+  неделю, «Где мы» от модели анализа по кнопке, недели, люди, решения, задачи и встречи.
+- **Что нового после обновления**: маленькое окно с новыми настройками и функциями, один раз.
+- **Строка распознавания в одну линию**: «Версия: … ▾», «Расшифровать заново», «⋯» и когда сделан текст.
+- **«Главная»** (была «Дэшборд»): одно оформление — стальной синий на холодном сланце; вкладки программы наверху
+  вместе; виджеты заполняют ряды; прогресс периода в календарных или рабочих днях; карточки недели не рвут слова.
+- Событие календаря можно отметить «не встреча» (одно или всю серию); длинные блоки и незаписанные встречи не
+  считаются идущими.
+- Obsidian: заметка следует за фичами и названием своей записи.
+- Плавные переходы между вкладками и экранами.
+- **Исправления после аудита кода**: запись, восстановленная после сбоя, больше не удаляется при том же
+  запуске, а сбой во время сведения восстанавливает её целиком с заметками; запись датируется началом, а не
+  «Стоп»; восстановление из копии заменяет повреждённую базу; сломанный ответ модели больше не стирает задачи;
+  серии календаря не теряют последнюю встречу и 29 февраля; настройки не стирают вводимый текст; Esc закрывает
+  журнал облака и окна шаблонов; агент (MCP) ничего не получает, если список «только локально» не прочитан.
+- **Быстрее на большой библиотеке**: правка строк расшифровки, поиск, «Главная», день календаря и список людей
+  занимают в разы меньше времени; список библиотеки не скачивается заново, пока ничего не изменилось и пока
+  окно скрыто.
+- **Ещё исправления по аудиту**: отмена одной задачи записи больше не отменяет следующую; задача, дважды
+  прерванная при запуске, останавливается, а не возобновляется бесконечно; заметка Obsidian пишется целиком, а
+  переименование сохраняет ваш раздел; повреждённая версия расшифровки не ломает запись; сроки задач читают дни
+  недели только целыми словами; серии календаря в UTC сохраняют время; восстановление из копии убирает старые
+  миниатюры и хранит только 3 прежние базы; фичи находят встречи по формам слова («платежам» для «Платежи»);
+  закрытая карточка фичи не открывается снова; редактор шаблонов спрашивает, прежде чем выбросить правки; язык
+  интерфейса сохраняется при любом порте запуска; откат обновления проверяет хеши файлов, uv закреплён и
+  проверяется, окно программы открывается по одноразовому адресу.
 
 ## 0.8.24
 

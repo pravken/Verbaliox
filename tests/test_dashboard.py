@@ -107,6 +107,21 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual({m["id"] for m in person["meetings"]}, {good, empty})
         self.assertEqual([t["what"] for t in person["owes_me"]], ["Прислать смету"])
 
+    def test_meetings_are_read_without_their_transcripts(self):
+        """The period's meetings: the protocol and each speaker's talk are read in one query, not a
+        get_meeting (every word, versions, translations) per meeting; the user's share as before."""
+        from unittest import mock
+
+        mid = self._meeting("Молчун", "2026-11-17")
+        segs = [{"id": 1, "start": 0, "end": 30, "speaker": "SPEAKER_01", "text": "длинная речь", "words": [{"word": "x"}]},
+                {"id": 2, "start": 30, "end": 31, "speaker": "SPEAKER_00", "text": "да"},
+                {"id": 3, "start": 31, "end": 90, "speaker": "SPEAKER_00", "text": "  "}]  # no words: not talk
+        database.save_meeting_results(mid, segments=segs)
+        with mock.patch("app.database.get_meeting", side_effect=AssertionError("transcript read")):
+            row = dashboard.detail("meetings", "week", today=self.TODAY)["meetings"][0]
+        self.assertEqual((row["id"], row["my_share"]), (mid, 3.2))  # 1 s of 31
+        self.assertEqual(row["reasons"], ["silent"])
+
     def test_a_series_giving_nothing_lately(self):
         """Asked by the user: «Серии без отдачи» — the newest meetings of a series, three in a row, gave
         no decision and no task; one with a decision before them does not count."""

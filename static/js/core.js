@@ -68,44 +68,75 @@ function applyUiScale(pct) {
 // Before anything is drawn: the last scale, so the window does not jump when the settings arrive
 (() => { let v = null; try { v = localStorage.getItem('verbaliox_ui_scale'); } catch (e) {} applyUiScale(v || '100'); })();
 
-// --- Themes (asked by the user): the accent colour and the background, from presets (Settings → Общие →
-// Оформление; ui_accent, ui_bg). Every colour of the page reads the variables of static/styles.css :root ---
+// --- The look: the accent colour and the background. Every colour of the page reads the variables of
+// static/styles.css :root, set here ---
+// One look, chosen with the user on the try-on page (asked by the user: one look instead of themes): the
+// steel blue on the cold slate, a solid fill. The other presets stay here to make it from, not chosen in the
+// app; the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
 const THEME_ACCENTS = {
-  blue: ['#0A84FF', '#4DA3FF', '#0071E3'], indigo: ['#5E5CE6', '#8583FF', '#4A48C9'], purple: ['#BF5AF2', '#D38CF7', '#A243D3'],
-  pink: ['#FF375F', '#FF6E8A', '#DE2A50'], teal: ['#30B0C7', '#5CCADD', '#2595A9'], mint: ['#00B8A9', '#3AD3C6', '#00998D'],
-  graphite: ['#8E8E93', '#B4B4B9', '#76767B'],
+  steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
+  emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#A8324A',
 };
-// page, sidebar, panel, card, raised
 const THEME_BGS = {
-  graphite: ['#141416', '#1C1C1E', '#1C1D21', '#242426', '#2C2C2E'],
-  black: ['#000000', '#0E0E10', '#111114', '#18181B', '#212124'],
-  midnight: ['#0E1320', '#141A2A', '#161C2B', '#1C2335', '#242C41'],
-  forest: ['#0F1613', '#151D19', '#17201B', '#1D2621', '#252F29'],
-  warm: ['#17140F', '#1E1B16', '#201C17', '#27231D', '#302B24'],
+  slate: '#121418', deepblue: '#10141C', petrol: '#0E1617', moss: '#121411',
+  pine: '#0F1513', steel: '#111518', coal: '#0B0C0E', black: '#000000',
 };
+const THEME_FILLS = ['solid', 'soft', 'outline'];
+// the presets of 0.8.24, for a theme chosen then
+const THEME_FORMER = { blue: 'steel', indigo: 'lavender', purple: 'lavender', pink: 'cherry', teal: 'turquoise', mint: 'emerald', graphite: 'slate',
+  midnight: 'deepblue', forest: 'pine', warm: 'coal' };
 function hexChannels(h) { return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(' '); }
 // a colour mixed with white (k > 0) or black (k < 0), as #RRGGBB
 function hexMix(h, k) {
   const to = k > 0 ? 255 : 0, f = Math.abs(k);
   return '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - f) + to * f).toString(16).padStart(2, '0')).join('');
 }
-function applyTheme(accent, bg) {
-  const a = THEME_ACCENTS[accent] || THEME_ACCENTS.blue, b = THEME_BGS[bg] || THEME_BGS.graphite;
+// two colours mixed: k of b into a
+function hexBlend(a, b, k) {
+  return '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+}
+function hexContrast(x, y) {
+  const lum = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+    .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const a = lum(x), b = lum(y);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+// the fill under a white text: the accent darkened step by step until white reads on it
+function readableFill(c) {
+  let k = 0.1, d = hexMix(c, -k);
+  while (hexContrast('#ffffff', d) < 4.8 && k < 0.8) { k += 0.04; d = hexMix(c, -k); }
+  return d;
+}
+function themeKey(v, list, def) { v = THEME_FORMER[v] || v; return list[v] ? v : def; }
+function applyTheme(accent, bg, fill) {
+  accent = themeKey(accent, THEME_ACCENTS, 'steel');
+  bg = themeKey(bg, THEME_BGS, 'slate');
+  fill = THEME_FILLS.includes(fill) ? fill : 'solid';
+  const a = THEME_ACCENTS[accent], page = THEME_BGS[bg], lo = readableFill(a);
   const st = document.documentElement.style;
-  [['accent', a[0]], ['accent-hi', a[1]], ['accent-lo', a[2]], ['bg', b[0]], ['sidebar', b[1]], ['panel', b[2]], ['card', b[3]], ['elevated', b[4]]]
+  // the accent and its shades: light (marks, links), the fill under white text, pressed; the page and four
+  // steps lighter keeping its tint (sidebar, panel, card, raised)
+  [['accent', a], ['accent-hi', hexMix(a, 0.36)], ['accent-lo', lo],
+    ['bg', page], ['sidebar', hexMix(page, 0.035)], ['panel', hexMix(page, 0.045)], ['card', hexMix(page, 0.075)], ['elevated', hexMix(page, 0.11)]]
     .forEach(([k, v]) => { st.setProperty(`--${k}`, v); st.setProperty(`--${k}-rgb`, hexChannels(v)); });
-  // the shades made from the accent: pressed, a text on the dark, a very light one
-  st.setProperty('--accent-deep', hexMix(a[2], -0.12));
-  st.setProperty('--accent-text', hexMix(a[0], 0.45));
-  st.setProperty('--accent-pale', hexMix(a[0], 0.78));
-  document.documentElement.dataset.accent = THEME_ACCENTS[accent] ? accent : 'blue';
-  document.documentElement.dataset.bg = THEME_BGS[bg] ? bg : 'graphite';
-  try { localStorage.setItem('verbaliox_theme', JSON.stringify([accent, bg])); } catch (e) {}
+  st.setProperty('--accent-deep', hexMix(lo, -0.14));
+  st.setProperty('--bg-deep', hexMix(page, -0.22));  // a page under cards, a step darker
+  st.setProperty('--accent-text', hexMix(a, 0.45));
+  st.setProperty('--accent-pale', hexMix(a, 0.78));
+  // «Заливка выделенного»: solid (white text on the darkened accent), soft (a tint of it, its light text),
+  // outline (a frame and the light text)
+  const fills = {
+    solid: [lo, hexMix(lo, -0.14), '#FFFFFF', 'transparent'],
+    soft: [hexBlend(page, a, 0.38), hexBlend(page, a, 0.46), hexMix(a, 0.6), hexBlend(page, a, 0.7)],
+    outline: ['transparent', hexBlend(page, a, 0.14), hexMix(a, 0.45), a],
+  }[fill];
+  ['fill-bg', 'fill-bg-hover', 'fill-fg', 'fill-ring'].forEach((k, i) => st.setProperty(`--${k}`, fills[i]));
+  Object.assign(document.documentElement.dataset, { accent, bg, fill });
 }
 // the accent as a colour for a canvas (it cannot read a CSS variable)
 function accentColor() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0A84FF'; }
 // Before anything is drawn: the last theme, so the window does not flash the default one
-(() => { let v = null; try { v = JSON.parse(localStorage.getItem('verbaliox_theme') || 'null'); } catch (e) {} if (Array.isArray(v)) applyTheme(v[0], v[1]); })();
+applyTheme('steel', 'slate', 'solid');  // before anything is drawn
 
 // --- Events without inline handlers ---
 // The page's Content-Security-Policy runs no inline script, so markup does not say onclick="…".
@@ -218,7 +249,7 @@ function openSupport() { openExternal(SUPPORT_URL); }
 function runAll(...calls) { for (const [name, ...args] of calls) callPage(name, ...args); }
 
 let state = {
-  uiLang: localStorage.getItem('whisper_ui_lang') || 'ru',
+  uiLang: (() => { try { return localStorage.getItem('whisper_ui_lang') || 'ru'; } catch (e) { return 'ru'; } })(),
   meetings: [],
   activeMeeting: null,
   contextMeetingId: null,
@@ -238,7 +269,7 @@ let state = {
   voicePreviewTimer: null,
   playerPeaks: [],
   playerHoverRatio: -1,
-  volume: Number(localStorage.getItem('verbaliox_volume') ?? 100),
+  volume: (() => { try { return Number(localStorage.getItem('verbaliox_volume') ?? 100); } catch (e) { return 100; } })(),
   muted: false,
   txView: (() => { try { return localStorage.getItem('verbaliox_tx_view') || 'orig'; } catch (e) { return 'orig'; } })(),
   txLang: null,
@@ -308,10 +339,39 @@ function enhanceDateInputs(root) {
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 
+// localStorage belongs to the page's origin, and the origin has the port: when 8765 is busy the app
+// starts on the next port, and that launch had no language (an English user got Russian). The server
+// keeps the choice too (setting ui_lang); localStorage is only its cache for the first paint.
+const UI_PREFS_STORED = (() => { try { return { lang: !!localStorage.getItem('whisper_ui_lang') }; } catch (e) { return {}; } })();
+let _uiPrefsSynced = false;
+
+// Once per page, with the first settings from the server (loadSystemInfo)
+function syncUiPrefsFromServer(settings) {
+  if (_uiPrefsSynced || !settings) return;
+  _uiPrefsSynced = true;
+  const lang = settings.ui_lang;
+  if (lang === 'ru' || lang === 'en') {
+    if (lang !== state.uiLang) setUILanguage(lang);
+  } else if (UI_PREFS_STORED.lang) {
+    saveUiSetting('ui_lang', state.uiLang);  // chosen before the server kept it: it does from now on
+  }
+  if (typeof dbPrefsFromServer === 'function') dbPrefsFromServer(settings);
+}
+
+// A preference of the page kept on the server (and in state.system.settings, so it is not sent twice)
+function saveUiSetting(key, value) {
+  const set = (state.system && state.system.settings) || null;
+  if (set) { if (set[key] === value) return; set[key] = value; }
+  fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => {});
+}
+
 function setUILanguage(lang) {
   state.uiLang = lang;
   document.documentElement.lang = lang;
-  localStorage.setItem('whisper_ui_lang', lang);
+  try { localStorage.setItem('whisper_ui_lang', lang); } catch (e) { /* the server keeps it too */ }
+  // the first call (at load) is before the server's settings: it does not overwrite them
+  if (_uiPrefsSynced) saveUiSetting('ui_lang', lang);
   // The launcher's splash screen speaks the same language (see /api/ui/lang)
   fetch('/api/ui/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang }) }).catch(() => {});
 
@@ -338,6 +398,9 @@ function setUILanguage(lang) {
 
   renderMeetingsSidebar();
   loadDictionary();
+  // drawn by script, not by data-i18n: drawn again in the new language (found in the audit)
+  if (typeof renderMeetingFeatures === 'function') renderMeetingFeatures();
+  if (typeof refreshTasksCount === 'function') refreshTasksCount(true);
   if (typeof scheduleFitTopbar === 'function') scheduleFitTopbar();
   if (state.system) {
     const p = state.system.paths;
@@ -873,7 +936,17 @@ window.addEventListener('click', e => {
   if (t.classList.contains('modal-backdrop') || t.classList.contains('tk-veil')) e.stopPropagation();
 }, true);
 
+// The motion chosen with the user on the try-on page: the new view fades in, the highlight of the tab
+// moves to it (static/js/shell.js placeTabIndicators), the widgets of Главная come in one after another
+function animateIn(el) {
+  if (!el) return;
+  el.classList.remove('vx-in');
+  void el.offsetWidth;  // restarts the animation
+  el.classList.add('vx-in');
+}
+
 function switchWorkspaceTab(tab) {
+  const prevTab = state.activeWorkspaceTab;
   state.activeWorkspaceTab = tab;
   if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
@@ -886,6 +959,7 @@ function switchWorkspaceTab(tab) {
       ? 'apple-segment-btn apple-segment-active'
       : 'apple-segment-btn text-apple-secondary hover:text-white';
   });
+  if (prevTab && prevTab !== tab) animateIn(document.getElementById(`wview-${tab}`));
 }
 
 function toggleExportMenu(e) {
@@ -900,3 +974,21 @@ function toggleExportMenu(e) {
 function hideExportMenu() {
   document.getElementById('export-menu')?.classList.add('hidden');
 }
+
+// Esc closes the dialogs made on the fly that have no keyboard handling of their own (found in the audit:
+// Esc closed Settings under the cloud log and left the log open). Their own ✕ is pressed, so a dialog
+// that asks before closing still asks; the event goes no further, the window below stays
+const ESC_DIALOGS = ['cloud-log', 'templates-editor', 'an-tpl-dlg', 'open-commitments'];
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  const open = ESC_DIALOGS.map(id => document.getElementById(id)).filter(Boolean);
+  if (!open.length) return;
+  const top = open.reduce((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a));
+  // A question opened over it (askConfirm, askText) answers its own Esc: the window under it stays
+  const over = [...document.querySelectorAll('.modal-backdrop')].pop();
+  if (over && over !== top && !top.contains(over) && (top.compareDocumentPosition(over) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+  const x = top.querySelector('[data-a="close"], [data-a="no"]');
+  e.preventDefault();
+  e.stopPropagation();
+  if (x) x.click(); else top.remove();
+}, true);

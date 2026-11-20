@@ -173,7 +173,7 @@ async function installUpdate() {
 // and said; once more a little later, when its last «still recording» is old enough to be sure
 async function saveOrphanRecordings() {
   const res = await fetch('/api/record/orphans/save', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than: 12 }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than: 30 }),
   }).catch(() => null);
   const data = res && res.ok ? await res.json().catch(() => null) : null;
   if (data && data.saved) {
@@ -184,7 +184,7 @@ async function saveOrphanRecordings() {
 
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(saveOrphanRecordings, 2000);
-  setTimeout(saveOrphanRecordings, 16000);
+  setTimeout(saveOrphanRecordings, 35000);  // past the 30 s of silence the server waits for
   state.autoScroll = true;
   loadSummaryTemplates();
   initLogoEasterEgg();
@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     scheduleVramRefresh(100);
-    loadMeetingsList().then(loadQueue).catch(console.error);  // what changed while the window was in the tray
+    loadMeetingsList({ poll: true }).then(loadQueue).catch(console.error);  // what changed while the window was in the tray
   });
   startLiveUpdates();
   loadQueue().catch(console.error);
@@ -992,6 +992,7 @@ function openFollowupMail(md) {
 function openTemplatesEditor() {
   document.getElementById('templates-editor')?.remove();
   let items = (state.summaryTemplates || []).map(x => ({ ...x }));
+  const initial = JSON.stringify(items);
   const wrap = document.createElement('div');
   wrap.id = 'templates-editor';
   wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
@@ -1032,7 +1033,12 @@ function openTemplatesEditor() {
   });
   wrap.addEventListener('click', async e => {
     const b = e.target.closest('button');
-    if (e.target === wrap || (b && b.dataset.a === 'no')) { wrap.remove(); return; }
+    if (b && b.dataset.a === 'no') { wrap.remove(); return; }
+    // A click beside the window is easy to make by accident: unsaved edits are not dropped without asking
+    if (e.target === wrap) {
+      if (JSON.stringify(items) === initial || await askConfirm(t('templatesDiscardConfirm'), true, t('templatesDiscard'))) wrap.remove();
+      return;
+    }
     if (!b) return;
     if (b.dataset.del !== undefined) { items.splice(Number(b.dataset.del), 1); draw(); }
     else if (b.dataset.preset !== undefined) { items.push({ ...presets[Number(b.dataset.preset)], id: '' }); draw(); }
@@ -1826,6 +1832,8 @@ async function loadMeetingInfo() {
     if (!state.activeMeeting || state.activeMeeting.id !== id) return;
     renderMeetingInfo(info);
   } catch (e) {
+    // Same check as on success: the user may have opened another recording meanwhile
+    if (!state.activeMeeting || state.activeMeeting.id !== id) return;
     box.innerHTML = `<div class="py-6 text-xs text-apple-red">${escapeHtml(e.message)}</div>`;
   }
 }
@@ -2855,7 +2863,7 @@ function openTextMenuAt(items, x, y, opts) {
     ? '<div class="my-1 h-px bg-white/10"></div>'
     : it.info  // a line that only says something (who chose a disputed word), not an action
     ? `<div class="tm-info">${escapeHtml(it.label)}</div>`
-    : `<button class="macos-menu-item gap-6" data-i="${i}" ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
+    : `<button class="macos-menu-item gap-6${it.danger ? ' tm-danger' : ''}" data-i="${i}" ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
       + `<span class="tm-key">${escapeHtml(it.key || '')}</span></button>`).join('');
   // Keeps the selection: a click in the menu must not clear it before the action reads it
   menu.addEventListener('mousedown', ev => ev.preventDefault());

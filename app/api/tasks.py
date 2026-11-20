@@ -30,11 +30,42 @@ def _meetings(briefs: Dict[int, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
 
 
 @router.get("/api/dashboard")
-def api_dashboard(period: str = "week", feature: int = 0) -> Dict[str, Any]:
-    """Everything the widgets of «Дэшборд» show for a period (app/dashboard.py)."""
+def api_dashboard(period: str = "week", feature: int = 0, lang: str = "ru") -> Dict[str, Any]:
+    """Everything the widgets of «Главная» show for a period (app/dashboard.py), with the public holidays
+    of the period (they are no working days)."""
+    from datetime import date
+
+    from app import holidays_cal
     from app.dashboard import build
 
-    return build(period, feature or None)
+    out = build(period, feature or None)
+    out["holidays"] = holidays_cal.between(date.fromisoformat(out["start"]), date.fromisoformat(out["end"]), "en" if lang == "en" else "ru")
+    return out
+
+
+@router.get("/api/worktime")
+def api_worktime(start: str, end: str) -> Dict[str, Any]:
+    """The hours worked of the days start…end (YYYY-MM-DD, end not included; app/worktime.py)."""
+    from datetime import date, datetime
+
+    from app import worktime
+
+    try:
+        a, b = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    if not a < b or (b - a).days > 120:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    return {"enabled": worktime.enabled(), "supported": worktime.idle_seconds() is not None, "norm": worktime.remind_hours(),
+            "today": worktime.work_day(datetime.now()).isoformat(), "days": worktime.days(a, b)}
+
+
+@router.get("/api/holidays/countries")
+def api_holiday_countries() -> Dict[str, Any]:
+    """The countries (and their regions) whose public holidays the app knows (app/holidays_cal.py)."""
+    from app import holidays_cal
+
+    return {"available": holidays_cal.available(), "countries": holidays_cal.countries(), "home": holidays_cal.home_country()}
 
 
 @router.get("/api/dashboard/detail")

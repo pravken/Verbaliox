@@ -413,8 +413,10 @@ function assistantScopeMenu(e) {
 function assistantPeriodPanel() {
   const btn = document.getElementById('as-scope-btn');
   const sc = state.askScope.type === 'period' && !state.askScope.days ? state.askScope : null;
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  // Local dates: toISOString() is UTC, so in the evening (or east of UTC in the morning) «today» was off by a day
+  const now = new Date();
+  const today = calKey(now);
+  const monthAgo = calKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
   const menu = assistantMenu({ stopPropagation() {}, currentTarget: btn }, [
     { head: t('rdSasScopeCustom') },
     { html: `<div class="flex items-center gap-2 px-2.5 py-1.5 text-xs text-apple-label">

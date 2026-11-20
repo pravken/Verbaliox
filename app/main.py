@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import json
 import os
 import re
 import secrets
@@ -63,7 +64,8 @@ SUPPORTED_EXTENSIONS = MEDIA_EXTENSIONS
 # --- Local session security ---
 # The server only listens on localhost, but any web page open in a browser can still send
 # requests to 127.0.0.1. Every launch therefore gets a random session token: the desktop
-# window opens /?token=..., receives it as an HttpOnly SameSite=Strict cookie, and every
+# window gets it from the launcher (POST /api/session), a browser through a one-time /?boot=...
+# address; it comes back as an HttpOnly SameSite=Strict cookie, and every
 # other request without that cookie is rejected. Requests with a foreign Host header
 # (DNS rebinding) are rejected as well, and so are requests other pages send (_foreign_page):
 # the cookie is sent along from any port of 127.0.0.1.
@@ -138,6 +140,35 @@ def _token_valid(value: Optional[str]) -> bool:
     return bool(value) and hmac.compare_digest(value, SESSION_TOKEN)
 
 
+# The browser (when the window cannot open) signs in through a one-time address /?boot=<nonce>: the
+# launcher asks for a nonce with the token (POST /api/session/boot) and opens that. The long-lived
+# token never stands in an address, which the browser keeps in its history; a nonce left there is
+# spent at once and dies within a minute anyway.
+BOOT_TTL_SEC = 60.0
+_boot_nonces: Dict[str, float] = {}
+
+
+def issue_boot_nonce() -> str:
+    import time as _time
+
+    now = _time.monotonic()
+    for k in [k for k, until in _boot_nonces.items() if until < now]:
+        _boot_nonces.pop(k, None)
+    while len(_boot_nonces) >= 20:  # a burst of launches: the oldest go
+        _boot_nonces.pop(next(iter(_boot_nonces)))
+    nonce = secrets.token_urlsafe(24)
+    _boot_nonces[nonce] = now + BOOT_TTL_SEC
+    return nonce
+
+
+def _boot_nonce_valid(value: Optional[str]) -> bool:
+    """Spends the nonce: valid once, within BOOT_TTL_SEC."""
+    import time as _time
+
+    until = _boot_nonces.pop(value or "", None)
+    return until is not None and _time.monotonic() <= until
+
+
 def _is_proactor_connection_reset(context: Dict[str, Any]) -> bool:
     return isinstance(context.get("exception"), ConnectionResetError) and "_call_connection_lost" in repr(
         context.get("handle") or context.get("message") or ""
@@ -166,6 +197,48 @@ def _quiet_windows_connection_resets() -> None:
     loop.set_exception_handler(handler)
 
 
+# Jobs a restart takes up again; "queued" had not begun, the others were broken off while they ran
+RESUME_STATES = {"queued", "extracting_audio", "transcribing", "diarizing", "summarizing"}
+MAX_INTERRUPTED_RUNS = 2
+INTERRUPTED_KEY = "interrupted_job_runs"
+INTERRUPTED_TEXT = "Обработка дважды прервалась вместе с программой — возможно, файл повреждён. Нажмите «Повторить»"
+
+
+def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
+    """The recordings a start queues again. A recording whose processing was broken off by the end of the
+    program is counted (kept in the settings): a file that makes the program itself crash was queued at
+    every start and crashed it again, for good. After MAX_INTERRUPTED_RUNS such ends in a row it is marked
+    failed instead; «Повторить» starts it again (counted afresh: the count is kept only while it runs)."""
+    from app.database import update_settings
+
+    try:
+        counts = json.loads(get_all_settings().get(INTERRUPTED_KEY) or "{}")
+        counts = counts if isinstance(counts, dict) else {}
+    except ValueError:
+        counts = {}
+    resume, kept = set(), {}
+    for m in meetings:
+        if m.get("status") not in RESUME_STATES:
+            continue
+        mid = int(m["id"])
+        n = counts.get(str(mid))
+        n = n if isinstance(n, int) else 0
+        if m.get("status") != "queued":  # it was running when the program ended
+            n += 1
+        if n >= MAX_INTERRUPTED_RUNS:
+            print(f"[resume] meeting {mid}: processing ended with the program {n} times, not queued again", flush=True)
+            update_meeting_progress(mid, status="failed", progress=0, stage_text="", error_message=INTERRUPTED_TEXT)
+            continue
+        resume.add(mid)
+        if n:
+            kept[str(mid)] = n
+    try:
+        update_settings({INTERRUPTED_KEY: json.dumps(kept)})
+    except Exception:
+        traceback.print_exc()
+    return resume
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _quiet_windows_connection_resets()
@@ -189,6 +262,9 @@ async def lifespan(_app: FastAPI):
     from app import brief_notice, updater
 
     brief_notice.start()
+    from app import worktime
+
+    worktime.start()
     threading.Thread(target=updater.notice_loop, daemon=True, name="update_notice").start()
     try:
         from app.model_manager import remove_retired_models
@@ -232,17 +308,20 @@ async def lifespan(_app: FastAPI):
 
     watch_folder.start()
     # Resume recordings that were interrupted mid-processing
-    active_states = {"queued", "extracting_audio", "transcribing", "diarizing", "summarizing"}
-    for m in list_meetings():
-        if m.get("status") in active_states:
-            enqueue_meeting_job(int(m["id"]))
+    meetings = list_meetings()
+    resume_ids = _interrupted_to_resume(meetings)
+    for m in meetings:
+        if m.get("status") in RESUME_STATES:
+            if int(m["id"]) in resume_ids:
+                enqueue_meeting_job(int(m["id"]))
         elif m.get("status") == "dubbing":
             # A dub interrupted by a restart is simply dropped; the transcript itself is complete
             update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Дубляж прерван перезапуском")
         elif m.get("status") == "downloading":
             update_meeting_progress(int(m["id"]), status="failed", progress=0, stage_text="",
                                     error_message="Скачивание по ссылке прервано перезапуском — нажмите «Повторить»")
-        elif m.get("status") == "mixing":
+        elif m.get("status") == "mixing" and int(m["id"]) not in _mixing_now():
+            # (one in app_status.mixing was made just now from a recovered recording: its mix is running)
             from pathlib import Path as _P
 
             if m.get("media_path") and _P(m["media_path"]).is_file():
@@ -313,23 +392,34 @@ async def local_session_guard(request: Request, call_next):
     path = request.url.path
     if not path.startswith(_PUBLIC_PREFIXES) and _foreign_page(request):
         return Response('{"detail":"Forbidden origin"}', status_code=403, media_type="application/json")
-    if path == "/api/session" and request.method == "POST":
-        # The app window signs in without the token in an address (see _LOCKED_PAGE)
+    if path in ("/api/session", "/api/session/boot") and request.method == "POST":
+        # The app window signs in without the token in an address (see _LOCKED_PAGE); the launcher
+        # trades it for a one-time browser address (issue_boot_nonce)
         try:
             token = (await request.json()).get("token")
         except Exception:
             token = None
         if not isinstance(token, str) or not _token_valid(token):
             return Response('{"detail":"Unauthorized"}', status_code=401, media_type="application/json")
+        if path == "/api/session/boot":
+            import json as _json
+
+            return Response(_json.dumps({"boot": issue_boot_nonce()}), media_type="application/json",
+                            headers={"Cache-Control": "no-store"})
         resp = Response(status_code=204)
         resp.set_cookie(_cookie_name(request), SESSION_TOKEN, httponly=True, samesite="strict", path="/")
         return resp
     if path == "/":
+        # ?token= stays for the launcher's check that the server is ours (probe_server, no browser) and
+        # for tests; the app opens a browser only with ?boot=
         query_token = request.query_params.get("token")
-        if _token_valid(query_token):
+        boot = request.query_params.get("boot")
+        if _token_valid(query_token) or (boot is not None and _boot_nonce_valid(boot)):
             resp = RedirectResponse("/", status_code=303)
             resp.set_cookie(_cookie_name(request), SESSION_TOKEN, httponly=True, samesite="strict", path="/")
             return resp
+        if boot is not None:  # spent or expired: the address is cleaned all the same
+            return RedirectResponse("/", status_code=303)
         if not _token_valid(request.cookies.get(_cookie_name(request))):
             return HTMLResponse(_LOCKED_PAGE, status_code=401)
         return await call_next(request)
@@ -492,6 +582,12 @@ def _queue_file(title: str, dest: Path, has_video: Optional[bool]) -> Dict[str, 
     return get_meeting(m["id"]) or m
 
 
+def _mixing_now() -> set:
+    from app import app_status
+
+    return app_status.mixing
+
+
 def _salvage_parts(title: str, parts: List[Tuple[Path, Optional[bool]]], notes: str = "") -> Dict[str, Any]:
     """The parts of a recording could not be joined: each one is kept as a recording of its own,
     so nothing that was recorded is lost."""
@@ -551,7 +647,7 @@ def recover_orphan_recordings() -> int:
         rec = _recordings_dir()
         # what finishing a recording made for its mix (the cleaned microphone, the lined-up system sound):
         # left by a crash during the mix, the recorded parts themselves are recovered below
-        for left in [*rec.glob(".page_*.part.mic.wav"), *rec.glob(".page_*.part.sys.wav")]:
+        for left in [*rec.glob(".page_*.part.mic.wav"), *rec.glob(".page_*.part.sys.wav"), *rec.glob(".page_*.part.voice.wav")]:
             left.unlink(missing_ok=True)
         found += [(p, None) for p in rec.glob(".page_*.webm.part")]
         found += [(p, True) for p in rec.glob(".screen_*.mkv.part")]

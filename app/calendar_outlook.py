@@ -50,6 +50,7 @@ foreach ($a in $found) {
     start = $a.Start.ToString('yyyy-MM-ddTHH:mm:ss')
     end = $a.End.ToString('yyyy-MM-ddTHH:mm:ss')
     location = [string]$a.Location
+    join = ([regex]::Match(([string]$a.Location + ' ' + [string]$a.Body), 'https://(teams\.microsoft\.com/l/meetup-join|teams\.microsoft\.com/meet|teams\.live\.com/meet|([\w-]+\.)?zoom\.us/[jw]/|meet\.google\.com/|[\w-]+\.webex\.com/)[^\s<>]*')).Value  # no double quote here: the script is a command-line argument
     attendees = @($people)
   }
   if ($out.Count -ge 300) { break }
@@ -99,10 +100,15 @@ def parse(text: str) -> List[Dict[str, Any]]:
             end = datetime.fromisoformat(str(it["end"]))
         except (KeyError, ValueError):
             continue
+        from app.meeting_join import find
+
+        join = find(str(it.get("join") or ""))  # checked again: only a link of a call service
         attendees = it.get("attendees") or []
         if isinstance(attendees, str):
             attendees = [attendees]
         out.append({"uid": str(it.get("uid") or ""), "title": str(it.get("title") or "").strip(), "start": start,
                     "end": end if end > start else start, "attendees": [str(a) for a in attendees if str(a).strip()],
-                    "rrule": "", "exdates": [], "all_day": False, "status": ""})
+                    "rrule": "", "exdates": [], "all_day": False, "status": "",
+                    "location": str(it.get("location") or "")[:200], "join": join,
+                    "online": bool(join) or "://" in str(it.get("location") or "")})
     return out

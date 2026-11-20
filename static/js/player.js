@@ -44,7 +44,7 @@ function changePlayerVolume(val) {
   const v = Math.max(0, Math.min(100, Number(val)));
   state.volume = v;
   state.muted = (v === 0);
-  localStorage.setItem('verbaliox_volume', String(v));
+  try { localStorage.setItem('verbaliox_volume', String(v)); } catch (e) { /* this session only */ }
 
   const player = document.getElementById('media-player');
   if (player) {

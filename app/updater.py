@@ -242,11 +242,29 @@ def _download_current() -> bool:
                                                        or dl.get("version") == latest.get("version"))
 
 
+FAILED_NAME = "update-failed.json"  # in the data folder: the archive whose install failed (its sum)
+
+
+def failed_before() -> bool:
+    """The archive downloaded is the one whose install failed (found in the audit: little disk space or a
+    proxy made every automatic attempt fail, and the app restarted and said so every five minutes).
+    It is not installed by itself again; a click in the window still installs it, a newer release too."""
+    from app.paths import DATA_DIR
+
+    with _lock:
+        sha = (_state.get("download") or {}).get("sha256") or ""
+    try:
+        failed = json.loads((DATA_DIR / FAILED_NAME).read_text(encoding="utf-8")).get("sha256") or ""
+    except (OSError, ValueError, AttributeError):
+        return False
+    return bool(sha) and sha.lower() == failed.lower()
+
+
 def ready_to_install() -> bool:
     """A downloaded update that automatic updates would install now."""
     with _lock:
         done = _download_current()
-    return done and auto_enabled() and not is_git_checkout()
+    return done and auto_enabled() and not is_git_checkout() and not failed_before()
 
 
 def install_on_exit() -> bool:
@@ -254,7 +272,7 @@ def install_on_exit() -> bool:
     try:
         with _lock:
             path = _state["download"].get("path") if _download_current() else ""
-        if not path or not auto_enabled() or is_git_checkout():
+        if not path or not auto_enabled() or is_git_checkout() or failed_before():
             return False
         launch_installer(restart=False)
         return True
@@ -463,6 +481,9 @@ def _stale_code_files(app_dir: Path, new_files: List[str]) -> List[str]:
     new = set(new_files)
     if not any(rel.startswith("app/") for rel in new):  # not a full program archive: remove nothing
         return []
+    # compared without letter case: on Windows «Foo.py» renamed «foo.py» is one file, written by the new
+    # version, which would be deleted as stale (found in the audit)
+    new = {rel.casefold() for rel in new}
     out = []
     for top in CODE_DIRS:
         base = app_dir / top
@@ -471,7 +492,7 @@ def _stale_code_files(app_dir: Path, new_files: List[str]) -> List[str]:
         for p in base.rglob("*"):
             if p.suffix.lower() in CODE_SUFFIXES and p.is_file() and "__pycache__" not in p.parts:
                 rel = p.relative_to(app_dir).as_posix()
-                if rel not in new:
+                if rel.casefold() not in new:
                     out.append(rel)
     return sorted(out)
 
@@ -530,12 +551,30 @@ TORCH_INDEX = "https://download.pytorch.org/whl/cu126"
 OLDER_TORCH_INDEXES = ["https://download.pytorch.org/whl/cu124"]
 
 
-def _reinstall(py: Path, uv: Optional[str], frozen_file: Path, log_dir: Path) -> None:
+def _reinstall(py: Path, uv: Optional[str], frozen_file: Optional[Path], log_dir: Path, backup: Path) -> None:
+    """Put back the packages of the previous version: from its own requirements.txt (in the backup),
+    checked by its hashes like any install. The list of what was installed (pip freeze, no hashes, from
+    any of the indexes) is the last resort, for a backup without that file."""
     indexes = [a for url in [TORCH_INDEX, *OLDER_TORCH_INDEXES] for a in ("--extra-index-url", url)]
-    cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(frozen_file),
-            "--index-strategy", "unsafe-best-match", *indexes]
-           if uv else [str(py), "-m", "pip", "install", "-r", str(frozen_file), *indexes])
+    req, hashes = None, ["--require-hashes"]
+    try:
+        with zipfile.ZipFile(backup) as bz:
+            data = bz.read("requirements.txt")
+        req = backup.parent / "requirements-before-update.txt"
+        req.write_bytes(data)
+    except (OSError, KeyError, zipfile.BadZipFile):
+        req, hashes = frozen_file, []
     with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+        if req is None:
+            lf.write("restore of the Python packages: no previous requirements.txt and no list of the installed ones\n")
+            return
+        if not hashes:
+            lf.write("restore of the Python packages: no previous requirements.txt in the backup, "
+                     "installing the list of the packages that were installed (without hashes)\n")
+        lf.flush()
+        cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(req), *hashes,
+                "--index-strategy", "unsafe-best-match", *indexes]
+               if uv else [str(py), "-m", "pip", "install", "-r", str(req), *hashes, *indexes])
         subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, creationflags=_NO_WINDOW)
 
 
@@ -562,6 +601,71 @@ def archive_files(names: List[str], app_dir: Path) -> List[Tuple[str, str]]:
     return out
 
 
+IN_PROGRESS = Path("updates") / "in-progress.json"  # in the data folder while files are being replaced
+
+
+def _restore(backup: Path, app_dir: Path, added: List[str], log_dir: Path) -> List[str]:
+    """The previous version's files back from the backup and the files the new version added removed,
+    file by file: one held open (Verbaliox.exe still closing) does not stop the others (found in the
+    audit: the first locked file ended the restore and the user was told to reinstall). Returns the
+    files that could not be put back."""
+    failed: List[str] = []
+    kept = set()
+    with zipfile.ZipFile(backup) as bz:
+        for info in bz.infolist():
+            rel = info.filename
+            kept.add(rel)
+            dest = app_dir / rel
+            for attempt in range(5):
+                try:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with bz.open(info) as src, open(dest, "wb") as out:
+                        shutil.copyfileobj(src, out)
+                    break
+                except OSError:
+                    if attempt == 4:
+                        failed.append(rel)
+                    else:
+                        time.sleep(1.0)
+    for rel in added:
+        if rel not in kept:
+            try:
+                (app_dir / rel).unlink(missing_ok=True)
+            except OSError:
+                failed.append(rel)
+    if failed:
+        with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+            lf.write("not put back: " + ", ".join(failed[:50]) + "\n")
+    return failed
+
+
+def recover_interrupted(app_dir: Path, data_dir: Path) -> bool:
+    """At start: an update cut off while it replaced files (the computer switched off, the process
+    killed) left two versions mixed (found in the audit). The previous version is put back from the
+    backup; libraries half installed are installed again by the launcher (setup.bat). True when done."""
+    marker = data_dir / IN_PROGRESS
+    if not marker.is_file():
+        return False
+    log_dir = data_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        info = json.loads(marker.read_text(encoding="utf-8"))
+        backup = Path(info.get("backup") or "")
+        if backup.is_file():
+            _restore(backup, app_dir, list(info.get("added") or []), log_dir)
+        if info.get("packages"):  # pip was at work: the launcher installs the previous libraries again
+            mark = app_dir / ".venv" / "verbaliox-requirements.sha256"
+            if mark.parent.is_dir():
+                mark.write_text("interrupted-update", encoding="ascii")
+        with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+            lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} an update cut off half-way: the previous version put back\n")
+    except Exception:
+        with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
+            lf.write("recovery of an interrupted update failed:\n" + traceback.format_exc())
+    marker.unlink(missing_ok=True)
+    return True
+
+
 def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable[[str], None]) -> None:
     log_dir = data_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -585,6 +689,14 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 if p.is_file():
                     bz.write(p, rel)
                     replaced.append(rel)
+        kept_before = set(replaced)
+        added = [rel for _n, rel in files if rel not in kept_before]
+        marker = data_dir / IN_PROGRESS
+
+        def mark(packages: bool = False) -> None:  # read at the next start if this process is cut off
+            marker.write_text(json.dumps({"backup": str(backup), "added": added, "packages": packages}), encoding="utf-8")
+
+        mark()
         try:
             report("Замена файлов программы…")
             for i, (n, rel) in enumerate(files):
@@ -605,14 +717,16 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 (app_dir / rel).unlink(missing_ok=True)
             if _sha256(app_dir / "requirements.txt") != old_req:
                 report("Установка библиотек Python (может занять несколько минут)…")
+                mark(packages=True)
                 py = app_dir / ".venv" / "Scripts" / "python.exe"
                 uv = find_uv()
                 # What is installed now: put back if the new libraries fail half way
                 frozen = _freeze(py, uv)
+                frozen_file: Optional[Path] = None
                 if frozen:
                     frozen_file = data_dir / "updates" / "packages-before-update.txt"
                     frozen_file.write_text(frozen, encoding="utf-8")
-                    restore_packages = (lambda: _reinstall(py, uv, frozen_file, log_dir))
+                restore_packages = (lambda: _reinstall(py, uv, frozen_file, log_dir, backup))
                 cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(app_dir / "requirements.txt"),
                         "--require-hashes", "--index-strategy", "unsafe-best-match", "--extra-index-url", TORCH_INDEX]
                        if uv else
@@ -626,17 +740,14 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 mark_requirements(app_dir)
             if _dub_requirements_hash(app_dir) != old_dub_req:
                 _mark_dub_outdated(app_dir, old_dub_req)
+            marker.unlink(missing_ok=True)
         except Exception as e:
             report("Ошибка — восстановление прежней версии…")
             outcome = "restored"
             # Each step on its own: a failure here must not hide the original error
             try:
-                with zipfile.ZipFile(backup) as bz:
-                    bz.extractall(app_dir)
-                kept = set(replaced)
-                for _n, rel in files:  # files the new version added
-                    if rel not in kept:
-                        (app_dir / rel).unlink(missing_ok=True)
+                if _restore(backup, app_dir, added, log_dir):
+                    outcome = "broken"
             except Exception:
                 outcome = "broken"
                 with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
@@ -649,6 +760,7 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                     outcome = "broken"
                     with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
                         lf.write("restore of the Python packages failed:\n" + traceback.format_exc())
+            marker.unlink(missing_ok=True)  # put back here (or told broken): nothing for the next start
             raise UpdateFailed(str(e), outcome) from e
 
 
@@ -681,10 +793,16 @@ def _main(argv: List[str]) -> int:
                 raise UpdateFailed("Архив обновления изменился после проверки — обновление отменено")
             apply_update(Path(a.zip), app_dir, data_dir, ui.set)
             ui.set("Готово." if a.no_restart else "Готово. Запуск Verbaliox…")
+            (data_dir / FAILED_NAME).unlink(missing_ok=True)
         except Exception as e:
             ok, message = False, f"{e}\n{OUTCOME_TEXT[getattr(e, 'outcome', 'untouched')]}"
             with open(data_dir / "logs" / "update.log", "a", encoding="utf-8") as lf:
                 lf.write(traceback.format_exc())
+            try:  # this archive is not installed by itself again (failed_before)
+                (data_dir / FAILED_NAME).write_text(json.dumps({"sha256": a.sha256 or _sha256(Path(a.zip)),
+                                                                "at": time.time(), "error": str(e)[:300]}), encoding="utf-8")
+            except OSError:
+                pass
         finally:
             launcher = app_dir / "Verbaliox.exe"
             pythonw = app_dir / ".venv" / "Scripts" / "pythonw.exe"

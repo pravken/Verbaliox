@@ -98,7 +98,7 @@ function renderTxModelBar() {
   const bar = document.getElementById('tx-model-bar');
   if (!bar) return;
   const chip = document.getElementById('tx-model-chip');
-  if (!m) { bar.classList.add('hidden'); chip.classList.add('hidden'); return; }
+  if (!m) { bar.classList.add('hidden'); document.getElementById('tx-quick').classList.add('hidden'); return; }
   if (state.txModelFor !== m.id) { state.txModelFor = m.id; state.txModelPick = null; state.txBarOpen = false; }
   const { list, done } = txModelChoices(m);
   const shown = (m.segments || []).length ? (m.transcript_model || '') : '';
@@ -108,10 +108,14 @@ function renderTxModelBar() {
   const busyNow = !DONE_STATUSES.includes(m.status);
   const folded = !!shown && !busyNow && !state.txBarOpen;
   bar.classList.toggle('hidden', folded);
-  chip.classList.toggle('hidden', !shown);
-  chip.setAttribute('aria-expanded', String(!folded));
-  chip.innerHTML = `<span class="tx-model-chip-dot" aria-hidden="true"></span><span>${escapeHtml(formatModelName(shown))}</span>`
-    + `<span class="tx-model-chip-more">· ${escapeHtml(t('txVersionsActions'))} ${folded ? '▾' : '▴'}</span>`;
+  document.getElementById('tx-quick').classList.toggle('hidden', !shown);
+  chip.innerHTML = `<span class="tx-model-chip-more">${escapeHtml(t('txVersion'))}</span><span>${escapeHtml(formatModelName(shown))}</span><span class="tx-model-chip-more" aria-hidden="true">▾</span>`;
+  const redo = document.getElementById('tx-redo-btn');
+  redo.disabled = busyNow || !!m.media_removed || shown === 'teams' || shown === 'merged';
+  redo.classList.toggle('hidden', shown === 'teams' || shown === 'merged');
+  const qs = document.getElementById('tx-quick-status');
+  qs.textContent = busyNow ? '' : m.transcript_at ? `✓ ${txShortDate(m.transcript_at)}` : '';
+  qs.title = m.transcript_at ? `${t('txModelDone')} · ${formatDateTime(m.transcript_at)}` : '';
   const pick = state.txModelPick || shown || m.model_name || (list[0] && list[0].id) || '';
   const lang = String(m.language || '').slice(0, 2);
   const sel = document.getElementById('tx-model-select');
@@ -172,6 +176,70 @@ function renderTxModelBar() {
   status.textContent = text;
   status.title = text;
   status.className = `tx-model-status ${cls}`;  // goes to a line of its own when the panel is narrow
+}
+
+function txShortDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const loc = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  return `${d.toLocaleDateString(loc, { day: 'numeric', month: 'short' }).replace('.', '')}, ${d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+// «Версия ▾»: the models; one with a text shows it, another one opens the recognition row with it picked
+// (its parameters and «Расшифровать» there), as does the precise mode
+function openTxVersionMenu(el) {
+  const m = state.activeMeeting;
+  if (!m) return;
+  const { list, done } = txModelChoices(m);
+  const shown = m.transcript_model || '';
+  const busy = !DONE_STATUSES.includes(m.status);
+  const at = model => { const v = (m.transcript_versions || []).find(x => x.model === model); return v && v.at ? txShortDate(v.at) : ''; };
+  const items = [{ info: true, label: t('txVersionsHead') }];
+  // the versions there first (the one shown on top), then the models that can make one
+  const rank = i => (i.id === shown ? 0 : done.has(i.id) ? 1 : i.installed ? 2 : 3);
+  const models = [...list.filter(i => i.id !== 'merged'), ...(done.has('merged') ? [{ id: 'merged', installed: true }] : [])]
+    .map((i, k) => [i, k]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([i]) => i);
+  for (const i of models) {
+    const fits = i.id === 'merged' || txModelFits(i, m) || done.has(i.id);
+    const key = i.id === shown ? (m.transcript_at ? txShortDate(m.transcript_at) : '') : done.has(i.id) ? at(i.id) || t('txVersionReady')
+      : !i.installed ? `${t('txVersionDownload')} ${i.size || ''}`.trim() : t('txVersionMake');
+    items.push({ label: `${i.id === shown ? '✓ ' : '   '}${formatModelName(i.id)}`, key, disabled: busy || !fits || (!done.has(i.id) && !!m.media_removed),
+      run: () => { if (i.id === shown) return; pickTxChip(i.id); if (!done.has(i.id)) toggleTxModelBar(true); } });
+  }
+  if (list.filter(i => i.id !== 'merged' && i.id !== 'teams' && i.installed && txModelFits(i, m)).length >= 2 && !m.media_removed) {
+    items.push({ sep: true }, { label: `   ${t('txAllModels')}`, key: t('txVersionMake'), disabled: busy, run: () => { pickTxChip(TX_PRECISE); toggleTxModelBar(true); } });
+  }
+  const r = el.getBoundingClientRect();
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6, { maxWidth: 380 }), 0);
+}
+
+// «Расшифровать заново»: the model of the text shown, once more (it asks first)
+function txRedo() {
+  const m = state.activeMeeting;
+  if (!m || !m.transcript_model) return;
+  const sel = document.getElementById('tx-model-select');
+  sel.value = m.transcript_model;
+  state.txModelPick = m.transcript_model;
+  transcribeWithPickedModel();
+}
+
+// «⋯»: what is done seldom with the text shown
+function openTxMoreMenu(el) {
+  const m = state.activeMeeting;
+  if (!m) return;
+  const shown = m.transcript_model || '';
+  const busy = !DONE_STATUSES.includes(m.status);
+  const show = id => { const b = document.getElementById(id); return b && !b.classList.contains('hidden'); };
+  const pickShown = () => { document.getElementById('tx-model-select').value = shown; state.txModelPick = shown; };
+  const items = [];
+  if (shown && shown !== 'teams' && !m.media_removed && (m.segments || []).length) items.push({ label: t('txResplit'), disabled: busy, run: () => openResplitDialog() });
+  if (show('tx-merge-btn')) items.push({ label: t('txMergeAll'), disabled: busy, run: () => mergeAllTranscripts() });
+  items.push({ label: t('txProcBtnLong'), disabled: busy || shown === 'merged' || shown === 'teams',
+    run: () => { pickShown(); toggleTxModelBar(true); setTimeout(() => document.getElementById('tx-proc-btn')?.click(), 0); } });
+  items.push({ label: t(state.txBarOpen ? 'txHideModels' : 'txShowModels'), run: () => toggleTxModelBar() });
+  items.push({ sep: true }, { label: t('txDeleteVersion'), danger: true, disabled: busy, run: () => { pickShown(); deletePickedTranscript(); } });
+  const r = el.getBoundingClientRect();
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6), 0);
 }
 
 function txModelFits(i, m) {
