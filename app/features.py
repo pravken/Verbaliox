@@ -251,11 +251,38 @@ def accept_suggestion(meeting_id: int, feature_id: int) -> List[int]:
 
 
 def _mentions(text: str, phrase: str) -> bool:
-    """The phrase as whole words of the text, any letter case («Платежи» in «Синк: платежи и возвраты»)."""
+    """The phrase as whole words of the text, any letter case («Платежи» in «Синк: платежи и возвраты»),
+    in any of their forms: «Синк по платежам» is about «Платежи» too (_same_word)."""
     phrase = phrase.strip()
     if len(phrase) < 2:
         return False
-    return re.search(r"(?<!\w)" + re.escape(phrase.casefold()) + r"(?!\w)", text.casefold()) is not None
+    if re.search(r"(?<!\w)" + re.escape(phrase.casefold()) + r"(?!\w)", text.casefold()):
+        return True
+    if re.search(r"[^\w\s-]", phrase):  # «C++», «Q3/Q4»: as written only
+        return False
+    want, words = _words(phrase), _words(text)
+    return bool(want) and any(all(_same_word(w, t) for w, t in zip(want, words[i:i + len(want)]))
+                              for i in range(len(words) - len(want) + 1))
+
+
+def _words(text: str) -> List[str]:
+    return re.findall(r"\w+", text.casefold().replace("ё", "е"))
+
+
+def _same_word(word: str, other: str) -> bool:
+    """One word in another form (платежи / платежам / платежей, отчёты / отчётам, report / reports): a word
+    of 5 letters or more and the other share all of it but an ending of up to 2 letters, the other's ending
+    up to 3. Shorter words only as they are: «пла» is no «платежи», «план» no «планёрка»."""
+    if word == other:
+        return True
+    if len(word) < 5:
+        return False
+    k = 0
+    for a, b in zip(word, other):
+        if a != b:
+            break
+        k += 1
+    return k >= max(4, len(word) - 2) and len(other) - k <= 3
 
 
 def suggest_by_title(meeting_id: int) -> List[int]:
