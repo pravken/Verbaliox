@@ -943,10 +943,14 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-rec-on .tb-rec-dot, .tb-rec-busy .tb-rec-dot { width: 9px; height: 9px; }
 .tb-rec-on .tb-rec-dot { animation: tb-blink 1s steps(2, start) infinite; }
 .tb-rec-wrap .tb-pop { left: auto; right: 0; }
-.tb-rec-wrap { display: inline-flex; align-items: center; gap: 3px; }
-.tb-rec-more { height: 34px; width: 22px; border-radius: 0 17px 17px 0; margin-left: -1px; color: #FF8A80; background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.6); font-size: 10px; line-height: 1; }
-.tb-rec-more:hover { background: rgba(255, 69, 58, 0.24); }
-.tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+/* The record button and its ▾ as one capsule (reported by the user: two plates with heavy frames and a gap
+   between them): one thin frame, a hairline before the ▾. While it records or starts, the button is alone */
+.tb-rec-wrap { display: inline-flex; align-items: center; height: 34px; border-radius: 17px; border: 1px solid rgba(255, 69, 58, 0.45); background: rgba(255, 69, 58, 0.08); }
+.tb-rec-wrap:has(.tb-rec-on), .tb-rec-wrap:has(.tb-rec-busy) { border-color: transparent; background: none; }
+.tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { width: 32px; height: 32px; border: 0; border-radius: 16px 0 0 16px; background: none; padding-left: 2px; }
+.tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy):hover { background: rgba(255, 69, 58, 0.16); }
+.tb-rec-more { height: 32px; width: 24px; border: 0; border-left: 1px solid rgba(255, 69, 58, 0.3); border-radius: 0 16px 16px 0; background: none; color: #FF8A80; font-size: 10px; line-height: 1; padding-right: 2px; }
+.tb-rec-more:hover { background: rgba(255, 69, 58, 0.16); }
 .tb-tab.hidden, .tb-rec-more.hidden { display: none; }
 .tb-tab-live, .tb-tab-live:hover { color: #FF8A80; }
 .rec-mh { padding: 4px 10px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8E8E93); }
@@ -1241,8 +1245,10 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-tile { display: block; padding: 0; cursor: pointer; transition: transform var(--dur-fast) ease, box-shadow var(--dur-fast) ease; }
 .hm-tile:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgb(var(--accent-hi-rgb) / 0.5); }
 .hm-tile-mon, .hm-tile-day { display: block; }
-/* the month band of the date takes the theme's fill (asked by the user: it stayed red whatever the theme) */
-.hm-tile-mon { height: 20px; background: var(--fill-bg); box-shadow: inset 0 0 0 1.5px var(--fill-ring); color: var(--fill-fg); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em; line-height: 20px; }
+/* the month band of the date takes the theme's fill (asked by the user: it stayed red whatever the theme);
+   with the outline fill a frame would be cut by the tile's corners: a tint instead */
+[data-fill="outline"] .hm-tile-mon { background: rgb(var(--accent-rgb) / 0.22); }
+.hm-tile-mon { height: 20px; background: var(--fill-bg); color: var(--fill-fg); font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em; line-height: 20px; }
 .hm-tile-day { height: 46px; font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 46px; color: #FFFFFF; }
 .hm-weekday { font-size: var(--fs-caption); line-height: 1.35; font-weight: 600; letter-spacing: 0.06em; color: var(--hc-dim, #8E8E93); }
 .hm-greeting { margin: 0; font-size: var(--fs-title-xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; color: #FFFFFF; }
