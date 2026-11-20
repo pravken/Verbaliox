@@ -3152,7 +3152,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 /* the time already past (static/js/dashboard.js dbWeek): a day before today filled whole, today down to
    the line of "now"; a meeting over has a tick, the one going on is red with how far it is */
 /* half the gap of the columns each side: the days already past make one band */
-.db-day-past, .db-day .db-past { margin: -6px -4px 0; padding: 6px 4px 0; border-radius: 8px; background: rgba(255, 255, 255, 0.055); }
+/* each past day its own card: no side margins eating the grid's gap (reported by the user: the past days ran
+   together into one block, notched at their tops) */
+.db-day-past, .db-day .db-past { margin: -6px 0 0; padding: 6px 6px 0; border-radius: 8px; background: rgba(255, 255, 255, 0.055); }
 .db-day-past { padding-bottom: 6px; }
 .db-day .db-past { border-radius: 8px 8px 0 0; padding-bottom: 1px; }
 .db-now { position: relative; height: 2px; margin: 0 -4px 14px; background: #FF453A; border-radius: 1px; }
