@@ -229,6 +229,34 @@ class ObsidianTest(unittest.TestCase):
         obsidian.export_meeting(m["id"], explicit=False)
         self.assertEqual(path.read_text(encoding="utf-8"), edited)
 
+    def test_a_failed_write_keeps_the_note_and_the_users_section(self):
+        m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")
+        path = obsidian.export_meeting(m["id"])
+        mine = path.read_text(encoding="utf-8") + "- [x] позвонить Анне\n"
+        path.write_text(mine, encoding="utf-8")
+        with mock.patch("os.replace", side_effect=OSError("файл занят")):
+            with self.assertRaises(OSError):
+                obsidian.export_meeting(m["id"])
+        self.assertEqual(path.read_text(encoding="utf-8"), mine)
+        self.assertEqual([p.name for p in path.parent.iterdir()], [path.name])  # no temporary file left
+
+    def test_a_move_onto_an_existing_note_carries_the_users_section(self):
+        m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")
+        old = obsidian.export_meeting(m["id"])
+        old.write_text(old.read_text(encoding="utf-8") + "- [x] позвонить Анне\n", encoding="utf-8")
+        database.update_meeting_fields(m["id"], title="Планёрка команды")
+        # a note of this recording is already at the new name (left by an earlier export)
+        target = old.with_name("2024-05-13 Планёрка команды.md")
+        shutil.copy(old, target)
+        target.write_text(obsidian.split_user_notes(target.read_text(encoding="utf-8"))[0] + "\n" + obsidian.NOTES_MARKER
+                          + "\n## Мои заметки\n\nсвоё в новой\n", encoding="utf-8")
+        path = obsidian.export_meeting(m["id"])
+        self.assertEqual(path, target)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("своё в новой", text)
+        self.assertIn("- [x] позвонить Анне", text)
+        self.assertFalse(old.exists())  # not left behind
+
     def test_notes_of_a_feature_go_into_its_folder_and_name(self):
         from app import features
 
