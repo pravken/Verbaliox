@@ -158,9 +158,15 @@ def _day(m: Dict[str, Any]) -> Optional[date]:
         return None
 
 
+def _counted(m: Dict[str, Any]) -> bool:
+    """A recording that counts as a meeting: a failed one does not, one whose transcription was cancelled
+    does (the meeting took place; it was left out, and its hours with it)."""
+    return bool(_day(m)) and m.get("status") != "failed"
+
+
 def build(period: str = "week", feature_id: Optional[int] = None, today: Optional[date] = None) -> Dict[str, Any]:
     from app import commitments
-    from app.database import list_meetings
+    from app.database import fill_durations, list_meetings
     from app.features import decisions_of, feature_map, list_features
     from app.people import canonical, my_names
     from app.voice_profiles import is_default_name
@@ -170,11 +176,12 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     start, end, prev = _bounds(period, today)
     fmap = feature_map()
     library = list_meetings()
-    meetings = [m for m in library if _day(m) and m.get("status") not in ("failed", "cancelled")]
+    meetings = [m for m in library if _counted(m)]
     if feature_id:
         meetings = [m for m in meetings if feature_id in fmap.get(m["id"], [])]
     now = [m for m in meetings if start <= _day(m) < end]
     before = [m for m in meetings if prev <= _day(m) < start]
+    fill_durations(now + before)
 
     tasks = commitments.all_tasks()
     if feature_id:
@@ -323,7 +330,7 @@ def detail(kind: str, period: str = "week", feature_id: Optional[int] = None, pe
     (only those), decisions (all of the period), tasks (the user's, open and done), waiting (promised to
     the user), person (the meetings with someone and the tasks between them)."""
     from app import commitments
-    from app.database import list_meetings
+    from app.database import fill_durations, list_meetings
     from app.features import feature_map
     from app.people import canonical, my_names
 
@@ -333,10 +340,11 @@ def detail(kind: str, period: str = "week", feature_id: Optional[int] = None, pe
     start, end, _prev = _bounds(period, today)
     fmap = feature_map()
     me = set(my_names())
-    meetings = [m for m in list_meetings() if _day(m) and m.get("status") not in ("failed", "cancelled")]
+    meetings = [m for m in list_meetings() if _counted(m)]
     if feature_id:
         meetings = [m for m in meetings if feature_id in fmap.get(m["id"], [])]
     now = [m for m in meetings if start <= _day(m) < end]
+    fill_durations(now)
     out: Dict[str, Any] = {"kind": kind, "period": period, "start": start.isoformat(), "end": end.isoformat(),
                            "feature": feature_id, "needs_me": not me}
     tasks = commitments.all_tasks()
