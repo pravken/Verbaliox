@@ -58,6 +58,22 @@ class PeopleDirectoryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             people.merge(["Мария Иванова"])
 
+    def test_damaged_variants_do_not_break_rename_and_merge(self):
+        people.add("Олег")
+        people.add("Анна")
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE people_directory SET aliases = '[не json'")
+            conn.commit()
+            conn.close()
+        self.assertEqual(people.update("Олег", new_name="Олег Петров")["aliases"], ["Олег"])
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE people_directory SET aliases = '{\"a\": 1}'")
+            conn.commit()
+            conn.close()
+        self.assertEqual(people.merge(["Олег Петров", "Анна"])["aliases"], ["Анна"])
+
     def test_rename_keeps_old_spelling_and_me_is_one(self):
         people.add("Олег")
         e = people.update("Олег", new_name="Олег Петров", role="Ведущий")
