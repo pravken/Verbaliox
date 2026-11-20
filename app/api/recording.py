@@ -438,14 +438,20 @@ def save_orphans(older_than: float = ORPHAN_AFTER_SEC) -> int:
     return n
 
 
+# A page opening saves the recordings whose page has been silent this long. The page tells every 10 s; 12 s
+# was too close: a second page (another window) opening while a heartbeat was a little late finished a
+# recording that was going on
+PAGE_ORPHAN_SEC = 30.0
+
+
 class OrphanPayload(BaseModel):
-    older_than: float = 12.0
+    older_than: float = PAGE_ORPHAN_SEC
 
 
 @router.post("/api/record/orphans/save")
 def api_save_orphans(payload: OrphanPayload) -> Dict[str, Any]:
     """The page has just loaded: recordings of the page before it (reloaded mid-recording) are saved now."""
-    return {"saved": save_orphans(max(5.0, payload.older_than))}
+    return {"saved": save_orphans(max(PAGE_ORPHAN_SEC, payload.older_than))}
 
 
 def watchdog_loop() -> None:
