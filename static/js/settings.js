@@ -1303,9 +1303,14 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
     if (!id) return;
     startWhisperModelDownload(id, id !== roles.main);
     // the next one when this download ends (the app downloads one Whisper model at a time)
+    // One question at a time: two slow answers would both see the end and skip a queued model
+    let busy = false, done = false;
     const wait = setInterval(async () => {
+      if (busy || done) return;
+      busy = true;
       const m = await fetch('/api/models/status').then(r => r.json()).catch(() => null);
-      if (m && !(m.setup_state || {}).active) { clearInterval(wait); nextWhisper(); }
+      busy = false;
+      if (!done && m && !(m.setup_state || {}).active) { done = true; clearInterval(wait); nextWhisper(); }
     }, 3000);
   };
   nextWhisper();
@@ -1364,13 +1369,19 @@ async function deleteOllamaModel(name) {
 
 function startWhisperPollingLoop(modelId) {
   clearInterval(window._whisperPollTimer);
-  window._whisperPollTimer = setInterval(async () => {
+  // One request at a time, and only for the current loop: a slow answer must not toast twice or
+  // stop a loop started after it
+  let busy = false;
+  const timer = window._whisperPollTimer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
     try {
       const res = await fetch('/api/models/status');
       const data = await readJson(res);
+      if (window._whisperPollTimer !== timer) return;
       updateWhisperModelsUI(data);
       if (!data.setup_state || !data.setup_state.active) {
-        clearInterval(window._whisperPollTimer);
+        clearInterval(timer);
         window._whisperPollTimer = null;
         await loadSystemInfo();
         if (data.setup_state && data.setup_state.progress === 100) {
@@ -1378,7 +1389,7 @@ function startWhisperPollingLoop(modelId) {
           showToast(t('modelReadyToast').replace('{name}', () => pretty));
         }
       }
-    } catch (e) {}
+    } catch (e) {} finally { busy = false; }
   }, 800);
 }
 
@@ -2693,13 +2704,19 @@ function pullCustomOllamaModel() {
 
 function startOllamaPollingLoop(model) {
   clearInterval(window._ollamaPollTimer);
-  window._ollamaPollTimer = setInterval(async () => {
+  // One request at a time, and only for the current loop: a slow answer must not toast twice or
+  // stop a loop started after it
+  let busy = false;
+  const timer = window._ollamaPollTimer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
     try {
       const res = await fetch('/api/ollama/status');
       const data = await readJson(res);
+      if (window._ollamaPollTimer !== timer) return;
       updateOllamaUI(data);
       if (!data.pull_state || !data.pull_state.active) {
-        clearInterval(window._ollamaPollTimer);
+        clearInterval(timer);
         window._ollamaPollTimer = null;
         await loadSystemInfo();
         if (data.pull_state && data.pull_state.progress === 100) {
@@ -2707,7 +2724,7 @@ function startOllamaPollingLoop(model) {
           showToast(t('llmReadyToast').replace('{name}', () => pretty));
         }
       }
-    } catch (e) {}
+    } catch (e) {} finally { busy = false; }
   }, 900);
 }
 
