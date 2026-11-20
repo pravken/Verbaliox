@@ -245,7 +245,8 @@ async def lifespan(_app: FastAPI):
         elif m.get("status") == "downloading":
             update_meeting_progress(int(m["id"]), status="failed", progress=0, stage_text="",
                                     error_message="Скачивание по ссылке прервано перезапуском — нажмите «Повторить»")
-        elif m.get("status") == "mixing":
+        elif m.get("status") == "mixing" and int(m["id"]) not in _mixing_now():
+            # (one in app_status.mixing was made just now from a recovered recording: its mix is running)
             from pathlib import Path as _P
 
             if m.get("media_path") and _P(m["media_path"]).is_file():
@@ -495,6 +496,12 @@ def _queue_file(title: str, dest: Path, has_video: Optional[bool]) -> Dict[str, 
     return get_meeting(m["id"]) or m
 
 
+def _mixing_now() -> set:
+    from app import app_status
+
+    return app_status.mixing
+
+
 def _salvage_parts(title: str, parts: List[Tuple[Path, Optional[bool]]], notes: str = "") -> Dict[str, Any]:
     """The parts of a recording could not be joined: each one is kept as a recording of its own,
     so nothing that was recorded is lost."""
@@ -554,7 +561,7 @@ def recover_orphan_recordings() -> int:
         rec = _recordings_dir()
         # what finishing a recording made for its mix (the cleaned microphone, the lined-up system sound):
         # left by a crash during the mix, the recorded parts themselves are recovered below
-        for left in [*rec.glob(".page_*.part.mic.wav"), *rec.glob(".page_*.part.sys.wav")]:
+        for left in [*rec.glob(".page_*.part.mic.wav"), *rec.glob(".page_*.part.sys.wav"), *rec.glob(".page_*.part.voice.wav")]:
             left.unlink(missing_ok=True)
         found += [(p, None) for p in rec.glob(".page_*.webm.part")]
         found += [(p, True) for p in rec.glob(".screen_*.mkv.part")]

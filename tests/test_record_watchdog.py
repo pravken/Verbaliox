@@ -38,11 +38,28 @@ class WatchdogTest(unittest.TestCase):
         recording.api_record_heartbeat(payload)
         self.assertTrue((self.dir / ".rec_pg1.json").is_file())
         self.assertEqual(recording.save_orphans(older_than=60), 0)  # it still records
-        with mock.patch.object(recording, "_mix_in_background"), mock.patch("app.calendar_ics.apply_to_recording"):
+        mixes = []
+        with mock.patch.object(recording, "_mix_in_background", side_effect=lambda mid, *a: mixes.append(a)), \
+                mock.patch("app.calendar_ics.apply_to_recording"):
             recording._beats["pg1"] = time.time() - 600
             self.assertEqual(recording.save_orphans(older_than=60), 1)
+        # found in the audit: the notes' file stays while the mix runs (a crash then recovers the recording
+        # whole) and goes when the mix is over
+        self.assertTrue((self.dir / ".rec_pg1.json").exists())
+        recording._end_session(mixes[0][-1])
         self.assertFalse((self.dir / ".rec_pg1.json").exists())
         self.assertNotIn("pg1", recording._page_recordings)
+
+    def test_a_recording_is_dated_by_its_start_not_its_stop(self):
+        """Found in the audit: «Стоп» at 11:01 dated a 10:00 meeting's recording 11:01 (the calendar, the day)."""
+        from datetime import datetime
+
+        self._page("pg3")
+        start = time.time() - 3600
+        payload = recording.RecordFinishPayload(title="Синк", page_id="pg3", has_mic=True, started_at=start)
+        with mock.patch.object(recording, "_mix_in_background"), mock.patch("app.calendar_ics.apply_to_recording"):
+            mid = recording.finish_recording(payload)["created"][0]["id"]
+        self.assertEqual(get_meeting(mid)["recorded_at"], datetime.fromtimestamp(start).strftime("%Y-%m-%d %H:%M:%S"))
 
     def test_after_a_crash_the_parts_become_one_recording_with_notes(self):
         page = self.dir / ".page_pg2.webm.part"
@@ -53,7 +70,7 @@ class WatchdogTest(unittest.TestCase):
             "payload": {"title": "Созвон", "page_id": "pg2", "capture_id": "cap2", "notes": "заметка", "has_mic": True},
             "paths": {"page": str(page), "system": str(system), "system_started": 1.0}}), encoding="utf-8")
         made = []
-        with mock.patch.object(recording, "_mix_in_background", side_effect=lambda mid, *a: made.append((mid, a))), \
+        with mock.patch.object(recording, "_mix_in_background", side_effect=lambda mid, *a: (made.append((mid, a)), recording._end_session(a[-1]))), \
                 mock.patch("app.calendar_ics.apply_to_recording"):
             used = recording.recover_sessions()
         self.assertEqual({p.name for p in used}, {page.name, system.name})
