@@ -214,7 +214,7 @@ function dbRenderHead() {
   if (sub) {
     const last = d ? new Date(`${d.end}T12:00:00`) : null;
     if (last) last.setDate(last.getDate() - 1);
-    sub.textContent = d ? `${t(`dbPeriodName_${p.period}`)}: ${fmt(d.start)} – ${fmt(last.toISOString().slice(0, 10))}` : '';
+    sub.textContent = d ? `${t(`dbPeriodName_${p.period}`)}: ${fmt(d.start)} – ${fmt(calKey(last))}` : '';
   }
   // How far the period is (asked by the user: «сколько дней прошло»): a bar and «Прошло 4 дня из 7»
   const prog = document.getElementById('db-progress');
@@ -805,7 +805,7 @@ function dbRenderDetail() {
   const { kind, person, data: d } = DB_DETAIL;
   box.classList.toggle('hidden', !kind);
   if (!kind) return;
-  const today = DB.data ? DB.data.today : new Date().toISOString().slice(0, 10);
+  const today = DB.data ? DB.data.today : calKey(new Date());
   const title = kind === 'person' ? person : t(`dbDt_${kind}`);
   const period = DB.data && kind !== 'person' ? `<div class="db-dt-period">${escapeHtml(document.getElementById('db-sub')?.textContent || '')}</div>` : '';
   let body;
