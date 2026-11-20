@@ -15,12 +15,12 @@ from typing import Optional
 
 _JOIN_RE = re.compile(
     r"https://(?:"
-    r"teams\.microsoft\.com/l/meetup-join/[^\s\"'<>\\]+"
-    r"|teams\.microsoft\.com/meet/[^\s\"'<>\\]+"
-    r"|teams\.live\.com/meet/[^\s\"'<>\\]+"
-    r"|(?:[\w-]+\.)?zoom\.us/[jw]/[^\s\"'<>\\]+"
-    r"|meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}[^\s\"'<>\\]*"
-    r"|[\w-]+\.webex\.com/[^\s\"'<>\\]+"
+    r"teams\.microsoft\.com/l/meetup-join/[^\s\"'<>\\‘’‚‛“”„]+"
+    r"|teams\.microsoft\.com/meet/[^\s\"'<>\\‘’‚‛“”„]+"
+    r"|teams\.live\.com/meet/[^\s\"'<>\\‘’‚‛“”„]+"
+    r"|(?:[\w-]+\.)?zoom\.us/[jw]/[^\s\"'<>\\‘’‚‛“”„]+"
+    r"|meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}[^\s\"'<>\\‘’‚‛“”„]*"
+    r"|[\w-]+\.webex\.com/[^\s\"'<>\\‘’‚‛“”„]+"
     r")",
     re.I,
 )
