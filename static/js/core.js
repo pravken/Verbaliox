@@ -904,7 +904,17 @@ window.addEventListener('click', e => {
   if (t.classList.contains('modal-backdrop') || t.classList.contains('tk-veil')) e.stopPropagation();
 }, true);
 
+// The motion chosen with the user on the try-on page: the new view fades in, the highlight of the tab
+// moves to it (static/js/shell.js placeTabIndicators), the widgets of Главная come in one after another
+function animateIn(el) {
+  if (!el) return;
+  el.classList.remove('vx-in');
+  void el.offsetWidth;  // restarts the animation
+  el.classList.add('vx-in');
+}
+
 function switchWorkspaceTab(tab) {
+  const prevTab = state.activeWorkspaceTab;
   state.activeWorkspaceTab = tab;
   if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
@@ -917,6 +927,7 @@ function switchWorkspaceTab(tab) {
       ? 'apple-segment-btn apple-segment-active'
       : 'apple-segment-btn text-apple-secondary hover:text-white';
   });
+  if (prevTab && prevTab !== tab) animateIn(document.getElementById(`wview-${tab}`));
 }
 
 function toggleExportMenu(e) {

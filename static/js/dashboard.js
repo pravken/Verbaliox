@@ -891,6 +891,14 @@ registerView('dashboard', {
     const qa = document.querySelector('#home-view .hm-head > .flex'), qslot = document.getElementById('db-qa');
     if (qa && qslot && !qslot.contains(qa)) qslot.appendChild(qa);
     renderDashboard();
+    // the widgets come in one after another as Главная opens (not on every redraw)
+    const grid = document.getElementById('db-grid');
+    if (grid) {
+      grid.querySelectorAll(':scope > .db-w').forEach((w, i) => { w.style.animationDelay = `${Math.min(i, 12) * 40}ms`; });
+      grid.classList.remove('db-wave'); void grid.offsetWidth; grid.classList.add('db-wave');
+      clearTimeout(DB.waveTimer);
+      DB.waveTimer = setTimeout(() => grid.classList.remove('db-wave'), 1000);
+    }
     if (typeof renderHome === 'function') renderHome();
     loadDashboard();
   },
