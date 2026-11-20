@@ -313,6 +313,30 @@ def _carry_secrets(old_db: Path, new_db: Path) -> None:
         conn.close()
 
 
+def _meeting_keys(db: Path) -> Dict[int, tuple]:
+    conn = sqlite3.connect(str(db))
+    try:
+        return {int(r[0]): (r[1], r[2]) for r in conn.execute("SELECT id, created_at, media_path FROM meetings")}
+    finally:
+        conn.close()
+
+
+def _drop_stale_caches(old_db: Path, new_db: Path) -> None:
+    """The files kept per recording number (the video thumbnail, the waveform kept after the WAV went) of
+    every number that is not the same recording in the restored database: an older copy gives its numbers
+    again to the recordings made next, which showed the waveform and the picture of another recording."""
+    from app.audio_utils import peaks_file
+    from app.paths import THUMBS_DIR
+
+    old, new = _meeting_keys(old_db), _meeting_keys(new_db)
+    stale = [mid for mid in set(old) | set(new) if old.get(mid) != new.get(mid)]
+    for mid in stale:
+        for f in (THUMBS_DIR / f"{mid}.jpg", peaks_file(mid)):
+            f.unlink(missing_ok=True)
+    if stale:
+        print(f"[backup] the thumbnails and waveforms of {len(stale)} recording number(s) dropped", flush=True)
+
+
 def apply_pending() -> Optional[str]:
     """At start, before the database is opened: a restored copy replaces it (the old one is kept)."""
     if not PENDING.is_file():
@@ -339,6 +363,10 @@ def apply_pending() -> Optional[str]:
             _carry_secrets(kept, PENDING)
         except sqlite3.DatabaseError as e:
             print(f"[backup] the API keys were not carried over: {e}", flush=True)
+        try:
+            _drop_stale_caches(kept, PENDING)
+        except (sqlite3.DatabaseError, OSError) as e:
+            print(f"[backup] the caches of the recordings were not checked: {e}", flush=True)
     for suffix in ("-wal", "-shm"):
         Path(str(DB_PATH) + suffix).unlink(missing_ok=True)
     PENDING.replace(DB_PATH)

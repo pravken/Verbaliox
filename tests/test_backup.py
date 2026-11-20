@@ -53,6 +53,38 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(moved.read_bytes(), b"sound")
         self.assertTrue(DB_PATH.exists())
 
+    def test_caches_of_numbers_that_change_hands_are_dropped(self):
+        from app.audio_utils import peaks_file
+        from app.paths import THUMBS_DIR
+
+        tmp = Path(tempfile.mkdtemp())
+
+        def db(name, rows):
+            p = tmp / name
+            conn = sqlite3.connect(str(p))
+            conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, created_at TEXT, media_path TEXT)")
+            conn.executemany("INSERT INTO meetings VALUES (?, ?, ?)", rows)
+            conn.commit()
+            conn.close()
+            return p
+
+        old = db("old.db", [(901, "2026-01-01", "a.m4a"), (902, "2026-02-01", "b.m4a"), (903, "2026-03-01", "c.m4a")])
+        new = db("new.db", [(901, "2026-01-01", "a.m4a"), (902, "2026-01-15", "x.m4a")])
+        THUMBS_DIR.mkdir(parents=True, exist_ok=True)
+        files = {mid: (THUMBS_DIR / f"{mid}.jpg", peaks_file(mid)) for mid in (901, 902, 903)}
+        for pair in files.values():
+            for f in pair:
+                f.write_text("[1]")
+        try:
+            backup._drop_stale_caches(old, new)
+            self.assertTrue(all(f.exists() for f in files[901]))  # the same recording in both
+            self.assertFalse(any(f.exists() for f in files[902]))  # another recording under this number
+            self.assertFalse(any(f.exists() for f in files[903]))  # a number the next recording will get
+        finally:
+            for pair in files.values():
+                for f in pair:
+                    f.unlink(missing_ok=True)
+
     def test_only_the_newest_databases_put_aside_are_kept(self):
         from app.paths import DATA_DIR
 
