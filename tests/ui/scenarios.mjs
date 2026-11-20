@@ -61,11 +61,25 @@ await step('read a recording', async () => {
   await sleep(1500);
   expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
   expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
-  expect(/версии и действия/.test(await page.textContent('#tx-model-chip')), 'the button does not say it opens');
+  // one short row (variant B): «Версия: … ▾», «Расшифровать заново», «⋯» and when the text was made
+  expect(/Версия:/.test(await page.textContent('#tx-model-chip')), 'no version button');
+  expect(await page.isVisible('#tx-redo-btn') && await page.isVisible('#tx-more-btn'), 'the row lacks its buttons');
   await page.click('#tx-model-chip');
-  expect(await page.isVisible('#tx-model-bar'), 'the button does not open the row');
+  await sleep(200);
+  const versions = await page.$$eval('#text-menu button', els => els.map(e => e.textContent));
+  expect(versions.some(x => x.includes('✓')), `the version shown is not marked: ${versions.join(' | ')}`);
+  await page.keyboard.press('Escape');
+  await page.click('#tx-more-btn');
+  await sleep(200);
+  const more = await page.$$eval('#text-menu button', els => els.map(e => e.textContent));
+  expect(more.some(x => /Удалить эту версию/.test(x)) && more.some(x => /Все модели и параметры/.test(x)), `the «⋯» menu: ${more.join(' | ')}`);
+  await page.click('#text-menu button:has-text("Все модели и параметры")');
+  expect(await page.isVisible('#tx-model-bar'), '«Все модели и параметры» does not open the row');
   expect(await page.locator('#tx-model-select option[value="precise"]').count() === 1, 'no precise mode in the list');
-  await page.click('#tx-model-chip');
+  await page.click('#tx-more-btn');
+  await sleep(200);
+  await page.click('#text-menu button:has-text("Свернуть панель моделей")');
+  expect(!(await page.isVisible('#tx-model-bar')), 'the row does not fold back');
   expect(!(await page.isVisible('#chapters-bar')), 'the chapters are shown twice');
   await page.click('#tx-view-btn');
   const items = await page.$$eval('#tx-view-menu button', els => els.map(e => e.textContent.trim()));

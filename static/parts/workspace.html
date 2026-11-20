@@ -630,9 +630,17 @@
             <span id="tx-model-status" class="tx-model-status"></span>
           </div>
           <div class="tx-toolbar max-w-6xl mx-auto flex items-center justify-between gap-3">
-            <!-- Audit 8.4: with a text there, recognition folds into this mark of its model; it opens the row above -->
-            <button id="tx-model-chip" data-click="toggleTxModelBar" class="tx-model-chip hidden" aria-expanded="false" aria-controls="tx-model-bar"
-              data-i18n-title="tipTxModelChip" title="Модель расшифровки: сменить, расшифровать заново, параметры"></button>
+            <!-- With a text there, recognition is one short row (asked by the user, variant B): the version (a menu of
+                 the models), «Расшифровать заново», «⋯» with the rare actions, and when the text was made -->
+            <div id="tx-quick" class="tx-quick hidden">
+              <button id="tx-model-chip" data-click="openTxVersionMenu" data-click-args='[{"$": "el"}]' class="tx-model-chip" aria-haspopup="menu"
+                data-i18n-title="tipTxModelChip" title="Версия текста: модель, которой он расшифрован. Выбрать другую"></button>
+              <button id="tx-redo-btn" data-click="txRedo" class="tx-model-chip" data-i18n-title="tipTxTranscribeAgain" title="Расшифровать запись заново той же моделью">
+                <span aria-hidden="true">↻</span><span class="tx-tool-label" data-i18n="txTranscribeAgain">Расшифровать заново</span></button>
+              <button id="tx-more-btn" data-click="openTxMoreMenu" data-click-args='[{"$": "el"}]' class="tx-model-chip tx-more" aria-haspopup="menu"
+                data-i18n-title="txMoreTip" title="Ещё: голоса, параметры, удаление версии" data-i18n-aria="txMoreTip" aria-label="Ещё">⋯</button>
+              <span id="tx-quick-status" class="tx-quick-status"></span>
+            </div>
                         <!-- Left: Speaker Filter Pills (they wrap within their part; the tools stay on one line) -->
             <div class="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap min-h-[28px]" id="speaker-pills-container">
               <!-- Populated dynamically -->
