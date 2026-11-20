@@ -284,6 +284,7 @@ const SERVER_TEXT_EN = {
   " Модель анализа недоступна: спорные места решены по точности моделей.": " The analysis model is not available: the disputed places went to the more accurate models.",
   "сведение версий": "merging the versions",
   "Скачивание по ссылке прервано перезапуском — нажмите «Повторить»": "The download was interrupted by a restart — press Retry",
+  "Обработка дважды прервалась вместе с программой — возможно, файл повреждён. Нажмите «Повторить»": "Processing ended together with the program twice — the file may be damaged. Press Retry",
   "Скачивание по ссылке…": "Downloading from the link…",
   "Слишком большой фрагмент записи": "The recording chunk is too large",
   "Слишком большой фрагмент звука": "The audio chunk is too large",
