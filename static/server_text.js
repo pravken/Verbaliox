@@ -56,6 +56,7 @@ const SERVER_TEXT_EN = {
   "calendar_ics: нужна ссылка на календарь или файл .ics": "calendar_ics: a calendar link or an .ics file is needed",
   "meet_never: нужен список JSON": "meet_never: a JSON list is needed",
   "meet_ignore: нужен список JSON": "meet_ignore: a JSON list is needed",
+  "setup_done: нужен список JSON": "setup_done: a JSON list is needed",
   "meet_overrides: нужен объект JSON": "meet_overrides: a JSON object is needed",
   "Архив обновления не скачан": "The update archive is not downloaded",
   "База в копии повреждена": "The database in the backup is damaged",

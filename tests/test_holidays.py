@@ -53,7 +53,8 @@ class HolidaysTest(unittest.TestCase):
         self.assertEqual(clean("holiday_country", "lt"), "LT")
         self.assertEqual(clean("holiday_country", ""), "")
         self.assertEqual(clean("holiday_subdiv", "BY"), "BY")
-        for key, bad in (("holiday_country", "Serbia"), ("holiday_subdiv", "../x")):
+        self.assertEqual(clean("setup_done", '["holidays"]'), '["holidays"]')
+        for key, bad in (("holiday_country", "Serbia"), ("holiday_subdiv", "../x"), ("setup_done", '{"a": 1}'), ("setup_done", '["../x"]')):
             with self.assertRaises(ValueError):
                 clean(key, bad)
 
