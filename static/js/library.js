@@ -2,9 +2,19 @@
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 // --- Meetings List, Global Search & Sidebar ---
-async function loadMeetingsList() {
-  const [res] = await Promise.all([fetch('/api/meetings'), loadFolders(), loadFeatures()]);
+// opts.poll: a background check. It sends the list's ETag back and an unchanged library answers 304
+// with no body: 3000 recordings are megabytes of JSON to parse and draw again for nothing
+async function loadMeetingsList(opts = {}) {
+  const ask = opts.poll && live.listEtag ? { headers: { 'If-None-Match': live.listEtag }, cache: 'no-store' } : {};
+  const before = opts.poll ? JSON.stringify([state.folders, state.features]) : '';
+  const [res] = await Promise.all([fetch('/api/meetings', ask), loadFolders(), loadFeatures()]);
+  if (res.status === 304) {
+    // the recordings are the same; a folder or a feature may have changed beside them
+    if (before !== JSON.stringify([state.folders, state.features]) && !state.globalSearchQuery) renderMeetingsSidebar();
+    return;
+  }
   const list = await readJson(res);
+  if (res.ok && Array.isArray(list)) live.listEtag = res.headers.get('ETag') || '';
   if (!res.ok || !Array.isArray(list)) return;  // the list shown stays (a lost session reloads the page)
   state.meetings = list;
   onLibraryChanged();
@@ -49,8 +59,9 @@ async function loadMeetingsList() {
 
 // --- Live updates ---
 // The server pushes progress over Server-Sent Events (/api/events). Polling stays as a safety
-// net: every 30 s while the stream is connected, at the old 2 s / 8 s cadence when it is not.
-const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false };
+// net: every 5 min while the stream is connected (the events carry the changes), at the old 2 s / 8 s
+// cadence when it is not, never while the window is hidden.
+const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false, listEtag: '', polledAt: 0 };
 const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now'];
 
 function startLiveUpdates() {
@@ -278,16 +289,21 @@ function handleLiveEvent(ev) {
 }
 
 async function pollMeetingsLoop() {
-  try {
-    await loadMeetingsList();
-    await loadQueue();
-  } catch (e) {
-    console.error(e);
-  }
   const busy = state.meetings.some(m => !DONE_STATUSES.includes(m.status));
-  // Live updates come by events; the poll is the fallback. A hidden window (tray) asks rarely and
-  // catches up when it is shown again (app.js visibilitychange)
-  setTimeout(pollMeetingsLoop, live.connected || document.hidden ? 30000 : (busy ? 2000 : 8000));
+  // Live updates come by events; the poll is the fallback. A hidden window (tray) does not ask at all
+  // and catches up when it is shown again (app.js visibilitychange). A short tick, so a lost event
+  // stream falls back to the fast cadence at once
+  const every = live.connected ? 300000 : (busy ? 2000 : 8000);
+  if ((!document.hidden || !live.polledAt) && Date.now() - live.polledAt >= every) {
+    live.polledAt = Date.now();
+    try {
+      await loadMeetingsList({ poll: true });
+      await loadQueue();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  setTimeout(pollMeetingsLoop, 2000);
 }
 
 async function handleGlobalSidebarSearch(rawVal) {
