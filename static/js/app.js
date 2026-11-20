@@ -992,6 +992,7 @@ function openFollowupMail(md) {
 function openTemplatesEditor() {
   document.getElementById('templates-editor')?.remove();
   let items = (state.summaryTemplates || []).map(x => ({ ...x }));
+  const initial = JSON.stringify(items);
   const wrap = document.createElement('div');
   wrap.id = 'templates-editor';
   wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
@@ -1032,7 +1033,12 @@ function openTemplatesEditor() {
   });
   wrap.addEventListener('click', async e => {
     const b = e.target.closest('button');
-    if (e.target === wrap || (b && b.dataset.a === 'no')) { wrap.remove(); return; }
+    if (b && b.dataset.a === 'no') { wrap.remove(); return; }
+    // A click beside the window is easy to make by accident: unsaved edits are not dropped without asking
+    if (e.target === wrap) {
+      if (JSON.stringify(items) === initial || await askConfirm(t('templatesDiscardConfirm'), true, t('templatesDiscard'))) wrap.remove();
+      return;
+    }
     if (!b) return;
     if (b.dataset.del !== undefined) { items.splice(Number(b.dataset.del), 1); draw(); }
     else if (b.dataset.preset !== undefined) { items.push({ ...presets[Number(b.dataset.preset)], id: '' }); draw(); }

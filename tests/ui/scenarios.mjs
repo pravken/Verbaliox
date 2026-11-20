@@ -424,6 +424,28 @@ await step('dashboard', async () => {
   await sleep(300);
 });
 
+// The templates editor: a click beside it asks before dropping unsaved edits, and closes at once when
+// nothing changed (audit: edits were lost to a stray click)
+await step('templates editor keeps edits', async () => {
+  await page.evaluate(() => openTemplatesEditor());
+  await sleep(300);
+  await page.click('#templates-editor button[data-add]');
+  await page.mouse.click(5, 5);
+  await sleep(300);
+  const asked = () => page.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].some(d => d.id !== 'templates-editor' && /без сохранения/.test(d.textContent)));
+  expect(await asked(), 'no question before dropping the edits');
+  expect(await page.isVisible('#templates-editor'), 'the editor closed without asking');
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  expect(await page.isVisible('#templates-editor'), '«Отмена» in the question closed the editor');
+  await page.evaluate(() => document.getElementById('templates-editor').remove());
+  await page.evaluate(() => openTemplatesEditor());
+  await sleep(300);
+  await page.mouse.click(5, 5);
+  await sleep(300);
+  expect(!(await page.isVisible('#templates-editor')) && !(await asked()), 'an unchanged editor did not just close');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
