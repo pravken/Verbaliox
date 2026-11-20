@@ -204,6 +204,27 @@ await step('setup steps after an update', async () => {
     body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
 });
 
+// A calendar meeting about to start with a Teams link: «Подключиться» on its card joins the call (asked by the user)
+await step('join a meeting call', async () => {
+  const sent = [];
+  await page.route('**/api/meeting/join', r => { sent.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await page.evaluate(() => {
+    switchAppView('dashboard');
+    Object.assign(state.system.settings, { work_day_start: '0', work_day_end: '24' });  // the meeting is in the day shown, whatever the time
+    const s = new Date(Date.now() + 5 * 60e3), e = new Date(s.getTime() + 30 * 60e3);
+    home.calConfigured = true;
+    home.events = [{ key: 'j|1', title: 'Синк с командой', start: s.toISOString(), end: e.toISOString(), s, e, attendees: [], online: true,
+      join: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0' }];
+    home.eventsAt = Date.now();
+    renderHomeNow();
+  });
+  await sleep(300);
+  await page.click('.hm-mt-join');
+  await sleep(300);
+  await page.unroute('**/api/meeting/join');
+  expect(sent.length === 1 && sent[0].url.startsWith('https://teams.microsoft.com/'), `the call was not opened: ${JSON.stringify(sent)}`);
+});
+
 // Settings → Календарь: a vacation marked by hand is saved at once and listed (asked by the user)
 await step('own days off', async () => {
   await page.evaluate(() => { openModal('settings', 'general'); selectSettingsTab('calendar'); });

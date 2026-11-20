@@ -313,6 +313,10 @@ function renderHomeMeetings() {
           title="${escapeHtml(t('hmBriefTip').replace('{n}', () => bf.open_tasks).replace('{title}', () => bf.last.title).replace('{date}', () => bf.last.date))}">${escapeHtml(
           bf.open_tasks ? t('hmBriefTasks').replace('{n}', () => bf.open_tasks) : t('hmBrief'))}</button>`
       : '';
+    // the call of the meeting, from its invitation (Teams, Zoom, Meet, Webex): one click joins, from now to its end
+    const join = !past && e.join && e.s - now < 15 * 60e3
+      ? `<button ${pageCall('click', 'joinMeetingCall', [e.join])} class="hm-mt-link hm-mt-join" title="${escapeHtml(t('hmJoinTip'))}">${escapeHtml(t('hmJoin'))}</button>`
+      : '';
     const title = e.title || t('hmUntitled');
     // a meeting going on: how far it is, filled in its card, and the minutes left
     const done = live ? Math.round((nowMs - e.s.getTime()) / (e.e.getTime() - e.s.getTime()) * 100) : 0;
@@ -324,7 +328,7 @@ function renderHomeMeetings() {
           <span class="flex items-baseline gap-1.5 min-w-0">${narrow && hpx < 40 ? `<span class="hm-mt-time">${escapeHtml(clock(e.s.getTime()))}</span>` : ''}<span class="hm-mt-title${lines > 1 ? ' hm-mt-wrap' : ''}" style="-webkit-line-clamp: ${lines}">${escapeHtml(title)}</span>${hpx < 34 && !narrow ? `<span class="hm-mt-time">${escapeHtml(time)}</span>` : ''}</span>
           ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(time)}</span>${live ? liveSub : ` · ${escapeHtml(who)}`}</span>` : ''}
           ${narrow && hpx >= 40 ? `<span class="hm-mt-sub hm-mono">${escapeHtml(time)}</span>` : ''}
-        </span>${narrow ? '' : brief}${action}${narrow ? '' : `<button ${pageCall('click', 'hmMeetingMenu', [e.key, { $: 'el' }])} class="hm-mt-more" title="${escapeHtml(t('hmMeetingMenuTip'))}" aria-label="${escapeHtml(t('hmMeetingMenuTip'))}">⋯</button>`}
+        </span>${join}${narrow ? '' : brief}${action}${narrow ? '' : `<button ${pageCall('click', 'hmMeetingMenu', [e.key, { $: 'el' }])} class="hm-mt-more" title="${escapeHtml(t('hmMeetingMenuTip'))}" aria-label="${escapeHtml(t('hmMeetingMenuTip'))}">⋯</button>`}
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
@@ -718,7 +722,14 @@ async function openLastRecording() {
 // A click on a Windows notification (run.py App.open_target): the place it was about. "meeting:ID:KIND"
 // opens the recording (a finished transcription on its text), "studio" the recording running, "last"
 // the newest recording, "settings:TAB" that part of the settings
+// The call of a calendar meeting: the server opens it (Teams in its app), only a link of a call service
+async function joinMeetingCall(url) {
+  const r = await fetch('/api/meeting/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }).catch(() => null);
+  if (r && r.ok) showToast(t('hmJoining')); else showError(t('hmJoinFailed'));
+}
+
 async function openFromNotice(target) {
+  if (String(target || '').startsWith('join:')) { joinMeetingCall(String(target).slice(5)); return; }
   const [kind, a, b] = String(target || '').split(':');
   if (kind === 'meeting' && Number(a)) {
     if (!(state.meetings || []).length) await loadMeetingsList().catch(() => {});

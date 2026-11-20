@@ -1368,6 +1368,8 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .hm-mt-time { flex: none; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
 .hm-mt-sub { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-mt-link { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; color: var(--accent-text); font-size: var(--fs-label); line-height: 1.35; }
+.hm-mt-link.hm-mt-join { background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+.hm-mt-link.hm-mt-join:hover { background: var(--fill-bg-hover); }
 .hm-mt-link:hover { background: rgba(255, 255, 255, 0.07); }
 .hm-mt-none { flex: none; font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8A8A90); }
 .hm-mt-btn { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.18)); color: #C7C7CC; font-size: var(--fs-label); line-height: 1.35; }

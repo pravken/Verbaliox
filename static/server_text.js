@@ -58,6 +58,7 @@ const SERVER_TEXT_EN = {
   "meet_ignore: нужен список JSON": "meet_ignore: a JSON list is needed",
   "setup_done: нужен список JSON": "setup_done: a JSON list is needed",
   "days_off: нужен список периодов": "days_off: a list of periods is needed",
+  "Это не ссылка на звонок": "This is not a link to a call",
   "meet_overrides: нужен объект JSON": "meet_overrides: a JSON object is needed",
   "Архив обновления не скачан": "The update archive is not downloaded",
   "База в копии повреждена": "The database in the backup is damaged",

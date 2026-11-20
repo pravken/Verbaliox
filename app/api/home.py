@@ -115,6 +115,16 @@ def _holidays(a: datetime, b: datetime, lang: str) -> Dict[str, str]:
     return holidays_cal.between(a.date(), last, "en" if lang == "en" else "ru")
 
 
+@router.post("/api/meeting/join")
+def api_meeting_join(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Joins the call of a calendar meeting (app/meeting_join.py): only a link of Teams, Zoom, Meet or Webex."""
+    from app import meeting_join
+
+    if not meeting_join.open_link(str(payload.get("url") or "")):
+        raise HTTPException(status_code=400, detail="Это не ссылка на звонок")
+    return {"ok": True}
+
+
 @router.get("/api/calendar/day")
 def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
     """The meetings of the working day (start…end, local time; past midnight for a night shift), each
