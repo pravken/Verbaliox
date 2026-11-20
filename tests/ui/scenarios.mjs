@@ -204,6 +204,26 @@ await step('setup steps after an update', async () => {
     body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
 });
 
+// Settings → Календарь: a vacation marked by hand is saved at once and listed (asked by the user)
+await step('own days off', async () => {
+  await page.evaluate(() => { openModal('settings', 'general'); selectSettingsTab('calendar'); });
+  await sleep(400);
+  await page.evaluate(() => {
+    document.getElementById('dayoff-from').value = '2026-03-02';
+    document.getElementById('dayoff-to').value = '2026-03-04';
+    document.getElementById('dayoff-title').value = 'Отпуск';
+  });
+  await page.click('button[data-click="addDayOff"]');
+  await sleep(500);
+  expect((await page.textContent('#dayoff-list')).includes('Отпуск'), 'the vacation is not listed');
+  const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+  expect(JSON.parse(set.days_off)[0].to === '2026-03-04', `not saved: ${set.days_off}`);
+  await page.click('#dayoff-list button[data-click="removeDayOff"]');
+  await sleep(500);
+  expect(!(await page.textContent('#dayoff-list')).includes('Отпуск'), 'the vacation was not removed');
+  await page.evaluate(() => closeModal('settings'));
+});
+
 // The cloud choice keeps the speech settings: its consent is asked in Settings → Analysis (no stub here:
 // the real server must accept the request)
 await step('first run wizard, cloud', async () => {
