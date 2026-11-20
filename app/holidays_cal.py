@@ -60,6 +60,32 @@ def countries() -> List[Dict[str, Any]]:
     return out
 
 
+def home_country() -> str:
+    """The country of this computer's region (Windows: Settings → Time & language → Region, not the
+    language of Windows: a Russian Windows in Serbia is Serbia), "" when unknown."""
+    code = ""
+    try:
+        import ctypes
+        import sys
+
+        if sys.platform == "win32":
+            buf = ctypes.create_unicode_buffer(16)
+            if ctypes.windll.kernel32.GetUserDefaultGeoName(buf, 16):
+                code = buf.value
+    except Exception:
+        code = ""
+    if not code:
+        import locale
+
+        try:
+            loc = locale.getlocale()[0] or ""
+        except Exception:
+            loc = ""
+        code = loc.replace("-", "_").split("_")[1] if "_" in loc.replace("-", "_") else ""
+    code = code.strip().upper()
+    return code if len(code) == 2 and code.isalpha() else ""
+
+
 def _language(cls_obj, lang: str) -> str:
     """The names in the language of the page when the country has it, else English, else its own."""
     langs = tuple(getattr(cls_obj, "supported_languages", ()) or ())
