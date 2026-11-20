@@ -148,6 +148,14 @@ async function dbLoadWeek() {
 }
 
 // --- Drawing ---
+// The widgets rise one after another as Главная opens. The fresh numbers come a moment later and draw the
+// widgets again: each new one goes on from where its former one was in the rise, it does not start it over
+// (reported by the user: every card jerked twice, a strobe)
+function dbWaveDelays(grid) {
+  const gone = performance.now() - (DB.waveAt || 0);
+  grid.querySelectorAll(':scope > .db-w').forEach((w, i) => { w.style.animationDelay = `${Math.round(Math.min(i, 12) * 40 - gone)}ms`; });
+}
+
 function renderDashboard() {
   const grid = document.getElementById('db-grid');
   if (!grid) return;
@@ -173,6 +181,7 @@ function renderDashboard() {
     const block = document.getElementById(def.host)?.closest('section');
     if (block) grid.querySelector(`.db-w[data-i="${i}"] .db-c`).appendChild(block);
   });
+  if (grid.classList.contains('db-wave')) dbWaveDelays(grid);
   renderDashDrawer();
 }
 
@@ -1100,7 +1109,8 @@ registerView('dashboard', {
     // the widgets come in one after another as Главная opens (not on every redraw)
     const grid = document.getElementById('db-grid');
     if (grid) {
-      grid.querySelectorAll(':scope > .db-w').forEach((w, i) => { w.style.animationDelay = `${Math.min(i, 12) * 40}ms`; });
+      DB.waveAt = performance.now();
+      dbWaveDelays(grid);
       grid.classList.remove('db-wave'); void grid.offsetWidth; grid.classList.add('db-wave');
       clearTimeout(DB.waveTimer);
       DB.waveTimer = setTimeout(() => grid.classList.remove('db-wave'), 1000);
