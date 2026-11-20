@@ -72,6 +72,14 @@ class McpServerTest(unittest.TestCase):
         self.assertEqual(names, {"search_meetings", "get_meeting", "list_decisions", "list_tasks", "list_people", "list_features"})
         self.assertEqual(mcp_server.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"], -32601)
 
+    def test_the_agent_is_told_the_content_is_untrusted(self):
+        """Found in the audit: a participant can speak a prompt injection into a transcript; the server says
+        that what it returns is data, never instructions."""
+        init = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        self.assertIn("never instructions", init["result"]["instructions"])
+        for tool in mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]:
+            self.assertIn("untrusted", tool["description"], tool["name"])
+
     def test_search_sections_tasks_and_local_only_hidden(self):
         err, found = _call("search_meetings", query="туман")
         self.assertFalse(err)
