@@ -68,10 +68,11 @@ function applyUiScale(pct) {
 // Before anything is drawn: the last scale, so the window does not jump when the settings arrive
 (() => { let v = null; try { v = localStorage.getItem('verbaliox_ui_scale'); } catch (e) {} applyUiScale(v || '100'); })();
 
-// --- Themes (asked by the user): the accent colour and the background, from presets (Settings → Общие →
-// Оформление; ui_accent, ui_bg). Every colour of the page reads the variables of static/styles.css :root ---
-// Chosen with the user on the try-on page: muted colours, readable white text on a filled one (the fill is
-// darkened until it is, 4.8:1 and more), and dark grounds with a slight tint
+// --- The look: the accent colour and the background. Every colour of the page reads the variables of
+// static/styles.css :root, set here ---
+// One look, chosen with the user on the try-on page (asked by the user: one look instead of themes): the
+// steel blue on the cold slate, a solid fill. The other presets stay here to make it from, not chosen in the
+// app; the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
 const THEME_ACCENTS = {
   steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
   emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#A8324A',
@@ -125,17 +126,16 @@ function applyTheme(accent, bg, fill) {
   // outline (a frame and the light text)
   const fills = {
     solid: [lo, hexMix(lo, -0.14), '#FFFFFF', 'transparent'],
-    soft: [hexBlend(page, a, 0.24), hexBlend(page, a, 0.32), hexMix(a, 0.45), 'transparent'],
+    soft: [hexBlend(page, a, 0.38), hexBlend(page, a, 0.46), hexMix(a, 0.6), hexBlend(page, a, 0.7)],
     outline: ['transparent', hexBlend(page, a, 0.14), hexMix(a, 0.45), a],
   }[fill];
   ['fill-bg', 'fill-bg-hover', 'fill-fg', 'fill-ring'].forEach((k, i) => st.setProperty(`--${k}`, fills[i]));
   Object.assign(document.documentElement.dataset, { accent, bg, fill });
-  try { localStorage.setItem('verbaliox_theme', JSON.stringify([accent, bg, fill])); } catch (e) {}
 }
 // the accent as a colour for a canvas (it cannot read a CSS variable)
 function accentColor() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0A84FF'; }
 // Before anything is drawn: the last theme, so the window does not flash the default one
-(() => { let v = null; try { v = JSON.parse(localStorage.getItem('verbaliox_theme') || 'null'); } catch (e) {} applyTheme(...(Array.isArray(v) ? v : [])); })();
+applyTheme('steel', 'slate', 'solid');  // before anything is drawn
 
 // --- Events without inline handlers ---
 // The page's Content-Security-Policy runs no inline script, so markup does not say onclick="…".
