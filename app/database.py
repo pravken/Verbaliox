@@ -250,6 +250,8 @@ def init_db() -> None:
             "work_day_fit": "true",  # ...stretched for a meeting that runs a little past its edges
             "meet_auto_all": "false",  # record every calendar meeting by itself (static/js/home.js)
             "meet_ask_inperson": "true",  # ...but ask first for a meeting without a link to a call
+            "holiday_country": "",  # public holidays of this country count as days off (app/holidays_cal.py); "" = none
+            "holiday_subdiv": "",  # ...and of its region
             "meet_ignore": "[]",  # calendar events that are no meeting: [{id: series, key: one, title}] (calendar_ics.is_meeting)
             "meet_never": "[]",  # calendar meetings never recorded or asked about: [{id: series, title}], JSON
             "meet_overrides": "{}",  # per meeting of the calendar: "rec" (record it) or "skip", JSON

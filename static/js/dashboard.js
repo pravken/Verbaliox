@@ -82,7 +82,7 @@ function dbSize(w) {
 async function loadDashboard() {
   const p = dbPrefs();
   DB.loading = true;
-  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}`;
+  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
   const [data, week, untx] = await Promise.all([
     fetch(`/api/dashboard?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
     dbLoadWeek(),
@@ -104,7 +104,7 @@ function dbMonday(d = new Date()) {
 async function dbLoadWeek() {
   const a = dbMonday(), b = new Date(a);
   b.setDate(a.getDate() + 7);
-  return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
+  return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
 }
 
@@ -202,11 +202,12 @@ function dbRenderHead() {
   if (prog) {
     prog.classList.toggle('hidden', !d);
     if (d) {
-      // calendar days, or working days (Monday to Friday) as the user chose with the gear (asked by the user)
-      const work = dbPrefs().days === 'work';
+      // calendar days, or working days (Monday to Friday) as the user chose with the gear (asked by the user);
+      // a public holiday of the country chosen in the settings is no working day
+      const work = dbPrefs().days === 'work', hol = d.holidays || {};
       const a = new Date(`${d.start}T00:00:00`), b = new Date(`${d.end}T00:00:00`), now = new Date();
       const days = [];
-      for (let x = new Date(a); x < b; x.setDate(x.getDate() + 1)) if (!work || (x.getDay() + 6) % 7 < 5) days.push(new Date(x));
+      for (let x = new Date(a); x < b; x.setDate(x.getDate() + 1)) if (!work || ((x.getDay() + 6) % 7 < 5 && !hol[calKey(x)])) days.push(new Date(x));
       const all = days.length;
       const done = days.filter(x => x.getTime() + 864e5 <= now.getTime()).length;  // the days over
       const today = days.find(x => x <= now && now < new Date(x.getTime() + 864e5));
@@ -331,6 +332,9 @@ function dbMerge(spans) {
 // «Свободное время»: the windows of 30 minutes or more left in the working day between the meetings
 function dbFreeHtml() {
   if (typeof home === 'undefined' || !home.calConfigured) return `<div class="db-note">${escapeHtml(t('hmCalOff'))}</div>`;
+  // a public holiday (Settings → Календарь → Праздники) is no working day
+  const hol = ((DB.week && DB.week.holidays) || {})[calKey(new Date())];
+  if (hol) return `<div class="db-note">${escapeHtml(t('dbHolidayToday').replace('{name}', () => hol))}</div>`;
   const d = hmDay(), now = Date.now();
   const from = Math.max(now, d.from.getTime()), to = d.to.getTime();
   if (from >= to) return `<div class="db-note">${escapeHtml(t('dbDayOver'))}</div>`;
@@ -364,7 +368,7 @@ function dbLoadHtml() {
       ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
       .filter(([s]) => calKey(new Date(s)) === k);
     const hours = dbMerge(spans).reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
-    if (i < 5 || hours) days.push({ x, k, hours });
+    if (i < 5 || hours) days.push({ x, k, hours, hol: (w.holidays || {})[k] || '' });
   }
   const top = Math.max(norm * 1.5, ...days.map(d => d.hours));
   const sum = days.reduce((s, d) => s + d.hours, 0);
@@ -372,7 +376,7 @@ function dbLoadHtml() {
     + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
     + `<div class="db-load"><i class="db-load-norm" style="bottom:${Math.round(norm / top * 100)}%"></i>` + days.map(d => {
       const over = d.hours > norm;
-      return `<div class="db-load-day${d.k === today ? ' today' : ''}${d.k < today ? ' past' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(d.hours * 10) / 10)} ${t('dbHoursShort')}`)}">`
+      return `<div class="db-load-day${d.k === today ? ' today' : ''}${d.k < today ? ' past' : ''}${d.hol ? ' hol' : ''}" title="${escapeHtml(`${d.x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(d.hours * 10) / 10)} ${t('dbHoursShort')}${d.hol ? ` · ${d.hol}` : ''}`)}">`
         + `<span class="db-load-v">${d.hours ? dbNum(Math.round(d.hours * 10) / 10) : ''}</span>`
         + `<i class="db-load-bar${over ? ' over' : ''}" style="height:${Math.round(d.hours / top * 100)}%"></i>`
         + `<span class="db-load-d">${escapeHtml(d.x.toLocaleDateString(lang, { weekday: 'short' }))}</span></div>`;
@@ -492,7 +496,9 @@ function dbWeek() {
   const nowDate = new Date(now);
   return `<div class="db-cal" style="grid-template-columns:repeat(${shown.length}, minmax(0, 1fr))">` + shown.map(x => {
     const k = calKey(x), list = (items[k] || []).sort((p, q) => p.at - q.at);
-    const head = `<div class="db-dn"><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}</div>`;
+    const hol = (w.holidays || {})[k];
+    const head = `<div class="db-dn${hol ? ' hol' : ''}"${hol ? ` title="${escapeHtml(hol)}"` : ''}><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}</div>`
+      + (hol ? `<div class="db-hol">${escapeHtml(hol)}</div>` : '');
     // The time already past is filled (asked by the user): a day before today whole; today down to the
     // line of "now", which stands after the last thing already begun, never over a card
     if (k === today) {

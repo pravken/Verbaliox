@@ -142,6 +142,14 @@ def clean(key: str, value: Any) -> str:
         return _meet_never(text_s)
     if key == "meet_ignore":
         return _meet_ignore(text_s)
+    if key == "holiday_country":  # ISO code of the country of the public holidays (app/holidays_cal.py)
+        if text_s and not re.fullmatch(r"[A-Za-z]{2}", text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s.upper()
+    if key == "holiday_subdiv":
+        if text_s and not re.fullmatch(r"[A-Za-z0-9-]{1,10}", text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
     return text
 
 

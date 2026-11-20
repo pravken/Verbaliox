@@ -30,11 +30,25 @@ def _meetings(briefs: Dict[int, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
 
 
 @router.get("/api/dashboard")
-def api_dashboard(period: str = "week", feature: int = 0) -> Dict[str, Any]:
-    """Everything the widgets of «Дэшборд» show for a period (app/dashboard.py)."""
+def api_dashboard(period: str = "week", feature: int = 0, lang: str = "ru") -> Dict[str, Any]:
+    """Everything the widgets of «Главная» show for a period (app/dashboard.py), with the public holidays
+    of the period (they are no working days)."""
+    from datetime import date
+
+    from app import holidays_cal
     from app.dashboard import build
 
-    return build(period, feature or None)
+    out = build(period, feature or None)
+    out["holidays"] = holidays_cal.between(date.fromisoformat(out["start"]), date.fromisoformat(out["end"]), "en" if lang == "en" else "ru")
+    return out
+
+
+@router.get("/api/holidays/countries")
+def api_holiday_countries() -> Dict[str, Any]:
+    """The countries (and their regions) whose public holidays the app knows (app/holidays_cal.py)."""
+    from app import holidays_cal
+
+    return {"available": holidays_cal.available(), "countries": holidays_cal.countries()}
 
 
 @router.get("/api/dashboard/detail")
