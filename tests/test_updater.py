@@ -499,6 +499,34 @@ class ReleaseSignatureTest(unittest.TestCase):
             self.assertNotEqual(again.returncode, 0)  # a key is never overwritten
 
 
+class FailedUpdateTest(unittest.TestCase):
+    """Found in the audit: an update failing for good (little disk space, a proxy) was installed by itself
+    again every few minutes, the app restarting and saying so each time."""
+
+    def test_an_archive_whose_install_failed_is_not_installed_by_itself_again(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from app import updater
+
+        d = Path(tempfile.mkdtemp())
+        zipf = d / "Verbaliox.zip"
+        zipf.write_bytes(b"zip")
+        state = {"download": {"done": True, "path": str(zipf), "version": "9.9.9", "sha256": "ab" * 32}, "latest": {"version": "9.9.9"}}
+        with mock.patch.dict(updater._state, state), mock.patch("app.paths.DATA_DIR", d), \
+                mock.patch.object(updater, "auto_enabled", return_value=True), mock.patch.object(updater, "is_git_checkout", return_value=False):
+            self.assertTrue(updater.ready_to_install())
+            (d / updater.FAILED_NAME).write_text(json.dumps({"sha256": "AB" * 32}), encoding="utf-8")
+            self.assertFalse(updater.ready_to_install())
+            with mock.patch.object(updater, "launch_installer") as go:
+                self.assertFalse(updater.install_on_exit())
+                go.assert_not_called()
+            updater._state["download"] = {**state["download"], "sha256": "cd" * 32}  # a newer archive
+            self.assertTrue(updater.ready_to_install())
+
+
 if __name__ == "__main__":
     unittest.main()
 
