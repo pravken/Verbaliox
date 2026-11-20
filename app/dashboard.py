@@ -28,30 +28,63 @@ SERIES_MIN = 3
 SERIES_LOOK = 6
 
 
-def _facts(full: Dict[str, Any], me: set, task_counts: Dict[int, int]) -> Dict[str, Any]:
+def _outcomes(ids: List[int], me: set) -> Dict[int, Dict[str, Any]]:
+    """What _facts needs of each recording, in one reading: the protocol of its analysis, its series, and
+    with «Это я» set the talk of each speaker (start, end and text of its lines, without their words).
+    get_meeting for each meeting of a quarter read whole transcripts with every word, its versions and
+    translations: seconds for a large library."""
+    from app.database import _db_lock, _list_speakers, _loads_dict, _num, get_connection
+
+    out: Dict[int, Dict[str, Any]] = {}
+    with _db_lock:
+        conn = get_connection()
+        try:
+            for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+                part = ids[i:i + 500]
+                marks = ",".join("?" * len(part))
+                for r in conn.execute(f"SELECT id, series_id, speakers_json, summaries_json FROM meetings WHERE id IN ({marks})", part):
+                    out[r["id"]] = {"series_id": r["series_id"], "protocol": _loads_dict(r["summaries_json"]).get("protocol") or "",
+                                    "speakers": _list_speakers(r["id"], r["speakers_json"] or "{}") if me else {}, "lines": []}
+                if not me:
+                    continue
+                for r in conn.execute(
+                        "SELECT meeting_id, json_extract(data, '$.speaker') AS speaker, json_extract(data, '$.start') AS start, "
+                        "json_extract(data, '$.end') AS end, json_extract(data, '$.text') AS text FROM segments "
+                        f"WHERE meeting_id IN ({marks}) AND json_valid(data) ORDER BY meeting_id, pos", part):
+                    if r["meeting_id"] in out:
+                        out[r["meeting_id"]]["lines"].append(
+                            {"speaker": r["speaker"], "start": _num(r["start"]), "end": _num(r["end"]), "text": r["text"]})
+        finally:
+            conn.close()
+    return out
+
+
+def _facts(m: Dict[str, Any], got: Dict[str, Any], me: set, task_counts: Dict[int, int]) -> Dict[str, Any]:
     """What a meeting gave: its decisions, its tasks, the user's share of the talk, and why it may be one
-    «без итогов» (reasons: no_outcome, silent; series is added over the period)."""
+    «без итогов» (reasons: no_outcome, silent; series is added over the period). `m` is the row of the
+    library list, `got` what _outcomes read of it."""
     from app.features import decisions_of
 
-    protocol = (full.get("summaries") or {}).get("protocol") or ""
+    protocol = got.get("protocol") or ""
     decisions = decisions_of(protocol)
-    duration = float(full.get("duration") or 0)
+    duration = float(m.get("duration") or 0)
     share = None
-    if me and full.get("segments"):
+    if me and got.get("lines"):
         try:
             from app.analytics import conversation_analytics
 
-            rows = conversation_analytics(full)["speakers"]
+            rows = conversation_analytics({"duration": duration, "segments": got["lines"],
+                                           "speakers": got.get("speakers") or {}})["speakers"]
             if rows:
                 share = round(sum(float(r["share"]) for r in rows if str(r.get("name") or "").strip().lower() in me), 1)
         except Exception:
             share = None
     reasons = []
-    if protocol and duration >= NO_OUTCOME_MIN_SEC and not decisions and not task_counts.get(full.get("id") or 0):
+    if protocol and duration >= NO_OUTCOME_MIN_SEC and not decisions and not task_counts.get(m.get("id") or 0):
         reasons.append("no_outcome")
     if share is not None and duration >= SILENT_MIN_SEC and share < SILENT_SHARE:
         reasons.append("silent")
-    return {"decisions": decisions, "tasks": task_counts.get(full.get("id") or 0, 0), "my_share": share,
+    return {"decisions": decisions, "tasks": task_counts.get(m.get("id") or 0, 0), "my_share": share,
             "analysed": bool(protocol), "reasons": reasons}
 
 
@@ -136,7 +169,8 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     today = today or date.today()
     start, end, prev = _bounds(period, today)
     fmap = feature_map()
-    meetings = [m for m in list_meetings() if _day(m) and m.get("status") not in ("failed", "cancelled")]
+    library = list_meetings()
+    meetings = [m for m in library if _day(m) and m.get("status") not in ("failed", "cancelled")]
     if feature_id:
         meetings = [m for m in meetings if feature_id in fmap.get(m["id"], [])]
     now = [m for m in meetings if start <= _day(m) < end]
@@ -181,7 +215,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
 
     # every feature: its meetings of the period, its open tasks, the last eight weeks, its last meeting
     week0 = today - timedelta(days=today.weekday())
-    all_meetings = meetings if not feature_id else [m for m in list_meetings() if _day(m)]
+    all_meetings = meetings if not feature_id else [m for m in library if _day(m)]
     feats = []
     all_tasks = commitments.all_tasks() if feature_id else tasks
     for f in list_features():
@@ -263,21 +297,19 @@ def _days_open(t: Dict[str, Any], today: date) -> int:
 def _meeting_rows(meetings: List[Dict[str, Any]], me: set, fmap: Dict[int, List[int]]) -> List[Dict[str, Any]]:
     """Each meeting with what it gave (_facts), newest first; «decision_texts» for the caller to take."""
     from app import commitments
-    from app.database import get_meeting
 
     counts: Dict[int, int] = {}
     for t in commitments.for_meetings([m["id"] for m in meetings]) if meetings else []:
         counts[t["meeting_id"]] = counts.get(t["meeting_id"], 0) + 1
+    got = _outcomes([m["id"] for m in meetings], me) if meetings else {}
     rows = []
     for m in sorted(meetings, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True):
-        try:
-            full = get_meeting(m["id"]) or {}
-        except Exception:
+        if m["id"] not in got:  # deleted meanwhile
             continue
-        f = _facts(full, me, counts)
+        f = _facts(m, got[m["id"]], me, counts)
         rows.append({"id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat(),
                      "time": str(m.get("recorded_at") or "")[11:16], "duration": float(m.get("duration") or 0),
-                     "features": fmap.get(m["id"], []), "series_id": full.get("series_id"),
+                     "features": fmap.get(m["id"], []), "series_id": got[m["id"]]["series_id"],
                      "decisions": len(f["decisions"]), "tasks": f["tasks"], "my_share": f["my_share"],
                      "analysed": f["analysed"], "reasons": f["reasons"], "decision_texts": f["decisions"]})
     _series_reasons(rows)
