@@ -370,6 +370,9 @@ def apply_pending() -> Optional[str]:
     for suffix in ("-wal", "-shm"):
         Path(str(DB_PATH) + suffix).unlink(missing_ok=True)
     PENDING.replace(DB_PATH)
+    from app.database import forget_settings
+
+    forget_settings()  # the settings of the restored copy
     print(f"[backup] restored the library from a backup; the previous database is {kept.name}", flush=True)
     _prune_before_restore()
     return str(kept)

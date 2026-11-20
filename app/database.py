@@ -57,6 +57,7 @@ def init_db() -> None:
     except Exception as e:
         print(f"[backup] restore failed: {e}", flush=True)
     hw = get_hardware_info()
+    forget_settings()  # the defaults and the one-time changes below write the table directly
     with _db_lock:
         conn = get_connection()
         # WAL lets the UI read while the worker writes progress updates
@@ -352,6 +353,7 @@ def init_db() -> None:
                         "SELECT rowid, meeting_id, segment_id FROM segments_fts")
 
         conn.commit()
+        forget_settings()
         if moved:
             # The transcripts' old place is free space in the file: given back to the disk once
             try:
@@ -663,24 +665,46 @@ def _reindex_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[
 
 
 # Settings helpers
+# The settings as last read: about a hundred places read them, some every few seconds (call detection,
+# the calendar per event), each with a new connection. Only update_settings, init_db and a restored
+# backup (forget_settings) change the table.
+_settings_cache: Optional[Dict[str, str]] = None
+
+
+def forget_settings() -> None:
+    """The settings are read again at the next get_all_settings (the table was changed some other way)."""
+    global _settings_cache
+    with _db_lock:
+        _settings_cache = None
+
+
 def get_all_settings() -> Dict[str, str]:
+    global _settings_cache
+    cached = _settings_cache
+    if cached is not None:
+        return dict(cached)  # a copy: a caller changing it does not change the settings
     with _db_lock:
         conn = get_connection()
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         conn.close()
-        return {r["key"]: r["value"] for r in rows}
+        _settings_cache = {r["key"]: r["value"] for r in rows}
+        return dict(_settings_cache)
 
 
 def update_settings(new_settings: Dict[str, Any]) -> Dict[str, str]:
+    global _settings_cache
     with _db_lock:
         conn = get_connection()
-        for k, v in new_settings.items():
-            conn.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (k, str(v)),
-            )
-        conn.commit()
-        conn.close()
+        try:
+            for k, v in new_settings.items():
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (k, str(v)),
+                )
+            conn.commit()
+        finally:
+            _settings_cache = None
+            conn.close()
     return get_all_settings()
 
 
