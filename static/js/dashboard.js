@@ -547,7 +547,7 @@ function dbWeek() {
     const live = !done && it.at.getTime() <= now;
     const pct = live ? Math.round((now - it.at) / Math.max(1, it.end - it.at) * 100) : 0;
     return `<button class="db-ev${done ? ' done' : ''}${live ? ' live' : ''}${it.own ? ' own' : ''}" ${it.rec ? `data-click="openMeeting" data-click-args='[${it.rec}]'` : 'disabled'} title="${escapeHtml(it.title)}">`
-      + `<span class="db-tm">${pad(it.at.getHours())}:${pad(it.at.getMinutes())}</span> ${escapeHtml(it.title)}${live ? `<i class="db-ev-prog" style="width:${pct}%"></i>` : ''}</button>`;
+      + `<span class="db-tm">${pad(it.at.getHours())}:${pad(it.at.getMinutes())}</span> <span class="db-ev-t">${escapeHtml(it.title)}</span>${live ? `<i class="db-ev-prog" style="width:${pct}%"></i>` : ''}</button>`;
   };
   const nowDate = new Date(now);
   return `<div class="db-cal" style="grid-template-columns:repeat(${shown.length}, minmax(0, 1fr))">` + shown.map(x => {
