@@ -888,6 +888,7 @@ function closeCalendarView() {
 
 async function calLoad() {
   const { a, b } = calRange();
+  const seq = (calView.seq = (calView.seq || 0) + 1);  // a quick ‹ › : only the last answer is shown (found in the audit)
   calView.loading = true;
   renderCalendarView();
   const [data, work] = await Promise.all([
@@ -895,6 +896,7 @@ async function calLoad() {
       .then(r => (r.ok ? r.json() : null)).catch(() => null),
     fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
   ]);
+  if (seq !== calView.seq) return;
   calView.work = work && work.enabled ? work.days : {};
   calView.loading = false;
   calView.data = data;
