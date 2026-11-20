@@ -399,6 +399,42 @@ class PortChoiceTest(unittest.TestCase):
             self.assertEqual(run.choose_port("127.0.0.1", ours), (ours, True))
 
 
+class BrowserAddressTest(unittest.TestCase):
+    def test_the_browser_gets_a_one_time_address_not_the_token(self):
+        """Found in the audit: the browser mode opened /?token=..., kept in the browser's history."""
+        import http.server
+        import json
+        import threading
+
+        import run
+
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                seen.append((self.path, json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
+                body = json.dumps({"boot": "once"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        port = srv.server_address[1]
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"):
+            url = run.app_url("127.0.0.1", port)
+        self.assertEqual(url, f"http://127.0.0.1:{port}/?boot=once")
+        self.assertEqual(seen, [("/api/session/boot", {"token": "secret-token"})])
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"):
+            self.assertNotIn("secret-token", run.app_url("127.0.0.1", 1))  # nothing answers: the plain address
+
+
 class PyEnvTest(unittest.TestCase):
     def test_missing_pip_is_bootstrapped_with_ensurepip(self):
         from app import pyenv
