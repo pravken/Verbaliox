@@ -1027,6 +1027,9 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-main { gap: 2px; padding: 0 3px; }
 .tb-main .tb-tab { height: 34px; padding: 0 14px; border-radius: 17px; gap: 7px; }
 .tb-mark { width: 14px; height: 14px; flex: none; color: var(--accent-hi); }
+/* the count on «Главная» in the accent, and orange when something is overdue or due today */
+#nav-tasks:not(.tb-active) .tb-badge { background: rgb(var(--accent-rgb) / 0.4); color: #FFFFFF; font-weight: 600; }
+#nav-tasks .tb-badge.tb-badge-hot { background: #FF9F0A; color: #1C1C1E; font-weight: 700; }
 .tb-active .tb-mark { color: #FFFFFF; }
 /* the recording's tabs in its header: a size lower than the bar's */
 #workspace-header .tb-rec-tabs { height: 36px; padding: 0 3px; margin-left: 6px; }
