@@ -313,6 +313,8 @@ def init_db() -> None:
             )
             """
         )
+        cur.execute(_FTS_ROWS_DDL)
+        cur.execute(_FTS_ROWS_INDEX)
         # The transcript: one row per line (see _write_segments), not one JSON in the recording's row
         cur.execute(_SEGMENTS_DDL)
         cur.execute(_VERSIONS_DDL)
@@ -337,9 +339,16 @@ def init_db() -> None:
         if cur.execute("PRAGMA user_version").fetchone()[0] < _FTS_SCHEMA_VERSION:
             # First start with the index (or a newer index format): build it from stored transcripts
             cur.execute("DELETE FROM segments_fts")
+            cur.execute("DELETE FROM segments_fts_rows")
             for row in cur.execute("SELECT id FROM meetings").fetchall():
                 _reindex_segments(conn, row["id"], _read_segments(conn, row["id"]))
             cur.execute(f"PRAGMA user_version = {_FTS_SCHEMA_VERSION}")
+        elif not _fts_rows_match(conn):
+            # The index made before this table (or changed by an older version after a downgrade):
+            # its rows listed again, once (under a second for a library of 300 000 lines)
+            cur.execute("DELETE FROM segments_fts_rows")
+            cur.execute("INSERT INTO segments_fts_rows (id, meeting_id, segment_id) "
+                        "SELECT rowid, meeting_id, segment_id FROM segments_fts")
 
         conn.commit()
         if moved:
@@ -352,6 +361,62 @@ def init_db() -> None:
 
 
 _FTS_SCHEMA_VERSION = 1
+
+# Where each line of a recording is in segments_fts (its rowid): the index stores meeting_id and
+# segment_id UNINDEXED, so deleting by them scanned the whole index (an edit of 300 lines took 16 s
+# under the lock); a delete by the rowid found here is a lookup
+_FTS_ROWS_DDL = """CREATE TABLE IF NOT EXISTS segments_fts_rows (
+    id INTEGER PRIMARY KEY,
+    meeting_id INTEGER NOT NULL,
+    segment_id INTEGER NOT NULL
+)"""
+_FTS_ROWS_INDEX = "CREATE INDEX IF NOT EXISTS segments_fts_rows_line ON segments_fts_rows (meeting_id, segment_id)"
+
+
+def _fts_count(conn: sqlite3.Connection) -> int:
+    try:  # the index's own row sizes, one per row: counted without reading the texts
+        return int(conn.execute("SELECT count(*) FROM segments_fts_docsize").fetchone()[0])
+    except sqlite3.Error:
+        return int(conn.execute("SELECT count(*) FROM segments_fts").fetchone()[0])
+
+
+def _fts_last(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT rowid FROM segments_fts ORDER BY rowid DESC LIMIT 1").fetchone()
+    return int(row[0]) if row else 0
+
+
+def _fts_rows_match(conn: sqlite3.Connection) -> bool:
+    """Whether segments_fts_rows lists the index as it is (same number of rows, same last rowid)."""
+    count, last = conn.execute("SELECT count(*), COALESCE(max(id), 0) FROM segments_fts_rows").fetchone()
+    return _fts_count(conn) == int(count) and _fts_last(conn) == int(last)
+
+
+def _fts_delete(conn: sqlite3.Connection, meeting_id: int, segment_ids: Optional[List[int]] = None) -> None:
+    """Deletes the index rows of a recording (or of its lines with these ids) by their rowids."""
+    if segment_ids is None:
+        rows = conn.execute("SELECT id FROM segments_fts_rows WHERE meeting_id = ?", (meeting_id,)).fetchall()
+    else:
+        rows = []
+        ids = sorted(set(segment_ids))
+        for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+            part = ids[i:i + 500]
+            rows += conn.execute(f"SELECT id FROM segments_fts_rows WHERE meeting_id = ? AND segment_id IN "
+                                 f"({','.join('?' * len(part))})", (meeting_id, *part)).fetchall()
+    rowids = [(r[0],) for r in rows]
+    conn.executemany("DELETE FROM segments_fts WHERE rowid = ?", rowids)
+    conn.executemany("DELETE FROM segments_fts_rows WHERE id = ?", rowids)
+
+
+def _fts_insert(conn: sqlite3.Connection, rows: List[tuple]) -> None:
+    """Adds index rows (text, meeting_id, segment_id, start, speaker), each listed in segments_fts_rows."""
+    if not rows:
+        return
+    mine = conn.execute("SELECT COALESCE(max(id), 0) FROM segments_fts_rows").fetchone()[0]
+    first = max(_fts_last(conn), int(mine)) + 1
+    conn.executemany("INSERT INTO segments_fts (rowid, text, meeting_id, segment_id, start, speaker) VALUES (?, ?, ?, ?, ?, ?)",
+                     [(first + i, *r) for i, r in enumerate(rows)])
+    conn.executemany("INSERT INTO segments_fts_rows (id, meeting_id, segment_id) VALUES (?, ?, ?)",
+                     [(first + i, r[1], r[2]) for i, r in enumerate(rows)])
 
 # Columns added after the first release, with their SQL type and default
 _MEETING_EXTRA_COLUMNS = {
@@ -574,15 +639,14 @@ def _reindex_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[
         if len(set(ids)) == len(ids) and len(set(old_ids)) == len(old_ids):
             rows = _segment_rows(segments)
             changed = [i for i, (r, o) in enumerate(zip(rows, before)) if r != o]
-            conn.executemany("DELETE FROM segments_fts WHERE meeting_id = ? AND segment_id = ?",
-                             [(meeting_id, old_ids[i]) for i in changed])
+            _fts_delete(conn, meeting_id, [old_ids[i] for i in changed])
             lines = [segments[i] for i in changed]
         else:
             before = None
     if before is None or len(before) != len(segments):
-        conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
-    conn.executemany(
-        "INSERT INTO segments_fts (text, meeting_id, segment_id, start, speaker) VALUES (?, ?, ?, ?, ?)",
+        _fts_delete(conn, meeting_id)
+    _fts_insert(
+        conn,
         [
             (
                 seg.get("text") or "",
@@ -1836,7 +1900,7 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
         _speaker_seconds_cache.pop(meeting_id, None)
         conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ?", (meeting_id,))
-        conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
+        _fts_delete(conn, meeting_id)
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))
         # its tasks, the tasks deleted from it (they were examples for the model: a recording kept to
@@ -1876,7 +1940,7 @@ def clear_results(meeting_id: int) -> bool:
         _speaker_seconds_cache.pop(meeting_id, None)
         # the Teams captions stay: read during the recording, they cannot be made again
         conn.execute("DELETE FROM transcript_versions WHERE meeting_id = ? AND model != 'teams'", (meeting_id,))
-        conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
+        _fts_delete(conn, meeting_id)
         conn.execute("DELETE FROM semantic_chunks WHERE meeting_id = ?", (meeting_id,))
         conn.execute("DELETE FROM semantic_meta WHERE meeting_id = ?", (meeting_id,))
         try:

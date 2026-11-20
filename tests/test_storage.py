@@ -132,6 +132,53 @@ class SearchIndexTest(unittest.TestCase):
         res = {r["meeting_id"]: r for r in database.search_all_meetings("капуст борщ")}
         self.assertEqual([h["segment_id"] for h in res[mid]["hits"]], [1])
 
+    def _index_rows(self, mid):
+        conn = database.get_connection()
+        try:
+            fts = sorted((r[0], r[1]) for r in conn.execute(
+                "SELECT segment_id, text FROM segments_fts WHERE meeting_id = ?", (mid,)))
+            listed = conn.execute("SELECT count(*) FROM segments_fts_rows WHERE meeting_id = ?", (mid,)).fetchone()[0]
+            return fts, listed, database._fts_rows_match(conn)
+        finally:
+            conn.close()
+
+    def test_an_edit_replaces_only_its_lines_in_the_index(self):
+        mid = self._meeting("Правка", ["первая строка", "вторая строка", "третья строка"])
+
+        def change(m):
+            m["segments"][1]["text"] = "исправленная строка"
+            return ("segments",)
+
+        database.edit_meeting(mid, change)
+        fts, listed, match = self._index_rows(mid)
+        self.assertEqual(fts, [(1, "первая строка"), (2, "исправленная строка"), (3, "третья строка")])
+        self.assertEqual(listed, 3)
+        self.assertTrue(match)
+        self.assertEqual([h["segment_id"] for h in {r["meeting_id"]: r for r in
+                          database.search_all_meetings("исправленн")}[mid]["hits"]], [2])
+        self.assertNotIn(mid, [r["meeting_id"] for r in database.search_all_meetings("вторая")])
+        database.clear_results(mid)
+        self.assertEqual(self._index_rows(mid)[:2], ([], 0))
+
+    def test_rowid_list_of_an_older_index_is_made_at_start(self):
+        """A library indexed before segments_fts_rows existed (or by an older version) gets it listed."""
+        mid = self._meeting("Старый индекс", ["слово один", "слово два"])
+        conn = database.get_connection()
+        conn.execute("DELETE FROM segments_fts_rows")
+        conn.commit()
+        conn.close()
+        database.init_db()
+        fts, listed, match = self._index_rows(mid)
+        self.assertEqual(listed, 2)
+        self.assertTrue(match)
+
+        def change(m):
+            m["segments"][0]["text"] = "другое"
+            return ("segments",)
+
+        database.edit_meeting(mid, change)
+        self.assertEqual(self._index_rows(mid)[0], [(1, "другое"), (2, "слово два")])
+
     def test_hits_are_capped_per_meeting(self):
         mid = self._meeting("cap", [f"повтор {i}" for i in range(10)])
         res = {r["meeting_id"]: r for r in database.search_all_meetings("повтор")}
@@ -509,7 +556,9 @@ class SegmentsTableTest(unittest.TestCase):
 
         with mock.patch.object(database, "get_connection", side_effect=counting):
             database.edit_meeting(m["id"], change)
-        self.assertEqual(len(writes), 3, writes)  # the line, and its search entry deleted and added
+        # the line, and its search entry deleted and added (each with its place in segments_fts_rows)
+        self.assertEqual(len(writes), 5, writes)
+        self.assertTrue(any(w.startswith("DELETE FROM segments_fts WHERE rowid") for w in writes), writes)
         got = database.get_meeting(m["id"])["segments"]
         hits = [h for h in database.search_all_meetings("правка") if h["meeting_id"] == m["id"]]
         self.assertTrue(hits)
