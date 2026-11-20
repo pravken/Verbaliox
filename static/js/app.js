@@ -1826,6 +1826,8 @@ async function loadMeetingInfo() {
     if (!state.activeMeeting || state.activeMeeting.id !== id) return;
     renderMeetingInfo(info);
   } catch (e) {
+    // Same check as on success: the user may have opened another recording meanwhile
+    if (!state.activeMeeting || state.activeMeeting.id !== id) return;
     box.innerHTML = `<div class="py-6 text-xs text-apple-red">${escapeHtml(e.message)}</div>`;
   }
 }
