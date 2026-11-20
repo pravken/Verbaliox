@@ -38,6 +38,32 @@ class BeforeMeetingTest(unittest.TestCase):
         self.assertEqual(notes[-1]["target"], f"brief:series:{sid}")
         self.assertIn("10:00", notes[-1]["title"])
 
+    def test_the_library_is_read_once_for_all_events(self):
+        """A day of meetings: the series, the people met and their recordings are looked up in one
+        reading of the library, not three per event."""
+        from app import commitments, database
+
+        init_db()
+        a = create_meeting("Ретро команды 05.11", "a.wav", "a.wav")
+        sid = series.create_series("Ретро команды")
+        update_meeting_fields(a["id"], series_id=sid)
+        update_meeting_progress(a["id"], status="completed")
+        b = create_meeting("Разговор", "b.wav", "b.wav")
+        database.edit_meeting(b["id"], lambda m: (m["speakers"].update(S1={"name": "Зоя Тестова"}), ("speakers",))[1])
+        update_meeting_progress(b["id"], status="completed")
+        commitments.create("Прислать план", "Зоя Тестова", meeting_id=b["id"])
+        reads = []
+        real = database.list_meetings
+        with mock.patch("app.series.list_meetings", side_effect=lambda: reads.append(1) or real()):
+            index = series.EventIndex()
+            infos = [series.before_meeting(t, people, index=index) for t, people in
+                     [("Ретро команды 12.11", []), ("Ретро команды 19.11", []), ("Обед", ["Зоя тестова"]), ("Обед", ["Никто"])]]
+        self.assertEqual(len(reads), 1)
+        self.assertEqual([i["series_id"] if i else None for i in infos], [sid, sid, None, None])
+        self.assertEqual(infos[0]["last"]["id"], a["id"])
+        self.assertEqual((infos[2]["person"], infos[2]["last"]["id"], infos[2]["open_tasks"]), ("Зоя тестова", b["id"], 1))
+        self.assertEqual(infos[2], series.before_meeting("Обед", ["Зоя тестова"]))  # as without the index
+
 
 @unittest.skipIf(series is None, "app dependencies not installed")
 class JoinTest(unittest.TestCase):
