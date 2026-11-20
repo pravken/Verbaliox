@@ -302,6 +302,9 @@ await step('day off from the calendar', async () => {
 // Settings → Календарь: a vacation marked by hand is saved at once and listed (asked by the user)
 await step('own days off', async () => {
   await page.evaluate(() => { openModal('settings', 'general'); selectSettingsTab('calendar'); });
+  // another tab of Settings fades in, like the views (asked by the user: it changed abruptly)
+  expect(await page.evaluate(() => [...document.querySelectorAll('#modal-settings [data-stab]:not(.hidden)')].some(el => el.classList.contains('vx-in'))),
+    'the settings tab did not fade in');
   await sleep(400);
   await page.evaluate(() => {
     document.getElementById('dayoff-from').value = '2026-03-02';
