@@ -175,6 +175,18 @@ class FeatureTagsTest(unittest.TestCase):
         self.assertEqual(len(page["weeks"]), features.WEEKS)
         self.assertEqual(page["weeks"][-1]["meetings"], 1)  # made this week
         self.assertEqual(page["last"], page["meetings"][0]["date"][:10])
+        self.assertEqual(page["week"]["decisions"], 2)  # the meeting is of this week
+        self.assertEqual(page["week"]["tasks_new"], 1)
+        self.assertIsNone(page["next"])  # no calendar
+        # the next calendar meeting: one whose title names the feature
+        from datetime import datetime, timedelta
+
+        ev = {"title": "Синк: платежи и возвраты", "start": (datetime.now() + timedelta(days=1)).isoformat(timespec="minutes"),
+              "end": (datetime.now() + timedelta(days=1, hours=1)).isoformat(timespec="minutes"), "attendees": [], "join": ""}
+        other = dict(ev, title="Обед")
+        with mock.patch("app.calendar_ics.upcoming", return_value=[other, ev]), \
+                mock.patch("app.database.get_all_settings", return_value={"calendar_ics": "outlook"}):
+            self.assertEqual(features.next_meeting(pay, [mid])["title"], "Синк: платежи и возвраты")
         self.assertEqual(features.decisions_of("## Decisions\n1. Ship it\n## Next\n- x"), ["Ship it"])
         self.assertEqual(features.decisions_of("**Решения**\n- Да\n**Итог**\n- нет"), ["Да"])
         from app.ollama_client import SUMMARY_TEMPLATES

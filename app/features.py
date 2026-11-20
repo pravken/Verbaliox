@@ -410,7 +410,40 @@ def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:
                          "decisions": decisions_of(sums.get("protocol") or "")})
     meetings.sort(key=lambda m: m["date"], reverse=True)
     tasks = commitments.for_meetings([m["id"] for m in meetings]) if meetings else []
-    return {"feature": f, "meetings": meetings, "tasks": tasks, **_card(rows, meetings, today)}
+    return {"feature": f, "meetings": meetings, "tasks": tasks, **_card(rows, meetings, today),
+            "next": next_meeting(f, [m["id"] for m in meetings]), "week": _week(meetings, tasks, today)}
+
+
+def _week(meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]], today=None) -> Dict[str, int]:
+    """What changed in the last 7 days: decisions of the meetings recorded then, tasks made and done then."""
+    from datetime import date, timedelta
+
+    since = ((today or date.today()) - timedelta(days=6)).isoformat()
+    return {"decisions": sum(len(m["decisions"]) for m in meetings if m["date"][:10] >= since),
+            "tasks_new": sum(1 for t in tasks if str(t.get("created_at") or "")[:10] >= since),
+            "tasks_done": sum(1 for t in tasks if t.get("status") == "done" and str(t.get("done_at") or "")[:10] >= since)}
+
+
+def next_meeting(f: Dict[str, Any], meeting_ids: List[int]) -> Optional[Dict[str, Any]]:
+    """The feature's next calendar meeting within two weeks: its title names the feature (its name or a
+    keyword), or it continues a series whose recordings are the feature's. None without a calendar."""
+    try:
+        from app import calendar_ics, series
+        from app.database import get_all_settings, list_meetings
+
+        if not (get_all_settings().get("calendar_ics") or "").strip():
+            return None
+        ours = set(meeting_ids)
+        done = [r for r in list_meetings() if r.get("status") == "completed"]
+        series_ids = {r.get("series_id") for r in done if r["id"] in ours and r.get("series_id")}
+        phrases = [f["name"], *split_list(f.get("keywords"))]
+        for e in calendar_ics.upcoming(hours=24 * 14, limit=60):
+            if any(_mentions(e["title"], p) for p in phrases) or \
+                    (series_ids and series.match_event(e["title"], [], done).get("series_id") in series_ids):
+                return e
+    except Exception:
+        return None
+    return None
 
 
 WEEKS = 12
