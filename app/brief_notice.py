@@ -21,6 +21,8 @@ def due(now: datetime):
 
     out = []
     for e in calendar_ics.window(now + timedelta(minutes=AHEAD_MIN - 1), now + timedelta(minutes=AHEAD_MIN + 1)):
+        if not calendar_ics.is_meeting(e):  # a long block, or one the user said is no meeting
+            continue
         key = f"{e.get('uid') or e['title']}|{e['start'].isoformat(timespec='minutes')}"
         if key in _told or e["start"] <= now:
             continue
