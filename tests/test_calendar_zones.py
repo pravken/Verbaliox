@@ -1,5 +1,7 @@
 """Calendar events of other zones, moved meetings of a series, «the first Monday of the month»."""
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
+import os
+import time
 import unittest
 from datetime import datetime, timezone
 
@@ -52,6 +54,25 @@ class ZonesTest(unittest.TestCase):
                   'END:DAYLIGHT\nEND:VTIMEZONE\n'
                   'BEGIN:VEVENT\nUID:c\nSUMMARY:X\nDTSTART;TZID="(UTC+01:00) Amsterdam":20260715T100000\nEND:VEVENT\n')[0]
         self.assertEqual(ev["start"], _local(datetime(2026, 7, 15, 8, 0, tzinfo=timezone.utc)))
+
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "the process zone cannot be changed here")
+    def test_a_utc_series_keeps_its_utc_time_across_the_viewers_summer_time(self):
+        # seen from Berlin: 09:00 local (UTC+2) before the change, 08:00 (UTC+1) after it
+        old = os.environ.get("TZ")
+        os.environ["TZ"] = "Europe/Berlin"
+        time.tzset()
+        try:
+            evs = _one("BEGIN:VEVENT\nUID:u\nSUMMARY:Sync\nDTSTART:20260914T070000Z\nDTEND:20260914T073000Z\n"
+                       "RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261102T070000Z\nEND:VEVENT\n")
+            got = [o["start"] for o in calendar_ics.occurrences(evs[0], datetime(2026, 10, 19), datetime(2026, 11, 10))]
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+            time.tzset()
+        self.assertEqual(got, [datetime(2026, 10, 19, 9, 0), datetime(2026, 10, 26, 8, 0), datetime(2026, 11, 2, 8, 0)])
 
 
 class SeriesTest(unittest.TestCase):
