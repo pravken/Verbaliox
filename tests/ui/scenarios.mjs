@@ -209,10 +209,15 @@ await step('setup steps after an update', async () => {
   const next = async () => {
     const was = await page.getAttribute('#setup-steps-dialog', 'data-step');
     await page.click('#setup-steps button[data-a="next"]');
-    await page.waitForFunction(prev => {
-      const d = document.getElementById('setup-steps-dialog');
-      return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
-    }, was);
+    // polled with evaluate: waitForFunction is refused by the page's CSP (no eval) in CI's Playwright
+    for (let i = 0; i < 80; i++) {
+      const moved = await page.evaluate(prev => {
+        const d = document.getElementById('setup-steps-dialog');
+        return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
+      }, was);
+      if (moved) break;
+      await sleep(100);
+    }
   };
   await next();
   // then the news of the version, one step each: the last one closes the wizard
