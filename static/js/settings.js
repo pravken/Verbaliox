@@ -3242,8 +3242,14 @@ function fillWorkdaySettings(s) {
 
 // --- The user's own days off and vacations (days_off): days off like holidays, saved at once ---
 let daysOff = [];
+let daysOffSaved = 0;  // when the list was last saved here: a fill of the form asked for before keeps it
 function renderDaysOff(raw) {
-  if (raw !== undefined) { try { daysOff = JSON.parse(raw || '[]'); } catch (e) { daysOff = []; } if (!Array.isArray(daysOff)) daysOff = []; }
+  // the settings filled again from an answer older than the last save would bring back what was just
+  // removed (seen on a slow computer): the list saved here wins for a few seconds
+  if (raw !== undefined && Date.now() - daysOffSaved > 5000) {
+    try { daysOff = JSON.parse(raw || '[]'); } catch (e) { daysOff = []; }
+    if (!Array.isArray(daysOff)) daysOff = [];
+  }
   const box = document.getElementById('dayoff-list');
   if (!box) return;
   const today = calKey(new Date());
@@ -3260,6 +3266,7 @@ async function saveDaysOff(list) {
     body: JSON.stringify({ settings: { days_off: JSON.stringify(list) } }) }).catch(() => null);
   if (!r || !r.ok) { const err = r ? await r.json().catch(() => ({})) : {}; showError(serverText(err.detail) || t('errorGeneric')); return false; }
   daysOff = list.slice().sort((a, b) => a.from.localeCompare(b.from));
+  daysOffSaved = Date.now();
   if (state.system && state.system.settings) state.system.settings.days_off = JSON.stringify(daysOff);
   renderDaysOff();
   if (typeof loadDashboard === 'function') loadDashboard();
