@@ -308,14 +308,22 @@ await step('own days off', async () => {
     document.getElementById('dayoff-to').value = '2026-03-04';
     document.getElementById('dayoff-title').value = 'Отпуск';
   });
+  // waited for, not timed: a slow computer (CI) saves later
+  const listed = async want => {
+    for (let i = 0; i < 50; i++) {
+      if ((await page.textContent('#dayoff-list')).includes('Отпуск') === want) return true;
+      await sleep(100);
+    }
+    return false;
+  };
   await page.click('button[data-click="addDayOff"]');
-  await sleep(500);
-  expect((await page.textContent('#dayoff-list')).includes('Отпуск'), 'the vacation is not listed');
+  expect(await listed(true), 'the vacation is not listed');
   const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(JSON.parse(set.days_off)[0].to === '2026-03-04', `not saved: ${set.days_off}`);
   await page.click('#dayoff-list button[data-click="removeDayOff"]');
-  await sleep(500);
-  expect(!(await page.textContent('#dayoff-list')).includes('Отпуск'), 'the vacation was not removed');
+  expect(await listed(false), 'the vacation was not removed');
+  await sleep(1500);  // a fill of the settings asked for before must not bring it back
+  expect(!(await page.textContent('#dayoff-list')).includes('Отпуск'), 'the vacation came back');
   await page.evaluate(() => closeModal('settings'));
 });
 
