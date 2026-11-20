@@ -253,7 +253,10 @@ def init_db() -> None:
             "meet_notify": "true",  # a Windows notification 5 minutes before a calendar meeting (app/brief_notice.py)
             "holiday_country": "",  # public holidays of this country count as days off (app/holidays_cal.py); "" = none
             "holiday_subdiv": "",  # ...and of its region
-            "days_off": "[]",  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)
+            "days_off": "[]",
+            "worktime_track": "true",  # count the minutes this computer is in use: the working day (app/worktime.py)
+            "work_remind_hours": "8",  # ...and tell when this many hours are worked; 0 = never
+            "work_reminded_day": "",  # the working day told about already  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)
             "setup_done": "[]",  # the steps of the setup after an update already answered (static/js/settings.js SETUP_STEPS)
             "meet_ignore": "[]",  # calendar events that are no meeting: [{id: series, key: one, title}] (calendar_ics.is_meeting)
             "meet_never": "[]",  # calendar meetings never recorded or asked about: [{id: series, title}], JSON

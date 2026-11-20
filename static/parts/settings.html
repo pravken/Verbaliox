@@ -572,6 +572,20 @@
               <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasNotifyHint">Уведомление Windows. Если в приглашении есть ссылка на Teams, Zoom, Google Meet или Webex, нажатие подключает к звонку.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-meet-notify" checked />
           </label>
+          <!-- How long the working day lasted (app/worktime.py) and the reminder of the norm -->
+          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
+            <span><span data-i18n="rdSasWorktime">Считать отработанное время</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasWorktimeHint">Минуты, когда за компьютером работают клавиатура и мышь, идёт запись или звонок, — как статус в Teams. Видно на «Главной» и в календаре. Только на этом компьютере.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-worktime-track" checked />
+          </label>
+          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
+            <label for="set-work-remind" data-i18n="rdSasWorkRemind">Напомнить, когда отработано</label>
+            <select id="set-work-remind" class="sx-time">
+              <option value="0" data-i18n="rdSasWorkRemindOff">не напоминать</option>
+              <option value="6">6 ч</option><option value="7">7 ч</option><option value="8">8 ч</option>
+              <option value="9">9 ч</option><option value="10">10 ч</option>
+            </select>
+          </div>
         </div>
         </div>
         <div data-stab="recognition" class="sx-section space-y-3 hidden">

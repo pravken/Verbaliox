@@ -43,6 +43,23 @@ def api_dashboard(period: str = "week", feature: int = 0, lang: str = "ru") -> D
     return out
 
 
+@router.get("/api/worktime")
+def api_worktime(start: str, end: str) -> Dict[str, Any]:
+    """The hours worked of the days start…end (YYYY-MM-DD, end not included; app/worktime.py)."""
+    from datetime import date, datetime
+
+    from app import worktime
+
+    try:
+        a, b = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    if not a < b or (b - a).days > 120:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    return {"enabled": worktime.enabled(), "supported": worktime.idle_seconds() is not None, "norm": worktime.remind_hours(),
+            "today": worktime.work_day(datetime.now()).isoformat(), "days": worktime.days(a, b)}
+
+
 @router.get("/api/holidays/countries")
 def api_holiday_countries() -> Dict[str, Any]:
     """The countries (and their regions) whose public holidays the app knows (app/holidays_cal.py)."""
