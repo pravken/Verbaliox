@@ -50,6 +50,18 @@ def _user32():
     return _WIN_API["user32"]
 
 
+def _console_is_ours_alone() -> bool:
+    """The console belongs to this process only (started by a double click or a shortcut). Started
+    from an open command prompt, the console is the prompt's: hiding it would hide the user's window."""
+    from ctypes import wintypes
+
+    k = ctypes.WinDLL("kernel32")
+    k.GetConsoleProcessList.argtypes = [ctypes.POINTER(wintypes.DWORD), wintypes.DWORD]
+    k.GetConsoleProcessList.restype = wintypes.DWORD
+    pids = (wintypes.DWORD * 4)()
+    return k.GetConsoleProcessList(pids, len(pids)) == 1
+
+
 def set_app_user_model_id() -> None:
     """
     Sets an explicit Windows AppUserModelID so the taskbar groups the window
@@ -66,7 +78,7 @@ def set_app_user_model_id() -> None:
 
 def apply_native_window_icon_and_hide_console() -> None:
     """
-    Hides the console window and applies assets/icon.ico directly to the native
+    Hides the console window (only one this process has alone) and applies assets/icon.ico directly to the native
     Win32 window handle (both ICON_SMALL and ICON_BIG) so the taskbar and titlebar
     display the Willow icon instead of the default Python icon.
     """
@@ -77,7 +89,7 @@ def apply_native_window_icon_and_hide_console() -> None:
             kernel32 = ctypes.WinDLL("kernel32")
             kernel32.GetConsoleWindow.restype = wintypes.HWND
             hwnd_console = kernel32.GetConsoleWindow()
-            if hwnd_console:
+            if hwnd_console and _console_is_ours_alone():
                 _user32().ShowWindow(hwnd_console, 0)  # SW_HIDE = 0
         except Exception:
             pass
