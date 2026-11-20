@@ -173,7 +173,7 @@ async function installUpdate() {
 // and said; once more a little later, when its last «still recording» is old enough to be sure
 async function saveOrphanRecordings() {
   const res = await fetch('/api/record/orphans/save', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than: 12 }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ older_than: 30 }),
   }).catch(() => null);
   const data = res && res.ok ? await res.json().catch(() => null) : null;
   if (data && data.saved) {
@@ -184,7 +184,7 @@ async function saveOrphanRecordings() {
 
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(saveOrphanRecordings, 2000);
-  setTimeout(saveOrphanRecordings, 16000);
+  setTimeout(saveOrphanRecordings, 35000);  // past the 30 s of silence the server waits for
   state.autoScroll = true;
   loadSummaryTemplates();
   initLogoEasterEgg();

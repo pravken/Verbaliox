@@ -61,6 +61,20 @@ class WatchdogTest(unittest.TestCase):
             mid = recording.finish_recording(payload)["created"][0]["id"]
         self.assertEqual(get_meeting(mid)["recorded_at"], datetime.fromtimestamp(start).strftime("%Y-%m-%d %H:%M:%S"))
 
+    def test_a_page_opening_does_not_finish_a_recording_whose_heartbeat_is_late(self):
+        self._page("pg3")
+        payload = recording.RecordFinishPayload(title="Созвон", page_id="pg3", has_mic=True)
+        recording.api_record_heartbeat(payload)
+        try:
+            recording._beats["pg3"] = time.time() - 20  # two beats late: still recording
+            got = recording.api_save_orphans(recording.OrphanPayload(older_than=12))  # an older page asks for 12 s
+            self.assertEqual(got, {"saved": 0})
+            self.assertIn("pg3", recording._beats)
+        finally:
+            recording._beats.pop("pg3", None)
+            recording._page_recordings.pop("pg3", None)
+            (self.dir / ".rec_pg3.json").unlink(missing_ok=True)
+
     def test_after_a_crash_the_parts_become_one_recording_with_notes(self):
         page = self.dir / ".page_pg2.webm.part"
         page.write_bytes(b"x" * 8192)
