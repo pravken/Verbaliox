@@ -272,7 +272,7 @@ async function openFeaturePage(id) {
   // tasks: overdue first, then by due date, those without one last
   const sorted = open.slice().sort((x, y) => (tkIsOver(y) - tkIsOver(x)) || String(x.due_date || '9999').localeCompare(String(y.due_date || '9999')));
   const taskShown = all.tasks ? sorted : sorted.slice(0, 4);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = calKey(new Date());  // the local day: the due dates near midnight
   const meetShown = all.meetings ? data.meetings : data.meetings.slice(0, 5);
   let month = '';
   const meetings = meetShown.map(m => {

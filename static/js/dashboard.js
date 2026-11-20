@@ -553,7 +553,7 @@ function dbWeek() {
   return `<div class="db-cal" style="grid-template-columns:repeat(${shown.length}, minmax(0, 1fr))">` + shown.map(x => {
     const k = calKey(x), list = (items[k] || []).sort((p, q) => p.at - q.at);
     const hol = (w.holidays || {})[k];
-    const wk = DB.work && DB.work.days[k] ? DB.work.days[k].worked : 0;  // the hours worked that day (app/worktime.py)
+    const wk = DB.work && DB.work.enabled && DB.work.days[k] ? DB.work.days[k].worked : 0;  // the hours worked that day (app/worktime.py)
     const head = `<div class="db-dn${hol ? ' hol' : ''}"${hol ? ` title="${escapeHtml(hol)}"` : ''}><b>${x.getDate()}</b>${escapeHtml(x.toLocaleDateString(lang, { weekday: 'short' }))}`
       + (wk ? `<span class="db-dn-wk" title="${escapeHtml(t('dbWorkedTip').replace('{t}', () => dbHm(wk * 60)))}">${escapeHtml(dbWorkedShort(wk))}</span>` : '') + '</div>'
       + (hol ? `<div class="db-hol">${escapeHtml(hol)}</div>` : '');
@@ -936,7 +936,7 @@ function dbTickNow() {
   if (state.appView !== 'dashboard') return;
   const day = new Date().toDateString();
   if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
-  else dbLoadWork().then(() => {
+  else if (dbPrefs().layout.some(w => w.id === 'worked')) dbLoadWork().then(() => {
     dbPrefs().layout.forEach((w, i) => {
       if (w.id !== 'worked' || DB.edit || DB.drag) return;
       const c = document.querySelector(`#db-grid .db-w[data-i="${i}"] .db-c`);

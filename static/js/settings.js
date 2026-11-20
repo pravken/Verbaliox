@@ -3255,6 +3255,7 @@ async function addDayOff() {
   const from = a.value, to = b.value || a.value;
   if (!from) { showError(t('dayOffNeedDate')); return; }
   if (to < from) { showError(t('dayOffOrder')); return; }
+  if ((new Date(`${to}T12:00:00`) - new Date(`${from}T12:00:00`)) / 864e5 > 366) { showError(t('dayOffTooLong')); return; }
   // without a name: «Выходной» in the language of the page, the same in the list and on the week
   if (await saveDaysOff([...daysOff, { from, to, title: n.value.trim() || t('dayOffDefault') }])) {
     a.value = b.value = n.value = '';
@@ -3273,7 +3274,8 @@ const HOLIDAYS = { list: null, want: { country: '', subdiv: '' } };
 async function holidayCountries() {
   if (!HOLIDAYS.list) {
     const data = await fetch('/api/holidays/countries').then(r => (r.ok ? r.json() : null)).catch(() => null);
-    HOLIDAYS.list = (data && data.countries) || [];
+    if (!data) return HOLIDAYS.list || [];  // asked again next time; the saved choice is kept meanwhile
+    HOLIDAYS.list = data.countries || [];
     HOLIDAYS.available = !!(data && data.available);
     HOLIDAYS.home = (data && data.home) || '';
   }
@@ -3416,20 +3418,36 @@ async function openSetupSteps(s) {
   });
   wrap.addEventListener('click', async e => {
     const b = e.target.closest('button[data-a]');
-    if (!b) return;
+    if (!b || st.busy) return;
     const step = steps[st.at];
     if (b.dataset.a === 'later') { close(); return; }  // asked again at the next start
+    st.busy = true;  // a double click does not skip a step
+    wrap.querySelectorAll('.frw-foot button').forEach(x => { x.disabled = true; });
     // «Не нужно»: not asked again (Settings keep it); «Далее»/«Готово»: the choice is saved; «Открыть»: seen,
     // and the wizard gives way to the place the feature lives
     const extra = b.dataset.a === 'next' && step.apply ? step.apply(st) : {};
     await save([step.id], extra);
     if (Object.keys(extra).length && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
+    st.busy = false;
     if (b.dataset.a === 'open') { close(); step.open.run(); return; }
     if (st.at < steps.length - 1) { st.at += 1; draw(); } else close();
   });
   document.addEventListener('keydown', onKey, true);
   draw();
   document.body.appendChild(wrap);
+}
+
+// The country and region chosen; the saved ones as they are while the list is not there or does not hold them
+// (a request failed, a region renamed by an update of the holidays package): a save never erases them
+function holidayPayload() {
+  const known = code => (HOLIDAYS.list || []).some(c => c.code === code);
+  const sel = document.getElementById('set-holiday-country'), sub = document.getElementById('set-holiday-subdiv');
+  if (!HOLIDAYS.list || !HOLIDAYS.list.length || !sel || (HOLIDAYS.want.country && !known(HOLIDAYS.want.country) && !sel.value)) {
+    return { holiday_country: HOLIDAYS.want.country, holiday_subdiv: HOLIDAYS.want.subdiv };
+  }
+  const subs = holidaySubdivs(sel.value);
+  const keepSub = sel.value === HOLIDAYS.want.country && HOLIDAYS.want.subdiv && !subs.some(x => x.code === HOLIDAYS.want.subdiv);
+  return { holiday_country: sel.value || '', holiday_subdiv: keepSub ? HOLIDAYS.want.subdiv : (sub?.value || '') };
 }
 
 function workdaySettingsPayload() {
@@ -3444,8 +3462,7 @@ function workdaySettingsPayload() {
     worktime_track: String(document.getElementById('set-worktime-track')?.checked !== false),
     work_remind_hours: document.getElementById('set-work-remind')?.value || '8',
     // before the list of countries came, the saved choice stays as it is
-    holiday_country: HOLIDAYS.list ? (document.getElementById('set-holiday-country')?.value || '') : HOLIDAYS.want.country,
-    holiday_subdiv: HOLIDAYS.list ? (document.getElementById('set-holiday-subdiv')?.value || '') : HOLIDAYS.want.subdiv,
+    ...holidayPayload(),
   };
 }
 
