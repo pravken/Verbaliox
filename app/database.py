@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import re
@@ -2066,17 +2067,21 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
 
 
 def _substring_hits(conn: sqlite3.Connection, q_fold: str, max_hits_per_meeting: int) -> List[sqlite3.Row]:
-    """Slow path: plain substring search over the stored segment texts (no JSON parsing)."""
-    hits: List[sqlite3.Row] = []
-    per_meeting: Dict[int, int] = {}
-    for r in conn.execute(
-        "SELECT meeting_id, segment_id, start, speaker, text FROM segments_fts ORDER BY meeting_id DESC, start"
-    ):
-        mid = int(r["meeting_id"])
-        if per_meeting.get(mid, 0) < max_hits_per_meeting and q_fold in (r["text"] or "").casefold():
-            hits.append(r)
-            per_meeting[mid] = per_meeting.get(mid, 0) + 1
-    return hits
+    """Slow path: plain substring search over the stored segment texts (no JSON parsing). Matched
+    inside SQLite (Python's casefold: SQLite's lower() folds only Latin letters), and only the first
+    lines of each recording come back, not every line of the library to be looked at here."""
+    conn.create_function("vx_has", 2, lambda text, q: q in (text or "").casefold(), deterministic=True)
+    return conn.execute(
+        """
+        SELECT meeting_id, segment_id, start, speaker, text FROM (
+            SELECT meeting_id, segment_id, start, speaker, text,
+                   ROW_NUMBER() OVER (PARTITION BY meeting_id ORDER BY start) AS rn
+            FROM segments_fts WHERE vx_has(text, ?)
+        ) WHERE rn <= ?
+        ORDER BY meeting_id DESC, start
+        """,
+        (q_fold, max_hits_per_meeting),
+    ).fetchall()
 
 
 def _fts_match_expression(query: str) -> str:
@@ -2100,11 +2105,11 @@ def search_all_meetings(query: str, max_hits_per_meeting: int = 4) -> List[Dict[
     match = _fts_match_expression(q)
     q_fold = q.casefold()
 
-    with _db_lock:
-        conn = get_connection()
-        meetings = conn.execute(
-            "SELECT id, title, duration, status, speakers_json FROM meetings ORDER BY id DESC"
-        ).fetchall()
+    conn = get_connection()
+    # Read without the lock that every change waits for (a search of a large library takes most of a
+    # second at each keystroke): with WAL a reader sees the last commit and blocks no writer
+    with (contextlib.nullcontext() if _wal_on else _db_lock):
+        meetings = conn.execute("SELECT id, title, duration, status FROM meetings ORDER BY id DESC").fetchall()
         hit_rows = []
         if match:
             hit_rows = conn.execute(
@@ -2122,11 +2127,18 @@ def search_all_meetings(query: str, max_hits_per_meeting: int = 4) -> List[Dict[
             # The index matches whole words and word beginnings only. For fragments from the middle
             # of a word ("рщ с") fall back to a case-insensitive substring scan of the indexed text.
             hit_rows = _substring_hits(conn, q_fold, max_hits_per_meeting)
-        conn.close()
-
-    hits_by_meeting: Dict[int, List[sqlite3.Row]] = {}
-    for r in hit_rows:
-        hits_by_meeting.setdefault(int(r["meeting_id"]), []).append(r)
+        hits_by_meeting: Dict[int, List[sqlite3.Row]] = {}
+        for r in hit_rows:
+            hits_by_meeting.setdefault(int(r["meeting_id"]), []).append(r)
+        # the names of the participants, of the recordings with hits only (as the list keeps them,
+        # without parsing their voice prints)
+        names: Dict[int, Dict[str, Any]] = {}
+        found = sorted(hits_by_meeting)
+        for i in range(0, len(found), 500):  # SQLite's limit on the number of parameters
+            part = found[i:i + 500]
+            for r in conn.execute(f"SELECT id, speakers_json FROM meetings WHERE id IN ({','.join('?' * len(part))})", part):
+                names[int(r["id"])] = _list_speakers(int(r["id"]), r["speakers_json"] or "{}")
+    conn.close()
 
     results: List[Dict[str, Any]] = []
     for m in meetings:
@@ -2134,10 +2146,7 @@ def search_all_meetings(query: str, max_hits_per_meeting: int = 4) -> List[Dict[
         rows = hits_by_meeting.get(mid, [])
         if not rows and q_fold not in (m["title"] or "").casefold():
             continue
-        try:
-            speakers = json.loads(m["speakers_json"] or "{}")
-        except Exception:
-            speakers = {}
+        speakers = names.get(mid) or {}
         results.append(
             {
                 "meeting_id": mid,
