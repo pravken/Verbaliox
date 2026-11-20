@@ -73,15 +73,16 @@ def work_day(at: datetime) -> date:
 @contextmanager
 def _conn():
     """A connection with the table there; committed and closed after use."""
-    from app.database import get_connection
+    from app.database import _db_lock, get_connection
 
-    conn = get_connection()
-    try:
-        conn.execute(_DDL)
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    with _db_lock:  # the database's own writers take it too: no wait on the busy timeout
+        conn = get_connection()
+        try:
+            conn.execute(_DDL)
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def mark(at: datetime) -> None:
