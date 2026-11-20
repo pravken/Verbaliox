@@ -28,6 +28,11 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   counted as going on.
 - Obsidian: a note follows its recording's features and title.
 - Smooth switching between tabs and views.
+- **Fixes from a code audit**: a recording recovered after a crash is no longer deleted at the same start,
+  and a crash during the mix recovers it whole with its notes; a recording is dated by its start, not by
+  «Stop»; a restore replaces a damaged database; a broken answer of the model no longer deletes the tasks;
+  calendar series keep their last meeting and 29 February; Settings keep what is being typed; Esc closes the
+  cloud log and the template windows; the agent (MCP) gets nothing when the local-only list cannot be read.
 
 ## 0.8.24 — English
 
@@ -720,6 +725,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   считаются идущими.
 - Obsidian: заметка следует за фичами и названием своей записи.
 - Плавные переходы между вкладками и экранами.
+- **Исправления после аудита кода**: запись, восстановленная после сбоя, больше не удаляется при том же
+  запуске, а сбой во время сведения восстанавливает её целиком с заметками; запись датируется началом, а не
+  «Стоп»; восстановление из копии заменяет повреждённую базу; сломанный ответ модели больше не стирает задачи;
+  серии календаря не теряют последнюю встречу и 29 февраля; настройки не стирают вводимый текст; Esc закрывает
+  журнал облака и окна шаблонов; агент (MCP) ничего не получает, если список «только локально» не прочитан.
 
 ## 0.8.24
 
