@@ -44,10 +44,8 @@ def _hidden() -> set:
         return set()
     from app.database import local_only_ids
 
-    try:
-        return set(local_only_ids())
-    except Exception:
-        return set()
+    # no try: a failed read must fail the call, not hand the agent the local-only recordings
+    return set(local_only_ids())
 
 
 def _day(m: Dict[str, Any]) -> str:
