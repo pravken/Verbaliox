@@ -684,7 +684,7 @@ function renderAnalysisOverview(box) {
       <h3 class="sc-h">${icon(opts.icon || 'doc')}<span class="sc-name">${escapeHtml(title)}</span>
         ${opts.tag ? `<span class="an-tag">${escapeHtml(opts.tag)}</span>` : ''}<span class="flex-1"></span>
         ${opts.edit ? act(opts.editFn || 'editAnalysisSection', [opts.edit], t('anEditTip'), '✎') : ''}
-        ${opts.regen && ai ? act('createAnalysisSection', [key], t('anRegen'), '↻') : ''}
+        ${opts.regen && ai ? act('createAnalysisSection', [key], t('anRegen'), AI_MARK) : ''}
         ${opts.open ? `<button class="sc-open" ${pageCall('click', 'selectSummaryTab', [opts.open])}>${escapeHtml(t('anOpen'))} →</button>` : ''}
         <b class="sc-n">${opts.count != null ? opts.count : ''}</b></h3>
       <div class="an-cardb${opts.clamp ? ' an-clamp' : ''}">${body}</div>
@@ -1897,7 +1897,7 @@ function renderMeetingInfo(info) {
   const row = (label, value, opts = {}) => value == null || value === '' ? '' : `
     <div class="kv"><span class="kv-k">${escapeHtml(label)}</span>
       <span class="kv-v${opts.mono ? ' kv-mono' : ''}">${opts.html ? value : escapeHtml(String(value))}</span></div>`;
-  const btn = (fn, args, label, title = '') => `<button class="ui-btn ui-btn-subtle h-7 text-[12px]" data-click="${fn}" data-click-args='${jsArg(args)}'${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(label)}</button>`;
+  const btn = (fn, args, label, title = '') => `<button class="ui-btn ui-btn-subtle h-7 text-[12px]" data-click="${fn}" data-click-args='${jsArg(args)}'${title ? ` title="${escapeHtml(title)}"` : ''}>${fn === 'recRegenFromInfo' ? AI_MARK + ' ' : ''}${escapeHtml(label)}</button>`;
   const card = (key, icon, title, rows, actions = '') => `<section class="scard" data-info="${key}">
       <h3 class="sc-h"><span class="sc-ic" aria-hidden="true">${recCardIcon(icon)}</span><span class="sc-name">${escapeHtml(title)}</span></h3>
       <div class="kv-rows">${rows || `<div class="sc-quiet">—</div>`}</div>
@@ -1940,7 +1940,7 @@ function renderMeetingInfo(info) {
   const analysis = card('analysis', 'sum', t('infoAnalysisCard'),
     row(t('infoAnalyses'), analyses.join(', ') || t('infoNoAnalysis'))
     + row(t('recModel'), summaryModelChoice().prettyModel),
-    done ? btn('recRegenFromInfo', [], `↻ ${t('recRegenAnalysisDlg')}`, t('tipGenerateSummary')) : '');
+    done ? btn('recRegenFromInfo', [], t('recRegenAnalysisDlg'), t('tipGenerateSummary')) : '');
 
   const dubs = (info.dubs || []).filter(Boolean);
   const storage = card('storage', 'folder', t('infoStorageCard'),

@@ -2457,7 +2457,7 @@ function recAnalysisBar() {
       <button class="an-chip${opt && opt.dataset.off === '1' ? ' an-model-off' : ''}" data-click="openAnalysisMenu" data-click-args='["model", {"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('anModelTip'))}">${escapeHtml(opt ? opt.textContent : '—')}<span aria-hidden="true">▾</span></button>
       <span class="flex-1"></span>
       <button class="an-btn" data-click="openAnalysisMenu" data-click-args='["cfg", {"$": "el"}]' title="${escapeHtml(t('anCfgTip'))}">${escapeHtml(t('anCfg'))}</button>
-      <button class="an-btn" data-click="generateSummaryForActiveTab" ${busy ? 'disabled' : ''} ${ai ? '' : 'aria-disabled="true"'} title="${escapeHtml(ai ? t('tipGenerateSummary') : t('anNeedModel'))}">↻ ${escapeHtml(busy ? t('anMaking') : t('recRegenAnalysis'))}</button>
+      <button class="an-btn" data-click="generateSummaryForActiveTab" ${busy ? 'disabled' : ''} ${ai ? '' : 'aria-disabled="true"'} title="${escapeHtml(ai ? t('tipGenerateSummary') : t('anNeedModel'))}">${AI_MARK} ${escapeHtml(busy ? t('anMaking') : t('recRegenAnalysis'))}</button>
     </div>`;
 }
 
