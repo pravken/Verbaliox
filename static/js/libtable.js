@@ -937,6 +937,7 @@ registerView('libtable', {
     renderLibSelectionBar();
     nextFrame(() => document.getElementById('lt-scroll')?.focus({ preventScroll: true }));
   },
-  hide: () => { syncLibTableButton(); LT.colsOpen = false; nextFrame(renderLibSelectionBar); },
+  // the selection belongs to the table on screen: it does not stay behind, unseen, for Delete in another section
+  hide: () => { syncLibTableButton(); LT.colsOpen = false; state.multi.clear(); nextFrame(renderLibSelectionBar); },
   refresh: renderLibTable,
 });

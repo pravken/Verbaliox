@@ -1503,7 +1503,8 @@ document.addEventListener('keydown', e => {
       document.querySelector(`#meetings-list [data-mid="${next}"]`)?.scrollIntoView({ block: 'nearest' });
     }
   }
-  if (e.key === 'Delete' && state.multi.size && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')
+  // only where the selection is seen: «Записи» (the old list of the sidebar is hidden)
+  if (e.key === 'Delete' && state.multi.size && state.appView === 'libtable' && !anyModalOpen() && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')
       && !document.activeElement?.isContentEditable) bulkDelete();
 });
 
