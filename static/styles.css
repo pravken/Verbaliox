@@ -3669,3 +3669,10 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-nodue-empty { font-size: var(--fs-ui); color: var(--hc-dim, #8E8E93); padding: 5px 8px; border: 1px dashed var(--line); border-radius: 6px; }
 .tk-nodue.tk-drop { border-color: var(--accent); background: rgb(var(--accent-rgb) / 0.1); }
 @media (max-width: 1240px) { .tk-cal-body { grid-template-columns: minmax(0, 1fr) 210px; } .tk-cal-main { padding-left: 20px; } }
+/* the rows of a group card on fixed columns; the names of the columns are the card's first row, small and faint */
+.tk-group .tk-row { grid-template-columns: 22px minmax(0, 1fr) 11rem 8.5rem 5.5rem 26px; }
+.tk-group .tk-who, .tk-group .tk-due, .tk-group .tk-from { justify-self: start; }
+.tk-group .tk-who { max-width: 100%; }
+.tk-row.tk-thead { min-height: 0; padding-top: 0; padding-bottom: 2px; background: none; border-color: transparent; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.tk-row.tk-thead:hover { background: none; }
+@container tklist (max-width: 760px) { .tk-row.tk-thead { display: none; } }

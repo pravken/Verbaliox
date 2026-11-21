@@ -139,6 +139,14 @@ await step('task calendar', async () => {
   await sleep(300);
   expect(await page.evaluate(() => !document.getElementById('tk-groups-box').classList.contains('tk-tbg-off')
     && !!document.querySelector('#tk-list .tk-group.pcard .pcd-ic, #tk-list .tk-group.pcard .tk-ava')), 'the list has no group cards');
+  // the names of the columns are inside each card, on the grid of its rows (the summary folded: room for the grid)
+  const cols = await page.evaluate(() => { TK.rep = false; renderTasks(); return [...document.querySelectorAll('#tk-list .tk-group')].map(g => {
+    const h = g.querySelectorAll('.tk-thead > span'), row = g.querySelector('.tk-row:not(.tk-thead)');
+    const x = el => Math.round(el.getBoundingClientRect().left);
+    return row ? [x(h[1]) === x(row.querySelector('.tk-row-main')), x(h[2]) === x(row.querySelector('.tk-who')), x(h[3]) === x(row.querySelector('.tk-due'))] : [];
+  }).flat(); });
+  await page.evaluate(() => { TK.rep = true; renderTasks(); });
+  expect(cols.length && cols.every(Boolean), `the column names are off their columns: ${cols}`);
 });
 
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)

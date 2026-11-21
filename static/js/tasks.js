@@ -339,7 +339,7 @@ function renderTasksList() {
       <div class="tk-group-head">${icon}${dot}${title}<b class="pcd-n">${g.items.length}</b>${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
-      ${tkGroupRowsHtml(g)}
+      ${tkHeadRow()}${tkGroupRowsHtml(g)}
     </section>`;
   }).join('');
   linkPeople(box, '.tk-row-text');  // a person the task names opens their card (people.js)
@@ -353,6 +353,12 @@ function tkGroupRowsHtml(g) {
   const all = TK.open.has(g.key) || g.items.length <= _tkGroupRows + 5;
   const shown = all ? g.items : g.items.slice(0, _tkGroupRows);
   return shown.map(tkRowHtml).join('') + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
+}
+
+// The names of the columns, inside each card under its title, on the grid of its rows
+function tkHeadRow() {
+  return `<div class="tk-row tk-thead" aria-hidden="true"><span></span><span>${escapeHtml(t('tkColTask'))}</span><span>${escapeHtml(t('tkColWho'))}</span>`
+    + `<span>${escapeHtml(t('tkColDue'))}</span><span>${escapeHtml(t('tkColFrom'))}</span><span></span></div>`;
 }
 
 function showAllInTaskGroup(key) {
