@@ -118,6 +118,22 @@ await step('recording without a text', async () => {
   expect(await page.isVisible('#tx-subbar') && !(await page.isVisible('#tx-model-bar')), 'the text does not come back');
 });
 
+// A speaker filter left from before «Разделить по голосам» (its speakers named anew) does not hide the whole text;
+// a filter or a search that hides every line offers «Показать все реплики», which clears both
+await step('stale speaker filter', async () => {
+  await page.evaluate(() => { state.speakerFilter = 'SPEAKER_99'; renderTranscript(); });
+  expect(await page.locator('#transcript-container .segment-row').count() > 0, 'a stale speaker filter hides the text');
+  expect(await page.evaluate(() => state.speakerFilter) === null, 'the stale filter is kept');
+  await page.fill('#transcript-search', 'нет-такого-слова');
+  await sleep(300);
+  expect(await page.isVisible('#tx-show-all'), 'no «Показать все реплики»');
+  await page.evaluate(() => { state.speakerFilter = 'SPEAKER_00'; });
+  await page.click('#tx-show-all');
+  await sleep(200);
+  expect(await page.locator('#transcript-container .segment-row').count() > 0 && await page.inputValue('#transcript-search') === ''
+    && await page.evaluate(() => state.speakerFilter) === null, '«Показать все реплики» did not clear the filter and the search');
+});
+
 // The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the
 // name once for a run of one speaker; the phrase playing is lit; «Текст» brings the running text back, kept
 await step('transcript as a chat', async () => {

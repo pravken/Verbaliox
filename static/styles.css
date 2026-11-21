@@ -4985,3 +4985,9 @@ button.sc-at:hover { color: var(--accent-text); }
 .an-failed-ic svg { width: 18px; height: 18px; }
 .an-failed-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-label); color: #C7C9CE; }
 .an-failed-text b { font-size: var(--fs-ui); color: #F5F5F7; font-weight: 600; }
+
+/* A filter or a search that hides every line of the text (reported by the user: after «Разделить по голосам» the
+   old speaker filter left only «Ни одна реплика не подходит…»): the empty state with «Показать все реплики» */
+.tx-empty-filtered { padding: 64px 16px; }
+.tx-empty-filtered .ui-btn { margin-top: 4px; height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
+.tx-empty-filtered .ui-btn:hover { background: #34373B; color: #FFFFFF; }

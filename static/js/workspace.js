@@ -1678,6 +1678,14 @@ function previewSpeakerVoice(startSec, endSec) {
   state.voicePreviewTimer = setTimeout(() => player.pause(), durationMs);
 }
 
+// «Показать все реплики»: the speaker filter and the search both cleared
+function showAllTxLines() {
+  state.speakerFilter = null;
+  document.getElementById('transcript-search').value = '';
+  renderSpeakerPillsBar();
+  renderTranscript();
+}
+
 function filterBySpeaker(spkId) {
   state.speakerFilter = (state.speakerFilter === spkId) ? null : spkId;
   renderSpeakerPillsBar();
@@ -1816,6 +1824,12 @@ function renderTranscriptNow() {
   const segments = m.segments || [];
   const speakers = m.speakers || {};
   const query = (document.getElementById('transcript-search').value || '').trim().toLowerCase();
+  // A speaker shown alone who has no line any more (reported by the user: «Разделить по голосам» names the
+  // voices anew, and the old id hid the whole text): the filter goes
+  if (state.speakerFilter && !segments.some(seg => seg.speaker === state.speakerFilter)) {
+    state.speakerFilter = null;
+    renderSpeakerPillsBar();
+  }
 
   const filtered = segments.filter(seg => {
     if (state.speakerFilter && seg.speaker !== state.speakerFilter) return false;
@@ -1845,6 +1859,9 @@ function renderTranscriptNow() {
       : DONE_STATUSES.includes(m.status) ? 'emptyTxNoSpeech' : 'emptyTxProcessing';
     // no text at all: the card of the recognition (renderTxModelBar) stands here and says it
     container.innerHTML = !segments.length && !m.media_removed ? ''
+      // a filter or a search hides every line: one button shows them all again
+      : segments.length ? `<div class="vx-empty tx-empty-filtered"><span class="vx-empty-ic">${pultIcon('text')}</span><span>${escapeHtml(t(why))}</span>
+          <button type="button" id="tx-show-all" class="ui-btn ui-btn-subtle" data-click="showAllTxLines">${escapeHtml(t('txShowAllLines'))}</button></div>`
       : `<div class="py-20 text-center text-xs text-apple-tertiary">${escapeHtml(t(why))}</div>`;
     rebuildPlaybackIndex();
     return;
