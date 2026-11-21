@@ -5058,3 +5058,14 @@ button.sc-at:hover { color: var(--accent-text); }
 #text-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
 #text-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
 #text-menu .macos-menu-item.tm-on .tm-key { color: var(--accent-text); opacity: 0.8; }
+
+/* «Расшифровка»: the model, the speakers and the tools of the text in one row from the left edge of the head to its
+   right edge (asked by the user, variant 1): the speakers no longer stretch over the free width and push the tools
+   to a second line; a narrow window first shortens the labels (fitTranscriptToolbar), then wraps */
+#tx-subbar .tx-toolbar { max-width: none; }
+#tx-subbar #speaker-pills-container { flex: none; min-width: 0; }
+#tx-subbar .tx-toolbar #tx-tools { margin-left: auto; }
+#tx-subbar .tx-toolbar { justify-content: flex-start; }
+.tx-toolbar.tx-compact #tx-quick-status { display: none; }
+.tx-toolbar.tx-compact #tx-tools .relative.w-40 { width: 7.5rem; }
+
