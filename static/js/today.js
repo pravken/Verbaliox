@@ -180,6 +180,8 @@ function tdRenderHead(span) {
     set('td-sub', String(at.getFullYear()));
   }
   document.getElementById('td-tile')?.classList.toggle('td-tile-word', span !== 'day');
+  // today has a green frame: while stepping through the days, today is seen at once (asked by the user)
+  document.getElementById('td-tile')?.classList.toggle('td-tile-today', span === 'day' && !view);
   const pills = document.getElementById('td-pills');
   if (pills) pills.innerHTML = tdPillsHtml(span);
   document.getElementById('td-nav')?.classList.remove('hidden');  // the day steps by a day, the week and the month by theirs

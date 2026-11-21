@@ -4865,3 +4865,8 @@ button.sc-at:hover { color: var(--accent-text); }
   .settings-page .sx-section > .sx-section-head { column-span: all; }
   .settings-page .sx-reset-row { max-width: none; }
 }
+
+/* «Сегодня»: today's date tile in a green frame, another day's in the usual one (asked by the user) */
+.td-tile.td-tile-today { border-color: #32D74B; box-shadow: 0 0 0 1px rgb(50 215 75 / 0.35), 0 0 12px rgb(50 215 75 / 0.18); }
+.td-tile.td-tile-today small { color: #32D74B; }
+.td-tile { transition: border-color var(--dur-fast, 120ms) ease, box-shadow var(--dur-fast, 120ms) ease; }
