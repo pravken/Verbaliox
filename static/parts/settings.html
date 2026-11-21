@@ -1064,18 +1064,16 @@
             <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="mcpDesc">Claude или другой агент ищет по встречам, читает нужные разделы, решения и задачи — без выгрузки файлов. Только чтение, работает и при закрытой программе.</p>
           </div>
           <div>
-            <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="mb-1">
               <span class="text-[11.5px] text-apple-secondary" data-i18n="mcpDesktop">Claude Desktop — в claude_desktop_config.json</span>
-              <button data-click="copyMcpConfig" data-click-args='["desktop"]' class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="copy">Копировать</button>
             </div>
-            <pre id="mcp-desktop" class="mcp-code"></pre>
+            <div class="mcp-wrap"><pre id="mcp-desktop" class="mcp-code"></pre><button data-click="copyMcpConfig" data-click-args='["desktop"]' class="mcp-copy" data-i18n-title="copy" title="Копировать" data-i18n-aria="copy" aria-label="Копировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           </div>
           <div>
-            <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="mb-1">
               <span class="text-[11.5px] text-apple-secondary" data-i18n="mcpCode">Claude Code — команда в терминале</span>
-              <button data-click="copyMcpConfig" data-click-args='["code"]' class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="copy">Копировать</button>
             </div>
-            <pre id="mcp-code" class="mcp-code"></pre>
+            <div class="mcp-wrap"><pre id="mcp-code" class="mcp-code"></pre><button data-click="copyMcpConfig" data-click-args='["code"]' class="mcp-copy" data-i18n-title="copy" title="Копировать" data-i18n-aria="copy" aria-label="Копировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="mcpLocalToggle">Отдавать агенту и диктовки</span>

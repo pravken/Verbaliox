@@ -4870,3 +4870,21 @@ button.sc-at:hover { color: var(--accent-text); }
 .td-tile.td-tile-today { border-color: #32D74B; box-shadow: 0 0 0 1px rgb(50 215 75 / 0.35), 0 0 12px rgb(50 215 75 / 0.18); }
 .td-tile.td-tile-today small { color: #32D74B; }
 .td-tile { transition: border-color var(--dur-fast, 120ms) ease, box-shadow var(--dur-fast, 120ms) ease; }
+
+/* Model lists: an icon button is a 32px square (the trash was 40x32 beside 32px buttons), a state chip
+   («Активна») has the weight of the buttons; the chosen model is told by its chip, not by a blue frame
+   (asked by the user: the frame was uneven and said nothing the chip did not) */
+.ui-btn.ui-btn-sq { width: var(--ctl-h, 32px); padding: 0; flex: none; }
+.ui-btn.ui-btn-state { font-weight: 600; cursor: default; }
+.ui-btn.ui-btn-state:active { transform: none; }
+
+/* Agent (MCP): «Копировать» is an icon in the corner of the code itself (asked by the user) */
+.mcp-wrap { position: relative; }
+.mcp-wrap .mcp-code { padding-right: 40px; }
+.mcp-copy { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 7px; border: 1px solid var(--line); background: var(--elevated, #2C2E32); color: #C7C7CC; cursor: pointer; opacity: 0.85;
+  transition: background-color var(--dur-fast, 120ms) ease, color var(--dur-fast, 120ms) ease, opacity var(--dur-fast, 120ms) ease; }
+.mcp-copy svg { width: 15px; height: 15px; }
+.mcp-wrap:hover .mcp-copy, .mcp-copy:focus-visible { opacity: 1; }
+.mcp-copy:hover { background: #34373B; color: #FFFFFF; }
+.mcp-copy:active { transform: scale(0.95); }
