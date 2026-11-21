@@ -5109,13 +5109,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 120px; }
 .db-sl-own { margin-left: 64px; }
 
-/* «Выйти» apart at the very bottom of the rail, a small mark without a label (asked by the user: it was clicked by
-   mistake next to «Настройки»); it always asks */
-.rail-quit { margin-top: 14px; padding: 6px 2px; }
-.rail-quit > span { display: none; }
-.rail-quit svg { width: 16px; height: 16px; opacity: 0.55; }
-.rail-quit:hover svg { opacity: 1; }
-
 /* Settings in two columns: a section with a single card no longer leaves the right column empty (asked by the user:
    «Обновления» stood alone on the left) — that card spans both columns */
 @container sxmain (min-width: 1280px) {
