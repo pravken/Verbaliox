@@ -46,3 +46,15 @@ function pultCardHead(title, n, ic, side = '') {
 function pultCard(title, n, ic, inner, cls = '', side = '') {
   return `<section class="pcard${cls ? ` ${cls}` : ''}">${pultCardHead(title, n, ic, side)}${inner}</section>`;
 }
+
+// The cards of a screen rise one after another (on entering a section or switching its view, never on an
+// update in place): at most 14, 35 ms apart; nothing moves with «reduce motion» (styles.css)
+function pultRise(root, selector) {
+  if (!root) return;
+  [...root.querySelectorAll(selector)].slice(0, 14).forEach((el, i) => {
+    el.classList.remove('pult-rise');
+    void el.offsetWidth;
+    el.style.animationDelay = `${i * 35}ms`;
+    el.classList.add('pult-rise');
+  });
+}
