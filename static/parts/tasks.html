@@ -8,6 +8,11 @@
           <p id="tk-sub" class="tk-sub"></p>
         </div>
         <div class="tk-head-actions">
+        <label class="tk-search">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+          <input id="tk-q" type="search" data-input="onTasksSearch" data-input-args='[{"$": "value"}]'
+                 data-i18n-placeholder="tkSearch" placeholder="Найти задачу" data-i18n-title="tkSearch" title="Найти задачу">
+        </label>
           <span id="tk-note" class="tk-note hidden" role="status"></span>
           <button id="tk-exp-btn" class="tk-btn" data-click="openTasksExportMenu" data-click-args='[{"$": "event"}]'
                   aria-haspopup="menu" data-i18n-title="tkExportTitle" title="Выгрузить задачи, которые видно сейчас">
@@ -32,11 +37,10 @@
           <span id="tk-views" class="tk-seg" role="radiogroup" data-i18n-aria="tkViewLabel" aria-label="Вид"></span></span>
         <span id="tk-groups-box" class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkGroupLabel">Группировка</span>
           <span id="tk-groups" class="tk-seg" role="radiogroup" data-i18n-aria="tkGroupLabel" aria-label="Группировка"></span></span>
-        <label class="tk-search">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
-          <input id="tk-q" type="search" data-input="onTasksSearch" data-input-args='[{"$": "value"}]'
-                 data-i18n-placeholder="tkSearch" placeholder="Найти задачу" data-i18n-title="tkSearch" title="Найти задачу">
-        </label>
+        <!-- «Колонки»: the columns of the table and the fields of the cards; its place kept in the calendar -->
+        <button id="tk-cols-btn" class="tk-btn" data-click="openTasksCols" data-click-args='[{"$": "event"}]' aria-haspopup="true" data-i18n-title="tkColsTip" title="Колонки таблицы и сведения на карточках">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+          <span data-i18n="tkCols">Колонки</span></button>
       </div>
 
       <div class="tk-body">

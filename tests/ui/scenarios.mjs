@@ -139,14 +139,22 @@ await step('task calendar', async () => {
   await sleep(300);
   expect(await page.evaluate(() => !document.getElementById('tk-groups-box').classList.contains('tk-tbg-off')
     && !!document.querySelector('#tk-list .tk-group.pcard .pcd-ic, #tk-list .tk-group.pcard .tk-ava')), 'the list has no group cards');
-  // the names of the columns are inside each card, on the grid of its rows (the summary folded: room for the grid)
-  const cols = await page.evaluate(() => { TK.rep = false; renderTasks(); return [...document.querySelectorAll('#tk-list .tk-group')].map(g => {
-    const h = g.querySelectorAll('.tk-thead > span'), row = g.querySelector('.tk-row:not(.tk-thead)');
+  // the names of the columns: one bar above all the cards, each name over its column (the summary folded:
+  // room for the grid); «Колонки» adds a column to the bar and the rows alike; the cards have no bar
+  const cols = await page.evaluate(() => {
+    TK.rep = false; TK.cols = ['who', 'due', 'src']; renderTasks();
+    const bar = document.querySelectorAll('#tk-list > .tk-colbar > span');
     const x = el => Math.round(el.getBoundingClientRect().left);
-    return row ? [x(h[1]) === x(row.querySelector('.tk-row-main')), x(h[2]) === x(row.querySelector('.tk-who')), x(h[3]) === x(row.querySelector('.tk-due'))] : [];
-  }).flat(); });
-  await page.evaluate(() => { TK.rep = true; renderTasks(); });
-  expect(cols.length && cols.every(Boolean), `the column names are off their columns: ${cols}`);
+    return [bar.length === 7, ...[...document.querySelectorAll('#tk-list .tk-group .tk-row')].map(row => {
+      const c = row.children;
+      return [x(bar[2]) === x(c[2]), x(bar[3]) === x(c[3]), x(bar[4]) === x(c[4]), x(bar[5]) === x(c[5])];
+    }).flat()];
+  });
+  expect(cols.length > 1 && cols.every(Boolean), `the column names are off their columns: ${cols}`);
+  await page.evaluate(() => setTasksView('cards'));
+  await sleep(300);
+  expect(await page.evaluate(() => !document.querySelector('#tk-list .tk-colbar') && document.querySelectorAll('#tk-list .tk-tcard').length > 0), 'the cards view is not cards');
+  await page.evaluate(() => { setTasksView('list'); TK.rep = true; resetTasksCols(); });
 });
 
 // «Словарь» is a section of the rail: a word added with its variants and group shows in its group with the
