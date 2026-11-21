@@ -219,9 +219,11 @@ function assistantMenu(e, items, width = 270) {
     if (it === 'sep') return '<div class="my-1 h-px bg-white/10"></div>';
     if (it.head) return `<div class="px-2.5 pt-1.5 pb-1 text-[11px] text-apple-tertiary">${escapeHtml(it.head)}</div>`;
     if (it.html) return `<div data-i="${i}">${it.html}</div>`;
-    return `<button class="macos-menu-item" data-i="${i}" ${it.disabled ? 'disabled' : ''}>
-      <span class="w-3.5 text-apple-blue shrink-0">${it.on ? '✓' : ''}</span><span class="flex-1 truncate">${escapeHtml(it.label)}</span>
-      ${it.note != null ? `<span class="text-[11px] text-apple-tertiary shrink-0">${escapeHtml(String(it.note))}</span>` : ''}</button>`;
+    // the name keeps its words; a long note (the model and its state) gives way and shows in full in the tip
+    const full = it.note != null ? `${it.label} · ${it.note}` : it.label;
+    return `<button class="macos-menu-item" data-i="${i}" ${it.disabled ? 'disabled' : ''} title="${escapeHtml(full)}">
+      <span class="w-3.5 text-apple-blue shrink-0">${it.on ? '✓' : ''}</span><span class="as-mi-l">${escapeHtml(it.label)}</span>
+      ${it.note != null ? `<span class="as-mi-n text-[11px] text-apple-tertiary">${escapeHtml(String(it.note))}</span>` : ''}</button>`;
   }).join('');
   menu.addEventListener('click', ev => {
     ev.stopPropagation();
@@ -258,7 +260,7 @@ function assistantModelMenu(e) {
   const cloud = cloudLlmChoice();
   if (cloud) items.push({ label: cloud.label, note: t('rdSasCloud'), on: chat.model === 'cloud', onClick: pick('cloud') });
   items.push('sep', { label: t('rdSasModelsKeys'), onClick: () => openModal('settings', 'analysis') });
-  assistantMenu(e, items, 290);
+  assistantMenu(e, items, 380);  // «Как в настройках» and the model with its state in one line
 }
 
 // The ⋯ of the conversation

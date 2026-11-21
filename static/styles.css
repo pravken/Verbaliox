@@ -2282,6 +2282,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .as-send-stop:hover { background: rgba(255, 255, 255, 0.18); }
 .as-hint { max-width: 860px; margin: 6px auto 0; font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8A8A90); }
 .as-menu .macos-menu-item:disabled { opacity: 0.4; cursor: default; }
+.as-menu .as-mi-l { flex: 0 0 auto; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.as-menu .as-mi-l:last-child { flex: 1 1 auto; max-width: none; }
+.as-menu .as-mi-n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 .as-menu-scroll { max-height: 70vh; overflow-y: auto; }
 @media (max-width: 1250px) { .as-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .as-side { width: 240px; } }
 
