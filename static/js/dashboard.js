@@ -352,7 +352,7 @@ function dbPrepHtml(size) {
     + tasks + `<div class="db-prep-foot">${last}<span class="flex-1"></span>${brief}</div></div>`;
 }
 
-// «Горит сегодня»: the tasks due today or overdue, mine and those promised to me, overdue first
+// «Срочные задачи»: the tasks due today or overdue, mine and those promised to me, overdue first
 function dbDueHtml(d, size) {
   if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))} <button class="db-more" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button></div>`;
   const today = d.today;
@@ -477,7 +477,7 @@ function dbCycleNorm() {
   renderDashboard();
 }
 
-// «Серии без отдачи»: series whose last meetings, three or more in a row, gave no decision and no task
+// «Серии без результатов»: series whose last meetings, three or more in a row, gave no decision and no task
 // (app/dashboard._dull_series); a click opens the latest one
 function dbDullHtml(d) {
   const list = d.dull_series || [];
@@ -748,7 +748,7 @@ function dashOpenSummary(meetingId) {
   setTimeout(() => openRecordTab('summary'), 300);
 }
 
-// --- «Жду от других»: what others promised the user (asked by the user) ---
+// --- «Ожидаю от других»: what others promised the user (asked by the user) ---
 function dbWaitingHtml(d, size) {
   if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div><button class="tk-btn tk-btn-sm" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button>`;
   const list = d.waiting || [];

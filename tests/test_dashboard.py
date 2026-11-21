@@ -113,7 +113,7 @@ class DashboardTest(unittest.TestCase):
 
 
     def test_details_without_outcome_waiting_decisions_and_a_person(self):
-        """Asked by the user: every number of the dashboard opens its details; «Жду от других»; «Без итогов»."""
+        """Asked by the user: every number of the dashboard opens its details; «Ожидаю от других»; «Без итогов»."""
         good = self._meeting("Синк", "2026-11-17", protocol="## Решения\n- Выпускать в пятницу\n")
         empty = self._meeting("Болтовня", "2026-11-18", protocol="## Обзор\n- Поговорили\n")
         commitments.create("Прислать смету", "Мария", meeting_id=good)
@@ -153,7 +153,7 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(row["reasons"], ["silent"])
 
     def test_a_series_giving_nothing_lately(self):
-        """Asked by the user: «Серии без отдачи» — the newest meetings of a series, three in a row, gave
+        """Asked by the user: «Серии без результатов» — the newest meetings of a series, three in a row, gave
         no decision and no task; one with a decision before them does not count."""
         from app import series
 

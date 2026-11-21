@@ -23,7 +23,7 @@ NO_OUTCOME_MIN_SEC = 10 * 60
 SILENT_SHARE = 5.0  # % of the talk
 SILENT_MIN_SEC = 30 * 60
 SERIES_MIN = 3
-# «Серии без отдачи» (asked by the user): a series whose last analysed meetings, this many at least in a row,
+# «Серии без результатов» (asked by the user): a series whose last analysed meetings, this many at least in a row,
 # gave no decision and no task, looked at among its last SERIES_LOOK meetings (whatever the period)
 SERIES_LOOK = 6
 
@@ -199,7 +199,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         for text in r.pop("decision_texts"):
             decisions.append({"text": text, "meeting_id": r["id"], "title": r["title"], "date": r["date"]})
     useless = [r for r in rows if r["reasons"]]
-    # promised to the user by someone else, still open («Жду от других»)
+    # promised to the user by someone else, still open («Ожидаю от других»)
     waiting = [t for t in tasks if t.get("status") != "done" and (t.get("to_whom") or "").strip().lower() in me
                and not is_mine(t)] if me else []
 

@@ -334,7 +334,7 @@ def raise_for_ollama(resp: "httpx.Response") -> None:
     err = str(err).strip()[:200]
     if re.search(r"memory|alloc|out of memory|oom", err, re.I):
         # the memory left to the system (app/mem_reserve.py) is kept: the model does not fit in the rest
-        raise RuntimeError(f"Модели не хватило памяти ({err}). Закройте другие программы, выберите модель поменьше "
+        raise RuntimeError(f"Модели не хватило памяти ({err}). Закройте другие программы, выберите модель меньшего размера "
                            "или уменьшите запас в «Настройки → Общие → Оставлять системе».")
     raise RuntimeError(f"Ollama ответила ошибкой {resp.status_code}: {err}")
 
@@ -467,7 +467,7 @@ def _install_ollama_if_needed() -> bool:
     _close_ollama_app()
 
     if find_ollama_executable() is not None:
-        _append_log("Ollama успешно установлена на компьютер!")
+        _append_log("Ollama установлена на компьютер.")
         return True
 
     return False
@@ -596,7 +596,7 @@ def start_model_pull(
 
             # Automatically set this newly downloaded model as the active LLM model
             update_settings({"ollama_model": model_name})
-            _append_log(f"Готово! Модель {pretty_name} успешно скачана и выбрана как активная.")
+            _append_log(f"Модель {pretty_name} скачана и выбрана как активная.")
             _pull_state.update(
                 {
                     "active": False,

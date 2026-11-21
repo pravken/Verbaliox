@@ -721,7 +721,7 @@ def diarize_and_merge_segments(
         print(f"[diarizer] the video card failed ({str(e).splitlines()[0][:160]}): again on the processor", flush=True)
         unload_diarizer()
         if progress_callback:
-            progress_callback(74, "Видеокарта не справилась — разделение участников на процессоре...")
+            progress_callback(74, "Сбой видеокарты — разделение участников на процессоре...")
         encoder = _get_ecapa_encoder(device="cpu")
         embeddings_list = _embed_slices(encoder, chunks, _embed_progress) if chunks else []
 

@@ -463,7 +463,7 @@ await step('dashboard', async () => {
   expect(await page.locator('#db-grid .db-w').count() === before - 1, 'a widget was not removed');
   await page.click('#db-drawer .db-lib-add >> nth=0');
   expect(await page.locator('#db-grid .db-w').count() === before, 'a widget was not added');
-  await page.click('#db-drawer button:has-text("Вернуть как было")');
+  await page.click('#db-drawer button:has-text("Сбросить")');
   // dragged, a widget lifts and a slot of its size shows where it lands, live; the drop keeps that order
   const ids = () => page.evaluate(() => dbPrefs().layout.map(w => w.id));
   const order0 = await ids();
@@ -501,7 +501,7 @@ await step('dashboard', async () => {
   await sleep(300);
   expect(JSON.stringify(await ids()) === JSON.stringify(order1), 'Esc did not cancel the drag');
   expect(await page.isVisible('#dashboard-view'), 'Esc while dragging left the dashboard');
-  await page.click('#db-drawer button:has-text("Вернуть как было")');
+  await page.click('#db-drawer button:has-text("Сбросить")');
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
   await sleep(600);

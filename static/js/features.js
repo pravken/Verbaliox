@@ -239,7 +239,7 @@ async function deleteDictFeature(id) {
 
 // --- The card of a feature (asked by the user; opened from the widget «Фичи» on «Главная», a feature's chip,
 // the tasks, the dictionary): what is going on now (its next meeting from the calendar, what changed in a
-// week, «Где мы» from the analysis model on a click), three numbers, its weeks and people, the last decisions,
+// week, «Состояние фичи» from the analysis model on a click), three numbers, its weeks and people, the last decisions,
 // the open tasks as rows and the meetings by month. Sections with nothing in them are left out ---
 const FP = { all: {} };  // the sections shown in full («Все решения», «Ещё», «Показать все»), per feature
 
@@ -329,7 +329,7 @@ async function openFeaturePage(id, refresh = false) {
 }
 
 // «Сейчас»: the next meeting of the feature (with «Подключиться» when the invitation has a call), what
-// changed in 7 days, and «Где мы» (kept on this computer; the model is asked only on a click)
+// changed in 7 days, and «Состояние фичи» (kept on this computer; the model is asked only on a click)
 function fpNowHtml(data) {
   const f = data.feature, n = data.next, w = data.week || {};
   const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
@@ -360,7 +360,7 @@ function fpWhere(id) {
   try { const v = JSON.parse(localStorage.getItem(`vx-feature-where-${id}`) || 'null'); return v && v.text ? v : null; } catch (e) { return null; }
 }
 
-// «Где мы»: two or three sentences from the transcripts of the feature's meetings (the assistant's answer)
+// «Состояние фичи»: two or three sentences from the transcripts of the feature's meetings (the assistant's answer)
 async function fpAskWhere(id) {
   const f = featureById(id);
   const page = await fetch(`/api/features/${id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);

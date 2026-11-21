@@ -264,7 +264,7 @@ def _download_one(meeting_id: int, url: str, stop: threading.Event) -> None:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if info and (info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming")):
-                raise RuntimeError("это прямая трансляция: она не кончается, скачать её целиком нельзя")
+                raise RuntimeError("это прямая трансляция: скачать её целиком нельзя")
             size = (info or {}).get("filesize") or (info or {}).get("filesize_approx") or 0
             if size > MAX_BYTES:
                 raise RuntimeError(f"файл {size / 2**30:.1f} ГБ, больше {MAX_BYTES // 2**30} ГБ")
