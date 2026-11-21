@@ -5084,3 +5084,8 @@ button.sc-at:hover { color: var(--accent-text); }
    the switches and the check boxes in the muted accent of the soft fill */
 .vs-switch:checked, [aria-checked="true"] > .vs-track, .vs-track[aria-checked="true"] { background: var(--accent-soft, var(--accent)); }
 html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: var(--accent-soft, var(--accent)); border-color: var(--accent-soft, var(--accent)); }
+
+/* «Фича: ● название» next to the recording's title: the chip's button centres it on the row like the label (reported
+   by the user: the chip sat 2px lower, aligned on the text's baseline) */
+.ft-chip-btn, .ft-add { display: inline-flex; align-items: center; vertical-align: middle; }
+#meeting-features .ft-chip { line-height: 18px; }
