@@ -131,6 +131,9 @@ def init_db() -> None:
                                 or not cur.execute("SELECT 1 FROM meetings WHERE folder_id IS NOT NULL LIMIT 1").fetchone()):
             _sort_existing_meetings(cur)
         cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('folders_sorted_v1', '1')")
+        if not cur.execute("SELECT 1 FROM settings WHERE key = 'formerly_local_v1'").fetchone():
+            _fix_formerly_local(cur)
+            cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('formerly_local_v1', '1')")
 
         cur.execute(
             """
@@ -2318,34 +2321,54 @@ def dictation_ids() -> set:
     return {int(r["id"]) for r in rows}
 
 
+def _fix_formerly_local(cur: sqlite3.Cursor) -> None:
+    """Once: every recording the user had closed to the agent by a folder marked «только локально» (or a
+    folder inside it) gets the mark itself. Told by the folder it was in, the mark opened again when the
+    folder was deleted or the recording moved out of it. The «Диктовки» folder had the mark on its own: its
+    recordings follow the setting of the agent instead."""
+    folders = cur.execute("SELECT id, parent_id, system_key, local_only FROM folders").fetchall()
+    children: Dict[int, List[int]] = {}
+    for f in folders:
+        if f["parent_id"] is not None:
+            children.setdefault(int(f["parent_id"]), []).append(int(f["id"]))
+
+    def subtree(fid: int) -> set:
+        out, todo = set(), [fid]
+        while todo:
+            x = todo.pop()
+            if x not in out:
+                out.add(x)
+                todo.extend(children.get(x, []))
+        return out
+
+    skip = set()
+    for f in folders:
+        if f["system_key"] == "dictations":
+            skip |= subtree(int(f["id"]))
+    closed = set()
+    for f in folders:
+        if f["local_only"] and int(f["id"]) not in skip:
+            closed |= subtree(int(f["id"]))
+    closed -= skip
+    ids = sorted(closed)
+    for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+        part = ids[i:i + 500]
+        cur.execute(f"UPDATE meetings SET local_only = 1 WHERE folder_id IN ({','.join('?' * len(part))})", part)
+
+
 def formerly_local_ids() -> set:
     """Ids of the recordings the user had marked «только локально» (themselves, or by a folder and the folders
-    inside it) while that mark existed: the agent keeps not getting them (the mark is gone with the cloud
-    models, what the user once closed does not open by itself). The «Диктовки» folder had the mark on its
-    own: it follows the setting of the agent (dictation_ids)."""
-    dict_fid = system_folder_id("dictations")
-    skip = set(folder_subtree_ids(dict_fid)) if dict_fid is not None else set()
+    inside it: set on the recordings once by _fix_formerly_local) while that mark existed: the agent keeps not
+    getting them (the mark is gone with the cloud models, what the user once closed does not open by itself,
+    not by a folder deleted or a recording moved either). The «Диктовки» folder had the mark on its own: its
+    recordings follow the setting of the agent (dictation_ids)."""
     with _db_lock:
         conn = get_connection()
         try:
-            marked = [int(r["id"]) for r in conn.execute("SELECT id FROM folders WHERE local_only = 1").fetchall()]
             own = {int(r["id"]) for r in conn.execute("SELECT id FROM meetings WHERE local_only = 1").fetchall()}
-        except sqlite3.OperationalError:  # a database made after the mark was gone has no such column
-            marked, own = [], set()
-        conn.close()
-    folders = set()
-    for fid in marked:
-        if fid not in skip:
-            folders.update(folder_subtree_ids(fid))
-    folders -= skip
-    if folders:
-        with _db_lock:
-            conn = get_connection()
-            ids = list(folders)
-            own |= {int(r["id"]) for r in conn.execute(
-                f"SELECT id FROM meetings WHERE folder_id IN ({','.join('?' * len(ids))})", ids).fetchall()}
+        finally:
             conn.close()
-    return own - dictation_ids()
+    return own - dictation_ids() if own else own
 
 
 def folder_subtree_ids(folder_id: int) -> List[int]:
