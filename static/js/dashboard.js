@@ -1345,7 +1345,7 @@ function dbFlip(grid, change) {
     const a = before.get(el);
     if (!a || el.classList.contains('db-slot')) return;
     const b = el.getBoundingClientRect();
-    const dx = a.left - b.left, dy = a.top - b.top;
+    const dx = zpx(a.left - b.left), dy = zpx(a.top - b.top);
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
     el.style.transition = 'none';
     el.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -1356,10 +1356,11 @@ function dbFlip(grid, change) {
   moved.forEach(el => { el.style.transition = 'transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1)'; el.style.transform = ''; });
 }
 
-// The widget under the pointer, by the grid's own layout (not the boxes moved by the animation)
+// The widget under the pointer, by the grid's own layout (not the boxes moved by the animation). The pointer and the
+// box are in the window's pixels, the offsets in the page's own (the interface scale): divided by the zoom first
 function dbHit(grid, x, y) {
   const g = grid.getBoundingClientRect();
-  const px = x - g.left - grid.clientLeft + grid.scrollLeft, py = y - g.top - grid.clientTop + grid.scrollTop;
+  const px = zpx(x - g.left) - grid.clientLeft + grid.scrollLeft, py = zpx(y - g.top) - grid.clientTop + grid.scrollTop;
   let last = null;
   for (const el of dbTiles(grid)) {
     const r = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
@@ -1378,7 +1379,7 @@ function dbDragMove(e) {
     dbDragLift(d);
   }
   e.preventDefault();
-  d.el.style.transform = `translate(${d.x - d.x0}px, ${d.y - d.y0}px) scale(1.02)`;
+  d.el.style.transform = `translate(${zpx(d.x - d.x0)}px, ${zpx(d.y - d.y0)}px) scale(1.02)`;
   if (!d.raf) d.raf = requestAnimationFrame(dbDragFrame);
 }
 
@@ -1388,10 +1389,10 @@ function dbDragLift(d) {
   const slot = document.createElement('div');
   slot.className = 'db-slot';
   slot.style.gridColumn = el.style.gridColumn;
-  slot.style.height = `${r.height}px`;
+  slot.style.height = `${zpx(r.height)}px`;
   el.after(slot);
   d.slot = slot;
-  Object.assign(el.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  Object.assign(el.style, { left: `${zpx(r.left)}px`, top: `${zpx(r.top)}px`, width: `${zpx(r.width)}px`, height: `${zpx(r.height)}px` });
   el.classList.add('db-lifted');
   document.body.classList.add('db-dragging-now');
   try { grid.setPointerCapture(d.pid); } catch (err) {}
@@ -1444,7 +1445,7 @@ function dbDragEnd(e, cancel) {
   // the widget settles into its slot, then the grid is drawn in the new order
   const to = d.slot.getBoundingClientRect(), from = d.el.getBoundingClientRect();
   d.el.style.transition = 'transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1)';
-  d.el.style.transform = `translate(${d.x - d.x0 + to.left - from.left}px, ${d.y - d.y0 + to.top - from.top}px)`;
+  d.el.style.transform = `translate(${zpx(d.x - d.x0 + to.left - from.left)}px, ${zpx(d.y - d.y0 + to.top - from.top)}px)`;
   setTimeout(done, 140);
 }
 function dbDragUp(e) { dbDragEnd(e, false); }
