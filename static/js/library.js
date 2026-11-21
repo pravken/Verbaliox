@@ -1433,6 +1433,12 @@ function renderLibSelectionBar() {
     <button data-click="clearLibSelection" class="ui-btn ui-btn-subtle h-6 !px-1.5 text-[11.5px]" title="${escapeHtml(t('cancel'))} (Esc)">✕</button>`;
 }
 
+// The open recording was deleted: its screen goes to «Записи», so another recording opened in its place by
+// the list (loadMeetingsList) is not met there by a second «Удалить»
+function leaveDeletedRecording() {
+  if (state.appView === 'library') switchAppView('libtable');
+}
+
 function libSelectedInOrder() {
   const ids = libVisibleIds().filter(id => state.multi.has(id));
   for (const id of state.multi) if (!ids.includes(id)) ids.push(id);
@@ -1452,6 +1458,7 @@ async function bulkDelete() {
       state.activeMeeting = null;
       document.getElementById('workspace-content').classList.add('hidden');
       document.getElementById('workspace-empty').classList.remove('hidden');
+      leaveDeletedRecording();
     }
   }
   state.multi.clear();
