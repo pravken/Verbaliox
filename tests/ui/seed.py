@@ -68,4 +68,22 @@ commitments.create("Подготовить список к пятнице", who=
 commitments.create("Посмотреть сроки", who="Анна", who_kind="part", due_date=(today + timedelta(days=1)).isoformat(), meeting_id=ids[0], at=30)
 # the notes of the first recording as the studio writes them: a mark (⚑) and a note, each with its moment
 db.update_meeting_fields(ids[0], user_notes="[00:24] ⚑ Сроки по проекту\n[00:40] Уточнить итоги прошлой недели")
+
+
+# A calendar with meetings on several days around today, for the scenarios that open a day of «Сегодня». Only the
+# file: a scenario points the setting calendar_ics at it (state.system.paths.data) and takes it back after
+def _ics_day(d):
+    return d.strftime("%Y%m%d")
+
+
+first = today - timedelta(days=8)
+ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Verbaliox demo//RU",
+       "BEGIN:VEVENT", "UID:demo-daily", f"DTSTART:{_ics_day(first)}T100000", f"DTEND:{_ics_day(first)}T104500",
+       "RRULE:FREQ=DAILY;COUNT=17", "SUMMARY:Ежедневная встреча", "END:VEVENT"]
+for uid, title, k, start, end in (("demo-review", "Разбор релиза", -1, "140000", "150000"),
+                                  ("demo-plan", "Планирование спринта", 1, "113000", "123000")):
+    d = _ics_day(today + timedelta(days=k))
+    ics += ["BEGIN:VEVENT", f"UID:{uid}", f"DTSTART:{d}T{start}", f"DTEND:{d}T{end}", f"SUMMARY:{title}", "END:VEVENT"]
+ics.append("END:VCALENDAR")
+Path(data_dir, "demo-calendar.ics").write_text("\r\n".join(ics) + "\r\n", encoding="utf-8")
 print("seeded", *ids)
