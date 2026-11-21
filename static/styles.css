@@ -4334,13 +4334,14 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 }
 /* a narrow list: the checkbox, the icon and the task on the first line, the columns under the task's words */
 @container tklist (max-width: 760px) { .tk-group .tk-row .tk-row-main { flex-basis: calc(100% - 120px); } .tk-group .tk-row .tk-who { margin-left: 46px; } }
-=======
 /* =========================================================================
    The recording screen (docs/pult-plan.md, stage 5): the header «Записи / название», the summary in cards,
    the transcript as a chat, live captions in the same look, the player
    ========================================================================= */
-.rec-head { padding: 8px 20px 6px; border-bottom: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
+.rec-head { padding: 16px 24px 6px; border-bottom: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
 .rec-head-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* the icon and the title where the heads of «Записи» and «Задачи» have them (24px from the rail, the title 12px after the icon) */
+.rec-head-row:first-child { gap: 12px; }
 .rec-ttl-ic { flex: none; width: 36px; height: 36px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
   background: rgb(var(--accent-rgb) / 0.12); border: 1px solid rgb(var(--accent-rgb) / 0.22); color: var(--accent-text); }
 .rec-ttl-ic svg { width: 18px; height: 18px; display: block; }
