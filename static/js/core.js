@@ -745,7 +745,13 @@ function selectSettingsTab(name) {
   const section = SETTINGS_SECTION_TAB[name] ? name : null;  // a section inside a tab: scrolled to
   name = settingsTabOf(name);
   if (!SETTINGS_TABS.includes(name)) name = 'general';
-  document.querySelectorAll('#modal-settings [data-stab]').forEach(el => el.classList.toggle('hidden', settingsTabOf(el.dataset.stab) !== name));
+  const changed = document.getElementById('modal-settings').dataset.tab !== name;
+  document.querySelectorAll('#modal-settings [data-stab]').forEach(el => {
+    const on = settingsTabOf(el.dataset.stab) === name;
+    el.classList.toggle('hidden', !on);
+    // another tab fades in, like the views of the program (asked by the user: Settings changed abruptly)
+    if (on && changed) animateIn(el);
+  });
   SETTINGS_TABS.forEach(k => {
     const btn = document.getElementById(`stab-${k}`);
     if (!btn) return;

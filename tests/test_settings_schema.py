@@ -84,3 +84,24 @@ class SettingsCacheTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CaptionsDefaultTest(unittest.TestCase):
+    """Asked by the user: captions load a recognition model, so a recording starts without them unless the
+    user asked for them; a choice already made is kept by an update."""
+
+    def test_off_for_a_new_install_kept_when_set(self):
+        from app import database
+
+        database.init_db()
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("DELETE FROM settings WHERE key = 'live_captions_auto'")
+            conn.commit()
+            conn.close()
+        database.init_db()  # a first start: the default is written
+        self.assertEqual(database.get_all_settings()["live_captions_auto"], "false")
+        database.update_settings({"live_captions_auto": "true"})
+        database.init_db()  # an update: the user's choice stays
+        self.assertEqual(database.get_all_settings()["live_captions_auto"], "true")
+        database.update_settings({"live_captions_auto": "false"})

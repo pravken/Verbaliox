@@ -6,6 +6,22 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.8.26 — English
+
+- **«Don't disturb in meetings» holds everything now**: while a meeting goes on and two minutes after it, the
+  transcription, the mix of a stopped recording and the speaker models wait; Nemotron leaves memory with the
+  other speech models. Models no longer load in the middle of a call and slow the computer down.
+- **Live captions are off by default** and never start by themselves while «Don't disturb in meetings» holds;
+  turn them on on the recording screen or in Settings → Recording.
+- **Meeting hours on Home** count every recording again, the ones not transcribed yet and cancelled included.
+- **Home opens smoothly**: the widgets rise once, not twice.
+- **Dragging widgets** in «Customize»: the widget lifts and a slot shows where it lands.
+- **Calendar month**: today is marked again.
+- «Customize» names each widget instead of its internal key.
+- Settings: switching tabs fades like the views.
+- The sidebar has no header of its own: more room for the sections.
+- Interface texts in a plainer, neutral tone.
+
 ## 0.8.25 — English
 
 - **Join a meeting from the notification**: when a meeting starts, a Windows notification with
@@ -713,6 +729,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.8.26
+
+- **«Не мешать на встречах» держит всё**: пока идёт встреча и две минуты после неё, ждут расшифровка, сведение
+  остановленной записи и модели участников; Nemotron выгружается вместе с остальными моделями речи. Модели
+  больше не загружаются посреди звонка и не тормозят компьютер.
+- **Субтитры по умолчанию выключены** и не включаются сами, пока действует «Не мешать на встречах»; включить
+  можно на экране записи или в «Настройки → Запись».
+- **Часы встреч на «Главной»** снова считают все записи, в том числе ещё не расшифрованные и отменённые.
+- **«Главная» открывается плавно**: виджеты появляются один раз, без двойного рывка.
+- **Перетаскивание виджетов** в «Настроить»: виджет приподнимается, а место показывает, куда он встанет.
+- **Календарь, месяц**: сегодняшний день снова выделен.
+- В «Настроить» у каждого виджета своё название вместо служебного ключа.
+- Настройки: вкладки переключаются с плавным появлением, как разделы.
+- У боковой панели больше нет своего заголовка: места для разделов больше.
+- Тексты интерфейса — проще и в спокойном, деловом тоне.
 
 ## 0.8.25
 

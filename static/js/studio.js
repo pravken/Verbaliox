@@ -1776,6 +1776,13 @@ function recordSound(kind) {
   }
 }
 
+// Whether captions wait for the user's switch as a recording starts: «Включать субтитры при начале записи» off
+// (the default), «Не мешать на встречах» on (a recording is a meeting), or «Только запись»
+function captionsHeldAtStart(settings) {
+  const s = settings || {};
+  return s.live_captions_auto !== 'true' || s.analysis_after_meetings !== 'false' || economyOn();
+}
+
 async function startLiveRecording() {
   if (isRecording() || _recStarting) return;
   _recStarting = true;
@@ -1905,13 +1912,14 @@ async function startLiveRecording() {
     liveCap.partial = '';
     liveCap.error = '';
     capReset();
-    // «Включать субтитры при начале записи» off, or the economy mode: the recording starts without them
-    // (the switch can turn them on; the Teams captions are read either way, stTeamsStart below)
-    // The switch shows them off for this recording; the user's choice is kept (liveCap.autoOff) for the
-    // next recordings and comes back when this one ends
+    // «Включать субтитры при начале записи» off (the default), «Не мешать на встречах» on (asked by the user:
+    // nothing heavy starts by itself during a meeting, and a recording is one), or the economy mode: the
+    // recording starts without them. The switch turns them on; the Teams captions are read either way
+    // (stTeamsStart below). The switch shows them off for this recording; the user's choice is kept
+    // (liveCap.autoOff) for the next recordings and comes back when this one ends
     const capSettings = (state.system && state.system.settings) || {};
     const capToggle = document.getElementById('live-captions-toggle');
-    if (capToggle.checked && (capSettings.live_captions_auto === 'false' || economyOn())) {
+    if (capToggle.checked && captionsHeldAtStart(capSettings)) {
       capToggle.checked = false;
       liveCap.autoOff = true;
     }

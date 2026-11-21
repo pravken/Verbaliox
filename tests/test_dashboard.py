@@ -72,6 +72,36 @@ class DashboardTest(unittest.TestCase):
         only = dashboard.build("week", feature_id=f["id"], today=self.TODAY)
         self.assertEqual(only["kpi"]["meetings_before"], 0)
 
+    def test_hours_of_recordings_not_transcribed_yet_or_cancelled(self):
+        """Reported by the user: the meeting hours stood still. The length was written only when a
+        transcription began, so a recording waiting in the queue counted 0 hours, and a cancelled one was
+        not counted at all."""
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        folder = Path(tempfile.mkdtemp())
+        ids = []
+        for title, status in (("В очереди", "queued"), ("Отменённая", "cancelled"), ("Сломанная", "failed")):
+            media = folder / f"{status}.wav"
+            media.write_bytes(b"x")
+            m = database.create_meeting(title, media.name, str(media))
+            with database._db_lock:
+                conn = database.get_connection()
+                conn.execute("UPDATE meetings SET recorded_at = ?, duration = 0 WHERE id = ?", ("2026-11-18 10:00:00", m["id"]))
+                conn.commit()
+                conn.close()
+            database.update_meeting_progress(m["id"], status=status, progress=0)
+            ids.append(m["id"])
+        with mock.patch("app.audio_utils.get_media_duration", return_value=2700.0) as probe:
+            d = dashboard.build("week", today=self.TODAY)
+            self.assertEqual(d["kpi"]["meetings"], 2)  # the failed one is no meeting
+            self.assertEqual(d["kpi"]["hours"], 1.5)
+            self.assertEqual(probe.call_count, 2)
+            dashboard.build("week", today=self.TODAY)
+            self.assertEqual(probe.call_count, 2)  # kept: the files are read once
+        self.assertEqual(database.get_meeting(ids[0])["duration"], 2700.0)
+
     def test_months_quarters_and_no_name_set(self):
         self.assertEqual(dashboard._bounds("month", self.TODAY)[:2], (date(2026, 11, 1), date(2026, 12, 1)))
         self.assertEqual(dashboard._bounds("quarter", self.TODAY), (date(2026, 10, 1), date(2027, 1, 1), date(2026, 7, 1)))
@@ -83,7 +113,7 @@ class DashboardTest(unittest.TestCase):
 
 
     def test_details_without_outcome_waiting_decisions_and_a_person(self):
-        """Asked by the user: every number of the dashboard opens its details; «Жду от других»; «Без итогов»."""
+        """Asked by the user: every number of the dashboard opens its details; «Ожидаю от других»; «Без итогов»."""
         good = self._meeting("Синк", "2026-11-17", protocol="## Решения\n- Выпускать в пятницу\n")
         empty = self._meeting("Болтовня", "2026-11-18", protocol="## Обзор\n- Поговорили\n")
         commitments.create("Прислать смету", "Мария", meeting_id=good)
@@ -123,7 +153,7 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(row["reasons"], ["silent"])
 
     def test_a_series_giving_nothing_lately(self):
-        """Asked by the user: «Серии без отдачи» — the newest meetings of a series, three in a row, gave
+        """Asked by the user: «Серии без результатов» — the newest meetings of a series, three in a row, gave
         no decision and no task; one with a decision before them does not count."""
         from app import series
 

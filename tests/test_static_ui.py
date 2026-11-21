@@ -57,6 +57,18 @@ class StaticUiTest(unittest.TestCase):
             names = re.findall(r"^\s{4}([A-Za-z0-9_]+):", block, flags=re.M)
             self.assertEqual(sorted({k for k in names if names.count(k) > 1}), [])
 
+    def test_every_dashboard_widget_has_its_texts(self):
+        """«Настроить» lists the widgets by title and a line about each (dbAbout_<id>, a key put together in
+        the script): a widget added without it showed the bare key."""
+        src = (ROOT / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+        block = re.search(r"const DB_WIDGETS = \{(.*?)\n\};", src, flags=re.S).group(1)
+        widgets = re.findall(r"^\s+(\w+): \{ title: '(\w+)'", block, flags=re.M)
+        self.assertGreater(len(widgets), 10)
+        en_at = I18N.index("\n  en: {")
+        for keys in (_keys(I18N[:en_at]), _keys(I18N[en_at:])):
+            missing = sorted({k for wid, title in widgets for k in (title, f"dbAbout_{wid}") if k not in keys})
+            self.assertEqual(missing, [])
+
     def test_placeholders_take_text_as_is(self):
         """t('…{title}…').replace('{title}', title): a title with "$'" or "$&" would be read as a pattern;
         a function's result is taken as is."""

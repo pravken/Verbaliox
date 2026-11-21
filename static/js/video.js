@@ -450,23 +450,3 @@ function releaseWillowFluff(count, spread, origin) {
     setTimeout(() => el.remove(), 6500);
   }
 }
-
-function initLogoEasterEgg() {
-  const logo = document.getElementById('app-logo');
-  if (!logo) return;
-  let lastHover = 0;
-  logo.addEventListener('mouseenter', () => {
-    const now = Date.now();
-    if (now - lastHover > 1200) releaseWillowFluff(6, 1);
-    lastHover = now;
-  });
-  let clicks = [];
-  logo.addEventListener('click', () => {
-    const now = Date.now();
-    clicks = clicks.filter(t => now - t < 1600).concat(now);
-    if (clicks.length >= 5) {
-      clicks = [];
-      releaseWillowFluff(48, 3.2);
-    }
-  });
-}

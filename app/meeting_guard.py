@@ -11,8 +11,14 @@ Then:
   are unloaded from memory (Ollama: keep_alive 0), once, when the meeting begins;
 - after QUIET_SEC without a meeting, the marked recordings are analysed one by one in the queue.
 
+The transcription waits the same way (reported by the user: a recording finished as the next meeting began,
+and its transcription loaded Parakeet and the speaker models during the call — the computer froze and the
+screen could not be shared): the queue holds the automatic transcriptions while a meeting goes on and
+QUIET_SEC after it (holds_queue), and the speech models loaded are released when a meeting begins, unless
+a job is running. What the user starts by hand in the queue (a translation, a dub, a new split) goes on.
+
 What the user starts by hand (the «Анализ» button, a question) is never held back.
-Settings → ИИ-анализ → «Анализ — после встречи» (analysis_after_meetings, on by default).
+Settings → «Не мешать на встречах» (analysis_after_meetings, on by default).
 """
 
 import threading
@@ -28,7 +34,7 @@ RECORDING_STALE_SEC = 10 * 3600  # «recording» reported this long ago: the pag
 _lock = threading.Lock()
 _running: Dict[int, int] = {}  # recording → the thread its automatic analysis runs on
 _interrupted: Set[int] = set()  # recordings whose analysis a meeting broke off
-_state = {"busy": "", "quiet_since": 0.0, "started": False}
+_state = {"busy": "", "quiet_since": 0.0, "started": False, "ended": 0.0, "looked": False}
 _sent: Set[int] = set()  # marked recordings sent to the queue since the last meeting: once each, not every poll
 
 
@@ -165,6 +171,36 @@ def _unload_models() -> List[str]:
         return []
 
 
+def holds_queue(now: Optional[float] = None) -> bool:
+    """Whether the automatic transcriptions wait: a meeting goes on, or one ended less than QUIET_SEC ago
+    (the next one often starts right after). «Только запись» holds the whole queue by itself (app/economy)."""
+    now = time.time() if now is None else now
+    with _lock:
+        looked = _state["looked"]
+    if not looked:  # just started (a recording recovered, jobs resumed): asked now, not after the first poll
+        try:
+            return busy() not in ("", "economy")
+        except Exception:
+            return False
+    with _lock:
+        if _state["busy"] and _state["busy"] != "economy":
+            return True
+        return bool(_state["ended"]) and now - _state["ended"] < QUIET_SEC
+
+
+def _release_speech() -> List[str]:
+    """The speech models out of memory as a meeting begins, when no job uses them (one running finishes)."""
+    try:
+        from app import idle_unload, transcriber
+
+        if transcriber.running_job_kind():
+            return []
+        return idle_unload.release_speech_models()
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
 def check(now: Optional[float] = None) -> str:
     """One look: a meeting begins → the analysis is broken off and its model unloaded; no meeting for
     QUIET_SEC → the marked recordings go to the queue. Returns the reason the analysis waits ("" = none)."""
@@ -173,19 +209,27 @@ def check(now: Optional[float] = None) -> str:
     with _lock:
         was = _state["busy"]
         _state["busy"] = reason
+        _state["looked"] = True
         if reason:
             _state["quiet_since"] = 0.0
             _sent.clear()  # after this meeting they are tried again
         elif was or not _state["quiet_since"]:
             _state["quiet_since"] = now
+        if was and not reason:
+            _state["ended"] = now
         quiet_for = now - _state["quiet_since"] if not reason else 0.0
     if reason and not was:
         broken = _break_off()
         # only when an analysis was broken off, or recording only was asked for: a calendar event coming
         # does not take the model from the user's own work
         unloaded = _unload_models() if (broken or reason == "economy") else []
+        unloaded += _release_speech()
         print(f"[meeting_guard] a meeting began ({reason}): analysis broken off {broken or '-'}, "
               f"unloaded {unloaded or '-'}", flush=True)
+    if was and not reason:
+        from app import transcriber
+
+        transcriber.wake_queue()  # the transcriptions held back start after QUIET_SEC (the queue looks every 5 s)
     if not reason and quiet_for >= QUIET_SEC:
         from app import transcriber
 

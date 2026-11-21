@@ -65,9 +65,10 @@ class QueuePausePayload(BaseModel):
 
 @router.get("/api/queue/paused")
 def api_queue_paused() -> Dict[str, Any]:
-    from app.transcriber import queue_paused
+    from app.transcriber import meeting_holds, queue_paused
 
-    return {"paused": queue_paused()}
+    # meeting: the transcriptions wait for the end of a meeting («Не мешать на встречах», app/meeting_guard)
+    return {"paused": queue_paused(), "meeting": meeting_holds()}
 
 
 @router.post("/api/queue/pause")

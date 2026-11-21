@@ -197,7 +197,7 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
     document.getElementById('set-economy-mode').checked = s.economy_mode === 'true';
     document.getElementById('set-economy-for').value = s.economy_for || '0';
-    document.getElementById('set-live-captions-auto').checked = s.live_captions_auto !== 'false';
+    document.getElementById('set-live-captions-auto').checked = s.live_captions_auto === 'true';
     document.getElementById('set-cpu-threads').value = s.cpu_threads || 'auto';
     loadWatchFolder();
     document.getElementById('set-semantic').checked = s.semantic_search === 'true';
@@ -989,7 +989,7 @@ function openLlmPicker() {
 // (the source, the microphone with a level check, the noise filter); calls (recorded by themselves, Teams
 // captions; Windows only); the calendar; then what downloads, with the precise mode (every speech model)
 // and the start with Windows as switches. Asked by the user to be offered here, not only in Settings. The language is not asked: the
-// recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
+// recommended set detects it (Russian by GigaAM, the rest by the other model); «Настроить вручную» opens
 // Settings → Recognition to choose the models
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
 function openFirstRunWizard(data) {
@@ -3115,7 +3115,7 @@ const SETTINGS_RESET = {
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
 };
 const SETTINGS_DEFAULTS = {
-  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', economy_for: '0', mcp_local_only: 'false', live_captions_auto: 'true', cpu_threads: 'auto',
+  start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', economy_for: '0', mcp_local_only: 'false', live_captions_auto: 'false', cpu_threads: 'auto',
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',

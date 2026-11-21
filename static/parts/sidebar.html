@@ -1,43 +1,13 @@
-<!-- The left sidebar: logo, hardware, library tree: part of static/index.html (assembled by app/page.py) -->
+<!-- The left sidebar: hardware, library tree: part of static/index.html (assembled by app/page.py) -->
   <!-- =========================================================================
-       LEFT SIDEBAR (Willow Brand Header + Action Buttons + Recordings List)
+       LEFT SIDEBAR (Hardware + Action Buttons + Recordings List)
        ========================================================================= -->
   <aside id="app-sidebar" class="relative bg-apple-sidebar border-r apple-border flex flex-col shrink-0 overflow-hidden" style="width: 312px;">
     <!-- Drag to change the sidebar width (double-click: back to the default) -->
     <div id="sidebar-resizer" class="sidebar-resizer" data-i18n-title="tipSidebarResize" title="Потяните, чтобы изменить ширину. Двойной щелчок — ширина по умолчанию"></div>
 
-    <!-- Sidebar Header Row 1: Willow (Verba) Plant Logo + Full Verbaliox Title -->
-    <div class="side-head px-3.5 border-b apple-border shrink-0">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <!-- Custom Minimalist Willow Branch (Verba) Botanical Logo -->
-          <!-- The willow sways and sheds fluff on hover; five quick clicks release a whole cloud (initLogoEasterEgg) -->
-          <div id="app-logo" class="app-logo w-7 h-7 rounded-lg bg-gradient-to-b from-[#163850] to-[#0E2233] border border-white/10 flex items-center justify-center shadow-sm shrink-0"
-               data-i18n-title="tipAppLogo" title="Verbaliox — локальное распознавание речи и анализ расшифровок">
-            <svg class="w-4 h-4 app-logo-branch" viewBox="0 0 24 24" fill="none">
-              <!-- Willow branch stem -->
-              <path d="M5 20C8.5 15.5 13 10.5 18.5 4.5" stroke="#4ADE80" stroke-width="1.8" stroke-linecap="round"/>
-              <!-- Fluffy willow catkins (buds) -->
-              <g class="catkin" style="--d: 0ms"><ellipse cx="8.2" cy="13.2" rx="2.1" ry="3.1" transform="rotate(-28 8.2 13.2)" fill="#F8FAFC"/></g>
-              <g class="catkin" style="--d: 90ms"><ellipse cx="14.2" cy="12.8" rx="2.0" ry="3.0" transform="rotate(32 14.2 12.8)" fill="#F8FAFC"/></g>
-              <g class="catkin" style="--d: 180ms"><ellipse cx="12.0" cy="7.5" rx="2.0" ry="3.0" transform="rotate(-22 12.0 7.5)" fill="#F8FAFC"/></g>
-              <g class="catkin" style="--d: 270ms"><ellipse cx="18.2" cy="5.2" rx="1.7" ry="2.5" transform="rotate(25 18.2 5.2)" fill="#F8FAFC"/></g>
-            </svg>
-          </div>
-          <div>
-            <button data-click="openAbout" data-i18n-title="tipAbout" title="О программе" class="sb-about font-semibold text-[14px] leading-tight tracking-tight text-white hover:text-apple-label">Verbaliox</button>
-          </div>
-        </div>
-        <button data-click="openSupport" data-i18n-title="tipSupport" title="Поддержать разработку на Ko-fi"
-          class="w-7 h-7 rounded-lg flex items-center justify-center text-apple-tertiary hover:text-[#FF5E5B] hover:bg-white/5 transition shrink-0">
-          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.9 4.5 6.6 4.5c2.1 0 3.6 1.2 4.4 2.5.8-1.3 2.3-2.5 4.4-2.5 3.7 0 5.7 3.9 4.2 7.3C19.5 16.4 12 21 12 21z"/></svg>
-        </button>
-
-
-      </div>
-
-    </div>
-
+    <!-- No header of its own (asked by the user): the window's title bar shows the name and the icon;
+         «О программе» and «Поддержать» are in Settings → Общие -->
     <div class="px-3.5 py-2.5 border-b apple-border shrink-0">
       <!-- Hardware: the processor, memory and video card, then the models in a frame of their own,
            split by where they run (renderVram in static/js/settings.js) -->

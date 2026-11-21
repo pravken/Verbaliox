@@ -55,15 +55,15 @@
             </label>
             <label class="imp-field"><span data-i18n="speechLangLabel">Язык речи</span>
               <select id="upload-language" class="imp-select" data-i18n-title="tipSelectSpeechLang" title="Выберите язык разговора или оставьте автоопределение">
-                <option value="auto" data-i18n="impLangAuto">Определить сам</option>
+                <option value="auto" data-i18n="impLangAuto">Определить автоматически</option>
                 <option value="mixed" data-i18n="langMixed">Несколько языков (RU + EN вперемешку)</option>
                 <option value="ru">Русский (RU)</option>
                 <option value="en">English (EN)</option>
               </select>
             </label>
             <label class="imp-field imp-more-item"><span data-i18n="speakersCountLabel">Число участников</span>
-              <select id="upload-speakers" class="imp-select" data-i18n-title="tipSelectSpeakersCount" title="Сколько участников может быть самое большее; программа найдёт до этого числа">
-                <option value="0" data-i18n="impLangAuto">Определить сам</option>
+              <select id="upload-speakers" class="imp-select" data-i18n-title="tipSelectSpeakersCount" title="Наибольшее число участников; программа найдёт не больше этого числа">
+                <option value="0" data-i18n="impLangAuto">Определить автоматически</option>
                 <option value="1">1</option>
                 <option value="2">2</option>
                 <option value="3">3</option>
@@ -85,7 +85,7 @@
         <section class="imp-sec imp-more-item">
           <div class="imp-sec-head">
             <span class="imp-sec-title" data-i18n="impSound">Звук перед распознаванием</span>
-            <span class="imp-hint" data-i18n="impSoundNote">только для копии, которую слушает модель; сами файлы не меняются</span>
+            <span class="imp-hint" data-i18n="impSoundNote">только для копии, которую слушает модель; исходные файлы не меняются</span>
             <span class="flex-1"></span>
             <button id="imp-reset" data-click="impResetSound" class="imp-link hidden" data-i18n="impAsSettings">Как в настройках</button>
           </div>

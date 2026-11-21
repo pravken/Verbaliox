@@ -92,7 +92,7 @@
         <div class="settings-card">
           <div>
             <h4 class="text-[13px] font-semibold text-white" data-i18n="startupTitle">Запуск и трей</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="startupHint">Чтобы автозапись по календарю, звонкам и горячие клавиши работали всегда, программа может жить в трее.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="startupHint">Чтобы автозапись по календарю, звонкам и горячие клавиши работали всегда, программа может работать в трее.</p>
           </div>
           <label class="vs-row cursor-pointer text-xs text-apple-label">
             <span data-i18n="startWithWindows">Запускать вместе с Windows (в трее, без окна)</span>
@@ -134,7 +134,7 @@
               <label class="mem-reserve-field"><span data-i18n="memReserveVram">Видеопамять</span>
                 <select id="set-mem-reserve-vram" data-i18n-title="memReserveVramTip" title="Видеопамять, которую модели не займут" class="h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none"></select></label>
             </div>
-            <p id="mem-reserve-hint" class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="memReserveHint">Программа и модели не займут эту часть памяти: при нехватке простаивающие модели выгружаются сами, а Ollama не может взять больше. Запас видеопамяти — со следующего запуска Ollama.</p>
+            <p id="mem-reserve-hint" class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="memReserveHint">Программа и модели не займут эту часть памяти: при нехватке простаивающие модели выгружаются автоматически, а Ollama не занимает больше. Запас видеопамяти — со следующего запуска Ollama.</p>
           </div>
           <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipQuietMode" title="Без всплывающих уведомлений Windows: о начале и конце записи, о готовых расшифровках. Переключается и в меню значка в трее">
             <span data-i18n="quietModeToggle">Тихий режим (без уведомлений)</span>
@@ -142,13 +142,13 @@
           </label>
           <label class="vs-row cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="economyToggle">Только запись</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="economyHint">Везде и всегда, пока включено: работает только запись, модели выгружаются, расшифровка, анализ и субтитры ждут. Субтитры Teams всё равно сохраняются с записью. Переключается и в меню значка в трее.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="economyHint">Пока режим включён: работает только запись, модели выгружены, расшифровка, анализ и субтитры ждут. Субтитры Teams сохраняются с записью в любом случае. Переключается и в меню значка в трее.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-economy-mode" />
           </label>
           <label class="flex items-center gap-2 ml-6 text-[11.5px] text-apple-secondary">
             <span data-i18n="economyForLabel">Включать на</span>
             <select id="set-economy-for" class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
-              <option value="0" data-i18n="economyFor0">пока не выключу</option>
+              <option value="0" data-i18n="economyFor0">до выключения</option>
               <option value="30" data-i18n="economyFor30">30 минут</option>
               <option value="60" data-i18n="economyFor60">1 час</option>
               <option value="120" data-i18n="economyFor120">2 часа</option>
@@ -170,7 +170,7 @@
         <div class="settings-card !space-y-0 flex items-center justify-between gap-3">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="uiScaleTitle">Масштаб интерфейса</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="uiScaleDesc">Размер всего в окне: текста, кнопок и списков. Меняется сразу.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="uiScaleDesc">Размер текста, кнопок и списков в окне. Меняется сразу.</p>
           </div>
           <div class="apple-segmented shrink-0" role="radiogroup" data-i18n-title="uiScaleTitle" title="Масштаб интерфейса">
             <button data-click="setUiScale" data-click-args='["75"]' id="scale-btn-75" role="radio" class="apple-segment-btn">75 %</button>
@@ -209,11 +209,11 @@
             <input type="checkbox" role="switch" class="vs-switch" id="set-update-auto" checked />
           </label>
           <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipUpdateBeta"
-            title="Предлагать и бета-версии: в них новое приходит раньше, но оно ещё проверяется. Когда выходит обычная версия, она тоже предлагается">
+            title="Предлагать и бета-версии: в них изменения появляются раньше, но ещё проходят проверку. Обычные версии тоже предлагаются">
             <span data-i18n="updateBetaToggle">Получать бета-версии</span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-update-beta" />
           </label>
-          <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="updateHint">Спрашивается только номер последней версии на GitHub. Ваши записи, модели и настройки при обновлении не затрагиваются.</p>
+          <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="updateHint">С GitHub запрашивается только номер последней версии. Ваши записи, модели и настройки при обновлении не затрагиваются.</p>
         </div>
         </div>
         <div data-stab="about" class="sx-section sx-sub space-y-3 hidden">
@@ -237,7 +237,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <h4 class="text-[13px] font-semibold text-white" data-i18n="supportTitle">Поддержать проект</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="supportDesc">Verbaliox бесплатна. Если она экономит вам время, можно угостить разработчика кофе.</p>
+              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="supportDesc">Verbaliox бесплатна. Если она экономит вам время, можно поддержать разработчика.</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
             <button data-click="openAbout" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="aboutBtn">О программе</button>
@@ -317,7 +317,7 @@
           <div>
             <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="liveModelLabel">Модель для субтитров во время записи</label>
             <select id="set-live-model" data-i18n-title="tipLiveModel"
-              title="Субтитры в студии нужны, чтобы следить за речью; после записи файл всё равно расшифровывается основной моделью"
+              title="Субтитры в студии нужны, чтобы следить за речью; после записи файл расшифровывается основной моделью"
               class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
               <option value="auto" data-i18n="liveModelAuto">Авто</option>
             </select>
@@ -325,8 +325,8 @@
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="liveAutoToggle">Включать субтитры при начале записи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="liveAutoHint">Выключено: запись начинается без субтитров, их можно включить в студии во время записи. Субтитры нагружают процессор. Субтитры Teams сохраняются с записью в любом случае.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-live-captions-auto" checked />
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="liveAutoHint">Выключено: запись начинается без субтитров, их можно включить на экране записи. Субтитры нагружают процессор и память. При «Не мешать на встречах» автоматически не включаются. Субтитры Teams сохраняются с записью в любом случае.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-live-captions-auto" />
           </label>
           <div>
             <label class="block text-[11.5px] text-apple-secondary mb-1" for="set-cpu-threads" data-i18n="cpuThreadsLabel">Потоки процессора для GigaAM и Parakeet</label>
@@ -339,8 +339,8 @@
             <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="cpuThreadsHint">Меньше потоков — процессор свободнее во время встречи, но расшифровка на процессоре идёт дольше.</p>
           </div>
           <div class="text-xs text-apple-label">
-            <span data-i18n="micAutoTitle">Звук микрофона улучшается сам</span>
-            <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="micAutoHint">Эхо колонок убирается, когда пишутся и микрофон, и звук компьютера (в наушниках его нет, и запись не меняется). Шум — вентилятор, клавиатура, улица — убирает ИИ-фильтр DeepFilterNet, когда он скачан.</span>
+            <span data-i18n="micAutoTitle">Звук микрофона улучшается автоматически</span>
+            <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="micAutoHint">Эхо колонок убирается, когда записываются и микрофон, и звук компьютера (в наушниках эха нет, и запись не меняется). Шум — вентилятор, клавиатуру, улицу — убирает ИИ-фильтр DeepFilterNet, когда он скачан.</span>
           </div>
           <div class="flex items-center gap-2 -mt-1">
             <span id="voice-filter-status" class="text-[11.5px] text-apple-tertiary flex-1 min-w-0 truncate"></span>
@@ -372,7 +372,7 @@
           <!-- outside the label: a click on the link does not flip the switch -->
           <div class="flex flex-wrap gap-x-4 -mt-1">
             <button type="button" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="showTeamsHelp" data-i18n="teamsHelpLink">Как включить субтитры в Teams</button>
-            <button type="button" id="teams-check-btn" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="teamsCheck" data-i18n="teamsCheck" data-i18n-title="tipTeamsCheck" title="Во время встречи с включёнными субтитрами: видит ли программа их сейчас">Проверить</button>
+            <button type="button" id="teams-check-btn" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="teamsCheck" data-i18n="teamsCheck" data-i18n-title="tipTeamsCheck" title="Во время встречи с включёнными субтитрами: проверить, видит ли их программа">Проверить</button>
           </div>
 
         </div>
@@ -385,7 +385,7 @@
           <div id="call-record-block" class="space-y-2">
             <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
               <span><span data-i18n="callRecordToggle">Записывать звонки автоматически</span>
-                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="callRecordHint">Запись начинается, когда выбранная программа держит микрофон дольше 5 секунд, и останавливается через 15 секунд после того, как она его отпустит. Запись, начатую вручную, автоматика не трогает.</span></span>
+                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="callRecordHint">Запись начинается, когда выбранная программа держит микрофон дольше 5 секунд, и останавливается через 15 секунд после того, как она его отпустит. Запись, начатую вручную, автозапись не останавливает.</span></span>
               <input type="checkbox" role="switch" class="vs-switch" id="set-call-record" data-change="renderCallSettings" />
             </label>
             <div id="call-record-options" class="pl-6 space-y-2">
@@ -415,7 +415,7 @@
           <p id="set-imports-dir" class="text-[11.5px] text-apple-tertiary break-all"></p>
           <label class="vs-row cursor-pointer text-xs text-apple-label">
             <span class="flex-1 min-w-0"><span class="block text-[13px] text-white" data-i18n="importCopyTitle">Копировать импортированные файлы в папку программы</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="importCopyHint">Выключено: файл остаётся там, где лежит, а запись ссылается на него (не переносите и не удаляйте его). Включено: программа хранит свою копию.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="importCopyHint">Выключено: файл остаётся на своём месте, а запись ссылается на него (не переносите и не удаляйте его). Включено: программа хранит свою копию.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-import-copy" />
           </label>
         </div>
@@ -587,7 +587,7 @@
           <!-- How long the working day lasted (app/worktime.py) and the reminder of the norm -->
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="rdSasWorktime">Считать отработанное время</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasWorktimeHint">Минуты, когда за компьютером работают клавиатура и мышь, идёт запись или звонок, — как статус в Teams. Видно на «Главной» и в календаре. Только на этом компьютере.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasWorktimeHint">Учитываются минуты, когда используются клавиатура и мышь, идёт запись или звонок, — как статус в Teams. Видно на «Главной» и в календаре. Только на этом компьютере.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-worktime-track" checked />
           </label>
           <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
@@ -609,7 +609,7 @@
         <div class="settings-card">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="deviceTitle">Устройство</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="deviceDesc">Где считается распознавание: видеокарта NVIDIA быстрее, процессор подходит любому компьютеру.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="deviceDesc">Где выполняется распознавание: видеокарта NVIDIA быстрее, процессор есть в любом компьютере.</p>
           </div>
           <!-- Audit 8.2: chosen by the hardware unless you pick yourself; the device and the precision are one level deeper -->
           <label class="vs-row cursor-pointer text-xs text-apple-label">
@@ -685,7 +685,7 @@
                 <span data-i18n="nemotronToggle">Точное разделение (Nemotron 3)</span>
                 <input type="checkbox" role="switch" class="vs-switch" id="set-nemotron" data-change="toggleNemotron" />
               </label>
-              <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="nemotronHint">Модель NVIDIA размечает, кто когда говорит, по всей записи сразу: на тестовых совещаниях путала людей втрое реже. До 8 участников. Скачивается отдельно; без неё работает обычное разделение.</p>
+              <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="nemotronHint">Модель NVIDIA размечает, кто когда говорит, по всей записи сразу: на тестовых совещаниях ошибалась в участниках втрое реже. До 8 участников. Скачивается отдельно; без неё работает обычное разделение.</p>
               <div class="flex items-center gap-2">
                 <span id="nemotron-status" class="text-[11.5px] text-apple-secondary"></span>
                 <button data-click="installNemotron" id="nemotron-install" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="nemotronInstall">Скачать</button>
@@ -701,13 +701,13 @@
               <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="voiceProfilesHint">Голос запоминается, когда вы указываете имя участника. В новых записях похожий голос получает это имя автоматически. Отпечатки голосов хранятся только в базе на этом компьютере.</p>
               <div id="voice-profiles-list" class="space-y-1"></div>
               <button data-click="applyVoiceProfilesToLibrary" class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]"
-                data-i18n-title="tipVoiceApplyAll" title="Подписать знакомые голоса в записях, сделанных до того, как голос был запомнен. Имена, которые вы дали сами, не меняются"
+                data-i18n-title="tipVoiceApplyAll" title="Подписать знакомые голоса в записях, сделанных до того, как голос был запомнен. Имена, заданные вручную, не меняются"
                 data-i18n="voiceApplyAll">Найти эти голоса в старых записях</button>
             </div>
           </div>
           <!-- Sound before recognition: the same switches the import window starts from (proc_*, vad_filter) -->
           <div class="text-[11.5px] font-semibold uppercase tracking-wider text-apple-tertiary pt-1"><span data-i18n="impSound">Звук перед распознаванием</span>
-            <span class="normal-case font-normal tracking-normal" data-i18n="impSoundNote">только для копии, которую слушает модель; сами файлы не меняются</span></div>
+            <span class="normal-case font-normal tracking-normal" data-i18n="impSoundNote">только для копии, которую слушает модель; исходные файлы не меняются</span></div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="impDenoise"></span>
               <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="impDenoiseHint"></span></span>
@@ -747,7 +747,7 @@
             <input type="checkbox" role="switch" class="vs-switch" id="set-asr-ensemble" />
           </label>
           <div id="set-ensemble-box" class="space-y-1.5">
-            <div class="text-[11.5px] text-apple-secondary" data-i18n="ensModels">Чем распознать ещё раз для сведения:</div>
+            <div class="text-[11.5px] text-apple-secondary" data-i18n="ensModels">Модели для повторного распознавания и сведения:</div>
             <div id="set-ensemble-models" class="ens-list"></div>
             <div class="text-[11px] text-apple-tertiary leading-snug" data-i18n="ensModelsHint">Сначала запись распознаёт основная модель — та, что выбрана в «Модель распознавания» или при импорте. Отмеченные модели распознают её ещё раз, и расшифровки сводятся в одну; основную, если она тоже отмечена, второй раз не запускают. Каждая модель — ещё один проход по записи. Ничего не отмечено — берутся самые точные из скачанных, до трёх вместе с основной. Модель, которая не знает язык записи, пропускается.</div>
           </div>
@@ -779,7 +779,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <label for="set-speech-model-ru" class="block text-xs font-medium text-white" data-i18n="routeTitle">Модель для русской речи</label>
-              <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="routeDesc">Записи на русском распознаёт эта модель, на других языках — основная. Если язык записи «Определить сам», он определяется по первой минуте.</p>
+              <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="routeDesc">Записи на русском распознаёт эта модель, на других языках — основная. Если язык записи «Определить автоматически», он определяется по первой минуте.</p>
             </div>
             <select id="set-speech-model-ru" data-change="setSpeechModelRu" class="imp-select shrink-0 max-w-[15rem]"></select>
           </div>
@@ -855,7 +855,7 @@
           <div id="ft-dict-list" class="space-y-2"></div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="ftSuggestToggle">Предлагать фичу новой записи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="ftSuggestHint">По названию встречи, а если в нём фичи нет — моделью анализа. Предложение появляется у названия записи с ✓ / ✕, само ничего не ставится.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="ftSuggestHint">По названию встречи, а если в нём фичи нет — моделью анализа. Предложение появляется у названия записи с ✓ / ✕; без подтверждения фича не ставится.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-feature-suggest" checked />
           </label>
         </div>
@@ -987,7 +987,7 @@
         <div class="settings-card !space-y-0">
           <div class="min-w-0 pb-1">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="afterTitle">После расшифровки</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="afterDesc">Что модель делает сама, когда запись расшифрована.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="afterDesc">Что выполняется автоматически, когда запись расшифрована.</p>
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label" data-i18n-title="tipAutoSummaryToggle" title="Генерировать структурированный протокол автоматически сразу после завершения транскрибации">
             <span data-i18n="autoSummaryToggle">Создавать обзор автоматически после расшифровки</span>
@@ -995,12 +995,12 @@
           </label>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="afterMeetingsToggle">Анализ — только когда нет встречи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="afterMeetingsHint">Пока идёт запись или по календарю встреча, анализ не запускается, а начатый останавливается, и модель анализа выгружается из памяти, чтобы компьютер не тормозил. Записи разбираются сами через пару минут после встречи. Анализ, запущенный вручную, не ждёт.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="afterMeetingsHint">Только на время встречи (идёт запись или встреча по календарю): расшифровка и анализ ждут её конца, начатый анализ останавливается, модели выгружаются из памяти — компьютер не нагружен, экран можно показывать. Через несколько минут после встречи записи расшифровываются и анализируются автоматически. Субтитры автоматически не включаются; субтитры, перевод и анализ, запущенные вручную, не ждут. Переключается и в меню значка в трее.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-analysis-after-meetings" checked />
           </label>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="autoTitleToggle">Называть записи по содержанию</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="autoTitleHint">Если у записи безликое название («Запись 14-05», «zoom_0», «VID_2024…»), после расшифровки модель придумает его по тексту. Названия, которые вы ввели сами, не меняются.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="autoTitleHint">Если у записи типовое название («Запись 14-05», «zoom_0», «VID_2024…»), после расшифровки модель даст ей название по тексту. Названия, введённые вручную, не меняются.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-auto-title" checked />
           </label>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
@@ -1080,7 +1080,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <h4 class="text-[13px] font-semibold text-white" data-i18n="watchTitle">Папка автоимпорта аудио и видео</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="watchDesc">Новые аудио и видео, которые появятся в этой папке (синхронизация с телефона, диктофон, записи Zoom), добавятся в медиатеку и расшифруются сами. Файлы, которые уже лежат в папке, не трогаются.</p>
+              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="watchDesc">Новые аудио и видео, которые появятся в этой папке (синхронизация с телефона, диктофон, записи Zoom), добавятся в медиатеку и расшифруются автоматически. Файлы, которые уже есть в папке, не добавляются.</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -1133,7 +1133,7 @@
             </label>
             <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
               <span><span data-i18n="obsFeatureFolders">Раскладывать по папкам фич</span>
-                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="obsFeatureFoldersHint">Заметка записи с фичей ложится в папку с названием фичи; без фичи — в общую папку.</span></span>
+                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="obsFeatureFoldersHint">Заметка записи с фичей сохраняется в папку с названием фичи; без фичи — в общую папку.</span></span>
               <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-feature_folders" data-change="updateObsidianPreview" />
             </label>
             <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
@@ -1158,7 +1158,7 @@
         <div class="settings-card">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="mcpTitle">Доступ агента (MCP)</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="mcpDesc">Claude или другой агент сам ищет по встречам, читает нужные разделы, решения и задачи — без выгрузки файлов. Только чтение, работает и при закрытой программе.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="mcpDesc">Claude или другой агент ищет по встречам, читает нужные разделы, решения и задачи — без выгрузки файлов. Только чтение, работает и при закрытой программе.</p>
           </div>
           <div>
             <div class="flex items-center justify-between gap-2 mb-1">
@@ -1207,7 +1207,7 @@
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="deleteMediaAfter">Удалять звук после расшифровки</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="deleteMediaAfterHint">Остаются расшифровка, анализ и заметки. Файлы, добавленные по пути на диске, не трогаются.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="deleteMediaAfterHint">Остаются расшифровка, анализ и заметки. Файлы, добавленные по пути на диске, не удаляются.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-delete-media-after" />
           </label>
           <div class="flex items-center gap-2 text-xs text-apple-label">
@@ -1255,7 +1255,7 @@
         <div data-stab="bench" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavBench">Сравнение моделей</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescBench">Какая модель лучше справляется с вашими записями.</p>
+            <p class="sx-section-desc" data-i18n="rdSasDescBench">Какая модель лучше работает на ваших записях.</p>
           </div>
         <!-- Model comparison on the user's recordings (app/bench.py) -->
         <div class="settings-card">
@@ -1366,7 +1366,7 @@
                 <option value="atempo">atempo (FFmpeg)</option>
                 <option value="rubberband">Rubber Band</option>
               </select>
-              <p id="sdub-stretch-hint" class="text-[11px] text-apple-tertiary mt-1 leading-snug" data-i18n="sdubStretchHint">Как ускоряется фраза, которая не влезает в исходный тайминг. Rubber Band звучит естественнее, но есть не во всех сборках FFmpeg.</p>
+              <p id="sdub-stretch-hint" class="text-[11px] text-apple-tertiary mt-1 leading-snug" data-i18n="sdubStretchHint">Как ускоряется фраза, которая не укладывается в исходный тайминг. Rubber Band звучит естественнее, но есть не во всех сборках FFmpeg.</p>
             </div>
             <div>
               <label class="flex items-center justify-between text-[11.5px] text-apple-secondary mb-1">

@@ -33,7 +33,7 @@ def api_llm_set_key(payload: LlmKeyPayload) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Неизвестный сервис")
     key = payload.key.strip()
     if not key or len(key) > 500 or any(c.isspace() for c in key):
-        raise HTTPException(status_code=400, detail="Ключ выглядит неверно")
+        raise HTTPException(status_code=400, detail="Неверный формат ключа")
     secret_store.set_secret(key_name(payload.provider), key)
     picked = ensure_model(payload.provider)
     return {**status(), "models": picked["models"], "model_changed": picked["changed"], "model": picked["model"]}
