@@ -26,7 +26,6 @@ from app.database import (
     get_all_settings,
     get_meeting,
     init_db,
-    is_local_only,
     list_meetings,
     save_meeting_results,  # noqa: F401 - reached as app.main.save_meeting_results
     update_meeting_progress,
@@ -283,12 +282,6 @@ async def lifespan(_app: FastAPI):
         ffmpeg_manager.ensure_on_start()  # none yet (first start): fetched without a visit to the settings
     except Exception:
         traceback.print_exc()
-    try:
-        from app import secret_store
-
-        secret_store.rewrap_former()  # API keys saved before the program had its present name
-    except Exception:
-        traceback.print_exc()
     idle_unload.start()
     try:
         from app import mem_reserve
@@ -495,7 +488,7 @@ def api_get_meeting(meeting_id: int) -> Dict[str, Any]:
     path = m.get("media_path") or ""
     # The file was moved or its disk is not there: the page offers «Указать файл…»
     missing = bool(path) and not m.get("media_removed") and m.get("status") != "mixing" and not Path(path).is_file()
-    return {**m, "local_only_effective": is_local_only(m), "media_missing": missing}
+    return {**m, "media_missing": missing}
 
 
 def _recordings_dir() -> Path:
@@ -821,7 +814,7 @@ def _pick_path_native(mode: str, directory: Path, filename: str = "", fmt: str =
 
 # --- The endpoints, one router per part of the program, in the order they were written (the order of
 # routes matters: "/api/meetings/search" before "/api/meetings/{meeting_id}") ---
-from app.api import analysis, assistant, cloud, export, home, library, media, recording, system, tasks  # noqa: E402
+from app.api import analysis, assistant, export, home, library, media, recording, system, tasks  # noqa: E402
 
-for _part in (system, library, recording, analysis, media, export, cloud, tasks, home, assistant):
+for _part in (system, library, recording, analysis, media, export, tasks, home, assistant):
     app.include_router(_part.router)

@@ -845,7 +845,7 @@ def api_live_ask(session_id: str, payload: LiveAskPayload) -> Dict[str, Any]:
         answer = llm.chat(system, f"Расшифровка разговора:\n{text}\n\nВопрос: {question}")
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e)[:300])
-    return {"answer": answer, "model": llm.label, "cloud": llm.is_cloud}
+    return {"answer": answer, "model": llm.label}
 
 @router.post("/api/live/{session_id}/config")
 def api_live_config(session_id: str, payload: LiveConfigPayload) -> Dict[str, Any]:

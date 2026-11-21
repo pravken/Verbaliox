@@ -13,7 +13,7 @@ class SettingsSchemaTest(unittest.TestCase):
         self.assertEqual(clean("num_speakers", "3"), "3")
         self.assertEqual(clean("num_speakers", 99), "20")
         self.assertEqual(clean("idle_unload_minutes", ""), "0")
-        for key, bad in (("auto_summary", "yes"), ("num_speakers", "x"), ("llm_provider", "evil"), ("date_folders", "x")):
+        for key, bad in (("auto_summary", "yes"), ("num_speakers", "x"), ("date_folders", "x")):
             with self.assertRaises(ValueError):
                 clean(key, bad)
         self.assertEqual(as_int("x", 0), 0)
@@ -48,12 +48,6 @@ class SettingsSchemaTest(unittest.TestCase):
             clean("Bad Key", "x")
         with self.assertRaises(ValueError):
             clean("summary_templates", "x" * (300 * 1024))
-
-    def test_cloud_needs_consent(self):
-        from app.llm import uses_cloud
-
-        self.assertFalse(uses_cloud({"llm_provider": "cloud", "llm_cloud_consent": "false"}))
-        self.assertTrue(uses_cloud({"llm_provider": "cloud", "llm_cloud_consent": "true"}))
 
 
 class SettingsCacheTest(unittest.TestCase):

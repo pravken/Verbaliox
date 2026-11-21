@@ -398,23 +398,21 @@ def _parse_check(answer: str, text: str) -> List[Dict[str, str]]:
     return out
 
 
-def check_with_model(meeting: Dict[str, Any], local_only: bool = False) -> List[Dict[str, str]]:
+def check_with_model(meeting: Dict[str, Any]) -> List[Dict[str, str]]:
     """A small model reads the analysis for words heard wrong. Uses the small installed model of live
-    translation when the analysis runs locally (seconds instead of a minute), else the analysis model."""
+    translation (seconds instead of a minute), else the analysis model."""
     from app import llm
 
     text = analysis_text(meeting)[:CHECK_TEXT_MAX]
     if not text.strip():
         return []
-    model = None
-    if not llm.uses_cloud() or local_only:
-        try:
-            from app.live_translate import model_choices
+    try:
+        from app.live_translate import model_choices
 
-            model = model_choices().get("fast")
-        except Exception:
-            model = None
-    tgt = llm.target(model, local_only=local_only)
+        model = model_choices().get("fast")
+    except Exception:
+        model = None
+    tgt = llm.target(model)
     parts = []
     try:
         from app.people import meeting_roster

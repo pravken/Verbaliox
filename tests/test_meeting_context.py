@@ -45,7 +45,7 @@ class MeetingContextTest(unittest.TestCase):
     def test_the_search_for_tasks_reads_the_transcript_alone(self):
         # the protocol's points as hints narrowed the search or brought in points that are not tasks
         merge_summaries(self.mid, {"protocol": PROTOCOL})
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = '{"who": "Ольга", "what": "провести обход этажа", "due": "в четверг", "time": "00:00", "quote": "В четверг проведём обход этажа"}'
         with mock.patch("app.llm.target", return_value=llm):
             commitments.extract(self.mid)
@@ -56,7 +56,7 @@ class MeetingContextTest(unittest.TestCase):
     def test_an_english_meeting_gets_its_tasks_in_english(self):
         from app.database import update_meeting_fields
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = ""
         with mock.patch("app.llm.target", return_value=llm):
             commitments.extract(self.mid)
@@ -67,7 +67,7 @@ class MeetingContextTest(unittest.TestCase):
 
     def test_an_answer_that_cannot_be_read_keeps_the_tasks(self):
         """Found in the audit: a model's answer without its list deleted every task found before."""
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = '{"who": "Ольга", "what": "провести обход этажа", "due": "в четверг", "time": "00:00", "quote": "В четверг проведём обход этажа"}'
         with mock.patch("app.llm.target", return_value=llm), mock.patch.object(commitments, "verify", side_effect=lambda items, m, llm: items):
             self.assertEqual(len(commitments.extract(self.mid)), 1)

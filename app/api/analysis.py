@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import File, HTTPException, UploadFile
 from pydantic import BaseModel
-from app.database import edit_meeting, get_meeting, is_local_only, update_meeting_fields
+from app.database import edit_meeting, get_meeting, update_meeting_fields
 from app.ollama_client import generate_meeting_summary
 from app.text_utils import realign_words
 
@@ -769,7 +769,7 @@ def api_analysis_check(meeting_id: int) -> Dict[str, Any]:
     if not m:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     try:
-        return {"suggestions": check_with_model(m, local_only=is_local_only(m))}
+        return {"suggestions": check_with_model(m)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -808,18 +808,6 @@ def api_clear_results(meeting_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     return get_meeting(meeting_id)
 
-@router.get("/api/privacy/cloud-log")
-def api_cloud_log() -> List[Dict[str, Any]]:
-    from app.llm import cloud_log
-
-    return cloud_log()
-
-@router.delete("/api/privacy/cloud-log")
-def api_clear_cloud_log() -> Dict[str, Any]:
-    from app.llm import clear_cloud_log
-
-    clear_cloud_log()
-    return {"ok": True}
 
 class CommitmentExtractPayload(BaseModel):
     model: Optional[str] = None
@@ -1012,7 +1000,6 @@ def api_generate_summary(meeting_id: int, payload: SummaryRequestPayload) -> Dic
                 custom_prompt=payload.custom_prompt,
                 model_name=payload.model or None,
                 answer_lang=payload.lang or m.get("language") or "ru",
-                local_only=is_local_only(m),
                 user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
                 context_note=meeting_context_note(m, payload.template),
                 template_prompt=template_prompt,

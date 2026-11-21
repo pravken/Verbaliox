@@ -153,11 +153,11 @@ class DigestTest(unittest.TestCase):
             self.db.delete_meeting(mid)
         self.db.delete_folder(self.folder["id"])
 
-    def _fake(self, cloud=False):
+    def _fake(self):
         from app.llm import Target
 
         sent = []
-        tgt = Target("anthropic" if cloud else "ollama", "m", 20000, lambda sys_, user: sent.append(user) or "## Главное\n- x [1]")
+        tgt = Target("ollama", "m", 20000, lambda sys_, user: sent.append(user) or "## Главное\n- x [1]")
         return tgt, sent
 
     def test_folder_digest_uses_overviews_and_links(self):
@@ -174,18 +174,6 @@ class DigestTest(unittest.TestCase):
         self.assertIn("текст Старая", sent[0])          # otherwise the transcript
         with mock.patch("app.llm.target", return_value=tgt):
             self.assertEqual(make_digest(folder_id=self.folder["id"], days=30)["count"], 1)  # "future" one only
-
-    def test_local_only_left_out_of_cloud(self):
-        from unittest import mock
-
-        from app.digest import make_digest
-
-        self.db.update_meeting_fields(self.ids[0], local_only=1)
-        tgt, sent = self._fake(cloud=True)
-        with mock.patch("app.llm.target", return_value=tgt):
-            out = make_digest(folder_id=self.folder["id"])
-        self.assertEqual((out["count"], out["excluded_local"]), (1, 1))
-        self.assertNotIn("Старая", sent[0])
 
 
 class PeopleTest(unittest.TestCase):

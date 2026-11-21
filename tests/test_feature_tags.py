@@ -63,7 +63,7 @@ class FeatureTagsTest(unittest.TestCase):
     def test_the_model_only_suggests_and_a_no_is_remembered(self):
         pay, search = features.create_feature("Платежи"), features.create_feature("Поиск")
         mid = self._meeting()
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = '["платежи", "Новая фича"]'  # a name not in the list is ignored
         with mock.patch("app.llm.target", return_value=llm):
             self.assertEqual(features.suggest(mid), [pay["id"]])
@@ -86,7 +86,7 @@ class FeatureTagsTest(unittest.TestCase):
     def test_accepting_one_suggestion_keeps_the_others(self):
         pay, search = features.create_feature("Платежи"), features.create_feature("Поиск")
         mid = self._meeting()
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = '["Платежи", "Поиск"]'
         with mock.patch("app.llm.target", return_value=llm):
             features.suggest(mid)
@@ -159,7 +159,7 @@ class FeatureTagsTest(unittest.TestCase):
         self.assertIn("PayGate", vocab.glossary_note())
         from app import ollama_client
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm = mock.Mock(max_chars=100000, label="m")
         llm.chat.return_value = "обзор"
         segs = [{"start": 0, "end": 5, "speaker": "S1", "text": "обсудили страйп"}]
         with mock.patch("app.llm.target", return_value=llm):

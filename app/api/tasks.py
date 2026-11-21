@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.database import get_meeting, is_local_only
 
 router = APIRouter()
 
@@ -299,9 +298,8 @@ def api_tasks_report(payload: ReportPayload) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
     if not payload.use_model or not facts["counts"]["all"]:
         return {**facts, "model": ""}
-    local = any(is_local_only(get_meeting(t["meeting_id"])) for t in tasks if t["meeting_id"])
     try:
-        return commitments.report_by_model(facts, local_only=local)
+        return commitments.report_by_model(facts)
     except (LlmError, OSError, RuntimeError):
         return {**facts, "model": "", "model_failed": True}
 
