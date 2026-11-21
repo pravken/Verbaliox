@@ -499,7 +499,7 @@ function modelsDownloadable() {
   for (const m of ((state.system || {}).ollama || {}).catalog || []) {
     if (m.installed || !m.good_ru) continue;
     const short = vramGb && m.min_vram_gb > vramGb;
-    out.push({ id: m.id, label: formatModelName(m.id), size: m.size || '', ai: true, downloading: pull.active && pull.model === m.id,
+    out.push({ id: m.id, label: formatModelName(m.id), size: uiSizeText(m.size), ai: true, downloading: pull.active && pull.model === m.id,
       need: m.min_vram_gb ? t('mpNeedVram').replace('{n}', () => m.min_vram_gb) : '', short, fn: 'modelsPopPullLlm' });
   }
   return out;
@@ -1896,7 +1896,17 @@ async function fillDictationTranslateLangs(value) {
 // Upload and re-transcribe dialogs: every model (Whisper, GigaAM, Parakeet). One not downloaded yet
 // has ↓ and its size: the job downloads it first (app/transcriber.py), the hint under the list says so
 function modelSizeLabel(item) {
-  return item.size || (item.size_mb >= 1000 ? (item.size_mb / 1024).toFixed(1) + ' GB' : (item.size_mb || '') + ' MB');
+  return uiSizeText(item.size || (item.size_mb >= 1000 ? (item.size_mb / 1024).toFixed(1) + ' GB' : (item.size_mb || '') + ' MB'));
+}
+
+// A size the server writes «6.6 GB» / «900 MB» in the units and the decimal sign of the page («6,6 ГБ»), so it
+// reads the same as the sizes written here (the «Модели» window had «8 ГБ» beside «6.6 GB»)
+function uiSizeText(text) {
+  const m = /^\s*([\d.,]+)\s*(GB|MB|ГБ|МБ)\s*$/i.exec(String(text || ''));
+  if (!m) return String(text || '');
+  const unit = /^(GB|ГБ)$/i.test(m[2]) ? t('unitGB') : t('unitMB');
+  const num = m[1].replace(',', '.');
+  return `${state.uiLang === 'en' ? num : num.replace('.', ',')} ${unit}`;
 }
 
 // --- Model meters: accuracy (or quality), speed and load in dots, half a dot a step, so that no two models
