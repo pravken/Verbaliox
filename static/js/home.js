@@ -101,7 +101,11 @@ async function hmLoadEvents(force, date) {
     home.calConfigured = !!data.configured;
     const worked = work && work.enabled && work.days[key] ? work.days[key].worked || 0 : 0;
     home.days[key] = { at: Date.now(), events, recordings: data.recordings || [], worked };
-    for (const k of Object.keys(home.days).sort().slice(0, -30)) delete home.days[k];  // a few weeks of days at most
+    // a few weeks of days at most: the ones loaded longest ago leave, never the day just loaded nor today (sorted by
+    // date, a step back of 30 days dropped the day just loaded: «Загрузка…» for good)
+    const todayKey = calKey(hmDay().from);
+    const old = Object.keys(home.days).filter(k => k !== key && k !== todayKey).sort((x, y) => home.days[x].at - home.days[y].at);
+    for (const k of old.slice(0, Math.max(0, Object.keys(home.days).length - 30))) delete home.days[k];
     if (today) { home.eventsAt = Date.now(); home.events = events; }
   })().finally(() => { delete hmEventsLoading[key]; });
   return hmEventsLoading[key];
