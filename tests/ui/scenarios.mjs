@@ -1105,16 +1105,20 @@ await step('meeting strip', async () => {
   await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
 });
 
-// «Очередь» on the rail and the load of the status bar: each opens its window next to it, Escape and a click
-// outside close it
+// «Очередь» as the island of the top strip and the load of the status bar: each opens its window next to it, Escape
+// and a click outside close it
 await step('queue and load windows', async () => {
-  await page.click('#rail-jobs');
+  expect(await page.locator('#rail-jobs').count() === 0, 'the rail still has its «Очередь»');
+  await page.evaluate(() => { state.queue = [{ id: 9902, state: 'running', kind: 'transcribe', title: 'Тест', progress: 40, position: 0 }]; renderJobsRail(); });
+  expect(await page.isVisible('#strip-island'), 'no island while a job runs');
+  await page.click('#strip-island');
   await sleep(300);
   expect(await page.isVisible('#jobs-pop'), 'the queue window did not open');
-  const r = await page.evaluate(() => [document.getElementById('jobs-pop').getBoundingClientRect().left, document.getElementById('app-rail').getBoundingClientRect().right]);
-  expect(r[0] >= r[1] && r[0] - r[1] < 20, `the queue window is not next to the rail: ${r}`);
+  const r = await page.evaluate(() => [document.getElementById('jobs-pop').getBoundingClientRect(), document.getElementById('strip-island').getBoundingClientRect()].map(x => [x.top, x.right, x.bottom]));
+  expect(r[0][0] >= r[1][2] && Math.abs(r[0][1] - r[1][1]) < 2, `the queue window is not under the island: ${JSON.stringify(r)}`);
   await page.keyboard.press('Escape');
   expect(!(await page.isVisible('#jobs-pop')), 'Escape did not close the queue window');
+  await page.evaluate(() => { state.queue = []; renderJobsRail(); island.had = false; clearTimeout(island.doneTimer); island.doneTimer = null; island.html = ''; document.getElementById('strip-island').classList.add('hidden'); });
   await page.click('#sb-load');
   await sleep(500);
   expect(await page.isVisible('#load-pop'), 'the load window did not open');

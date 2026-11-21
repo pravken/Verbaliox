@@ -5120,3 +5120,19 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
   font-size: var(--fs-ui); font-weight: 500; padding: 0 10px; }
 .hm-pop .hm-select:hover { background: #34373B; }
 .hm-pop .hm-select:focus { border-color: rgb(var(--accent-rgb) / 0.6); outline: none; }
+
+/* «Очередь» as an island in the top strip (asked by the user, the iPhone way): a dark capsule before «＋ Импорт» with
+   the ring of the job, its name and percent, «+N в очереди»; «Готово» green for a moment; no rail button, no
+   «Очередь пуста» in the status bar */
+.st-island { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl-h, 32px); box-sizing: border-box; padding: 0 12px 0 6px;
+  border-radius: 16px; background: #0B0C0E; border: 1px solid var(--line); color: #E6E7EA; font-size: var(--fs-ui); font-weight: 500;
+  white-space: nowrap; flex: none; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease; }
+.st-island:hover { background: #15171A; }
+.st-island.hidden { display: none; }
+.st-island svg { width: 20px; height: 20px; flex: none; }
+.st-island-t { font-variant-numeric: tabular-nums; }
+.st-island-n { color: var(--hc-dim, #9A9CA1); font-weight: 400; padding-left: 8px; border-left: 1px solid var(--line); }
+.st-island-n.st-island-solo { padding-left: 6px; border-left: 0; }
+.st-island-wait { color: var(--hc-dim, #AEAEB2); }
+.st-island-done { color: #7EE787; }
+#sb-queue { display: none !important; }
