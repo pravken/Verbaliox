@@ -463,7 +463,7 @@
     <div id="workspace-content" class="hidden flex-1 flex flex-col overflow-hidden">
 
       <!-- THE HEADER OF A RECORDING (stage 5 of docs/pult-plan.md): «Записи / название» with the icon of the
-           section on the first line; the tabs («Итоги» first), translation and export on the second -->
+           section on the first line; the tabs, translation and export on the second -->
       <header id="workspace-header" class="rec-head shrink-0 z-20">
         <div class="rec-head-row">
           <span class="rec-ttl-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg></span>
@@ -488,11 +488,13 @@
         </div>
 
         <div class="rec-head-row rec-head-tabs">
-        <!-- The tabs of the open recording (openRecordTab in static/js/shell.js): «Итоги» first -->
+        <!-- The tabs of the open recording (openRecordTab in static/js/shell.js), in the order the user chose:
+             «Расшифровка» (opened first), «Анализ», «Участники», «Сведения» -->
         <div id="tb-record" class="tb-group tb-rec-tabs hidden" role="group" data-i18n-aria="tbRecordGroup" aria-label="Открытая запись">
-          <button data-click="openRecordTab" data-click-args='["summary"]' id="nav-summary" class="tb-subtab" data-i18n-title="tipTabSummary" title="Структурированный обзор, задачи и ответы на вопросы по записи"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="tabSummary">Итоги</span><span id="nav-summary-n" class="tb-badge hidden"></span></button>
           <button data-click="openRecordTab" data-click-args='["transcript"]' id="nav-transcript" class="tb-subtab" data-i18n-title="tipTabTranscript" title="Показать полную расшифровку речи по ролям и таймкодам (Ctrl+3)"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span class="tb-lbl" data-i18n="tabTranscript">Расшифровка</span></button>
+          <button data-click="openRecordTab" data-click-args='["summary"]' id="nav-summary" class="tb-subtab" data-i18n-title="tipTabSummary" title="Структурированный обзор, задачи и ответы на вопросы по записи"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="tabSummary">Анализ</span><span id="nav-summary-n" class="tb-badge hidden"></span></button>
           <button data-click="openRecordTab" data-click-args='["speakers"]' id="nav-speakers" class="tb-subtab" data-i18n-title="tipTabSpeakers" title="Управление участниками, прослушивание образцов голоса и переименование"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 6.2a3 3 0 0 1 0 5.6M17.5 14.4A5.5 5.5 0 0 1 20.5 19"/></svg><span class="tb-lbl" data-i18n="tabSpeakers">Участники</span><span id="nav-speakers-n" class="tb-badge hidden"></span></button>
+          <button data-click="openRecordTab" data-click-args='["info"]' id="nav-info" class="tb-subtab" data-i18n-title="tipTabInfo" title="Где лежит файл, его формат, даты и состояние обработки"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.4"/></svg><span class="tb-lbl" data-i18n="tabInfo">Сведения</span></button>
         </div>
 
         <!-- The views of the recording are chosen in the tabs above (openRecordTab in static/js/shell.js);
@@ -651,6 +653,9 @@
 
             <!-- Right: Transcript Editing, Auto-Scroll & Search Tools -->
             <div id="tx-tools" class="flex items-center gap-1.5 shrink-0 ml-auto">
+              <!-- Again, with the choice of the model, the language and the number of speakers (the dialog of the recording's menu) -->
+              <button data-click="recReconfigure" class="ui-btn ui-btn-subtle shrink-0" data-i18n-title="recRedoTip" title="Расшифровать заново с выбором модели, языка и числа говорящих">
+                <span aria-hidden="true">↻</span><span data-i18n="recRedo">Расшифровать заново…</span></button>
               <!-- The look of the text: a chat (a bubble for each phrase) or the text as before (setTxLayout in workspace.js) -->
               <div class="tx-layout" role="radiogroup" data-i18n-aria="txLayoutAria" aria-label="Вид расшифровки">
                 <button data-click="setTxLayout" data-click-args='["chat"]' id="tx-layout-chat" role="radio" aria-checked="true" data-i18n="txLayoutChat" data-i18n-title="txLayoutChatTip" title="Реплики облачками: аватар и имя один раз на серию реплик">Чат</button>

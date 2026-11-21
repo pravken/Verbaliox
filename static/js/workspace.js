@@ -14,6 +14,11 @@ async function selectMeeting(id, reloadPlayer = true) {
   const seq = ++_selectSeq;
   // Audit 3.2. The click answers at once: the row lights up and the title shows the recording,
   // the rest comes with the server's answer
+  // Another recording opens on «Расшифровка» (asked by the user); done before the answer, so a caller that
+  // opens another tab right after (the dashboard: «Анализ») has the last word
+  if (reloadPlayer && (!state.activeMeeting || state.activeMeeting.id !== id) && state.activeWorkspaceTab && state.activeWorkspaceTab !== 'transcript') {
+    switchWorkspaceTab('transcript');
+  }
   const known = (state.meetings || []).find(x => x.id === id);
   if (known && (!state.activeMeeting || state.activeMeeting.id !== id)) {
     state.pendingMeetingId = id;
@@ -2426,4 +2431,13 @@ function transcriptChatGroupHtml(group) {
         <div class="ch-bubs">${group.segs.map(bubble).join('')}</div>
       </div>
     </div>`;
+}
+
+// «↻ Расшифровать заново…» of the open recording: the dialog of the recording's menu (the model, the language,
+// the number of speakers), for the recording shown
+function recReconfigure() {
+  const m = state.activeMeeting;
+  if (!m) return;
+  state.contextMeetingId = m.id;
+  ctxOpenReconfigureModal();
 }

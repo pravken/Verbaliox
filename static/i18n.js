@@ -1378,7 +1378,7 @@ const I18N = {
     emptySubtitle: 'Запишите встречу или добавьте аудио и видео. Обработка выполняется локально на этом компьютере.',
     emptyPickRecording: 'Или выберите запись в медиатеке слева',
     tabTranscript: 'Расшифровка',
-    tabSummary: 'Итоги',
+    tabSummary: 'Анализ',
     tabSpeakers: 'Участники',
     searchPlaceholder: 'Поиск в тексте…',
     export: 'Экспорт',
@@ -1421,7 +1421,7 @@ const I18N = {
     tipRenameInline: 'Нажмите, чтобы переименовать запись',
     tipTabTranscript: 'Показать полную расшифровку речи по ролям и таймкодам (Ctrl+3)',
     tipAnalysisRunning: 'Идёт анализ этой записи',
-    tipTabSummary: 'Итоги встречи: кратко, решения, задачи, отметки и заметки; разделы анализа',
+    tipTabSummary: 'Структурированный обзор, задачи и ответы на вопросы по записи',
     tipTabSpeakers: 'Управление участниками, прослушивание образцов голоса и переименование',
     tipExportBtn: 'Экспортировать результат в файл (Word, Markdown, TXT, SRT, JSON)',
     tipExportDocx: 'Сохранить как документ Microsoft Word (.docx)',
@@ -3037,6 +3037,8 @@ const I18N = {
     scLoopPhrase: 'Повторять реплику по кругу',
     scMarkMoment: 'Отметка в плеере / к следующей отметке',
     scAbRepeat: 'Повтор отрезка: начало и конец',
+    recRedo: 'Расшифровать заново…',
+    recRedoTip: 'Расшифровать заново с выбором модели, языка и числа говорящих',
 
   },
   en: {
@@ -4415,7 +4417,7 @@ const I18N = {
     emptySubtitle: 'Record a meeting or add audio and video. Everything is processed locally on this computer.',
     emptyPickRecording: 'Or pick a recording in the library on the left',
     tabTranscript: 'Transcript',
-    tabSummary: 'Summary',
+    tabSummary: 'Analysis',
     tabSpeakers: 'Speakers',
     searchPlaceholder: 'Search transcript…',
     export: 'Export',
@@ -4458,7 +4460,7 @@ const I18N = {
     tipRenameInline: 'Click to rename this recording',
     tipTabTranscript: 'View full timecoded and speaker-labeled transcript (Ctrl+3)',
     tipAnalysisRunning: 'Analysis is running for this recording',
-    tipTabSummary: 'The meeting summary: in short, decisions, tasks, marks and notes; the analysis sections',
+    tipTabSummary: 'View structured AI notes, action items, and Q&A',
     tipTabSpeakers: 'Manage speakers, preview voice samples, and rename voices',
     tipExportBtn: 'Export notes and transcript (Word, Markdown, TXT, SRT, JSON)',
     tipExportDocx: 'Export as Microsoft Word document (.docx)',
@@ -6074,6 +6076,8 @@ const I18N = {
     scLoopPhrase: 'Play the phrase in a loop',
     scMarkMoment: 'Mark in the player / to the next mark',
     scAbRepeat: 'Repeat a stretch: its start and end',
+    recRedo: 'Transcribe again…',
+    recRedoTip: 'Transcribe again, choosing the model, the language and the number of speakers',
 
   }
 };
