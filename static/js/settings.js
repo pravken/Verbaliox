@@ -61,6 +61,33 @@ async function installVoiceFilter() {
   }
 }
 
+// Settings → General → «Акцент»: the colour of the picked-out buttons and marks, applied at once and saved
+// (ui_accent); the background stays one
+function renderAccentChoices() {
+  const el = document.getElementById('theme-accents');
+  if (!el) return;
+  const on = themeKey(((state.system && state.system.settings) || {}).ui_accent, THEME_ACCENTS, 'steel');
+  el.innerHTML = Object.keys(THEME_ACCENTS).map(k => {
+    const name = escapeHtml(t(`theme_accent_${k}`));
+    return `<button role="radio" aria-checked="${k === on}" class="theme-sw${k === on ? ' on' : ''}" data-click="setAccent" `
+      + `data-click-args='["${k}"]' title="${name}" aria-label="${name}"><i style="background:${THEME_ACCENTS[k]}"></i></button>`;
+  }).join('');
+  const label = document.getElementById('theme-accent-name');
+  if (label) label.textContent = t(`theme_accent_${on}`);
+}
+
+async function setAccent(key) {
+  applyTheme(key, 'slate', 'solid');
+  if (state.system) state.system.settings = { ...(state.system.settings || {}), ui_accent: key };
+  renderAccentChoices();
+  const res = await fetch('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { ui_accent: key } }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { showError(data.detail); return; }
+  if (state.system) state.system.settings = data.settings;
+}
+
 // Settings → General: the interface scale, applied at once and saved (ui_scale)
 function renderUiScaleButtons() {
   const cur = String(Math.round(uiZoom() * 100));
@@ -121,6 +148,8 @@ async function fillSystemInfo() {
       setUiScale(near);
     } else applyUiScale(ownScale);
     renderUiScaleButtons();
+    applyTheme((data.settings || {}).ui_accent, 'slate', 'solid');
+    renderAccentChoices();
 
     const hw = data.hardware;
     document.getElementById('hw-text').textContent = hw.cuda_available
