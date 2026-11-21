@@ -964,8 +964,9 @@
                 </button>
                 <div id="rp-pop-more" class="rp-pop rp-menu hidden" role="menu"></div>
               </div>
-              <!-- Minimize the player to one line and back (rpToggleMini; the title is set by the script) -->
-              <button id="rp-min-btn" class="rp-icon-btn" data-click="rpToggleMini" aria-expanded="true" data-i18n-title="rpMinimize" title="Свернуть проигрыватель">
+              <!-- Minimize the player to one line and back (rpToggleMini; the title and the label are set by rpApplyMini,
+                   again on a change of the language) -->
+              <button id="rp-min-btn" class="rp-icon-btn" data-click="rpToggleMini" aria-expanded="true" title="Свернуть проигрыватель" aria-label="Свернуть проигрыватель">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
               </button>
             </div>
