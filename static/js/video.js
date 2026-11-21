@@ -362,7 +362,10 @@ document.addEventListener('keydown', (e) => {
     // Closes the dialog on top; the recording window stays open while it records
     const open = [...document.querySelectorAll('[id^="modal-"]')].filter(m => !m.classList.contains('hidden'));
     const top = open[open.length - 1];
-    if (top && !isTypingTarget(e.target)) {
+    // a one-line field of the dialog itself (the link of «Импорт», focused on opening) does not keep it open;
+    // a text area and the fields of the page under it do
+    const ownLine = top && e.target.tagName === 'INPUT' && top.contains(e.target);
+    if (top && (ownLine || !isTypingTarget(e.target))) {
       e.preventDefault();
       closeModal(top.id.slice('modal-'.length));
     } else if (!top && studio.focus) {
