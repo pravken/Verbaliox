@@ -144,6 +144,7 @@ async function loadTasks() {
 }
 
 async function renderTasksPage() {
+  TK.rise = true;  // entering the section: the cards rise
   await loadTasks();
   renderTasks();
 }
@@ -156,6 +157,11 @@ function renderTasks() {
   document.getElementById('tk-list').classList.toggle('hidden', TK.view === 'cal');
   document.getElementById('tk-cal').classList.toggle('hidden', TK.view !== 'cal');
   renderTasksReport();
+  if (TK.rise) {  // on entering the section or switching its view, never on an update in place
+    TK.rise = false;
+    if (TK.view === 'cal') pultRise(document.getElementById('tk-cal'), '.tk-cal-grid-wrap, .tk-cal-side > *');
+    else pultRise(document.getElementById('tk-list'), ':scope > .tk-colbar, :scope > .tk-group');
+  }
 }
 
 // --- What is on screen: the filter, the people and the search (the counts of the filters use the same) ---
@@ -243,6 +249,7 @@ function setTasksView(view) {
   }
   TK.view = view;
   TK.sel = null;
+  TK.rise = true;
   renderTasks();
 }
 

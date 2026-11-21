@@ -3749,3 +3749,42 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .sx-card-hd > .pcd-ic + h4 { grid-column: 2; line-height: 24px; }
 .sx-card-hd > .pcd-ic + h4 + * { margin-top: 6px; }
 
+/* «Задачи» to the pixel as «Записи» (the values of .lt-head, .lt-bar, .lt-card, .lt-row and .lt-hrow of
+   static/js/libtable.js): the head, one bar of 36px (filters on the left; the view, the grouping and
+   «Колонки» on the right), the cards, the rows and the bar of the column names */
+#tasks-view .tk-head.tk-head-lt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; background: none; border-bottom: 0; }
+#tasks-view .tk-head-lt .tk-title { font-size: var(--fs-title); }
+#tasks-view .tk-head-lt .tk-sub { font-size: var(--fs-ui); }
+.tk-head-ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+#tasks-view .tk-head-lt .tk-search { border-radius: 8px; }
+#tasks-view .tk-bar { display: flex; align-items: center; gap: 6px; height: 36px; min-height: 0; flex: none; flex-wrap: nowrap; margin: 0 24px 8px; padding: 0; font-size: var(--fs-ui); background: none; border: 0; }
+.tk-fl { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.tk-fr { flex: none; display: flex; align-items: center; gap: 6px; }
+.tk-fl .tk-filters { flex-wrap: nowrap; }
+#tasks-view .tk-bar .tk-chip { flex: none; height: 28px; padding: 0 11px; border-radius: 14px; font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); }
+#tasks-view .tk-bar .tk-chip.tk-on { border-color: rgb(var(--accent-rgb) / 0.6); background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+#tasks-view .tk-bar .tk-seg { display: inline-flex; align-items: stretch; gap: 2px; height: 30px; box-sizing: border-box; padding: 2px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.1)); background: rgba(255, 255, 255, 0.04); }
+#tasks-view .tk-bar .tk-seg-btn { height: auto; padding: 0 9px; border-radius: 6px; font-size: var(--fs-caption); font-weight: 400; box-shadow: none; }
+#tasks-view .tk-bar .tk-seg-btn.tk-on { background: rgba(255, 255, 255, 0.13); color: #FFFFFF; }
+#tasks-view .tk-bar .tk-btn { gap: 7px; height: 30px; padding: 0 11px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
+#tasks-view .tk-bar .tk-btn:disabled { opacity: 0.4; pointer-events: auto; cursor: default; }
+#tasks-view .tk-tbg-lbl { font-size: var(--fs-caption); }
+#tasks-view .tk-list { padding: 0 24px 20px; gap: 0; }
+#tasks-view .tk-group.pcard { display: block; margin-bottom: 12px; padding: 10px 12px 6px; }
+#tasks-view .tk-group .tk-group-head { margin: 0 0 6px; padding: 0 4px; line-height: 24px; }
+#tasks-view .tk-group .tk-row { min-height: 38px; padding: 4px 12px; column-gap: 12px; row-gap: 0; box-sizing: border-box; }
+#tasks-view .tk-dense .tk-group .tk-row { min-height: 30px; padding-top: 2px; padding-bottom: 2px; }
+#tasks-view .tk-colbar { margin-bottom: 10px; padding: 7px 24px; column-gap: 12px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); border-radius: 10px; background: var(--sidebar); font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #A1A1A6); white-space: nowrap; }
+#tasks-view .tk-colbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#tasks-view .tk-tcards { padding: 0 0 6px; }
+#tasks-view .tk-cal-main { padding: 0 24px 16px; }
+/* a narrow window: the view, the grouping and «Колонки» on the first line, the filters under them */
+#tasks-view { container-type: inline-size; }
+@container (max-width: 1040px) {
+  #tasks-view .tk-bar { height: 76px; flex-wrap: wrap; align-content: center; row-gap: 10px; }
+  #tasks-view .tk-fr { order: 1; margin-left: auto; }
+  #tasks-view .tk-fl { order: 2; flex-basis: 100%; }
+}
+/* the cards rising one after another (pultRise in static/js/pult_cards.js) */
+.pult-rise { animation: vx-rise 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .pult-rise { animation: none; } }
