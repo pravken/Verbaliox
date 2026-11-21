@@ -20,9 +20,6 @@
       </header>
 
       <div class="tk-bar">
-        <div id="tk-views" class="tk-seg" role="radiogroup" data-i18n-title="tkViewLabel" title="Вид"></div>
-        <div id="tk-groups" class="tk-seg" role="radiogroup" data-i18n-title="tkGroupLabel" title="Группировать"></div>
-        <span class="tk-vsep" aria-hidden="true"></span>
         <div id="tk-filters" class="tk-filters"></div>
         <span class="tk-vsep" aria-hidden="true"></span>
         <div class="tk-ppl-wrap">
@@ -30,6 +27,11 @@
           <button id="tk-ppl-clear" class="tk-x hidden" data-click="clearTasksPeople" data-i18n-title="tkPeopleClear" title="Сбросить фильтр по людям">✕</button>
         </div>
         <span class="tk-grow"></span>
+        <!-- Named groups of the toolbar: the view, and the grouping of the list (greyed in the calendar, its place kept) -->
+        <span class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkViewLabel">Вид</span>
+          <span id="tk-views" class="tk-seg" role="radiogroup" data-i18n-aria="tkViewLabel" aria-label="Вид"></span></span>
+        <span id="tk-groups-box" class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkGroupLabel">Группировка</span>
+          <span id="tk-groups" class="tk-seg" role="radiogroup" data-i18n-aria="tkGroupLabel" aria-label="Группировка"></span></span>
         <label class="tk-search">
           <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
           <input id="tk-q" type="search" data-input="onTasksSearch" data-input-args='[{"$": "value"}]'

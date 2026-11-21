@@ -3612,3 +3612,60 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 @media (prefers-reduced-motion: reduce) { .rail *, .rail-ind { animation: none !important; transition: none !important; } }
 /* a narrow window: icons only, the name in the tip */
 @media (max-width: 1180px) { .rail { width: 56px; } .rail-btn > span[data-i18n] { display: none; } .rail-btn { padding: 11px 2px; } }
+
+/* =========================================================================
+   «Пульт встреч», stage 6 (docs/pult-plan.md): one card everywhere (static/js/pult_cards.js), the tasks
+   ========================================================================= */
+/* the card: one frame, background and rounding; its head the icon of its kind in a square, the name, a number */
+.pcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px 10px; box-sizing: border-box; min-width: 0; }
+.pcd-h { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--fs-ui); font-weight: 600; line-height: 24px; color: #F5F5F7; }
+.pcd-t { flex: 1; min-width: 0; display: inline-flex; align-items: baseline; }
+.pcd-n { margin-left: 8px; font-weight: 500; font-size: var(--fs-ui); color: var(--hc-dim, #8E8E93); }
+.pcd-side { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.pcd-ic { flex: none; width: 24px; height: 24px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.pcd-ic svg { display: block; width: 14px; height: 14px; }
+.pcard-over .pcd-h, .pcard-over .tk-group-title { color: #FF8A80; }
+.pcard-over .pcd-ic { background: rgba(255, 69, 58, 0.14); color: #FF8A80; }
+
+/* Задачи: the toolbar in named groups, the grouping greyed in the calendar (its place kept) */
+.tk-tbg { display: inline-flex; align-items: center; gap: 8px; }
+.tk-tbg-lbl { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
+.tk-tbg-off { opacity: 0.45; }
+.tk-tbg-off .tk-seg-btn { cursor: default; }
+/* the groups of the list as cards */
+.tk-group.pcard { gap: 6px; padding: 12px 14px 12px; }
+.tk-group .tk-group-head { padding: 0 2px 2px; }
+.tk-group .pcd-n { margin-left: 0; }
+/* the calendar: head, weekdays, days; a chip per task with the dot of its person */
+.tk-cal-main { padding: 14px 18px 16px 28px; gap: 10px; min-height: 0; overflow: hidden; }
+.tk-cal-head { gap: 8px; }
+.tk-month { min-width: 170px; margin: 0 2px; text-align: center; font-size: var(--fs-sub); }
+.tk-btn-sq { width: 32px; padding: 0; }
+.tk-cal-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; align-items: start; overflow-y: auto; }
+.tk-cal-grid-wrap { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tk-week { gap: 4px; letter-spacing: 0; font-weight: 500; font-size: var(--fs-caption); padding: 0 8px; }
+.tk-grid { flex: none; gap: 4px; grid-auto-rows: minmax(92px, auto); }
+.tk-day { min-height: 92px; gap: 3px; padding: 6px 6px 5px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); overflow: visible; min-width: 0; }
+.tk-day.tk-weekend { background: repeating-linear-gradient(135deg, var(--card) 0 7px, rgba(255, 255, 255, 0.022) 7px 14px); }
+.tk-day.tk-out { opacity: 0.4; }
+.tk-day.tk-today { border-color: rgb(var(--accent-rgb) / 0.8); box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.5); }
+.tk-day.tk-tall { min-height: 300px; }
+.tk-day-n { display: block; min-width: 0; height: auto; padding: 0; margin-bottom: 2px; border-radius: 0; font-size: var(--fs-caption); font-weight: 500; color: var(--hc-dim, #AEAEB2); text-align: left; }
+.tk-today .tk-day-n { background: none; color: var(--accent-text); font-weight: 600; }
+.tk-day-today { font-weight: 600; }
+.tk-more-n { align-self: flex-start; padding: 0 6px; height: auto; }
+.tk-cchip { align-items: flex-start; gap: 6px; min-height: 0; padding: 3px 6px; border-left: 0; border-radius: 6px; background: rgba(255, 255, 255, 0.05); font-size: var(--fs-caption); line-height: 1.35; min-width: 0; }
+.tk-cdot { flex: none; width: 6px; height: 6px; margin-top: 5px; border-radius: 50%; }
+.tk-cchip .tk-ctext { display: block; min-width: 0; overflow: visible; white-space: normal; overflow-wrap: break-word; hyphens: auto; text-overflow: clip; }
+.tk-cchip.tk-over { background: rgba(255, 69, 58, 0.12); color: #FF8A80; }
+.tk-cal-hint { margin-top: 6px; }
+.tk-cal-side { width: auto; padding: 0; border: 0; gap: 10px; overflow: visible; }
+.tk-cal-side .tk-card, .tk-cal-side .tk-dayl { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+/* «Без срока»: one size of text inside — the number, the tasks and the empty slot alike */
+.tk-nodue { display: flex; flex-direction: column; gap: 4px; padding-bottom: 12px; }
+.tk-nodue .pcd-h { margin-bottom: 6px; }
+.tk-nodue .tk-cchip { font-size: var(--fs-ui); padding: 5px 8px; }
+.tk-nodue .tk-cdot { margin-top: 6px; }
+.tk-nodue-empty { font-size: var(--fs-ui); color: var(--hc-dim, #8E8E93); padding: 5px 8px; border: 1px dashed var(--line); border-radius: 6px; }
+.tk-nodue.tk-drop { border-color: var(--accent); background: rgb(var(--accent-rgb) / 0.1); }
+@media (max-width: 1240px) { .tk-cal-body { grid-template-columns: minmax(0, 1fr) 210px; } .tk-cal-main { padding-left: 20px; } }
