@@ -3617,9 +3617,9 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
    The recording screen (docs/pult-plan.md, stage 5): the header «Записи / название», the summary in cards,
    the transcript as a chat, live captions in the same look, the player
    ========================================================================= */
-.rec-head { padding: 12px 20px 8px; border-bottom: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+.rec-head { padding: 8px 20px 6px; border-bottom: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
 .rec-head-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.rec-ttl-ic { flex: none; width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+.rec-ttl-ic { flex: none; width: 36px; height: 36px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
   background: rgb(var(--accent-rgb) / 0.12); border: 1px solid rgb(var(--accent-rgb) / 0.22); color: var(--accent-text); }
 .rec-ttl-ic svg { width: 18px; height: 18px; display: block; }
 .rec-trail { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; }
