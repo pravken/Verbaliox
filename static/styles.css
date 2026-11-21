@@ -3784,3 +3784,13 @@ button.sc-at:hover { color: var(--accent-text); }
 .rp-mini .rp-right { order: 5; flex: none; gap: 0; }
 .rp-mini .rp-right > :not(#rp-min-btn) { display: none; }
 .rp-mini #video-drawer { display: none; }
+/* «Сведения»: four cards of rows «key — value», the actions of each under a line */
+.info-wrap { max-width: 1100px; margin: 0 auto; }
+.info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 6px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); font-size: var(--fs-ui); }
+.kv-rows > .kv:first-child { border-top: 0; }
+.kv-k { color: var(--hc-dim, #8E8E93); }
+.kv-v { min-width: 0; color: #E5E5EA; overflow-wrap: anywhere; user-select: text; }
+.kv-mono { font-family: var(--font-mono); font-size: var(--fs-label); }
+.kv-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+@container (max-width: 860px) { .info-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -1885,74 +1885,74 @@ function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast(t('copied'), null, 'success'), () => {});
 }
 
+// «Сведения» (stage 5): cards «Файл», «Расшифровка», «Анализ», «Хранение» as rows «key — value», each with its
+// actions under a line. Only what the program already does: reveal and copy the path, transcribe again (the dialog
+// with the model, the language and the speakers), split by speakers again, make the analysis again, move to a folder
 function renderMeetingInfo(info) {
   const box = document.getElementById('info-content');
+  const m = state.activeMeeting || {};
   const row = (label, value, opts = {}) => value == null || value === '' ? '' : `
-    <div class="flex items-start gap-4 px-4 py-2.5 text-xs">
-      <div class="w-40 shrink-0 text-apple-secondary">${escapeHtml(label)}</div>
-      <div class="flex-1 min-w-0 text-apple-label ${opts.mono ? 'font-mono text-[11.5px]' : ''} break-all select-text">${opts.html ? value : escapeHtml(String(value))}</div>
-    </div>`;
-  const card = (title, rows, actions = '') => rows.trim() ? `
-    <div class="rounded-xl border apple-border bg-apple-sidebar overflow-hidden">
-      <div class="px-4 py-2.5 border-b apple-border flex items-center justify-between gap-2">
-        <h4 class="text-xs font-semibold text-white">${escapeHtml(title)}</h4>
-        <div class="flex items-center gap-1.5">${actions}</div>
-      </div>
-      <div class="divide-y divide-white/5">${rows}</div>
-    </div>` : '';
-  const pathActions = (p) => p ? `
-    <button data-click="revealPath" data-click-args='[{"$": "data", "k": "p"}]' data-p="${escapeHtml(p)}" class="ui-btn ui-btn-subtle h-6 px-2 text-[11.5px]">${escapeHtml(t('showInFolder'))}</button>
-    <button data-click="copyText" data-click-args='[{"$": "data", "k": "p"}]' data-p="${escapeHtml(p)}" class="ui-btn ui-btn-subtle h-6 px-2 text-[11.5px]">${escapeHtml(t('copyPath'))}</button>` : '';
-
+    <div class="kv"><span class="kv-k">${escapeHtml(label)}</span>
+      <span class="kv-v${opts.mono ? ' kv-mono' : ''}">${opts.html ? value : escapeHtml(String(value))}</span></div>`;
+  const btn = (fn, args, label, title = '') => `<button class="ui-btn ui-btn-subtle h-7 text-[12px]" data-click="${fn}" data-click-args='${jsArg(args)}'${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(label)}</button>`;
+  const card = (key, icon, title, rows, actions = '') => `<section class="scard" data-info="${key}">
+      <h3 class="sc-h"><span class="sc-ic" aria-hidden="true">${recCardIcon(icon)}</span><span class="sc-name">${escapeHtml(title)}</span></h3>
+      <div class="kv-rows">${rows || `<div class="sc-quiet">—</div>`}</div>
+      ${actions ? `<div class="kv-acts">${actions}</div>` : ''}
+    </section>`;
   const media = info.media || {};
   const probe = info.probe || {};
   const v = probe.video;
   const a = probe.audio;
-  const sourceName = t(`infoSource_${info.source || 'import'}`);
   const folderPath = (info.folders || []).map(f => f.system_key ? t(`folderSystem_${f.system_key}`) : f.name).join(' / ');
+  const done = (info.segments || 0) > 0;
 
-  let html = card(t('infoFile'),
+  const file = card('file', 'note', t('infoFile'),
     row(t('infoName'), media.name || info.filename)
     + row(t('infoLocation'), media.path, { mono: true })
     + (media.exists === false ? row(t('infoState'), `<span class="text-apple-red">${escapeHtml(t('infoMissing'))}</span>`, { html: true }) : '')
     + row(t('infoSize'), media.size != null ? formatBytes(media.size) : '')
-    + row(t('infoSourceLabel'), sourceName + (info.owns_media ? '' : ` · ${t('infoInPlace')}`))
-    + row(t('infoFolder'), folderPath || t('infoNoFolder')),
-    pathActions(media.exists ? media.path : ''));
-
-  html += card(t('infoDates'),
-    row(t('infoRecordedAt'), formatDateTime(info.recorded_at))
-    + row(t('infoAddedAt'), formatDateTime(info.created_at))
-    + row(t('infoFileModified'), media.modified ? formatDateTime(media.modified) : '')
-    + row(t('infoProcessedAt'), info.completed_at ? formatDateTime(info.completed_at) : ''));
-
-  html += card(t('infoFormat'),
-    row(t('infoContainer'), probe.container)
     + row(t('infoDuration'), formatTime(probe.duration || info.duration))
+    + row(t('infoContainer'), probe.container)
     + (v ? row(t('infoVideo'), [v.codec && v.codec.toUpperCase(), v.width && v.height ? `${v.width}×${v.height}` : '', v.fps ? `${v.fps} fps` : ''].filter(Boolean).join(' · ')) : '')
     + (a ? row(t('infoAudio'), [a.codec && a.codec.toUpperCase(), a.sample_rate ? `${(a.sample_rate / 1000).toFixed(1)} kHz` : '', a.layout || (a.channels ? `${a.channels} ch` : ''), a.bitrate_kbps ? `${a.bitrate_kbps} kbps` : ''].filter(Boolean).join(' · ')) : '')
-    + row(t('infoBitrate'), probe.bitrate_kbps ? `${probe.bitrate_kbps} kbps` : ''));
+    + row(t('infoBitrate'), probe.bitrate_kbps ? `${probe.bitrate_kbps} kbps` : '')
+    + row(t('infoSourceLabel'), t(`infoSource_${info.source || 'import'}`) + (info.owns_media ? '' : ` · ${t('infoInPlace')}`)),
+    media.exists && media.path ? btn('revealPath', [media.path], t('showInFolder')) + btn('copyText', [media.path], t('copyPath')) : '');
 
-  html += card(t('infoProcessing'),
+  const transcript = card('transcript', 'doc', t('infoTranscriptCard'),
     row(t('infoStatus'), tMaybe(`status_${info.status}`) || info.status)
     + row(t('infoModel'), formatModelName(info.transcript_model || info.model_name))
     + row(t('infoLanguage'), !info.language ? '' : info.language === 'auto' ? t('studioSpeechAuto')
       : `${langName(info.language)} (${String(info.language).toUpperCase()})`)
     + row(t('infoCounts'), t('infoCountsValue').replace('{spk}', () => info.speakers).replace('{seg}', () => info.segments).replace('{words}', () => info.words))
-    + row(t('infoAnalyses'), (info.summaries || []).filter(k => k !== 'error')
-      .map(k => tMaybe(`summaryName_${k}`) || ((state.summaryTemplates || []).find(x => x.id === k) || {}).name || k).join(', '))
     + row(t('infoTranslations'), (info.translations || []).map(c => langName(c)).join(', '))
-    + row(t('infoWorkAudio'), info.audio && info.audio.exists ? `${info.audio.path} · ${formatBytes(info.audio.size)}` : '', { mono: true }));
+    + row(t('infoProcessedAt'), info.completed_at ? formatDateTime(info.completed_at) : '')
+    + row(t('infoWorkAudio'), info.audio && info.audio.exists ? `${info.audio.path} · ${formatBytes(info.audio.size)}` : '', { mono: true }),
+    btn('recReconfigure', [], `↻ ${t('recRedo')}`, t('recRedoTip'))
+    + (done ? btn('openResplitDialog', [], t('infoResplit'), t('spResplitTip')) : ''));
+
+  const analyses = (info.summaries || []).filter(k => k !== 'error')
+    .map(k => tMaybe(`summaryName_${k}`) || ((state.summaryTemplates || []).find(x => `tpl:${x.id}` === k || x.id === k) || {}).name || k);
+  const analysis = card('analysis', 'sum', t('infoAnalysisCard'),
+    row(t('infoAnalyses'), analyses.join(', ') || t('infoNoAnalysis'))
+    + row(t('recModel'), summaryModelChoice().prettyModel),
+    done ? btn('recRegenFromInfo', [], `↻ ${t('recRegenAnalysisDlg')}`, t('tipGenerateSummary')) : '');
 
   const dubs = (info.dubs || []).filter(Boolean);
-  if (dubs.length || info.obsidian) {
-    html += card(t('infoOutputs'),
-      dubs.map(d => row(t('infoDubFile'), `${d.path}${d.size != null ? ' · ' + formatBytes(d.size) : ''}`, { mono: true })).join('')
-      + (info.obsidian ? row('Obsidian', info.obsidian.path + (info.obsidian.exists ? '' : ` (${t('infoMissing')})`), { mono: true }) : ''),
-      info.obsidian && info.obsidian.exists ? pathActions(info.obsidian.path) : '');
-  }
+  const storage = card('storage', 'folder', t('infoStorageCard'),
+    row(t('infoFolder'), folderPath || t('infoNoFolder'))
+    + row(t('infoRecordedAt'), formatDateTime(info.recorded_at))
+    + row(t('infoAddedAt'), formatDateTime(info.created_at))
+    + row(t('infoFileModified'), media.modified ? formatDateTime(media.modified) : '')
+    + dubs.map(d => row(t('infoDubFile'), `${d.path}${d.size != null ? ' · ' + formatBytes(d.size) : ''}`, { mono: true })).join('')
+    + (info.obsidian ? row('Obsidian', info.obsidian.path + (info.obsidian.exists ? '' : ` (${t('infoMissing')})`), { mono: true }) : ''),
+    (m.id === info.id ? `<button class="ui-btn ui-btn-subtle h-7 text-[12px]" data-click="recMoveFromInfo" data-click-args='[{"$": "el"}]'>${escapeHtml(t('infoMoveFolder'))}</button>` : '')
+    + (info.obsidian && info.obsidian.exists ? btn('revealPath', [info.obsidian.path], `Obsidian: ${t('showInFolder')}`) : ''));
+
+  let html = `<div class="info-grid">${file}${transcript}${analysis}${storage}</div>`;
   if ((info.pending_exports || []).length) {
-    html += `<div class="rounded-xl border border-apple-amber/40 bg-apple-amber/10 px-4 py-3 text-xs text-apple-amber flex items-center justify-between gap-3">
+    html += `<div class="rounded-xl border border-apple-amber/40 bg-apple-amber/10 px-4 py-3 mt-3 text-xs text-apple-amber flex items-center justify-between gap-3">
       <span>${escapeHtml(t('infoPendingExports').replace('{n}', () => info.pending_exports.length))}</span>
       <button data-click="cancelPendingExports" data-click-args='[${info.id}]' class="ui-btn ui-btn-subtle h-6 px-2 text-[11.5px]">${escapeHtml(t('cancel'))}</button>
     </div>`;
