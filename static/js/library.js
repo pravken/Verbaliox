@@ -114,7 +114,7 @@ function scheduleSidebarRender(rowId) {
       if (all || !rows) renderMeetingsSidebar();
       else for (const id of rows) if (!renderSidebarRow(id)) { renderMeetingsSidebar(); break; }
     }
-    if (state.appView === 'libtable' && typeof renderLibTable === 'function') renderLibTable();
+    if (state.appView === 'libtable' && typeof renderLibTableLive === 'function') renderLibTableLive(all || !rows ? null : rows);
   });
 }
 
