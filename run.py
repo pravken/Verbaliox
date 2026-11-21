@@ -942,12 +942,20 @@ class TrayController:
             return True
         # Something runs, or the app stays in the tray by choice (Settings → General): the window hides
         threading.Timer(0.05, self.window.hide).start()
-        if self._status.get("state") != "idle":
-            self._notify("Verbaliox работает в фоне",
-                         "Запись или обработка продолжается. Значок в трее — открыть окно или выйти.")
-        elif not self._told_tray:
+        # told once, for good (asked by the user: the note came at every close); kept in the settings
+        if get_all_settings().get("tray_told") != "1" and not self._told_tray:
             self._told_tray = True
-            self._notify("Verbaliox в трее", "Программа продолжает работать. Значок в трее — открыть окно или выйти.")
+            try:
+                from app.database import update_settings
+
+                update_settings({"tray_told": "1"})
+            except Exception:
+                pass
+            if self._status.get("state") != "idle":
+                self._notify("Verbaliox работает в фоне",
+                             "Запись или обработка продолжается. Значок в трее — открыть окно или выйти.")
+            else:
+                self._notify("Verbaliox в трее", "Программа продолжает работать. Значок в трее — открыть окно или выйти.")
         return False
 
     def _update_in_background(self) -> None:
