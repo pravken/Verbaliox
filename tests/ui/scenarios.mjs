@@ -61,8 +61,8 @@ await step('read a recording', async () => {
   await sleep(1500);
   expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
   expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
-  // one short row (variant B): «Версия: … ▾», «Расшифровать заново», «⋯» and when the text was made
-  expect(/Версия:/.test(await page.textContent('#tx-model-chip')), 'no version button');
+  // one short row (variant B): «Модель: … ▾», «Расшифровать заново», «⋯» and when the text was made
+  expect(/Модель:/.test(await page.textContent('#tx-model-chip')), 'no model button');
   expect(await page.isVisible('#tx-redo-btn') && await page.isVisible('#tx-more-btn'), 'the row lacks its buttons');
   await page.click('#tx-model-chip');
   await sleep(200);
@@ -88,6 +88,34 @@ await step('read a recording', async () => {
   await page.click('#tx-view-menu button:has-text("Без запинок")');
   expect(await page.evaluate(() => !!state.noFillers) !== before, '«Без запинок» did not switch');
   await page.evaluate(() => txViewToggle('fillers'));
+});
+
+// A recording without a text (reported by the user: the old «РАСПОЗНАВАНИЕ» panel and a band with two percents):
+// one card in the content column; while the tracks are mixed it shows the stage and one labelled percent, never
+// «Идёт расшифровка»; the tools of a text are not shown; idle, it offers the model and «Расшифровать» (32px)
+await step('recording without a text', async () => {
+  await page.evaluate(() => {
+    const m = state.activeMeeting;
+    Object.assign(m, { segments: [], status: 'mixing', progress: 28, stage_text: 'Сведение дорожек: удаление эха колонок… 36%' });
+    renderTxModelBar(); updateProcessingBanner(m); renderTranscript();
+  });
+  expect(await page.isVisible('#tx-model-bar') && await page.isVisible('#tx-rc-prog'), 'no progress card');
+  expect(!(await page.isVisible('#tx-subbar')) && !(await page.isVisible('#workspace-processing-banner')), 'the toolbar or the old band is shown');
+  const card = await page.textContent('#tx-model-bar');
+  expect(/Сведение дорожек/.test(card) && !/Идёт расшифровка/.test(card), `the card while mixing: ${card.replace(/\s+/g, ' ')}`);
+  expect((await page.textContent('#tx-rc-pct')).trim() === 'Этап 36% · Всего 28%', 'the percents are not labelled');
+  await page.evaluate(() => { Object.assign(state.activeMeeting, { status: 'added', progress: 0, stage_text: '' }); renderTxModelBar(); updateProcessingBanner(state.activeMeeting); });
+  expect(await page.isVisible('#tx-rc-pick') && await page.isVisible('#tx-transcribe-btn'), 'no model choice or «Расшифровать»');
+  const geo = await page.evaluate(() => {
+    const r = id => document.getElementById(id).getBoundingClientRect();
+    return { card: [r('tx-model-bar').left, r('tx-model-bar').right], col: [r('transcript-inner').left, r('transcript-inner').right],
+      btns: ['tx-transcribe-btn', 'tx-proc-btn'].map(id => r(id).height), seg: r('tx-model-chips').height };
+  });
+  expect(geo.card.every((x, i) => Math.abs(x - geo.col[i]) < 1), `the card is off the content column: ${JSON.stringify(geo)}`);
+  expect(geo.btns.every(h => h === 32) && geo.seg === 32, `not 32px: ${JSON.stringify(geo)}`);
+  await page.evaluate(() => selectMeeting(state.activeMeeting.id, false));
+  await sleep(500);
+  expect(await page.isVisible('#tx-subbar') && !(await page.isVisible('#tx-model-bar')), 'the text does not come back');
 });
 
 // The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the

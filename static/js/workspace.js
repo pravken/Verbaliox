@@ -108,33 +108,79 @@ function toggleTxModelBar(open) {
   renderTxModelBar();
 }
 
+// The stage the server names, apart from its own percent: «Сведение дорожек: удаление эха колонок… 36%» is the
+// stage «Сведение дорожек», its step «удаление эха колонок…» and 36% of that step, while m.progress is the whole job
+function txStageParts(m) {
+  let s = serverText(m.stage_text || '') || t('processingShort');
+  const pm = s.match(/\s*(\d{1,3})\s*%/);
+  const stage = pm ? Number(pm[1]) : null;
+  if (pm) s = s.slice(0, pm.index) + s.slice(pm.index + pm[0].length);
+  s = s.replace(/(…|\.\.\.)\s+·/, '$1 ·').replace(/[\s:·]+$/, '').replace(/^[\s·]+/, '').trim();
+  const i = s.indexOf(': ');
+  let detail = i > 0 ? s.slice(i + 2) : '';
+  // the recognition names no step: the model at work is the line under the stage
+  if (!detail && !['mixing', 'merging', 'splitting'].includes(m.status) && (m.asr_now || m.model_name)) detail = formatModelName(m.asr_now || m.model_name);
+  return { text: s, name: (i > 0 ? s.slice(0, i) : s).replace(/(…|\.\.\.)$/, ''), detail: detail.charAt(0).toUpperCase() + detail.slice(1), stage };
+}
+
+// One percent, or both labelled when the stage's own differs from the whole job's («Этап 36% · Всего 28%»)
+function txPctLabel(m, parts) {
+  const total = Number(m.progress) || 0;
+  if (parts.stage == null || Math.abs(parts.stage - total) <= 1) return `${total}%`;
+  return `${t('txRcStage').replace('{n}', () => parts.stage)} · ${t('txRcTotal').replace('{n}', () => total)}`;
+}
+
+// The models the card offers in its one control: the downloaded ones that know the language, the ones with a
+// version, «Авто: по языку» when the recording or the settings use it, the merged text, the model picked
+function txSegItems(m, list, done, pick, working) {
+  const items = [];
+  if (m.model_name === 'auto' || pick === 'auto' || (typeof speechRoutingOn === 'function' && speechRoutingOn())) items.push({ id: 'auto', installed: true, size: '' });
+  for (const i of list) {
+    if (i.id === 'merged') continue;
+    if (done.has(i.id) || (i.installed && txModelFits(i, m)) || i.id === pick || i.id === working) items.push(i);
+  }
+  if (done.has('merged') || working === 'merged') items.push({ id: 'merged', installed: true, size: '' });
+  return items;
+}
+
 function renderTxModelBar() {
   const m = state.activeMeeting;
   const bar = document.getElementById('tx-model-bar');
   if (!bar) return;
   const chip = document.getElementById('tx-model-chip');
+  const subbar = document.getElementById('tx-subbar');
   if (!m) { bar.classList.add('hidden'); document.getElementById('tx-quick').classList.add('hidden'); return; }
   if (state.txModelFor !== m.id) { state.txModelFor = m.id; state.txModelPick = null; state.txBarOpen = false; }
   const { list, done } = txModelChoices(m);
-  const shown = (m.segments || []).length ? (m.transcript_model || '') : '';
-  // With a text there and nothing at work, the row folds into one button (asked by the user: two rows of
-  // models and actions always in sight for what is done once). Its words say it opens («версии и
-  // действия ▾»): a bare mark of the model was not seen as a button before (audit 8.4)
-  const busyNow = !DONE_STATUSES.includes(m.status);
-  const folded = !!shown && !busyNow && !state.txBarOpen;
-  bar.classList.toggle('hidden', folded);
+  const hasText = !!(m.segments || []).length;
+  const shown = hasText ? (m.transcript_model || '') : '';
+  const busy = !DONE_STATUSES.includes(m.status);
+  // Without a text the card stands in its place (the toolbar of the text has nothing to act on: hidden);
+  // with a text it opens above it on request («⋯ → Все модели и параметры»), the toolbar holds the short row
+  const noText = !hasText;
+  const open = noText ? !m.media_removed : state.txBarOpen;
+  bar.classList.toggle('hidden', !open);
+  bar.classList.toggle('tx-rc-alone', noText);
+  if (subbar) subbar.classList.toggle('hidden', noText);
+  const progress = noText && busy;  // the mix or the recognition of a recording without a text: its progress
+  document.getElementById('tx-rc-close').classList.toggle('hidden', noText);
+  document.getElementById('tx-rc-pick').classList.toggle('hidden', progress);
+  document.getElementById('tx-rc-foot').classList.toggle('hidden', progress);
+  document.getElementById('tx-rc-prog').classList.toggle('hidden', !progress);
   document.getElementById('tx-quick').classList.toggle('hidden', !shown);
-  chip.innerHTML = `<span class="tx-model-chip-more">${escapeHtml(t('txVersion'))}</span><span>${escapeHtml(formatModelName(shown))}</span><span class="tx-model-chip-more" aria-hidden="true">▾</span>`;
+  chip.innerHTML = `<span class="tx-model-chip-more">${escapeHtml(t('txVersion'))}</span><span>${escapeHtml(formatModelName(shown))}</span><svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
   const redo = document.getElementById('tx-redo-btn');
-  redo.disabled = busyNow || !!m.media_removed || shown === 'teams' || shown === 'merged';
+  redo.disabled = busy || !!m.media_removed || shown === 'teams' || shown === 'merged';
   redo.classList.toggle('hidden', shown === 'teams' || shown === 'merged');
   const qs = document.getElementById('tx-quick-status');
-  qs.textContent = busyNow ? '' : m.transcript_at ? `✓ ${txShortDate(m.transcript_at)}` : '';
+  qs.textContent = busy ? '' : m.transcript_at ? `✓ ${txShortDate(m.transcript_at)}` : '';
   qs.title = m.transcript_at ? `${t('txModelDone')} · ${formatDateTime(m.transcript_at)}` : '';
+  const working = busy ? (m.status === 'merging' ? 'merged' : m.status === 'splitting' || m.status === 'mixing' ? '' : m.asr_now || m.model_name) : '';
   const pick = state.txModelPick || shown || m.model_name || (list[0] && list[0].id) || '';
   const lang = String(m.language || '').slice(0, 2);
   const sel = document.getElementById('tx-model-select');
-  sel.innerHTML = list.map(i => {
+  const options = [...(m.model_name === 'auto' || pick === 'auto' || (typeof speechRoutingOn === 'function' && speechRoutingOn()) ? [{ id: 'auto', installed: true, size: '' }] : []), ...list];
+  sel.innerHTML = options.map(i => {
     // GigaAM knows Russian only: not offered for a recording in another language
     const fits = !i.languages || !lang || i.languages.includes(lang) || done.has(i.id);
     return `<option value="${escapeHtml(i.id)}" ${fits ? '' : 'disabled'}>${escapeHtml(formatModelName(i.id))}${done.has(i.id) ? '  ✓' : ''}${
@@ -143,42 +189,59 @@ function renderTxModelBar() {
     // The precise mode: the downloaded models one after another, their versions merged into one
     + `<option value="${TX_PRECISE}">${escapeHtml(t('txPrecise'))}</option>`;
   sel.value = pick;
-  const busy = !DONE_STATUSES.includes(m.status);
   sel.disabled = busy;
-  renderTxModelChips(m, list, done, shown, pick, busy);
+  renderTxModelChips(m, list, done, shown, pick, busy, working);
+  // «Скачать…»: the models not downloaded yet that know the recording's language
+  const missing = list.filter(i => !i.installed && i.id !== 'merged' && i.id !== 'teams' && txModelFits(i, m) && !done.has(i.id));
+  const dl = document.getElementById('tx-rc-download');
+  dl.classList.toggle('hidden', !missing.length || !!m.media_removed);
+  dl.disabled = busy;
+  // the head: what the card is about now
+  const parts = progress ? txStageParts(m) : null;
+  document.getElementById('tx-rc-ic').innerHTML = pultIcon(progress ? (m.status === 'mixing' ? 'wave' : 'spark') : 'text');
+  const why = m.status === 'cleared' ? (Object.keys(m.summaries || {}).length ? 'txRcHintAnalysisKept' : 'txRcHintCleared')
+    : ['failed', 'cancelled'].includes(m.status) ? 'txRcHintFailed' : m.status === 'completed' ? 'txRcHintNoSpeech' : 'txRcHint';
+  document.getElementById('tx-rc-title').textContent = progress ? parts.name : noText ? t('txRcEmptyTitle') : t('txSectionRecognition');
+  const sub = progress ? parts.detail : noText ? t(why) : '';
+  const subEl = document.getElementById('tx-rc-sub');
+  subEl.textContent = sub;
+  subEl.classList.toggle('hidden', !sub);
+  if (progress) renderTxCardProgress(m, parts);
   const notModel = pick === 'merged' || pick === 'teams';  // not made by a model: nothing to transcribe with
   document.getElementById('tx-proc-btn').classList.toggle('hidden', notModel);
   if (busy) hideTxProcMenu();
   const btn = document.getElementById('tx-transcribe-btn');
   btn.disabled = busy || !!m.media_removed;  // without the sound there is nothing to transcribe
-  btn.classList.toggle('opacity-40', btn.disabled);
   btn.classList.toggle('hidden', notModel);
   const again = !!pick && pick === shown;
   document.getElementById('tx-transcribe-label').textContent = t(pick === TX_PRECISE ? 'txPreciseRun' : again ? 'txTranscribeAgain' : 'txTranscribe');
-  // The next step while the picked model has no text yet: the call to action stands out in blue
+  // The next step while the picked model has no text yet: the primary button; again: a secondary one
   btn.classList.toggle('ui-btn-primary', !again);
   btn.classList.toggle('ui-btn-subtle', again);
   // «Свести всё»: once two models have a text, or two downloaded models can make one
   const mergeBtn = document.getElementById('tx-merge-btn');
   const usable = list.filter(i => i.id !== 'merged' && (done.has(i.id) || (i.installed && txModelFits(i, m))));
-  mergeBtn.classList.toggle('hidden', usable.length < 2 || !!m.media_removed && [...done].filter(x => x !== 'merged').length < 2);
+  const mergeOff = usable.length < 2 || !!m.media_removed && [...done].filter(x => x !== 'merged').length < 2;
+  mergeBtn.classList.toggle('hidden', mergeOff);
   mergeBtn.disabled = busy;
-  mergeBtn.classList.toggle('opacity-40', busy);
+  const quickMerge = document.getElementById('tx-quick-merge');
+  quickMerge.classList.toggle('hidden', mergeOff || !shown);
+  quickMerge.disabled = busy;
   // «Разделить по голосам»: the text shown split by voices again (people.js openResplitDialog); not for
   // the Teams captions (their speakers are the captions') nor without the sound
   const resplitBtn = document.getElementById('tx-resplit-btn');
   resplitBtn.classList.toggle('hidden', !shown || pick !== shown || shown === 'teams' || !!m.media_removed || !(m.segments || []).length);
   resplitBtn.disabled = busy;
-  resplitBtn.classList.toggle('opacity-40', busy);
   // Clearing: the transcript of the model picked, when it made one (the one shown)
   const delBtn = document.getElementById('tx-delete-version-btn');
   delBtn.classList.toggle('hidden', !pick || pick !== shown);
   delBtn.disabled = busy;
-  delBtn.classList.toggle('opacity-40', busy);
   const disputes = (m.segments || []).reduce((n, s) => n + (s.words || []).filter(w => w.alts && w.alts.length).length, 0);
   const status = document.getElementById('tx-model-status');
+  const pickItem = list.find(i => i.id === pick);
   let text, cls;
-  if (busy) [text, cls] = [m.status === 'merging' ? t('txMergingBusy') : m.status === 'splitting' ? t('txSplittingBusy') : t('txModelBusy').replace('{model}', () => formatModelName(m.asr_now || m.model_name)), 'text-apple-secondary'];
+  if (busy) [text, cls] = [m.status === 'merging' ? t('txMergingBusy') : m.status === 'splitting' ? t('txSplittingBusy')
+    : m.status === 'mixing' ? t('txMixingBusy') : t('txModelBusy').replace('{model}', () => formatModelName(m.asr_now || m.model_name)), 'text-apple-secondary'];
   else if (pick === 'merged' && shown === 'merged') [text, cls] = [`✓ ${t('txMergedDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}${
     disputes ? ' · ' + t('txDisputes').replace('{n}', () => disputes) : ''}`, 'text-apple-green'];
   else if (pick && pick === shown) [text, cls] = [`✓ ${t('txModelDone')}${m.transcript_at ? ' · ' + formatDateTime(m.transcript_at) : ''}`, 'text-apple-green'];
@@ -186,11 +249,54 @@ function renderTxModelBar() {
     const run = state.txPreciseModels && state.txPreciseModels.id === m.id ? state.txPreciseModels.models : [];
     [text, cls] = [run.length ? t('txAllModelsHint').replace('{models}', () => run.map(formatModelName).join(' → ')) : t('txPreciseHint'), 'text-apple-secondary'];
   }
-  else if (!shown) [text, cls] = [t('txModelNone'), 'text-apple-secondary'];
+  else if (pickItem && !pickItem.installed && !done.has(pick)) [text, cls] = [t('txRcWillDownload').replace('{model}', () => formatModelName(pick)).replace('{size}', () => pickItem.size || ''), 'text-apple-secondary'];
+  else if (!shown) [text, cls] = ['', 'text-apple-secondary'];  // the head already says there is no text
   else [text, cls] = [t('txModelNotYet').replace('{model}', () => formatModelName(shown)), 'text-apple-amber'];
-  status.textContent = text;
+  status.textContent = noText ? text : '';
   status.title = text;
-  status.className = `tx-model-status ${cls}`;  // goes to a line of its own when the panel is narrow
+  status.className = `tx-model-status ${cls}`;
+  // with a text the card's head says it (the foot keeps one row of buttons)
+  if (!noText) {
+    subEl.textContent = text;
+    subEl.title = text;
+    subEl.className = `vx-head-sub ${cls}${text ? '' : ' hidden'}`;
+  } else subEl.className = `vx-head-sub${sub ? '' : ' hidden'}`;
+}
+
+function noTextCard(m) {
+  return !(m.segments || []).length && !m.media_removed && !DONE_STATUSES.includes(m.status);
+}
+
+// The progress of the card: one bar of the whole job, its percent (the stage's own labelled beside it), the time
+// and «Отменить» (not for the mix of a stopped recording: it is not a job that can be cancelled)
+function renderTxCardProgress(m, parts) {
+  document.getElementById('tx-rc-title').textContent = parts.name;
+  const sub = document.getElementById('tx-rc-sub');
+  sub.textContent = parts.detail;
+  sub.classList.toggle('hidden', !parts.detail);
+  const q = (state.queue || []).find(x => x.id === m.id);
+  const running = !!(q && q.state === 'running');
+  const fill = document.getElementById('tx-rc-fill');
+  fill.style.width = `${Math.max(running || m.status === 'mixing' ? 3 : 0, Number(m.progress) || 0)}%`;
+  fill.classList.toggle('progress-live', running || m.status === 'mixing');
+  document.getElementById('tx-rc-pct').textContent = txPctLabel(m, parts);
+  document.getElementById('tx-rc-time').textContent = running ? formatTiming(jobTiming(q, m.progress || 0)) : '';
+  document.getElementById('tx-rc-cancel').classList.toggle('hidden', m.status === 'mixing');
+}
+
+// «Скачать…»: the models not downloaded yet; the one chosen is picked and downloaded before «Расшифровать»
+function openTxDownloadMenu(el) {
+  const m = state.activeMeeting;
+  if (!m) return;
+  const { list, done } = txModelChoices(m);
+  const items = [{ info: true, label: t('txRcDownloadHead') }];
+  for (const i of list) {
+    if (i.installed || i.id === 'merged' || i.id === 'teams' || done.has(i.id) || !txModelFits(i, m)) continue;
+    items.push({ label: formatModelName(i.id), key: i.size || '', run: () => pickTxChip(i.id) });
+  }
+  items.push({ sep: true }, { label: t('txRcModelsSettings'), run: () => { openModal('settings', 'recognition'); selectSettingsTab('models'); } });
+  const r = el.getBoundingClientRect();
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6, { maxWidth: 360 }), 0);
 }
 
 function txShortDate(iso) {
@@ -244,11 +350,9 @@ function openTxMoreMenu(el) {
   if (!m) return;
   const shown = m.transcript_model || '';
   const busy = !DONE_STATUSES.includes(m.status);
-  const show = id => { const b = document.getElementById(id); return b && !b.classList.contains('hidden'); };
   const pickShown = () => { document.getElementById('tx-model-select').value = shown; state.txModelPick = shown; };
   const items = [];
   if (shown && shown !== 'teams' && !m.media_removed && (m.segments || []).length) items.push({ label: t('txResplit'), disabled: busy, run: () => openResplitDialog() });
-  if (show('tx-merge-btn')) items.push({ label: t('txMergeAll'), disabled: busy, run: () => mergeAllTranscripts() });
   items.push({ label: t('txProcBtnLong'), disabled: busy || shown === 'merged' || shown === 'teams',
     run: () => { pickShown(); toggleTxModelBar(true); setTimeout(() => document.getElementById('tx-proc-btn')?.click(), 0); } });
   items.push({ label: t(state.txBarOpen ? 'txHideModels' : 'txShowModels'), run: () => toggleTxModelBar() });
@@ -262,41 +366,34 @@ function txModelFits(i, m) {
   return !i.languages || !lang || i.languages.includes(lang);
 }
 
-// The models as chips: shown now (filled), a text there (✓), none yet (outline), at work (a spinner),
-// not downloaded (↓ size); a model that does not know the recording's language is dimmed
-function renderTxModelChips(m, list, done, shown, pick, busy) {
+// The models as one segmented control: picked (filled), a text there (✓), at work (a spinner), not downloaded
+// (its size); a model that does not know the recording's language is not offered
+function renderTxModelChips(m, list, done, shown, pick, busy, working = '') {
   const box = document.getElementById('tx-model-chips');
   if (!box) return;
-  const working = busy ? (m.status === 'merging' ? 'merged' : m.status === 'splitting' ? '' : m.asr_now || m.model_name) : '';
-  // The merged text shown: the chips of the models it was made from light up (a merge of an older
-  // version did not keep them: the variants of its disputed words name them)
+  // The merged text shown: the models it was made from are marked (a merge of an older version did not keep
+  // them: the variants of its disputed words name them); «Все модели» picked: the models it will run
   let inMerge = new Set();
-  // «Все модели» picked: the models it will run light up, before «Расшифровать» is pressed
   const precise = pick === TX_PRECISE && !busy;
-  box.classList.toggle('tx-chips-precise', precise);
   if (precise && state.txPreciseModels && state.txPreciseModels.id === m.id) inMerge = new Set(state.txPreciseModels.models);
   else if (shown === 'merged' && (pick === 'merged' || !pick)) {
     inMerge = new Set(m.merged_models || []);
     if (!inMerge.size) for (const seg of m.segments || []) for (const w of seg.words || []) for (const a of w.alts || []) (a.models || []).forEach(x => inMerge.add(x));
   }
-  const items = [...list.filter(i => i.id !== 'merged'), ...(done.has('merged') || working === 'merged' ? [{ id: 'merged', installed: true }] : [])];
+  const items = txSegItems(m, list, done, pick, working);
+  const canAll = list.filter(i => i.id !== 'merged' && i.id !== 'teams' && i.installed && txModelFits(i, m)).length >= 2 && !m.media_removed;
+  const seg = (id, label, st, extra, tip, picked) => `<button type="button" role="radio" aria-checked="${picked}" class="tx-seg-btn is-${st}${picked ? ' is-picked' : ''}${inMerge.has(id) ? ' is-in-merge' : ''}"
+      ${busy ? 'disabled' : ''} title="${escapeHtml(tip)}" data-click="pickTxChip" data-click-args='[${jsArg(id)}]'>${
+      st === 'busy' ? '<span class="tx-chip-spin" aria-hidden="true"></span>' : st === 'done' || st === 'shown' ? '<span class="tx-seg-ok" aria-hidden="true">✓</span>' : ''}<span>${escapeHtml(label)}</span>${extra}</button>`;
   box.innerHTML = items.map(i => {
-    const fits = i.id === 'merged' || txModelFits(i, m) || done.has(i.id);
-    const state = working === i.id ? 'busy' : i.id === shown ? 'shown' : done.has(i.id) ? 'done' : !i.installed ? 'missing' : 'none';
-    const mark = { busy: '<span class="tx-chip-spin" aria-hidden="true"></span>', shown: '●', done: '✓', missing: '↓', none: '○' }[state];
-    const tip = (i.id === 'teams' && state === 'done' ? t('txChipTeams') : t(`txChip_${state}`).replace('{size}', () => i.size || ''))
-      + (fits ? '' : ` · ${t('txModelOtherLang')}`)
+    const st = working === i.id ? 'busy' : i.id === shown ? 'shown' : done.has(i.id) ? 'done' : !i.installed ? 'missing' : 'none';
+    const tip = i.id === 'auto' ? t('modelAutoByLang') : (i.id === 'teams' && st === 'done' ? t('txChipTeams') : t(`txChip_${st}`).replace('{size}', () => i.size || ''))
       + (inMerge.has(i.id) ? ` · ${t('txChipInMerge')}` : '');
-    const merged = inMerge.has(i.id);
-    return `<button type="button" role="radio" aria-checked="${pick === i.id}" class="tx-chip is-${state}${pick === i.id ? ' is-picked' : ''}${merged ? ' is-in-merge' : ''}"
-      ${busy || !fits ? 'disabled' : ''} title="${escapeHtml(tip)}" data-click="pickTxChip" data-click-args='[${jsArg(i.id)}]'>
-      <span class="tx-chip-mark">${mark}</span><span>${escapeHtml(formatModelName(i.id))}</span>${state === 'missing' && i.size ? `<span class="tx-chip-size">${escapeHtml(i.size)}</span>` : ''}</button>`;
+    return seg(i.id, formatModelName(i.id), st, st === 'missing' && i.size ? `<span class="tx-chip-size">${escapeHtml(i.size)}</span>` : '', tip, pick === i.id);
   }).join('')
     // «Все модели»: the precise mode as a choice of its own, next to the models (only with two that can run)
-    + (list.filter(i => i.id !== 'merged' && i.id !== 'teams' && i.installed && txModelFits(i, m)).length >= 2 && !m.media_removed
-      ? `<button type="button" role="radio" aria-checked="${pick === TX_PRECISE}" class="tx-chip tx-chip-all${pick === TX_PRECISE ? ' is-picked' : ''}"
-        ${busy ? 'disabled' : ''} title="${escapeHtml(t('tipTxAllModels'))}" data-click="pickTxChip" data-click-args='[${jsArg(TX_PRECISE)}]'>
-        <span class="tx-chip-mark" aria-hidden="true">⧉</span><span>${escapeHtml(t('txAllModels'))}</span></button>` : '');
+    + (canAll ? seg(TX_PRECISE, t('txAllModels'), 'all', '', t('tipTxAllModels'), pick === TX_PRECISE) : '');
+  box.classList.toggle('hidden', !box.innerHTML);
 }
 
 function pickTxChip(id) {
@@ -513,9 +610,14 @@ async function transcribeWithPickedModel() {
 }
 
 function updateProcessingBanner(m) {
+  if (noTextCard(m)) renderTxCardProgress(m, txStageParts(m));
   const isBusy = !DONE_STATUSES.includes(m.status);
   const banner = document.getElementById('workspace-processing-banner');
-  banner.classList.toggle('hidden', !isBusy && !['failed', 'cancelled', 'cleared', 'added'].includes(m.status));
+  // A recording without a text: its card in the text's place shows the progress, and «Расшифровать» of one
+  // added without recognition; the band stays for a text being made anew and for what went wrong
+  const noText = !(m.segments || []).length && !m.media_removed;
+  banner.classList.toggle('hidden', (!isBusy && !['failed', 'cancelled', 'cleared', 'added'].includes(m.status))
+    || (noText && (isBusy || m.status === 'added')));
   // added without recognition: the button starts it, it does not «repeat» it
   document.getElementById('workspace-retry-btn').textContent = t(m.status === 'added' ? 'impGo' : 'retryBtn');
   // the mix of a stopped recording is not a job that can be cancelled
@@ -529,8 +631,10 @@ function updateProcessingBanner(m) {
   document.getElementById('workspace-progress-time').textContent = running ? formatTiming(jobTiming(q, m.progress || 0)) : '';
   if (isBusy) {
     document.getElementById('workspace-stage-text').classList.add('truncate');
-    document.getElementById('workspace-stage-text').textContent = serverText(m.stage_text) || t('processingShort');
-    document.getElementById('workspace-progress-pct').textContent = `${m.progress}%`;
+    // the stage without its own percent; one percent, or both labelled (txPctLabel)
+    const parts = txStageParts(m);
+    document.getElementById('workspace-stage-text').textContent = parts.text;
+    document.getElementById('workspace-progress-pct').textContent = txPctLabel(m, parts);
     bar.style.background = '';
     bar.style.width = `${Math.max(running ? 3 : 0, m.progress || 0)}%`;
   } else {
@@ -1739,7 +1843,9 @@ function renderTranscriptNow() {
       : m.status === 'cleared' ? (Object.keys(m.summaries || {}).length ? 'emptyTxAnalysisKept' : 'emptyTxCleared')
       : ['failed', 'cancelled'].includes(m.status) ? 'emptyTxFailed'
       : DONE_STATUSES.includes(m.status) ? 'emptyTxNoSpeech' : 'emptyTxProcessing';
-    container.innerHTML = `<div class="py-20 text-center text-xs text-apple-tertiary">${escapeHtml(t(why))}</div>`;
+    // no text at all: the card of the recognition (renderTxModelBar) stands here and says it
+    container.innerHTML = !segments.length && !m.media_removed ? ''
+      : `<div class="py-20 text-center text-xs text-apple-tertiary">${escapeHtml(t(why))}</div>`;
     rebuildPlaybackIndex();
     return;
   }
