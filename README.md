@@ -15,7 +15,7 @@
 
 **Verbaliox** is a Windows desktop app for transcribing audio and video on your own computer. It recognizes speech, splits it by speaker, and can optionally summarize the transcript or answer questions about it with a local language model through [Ollama](https://ollama.com).
 
-Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA, or CPU). The app needs no account or API key. If you want, analysis can use a cloud model instead (OpenAI, Anthropic Claude, Google Gemini or an OpenAI-compatible service) with your own API key; it is off by default. Network access is described [below](#network-access).
+Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA, or CPU). The app needs no account or API key, and the text of recordings is analysed on your computer too. Network access is described [below](#network-access).
 
 ### Features
 
@@ -25,7 +25,7 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Speaker separation** by clustering SpeechBrain ECAPA-TDNN voice embeddings. Works without tokens. Optionally (Settings → Recognition), **NVIDIA Nemotron 3 Diarization** marks who speaks when across the whole recording, up to 8 speakers; it is downloaded on request and mixed people up about three times less often on test meetings. Accuracy drops with overlapping speech, very short replies, or similar voices, so check the result and fix speakers where needed.
 - **Optional audio cleanup** before recognition: FFmpeg filters for noise reduction, click removal and loudness leveling. A simple voice filter is also available in the player.
 - **Filler-word removal** ("uh", "um", "э-э", "ммм"…). The original text is kept and can be restored.
-- **Local summaries and Q&A** via Ollama (by default Gemma 4 E4B on GPUs with 8 GB and more, Gemma 4 E2B on smaller GPUs and without one), or optionally a **cloud model over its API** (OpenAI, Claude, Gemini, OpenAI-compatible) with your key; long recordings then fit in one request. Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
+- **Local summaries and Q&A** via Ollama (by default Gemma 4 E4B on GPUs with 8 GB and more, Gemma 4 E2B on smaller GPUs and without one). Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
 - **Transcript editor and player**: click a word to jump to it, edit segments, merge them, rename speakers, waveform, playback speed.
 - **Recording** from a microphone, system audio, or both, with saved presets for one-click starts. System audio is captured directly (WASAPI loopback), without a screen-share prompt.
 - **Three parts of the app**: the **Library** (recordings, transcripts, analysis), the **Studio** (recording with live captions and real-time translation that is typed in without flicker; can fill the whole window) and **Ask** (questions about one recording, a folder or the whole library).
@@ -48,8 +48,8 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Checked summaries**: each point of an overview gets the time it comes from, and points the transcript does not support are marked `[?]`. **My notes** taken during the meeting go into every summary; your own summary templates.
 - **Promises across meetings**: who promised what to whom and by when, collected after each summary, shown before the next meeting of the series, exported to Obsidian, Todoist (CSV) or Markdown, and a follow-up email draft.
 - **Calendar** (an `.ics` file or link, read only): a recording made during a meeting gets its title and participants; the Studio lists the next meetings with a brief.
-- **Dictation into any program**: `Ctrl+Alt+D` records the microphone and types the text where the cursor is. `Ctrl+Alt+T` does the same with translation: speak Russian, and the English text (or another language chosen in Settings → Recording) is typed. The local Ollama model translates; a cloud model only if you allow it for dictation.
-- **Import by link** (YouTube and other sites, via yt-dlp installed on first use); **noise cleanup** export; **privacy** options: delete the sound after transcription or after N days, and a log of everything sent to a cloud model.
+- **Dictation into any program**: `Ctrl+Alt+D` records the microphone and types the text where the cursor is. `Ctrl+Alt+T` does the same with translation: speak Russian, and the English text (or another language chosen in Settings → Recording) is typed. The local Ollama model translates.
+- **Import by link** (YouTube and other sites, via yt-dlp installed on first use); **noise cleanup** export; **privacy** options: delete the sound after transcription or after N days.
 - **Translate text**: machine translation of a transcript with your local Ollama model, shown under or instead of the original, exported as translated or bilingual files and as video subtitles. See [Translate text](#translate-text).
 
 ### Requirements
@@ -153,7 +153,6 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | **Download the filter** in Settings → Recording (optional) | github.com (release `v0.5.6` of `Rikorose/DeepFilterNet`, checked by SHA-256) |
 | App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer |
 | You click **Install** for an update | github.com: the release archive and `SHA256SUMS.txt`; PyPI and download.pytorch.org if the new version needs other Python packages. The checksum proves the archive arrived complete and unchanged. Once the author's release key is set up, `SHA256SUMS.txt` is also signed (`SHA256SUMS.txt.minisig`, minisign format) and the app installs only releases signed with it ([docs/release-signing.md](docs/release-signing.md)) |
-| Only if you turned on a cloud model in Settings → Analysis: an overview, a question, a title or an Obsidian note is made | The chosen service (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` or your Base URL): the transcript text of that recording, or the fragments found for a library question. Audio and video are never sent. The API key is stored encrypted with Windows DPAPI |
 
 The user interface, fonts and scripts are served locally. The built-in server listens only on `127.0.0.1`. Every launch creates a random session token, so other websites open in your browser cannot read or control the app.
 
@@ -165,7 +164,7 @@ Recordings, extracted audio, the database and exports are kept in `%LOCALAPPDATA
 
 `uninstall.bat` in the program folder (or «Remove Verbaliox completely» in the Start menu of an installed copy) removes the program and everything it made, for a portable folder and an installed copy alike:
 - the program folder with its Python environments and models;
-- the data folder (recordings kept by the program, transcripts, settings, saved API keys, logs), the folders of the old name VerbaScribe;
+- the data folder (recordings kept by the program, transcripts, settings, logs), the folders of the old name VerbaScribe;
 - «Start with Windows», the installer's entry in Installed apps, the shortcuts, `OLLAMA_MODELS` when it points to the program's models, temporary files.
 
 It closes the program first and asks before deleting. Ollama, uv and Python 3.11 that the setup may have installed are asked about separately (other programs may use them). A recordings folder chosen in Settings outside the data folder, files imported without a copy, exports and Obsidian notes are never deleted. `uninstall.bat -KeepData` keeps the recordings and settings; `-Yes` asks nothing (and keeps the shared tools).
@@ -239,7 +238,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 
 **Verbaliox** — настольное приложение для Windows, которое расшифровывает аудио и видео на вашем компьютере. Оно распознаёт речь, разделяет её по спикерам и, если нужно, составляет краткое содержание или отвечает на вопросы по тексту с помощью локальной языковой модели через [Ollama](https://ollama.com).
 
-Записи и расшифровки обрабатываются и хранятся локально (видеокарта NVIDIA через CUDA или процессор). Аккаунт и API-ключи не нужны. По желанию анализ можно выполнять облачной моделью (OpenAI, Anthropic Claude, Google Gemini или OpenAI-совместимый сервис) с вашим API-ключом; по умолчанию это выключено. Какие сетевые подключения бывают, описано [ниже](#сеть).
+Записи и расшифровки обрабатываются и хранятся локально (видеокарта NVIDIA через CUDA или процессор). Аккаунт и API-ключи не нужны, текст записей анализируется тоже на компьютере. Какие сетевые подключения бывают, описано [ниже](#сеть).
 
 ### Возможности
 
@@ -249,7 +248,7 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Разделение по спикерам**: кластеризация голосовых эмбеддингов SpeechBrain ECAPA-TDNN, без токенов. По желанию («Настройки → Распознавание») — **NVIDIA Nemotron 3 Diarization**: размечает, кто когда говорит, по всей записи сразу, до 8 участников; скачивается по запросу, на тестовых совещаниях путала людей примерно втрое реже. Точность снижается при перебиваниях, очень коротких репликах и похожих голосах, поэтому результат стоит проверять и при необходимости поправлять спикеров вручную.
 - **Очистка звука перед распознаванием** (по желанию): фильтры FFmpeg для шумоподавления, удаления щелчков и выравнивания громкости. В плеере также есть простой голосовой фильтр.
 - **Удаление слов-паразитов** («э-э», «ммм», «uh», «um»…). Исходный текст сохраняется, его можно вернуть.
-- **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Gemma 4 E4B на видеокартах от 8 ГБ, Gemma 4 E2B на меньших и без видеокарты) или, по желанию, **облачной моделью по API** (OpenAI, Claude, Gemini, OpenAI-совместимые) с вашим ключом; длинные записи тогда обрабатываются одним запросом. Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
+- **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Gemma 4 E4B на видеокартах от 8 ГБ, Gemma 4 E2B на меньших и без видеокарты). Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
 - **Редактор расшифровки и плеер**: клик по слову перематывает к нему, реплики можно править и склеивать, спикеров — переименовывать; есть звуковая дорожка и выбор скорости.
 - **Запись** с микрофона, системного звука или обоих источников, с пресетами для запуска в один клик. Системный звук захватывается напрямую (WASAPI loopback), без запроса на показ экрана.
 - **Три раздела программы**: **Медиатека** (записи, расшифровки, анализ), **Студия** (запись с живыми субтитрами и переводом в реальном времени, текст печатается без мерцания; можно развернуть на всё окно) и **Вопросы** (к одной записи, к папке или ко всей медиатеке).
@@ -272,8 +271,8 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Проверенные саммари**: у каждого пункта обзора есть время, откуда он взят, а пункты, которых нет в расшифровке, помечены `[?]`. **Мои заметки** во время встречи учитываются в каждом саммари; свои шаблоны саммари.
 - **Обещания между встречами**: кто, что, кому и к какому сроку пообещал — собирается после саммари, показывается перед следующей встречей серии, выгружается в Obsidian, Todoist (CSV) или Markdown; черновик письма по итогам.
 - **Календарь** (файл или ссылка `.ics`, только чтение): запись во время встречи получает её название и участников; в Студии видны ближайшие встречи со справкой.
-- **Диктовка в любую программу**: `Ctrl+Alt+D` записывает микрофон и печатает текст там, где стоит курсор. `Ctrl+Alt+T` делает то же с переводом: говорите по-русски, а вставляется английский текст (или другой язык из «Настройки → Запись»). Переводит локальная модель Ollama; облачная — только если вы разрешите её для диктовки.
-- **Импорт по ссылке** (YouTube и другие сайты, через yt-dlp, который ставится при первом использовании); экспорт **с очисткой шума**; **приватность**: удаление звука после расшифровки или через N дней и журнал всего, что отправлялось облачной модели.
+- **Диктовка в любую программу**: `Ctrl+Alt+D` записывает микрофон и печатает текст там, где стоит курсор. `Ctrl+Alt+T` делает то же с переводом: говорите по-русски, а вставляется английский текст (или другой язык из «Настройки → Запись»). Переводит локальная модель Ollama.
+- **Импорт по ссылке** (YouTube и другие сайты, через yt-dlp, который ставится при первом использовании); экспорт **с очисткой шума**; **приватность**: удаление звука после расшифровки или через N дней.
 - **Перевод текста**: машинный перевод расшифровки локальной моделью Ollama — под оригиналом или вместо него, экспорт переведённых и двуязычных файлов, субтитры для видео. Подробнее — в разделе [Перевод текста](#перевод-текста).
 
 ### Требования
@@ -376,7 +375,6 @@ start.bat
 | **Скачать фильтр** в Настройки → Запись (по желанию) | github.com (релиз `v0.5.6` репозитория `Rikorose/DeepFilterNet`, проверка SHA-256) |
 | Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере |
 | Вы нажимаете **Установить** для обновления | github.com: архив релиза и `SHA256SUMS.txt`; PyPI и download.pytorch.org, если новой версии нужны другие пакеты Python. Контрольная сумма подтверждает, что архив дошёл целым и неизменным. Когда настроен ключ автора, `SHA256SUMS.txt` ещё и подписан (`SHA256SUMS.txt.minisig`, формат minisign), и программа ставит только релизы с этой подписью ([docs/release-signing.md](docs/release-signing.md)) |
-| Только если в «Настройки → Анализ» включена облачная модель: создаётся обзор, ответ на вопрос, название или заметка Obsidian | Выбранный сервис (`api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com` или ваш Base URL): текст расшифровки этой записи, а для вопросов по медиатеке — найденные фрагменты. Аудио и видео не отправляются. API-ключ хранится зашифрованным (Windows DPAPI) |
 
 Интерфейс, шрифты и скрипты загружаются локально. Встроенный сервер слушает только `127.0.0.1`. При каждом запуске создаётся случайный токен сессии, поэтому другие сайты, открытые в браузере, не могут читать данные приложения или управлять им.
 
@@ -388,7 +386,7 @@ start.bat
 
 `uninstall.bat` в папке программы (или «Удалить Verbaliox полностью» в меню «Пуск» установленной копии) удаляет программу и всё, что она создала. Подходит и для переносной папки, и для установленной копии:
 - папку программы со средами Python и моделями;
-- папку данных (записи, сохранённые программой, расшифровки, настройки, сохранённые ключи API, журналы) и папки старого названия VerbaScribe;
+- папку данных (записи, сохранённые программой, расшифровки, настройки, журналы) и папки старого названия VerbaScribe;
 - автозапуск с Windows, запись установщика в «Установленных приложениях», ярлыки, `OLLAMA_MODELS`, если она указывает на модели программы, временные файлы.
 
 Сначала он закрывает программу и спрашивает подтверждение. Про Ollama, uv и Python 3.11, которые могла поставить настройка, спрашивает отдельно: ими могут пользоваться другие программы. Не удаляются папка записей, выбранная в настройках вне папки данных, файлы, импортированные без копирования, экспорт и заметки Obsidian. `uninstall.bat -KeepData` оставляет записи и настройки; `-Yes` ничего не спрашивает (и не трогает общие инструменты).

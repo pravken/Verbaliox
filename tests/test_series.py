@@ -27,41 +27,6 @@ class SeriesMatchTest(unittest.TestCase):
         self.assertIsNone(matching_meeting(_m(2, "Интервью", "2026-05-02"), [_m(1, "Созвон", "2026-05-01")]))
 
 
-class SinceLastTimePrivacyTest(unittest.TestCase):
-    def test_private_meetings_of_the_series_stay_out_of_a_cloud_prompt(self):
-        import sqlite3
-        from types import SimpleNamespace
-        from unittest import mock
-
-        from app import commitments, database as db, series
-        from app.paths import DB_PATH
-
-        db.init_db()
-        sid = series.create_series("Синк")
-        ids = []
-        for n, (title, day, private) in enumerate([("Закрытая 1", "2026-04-01", 1), ("Открытая 2", "2026-04-08", 0),
-                                                   ("Открытая 3", "2026-04-15", 0)]):
-            mid = db.create_meeting(title, f"{n}.wav", f"/x/{n}.wav", recorded_at=f"{day} 10:00:00")["id"]
-            db.save_meeting_results(mid, segments=[{"id": 1, "start": 0.0, "end": 5.0, "text": f"Текст {title}", "speaker": "S1"}],
-                                    language="ru")
-            db.update_meeting_progress(mid, status="completed", progress=100)
-            conn = sqlite3.connect(DB_PATH)
-            conn.execute("UPDATE meetings SET series_id = ?, local_only = ? WHERE id = ?", (sid, private, mid))
-            conn.commit()
-            conn.close()
-            ids.append(mid)
-        commitments.create(what="Секретная сделка", who="Иван", meeting_id=ids[0])
-        commitments.create(what="Отчёт к пятнице", who="Анна", meeting_id=ids[1])
-        prompts = []
-        cloud = SimpleNamespace(is_cloud=True, label="cloud", max_chars=100000,
-                                chat=lambda system, user, **kw: (prompts.append(user), "ok")[1])
-        with mock.patch("app.llm.target", lambda *a, **k: cloud):
-            series.since_last_time(ids[2])
-        self.assertNotIn("Секретная сделка", prompts[0])
-        self.assertNotIn("Закрытая 1", prompts[0])
-        self.assertIn("Отчёт к пятнице", prompts[0])
-
-
 if __name__ == "__main__":
     unittest.main()
 
@@ -446,7 +411,7 @@ class NotesAndTemplatesTest(unittest.TestCase):
         saved = save_summary_templates([{"name": "1:1", "prompt": "Обратная связь и шаги"}, {"name": "", "prompt": "x"}])
         self.assertEqual(len(saved), 1)
         self.assertEqual(summary_templates()[0]["name"], "1:1")
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = "ok"
         segs = [{"start": 0, "end": 2, "text": "Привет", "speaker": "S1"}]
         with mock.patch("app.llm.target", return_value=llm):
@@ -499,7 +464,7 @@ class CommitmentsTest(unittest.TestCase):
         save_meeting_results(m["id"], segments=segs, speakers={"S2": {"name": "Анна"}})
         answer = ('```json\n{"who": "Анна", "to": "клиент", "what": "подготовит презентацию для клиента", "due": "к пятнице", "time": "01:10"}\n'
                   '{"who": "Борис", "to": "", "what": "откроет офис в Лондоне и наймёт десять инженеров", "due": "", "time": ""}\n```')
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = answer
         with mock.patch("app.llm.target", return_value=llm):
             items = commitments.extract(m["id"])
@@ -599,19 +564,6 @@ class PrivacyTest(unittest.TestCase):
             self.assertTrue(got["media_removed"] and got["segments"])
             remove_media(b["id"])
             self.assertTrue(user.exists())
-
-    def test_cloud_log(self):
-        from app.database import init_db
-        from app.llm import Target, clear_cloud_log, cloud_log
-
-        init_db()
-        clear_cloud_log()
-        Target("openai", "gpt-x", 1000, lambda s, u: "ok").chat("Составь обзор", "текст")
-        Target("ollama", "qwen3:4b", 1000, lambda s, u: "ok").chat("локально", "текст")
-        rows = cloud_log()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["model"], "gpt-x")
-        self.assertIn("Составь обзор", rows[0]["purpose"])
 
 
 class DictationTest(unittest.TestCase):

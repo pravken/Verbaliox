@@ -197,8 +197,7 @@ class SuspectsTest(unittest.TestCase):
                 seen.update(user=user, short=short)
                 return '[{"wrong": "кубер", "right": "Kubernetes"}]'
 
-        with mock.patch("app.llm.uses_cloud", return_value=False), \
-                mock.patch("app.live_translate.model_choices", return_value={"fast": "gemma4:e2b"}), \
+        with mock.patch("app.live_translate.model_choices", return_value={"fast": "gemma4:e2b"}), \
                 mock.patch("app.llm.target", return_value=Fake()) as tgt:
             out = analysis_edits.check_with_model(self.MEETING)
         self.assertEqual(tgt.call_args[0][0], "gemma4:e2b")

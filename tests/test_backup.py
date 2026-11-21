@@ -10,14 +10,19 @@ from app import backup
 
 class BackupTest(unittest.TestCase):
     def test_make_restore_apply(self):
-        from app import secret_store
-        from app.database import DB_PATH, _db_lock, create_meeting, get_meeting, init_db, list_meetings
+        from app.database import DB_PATH, _db_lock, create_meeting, get_connection, get_meeting, init_db, list_meetings
 
         init_db()
         media = Path(tempfile.mkdtemp()) / "talk.m4a"
         media.write_bytes(b"sound")
         m = create_meeting("Встреча для копии", "talk.m4a", str(media))
-        secret_store.set_secret("llm_key_openai", "sk-test")
+        # the table of API keys of an earlier version, left in the database: never put into a copy
+        with _db_lock:
+            conn = get_connection()
+            conn.execute("CREATE TABLE IF NOT EXISTS secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)")
+            conn.execute("INSERT OR REPLACE INTO secrets VALUES ('llm_key_openai', 'plain:sk-test', '2026-01-01')")
+            conn.commit()
+            conn.close()
         out = Path(tempfile.mkdtemp()) / "copy.zip"
         info = backup.make(out, with_media=True)
         self.assertGreaterEqual(info["media_files"], 1)
@@ -28,7 +33,7 @@ class BackupTest(unittest.TestCase):
         conn = sqlite3.connect(str(db))
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         conn.close()
-        self.assertNotIn("secrets", tables)  # API keys stay on this computer
+        self.assertNotIn("secrets", tables)
 
         before = len(list_meetings())
         media.unlink()  # lost; the restore puts it back (it lived outside the app's folders: into the recordings folder)
@@ -47,7 +52,6 @@ class BackupTest(unittest.TestCase):
         self.assertFalse(backup.PENDING.exists())
         self.assertEqual(len(list_meetings()), before)
         self.assertEqual(get_meeting(m["id"])["title"], "Встреча для копии")
-        self.assertEqual(secret_store.get_secret("llm_key_openai"), "sk-test")  # the keys of this computer stay
         moved = Path(get_meeting(m["id"])["media_path"])
         self.assertEqual(moved.parent.name, backup.RESTORED_FOLDER)
         self.assertEqual(moved.read_bytes(), b"sound")

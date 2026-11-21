@@ -666,7 +666,7 @@ def _merge_runner(meeting_id: int) -> str:
     """One transcript from the transcripts of several models (app/transcript_merge.py), shown as the
     version "merged"; the others stay."""
     from app import llm
-    from app.database import all_transcripts, is_local_only
+    from app.database import all_transcripts
     from app.model_manager import format_whisper_model_name
     from app.transcript_merge import MERGED, merge
 
@@ -677,7 +677,7 @@ def _merge_runner(meeting_id: int) -> str:
     update_meeting_progress(meeting_id, progress=5, stage_text="Сведение версий: сопоставление слов...")
     chat, note = None, ""
     try:
-        chat = llm.target(None, local_only=is_local_only(meeting)).chat
+        chat = llm.target(None).chat
     except Exception as e:  # no analysis model: the disputed places go to the more accurate model
         print(f"[merge] no analysis model: {e}", flush=True)
         note = " Модель анализа недоступна: спорные места решены по точности моделей."
@@ -863,10 +863,9 @@ def _analysis_runner(meeting_id: int) -> str:
     want_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true")
     if want_summary:
         from app import llm
-        from app.database import is_local_only
 
-        if not llm.available(settings, local_only=is_local_only(m)):
-            # no analysis model now (Ollama removed, no cloud key): the mark stays, said plainly
+        if not llm.available(settings):
+            # no analysis model now (Ollama removed): the mark stays, said plainly
             return "Анализ ждёт модель анализа: она недоступна"
         with meeting_guard.guard(meeting_id):
             _auto_analysis(meeting_id, settings, segments, speakers, lang)
@@ -913,13 +912,11 @@ def _complete_runner(meeting_id: int) -> str:
         with meeting_guard.guard(meeting_id):
             _auto_analysis(meeting_id, settings, segments, speakers, lang)  # the chapters of a long one with it
     elif "chapters" in missing:
-        from app.database import is_local_only
-
         with meeting_guard.guard(meeting_id):
             try:
                 update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
                 chapters = generate_meeting_summary(segments=segments, speakers=speakers, template_key="chapters",
-                                                    answer_lang=lang, local_only=is_local_only(m))
+                                                    answer_lang=lang)
                 merge_summaries(meeting_id, {"chapters": chapters})
             except Exception as e:
                 if not meeting_guard.interrupted(meeting_id) and not _cancel_wanted(meeting_id):
@@ -1410,23 +1407,19 @@ def _auto_analysis(meeting_id: int, settings: Dict[str, str], merged_segments: L
     summaries: Dict[str, Any] = {}
     from app import llm
 
-    from app.database import is_local_only
     from app.features import note_for as features_note_for
     from app.meeting_context import note_for_summary as meeting_context_note
 
-    local_only = is_local_only(get_meeting(meeting_id))
-    if llm.available(settings, local_only=local_only):
-        cloud = llm.uses_cloud(settings) and not local_only
-        if not cloud:  # the analysis model loads alone: the speech models go first
-            _release_speech_models()
+    if llm.available(settings):
+        _release_speech_models()  # the analysis model loads alone: the speech models go first
         update_meeting_progress(
             meeting_id,
             status="summarizing",
             progress=90,
-            stage_text="Формирование обзора записи (" + ("облачная модель" if cloud else "Ollama") + ")...",
+            stage_text="Формирование обзора записи (Ollama)...",
         )
         try:
-            where = "облачная модель" if cloud else "Ollama"
+            where = "Ollama"
             part_notes: Dict[str, Any] = {}  # the parts of a long recording, read once for both
             try:  # who was there, their names written right (app/people.meeting_roster)
                 from app.people import meeting_roster
@@ -1478,7 +1471,6 @@ def _auto_analysis(meeting_id: int, settings: Dict[str, str], merged_segments: L
                     features_note=features_note_for(get_meeting(meeting_id) or {}),
                     context_note=meeting_context_note(get_meeting(meeting_id) or {}, "protocol"),
                     answer_lang=detected_lang,
-                    local_only=local_only,
                     part_notes=part_notes,
                     participants=roster,
                 )
@@ -1499,7 +1491,7 @@ def _auto_analysis(meeting_id: int, settings: Dict[str, str], merged_segments: L
                     update_meeting_progress(meeting_id, stage_text="Темы разговора для таймлайна...")
                     chapters_md = generate_meeting_summary(
                         segments=merged_segments, speakers=speakers_meta, template_key="chapters",
-                        answer_lang=detected_lang, local_only=local_only, part_notes=part_notes,
+                        answer_lang=detected_lang, part_notes=part_notes,
                         participants=roster)
                     summaries["chapters"] = chapters_md
                     merge_summaries(meeting_id, {"chapters": chapters_md})
@@ -1538,13 +1530,11 @@ def _after_transcription(
         and is_generic_title(meeting.get("title") or "")
     ):
         from app import llm
-        from app.database import is_local_only
 
-        local_only = is_local_only(meeting)
-        if llm.available(settings, local_only=local_only):
+        if llm.available(settings):
             update_meeting_progress(meeting_id, progress=94, stage_text="Название записи по содержанию...")
             try:
-                title = generate_meeting_title(segments, speakers, answer_lang=lang, local_only=local_only)
+                title = generate_meeting_title(segments, speakers, answer_lang=lang)
                 if title:
                     update_meeting_fields(meeting_id, title=title, title_is_default=0)
                     from app.naming import rename_recording_file
@@ -1561,14 +1551,13 @@ def _after_transcription(
         print(f"[series] meeting {meeting_id}: {e}", flush=True)
     try:  # its features: the series' own (set by the user), else the analysis model's suggestion (app/features.py)
         from app import features, llm as llm_targets
-        from app.database import is_local_only as _local_only
 
         # the series' own features; else the meeting's title (a Teams meeting is often named after its
         # feature); else the analysis model's guess. The last two only suggest, for ✓ / ✕
         suggest_on = settings.get("feature_suggest", "true").lower() == "true"
         if not features.apply_series_rule(meeting_id) and suggest_on and not features.suggest_by_title(meeting_id) \
                 and with_llm and features.list_features() \
-                and llm_targets.available(settings, local_only=_local_only(get_meeting(meeting_id) or {})):
+                and llm_targets.available(settings):
             features.suggest(meeting_id)
     except Exception as e:
         print(f"[features] meeting {meeting_id}: {e}", flush=True)
@@ -1819,7 +1808,7 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     from datetime import datetime
 
     from app import llm
-    from app.database import all_transcripts, is_local_only, save_transcript_version
+    from app.database import all_transcripts, save_transcript_version
     from app.model_manager import format_whisper_model_name
     from app.transcript_merge import MERGED, merge
 
@@ -1885,7 +1874,7 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     update_meeting_progress(meeting_id, status="transcribing", progress=86, stage_text="Сведение версий: сопоставление слов...")
     chat = None
     try:
-        chat = llm.target(None, local_only=is_local_only(get_meeting(meeting_id))).chat
+        chat = llm.target(None).chat
     except Exception as e:  # no analysis model: the disputed places go to the more accurate model
         print(f"[ensemble] no analysis model: {e}", flush=True)
     # the Teams captions of the recording (app/teams_captions.py) are one more voice, a light one

@@ -46,15 +46,6 @@ class TranscriptLinesTest(unittest.TestCase):
         self.assertEqual(_segment_parts({"start": 1.0, "end": 3.0, "text": "Коротко"}), [(1.0, "Коротко")])
 
 
-@needs_deps
-class DefaultModelTest(unittest.TestCase):
-    def test_picks_current_fast_model(self):
-        gemini = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.0-flash-preview",
-                  "gemini-2.5-pro", "text-embedding-004", "gemma-3-27b-it"]
-        self.assertEqual(llm.pick_default_model("gemini", gemini), "gemini-2.5-flash")
-        self.assertEqual(llm.pick_default_model("openai", ["gpt-4o-mini", "gpt-5-mini", "gpt-5-nano", "tts-1"]), "gpt-5-mini")
-        self.assertIsNone(llm.pick_default_model("openai", []))
-
 
 @needs_deps
 class AutoPairTest(unittest.TestCase):

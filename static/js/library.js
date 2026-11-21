@@ -675,10 +675,6 @@ function openFolderMenu(e, id) {
   document.getElementById('fctx-title').textContent = folderName(f);
   document.getElementById('fctx-delete').classList.toggle('hidden', !!f.system_key);
   document.getElementById('fctx-move').classList.toggle('hidden', !!f.system_key);  // the program's own folders stay at the top
-  const inherited = !f.local_only && folderLocalOnly(f.parent_id);
-  document.getElementById('fctx-local-check').textContent = f.local_only || inherited ? '✓' : '';
-  document.getElementById('fctx-local').disabled = inherited;
-  document.getElementById('fctx-local').style.opacity = inherited ? '.5' : '';
   menu.classList.remove('hidden');
   placeMenuAt(menu, e);
 }
@@ -695,16 +691,6 @@ async function fctxRename() {
   const name = (await askText(t('folderRenamePrompt'), folderName(f)) || '').trim();
   if (!name || name === folderName(f)) return;
   await patchFolder(f.id, { name });
-}
-
-async function fctxToggleLocalOnly() {
-  hideFolderMenu();
-  const f = folderById(state.contextFolderId);
-  if (!f) return;
-  if (await patchFolder(f.id, { local_only: !f.local_only })) {
-    showToast(!f.local_only ? t('localOnlyFolderOn') : t('localOnlyOff'));
-    renderAnalysisEstimate();
-  }
 }
 
 // «Переместить в…»: the folders it may go into (not itself or a folder inside it), and the top level
@@ -859,8 +845,7 @@ const REC_STEP_OF_STATUS = {
 function recordingBadgesHtml(m) {
   const running = REC_STEP_OF_STATUS[m.status];
   const failedStep = m.status === 'failed' ? (m.has_transcript ? null : 'transcript') : null;
-  // Always shown: what needs attention (a step running, a failure, a recording marked local by
-  // itself). What a recording has (analysis, translations, dubs) shows on hover and on the selected
+  // Always shown: what needs attention (a step running, a failure). What a recording has (analysis, translations, dubs) shows on hover and on the selected
   // row, or always with "Badges: all" in the view menu; having a transcript is the norm: no badge
   const badge = (kind, done, label, text = '') => {
     const busy = running === kind;
@@ -875,9 +860,7 @@ function recordingBadgesHtml(m) {
   };
   const trLangs = m.translations_langs || [];
   const dubLangs = m.dub_langs || [];
-  // The lock of a whole folder is on the folder's row
-  const lock = meetingLocalOnly(m) ? `<span class="rec-badge ${m.local_only ? '' : 'rec-badge-extra'}" title="${escapeHtml(t('tipLocalOnly'))}">${ICON_LOCK}</span>` : '';
-  return lock + badge('transcript', m.has_transcript, t('recBadgeTranscript'))
+  return badge('transcript', m.has_transcript, t('recBadgeTranscript'))
     + badge('summary', m.has_summary, t('recBadgeSummary'))
     + badge('translation', trLangs.length > 0, `${t('recBadgeTranslation')}${trLangs.length ? ': ' + trLangs.map(langName).join(', ') : ''}`, trLangs.map(langCode).join(' '))
     + badge('dub', dubLangs.length > 0, `${t('recBadgeDub')}${dubLangs.length ? ': ' + dubLangs.map(langName).join(', ') : ''}`, dubLangs.map(langCode).join(' '));
@@ -1169,7 +1152,6 @@ const LIB_FILTERS = {
   state: {
     busy: m => !DONE_STATUSES.includes(m.status),
     failed: m => m.status === 'failed',
-    local: m => !!m.local_only || folderLocalOnly(m.folder_id),
   },
   has: {
     summary: m => !!m.has_summary,
@@ -1185,7 +1167,9 @@ function libFilters() {
   if (_libFilters) return _libFilters;
   let raw = {};
   try { raw = JSON.parse(localStorage.getItem(LIB_FILTER_KEY) || '{}') || {}; } catch (e) {}
-  _libFilters = Object.fromEntries(LIB_FILTER_GROUPS.map(g => [g, new Set(Array.isArray(raw[g]) ? raw[g].map(String) : [])]));
+  // a choice that is no longer offered (the former «только локально») is dropped, or it would hide every recording
+  _libFilters = Object.fromEntries(LIB_FILTER_GROUPS.map(g => [g, new Set((Array.isArray(raw[g]) ? raw[g].map(String) : [])
+    .filter(id => !LIB_FILTERS[g] || id in LIB_FILTERS[g]))]));
   return _libFilters;
 }
 
@@ -1609,7 +1593,6 @@ function folderRowHtml(f, depth, collapsed) {
       <span class="shrink-0 text-apple-tertiary ${open ? 'rotate-90' : ''}">${ICON_CHEVRON}</span>
       <span class="shrink-0 ${f.system_key ? 'text-apple-blue' : 'text-apple-secondary'}">${folderIcon(f)}</span>
       <span class="text-[12px] font-semibold truncate flex-1">${escapeHtml(folderName(f))}</span>
-      ${f.local_only ? `<span class="shrink-0 text-apple-tertiary" title="${escapeHtml(t('tipLocalOnly'))}">${ICON_LOCK}</span>` : ''}
       ${!open && libHere().folders.has(f.id) ? `<span class="lib-here-dot" title="${escapeHtml(t('tipLibHere'))}"></span>` : ''}
       <span class="text-[11px] font-mono text-apple-tertiary">${count}</span>
       <button data-click="openFolderMenu" data-click-args='[{"$": "event"}, ${f.id}]' title="${escapeHtml(t('tipFolderMenu'))}"

@@ -12,6 +12,7 @@ async function assistantLoad() {
   ASSIST.loaded = true;
   const data = await fetch('/api/assistant/chats').then(r => (r.ok ? r.json() : { chats: [] })).catch(() => ({ chats: [] }));
   ASSIST.chats = Array.isArray(data.chats) ? data.chats : [];
+  for (const c of ASSIST.chats) if (c && c.model === 'cloud') c.model = '';  // the cloud model of earlier versions
   ASSIST.chatId = ASSIST.chats[0]?.id || null;
   renderAssistant();
 }
@@ -158,15 +159,9 @@ function assistantSettings() {
   return state.system?.settings || {};
 }
 
-// '' — as in the settings; 'cloud' — the cloud model; an Ollama tag — that local model
-function assistantModelIsCloud(model) {
-  const s = assistantSettings();
-  return model === 'cloud' || (!model && s.llm_provider === 'cloud');
-}
-
+// '' — as in the settings; an Ollama tag — that local model
 function assistantModelName(model) {
   const s = assistantSettings();
-  if (assistantModelIsCloud(model)) return cloudLlmChoice()?.label || t('rdSasCloudModel');
   const tag = model || s.ollama_model || '';
   if (!tag) return t('rdSasNoModel');
   const note = localLlmNote(tag);
@@ -175,7 +170,6 @@ function assistantModelName(model) {
 
 // The local model of the conversation cannot answer now (not downloaded, or no Ollama)
 function assistantModelOff(model) {
-  if (assistantModelIsCloud(model)) return false;
   const tag = model || assistantSettings().ollama_model || '';
   return !tag || localLlmState(tag) !== 'ready';
 }
@@ -190,17 +184,16 @@ function renderAssistantHead() {
   // names the model and the «где работает» pill is hidden (they said the same thing twice more)
   const offNow = assistantModelOff(model);
   const tag = model || assistantSettings().ollama_model || '';
-  if (label) label.textContent = offNow && !assistantModelIsCloud(model) ? (tag ? formatModelName(tag) : t('rdSasNoModel')) : assistantModelName(model);
+  if (label) label.textContent = offNow ? (tag ? formatModelName(tag) : t('rdSasNoModel')) : assistantModelName(model);
   const pill = document.getElementById('as-privacy');
   document.getElementById('as-model-btn')?.classList.toggle('an-model-off', assistantModelOff(model));
   document.getElementById('as-noai')?.classList.toggle('hidden', !assistantModelOff(model));
   if (pill) {
-    const cloud = assistantModelIsCloud(model);
     const off = assistantModelOff(model);
     // not «на этом компьютере» while nothing here can answer: the pill says so and leads to the models
-    pill.className = `as-pill ${off ? 'as-pill-off' : cloud ? 'as-pill-cloud' : 'as-pill-local'}`;
-    pill.textContent = t(off ? 'rdSasPillOff' : cloud ? 'rdSasPillCloud' : 'rdSasPillLocal');
-    pill.title = t(off ? 'anNeedModel' : cloud ? 'rdSasPillCloudHint' : 'rdSasPillLocalHint');
+    pill.className = `as-pill ${off ? 'as-pill-off' : 'as-pill-local'}`;
+    pill.textContent = t(off ? 'rdSasPillOff' : 'rdSasPillLocal');
+    pill.title = t(off ? 'anNeedModel' : 'rdSasPillLocalHint');
     if (off) { pill.dataset.click = 'openModal'; pill.dataset.clickArgs = '["settings", "analysis"]'; pill.setAttribute('role', 'button'); }
     else { delete pill.dataset.click; delete pill.dataset.clickArgs; pill.removeAttribute('role'); }
     pill.style.display = offNow ? 'none' : '';  // (.as-pill sets display, so not the hidden class)
@@ -256,9 +249,6 @@ function assistantModelMenu(e) {
   const items = [{ head: t('rdSasWhoAnswers') },
     { label: t('rdSasModelDefault'), note: assistantModelName(''), on: !chat.model, onClick: pick('') }];
   local.forEach(id => items.push({ label: formatModelName(id), note: localLlmNote(id) || t('rdSasLocal'), on: chat.model === id, onClick: pick(id) }));
-  // the cloud model as Settings → AI analysis sets it (a provider, its model, a saved key, the consent)
-  const cloud = cloudLlmChoice();
-  if (cloud) items.push({ label: cloud.label, note: t('rdSasCloud'), on: chat.model === 'cloud', onClick: pick('cloud') });
   items.push('sep', { label: t('rdSasModelsKeys'), onClick: () => openModal('settings', 'analysis') });
   assistantMenu(e, items, 380);  // «Как в настройках» and the model with its state in one line
 }
@@ -711,7 +701,7 @@ function renderAssistantItem(item, isLast) {
       const shown = (data.sources || []).filter(s => !cited.size || cited.has(s.n)).slice(0, 20);
       const recs = new Set(shown.map(s => s.meeting_id)).size;
       const sources = assistantSourcesHtml(item, shown);
-      const model = data.model ? `${data.cloud ? '☁ ' : ''}${escapeHtml(data.cloud ? data.model : formatModelName(data.model))}` : '';
+      const model = data.model ? escapeHtml(formatModelName(data.model)) : '';
       body = `<div class="as-a">
         <div class="markdown-body text-[13.5px]" data-as-answer="${Number(item.id) || 0}"></div>
         ${sources ? `<div class="as-srclist"><div class="as-srclist-h">${escapeHtml(t('rdSasSourcesCount').replace('{r}', () => recs).replace('{n}', () => shown.length))}</div>${sources}</div>` : ''}
@@ -720,7 +710,7 @@ function renderAssistantItem(item, isLast) {
           <button data-click="assistantSaveMenu" data-click-args='[{"$": "event"}, ${Number(item.id) || 0}]' class="as-act">${escapeHtml(t('rdSasSave'))}</button>
           <button data-click="assistantRetry" data-click-args='[${Number(item.id) || 0}]' class="as-act">${escapeHtml(t('rdSasRegenerate'))}</button>
           <span class="flex-1"></span>
-          <span class="as-model">${model}${data.excluded_local ? ' · ' + escapeHtml(t('askExcludedLocal').replace('{n}', () => data.excluded_local)) : ''}</span>
+          <span class="as-model">${model}</span>
         </div>
       </div>`;
     }

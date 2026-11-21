@@ -160,7 +160,6 @@ def analysis_moments(m: Dict[str, Any], budget: float = DIGEST_SEC) -> List[Dict
 
 
 def pick_highlights(m: Dict[str, Any], model_name: Optional[str] = None, answer_lang: str = "ru") -> List[Dict[str, Any]]:
-    from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import _lang_phrase, build_transcript_lines
 
@@ -169,7 +168,7 @@ def pick_highlights(m: Dict[str, Any], model_name: Optional[str] = None, answer_
         raise ValueError("Нет текста записи")
     from app.commitments import transcript_parts
 
-    llm = target(model_name, local_only=is_local_only(m))
+    llm = target(model_name)
     # A long recording is read part by part: cut to the model's size, it lost everything after
     # the first twenty minutes
     parts = transcript_parts(lines, max(8000, llm.max_chars - 3000))

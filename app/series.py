@@ -14,7 +14,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
-from app.database import _db_lock, get_connection, get_meeting, list_meetings, local_only_ids, update_meeting_fields
+from app.database import _db_lock, get_connection, get_meeting, list_meetings, update_meeting_fields
 
 MIN_SHARED_PEOPLE = 2
 MIN_PEOPLE_OVERLAP = 0.5
@@ -132,7 +132,6 @@ def _outcomes(m: Dict[str, Any]) -> str:
 
 
 def since_last_time(meeting_id: int, model_name: Optional[str] = None, answer_lang: str = "ru") -> str:
-    from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import _lang_phrase, build_transcript_lines
 
@@ -142,7 +141,7 @@ def since_last_time(meeting_id: int, model_name: Optional[str] = None, answer_la
     prev = previous_meeting(m)
     if not prev:
         raise ValueError("В серии нет более ранней встречи")
-    llm = target(model_name, local_only=is_local_only(m) or is_local_only(prev))
+    llm = target(model_name)
     now_text = "\n".join(build_transcript_lines(m.get("segments") or [], m.get("speakers") or {}))
     budget = max(8000, llm.max_chars - 9000)
     if len(now_text) > budget:
@@ -161,9 +160,6 @@ def since_last_time(meeting_id: int, model_name: Optional[str] = None, answer_la
     from app import commitments
 
     earlier = [x for x in commitments.open_for_series(int(m["series_id"])) if x["meeting_id"] != m["id"]]
-    if llm.is_cloud:  # the tasks of the series' private meetings (and their titles) stay on this computer
-        private = local_only_ids()
-        earlier = [x for x in earlier if x["meeting_id"] not in private]
     promised = (f"Открытые задачи из прошлых встреч серии (проверь каждую):\n{commitments.as_text(earlier)}\n\n"
                 if earlier else "")
     user = (f"{promised}Прошлая встреча «{prev.get('title')}» ({_when(prev)[:10]}):\n{_outcomes(prev)}\n\n"
@@ -188,14 +184,6 @@ def brief(series_id: Optional[int] = None, person: Optional[str] = None, model_n
     if not rows:
         raise ValueError("Нет встреч для справки")
     llm = target(model_name)
-    excluded = 0
-    if llm.is_cloud:
-        private = local_only_ids()
-        kept = [r for r in rows if r["id"] not in private]
-        excluded = len(rows) - len(kept)
-        if not kept:
-            llm, excluded, kept = target(None if model_name == "cloud" else model_name, local_only=True), 0, rows
-        rows = kept
     meetings = [m for m in (get_meeting(r["id"]) for r in rows) if m]
     per = max(800, (llm.max_chars - 3000) // max(1, len(meetings)))
     blocks = [f"[{n}] «{m.get('title')}», {_when(m)[:10]}\n{_outcomes(m)[:per]}" for n, m in enumerate(meetings, 1)]
@@ -216,8 +204,8 @@ def brief(series_id: Optional[int] = None, person: Optional[str] = None, model_n
     answer = llm.chat(system, promised + "Материалы встреч (от старых к новым):\n\n" + "\n\n".join(blocks))
     sources = [{"n": n, "meeting_id": int(m["id"]), "title": m.get("title") or "", "date": _when(m)[:10], "start": 0.0,
                 "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
-    return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "cloud": llm.is_cloud,
-            "mode": "brief", "count": len(meetings), "excluded_local": excluded}
+    return {"answer": answer, "sources": sources, "found": True, "model": llm.label,
+            "mode": "brief", "count": len(meetings)}
 
 
 class EventIndex:

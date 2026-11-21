@@ -372,7 +372,6 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
     """The analysis model's guess which existing features the meeting is about, kept as suggestions
     (shown with ✓ / ✕). Not for a meeting that has features, nor when there are none to choose from;
     a feature the user turned down for this meeting is not suggested again."""
-    from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import build_transcript_lines
 
@@ -386,7 +385,7 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
         body = "\n".join(build_transcript_lines(m.get("segments") or [], m.get("speakers") or {}))
     text = (f"Название встречи: {m.get('title') or ''}\n\n" + (f"MFU:\n{m['mfu']}\n\n" if (m.get("mfu") or "").strip() else "")
             + body)[:SUGGEST_TEXT_CHARS]
-    llm = target(model_name, local_only=is_local_only(m))
+    llm = target(model_name)
     listing = "Фичи:\n" + describe(f["id"] for f in features)  # with what each is about, when written
     ids = parse_names(llm.chat(_SUGGEST, listing + "\n\n" + text, short=True), features)
     return _keep_suggestions(meeting_id, ids)

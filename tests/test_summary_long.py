@@ -30,7 +30,7 @@ class LongSummaryTest(unittest.TestCase):
                 return "\n".join(f"- [{s}] начало части" for s in stamps) + "\n- сжатый конспект"
             return "обзор"
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.side_effect = chat
         with mock.patch("app.llm.target", return_value=llm):
             self.assertEqual(ollama_client.generate_meeting_summary(segs, {}, "protocol"), "обзор")
@@ -46,7 +46,7 @@ class LongSummaryTest(unittest.TestCase):
         n = (ollama_client.SINGLE_PASS_MAX_CHARS - 2000) // (len(text) + 12)
         segs = [{"start": i * 10, "end": i * 10 + 9, "speaker": "S1", "text": text} for i in range(n)]
         asked = []
-        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm = mock.Mock(max_chars=100000, label="m")
         llm.chat.side_effect = lambda system, user, **_: asked.append(user) or "- [00:00] конспект"
         with mock.patch("app.llm.target", return_value=llm):
             ollama_client.generate_meeting_summary(segs, {}, "protocol", user_notes="заметка " * 750)
@@ -62,7 +62,7 @@ class LongSummaryTest(unittest.TestCase):
             asked.append(user[:20])
             return "- [00:00] конспект" if user.startswith("Это фрагмент") else "ответ"
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000, label="qwen3:8b")
+        llm = mock.Mock(max_chars=100000, label="qwen3:8b")
         llm.chat.side_effect = chat
         notes = {}
         with mock.patch("app.llm.target", return_value=llm):
@@ -75,13 +75,12 @@ class LongSummaryTest(unittest.TestCase):
 
 @unittest.skipIf(ollama_client is None, "app dependencies not installed")
 class PlainAnswerTest(unittest.TestCase):
-    def test_a_retelling_asks_a_local_model_not_to_reason_and_the_cloud_as_usual(self):
+    def test_a_retelling_asks_the_model_not_to_reason(self):
         from app.llm import Target
 
         seen = []
         Target("ollama", "gemma4:e4b", 1000, lambda s, u, **kw: seen.append(kw) or "ok").chat("s", "u", plain=True)
-        Target("openai", "gpt-x", 1000, lambda s, u: seen.append("cloud") or "ok", logs_itself=True).chat("s", "u", plain=True)
-        self.assertEqual(seen, [{"plain": True}, "cloud"])
+        self.assertEqual(seen, [{"plain": True}])
 
     def test_unnamed_speakers_are_called_in_the_answer_language(self):
         sp = {"S1": {"name": "Участник 1"}, "S2": {"name": "Ольга"}}
@@ -107,9 +106,9 @@ class LongHighlightsTest(unittest.TestCase):
             a = h * 3600 + mm * 60 + ss + 30
             return f"{a // 3600}:{a % 3600 // 60:02d}:{a % 60:02d}-{a // 3600}:{(a + 30) % 3600 // 60:02d}:{(a + 30) % 60:02d} | момент"
 
-        llm = mock.Mock(is_cloud=False, max_chars=20000)
+        llm = mock.Mock(max_chars=20000)
         llm.chat.side_effect = chat
-        with mock.patch("app.llm.target", return_value=llm), mock.patch("app.database.is_local_only", return_value=False):
+        with mock.patch("app.llm.target", return_value=llm):
             moments = media_cut.pick_highlights({"segments": segs, "speakers": {}, "duration": 5400})
         self.assertGreater(llm.chat.call_count, 1)
         self.assertGreater(moments[-1]["start"], 3600)  # the last hour is not lost

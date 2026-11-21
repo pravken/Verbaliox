@@ -845,9 +845,6 @@ function openModal(name, tab) {
     refreshExportDirLabel();
     refreshRecordingsDirLabel();
     refreshObsidianStatus();
-    state.llmProviderEdited = false;
-    state.llmShowCloud = false;
-    loadLlmStatus();
     nextFrame(() => drawIdleSoundCloudBars('settings-waveform-canvas'));
   }
 }
@@ -971,7 +968,6 @@ function switchWorkspaceTab(tab) {
   if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
   if (tab === 'info') loadMeetingInfo();
-  if (tab === 'summary') renderAnalysisEstimate();
   ['transcript', 'summary', 'speakers', 'info'].forEach(k => {
     document.getElementById(`wview-${k}`).classList.toggle('hidden', k !== tab);
     const btn = document.getElementById(`wtab-${k}`);
@@ -996,9 +992,9 @@ function hideExportMenu() {
 }
 
 // Esc closes the dialogs made on the fly that have no keyboard handling of their own (found in the audit:
-// Esc closed Settings under the cloud log and left the log open). Their own ✕ is pressed, so a dialog
+// Esc closed Settings under a dialog and left the dialog open). Their own ✕ is pressed, so a dialog
 // that asks before closing still asks; the event goes no further, the window below stays
-const ESC_DIALOGS = ['cloud-log', 'templates-editor', 'an-tpl-dlg', 'open-commitments'];
+const ESC_DIALOGS = ['templates-editor', 'an-tpl-dlg', 'open-commitments'];
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
   const open = ESC_DIALOGS.map(id => document.getElementById(id)).filter(Boolean);
