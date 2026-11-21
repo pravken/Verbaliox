@@ -54,7 +54,7 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **Assistant**: a clear send button; the conversation title shows that it can be renamed.
 - Fixes: the calendar from classic Outlook without a mail profile no longer opens Outlook's first-run wizard
   every 15 minutes; deleting an Ollama model starts Ollama when needed and deletes the name it really has;
-  the shortcuts show the new icon after the next update.
+  the shortcuts show the new icon after the next update; «About» shows the new icon.
 
 ## 0.8.25 — English
 
@@ -811,7 +811,7 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Ассистент**: понятная кнопка отправки; по заголовку разговора видно, что его можно переименовать.
 - Исправления: календарь из классического Outlook без почтового профиля больше не открывает мастер первого
   запуска Outlook каждые 15 минут; удаление модели Ollama при необходимости запускает Ollama и удаляет модель
-  под её настоящим именем; ярлыки показывают новый значок после следующего обновления.
+  под её настоящим именем; ярлыки показывают новый значок после следующего обновления; в «О программе» — новый значок.
 
 ## 0.8.25
 

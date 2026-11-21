@@ -4844,3 +4844,13 @@ button.sc-at:hover { color: var(--accent-text); }
 .hm-mt.hm-mt-k-recording { --hm-tint: rgb(var(--accent-rgb) / 0.07); border-left: 3px dashed rgb(var(--accent-rgb) / 0.8); cursor: pointer; text-align: left; font: inherit; color: inherit; }
 .hm-mt.hm-mt-k-recording:hover { --hm-tint: rgb(var(--accent-rgb) / 0.15); }
 .hm-mt-slot { visibility: hidden; }  /* the place of «⋯»: the link of a recording stands where a meeting's does */
+
+/* About: the program's own icon (the dragon-V, assets/icon.ico) instead of the former willow drawing; it sways
+   twice on opening, a click shakes it, five quick clicks start the big easter egg (as before) */
+.about-logo { background: none; border: 0; box-shadow: none; border-radius: 24px; overflow: visible; }
+.about-mark { width: 104px; height: 104px; border-radius: 24px; display: block; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  transform-origin: 50% 90%; animation: mark-sway 2.4s ease-in-out 2; pointer-events: none; user-select: none; }
+.about-logo.about-shake .about-mark { animation: willow-shake .5s ease-in-out; }
+@media (prefers-reduced-motion: reduce) { .about-mark, .about-logo.about-shake .about-mark { animation: none; } }
+@keyframes mark-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 60% { transform: rotate(2deg); } }
+.about-logo:focus, .about-card:focus { outline: none; }  /* the easter egg is not in the tab order (tabindex -1): the window's focus goes on */
