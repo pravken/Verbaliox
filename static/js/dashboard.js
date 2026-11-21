@@ -350,7 +350,7 @@ function dbRenderHead() {
     `<button role="radio" aria-checked="${p.period === k}" class="tk-seg-btn${p.period === k ? ' tk-on' : ''}" data-click="setDashPeriod" data-click-args='["${k}"]'>${escapeHtml(t(`dbPeriod_${k}`))}</button>`).join('');
   const f = p.feature ? featureById(p.feature) : null;
   const fb = document.getElementById('db-feature-btn');
-  fb.textContent = `${f ? f.name : t('dbAllFeatures')} ▾`;
+  fb.innerHTML = `<span class="lt-ell">${escapeHtml(f ? f.name : t('dbAllFeatures'))}</span>${VX_CARET}`;
   fb.classList.toggle('lt-btn-on', !!f);
   document.getElementById('db-edit-label').textContent = t(DB.edit ? 'dbDone' : 'dbEdit');
   document.getElementById('db-edit-btn').setAttribute('aria-pressed', DB.edit ? 'true' : 'false');
@@ -1105,7 +1105,7 @@ async function dbOpenDetail(kind, person = '') {
 
 function dbCloseDetail() {
   DB_DETAIL.kind = '';
-  document.getElementById('db-detail')?.classList.add('hidden');
+  drawerHide(document.getElementById('db-detail'));
 }
 
 function dbDetailFilter(f) {
@@ -1140,11 +1140,11 @@ function dbDetailMeetings(d) {
   return `<div class="db-dt-sum">${escapeHtml(t('dbDtMeetingsSum').replace('{n}', () => rows.length).replace('{h}', () => dbHm(total)))}</div>`
     + (chips ? `<div class="db-dt-chips">${chips}</div>` : '') + seg
     + (rows.length ? `<div class="db-dt-head"><span></span><span>${escapeHtml(t('dbDtDec'))}</span><span>${escapeHtml(t('dbDtTasks'))}</span><span>${escapeHtml(t('dbDtShare'))}</span><span></span></div>${list}`
-      : `<div class="db-note">${escapeHtml(t(DB_DETAIL.filter === 'useless' ? 'dbUselessNone' : 'dbNoMeetingsYet'))}</div>`);
+      : vxEmpty('meet', t(DB_DETAIL.filter === 'useless' ? 'dbUselessNone' : 'dbNoMeetingsYet')));
 }
 
 function dbDetailTasks(list, today, mine) {
-  if (!list.length) return `<div class="db-note">${escapeHtml(t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'))}</div>`;
+  if (!list.length) return vxEmpty(mine ? 'task' : 'clock', t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'));
   return list.map(x => `<div class="db-dt-task${x.status === 'done' ? ' done' : ''}">`
     + (mine && x.status !== 'done' ? `<button class="db-ck" data-click="dbDetailDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
     + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><span class="db-dt-text">${escapeHtml(x.what)}</span>`
@@ -1161,14 +1161,14 @@ function dbRenderDetail() {
   const box = document.getElementById('db-detail');
   if (!box) return;
   const { kind, person, data: d } = DB_DETAIL;
-  box.classList.toggle('hidden', !kind);
-  if (!kind) return;
+  if (!kind) { drawerHide(box); return; }
+  drawerShow(box);
   const today = DB.data ? DB.data.today : calKey(new Date());
   const title = kind === 'person' ? person : t(`dbDt_${kind}`);
-  const period = DB.data && kind !== 'person' ? `<div class="db-dt-period">${escapeHtml(document.getElementById('db-sub')?.textContent || '')}</div>` : '';
+  const period = DB.data && kind !== 'person' ? document.getElementById('db-sub')?.textContent || '' : '';
   let body;
   if (!d) body = `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
-  else if (d.error) body = `<div class="db-note">${escapeHtml(t('dbNoData'))}</div>`;
+  else if (d.error) body = vxEmpty('over', t('dbNoData'));
   else if (kind === 'meetings' || kind === 'useless') body = dbDetailMeetings(d);
   else if (kind === 'decisions') {
     // grouped by their meeting (asked by the user: the same title and chip under every decision made the list
@@ -1184,7 +1184,7 @@ function dbRenderDetail() {
       return `<div class="db-dt-group"><button class="db-dt-ghead" data-click="dashOpenSummary" data-click-args='[${g.meeting_id}]'>`
         + `<span class="db-dt-gtitle">${escapeHtml(g.title || t('hmUntitled'))}</span><small>${f ? featureChipHtml(f) : ''}<span>${escapeHtml(dbAgo(g.date, today))}</span></small></button>`
         + `<ul class="db-dt-points">${g.items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
-    }).join('') : `<div class="db-note">${escapeHtml(t('dbNoDecisionsYet'))}</div>`;
+    }).join('') : vxEmpty('dec', t('dbNoDecisionsYet'));
   } else if (kind === 'tasks' || kind === 'waiting') {
     body = d.needs_me ? `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div>` : dbDetailTasks(d.tasks, today, kind === 'tasks');
   } else {  // a person
@@ -1193,10 +1193,11 @@ function dbRenderDetail() {
       + `<div class="db-dt-sec">${escapeHtml(t('dbDtTheirMeetings').replace('{n}', () => d.meetings_total || 0))}</div>`
       + ((d.meetings || []).map(m => `<button class="db-dt-row db-dt-row2" data-click="dashOpenSummary" data-click-args='[${m.id}]'>`
         + `<span class="db-dt-main"><b class="db-dt-one">${escapeHtml(m.title || t('hmUntitled'))}</b><small><span>${escapeHtml(dbAgo(m.date, today))}</span></small></span><span class="db-dt-dur">${escapeHtml(dbHm(m.duration))}</span></button>`).join('')
-        || `<div class="db-note">${escapeHtml(t('dbNoMeetingsYet'))}</div>`)
+        || vxEmpty('meet', t('dbNoMeetingsYet')))
       + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${JSON.stringify(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
   }
-  box.innerHTML = `<div class="db-dt-top"><h2>${escapeHtml(title)}</h2><button class="hm-x" data-click="dbCloseDetail" title="${escapeHtml(t('close'))}" aria-label="${escapeHtml(t('close'))}">✕</button></div>${period}<div class="db-dt-body">${body}</div>`;
+  const ic = { meetings: 'meet', useless: 'over', decisions: 'dec', tasks: 'task', waiting: 'clock' }[kind] || 'people';
+  box.innerHTML = vxHead(ic, title, { sub: period, close: 'data-click="dbCloseDetail"' }) + `<div class="db-dt-body">${body}</div>`;
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && DB_DETAIL.kind) dbCloseDetail(); });
@@ -1235,17 +1236,23 @@ function resetDashboard() {
   renderDashboard();
 }
 
+// the line icons of the widgets in the panel «Виджеты» (the icon language of the rail and the cards)
+const DB_LIB_IC = { kpis: 'grid', mytasks: 'task', waiting: 'clock', features: 'tag', time: 'chart', people: 'people', decisions: 'dec',
+  summary: 'spark', load: 'chart', dull: 'redo', worked: 'clock', apps: 'grid' };
+
 function renderDashDrawer() {
   const box = document.getElementById('db-drawer');
   if (!box) return;
-  box.classList.toggle('hidden', !DB.edit);
-  if (!DB.edit) { box.innerHTML = ''; return; }
+  if (!DB.edit) { drawerHide(box, () => { box.innerHTML = ''; }); return; }
+  drawerShow(box);
   const on = new Set(dbPrefs().layout.map(w => w.id));
-  const item = (id, add) => `<div class="db-lib${add ? '' : ' on'}"><span class="db-lib-ic">${DB_WIDGETS[id].icon}</span>`
+  // one row for both lists; the right slot holds «Добавить» or the chip «Показан», so the slot never moves
+  const item = (id, add) => `<div class="db-lib${add ? '' : ' on'}"><span class="db-lib-ic">${pultIcon(DB_LIB_IC[id] || 'grid')}</span>`
     + `<span class="db-lib-tx"><b>${escapeHtml(t(DB_WIDGETS[id].title))}</b><span>${escapeHtml(t(`dbAbout_${id}`))}</span></span>`
-    + (add ? `<button class="db-lib-add" data-click="addDashWidget" data-click-args='["${id}"]'>${escapeHtml(t('dbAdd'))}</button>` : '') + '</div>';
+    + (add ? `<button class="tk-btn tk-btn-sm db-lib-add" data-click="addDashWidget" data-click-args='["${id}"]'>${VX_PLUS}<span>${escapeHtml(t('dbAdd'))}</span></button>`
+      : `<span class="db-lib-shown">${escapeHtml(t('dbShown'))}</span>`) + '</div>';
   const ids = Object.keys(DB_WIDGETS);
-  box.innerHTML = `<h2>${escapeHtml(t('dbWidgets'))}</h2><p class="db-note">${escapeHtml(t('dbEditHint'))}</p>`
+  box.innerHTML = vxHead('grid', t('dbWidgets'), { close: 'data-click="toggleDashEdit"' }) + `<p class="db-drawer-hint">${escapeHtml(t('dbEditHint'))}</p>`
     + (ids.some(id => !on.has(id)) ? `<div class="db-cap">${escapeHtml(t('dbAddCap'))}</div>${ids.filter(id => !on.has(id)).map(id => item(id, true)).join('')}` : '')
     + `<div class="db-cap">${escapeHtml(t('dbOnCap'))}</div>${ids.filter(id => on.has(id)).map(id => item(id, false)).join('')}`
     + `<div class="db-drawer-foot"><button class="tk-btn tk-btn-sm" data-click="resetDashboard">${escapeHtml(t('dbReset'))}</button>`

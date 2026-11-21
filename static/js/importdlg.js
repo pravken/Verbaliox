@@ -89,6 +89,15 @@ function impAddPaths(paths) {
 
 // «Папка…»: the Windows folder picker, then every audio and video file in it is added where it is;
 // without that picker, the window with its path field
+// «Обзор…» beside the path in the window: the Windows folder picker; the folder goes into the window's list
+// (the window keeps its parameters). Without the picker the field stays for a typed path
+async function impBrowsePath() {
+  const res = await fetch('/api/import/pick-folder', { method: 'POST' }).catch(() => null);
+  const data = res && res.ok ? await readJson(res) : null;
+  if (!data || !data.available) { document.getElementById('local-path-input')?.focus(); return; }
+  if (data.path) impAddPaths([data.path]);
+}
+
 async function impPickFolder() {
   const res = await fetch('/api/import/pick-folder', { method: 'POST' }).catch(() => null);
   const data = res && res.ok ? await readJson(res) : null;

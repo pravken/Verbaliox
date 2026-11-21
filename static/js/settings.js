@@ -1,4 +1,4 @@
-// Verbaliox page script, part 3 of 9: Settings: system info, FFmpeg, models in VRAM, Whisper and Ollama models, cloud LLM, search by meaning, dictionary.
+// Verbaliox page script, part 3 of 9: Settings: system info, FFmpeg, models in VRAM, Whisper and Ollama models, search by meaning, dictionary.
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 // --- System & Settings ---
@@ -216,7 +216,6 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-dictation-hotkey').value = s.dictation_hotkey ?? 'Ctrl+Alt+D';
     document.getElementById('set-dictation-language').value = s.dictation_language || 'auto';
     document.getElementById('set-translate-hotkey').value = s.dictation_translate_hotkey ?? 'Ctrl+Alt+T';
-    document.getElementById('set-dictation-translate-cloud').checked = s.dictation_translate_cloud === 'true';
     document.getElementById('set-dictation-save').checked = s.dictation_save !== 'false';
     fillDictationTranslateLangs(s.dictation_translate_to || 'en');
     document.getElementById('set-calendar-ics').value = s.calendar_ics || '';
@@ -544,11 +543,11 @@ function renderModelsPop() {
       ${m.downloading ? `<span class="mp-dl-btn mp-dl-busy">${escapeHtml(t('mpDownloading'))}${(() => { const d = modelDownloadsNow().find(x => x.id === m.id); return d && d.pct ? ` · ${d.pct}%` : ''; })()}</span>`
         : `<button data-click="${m.fn}" data-click-args='[${jsArg(m.id)}]' class="mp-dl-btn" title="${escapeHtml(t('tipDownloadModel'))}">↓ ${escapeHtml(m.size)}</button>`}</div>`).join('');
   const anyLoaded = (vram.chips || []).some(c => c.loaded && c.kind !== 'dub');
-  pop.innerHTML = `<div class="mp-head"><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
+  pop.innerHTML = `<div class="mp-head vx-panel-h"><span class="vx-panel-ic" aria-hidden="true">${pultIcon('wave')}</span><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
       ${anyLoaded ? `<button data-click="unloadAllModelsNow" class="mp-unload" title="${escapeHtml(t('tipUnloadAll'))}" ${vram.busy ? 'disabled' : ''}>${escapeHtml(t('mpUnloadAll'))}</button>` : ''}
       <button data-click="toggleModelsLegend" class="mp-close mp-info${modelsPop.legend ? ' is-on' : ''}" aria-expanded="${!!modelsPop.legend}"
         aria-label="${escapeHtml(t('mpLegendTip'))}" title="${escapeHtml(t('mpLegendTip'))}">i</button>
-      <button data-click="closeModelsPop" class="mp-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button></div>
+      <button data-click="closeModelsPop" class="vx-x" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">✕</button></div>
     ${modelsPop.legend ? `<div class="mp-legend">
       <span><i class="mp-lg-dot mp-lg-on"></i>${escapeHtml(t('mpLgOn'))}</span>
       <span><i class="mp-lg-dot mp-lg-loading"></i>${escapeHtml(t('mpLgLoading'))}</span>
@@ -949,9 +948,9 @@ function openLlmPicker() {
         <span class="llm-line"><b>${escapeHtml(t('llmPickWeak'))}</b> ${escapeHtml(en ? m.weak_en : m.weak_ru)}</span>
       </button>`;
     }).join('');
+    vxRedraw(wrap);
     wrap.innerHTML = `<div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-3 modal-card llm-dialog">
-      <div class="text-sm font-semibold text-white">${escapeHtml(t('llmPickTitle'))}</div>
-      <p class="text-[11.5px] text-apple-secondary leading-relaxed">${escapeHtml(t('llmPickIntro'))}</p>
+      ${vxHead('spark', t('llmPickTitle'), { sub: t('llmPickIntro') })}
       <div class="flex items-center gap-1.5 text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(gpuText)}</span>
         <button data-a="info" class="llm-info-btn${showInfo ? ' llm-info-btn-on' : ''}" aria-expanded="${showInfo}" title="${escapeHtml(t('llmMemTitle'))}" aria-label="${escapeHtml(t('llmMemTitle'))}">i</button></div>
       ${showInfo ? `<div class="llm-info"><div class="font-medium text-apple-label">${escapeHtml(t('llmMemTitle'))}</div>
@@ -962,7 +961,6 @@ function openLlmPicker() {
       <div class="llm-list" role="radiogroup">${cards}</div>
       <p class="text-[11px] text-apple-tertiary leading-snug">${escapeHtml(t('mmNoteLlm'))}</p>
       <div class="flex items-center gap-2 pt-1">
-        <button data-a="cloud" class="ui-btn ui-btn-subtle">${escapeHtml(t('noAiCloud'))}</button>
         <span class="flex-1"></span>
         <button data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
         <button data-a="yes" class="ui-btn ui-btn-primary">${escapeHtml(cur.installed ? t('uiSelect') : t('llmPickDownload').replace('{size}', () => cur.size || ''))}</button>
@@ -980,7 +978,6 @@ function openLlmPicker() {
     if (!a) return;
     if (a.dataset.a === 'info') { showInfo = !showInfo; draw(); wrap.querySelector('button[data-a="info"]').focus(); return; }
     done();
-    if (a.dataset.a === 'cloud') { openModal('settings', 'analysis'); return; }
     const m = list.find(x => x.id === pick);
     if (m.installed) selectActiveOllamaModel(m.id); else pullOllamaModel(m.id, true);
   });
@@ -996,6 +993,8 @@ function openLlmPicker() {
 // and the start with Windows as switches. Asked by the user to be offered here, not only in Settings. The language is not asked: the
 // recommended set detects it (Russian by GigaAM, the rest by the other model); «Настроить вручную» opens
 // Settings → Recognition to choose the models
+// the icon of each step of the first-run window, in its head
+const FRW_IC = { ai: 'spark', sound: 'mic', calls: 'people', cal: 'cal', sum: 'dec' };
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
 function openFirstRunWizard(data) {
   document.getElementById('first-run-wizard')?.remove();
@@ -1082,7 +1081,6 @@ function openFirstRunWizard(data) {
         <span class="frw-opt-desc">${escapeHtml(desc)}</span></span>
       <span class="frw-radio" aria-hidden="true"></span></button>`;
   const ICON_PC = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
-  const ICON_CLOUD = '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.3 4.5 4.5 0 0 0 7 18z"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg>';
   const sizeOf = ids => ids.filter(id => !item(id)?.installed).reduce((a, id) => a + wizardSizeMb(item(id)), 0);
   const ffmpegMb = () => ((data.ffmpeg || {}).available ? 0 : (((data.ffmpeg || {}).download_info || {}).size_mb || 0));
@@ -1142,7 +1140,6 @@ function openFirstRunWizard(data) {
       const local = t('frwAiLocalD').replace('{model}', () => formatModelName(picks.llm)).replace('{size}', () => (wizardSizeMb(llmItem) ? wizardSizeText(wizardSizeMb(llmItem)) : ''));
       body = `<div class="frw-opts" role="radiogroup">
           ${option('ai:local', st.ai === 'local', ICON_PC, t('frwAiLocal'), (data.ollama || {}).installed ? local : `${local} · ${t('frwWithOllama')}`, picks.gpu)}
-          ${option('ai:cloud', st.ai === 'cloud', ICON_CLOUD, t('frwAiCloud'), t('frwAiCloudD'), false)}
           ${option('ai:none', st.ai === 'none', ICON_PAUSE, t('frwAiNone'), t('frwAiNoneD'), !picks.gpu)}
         </div>`;
     } else {
@@ -1150,7 +1147,7 @@ function openFirstRunWizard(data) {
       sub = t('frwSumSub');
       const ids = speech();
       const total = sizeOf(ids) + ffmpegMb() + llmMb() + filterMb();
-      const aiTitle = { local: t('frwAiLocal'), cloud: t('frwAiCloud'), none: t('frwAiNone') }[st.ai];
+      const aiTitle = { local: t('frwAiLocal'), none: t('frwAiNone') }[st.ai];
       const row = (k, v, d, size, strong) => `<div class="frw-row"><span class="frw-k">${escapeHtml(k)}</span>
           <span class="frw-v">${escapeHtml(v)}${d ? `<span class="frw-d">${escapeHtml(d)}</span>` : ''}</span>
           <span class="frw-size${strong ? ' is-total' : ''}">${escapeHtml(size)}</span></div>`;
@@ -1171,8 +1168,9 @@ function openFirstRunWizard(data) {
     }
     const list = pages(), at = list.indexOf(st.page);
     const dots = list.map((_, i) => `<span class="frw-dot${i === at ? ' is-on' : ''}"></span>`).join('');
+    vxRedraw(wrap);
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
+      <div class="frw-head"><span class="vx-head-ic" aria-hidden="true">${pultIcon(FRW_IC[st.page] || 'set')}</span><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
@@ -1275,9 +1273,6 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
     settings.asr_ensemble = 'true';
     settings.asr_ensemble_models = (Array.isArray(toDownload) ? toDownload : chosen).filter(id => ENSEMBLE_ALL.includes(id)).join(',');
   }
-  // A cloud model is switched on in Settings → Analysis (opened below), where its consent is asked: sent
-  // here, the server would refuse the whole request and every choice of the wizard would be lost
-  if (ai === 'local') settings.llm_provider = 'ollama';
   // calls, the start with Windows, the noise filter; the calendar goes on its own below: an address the
   // server refuses would lose every other choice of the wizard with it
   const { calendar_ics: calSource, meet_auto_all: allMeet, ...rest } = automation;
@@ -1324,7 +1319,6 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
   if (getFilter) installVoiceFilter();
   showToast(t('frDownloading'));
   await loadSystemInfo();
-  if (ai === 'cloud') openModal('settings', 'analysis');
 }
 
 async function selectActiveWhisperModel(modelId) {
@@ -1478,7 +1472,7 @@ function updateOllamaUI(ollama) {
       if (isPullingThis) {
         actionHtml = `<span class="ui-btn bg-apple-blue/20 text-apple-blue font-mono animate-pulse">${ps.progress || 1}%</span>`;
       } else if (item.installed) {
-        const del = `<button data-id="${escapeHtml(item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
+        const del = `<button data-id="${escapeHtml(item.installed_as || item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
               class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button>`;
         actionHtml = isSelected
           ? `<div class="flex items-center gap-1.5"><span class="ui-btn bg-apple-green/20 text-apple-green">${SVG_ICONS.check}<span>${t('uiActive')}</span></span>${del}</div>`
@@ -1537,32 +1531,6 @@ function updateOllamaUI(ollama) {
   }
   syncSidebarDownloadWidget();
 }
-
-// The model choice above the analysis: the cloud model (when set up) and the Ollama models
-// Before the analysis runs: a cloud request shows its model and its size in tokens; a recording
-// marked "local analysis only" says it stays on this computer
-let _estimateSeq = 0;
-async function renderAnalysisEstimate() {
-  const box = document.getElementById('analysis-estimate');
-  const m = state.activeMeeting;
-  if (!box) return;
-  if (!m || !(m.segments || []).length) { box.classList.add('hidden'); return; }
-  const seq = ++_estimateSeq;
-  const est = await fetch(`/api/meetings/${m.id}/llm-estimate`).then(r => r.ok ? r.json() : null).catch(() => null);
-  if (seq !== _estimateSeq || !est || !state.activeMeeting || state.activeMeeting.id !== m.id) return;
-  const cloudSelected = !!(state.llm && state.llm.mode === 'cloud');
-  let html = '';
-  if (est.local_only) {
-    html = `<span class="text-apple-green">${ICON_LOCK}</span><span class="text-apple-secondary">${escapeHtml(cloudSelected ? t('estLocalOnlyCloud') : t('estLocalOnly'))}</span>`;
-  } else if (est.cloud) {
-    const tokens = est.tokens >= 1000 ? `${(est.tokens / 1000).toFixed(est.tokens >= 10000 ? 0 : 1)} ${t('estThousand')}` : String(est.tokens);
-    html = `<span class="text-apple-amber">☁</span><span class="text-apple-secondary">${escapeHtml(t('estCloud').replace('{model}', () => est.label || '').replace('{tokens}', () => tokens))}</span>`;
-  }
-  box.innerHTML = html;
-  box.classList.toggle('hidden', !html);
-}
-
-const ICON_LOCK = '<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>';
 
 // --- Auto-import folder (app/watch_folder.py) ---
 function renderWatchFolder(st) {
@@ -2214,295 +2182,18 @@ function renderSummaryModelSelect() {
   const ollama = state.lastOllama;
   if (!summarySelect || !ollama || !ollama.catalog) return;
   const activeModel = document.getElementById('set-ollama-model').value || ollama.active_model || 'gemma4:e2b';
-  const cloud = cloudLlmChoice();
-  const onCloud = !!cloud && state.llm.mode === 'cloud';
-  summarySelect.innerHTML = (cloud
-    ? `<option value="__cloud" ${onCloud ? 'selected' : ''}>☁ ${escapeHtml(cloud.label)}</option>` : '')
-    + ollama.catalog.map(item => {
+  summarySelect.innerHTML = ollama.catalog.map(item => {
       const pretty = formatModelName(item.id);
       // Audit 7.6: «Ollama не запущен» is said once, by the banner above with its action; a model
       // that is not downloaded is still marked here, it is a fact of that model
       const note = localLlmState(item.id) === 'missing' ? localLlmNote(item.id) : '';
-      return `<option value="${escapeHtml(item.id)}" data-off="${localLlmState(item.id) === 'ready' ? 0 : 1}" ${!onCloud && item.id === activeModel ? 'selected' : ''}>${escapeHtml(pretty)}${note ? ` · ${escapeHtml(note)}` : ''}</option>`;
+      return `<option value="${escapeHtml(item.id)}" data-off="${localLlmState(item.id) === 'ready' ? 0 : 1}" ${item.id === activeModel ? 'selected' : ''}>${escapeHtml(pretty)}${note ? ` · ${escapeHtml(note)}` : ''}</option>`;
     }).join('');
-  summarySelect.title = onCloud ? t('tipSummaryCloud') : t('tipSelectLlm');
-}
-
-// The configured cloud model, if it can be used (a key is saved and sending was agreed to)
-function cloudLlmChoice() {
-  const st = state.llm;
-  if (!st || !st.consent) return null;
-  const p = st.providers[st.provider];
-  if (!p || (!p.key.saved && st.mode !== 'cloud')) return null;
-  const name = p.name.replace(/ \(.*\)$/, '');
-  // Chosen but not set up yet: still offered, so the request explains what is missing
-  return { provider: st.provider, model: p.model, label: p.key.saved && p.model ? `${name} · ${p.model}` : `${name} · ${t('llmNotConfigured')}` };
-}
-
-async function loadLlmStatus() {
-  try {
-    const res = await fetch('/api/llm/status');
-    if (res.ok) state.llm = await readJson(res);
-  } catch (e) {
-    console.error(e);
-  }
-  renderSummaryModelSelect();
-  renderLlmSettings();
-}
-
-function renderLlmSettings() {
-  const st = state.llm;
-  if (!st || !document.getElementById('llm-cloud-panel')) return;
-  const cloud = st.mode === 'cloud';
-  for (const k of ['ollama', 'cloud']) {
-    document.getElementById(`llm-mode-${k}`).className =
-      `apple-segment-btn ${(k === 'cloud') === cloud ? 'apple-segment-active' : 'text-apple-secondary hover:text-white'}`;
-  }
-  document.getElementById('llm-cloud-panel').classList.toggle('hidden', !cloud && !state.llmShowCloud);
-  // With a cloud model the local ones stay: translation, live subtitles and dubbing always use Ollama
-  for (const [id, key] of [['ollama-section-title', 'ollamaSectionTitle'], ['ollama-section-desc', 'ollamaSectionDesc']]) {
-    const el = document.getElementById(id);
-    if (!el) continue;
-    el.dataset.i18n = cloud ? key + 'Cloud' : key;
-    el.textContent = t(el.dataset.i18n);
-  }
-  const sel = document.getElementById('set-llm-provider');
-  if (!state.llmProviderEdited) sel.value = st.provider;
-  renderLlmProvider(true);
-}
-
-function renderLlmProvider(keepModel) {
-  const st = state.llm;
-  if (!st) return;
-  const prov = document.getElementById('set-llm-provider').value;
-  if (keepModel !== true) state.llmProviderEdited = true;
-  const p = st.providers[prov];
-  const modelInput = document.getElementById('set-llm-model');
-  if (keepModel !== true || modelInput.dataset.prov !== prov) {
-    modelInput.value = p.model || '';
-    modelInput.dataset.prov = prov;
-  }
-  renderLlmModelSelect(prov);
-  document.getElementById('llm-base-url-row').classList.toggle('hidden', prov !== 'openai_compat');
-  document.getElementById('set-llm-base-url').value = prov === 'openai_compat' ? (p.base_url || '') : '';
-
-  // Key: a clear "saved" mark, and where to get one (a link that opens in the browser)
-  const keyInput = document.getElementById('set-llm-key');
-  const badge = document.getElementById('llm-key-badge');
-  const ok = p.key.saved && p.key.readable;
-  badge.classList.toggle('hidden', !p.key.saved);
-  badge.className = `${p.key.saved ? '' : 'hidden '}inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${ok ? 'bg-apple-green/15 text-apple-green' : 'bg-apple-red/15 text-apple-red'}`;
-  badge.innerHTML = ok ? `${SVG_ICONS.check}<span>${escapeHtml(t('llmKeyBadge').replace('{last4}', p.key.last4))}</span>` : escapeHtml(t('llmKeyBadgeBroken'));
-  keyInput.placeholder = p.key.saved ? t('llmKeySavedPh').replace('{last4}', p.key.last4) : t('llmKeyPh');
-  keyInput.classList.toggle('border-apple-green/50', ok);
-  const hint = document.getElementById('llm-key-hint');
-  hint.textContent = p.key.saved
-    ? (p.key.readable ? t('llmKeySaved') : t('llmKeyUnreadable'))
-    : (p.keys_url ? t('llmKeyWhere').replace('{url}', () => p.keys_url) : t('llmKeyCompat'));
-  hint.className = `mt-1 text-[11.5px] leading-snug break-words select-text ${p.key.saved && !p.key.readable ? 'text-apple-red' : 'text-apple-tertiary'}`;
-  const links = document.getElementById('llm-key-links');
-  links.classList.toggle('hidden', !p.keys_url);
-  document.getElementById('llm-key-open').dataset.url = p.keys_url || '';
-  document.getElementById('llm-key-copy').dataset.url = p.keys_url || '';
-  document.getElementById('llm-key-delete').classList.toggle('hidden', !p.key.saved);
-  if (keepModel !== true) setLlmTestResult('', '');
-  // The models the key can use, once per provider and session
-  state.llmModelsTried = state.llmModelsTried || {};
-  if (p.key.saved && p.key.readable && !(state.llmModels && state.llmModels[prov]) && !state.llmModelsTried[prov]) {
-    state.llmModelsTried[prov] = true;
-    loadLlmModels(false);
-  }
-}
-
-// The model list: the models the key can use (or the suggestions until it is loaded) and "other…"
-function renderLlmModelSelect(prov) {
-  const st = state.llm;
-  const p = st.providers[prov];
-  const input = document.getElementById('set-llm-model');
-  const sel = document.getElementById('set-llm-model-select');
-  const loaded = state.llmModels && state.llmModels[prov];
-  const list = [...(loaded || p.suggested || [])];
-  const current = input.value.trim();
-  const custom = !!current && !list.includes(current);
-  sel.innerHTML = list.map(m => `<option value="${escapeHtml(m)}" ${m === current ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')
-    + (custom ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>` : '')
-    + `<option value="__custom">${escapeHtml(t('llmModelOther'))}</option>`;
-  if (!current && list.length) { sel.value = list[0]; input.value = list[0]; }
-  input.classList.toggle('hidden', !state.llmCustomModel);
-  const hint = document.getElementById('llm-model-hint');
-  hint.textContent = loaded
-    ? (custom ? t('llmModelNotInList') : t('llmModelsFromKey').replace('{n}', () => loaded.length))
-    : (p.key.saved ? '' : t('llmModelsAfterKey'));
-  hint.className = `mt-1 text-[11px] leading-snug ${loaded && custom ? 'text-apple-amber' : 'text-apple-tertiary'}`;
-}
-
-function onLlmModelSelect(value) {
-  const input = document.getElementById('set-llm-model');
-  if (value === '__custom') {
-    state.llmCustomModel = true;
-    input.classList.remove('hidden');
-    input.focus();
-    input.select();
-    return;
-  }
-  state.llmCustomModel = false;
-  input.value = value;
-  input.classList.add('hidden');
-  setLlmTestResult('', '');
-}
-
-function setLlmTestResult(kind, text) {
-  const out = document.getElementById('llm-test-result');
-  out.classList.toggle('hidden', !text);
-  const cls = { ok: 'bg-apple-green/10 text-apple-green border border-apple-green/30', err: 'bg-apple-red/10 text-apple-red border border-apple-red/30', wait: 'text-apple-secondary animate-pulse' }[kind] || '';
-  out.className = `${text ? '' : 'hidden '}text-[11.5px] leading-snug break-words select-text rounded-lg px-3 py-2 ${cls}`;
-  out.textContent = text;
-}
-
-function llmSettingsPayload() {
-  const prov = document.getElementById('set-llm-provider').value;
-  const out = { llm_cloud_provider: prov, [`llm_model_${prov}`]: document.getElementById('set-llm-model').value.trim() };
-  if (prov === 'openai_compat') out.llm_base_url_openai_compat = document.getElementById('set-llm-base-url').value.trim();
-  return out;
-}
-
-async function saveLlmSettingsNow(extra = {}) {
-  const res = await fetch('/api/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: { ...llmSettingsPayload(), ...extra } }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { showError(data.detail); return false; }
-  if (state.system) state.system.settings = data.settings;
-  state.llmProviderEdited = false;
-  await loadLlmStatus();
-  return true;
-}
-
-async function setLlmMode(mode) {
-  const st = state.llm || {};
-  const extra = { llm_provider: mode };
-  if (mode === 'cloud' && !st.consent) {
-    if (!await askConfirm(t('llmConsentConfirm'), false, t('cfTurnOn'))) return;
-    extra.llm_cloud_consent = 'true';
-  }
-  state.llmShowCloud = mode === 'cloud';
-  if (await saveLlmSettingsNow(extra)) {
-    showToast(mode === 'cloud' ? t('llmModeCloudOn') : t('llmModeLocalOn'));
-  }
-}
-
-// Saving a key: the server checks which models it can use (and picks one if the chosen one is not
-// among them), then the connection is tested right away, so it is clear whether everything works
-async function saveLlmKey() {
-  const input = document.getElementById('set-llm-key');
-  const key = input.value.trim();
-  if (!key) { input.focus(); return; }
-  const provider = document.getElementById('set-llm-provider').value;
-  setLlmTestResult('wait', t('llmKeyChecking'));
-  if (!(await saveLlmSettingsNow())) return;
-  const res = await fetch('/api/llm/key', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, key }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { setLlmTestResult('err', data.detail || t('errorGeneric')); return; }
-  input.value = '';
-  state.llm = data;
-  if ((data.models || []).length) state.llmModels = { ...(state.llmModels || {}), [provider]: data.models };
-  const modelInput = document.getElementById('set-llm-model');
-  modelInput.value = data.model || modelInput.value;
-  state.llmCustomModel = false;
-  renderLlmSettings();
-  renderSummaryModelSelect();
-  if (data.model_changed) showToast(t('llmModelSwitched').replace('{model}', () => data.model));
-  await testLlmConnection();
-}
-
-async function deleteLlmKey() {
-  const provider = document.getElementById('set-llm-provider').value;
-  if (!await askConfirm(t('llmKeyDeleteConfirm'), true, t('cfDeleteKey'))) return;
-  await fetch(`/api/llm/key/${provider}`, { method: 'DELETE' });
-  if (state.llmModels) delete state.llmModels[provider];
-  await loadLlmStatus();
-}
-
-async function loadLlmModels(explicit) {
-  const provider = document.getElementById('set-llm-provider').value;
-  const btn = document.getElementById('llm-models-btn');
-  btn.classList.add('animate-spin');
-  try {
-    const res = await fetch(`/api/llm/models/${provider}`);
-    const data = await res.json().catch(() => ({}));
-    const models = data.models || [];
-    if (!models.length) {
-      if (explicit) setLlmTestResult('err', t('llmModelsNone'));
-      return;
-    }
-    state.llmModels = { ...(state.llmModels || {}), [provider]: models };
-    const input = document.getElementById('set-llm-model');
-    // The chosen model is not available with this key: suggest the recommended one
-    if (!state.llmCustomModel && data.recommended && !models.includes(input.value.trim())) {
-      input.value = data.recommended;
-      if (explicit) showToast(t('llmModelSwitched').replace('{model}', () => data.recommended));
-    }
-    renderLlmModelSelect(provider);
-    if (explicit) showToast(t('llmModelsLoaded').replace('{n}', () => models.length));
-  } finally {
-    btn.classList.remove('animate-spin');
-  }
-}
-
-async function testLlmConnection() {
-  const provider = document.getElementById('set-llm-provider').value;
-  const btn = document.getElementById('llm-test-btn');
-  if (!(await saveLlmSettingsNow())) return;
-  btn.disabled = true;
-  setLlmTestResult('wait', t('llmTesting'));
-  try {
-    const res = await fetch(`/api/llm/test/${provider}`, { method: 'POST' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
-    setLlmTestResult('ok', t('llmTestOk').replace('{model}', () => data.model).replace('{sec}', () => data.seconds));
-  } catch (e) {
-    setLlmTestResult('err', e.message);
-  } finally {
-    btn.disabled = false;
-  }
+  summarySelect.title = t('tipSelectLlm');
 }
 
 // Web links never open inside the app window: they go to the default browser
 const SUPPORT_URL = 'https://ko-fi.com/pravken';
-
-// What left the computer: every request to a cloud model, with its size and purpose
-async function openCloudLog() {
-  const rows = await fetch('/api/privacy/cloud-log').then(r => r.json()).catch(() => []);
-  document.getElementById('cloud-log')?.remove();
-  const wrap = document.createElement('div');
-  wrap.id = 'cloud-log';
-  wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
-  wrap.setAttribute('role', 'dialog');
-  wrap.setAttribute('aria-modal', 'true');
-  wrap.innerHTML = `<div class="w-full max-w-2xl max-h-[85vh] flex flex-col bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
-      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-center justify-between gap-3">
-        <div><div class="text-sm font-semibold text-white">${escapeHtml(t('cloudLogBtn'))}</div>
-          <p class="text-[11.5px] text-apple-secondary mt-1">${escapeHtml(t('cloudLogDesc'))}</p></div>
-        <div class="flex gap-2 shrink-0">
-          ${rows.length ? `<button data-a="clear" class="ui-btn ui-btn-subtle">${escapeHtml(t('cloudLogClear'))}</button>` : ''}
-          <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
-        </div>
-      </div>
-      <div class="flex-1 overflow-y-auto px-5 py-2">${rows.length ? rows.map(r => `<div class="py-2 border-b border-white/5 text-[11.5px]">
-          <div class="flex justify-between gap-3"><span class="text-white">${escapeHtml(r.provider)} · ${escapeHtml(r.model)}</span>
-            <span class="font-mono text-apple-tertiary shrink-0">${escapeHtml(r.at.replace('T', ' '))} · ${r.tokens} tok</span></div>
-          <div class="text-apple-secondary truncate" title="${escapeHtml(r.purpose)}">${escapeHtml(r.purpose)}</div></div>`).join('')
-        : `<div class="py-10 text-center text-xs text-apple-tertiary">${escapeHtml(t('cloudLogEmpty'))}</div>`}</div>
-    </div>`;
-  wrap.addEventListener('click', async e => {
-    if (e.target === wrap || e.target.closest('[data-a="close"]')) wrap.remove();
-    else if (e.target.closest('[data-a="clear"]')) { await fetch('/api/privacy/cloud-log', { method: 'DELETE' }); wrap.remove(); openCloudLog(); }
-  });
-  document.body.appendChild(wrap);
-}
 
 // mailto: links go to the mail app (the window itself never navigates away)
 function openExternalMail(url) {
@@ -2533,15 +2224,6 @@ document.addEventListener('click', (e) => {
 }, true);
 
 async function selectActiveOllamaModel(modelId) {
-  if (modelId === '__cloud') {
-    await saveLlmSettingsNow({ llm_provider: 'cloud' });
-    const c = cloudLlmChoice();
-    showToast(c ? `${t('llmModeCloudOn')} · ${c.label}` : t('llmModeCloudOn'));
-    renderAnalysisEstimate();
-    return;
-  }
-  setTimeout(renderAnalysisEstimate, 300);
-  if (state.llm && state.llm.mode === 'cloud') await saveLlmSettingsNow({ llm_provider: 'ollama' });
   document.getElementById('set-ollama-model').value = modelId;
   const summarySelect = document.getElementById('summary-llm-select');
   if (summarySelect) summarySelect.value = modelId;
@@ -2630,7 +2312,6 @@ function settingsFormValues() {
     mem_reserve_ram: document.getElementById('set-mem-reserve-ram')?.value || 'auto',
     mem_reserve_vram: document.getElementById('set-mem-reserve-vram')?.value || 'auto',
     ...obsidianSettingsPayload(),
-    ...llmSettingsPayload(),
     record_source_mode: document.getElementById('set-record-source')?.value || 'both',
     record_mic_device: document.getElementById('set-record-mic')?.value || '',
     live_whisper_model: document.getElementById('set-live-model')?.value || 'auto',
@@ -2639,7 +2320,6 @@ function settingsFormValues() {
     dictation_language: document.getElementById('set-dictation-language')?.value || 'auto',
     dictation_translate_hotkey: document.getElementById('set-translate-hotkey')?.value.trim() || '',
     dictation_translate_to: document.getElementById('set-dictation-translate-to')?.value || 'en',
-    dictation_translate_cloud: document.getElementById('set-dictation-translate-cloud')?.checked ? 'true' : 'false',
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
     onnx_gpu: document.getElementById('set-onnx-gpu')?.checked ? 'true' : 'false',
@@ -3083,7 +2763,7 @@ const SETTINGS_RESET = {
     ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
-    ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
+    ['set-dictation-save', 'dictation_save', 'check']],
   export: [['set-file-name-template', 'file_name_template', 'value'], ['set-date-folders', 'date_folders', 'value']],
   privacy: [['set-delete-media-after', 'delete_media_after', 'check'], ['set-media-retention', 'media_retention_days', 'value']],
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
@@ -3097,7 +2777,7 @@ const SETTINGS_DEFAULTS = {
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   holiday_country: '', holiday_subdiv: '', meet_notify: 'true', meet_notify_before: '300', worktime_track: 'true', apps_track: 'false', work_remind_hours: '8',
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
-  dictation_save: 'true', dictation_translate_cloud: 'false',
+  dictation_save: 'true',
   file_name_template: '{date} {title}', date_folders: 'off',
   delete_media_after: 'false', media_retention_days: '0',
   update_check: 'true', update_auto: 'true', update_beta: 'false',
@@ -3491,6 +3171,7 @@ function drawAfterUpdate() {
       ${step.open ? `<button class="tk-btn tk-btn-sm" data-a="open" data-id="${escapeHtml(step.id)}" title="${escapeHtml(t(step.open.label))}">${escapeHtml(t('auOpen'))}</button>` : '<span></span>'}</div>`;
   const all = groups.length ? `<button class="upd-more" data-a="all" aria-expanded="${allOpen}">${allOpen ? '▾' : '▸'} ${escapeHtml(t('auAllChanges'))}<span class="upd-faint">${total}</span></button>
       ${allOpen ? `<div class="upd-all">${groups.map(g => `<div class="upd-all-h">${escapeHtml(g.title)}</div><ul>${g.items.map(x => `<li>${auInline(x)}</li>`).join('')}</ul>`).join('')}</div>` : ''}` : '';
+  vxRedraw(wrap);
   wrap.innerHTML = `<div class="upd-win modal-card" id="upd-after-win">
     <div class="upd-head"><span class="upd-logo" aria-hidden="true">V</span>
       <div><div class="upd-kicker">${escapeHtml(t('auInstalled'))}</div><h2>${escapeHtml(t('updWhatsNew').replace('{v}', () => version))}</h2></div>
@@ -3747,10 +3428,10 @@ function editDictItem(id) {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   const field = (key, label, value, hint = '') => `<label class="block space-y-1"><span class="text-xs text-apple-label">${escapeHtml(label)}</span>
-    <input data-k="${key}" type="text" value="${escapeHtml(value || '')}" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+    <input data-k="${key}" type="text" value="${escapeHtml(value || '')}" class="vx-field" />
     ${hint ? `<span class="block text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(hint)}</span>` : ''}</label>`;
-  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-3.5 modal-card">
-      <div class="text-sm font-semibold text-white">${escapeHtml(t('dictEditTitle'))}</div>
+  wrap.innerHTML = `<form class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead('book', t('dictEditTitle'), { close: 'data-a="no"' })}
       ${field('term', t('dictEditWord'), item.term)}
       ${field('variants', t('dictVariantsEdit'), item.variants, t('dictEditVariantsHint'))}
       ${field('category', t('dictEditCategory'), item.category)}

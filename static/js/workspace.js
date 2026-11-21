@@ -67,7 +67,6 @@ async function selectMeeting(id, reloadPlayer = true) {
   renderFillerButton();
   renderSeriesUi();
   renderMeetingFeatures();
-  if (prevId !== m.id || state.activeWorkspaceTab === 'summary') renderAnalysisEstimate();
 
   if (reloadPlayer || prevId !== m.id) {
     const player = document.getElementById('media-player');

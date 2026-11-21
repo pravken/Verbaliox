@@ -500,6 +500,8 @@ function renderLibTableBar() {
       + `<button type="button" class="lt-btn" data-click="ltBulkFeature" data-click-args='[{"$": "event"}]'>${escapeHtml(t('ltToFeature'))}</button>`
       + `<button type="button" class="lt-btn" data-click="ltBulkExport" data-click-args='[{"$": "event"}]'>${escapeHtml(t('export'))}</button>`
       + `<button type="button" class="lt-btn" data-click="ltBulkTranscribe" title="${escapeHtml(t('ltTranscribeTip'))}">${escapeHtml(t('ltTranscribe'))}</button>`
+      // «Удалить» in sight (asked by the user: it was only in «⋯»); bulkDelete asks before anything goes
+      + `<button type="button" class="lt-btn lt-danger" data-click="bulkDelete" title="Delete">${escapeHtml(t('ltDelete'))}</button>`
       + `<button type="button" class="lt-btn" data-click="ltBulkMore" data-click-args='[{"$": "event"}]' title="${escapeHtml(t('ltMoreTip'))}" aria-haspopup="menu">⋯</button>`
       + `<button type="button" class="lt-btn lt-ghost" data-click="clearLibSelection" title="Esc">${escapeHtml(t('ltClearSel'))}</button>`;
     return;
@@ -512,9 +514,9 @@ function renderLibTableBar() {
   const groupOff = p.view === 'cards' || p.view === 'folders';
   const views = LT_VIEWS.map(v => `<button type="button" class="lt-seg-b${p.view === v ? ' on' : ''}" data-click="ltSetView" data-click-args='["${v}"]' aria-pressed="${p.view === v}">${escapeHtml(t(`ltView_${v}`))}</button>`).join('');
   bar.innerHTML = `<span class="lt-fl">${LT_CHIPS.map(chip).join('')}`
-    + `<button type="button" id="lt-feature-btn" class="lt-chip${fName ? ' on' : ''}" data-click="openLibTableFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"><span class="lt-ell">${escapeHtml(fName ? `${t('ltFeature')}: ${fName}` : t('ltFeature'))}</span> ▾</button>`
-    + `<button type="button" id="lt-folder-btn" class="lt-chip${ff && !folderOff ? ' on' : ''}" data-click="openLibTableFolderMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" ${folderOff ? `disabled title="${escapeHtml(t('ltFolderOffTip'))}"` : ''}><span class="lt-ell">${escapeHtml(ff && !folderOff ? `${t('ltCol_folder')}: ${ff}` : t('ltCol_folder'))}</span> ▾</button>`
-    + `<button type="button" id="lt-group-btn" class="lt-chip" data-click="openLibTableGroupMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" ${groupOff ? `disabled title="${escapeHtml(t('ltGroupOffTip'))}"` : ''}><span class="lt-ell">${escapeHtml(t(`ltGroupChip_${p.group}`))}</span> ▾</button></span>`
+    + `<button type="button" id="lt-feature-btn" class="lt-chip${fName ? ' on' : ''}" data-click="openLibTableFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"><span class="lt-ell">${escapeHtml(fName ? `${t('ltFeature')}: ${fName}` : t('ltFeature'))}</span>${VX_CARET}</button>`
+    + `<button type="button" id="lt-folder-btn" class="lt-chip${ff && !folderOff ? ' on' : ''}" data-click="openLibTableFolderMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" ${folderOff ? `disabled title="${escapeHtml(t('ltFolderOffTip'))}"` : ''}><span class="lt-ell">${escapeHtml(ff && !folderOff ? `${t('ltCol_folder')}: ${ff}` : t('ltCol_folder'))}</span>${VX_CARET}</button>`
+    + `<button type="button" id="lt-group-btn" class="lt-chip" data-click="openLibTableGroupMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" ${groupOff ? `disabled title="${escapeHtml(t('ltGroupOffTip'))}"` : ''}><span class="lt-ell">${escapeHtml(t(`ltGroupChip_${p.group}`))}</span>${VX_CARET}</button></span>`
     + `<span class="lt-fr"><span class="lt-seg" role="group" title="${escapeHtml(t('ltViewTip'))}">${views}</span>`
     + `<span class="lt-cols-wrap"><button type="button" class="lt-btn" data-lt-cols data-click="toggleLibTableColumns" aria-haspopup="dialog" aria-expanded="${LT.colsOpen}" title="${escapeHtml(t(p.view === 'cards' ? 'ltColumnsCardsTip' : 'ltColumnsTip'))}">${LT_SVG(LT_ICON.gear, 14)}<span>${escapeHtml(t('ltColumns'))}</span></button>`
     + (LT.colsOpen ? ltColumnsPopHtml() : '') + '</span></span>';

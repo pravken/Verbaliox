@@ -119,7 +119,7 @@ def init_db() -> None:
             """
         )
         folder_cols = {r["name"] for r in cur.execute("PRAGMA table_info(folders)").fetchall()}
-        if "local_only" not in folder_cols:
+        if "local_only" not in folder_cols:  # the former «только локально» mark: no longer read
             cur.execute("ALTER TABLE folders ADD COLUMN local_only INTEGER DEFAULT 0")
         _ensure_system_folders(cur)
         # Sorted once. The column is added in autocommit and the sorting committed at the end: a
@@ -170,7 +170,7 @@ def init_db() -> None:
             "num_speakers": "0",  # 0 = auto-detect
             "auto_summary": "true",
             "analysis_after_meetings": "true",
-            "mcp_local_only": "false",  # the agent (app/mcp_server.py) also gets the recordings marked «только локально»
+            "mcp_local_only": "false",  # the agent (app/mcp_server.py) also gets the dictations
             "economy_mode": "false",  # «Только запись»: no model works (app/economy.py; the tray menu)
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
@@ -206,7 +206,6 @@ def init_db() -> None:
             "dictation_save": "true",
             "start_with_windows": "false",  # in the tray, without a window, when the user signs in (app/autostart.py)
             "close_to_tray": "false",  # closing the window keeps the app in the tray (quit from its menu)  # each dictation is kept in the library, folder "Dictations"
-            "dictation_translate_cloud": "false",  # dictation is translated by the local model unless allowed
             "quiet_mode": "false",  # no tray notifications (run.py TrayController)
             "call_auto_record": "false",  # record calls by themselves (app/call_watch.py)
             "rec_voice_filter": "true",  # the microphone cleaned by DeepFilterNet when downloaded (app/voice_filter.py)
@@ -247,9 +246,6 @@ def init_db() -> None:
             "obsidian_stats": "true",  # «Участники»: who spoke how long, turns, pace, monologues, interruptions
             "obsidian_more": "true",  # every other section of the analysis (decisions, letter, notes, templates, answers)
             "obsidian_generate": "true",  # make the overview and tasks for the note if they are missing
-            "llm_provider": "ollama",  # analysis: "ollama" (local) or "cloud" (app/llm.py)
-            "llm_cloud_provider": "openai",
-            "llm_cloud_consent": "false",  # the user agreed that transcripts are sent to the cloud service
             "ask_import_params": "true",  # the import window asks the processing of new files (static/js/importdlg.js)
             "work_day_start": "9",  # the working day of the home page, hours; an end before the start runs past midnight
             "work_day_end": "18",
@@ -283,6 +279,8 @@ def init_db() -> None:
         if not cur.execute("SELECT 1 FROM settings WHERE key = 'ui_scale_default_v2'").fetchone():
             cur.execute("UPDATE settings SET value = '100' WHERE key = 'ui_scale' AND value = '75'")
             cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('ui_scale_default_v2', '1')")
+
+        drop_cloud_leftovers(cur)
 
         # Search by meaning (app/semantic.py): transcript chunks with their embedding vectors, and
         # which recordings are indexed with which model. A changed transcript drops its meta row.
@@ -444,7 +442,7 @@ _MEETING_EXTRA_COLUMNS = {
     "media_removed": "INTEGER DEFAULT 0",  # 1: the sound was deleted for privacy, the transcript kept
     "transcript_verified": "INTEGER DEFAULT 0",  # 1: the user checked and corrected it: a reference for app/bench.py
     "has_video": "INTEGER DEFAULT NULL",  # NULL: told from the file extension (see is_video)
-    "local_only": "INTEGER DEFAULT 0",  # 1: never sent to a cloud model (see is_local_only)
+    "local_only": "INTEGER DEFAULT 0",  # the former «только локально» mark: no longer read
     "media_size": "INTEGER DEFAULT NULL",  # bytes of the media file; NULL: not measured yet
     "series_id": "INTEGER DEFAULT NULL",  # a series of recurring meetings (app/series.py)
     # the calendar meeting going on when it was recorded, and whether it is that meeting (app/calendar_match.py)
@@ -573,11 +571,22 @@ def _ensure_system_folders(cur: sqlite3.Cursor) -> None:
     for key, name in SYSTEM_FOLDERS.items():
         if not cur.execute("SELECT 1 FROM folders WHERE system_key = ?", (key,)).fetchone():
             cur.execute("INSERT INTO folders (name, parent_id, system_key, created_at) VALUES (?, NULL, ?, ?)", (name, key, now))
-            if key == "dictations":  # they can hold anything said (a password too): never sent to a cloud model
-                try:
-                    cur.execute("UPDATE folders SET local_only = 1 WHERE system_key = 'dictations'")
-                except sqlite3.OperationalError:
-                    pass  # a library from before local_only (the column comes with its migration)
+
+
+# What the cloud models of earlier versions stored: their choice, the consent, the services' addresses and
+# models, and the dictation's permission. Analysis runs on Ollama only now
+_CLOUD_SETTINGS = ("llm_provider", "llm_cloud_provider", "llm_cloud_consent", "llm_base_url_openai_compat",
+                   "dictation_translate_cloud")
+
+
+def drop_cloud_leftovers(cur: sqlite3.Cursor) -> None:
+    """The API keys (the `secrets` table), the log of cloud requests and the cloud settings of earlier
+    versions are deleted: a key must not stay on the disk once nothing uses it. Every start (cheap): a
+    backup made by an older version may bring them back."""
+    cur.execute("DROP TABLE IF EXISTS secrets")
+    cur.execute("DROP TABLE IF EXISTS cloud_log")
+    cur.execute(f"DELETE FROM settings WHERE key IN ({','.join('?' * len(_CLOUD_SETTINGS))}) "
+                "OR key LIKE 'llm\\_model\\_%' ESCAPE '\\'", _CLOUD_SETTINGS)
 
 
 def _sort_existing_meetings(cur: sqlite3.Cursor) -> None:
@@ -1362,7 +1371,7 @@ def restore_segments_backup(meeting_id: int) -> bool:
 def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
     allowed = {"title", "model_name", "language", "language_choice", "num_speakers_hint", "folder_id", "title_is_default", "obsidian_path", "obsidian_hash", "user_notes", "mfu",
                "transcript_verified", "audio_path", "transcript_made_with",
-               "local_only", "series_id", "calendar_json"}
+               "series_id", "calendar_json"}
     items = [(k, v) for k, v in fields.items() if k in allowed]
     if not items:
         return
@@ -1639,7 +1648,7 @@ def get_meeting(meeting_id: int) -> Optional[Dict[str, Any]]:
 
 _LIST_COLUMNS = """id, title, filename, media_path, duration, status, progress, stage_text,
     error_message, language, model_name, num_speakers_hint,
-    speakers_json, created_at, completed_at, folder_id, source, recorded_at, has_video, local_only, media_size, series_id,
+    speakers_json, created_at, completed_at, folder_id, source, recorded_at, has_video, media_size, series_id,
     transcript_verified, transcript_model,
     obsidian_path, exports_json,
     has_transcript, has_summary"""
@@ -1712,7 +1721,6 @@ def list_meetings() -> List[Dict[str, Any]]:
         d["translations_langs"] = [x for x in (d.pop("tr_langs") or "").split(",") if x]
         d["dub_langs"] = [x for x in (d.pop("dub_langs") or "").split(",") if x and x != "None"]
         d["has_transcript"] = bool(d["has_transcript"])
-        d["local_only"] = bool(d.get("local_only"))
         d["has_summary"] = bool(d["has_summary"])
         d["speakers"] = {k: dict(v) if isinstance(v, dict) else v
                          for k, v in _list_speakers(d["id"], d.pop("speakers_json", "{}") or "{}").items()}
@@ -2101,7 +2109,7 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
     d["pending_exports"] = _loads_list(d.pop("pending_exports_json", None))
     d["exports"] = [p for p in _loads_list(d.pop("exports_json", None)) if isinstance(p, str)]
     d["is_video"] = is_video(d)
-    d["local_only"] = bool(d.get("local_only"))
+    d.pop("local_only", None)  # the former «только локально» mark
     legacy = _loads_list(d.pop("segments_json", None))  # not moved yet (see _move_segments_to_table)
     d["segments"] = _read_segments(conn, d["id"]) or legacy
     for key, target in (
@@ -2266,9 +2274,9 @@ def merge_segment_with_previous(meeting_id: int, segment_id: int) -> Optional[Di
 def list_folders() -> List[Dict[str, Any]]:
     with _db_lock:
         conn = get_connection()
-        rows = conn.execute("SELECT id, name, parent_id, system_key, local_only FROM folders ORDER BY id").fetchall()
+        rows = conn.execute("SELECT id, name, parent_id, system_key FROM folders ORDER BY id").fetchall()
         conn.close()
-    return [{**dict(r), "local_only": bool(r["local_only"])} for r in rows]
+    return [dict(r) for r in rows]
 
 
 def get_folder(folder_id: int) -> Optional[Dict[str, Any]]:
@@ -2279,41 +2287,48 @@ def system_folder_id(key: str) -> Optional[int]:
     return next((f["id"] for f in list_folders() if f.get("system_key") == key), None)
 
 
-def is_local_only(meeting: Optional[Dict[str, Any]]) -> bool:
-    """A recording that must not be sent to a cloud model: marked itself, or in a folder (at any
-    depth) that is marked."""
-    if not meeting:
-        return False
-    if meeting.get("local_only"):
-        return True
-    folders = {f["id"]: f for f in list_folders()}
-    fid, seen = meeting.get("folder_id"), set()
-    while fid is not None and fid in folders and fid not in seen:
-        seen.add(fid)
-        if folders[fid].get("local_only"):
-            return True
-        fid = folders[fid].get("parent_id")
-    return False
-
-
-def local_only_ids() -> set:
-    """Ids of every recording that must not go to a cloud model (see is_local_only)."""
-    folders = {f["id"]: f for f in list_folders()}
-
-    def marked(fid: Any) -> bool:
-        seen = set()
-        while fid is not None and fid in folders and fid not in seen:
-            seen.add(fid)
-            if folders[fid].get("local_only"):
-                return True
-            fid = folders[fid].get("parent_id")
-        return False
-
+def dictation_ids() -> set:
+    """Ids of the recordings in the «Диктовки» folder (and the folders inside it): a dictation can hold
+    anything said, a password too."""
+    fid = system_folder_id("dictations")
+    if fid is None:
+        return set()
+    folders = folder_subtree_ids(fid)
     with _db_lock:
         conn = get_connection()
-        rows = conn.execute("SELECT id, folder_id, local_only FROM meetings").fetchall()
+        rows = conn.execute(f"SELECT id FROM meetings WHERE folder_id IN ({','.join('?' * len(folders))})", folders).fetchall()
         conn.close()
-    return {int(r["id"]) for r in rows if r["local_only"] or marked(r["folder_id"])}
+    return {int(r["id"]) for r in rows}
+
+
+def formerly_local_ids() -> set:
+    """Ids of the recordings the user had marked «только локально» (themselves, or by a folder and the folders
+    inside it) while that mark existed: the agent keeps not getting them (the mark is gone with the cloud
+    models, what the user once closed does not open by itself). The «Диктовки» folder had the mark on its
+    own: it follows the setting of the agent (dictation_ids)."""
+    dict_fid = system_folder_id("dictations")
+    skip = set(folder_subtree_ids(dict_fid)) if dict_fid is not None else set()
+    with _db_lock:
+        conn = get_connection()
+        try:
+            marked = [int(r["id"]) for r in conn.execute("SELECT id FROM folders WHERE local_only = 1").fetchall()]
+            own = {int(r["id"]) for r in conn.execute("SELECT id FROM meetings WHERE local_only = 1").fetchall()}
+        except sqlite3.OperationalError:  # a database made after the mark was gone has no such column
+            marked, own = [], set()
+        conn.close()
+    folders = set()
+    for fid in marked:
+        if fid not in skip:
+            folders.update(folder_subtree_ids(fid))
+    folders -= skip
+    if folders:
+        with _db_lock:
+            conn = get_connection()
+            ids = list(folders)
+            own |= {int(r["id"]) for r in conn.execute(
+                f"SELECT id FROM meetings WHERE folder_id IN ({','.join('?' * len(ids))})", ids).fetchall()}
+            conn.close()
+    return own - dictation_ids()
 
 
 def folder_subtree_ids(folder_id: int) -> List[int]:
@@ -2349,14 +2364,11 @@ def create_folder(name: str, parent_id: Optional[int] = None) -> Dict[str, Any]:
 _UNSET = object()
 
 
-def update_folder(folder_id: int, name: Optional[str] = None, parent_id: Any = _UNSET,
-                  local_only: Optional[bool] = None) -> Dict[str, Any]:
+def update_folder(folder_id: int, name: Optional[str] = None, parent_id: Any = _UNSET) -> Dict[str, Any]:
     folder = get_folder(folder_id)
     if not folder:
         raise LookupError("Папка не найдена")
     fields: Dict[str, Any] = {}
-    if local_only is not None:
-        fields["local_only"] = 1 if local_only else 0
     if name is not None:
         name = name.strip()[:120]
         if not name:
@@ -2391,19 +2403,8 @@ def delete_folder(folder_id: int) -> None:
         raise LookupError("Папка не найдена")
     if folder.get("system_key"):
         raise ValueError("Системную папку удалить нельзя")
-    # «Только локальный анализ» came from this folder (or one above it): what moves out keeps it, or the
-    # next cloud analysis would take recordings the user had kept away from it
-    folders = {f["id"]: f for f in list_folders()}
-    fid, seen, protected = folder_id, set(), False
-    while fid is not None and fid in folders and fid not in seen:
-        seen.add(fid)
-        protected = protected or bool(folders[fid].get("local_only"))
-        fid = folders[fid].get("parent_id")
     with _db_lock:
         conn = get_connection()
-        if protected:
-            conn.execute("UPDATE folders SET local_only = 1 WHERE parent_id = ?", (folder_id,))
-            conn.execute("UPDATE meetings SET local_only = 1 WHERE folder_id = ?", (folder_id,))
         conn.execute("UPDATE folders SET parent_id = ? WHERE parent_id = ?", (folder["parent_id"], folder_id))
         conn.execute("UPDATE meetings SET folder_id = ? WHERE folder_id = ?", (folder["parent_id"], folder_id))
         conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))

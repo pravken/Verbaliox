@@ -17,6 +17,8 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 SOURCE = "outlook"
+NO_PROFILE = ("Классический Outlook не настроен: в нём нет почтового профиля. Для нового Outlook и Outlook в браузере "
+              "добавьте опубликованную ссылку .ics")
 DAYS_BACK = 1
 DAYS_AHEAD = 14
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -59,6 +61,14 @@ ConvertTo-Json -InputObject @($out) -Depth 4 -Compress
 """
 
 
+# Where classic Outlook keeps its mail profiles: 2013 and later per Office version, before it the
+# Windows Messaging Subsystem. With none, starting Outlook opens its first-run wizard («Welcome to
+# Outlook») instead of the calendar, and every new read opened it again (found by the user: the
+# wizard kept coming back after the calendar source was set to Outlook).
+_PROFILE_KEYS = (r"Software\Microsoft\Office\16.0\Outlook\Profiles", r"Software\Microsoft\Office\15.0\Outlook\Profiles",
+                 r"Software\Microsoft\Windows NT\CurrentVersion\Windows Messaging Subsystem\Profiles")
+
+
 def supported() -> bool:
     """Classic Outlook is registered for automation on this computer."""
     if sys.platform != "win32":
@@ -72,17 +82,56 @@ def supported() -> bool:
         return False
 
 
+def has_profile() -> bool:
+    """Classic Outlook has a mail profile set up: it opens without its first-run wizard."""
+    if sys.platform != "win32":
+        return False
+    import winreg
+
+    for key in _PROFILE_KEYS:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+                if winreg.QueryInfoKey(k)[0] > 0:  # at least one profile
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def _outlook_running() -> bool:
+    try:
+        res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OUTLOOK.EXE", "/NH"], capture_output=True, text=True,
+                             errors="replace", timeout=15, creationflags=_NO_WINDOW)
+        return "outlook.exe" in (res.stdout or "").lower()
+    except (OSError, subprocess.SubprocessError):
+        return True  # not known: the Outlook there is not closed
+
+
+def _close_started_outlook() -> None:
+    """The Outlook this read started and left waiting (a password, a profile choice) is closed again:
+    not a window left behind for the user to close."""
+    try:
+        subprocess.run(["taskkill", "/IM", "OUTLOOK.EXE", "/F"], capture_output=True, timeout=15, creationflags=_NO_WINDOW)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def fetch() -> List[Dict[str, Any]]:
     """Meetings from yesterday to two weeks ahead, as app/calendar_ics.py events."""
     if not supported():
         raise RuntimeError("Классический Outlook на этом компьютере не найден. Для нового Outlook и Outlook в браузере "
                            "добавьте опубликованную ссылку .ics")
+    if not has_profile():
+        raise RuntimeError(NO_PROFILE)
+    was_running = _outlook_running()
     script = _SCRIPT.replace("__BACK__", str(DAYS_BACK)).replace("__AHEAD__", str(DAYS_AHEAD))
     try:
         res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
                              creationflags=_NO_WINDOW)
     except subprocess.TimeoutExpired:
+        if not was_running:
+            _close_started_outlook()
         raise RuntimeError("Outlook не ответил за 90 секунд (возможно, ждёт выбора профиля или пароля)")
     if res.returncode != 0:
         raise RuntimeError("Outlook: " + ((res.stderr or res.stdout or "").strip().splitlines() or ["ошибка"])[-1][:200])

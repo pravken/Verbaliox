@@ -542,7 +542,6 @@ def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[
     m = get_meeting(meeting_id) or {}
     if not generate or not m.get("segments"):
         return m
-    from app.database import is_local_only
     from app.ollama_client import generate_meeting_summary
 
     summaries = dict(m.get("summaries") or {})
@@ -562,7 +561,7 @@ def _prepare(meeting_id: int, generate: bool, settings: Dict[str, str]) -> Dict[
             summaries[key] = maybe_ground(generate_meeting_summary(
                 segments=m["segments"], speakers=m.get("speakers") or {}, template_key=key,
                 answer_lang=m.get("language") or "ru",
-                local_only=is_local_only(m), user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
+                user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
                 context_note=meeting_context_note({**m, "summaries": summaries}, key),
                 participants=meeting_roster(m),
             ), key, m)

@@ -403,7 +403,9 @@ function updateRecordButtonState() {
 // the dashboard and the dictation card): record with a preset, with the captions, dictate, the settings
 function openRecMenu(e) {
   e.stopPropagation();
-  document.getElementById('rec-menu')?.remove();
+  // a second click on ▾ closes the menu it opened (reported by the user: it stayed open)
+  const open = document.getElementById('rec-menu');
+  if (open) { open.remove(); return; }
   const menu = document.createElement('div');
   menu.id = 'rec-menu';
   menu.className = 'fixed w-80 macos-menu z-50';

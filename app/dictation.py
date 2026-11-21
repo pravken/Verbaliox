@@ -6,14 +6,12 @@ image or copied files in the clipboard, as keystrokes, the clipboard untouched).
 
 Recognition uses the models already downloaded: GigaAM v3 for Russian, Parakeet for other
 languages (both on the CPU, a second or two), otherwise the live-caption Whisper worker. Each
-dictation is also kept in the library (folder "Dictations", local analysis only): the sound, the
+dictation is also kept in the library (folder "Dictations"): the sound, the
 text and its translation; off in Settings ("dictation_save").
 
 Dictation with translation has a hotkey of its own (Ctrl+Alt+T by default): the recognized text is
-translated into the chosen language before it is typed. The local Ollama model translates; a cloud
-model only when the user allowed it for dictation (what is dictated can be anything, a password
-included). When the translation fails, the original is typed and the notice says so: nothing that
-was said is lost.
+translated into the chosen language before it is typed. The local Ollama model translates. When the
+translation fails, the original is typed and the notice says so: nothing that was said is lost.
 """
 
 import sys
@@ -157,18 +155,14 @@ def translate(text: str, target: str) -> "tuple[str, str]":
     """(text to type, note). The note is empty when the text was translated or already in `target`;
     otherwise it says why the original is typed."""
     from app import llm
-    from app.database import get_all_settings
     from app.live_translate import phrase_language
     from app.translation import TEXT_LANGUAGES
 
     if phrase_language(text) == target[:2]:
         return text, ""
     name = TEXT_LANGUAGES.get(target, target)
-    settings = get_all_settings()
-    allow_cloud = (settings.get("dictation_translate_cloud") or "false").lower() == "true"
     try:
-        # Without the dictation's own permission the cloud model of the settings gives way to Ollama
-        tgt = llm.target(None, local_only=not allow_cloud)
+        tgt = llm.target(None)
     except Exception as e:
         return text, f"Перевод недоступен: {str(e)[:100]}"
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout

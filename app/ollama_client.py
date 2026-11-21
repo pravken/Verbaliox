@@ -295,15 +295,35 @@ def use_program_folder_for_ollama_models() -> None:
         pass
 
 
+def installed_name(name: str, models: List[str]) -> Optional[str]:
+    """The name Ollama lists a model of the catalog under: the same, or a variant of the tag
+    («gemma4:e4b» installed as «gemma4:e4b-it-q4_K_M»), or «:latest» of a name without a tag."""
+    if name in models:
+        return name
+    if ":" not in name:
+        return next((m for m in models if m == f"{name}:latest" or m.startswith(name + ":")), None)
+    return next((m for m in models if m.startswith(name + "-")), None)
+
+
 def delete_ollama_model(name: str) -> None:
+    """Deletes a model by the name the page shows. Ollama is started for it (the program stops it when idle,
+    and the list of models then comes from its folder); a model Ollama does not have is gone already."""
     base = (get_all_settings().get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
-    if not _is_ollama_port_open(*_ollama_address(base)):
-        raise RuntimeError("Ollama не запущена — запустите её, чтобы удалить модель")
+    if not ensure_ollama_running(base):
+        if installed_name(name, models_on_disk()) is None:
+            return  # not in its folder either: nothing to delete
+        raise RuntimeError("Не удалось запустить Ollama: модель не удалена")
     with httpx.Client(timeout=30.0) as client:
-        r = client.request("DELETE", f"{base}/api/delete", json={"model": name})
-    if r.status_code == 404:
-        raise RuntimeError("Модель не найдена в Ollama")
-    r.raise_for_status()
+        tags = client.get(f"{base}/api/tags")
+        listed = [m["name"] for m in tags.json().get("models", [])] if tags.status_code == 200 else [name]
+        target = installed_name(name, listed)
+        if target is None:
+            print(f"[ollama] {name} is not in Ollama's list: already deleted", flush=True)
+            return
+        r = client.request("DELETE", f"{base}/api/delete", json={"model": target})
+    if r.status_code == 404:  # deleted in the meantime (another window, the Ollama app itself)
+        return
+    raise_for_ollama(r)
 
 
 # Models that only turn text into vectors (search by meaning, app/semantic.py): Ollama answers a
@@ -375,12 +395,11 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
 
     # Build catalog with installed flags
     catalog = []
-    installed_set = set(models)
     for item in RECOMMENDED_LLM_MODELS:
-        is_inst = item["id"] in installed_set or any(
-            m.startswith(item["id"] + "-") for m in installed_set
-        )
-        catalog.append({**item, "installed": is_inst})
+        # the name it is installed under: the trash deletes that one (the catalog's own name is not in
+        # Ollama's list when a variant of the tag was downloaded)
+        as_name = installed_name(item["id"], models)
+        catalog.append({**item, "installed": as_name is not None, "installed_as": as_name or ""})
 
     # Also append any other custom models the user has in Ollama
     known_ids = {item["id"] for item in RECOMMENDED_LLM_MODELS}
@@ -1115,7 +1134,6 @@ def generate_meeting_summary(
     model_name: Optional[str] = None,
     base_url: Optional[str] = None,
     answer_lang: Optional[str] = "ru",
-    local_only: bool = False,
     user_notes: str = "",
     template_prompt: str = "",
     progress: Optional[Callable[[int, int], None]] = None,
@@ -1135,8 +1153,7 @@ def generate_meeting_summary(
     of a long recording are made once (the overview and the chapters asked for the very same ones)."""
     from app.llm import target
 
-    # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
-    llm = target(model_name, local_only=local_only)
+    llm = target(model_name)
     lines = build_transcript_lines(segments, speakers_in_language(speakers, answer_lang))
     transcript_text = "\n".join(lines)
     if not transcript_text.strip():
@@ -1197,13 +1214,13 @@ def generate_meeting_summary(
         "ни в этом списке, ни в расшифровке; если не ясно, о ком речь, пиши имя так, как оно сказано."
     ) if roster else ""
     # The user's contacts besides the participants: a person named in the talk is written as in the contacts
-    # (app/people.known_people; a cloud service gets only the ones the transcript names)
+    # (app/people.known_people)
     known: List[str] = []
     if participants is not None:
         try:
             from app.people import known_people
 
-            known = known_people({"segments": segments, "speakers": speakers}, exclude=roster, cloud=llm.is_cloud)
+            known = known_people({"segments": segments, "speakers": speakers}, exclude=roster)
         except Exception:
             known = []
     if roster or known:
@@ -1225,7 +1242,7 @@ def generate_meeting_summary(
     if known_rule:
         roster_note = roster_note + "\n" + known_rule
     source_label = "Вот точная расшифровка аудио/видеозаписи"
-    single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
+    single_pass_max = single_pass_max_chars()
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
     # and so do the feature's note and the glossary (the PC check of 0.8.7-beta.2: room was left, but the
@@ -1234,7 +1251,7 @@ def generate_meeting_summary(
     whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text) - added)
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
-        chunks = _chunk_lines(lines, chunk_max_chars() if not llm.is_cloud else llm.max_chars // 2)
+        chunks = _chunk_lines(lines, chunk_max_chars())
         focus = (
             f"Особенно подробно выпиши всё, что относится к вопросу: {custom_prompt.strip()}\n"
             if custom_prompt.strip()
@@ -1317,13 +1334,12 @@ def generate_meeting_title(
     speakers: Dict[str, Dict[str, Any]],
     answer_lang: Optional[str] = "ru",
     model_name: Optional[str] = None,
-    local_only: bool = False,
 ) -> str:
     """A short title (3-8 words) for the recording from the beginning of its transcript."""
     from app.llm import target
 
     # the title by content is turned on by the user (auto_title): a stopped Ollama is started, as for the overview
-    llm = target(model_name, local_only=local_only)
+    llm = target(model_name)
     text = "\n".join(build_transcript_lines(segments, speakers))[:7000]
     if not text.strip():
         raise RuntimeError("Транскрипт пуст")

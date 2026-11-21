@@ -132,7 +132,8 @@ def api_meeting_join(payload: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/api/calendar/day")
 def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
     """The meetings of the working day (start…end, local time; past midnight for a night shift), each
-    with the recording made during it, if any."""
+    with the recording made during it, if any, and the recordings made outside any meeting (a day gone by
+    shows them on its timeline)."""
     from app import calendar_ics
     from app.database import get_all_settings
 
@@ -158,14 +159,20 @@ def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, A
 
     index = series.EventIndex(library) if items else None  # made once for all the events of the day
     now = datetime.now()
+    used = set()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
         hit = next((m for t, m in made if s.replace(second=0) - EARLY <= t < e), None)
         it["recording"] = {"id": hit["id"], "status": hit.get("status"), "progress": hit.get("progress")} if hit else None
+        if hit:
+            used.add(hit["id"])
         # A meeting ahead that continues a series: its last time and the tasks still open (the brief)
         it["before"] = series.before_meeting(it["title"], it.get("attendees") or [], index=index) if e > now else None
+    recordings = [{"id": m["id"], "title": m.get("title") or "", "at": t.isoformat(timespec="minutes"),
+                   "duration": m.get("duration") or 0, "status": m.get("status"), "progress": m.get("progress")}
+                  for t, m in sorted(made, key=lambda x: x[0]) if m["id"] not in used]
     return {"configured": bool((get_all_settings().get("calendar_ics") or "").strip()), "events": items,
-            **calendar_ics.status()}
+            "recordings": recordings, **calendar_ics.status()}
 
 
 # --- Dictation from the home page: the text is shown, not typed (app/dictation.py) ---

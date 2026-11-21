@@ -16,11 +16,11 @@
           <span id="tk-note" class="tk-note hidden" role="status"></span>
           <button id="tk-exp-btn" class="tk-btn" data-click="openTasksExportMenu" data-click-args='[{"$": "event"}]'
                   aria-haspopup="menu" data-i18n-title="tkExportTitle" title="Выгрузить задачи, которые видно сейчас">
-            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
+            <svg class="vx-bic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
             <span data-i18n="tkExport">Экспорт</span>
-            <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            <svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
           </button>
-          <button class="tk-btn tk-btn-primary" data-click="openNewTask" data-i18n="tkNew">+ Задача</button>
+          <button class="tk-btn tk-btn-primary" data-click="openNewTask"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="tkNew">Задача</span></button>
         </div>
       </header>
 
@@ -58,9 +58,9 @@
     <!-- «+ Задача»: what, who (from the text too), when, from which recording -->
     <div id="tk-new" class="tk-veil hidden" data-click="closeNewTaskOnBackdrop" data-click-args='[{"$": "event"}]'>
       <div class="tk-dlg" role="dialog" aria-modal="true" aria-labelledby="tk-new-title" data-keydown="onNewTaskKey" data-keydown-args='[{"$": "event"}]'>
-        <div class="tk-dlg-head">
-          <h2 id="tk-new-title" data-i18n="tkNewTitle">Новая задача</h2>
-          <button class="tk-x" data-click="closeNewTask" data-i18n-title="tkClose" title="Закрыть">✕</button>
+        <div class="tk-dlg-head vx-head">
+          <span class="vx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7.5l2 2 3-3.5M4.5 15.5l2 2 3-3.5M13 8h7M13 16h7"/></svg></span><div class="vx-head-tt"><h2 id="tk-new-title" class="vx-head-t" data-i18n="tkNewTitle">Новая задача</h2></div>
+          <button class="vx-x" data-click="closeNewTask" data-i18n-title="tkClose" title="Закрыть" data-i18n-aria="tkClose" aria-label="Закрыть">✕</button>
         </div>
         <textarea id="tk-n-text" rows="2" class="tk-n-text" data-input="onNewTaskText" data-input-args='[{"$": "value"}]'
                   data-i18n-placeholder="tkNewPlaceholder" placeholder="Что нужно сделать?" data-i18n-title="tkNewWhat" title="Что сделать"></textarea>

@@ -36,6 +36,39 @@ function leaveThen(el, done) {
   el.addEventListener('animationend', (e) => { if (e.target === el) end(); }, { once: true });
   setTimeout(end, 140);
 }
+// A side panel (the details and the widgets of «Обзор»): slides in from the right when it is shown, and out
+// before it is hidden; a redraw of a shown one does not move it. after() runs once it is hidden
+function drawerShow(el) {
+  if (!el) return;
+  const was = el.classList.contains('hidden') || el.classList.contains('vx-drawer-out');
+  el._drawer = (el._drawer || 0) + 1;
+  el.classList.remove('hidden', 'vx-drawer-out');
+  if (was) { el.classList.remove('vx-drawer-in'); void el.offsetWidth; el.classList.add('vx-drawer-in'); }
+}
+function drawerHide(el, after) {
+  if (!el) return;
+  if (el.classList.contains('hidden') || scrollMotion() === 'auto') { el.classList.add('hidden'); el.classList.remove('vx-drawer-in', 'vx-drawer-out'); if (after) after(); return; }
+  if (el.classList.contains('vx-drawer-out')) return;
+  const token = el._drawer = (el._drawer || 0) + 1;
+  el.classList.remove('vx-drawer-in');
+  el.classList.add('vx-drawer-out');
+  const end = () => {
+    el.removeEventListener('animationend', onEnd);
+    if (el._drawer !== token) return;
+    el._drawer++;
+    el.classList.remove('vx-drawer-out');
+    el.classList.add('hidden');
+    if (after) after();
+  };
+  const onEnd = (e) => { if (e.target === el) end(); };
+  el.addEventListener('animationend', onEnd);
+  setTimeout(end, 220);
+}
+// A window drawn again in place (its next step, a filter): the opening motion plays on the first draw only
+function vxRedraw(wrap) {
+  if (wrap.dataset.drawn) wrap.classList.add('vx-drawn');
+  wrap.dataset.drawn = '1';
+}
 function hideWithExit(el) { leaveThen(el, () => el.classList.add('hidden')); }
 function removeWithExit(el) { leaveThen(el, () => el.remove()); }
 function cancelLeave(el) {
@@ -447,18 +480,24 @@ function setUILanguage(lang) {
 // A styled yes/no question (instead of the browser's confirm): resolves true or false.
 // Cancel is focused, so Enter does not confirm by accident.
 // opts.cancel: the label of the other button; opts.single: one button only (a message, not a question)
+// One caret for every menu button and one «+» for every add button (the same line icons, never ▾ or a text plus)
+const VX_CARET = '<svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const VX_PLUS = '<svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
 function confirmDialog(title, text, okLabel, danger = true, opts = {}) {
   return new Promise(resolve => {
     const wrap = document.createElement('div');
     wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
-    wrap.innerHTML = `<div class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
-      <div class="text-sm font-semibold text-white">${escapeHtml(title)}</div>
-      ${text ? `<p class="text-xs text-apple-secondary leading-relaxed whitespace-pre-line break-words">${escapeHtml(text)}</p>` : ''}
-      <div class="flex justify-end gap-2">
-        ${opts.single ? '' : `<button data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(opts.cancel || t('cancel'))}</button>`}
-        <button data-a="yes" class="ui-btn ${danger ? 'bg-apple-red text-white hover:opacity-90' : 'ui-btn-primary'}">${escapeHtml(okLabel)}</button>
+    // the head: a warning in red for what cannot be undone, a question mark for a question, «i» for a message
+    const ic = opts.single ? 'info' : danger ? 'over' : 'help';
+    wrap.innerHTML = `<div class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead(ic, title, { close: 'data-a="no"', tone: danger && !opts.single ? 'danger' : '' })}
+      ${text ? `<p class="vx-dlg-text whitespace-pre-line break-words">${escapeHtml(text)}</p>` : ''}
+      <div class="vx-dlg-foot">
+        ${opts.single ? '' : `<button data-a="no" class="tk-btn">${escapeHtml(opts.cancel || t('cancel'))}</button>`}
+        <button data-a="yes" class="tk-btn ${danger ? 'tk-btn-danger' : 'tk-btn-primary'}">${escapeHtml(okLabel)}</button>
       </div></div>`;
     const done = v => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); resolve(v); };
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
@@ -469,7 +508,7 @@ function confirmDialog(title, text, okLabel, danger = true, opts = {}) {
     });
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(wrap);
-    wrap.querySelector('button[data-a="no"]') ? wrap.querySelector('button[data-a="no"]').focus() : wrap.querySelector('button[data-a="yes"]').focus();
+    (wrap.querySelector('.vx-dlg-foot button[data-a="no"]') || wrap.querySelector('button[data-a="yes"]')).focus();
   });
 }
 
@@ -498,13 +537,14 @@ function askText(label, value = '', opts = {}) {
     wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
-    wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
-      ${opts.title ? `<div class="text-sm font-semibold text-white">${escapeHtml(opts.title)}</div>` : ''}
-      <label class="block text-xs text-apple-label leading-relaxed whitespace-pre-line">${escapeHtml(label)}</label>
-      <input type="text" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
-      <div class="flex justify-end gap-2">
-        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
-        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(opts.ok || t('ok'))}</button>
+    // the head names what is typed (the title, or the question itself when there is no title)
+    wrap.innerHTML = `<form class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead(opts.ic || 'pen', opts.title || label, { close: 'data-a="no"' })}
+      ${opts.title ? `<label class="vx-dlg-text whitespace-pre-line">${escapeHtml(label)}</label>` : ''}
+      <input type="text" class="vx-field" aria-label="${escapeHtml(label)}" />
+      <div class="vx-dlg-foot">
+        <button type="button" data-a="no" class="tk-btn">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="tk-btn tk-btn-primary">${escapeHtml(opts.ok || t('ok'))}</button>
       </div></form>`;
     const input = wrap.querySelector('input');
     input.value = value || '';
@@ -636,7 +676,8 @@ async function readJson(res) {
 // a warning and an error. An error stays until it is closed and is read out by the screen reader at
 // once; the others leave by themselves, but not while the pointer is on them. A new status or done
 // notice replaces the previous one; errors and warnings stack, three at most, the newest below
-const TOAST_LIFE = { status: 3000, success: 3000, warning: 8000, error: 0 };
+// an error goes away by itself too (reported by the user: it stayed until closed); one with a button stays
+const TOAST_LIFE = { status: 3000, success: 3000, warning: 8000, error: 10000 };
 const TOAST_ICONS = {
   status: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v3.6M8 5.1v.1" stroke-linecap="round"/></svg>',
   success: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.4l3 3 6-6.4"/></svg>',
@@ -652,12 +693,12 @@ function showToast(msg, action, kind) {
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
   el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-  el.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICONS[kind]}</span><span class="toast-text"></span>`;
+  el.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICONS[kind]}</span><span class="toast-text"></span><span class="toast-life" aria-hidden="true"></span>`;
   el.querySelector('.toast-text').textContent = msg;
   const dismiss = () => { clearTimeout(el._timer); removeWithExit(el); };
   if (action && action.label && typeof action.onClick === 'function') {
     const btn = document.createElement('button');
-    btn.className = 'toast-action';
+    btn.className = 'tk-btn tk-btn-sm toast-action';
     btn.textContent = action.label;
     if (action.title) btn.title = action.title;
     btn.onclick = () => { dismiss(); action.onClick(); };
@@ -665,16 +706,25 @@ function showToast(msg, action, kind) {
   }
   if (kind === 'warning' || kind === 'error') {
     const x = document.createElement('button');
-    x.className = 'toast-close';
+    x.className = 'vx-x toast-close';
     x.setAttribute('aria-label', t('close'));
     x.textContent = '✕';
     x.onclick = dismiss;
     el.appendChild(x);
   }
-  const life = action && kind === 'success' ? 7000 : TOAST_LIFE[kind];
-  const arm = (ms) => { clearTimeout(el._timer); if (ms) el._timer = setTimeout(dismiss, ms); };
+  const life = action && kind === 'success' ? 7000 : action && kind === 'error' ? 0 : TOAST_LIFE[kind];
+  // the thin line at the bottom shows the life left; it stops while the pointer is on the notice and starts
+  // again, over the shorter time, when it leaves
+  const line = el.querySelector('.toast-life');
+  const arm = (ms) => {
+    clearTimeout(el._timer);
+    if (ms) el._timer = setTimeout(dismiss, ms);
+    line.classList.toggle('hidden', !ms);
+    if (ms) { line.style.animationDuration = `${ms}ms`; line.classList.remove('is-on'); void line.offsetWidth; line.classList.add('is-on'); }
+  };
   el.addEventListener('mouseenter', () => clearTimeout(el._timer));
   el.addEventListener('mouseleave', () => arm(life && Math.max(1500, life / 2)));
+  el.appendChild(line);
   stack.appendChild(el);
   const live = [...stack.children].filter(c => !c.classList.contains('is-leaving'));
   live.slice(0, Math.max(0, live.length - 3)).forEach(c => removeWithExit(c));
@@ -789,7 +839,7 @@ const _modalReturnFocus = {};
 
 function focusablesIn(root) {
   return [...root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-    .filter(el => !el.disabled && el.getClientRects().length);  // shown (offsetParent is null for fixed ones)
+    .filter(el => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);  // shown (offsetParent is null for fixed ones), in the tab order
 }
 
 document.addEventListener('keydown', e => {
@@ -827,10 +877,11 @@ function openModal(name, tab) {
   if (name === 'settings' && state.appView !== 'settings') switchAppView('settings');
   setTimeout(() => {
     if (modal.contains(document.activeElement)) return;
-    const first = name === 'settings' ? document.getElementById('settings-search') : null;  // the search, not «Закрыть»
+    // the search of Settings, not «Закрыть»; a window with nothing to fill marks its own start (data-autofocus)
+    const first = name === 'settings' ? document.getElementById('settings-search') : modal.querySelector('[data-autofocus]');
     // Audit 7.2: the first field or action, not the ✕ of the window (Enter must not close it)
     const items = focusablesIn(modal);
-    (first || items.find(el => !el.matches('.dlg-x, .imp-x')) || items[0] || modal).focus();
+    (first || items.find(el => !el.matches('.dlg-x, .imp-x, .vx-x')) || items[0] || modal).focus();
   }, 60);
   if (name === 'import') onImportDialogOpen();  // importdlg.js: the list, the processing from the settings
   if (name === 'settings') {
@@ -844,9 +895,6 @@ function openModal(name, tab) {
     refreshExportDirLabel();
     refreshRecordingsDirLabel();
     refreshObsidianStatus();
-    state.llmProviderEdited = false;
-    state.llmShowCloud = false;
-    loadLlmStatus();
     nextFrame(() => drawIdleSoundCloudBars('settings-waveform-canvas'));
   }
 }
@@ -970,7 +1018,6 @@ function switchWorkspaceTab(tab) {
   if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
   if (tab === 'info') loadMeetingInfo();
-  if (tab === 'summary') renderAnalysisEstimate();
   ['transcript', 'summary', 'speakers', 'info'].forEach(k => {
     document.getElementById(`wview-${k}`).classList.toggle('hidden', k !== tab);
     const btn = document.getElementById(`wtab-${k}`);
@@ -995,9 +1042,9 @@ function hideExportMenu() {
 }
 
 // Esc closes the dialogs made on the fly that have no keyboard handling of their own (found in the audit:
-// Esc closed Settings under the cloud log and left the log open). Their own ✕ is pressed, so a dialog
+// Esc closed Settings under a dialog and left the dialog open). Their own ✕ is pressed, so a dialog
 // that asks before closing still asks; the event goes no further, the window below stays
-const ESC_DIALOGS = ['cloud-log', 'templates-editor', 'an-tpl-dlg', 'open-commitments'];
+const ESC_DIALOGS = ['templates-editor', 'an-tpl-dlg', 'open-commitments'];
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
   const open = ESC_DIALOGS.map(id => document.getElementById(id)).filter(Boolean);

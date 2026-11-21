@@ -3,9 +3,10 @@ The library for an agent (asked by the user: Claude or another agent reads the m
 hundreds of exported notes): a Model Context Protocol server on stdio, JSON-RPC 2.0 one message per line,
 written here without a library (the protocol needs initialize, tools/list and tools/call).
 
-Read only, on the same database as the app (it works with the app closed). Recordings marked «только
-локально» (or in such a folder) are left out: an agent may send what it reads to a cloud model; the setting
-mcp_local_only («Отдавать агенту и локальные записи») lets them in.
+Read only, on the same database as the app (it works with the app closed). The dictations (the «Диктовки»
+folder) are left out: they can hold anything said, and an agent may send what it reads to a service of its
+own; the setting mcp_local_only («Отдавать агенту и диктовки») lets them in. The recordings marked «только
+локально» in earlier versions stay out.
 
 Started by the agent's client: `<the app's python> <app folder>/app/mcp_server.py` (Settings → Агент shows
 the lines for Claude Desktop and Claude Code). Tools:
@@ -34,7 +35,7 @@ MAX_TEXT = 200_000  # an answer this long at most (a long transcript is cut, the
 
 def _settings() -> Dict[str, str]:
     """Read anew at every call: this process lives long beside the app, which changes the settings in its own
-    process (its cache here would keep serving «only local» recordings after the user took the permission back)."""
+    process (its cache here would keep serving the dictations after the user took the permission back)."""
     from app.database import forget_settings, get_all_settings
 
     forget_settings()
@@ -42,13 +43,15 @@ def _settings() -> Dict[str, str]:
 
 
 def _hidden() -> set:
-    """The recordings an agent does not get (local only), unless the user allowed them."""
-    if (_settings().get("mcp_local_only") or "false").lower() == "true":
-        return set()
-    from app.database import local_only_ids
+    """The recordings an agent does not get: the dictations, unless the user allowed them, and the ones the
+    user had marked «только локально» in earlier versions (always)."""
+    from app.database import dictation_ids, formerly_local_ids
 
-    # no try: a failed read must fail the call, not hand the agent the local-only recordings
-    return set(local_only_ids())
+    # no try: a failed read must fail the call, not hand the agent the dictations
+    hidden = set(formerly_local_ids())
+    if (_settings().get("mcp_local_only") or "false").lower() != "true":
+        hidden |= set(dictation_ids())
+    return hidden
 
 
 def _day(m: Dict[str, Any]) -> str:
@@ -107,7 +110,7 @@ def get_meeting(id: int, sections: Optional[List[str]] = None) -> Dict[str, Any]
     from app.database import get_meeting as load
 
     if int(id) in _hidden():
-        raise ValueError("This recording is marked local only: it is not given to an agent")
+        raise ValueError("This recording is a dictation: it is not given to an agent")
     m = load(int(id))
     if not m:
         raise ValueError("No meeting with this id")
@@ -170,7 +173,7 @@ def list_tasks(scope: str = "mine", person: str = "", status: str = "open") -> D
 def list_people() -> Dict[str, Any]:
     from app.people import directory
 
-    # names heard only in local-only recordings stay out like the recordings (a failed read of that list
+    # names heard only in dictations stay out like the recordings (a failed read of that list
     # fails the call, as everywhere here)
     rows = directory(skip=_hidden())
     return {"people": [{"name": r.get("name"), "role": r.get("role") or "", "aliases": r.get("aliases") or [],
