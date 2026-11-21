@@ -8,7 +8,8 @@
 // day or a day off. Order everywhere: the pill, the meeting, its details, the buttons of the state.
 const STRIP_SOON_MS = 15 * 60e3;
 const STRIP_RECENT_MS = 3 * 3600e3;  // the recording just made stays on the strip this long
-const strip = { events: [], holidays: {}, configured: false, at: 0, loading: null, call: null, callAt: 0, callOff: false,
+const STRIP_RETRY_MS = 45000;  // after a failed load: the next try this much later, not on the next redraw
+const strip = { events: [], holidays: {}, configured: false, at: 0, failAt: 0, loading: null, call: null, callAt: 0, callOff: false,
   skip: new Set(), html: '', click: null };
 let stripSeen = new Set();  // recordings whose «Итоги готовы» were opened or hidden
 try { stripSeen = new Set(JSON.parse(localStorage.getItem('verbaliox_strip_seen') || '[]')); } catch (e) { /* storage off */ }
@@ -23,12 +24,15 @@ function stripDayStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); retur
 // The meetings of today and of the week ahead (the next one after a free day), and the public holidays
 async function stripLoad(force) {
   if (!force && Date.now() - strip.at < 300000) return;
+  // a failed answer redraws the strip, which asks again: without this pause, a request loop
+  if (!force && Date.now() - strip.failAt < STRIP_RETRY_MS) return;
   if (strip.loading) return strip.loading;
   strip.loading = (async () => {
     const a = stripDayStart(new Date()), b = new Date(a.getTime() + 8 * 86400e3);
     const data = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
       .then(r => (r.ok ? r.json() : null)).catch(() => null);
-    if (!data) return;
+    if (!data) { strip.failAt = Date.now(); return; }
+    strip.failAt = 0;
     strip.at = Date.now();
     strip.configured = !!data.configured;
     strip.holidays = data.holidays || {};

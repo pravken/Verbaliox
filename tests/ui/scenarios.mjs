@@ -1218,6 +1218,19 @@ await step('language from the server', async () => {
   expect(kept[0] === 'ru' && kept[1] === 'week', `a choice on the page was not kept on the server: ${kept}`);
 });
 
+// The strip: a failed calendar answer is not asked again at once (its redraw asked again: a request loop)
+await step('strip back-off', async () => {
+  let calls = 0;
+  await page.route('**/api/calendar/range*', r => { calls++; return r.fulfill({ status: 404, body: '{}' }); });
+  await page.evaluate(() => { strip.at = 0; strip.failAt = 0; renderStrip(); });
+  await sleep(2000);
+  await page.evaluate(() => { renderStrip(); renderStrip(); });
+  await sleep(300);
+  await page.unroute('**/api/calendar/range*');
+  expect(calls >= 1 && calls <= 2, `the strip asked the calendar ${calls} times in 2 s after a failure`);
+  await page.evaluate(() => { strip.failAt = 0; });
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
