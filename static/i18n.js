@@ -1378,7 +1378,7 @@ const I18N = {
     emptySubtitle: 'Запишите встречу или добавьте аудио и видео. Обработка выполняется локально на этом компьютере.',
     emptyPickRecording: 'Или выберите запись в медиатеке слева',
     tabTranscript: 'Расшифровка',
-    tabSummary: 'Анализ',
+    tabSummary: 'Итоги',
     tabSpeakers: 'Участники',
     searchPlaceholder: 'Поиск в тексте…',
     export: 'Экспорт',
@@ -1421,7 +1421,7 @@ const I18N = {
     tipRenameInline: 'Нажмите, чтобы переименовать запись',
     tipTabTranscript: 'Показать полную расшифровку речи по ролям и таймкодам (Ctrl+3)',
     tipAnalysisRunning: 'Идёт анализ этой записи',
-    tipTabSummary: 'Структурированный обзор, задачи и ответы на вопросы по записи',
+    tipTabSummary: 'Итоги встречи: кратко, решения, задачи, отметки и заметки; разделы анализа',
     tipTabSpeakers: 'Управление участниками, прослушивание образцов голоса и переименование',
     tipExportBtn: 'Экспортировать результат в файл (Word, Markdown, TXT, SRT, JSON)',
     tipExportDocx: 'Сохранить как документ Microsoft Word (.docx)',
@@ -3013,6 +3013,21 @@ const I18N = {
     rlTipAsk: 'Ассистент: вопросы к записям (Ctrl+5)',
     rlTipDict: 'Словарь: как писать имена, проекты и термины',
 
+    // --- The recording screen: summary cards, the transcript as a chat, the player (docs/pult-plan.md, stage 5) ---
+    recCrumbRecords: 'Записи',
+    recCrumbTip: 'Все записи',
+    recListenFrom: 'Слушать с этого места',
+    recDecisions: 'Решения',
+    recTasks: 'Задачи',
+    recMarked: 'Отмечено',
+    recMark: 'Отметка',
+    recNoMarks: 'Отметок нет. Во время записи момент отмечается клавишей M',
+    recNoDecisions: 'Решений не принималось',
+    recNoTasks: 'Задач нет',
+    recAfterAnalysis: 'Появится после анализа',
+    recTopics: 'Темы',
+    recAskPh: 'Вопрос об этой записи…',
+
   },
   en: {
     // --- Cloud language models for analysis ---
@@ -4390,7 +4405,7 @@ const I18N = {
     emptySubtitle: 'Record a meeting or add audio and video. Everything is processed locally on this computer.',
     emptyPickRecording: 'Or pick a recording in the library on the left',
     tabTranscript: 'Transcript',
-    tabSummary: 'Analysis',
+    tabSummary: 'Summary',
     tabSpeakers: 'Speakers',
     searchPlaceholder: 'Search transcript…',
     export: 'Export',
@@ -4433,7 +4448,7 @@ const I18N = {
     tipRenameInline: 'Click to rename this recording',
     tipTabTranscript: 'View full timecoded and speaker-labeled transcript (Ctrl+3)',
     tipAnalysisRunning: 'Analysis is running for this recording',
-    tipTabSummary: 'View structured AI notes, action items, and Q&A',
+    tipTabSummary: 'The meeting summary: in short, decisions, tasks, marks and notes; the analysis sections',
     tipTabSpeakers: 'Manage speakers, preview voice samples, and rename voices',
     tipExportBtn: 'Export notes and transcript (Word, Markdown, TXT, SRT, JSON)',
     tipExportDocx: 'Export as Microsoft Word document (.docx)',
@@ -6024,6 +6039,21 @@ const I18N = {
     rlTipPeople: 'People: participants, voices and contacts (Ctrl+4)',
     rlTipAsk: 'Assistant: questions about the recordings (Ctrl+5)',
     rlTipDict: 'Dictionary: how names, projects and terms are spelled',
+
+    // --- The recording screen: summary cards, the transcript as a chat, the player (docs/pult-plan.md, stage 5) ---
+    recCrumbRecords: 'Recordings',
+    recCrumbTip: 'All recordings',
+    recListenFrom: 'Play from here',
+    recDecisions: 'Decisions',
+    recTasks: 'Tasks',
+    recMarked: 'Marked',
+    recMark: 'Mark',
+    recNoMarks: 'No marks. While recording, M marks a moment',
+    recNoDecisions: 'No decisions were made',
+    recNoTasks: 'No tasks',
+    recAfterAnalysis: 'Appears after the analysis',
+    recTopics: 'Topics',
+    recAskPh: 'A question about this recording…',
 
   }
 };

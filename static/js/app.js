@@ -664,69 +664,101 @@ function renderAnalysisHead() {
   }
 }
 
-// Overview: the summary and the cards of the other sections («Настроить»); what is not made yet below
+// Overview: «Итоги» in cards (docs/pult-plan.md, stage 5). «Коротко», «Решения», «Задачи», «Отмечено» and
+// «Мои заметки» on the left, «Темы» on the right; each card's head has the icon of its kind, the name and the
+// count at the right end; the moments are quiet links «▶ 06:12» that play from there. The rest of the protocol
+// and the other sections chosen in «Настроить» follow; what is not made yet is offered below
 function renderAnalysisOverview(box) {
   const m = state.activeMeeting;
   const sums = m.summaries || {};
   const off = anOverviewOff();
   const ai = aiAvailable();
-  const card = (key, title, body, opts = {}) => `<section class="an-card${opts.wide ? ' an-wide' : ''}" data-card="${escapeHtml(key)}">
-      <div class="an-cardh">${opts.ai ? '<svg class="tb-ai" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>' : ''}
-        ${opts.mine ? '<span class="an-dot an-dot-mine"></span>' : ''}${escapeHtml(title.toUpperCase())}
-        ${opts.count ? `<span class="an-cnt">${opts.count}</span>` : ''}${opts.tag ? `<span class="an-tag">${escapeHtml(opts.tag)}</span>` : ''}
-        <span class="flex-1"></span>
-        ${opts.edit ? `<button class="an-more" ${pageCall('click', 'editAnalysisSection', [key])} title="${escapeHtml(t('anEditTip'))}" aria-label="${escapeHtml(t('anEdit'))}">✎</button>` : ''}
-        ${opts.regen && ai ? `<button class="an-more" ${pageCall('click', 'createAnalysisSection', [key])} title="${escapeHtml(t('anRegen'))}">↻</button>` : ''}
-        ${opts.open ? `<button class="an-more" ${pageCall('click', 'selectSummaryTab', [key])}>${escapeHtml(t('anOpen'))} →</button>` : ''}
-      </div>
+  const icon = (kind) => `<span class="sc-ic" aria-hidden="true">${recCardIcon(kind)}</span>`;
+  const act = (fn, args, label, mark) => `<button class="sc-act" ${pageCall('click', fn, args)} title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${mark}</button>`;
+  // one card: the head (icon, name, the actions on hover, the count at the right end), its body
+  const card = (key, title, body, opts = {}) => `<section class="scard${opts.cls ? ` ${opts.cls}` : ''}" data-card="${escapeHtml(key)}">
+      <h3 class="sc-h">${icon(opts.icon || 'doc')}<span class="sc-name">${escapeHtml(title)}</span>
+        ${opts.tag ? `<span class="an-tag">${escapeHtml(opts.tag)}</span>` : ''}<span class="flex-1"></span>
+        ${opts.edit ? act(opts.editFn || 'editAnalysisSection', [opts.edit], t('anEditTip'), '✎') : ''}
+        ${opts.regen && ai ? act('createAnalysisSection', [key], t('anRegen'), '↻') : ''}
+        ${opts.open ? `<button class="sc-open" ${pageCall('click', 'selectSummaryTab', [opts.open])}>${escapeHtml(t('anOpen'))} →</button>` : ''}
+        <b class="sc-n">${opts.count != null ? opts.count : ''}</b></h3>
       <div class="an-cardb${opts.clamp ? ' an-clamp' : ''}">${body}</div>
     </section>`;
   const md = (key) => `<div class="markdown-body an-md" data-md="${escapeHtml(key)}"></div>`;
-  const busyCard = (key, title) => card(key, title, `<div class="an-making-sm">${escapeHtml(t('anMaking'))}</div>`);
+  const making = `<div class="sc-quiet">${escapeHtml(t('anMaking'))}</div>`;
+  const quiet = (text) => `<div class="sc-quiet">${escapeHtml(text)}</div>`;
+  const make = (key) => (ai ? `<button class="sc-make" ${pageCall('click', 'createAnalysisSection', [key])}>✦ ${escapeHtml(t('anCreate'))}</button>` : '');
+  const at = (sec) => (sec != null ? `<button class="sc-at" ${pageCall('click', 'seekPlayer', [Number(sec) || 0])} title="${escapeHtml(t('recListenFrom'))}">▶ ${formatTime(sec)}</button>` : '<span class="sc-at" aria-hidden="true"></span>');
+  const row = (text, sec, lead = '') => `<div class="sc-row">${lead}<span class="sc-t">${escapeHtml(text)}</span>${at(sec)}</div>`;
+
+  const protocol = String(sums.protocol || '');
+  const dec = recMdSection(protocol, REC_DECISION_HEADS);
+  const next = recMdSection(dec.rest, REC_NEXT_HEADS);
+  const rest = /[^\s#*_-]/.test(next.rest.replace(/^\s*#{1,6}\s.*$/gm, '')) ? next.rest.trim() : '';  // more than headings
+  const notes = recNotes(m.user_notes);
+
+  // «Коротко»
+  const tldr = anIsBusy('tldr') ? making : anHasContent('tldr') ? md('tldr') : `${quiet(t('anNotMade'))}${make('tldr')}`;
+  const lead = off.includes('tldr') ? '' : card('tldr', t('anShort'), tldr, { icon: 'sum', cls: 'lead', edit: anHasContent('tldr') ? 'tldr' : '', regen: anHasContent('tldr') });
+  // «Решения»: the points of the protocol's «Решения»
+  const decBody = anIsBusy('protocol') ? making
+    : dec.items.length ? dec.items.map(x => row(x.text, x.at, '<span class="sc-dot"></span>')).join('')
+    : quiet(dec.found ? t('recNoDecisions') : anHasContent('protocol') ? t('recNoDecisions') : t('recAfterAnalysis'));
+  const decisions = card('decisions', t('recDecisions'), decBody, { icon: 'dec', count: dec.items.length || '', edit: anEditable('protocol') ? 'protocol' : '' });
+  // «Задачи»: the tasks of the recording (filled by recFillTasks); the protocol's «Следующие шаги» until then
+  const tasks = card('rec-tasks', t('recTasks'), recTasksBody(next.items), { icon: 'task', count: '', open: 'commitments' });
+  // «Отмечено» and «Мои заметки»: the lines of the notes, the marks (⚑) apart
+  const marksBody = notes.marks.length ? notes.marks.map(x => row(x.text || t('recMark'), x.at)).join('') : quiet(t('recNoMarks'));
+  const notesBody = notes.lines.length ? notes.lines.map(x => row(x.text, x.at)).join('') : quiet(t('anNoNotes'));
+  const mine = `<div class="sum-two">${card('rec-marks', t('recMarked'), marksBody, { icon: 'mark', count: notes.marks.length || '', edit: 'mynotes', editFn: 'selectSummaryTab' })}
+    ${off.includes('mynotes') ? '' : card('mynotes', t('notesTitle'), notesBody, { icon: 'note', count: notes.lines.length || '', edit: 'mynotes', editFn: 'selectSummaryTab' })}</div>`;
+  // «Темы»: the chapters, each a link to its moment
+  const chs = parseChapters(sums.chapters);
+  const topicsBody = anIsBusy('chapters') ? making
+    : chs.length ? chs.map(c => `<button class="sc-row link" ${pageCall('click', 'seekPlayer', [Number(c.start) || 0])} title="${escapeHtml(c.desc || t('anListenChapter'))}"><span class="sc-t">${escapeHtml(c.title)}</span><span class="sc-at">${formatTime(c.start)}</span></button>`).join('')
+    : anHasContent('chapters') ? md('chapters') : `${quiet(t('anNotMade'))}${make('chapters')}`;
+  const topics = off.includes('chapters') ? '' : card('chapters', t('recTopics'), topicsBody, { icon: 'topic', count: chs.length || '', regen: anHasContent('chapters') });
+
+  // the rest of the protocol, and the other sections as before
   const cards = [];
   const missing = [];
   const consider = (key, title, render, opts) => {
-    if (anIsBusy(key)) { cards.push(busyCard(key, title)); return; }
+    if (anIsBusy(key)) { cards.push(card(key, title, making)); return; }
     if (!anHasContent(key)) { if (opts.make !== false) missing.push({ key, title, about: anSectionInfo(key).about }); return; }
     if (off.includes(key)) return;
     cards.push(render());
   };
-  consider('tldr', t('anShort'), () => card('tldr', t('anShort'), md('tldr'), { wide: true, ai: true, regen: true, edit: true }), {});
-  if (anIsBusy('protocol')) cards.push(busyCard('protocol', t('anResults')));
-  else if (anHasContent('protocol')) cards.push(card('protocol', t('anResults'), md('protocol'), { wide: true, regen: false, edit: true }));
-  else missing.unshift({ key: 'protocol', title: t('anResults'), about: t('anAboutProtocol') });
-  consider('chapters', t('sumChapters'), () => {
-    const chs = parseChapters(sums.chapters);
-    const body = chs.length ? chs.map(c => `<div class="an-row"><button class="an-tc" ${pageCall('click', 'seekPlayer', [Number(c.start) || 0])} title="${escapeHtml(t('anListenChapter'))}">${formatTime(c.start)}</button>
-        <span class="an-row-text"><b>${escapeHtml(c.title)}</b>${c.desc ? `<span class="an-row-sub">${escapeHtml(c.desc)}</span>` : ''}</span></div>`).join('') : md('chapters');
-    return card('chapters', t('sumChapters'), body, { count: chs.length, regen: true });
-  }, {});
-  consider('tasks', t('sumTasks'), () => card('tasks', t('sumTasks'), md('tasks'), { count: anListCount('tasks'), open: true, clamp: true }), { make: false });
-  consider('commitments', t('sumCommitments'), () => card('commitments', t('sumCommitments'), `<div class="an-row-sub">${escapeHtml(t('anCommitCount').replace('{n}', () => String(anListCount('commitments'))))}</div>`, { count: anListCount('commitments'), open: true }), {});
+  if (anHasContent('protocol') && !anIsBusy('protocol')) {
+    cards.push(`<div class="${rest ? '' : 'hidden'}">${card('protocol', t('anResults'), `<div class="markdown-body an-md" data-md-rest="1"></div>`, { icon: 'doc', edit: anEditable('protocol') ? 'protocol' : '' })}</div>`);
+  } else if (!anIsBusy('protocol')) missing.unshift({ key: 'protocol', title: t('anResults'), about: t('anAboutProtocol') });
+  consider('tasks', t('sumTasks'), () => card('tasks', t('sumTasks'), md('tasks'), { icon: 'task', count: anListCount('tasks'), open: 'tasks', clamp: true }), { make: false });
   (state.summaryTemplates || []).forEach(x => {
     const key = `tpl:${x.id}`;
-    consider(key, x.name, () => card(key, x.name, md(key), { count: anListCount(key), tag: t('anMyTemplate'), open: true, clamp: true }), {});
+    consider(key, x.name, () => card(key, x.name, md(key), { count: anListCount(key), tag: t('anMyTemplate'), open: key, clamp: true }), {});
   });
-  consider('followup', t('anLetter'), () => card('followup', t('anLetter'), md('followup'), { open: true, clamp: true }), {});
-  if (m.series_id) consider('since_last', t('sumSinceLast'), () => card('since_last', t('sumSinceLast'), md('since_last'), { open: true, clamp: true }), {});
-  consider('notes', t('sumNotes'), () => card('notes', t('sumNotes'), md('notes'), { open: true, clamp: true }), {});
+  consider('followup', t('anLetter'), () => card('followup', t('anLetter'), md('followup'), { icon: 'mail', open: 'followup', clamp: true }), {});
+  if (m.series_id) consider('since_last', t('sumSinceLast'), () => card('since_last', t('sumSinceLast'), md('since_last'), { open: 'since_last', clamp: true }), {});
+  consider('notes', t('sumNotes'), () => card('notes', t('sumNotes'), md('notes'), { icon: 'note', open: 'notes', clamp: true }), {});
   if ((m.mfu || '').trim()) {
     const lines = String(m.mfu).split('\n').map(s => s.trim()).filter(Boolean).slice(0, 6);
-    cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { mine: true, open: true }));
+    cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { icon: 'note', open: 'mfu' }));
   }
-  if (!off.includes('mynotes')) {
-    const lines = String(m.user_notes || '').split('\n').map(s => s.trim()).filter(Boolean).slice(0, 6);
-    cards.push(card('mynotes', t('notesTitle'), lines.length ? lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join('')
-      : `<div class="an-row-sub">${escapeHtml(t('anNoNotes'))}</div>`, { mine: true, open: true }));
-  }
-  box.innerHTML = `<div class="an-grid">${cards.join('')}</div>`
+  const ask = `<button class="sum-ask" data-click="runCustomQuestion" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`}>${recCardIcon('ask')}<span>${escapeHtml(t('recAskPh'))}</span></button>`;
+  box.innerHTML = `<div class="sum-grid">
+      <div class="sum-main">${lead}${decisions}${tasks}${mine}${cards.join('')}</div>
+      <div class="sum-side">${topics}${ask}</div>
+    </div>`
     + (missing.length ? `<section class="an-missing"><div class="an-grp an-grp-flat">${escapeHtml(t('anCanMake'))}</div>
       <div class="an-missing-grid">${missing.map(x => `<div class="an-tile">
           <span class="an-tile-text"><b>${escapeHtml(x.title)}</b><span>${escapeHtml(x.about || '')}</span></span>
           <button class="an-tile-btn" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`} ${pageCall('click', 'createAnalysisSection', [x.key])}>✦ ${escapeHtml(t('anCreate'))}</button>
         </div>`).join('')}</div></section>` : '');
   box.querySelectorAll('[data-md]').forEach(el => renderMarkdownWithTimestamps(el, sums[el.dataset.md] || '', m.duration));
-  if (!cards.length && !missing.length) box.innerHTML = anEmptyHtml('protocol', sums.error);
+  const restEl = box.querySelector('[data-md-rest]');
+  if (restEl) renderMarkdownWithTimestamps(restEl, rest, m.duration);
+  markUnverified(box.querySelector('.sum-main'));
+  recFillTasks(box, next.items);
 }
 
 // The menus of the section's head: the model, «Настроить» (the overview's cards), «Экспорт», ⋯
@@ -798,7 +830,7 @@ function openAnalysisMenu(kind, el) {
 // «Настроить»: which cards the overview shows (made ones; the others are offered below it)
 function openOverviewConfig(el) {
   document.getElementById('an-cfg-pop')?.remove();
-  const keys = [['tldr', t('anShort')], ['chapters', t('sumChapters')], ...(anHasContent('tasks') ? [['tasks', t('sumTasks')]] : []), ['commitments', t('sumCommitments')],
+  const keys = [['tldr', t('anShort')], ['chapters', t('sumChapters')], ...(anHasContent('tasks') ? [['tasks', t('sumTasks')]] : []),
     ['followup', t('anLetter')], ...(state.activeMeeting && state.activeMeeting.series_id ? [['since_last', t('sumSinceLast')]] : []),
     ['notes', t('sumNotes')], ['mynotes', t('notesTitle')],
     ...(state.summaryTemplates || []).map(x => [`tpl:${x.id}`, x.name])];
@@ -2213,6 +2245,7 @@ function editAnalysisSection(key) {
   const box = document.getElementById('summary-content');
   const host = tab === 'protocol' ? box?.querySelector(`[data-card="${CSS.escape(key)}"] .an-cardb`) : box;
   if (!host) return;
+  host.closest('.hidden')?.classList.remove('hidden');  // the protocol's card is hidden while all of it is in the cards above
   const old = m.summaries[key];
   state.anEdit = { id: m.id, tab, key };
   host.classList.remove('an-clamp');

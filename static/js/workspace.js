@@ -2225,3 +2225,132 @@ async function changeSegmentSpeaker(segId, newSpeaker) {
   renderSpeakersPanel();
   renderTranscript();
 }
+
+// =====================================================================================================
+// The recording screen (docs/pult-plan.md, stage 5)
+// =====================================================================================================
+
+// «Записи» in the header of a recording: the list of all recordings (the records section)
+function recOpenRecords() {
+  switchAppView(APP_VIEWS.includes('libtable') ? 'libtable' : 'library');
+}
+
+
+// --- «Итоги» in cards (renderAnalysisOverview in app.js) ---
+// The icon of a card's kind, drawn in its square (the same set as the cards of the other screens)
+const REC_CARD_ICONS = {
+  sum: '<path d="M4 6h16M4 10h16M4 14h10"/>',
+  dec: '<path d="M5 12.5l4 4L19 7"/>',
+  task: '<path d="M4.5 7.5l2 2 3-3.5M4.5 15.5l2 2 3-3.5M13 8h7M13 16h7"/>',
+  mark: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+  note: '<path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4M8.5 12h7M8.5 16h5"/>',
+  topic: '<path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10"/>',
+  mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>',
+  doc: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 16h4"/>',
+  ask: '<path d="M4 5.5h16v10H9l-5 4z"/><path d="M9.5 9.2a2.5 2.5 0 114 2c-.9.5-1.5 1-1.5 2"/>',
+};
+function recCardIcon(kind) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${REC_CARD_ICONS[kind] || REC_CARD_ICONS.doc}</svg>`;
+}
+
+// The headings of the protocol's result sections (app/analysis_chain.py writes «## Решения» and
+// «## Следующие шаги», «## Decisions» and «## Next steps»; a model may write them in bold)
+const REC_DECISION_HEADS = /^(решения|принятые решения|договор[её]нности|decisions|agreements)(?!\p{L})/iu;
+const REC_NEXT_HEADS = /^(следующие шаги|задачи|поручения|next steps|action items|tasks)(?!\p{L})/iu;
+// «Решений не принималось», «No next steps were named»: a section that says there is nothing
+const REC_NONE_RE = /^(решений не принималось|следующие шаги не назывались|задач нет|no decisions were made|no next steps were named|none)\.?$/i;
+
+// One section of a Markdown text: its top-level points (the text and the first moment named in it) and
+// the text without it. A heading is «## Name» or a line of bold «**Name**»
+function recMdSection(md, heads) {
+  const lines = String(md || '').split('\n');
+  const headOf = (line) => {
+    const h = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/) || line.match(/^\s{0,3}(?:\*\*|__)(.+?)(?:\*\*|__):?\s*$/);
+    return h ? h[1].replace(/[*_:]/g, '').trim() : null;
+  };
+  let from = -1, to = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const h = headOf(lines[i]);
+    if (h === null) continue;
+    if (from < 0 && heads.test(h)) from = i;
+    else if (from >= 0) { to = i; break; }
+  }
+  if (from < 0) return { found: false, items: [], rest: String(md || '') };
+  const items = [];
+  for (const line of lines.slice(from + 1, to)) {
+    const it = line.match(/^(\s*)(?:[-*+]|\d+[.)])\s+(.+)$/);
+    if (!it || it[1].length > 1) continue;  // only the top-level points
+    let at = null;
+    const text = it[2].replace(/\[(\d{1,2}):([0-5]\d)(?::([0-5]\d))?(?:\s*[-–—]\s*\d{1,2}:[0-5]\d(?::[0-5]\d)?)?\]|\((\d{1,2}):([0-5]\d)\)/g, (x, a, b, c, d, e) => {
+      if (at === null) at = a !== undefined ? tsSeconds(a, b, c) : tsSeconds(d, e);
+      return '';
+    }).replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+([.,;:])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+    if (text && !REC_NONE_RE.test(text)) items.push({ text, at });
+  }
+  return { found: true, items, rest: [...lines.slice(0, from), ...lines.slice(to)].join('\n') };
+}
+
+// The user's notes of a recording (the studio writes «[12:03] text», a mark «[12:03] ⚑ text»): the
+// marks apart from the other lines, each with its moment
+function recNotes(text) {
+  const marks = [], lines = [];
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^\[(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\]\s*(.*)$/);
+    const at = m ? tsSeconds(m[1], m[2], m[3]) : null;
+    const body = m ? m[4] : line;
+    if (/^⚑/.test(body)) marks.push({ text: body.replace(/^⚑\s*/, ''), at });
+    else lines.push({ text: body, at });
+  }
+  return { marks, lines };
+}
+
+// «Задачи»: the tasks of the recording, the protocol's «Следующие шаги» while there are none. Each row
+// has its places for the box, the text, who, the due date and the moment, filled or empty
+function recTaskRowHtml(c) {
+  const done = c.status === 'done';
+  const due = c.due_date ? tkDueText(c) : c.due || t('tkNoDue');
+  const at = c.at != null
+    ? `<button class="sc-at" ${pageCall('click', 'seekPlayer', [Number(c.at) || 0])} title="${escapeHtml(t('recListenFrom'))}">▶ ${formatTime(c.at)}</button>`
+    : '<span class="sc-at" aria-hidden="true"></span>';
+  return `<div class="sc-row task-r${done ? ' sc-done' : ''}">
+      <input type="checkbox" ${done ? 'checked' : ''} data-cid="${Number(c.id) || 0}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="tk-check" aria-label="${escapeHtml(t('tkDone'))}" />
+      <span class="sc-t">${escapeHtml(c.what || '')}</span>
+      <span class="sc-who">${c.who ? `${tkAvatar(c.who, c.who_kind, 18)}<span>${escapeHtml(c.who)}</span>` : ''}</span>
+      <span class="sc-due ${c.due_date ? tkDueTone(c).replace('tk-', 'sc-') : ''}">${escapeHtml(due)}</span>${at}
+    </div>`;
+}
+function recTasksBody(next) {
+  const m = state.activeMeeting;
+  const got = state.recTasks && m && state.recTasks.id === m.id ? state.recTasks.items : null;
+  if (got && got.length) return got.map(recTaskRowHtml).join('');
+  if (next && next.length) {
+    return next.map(x => `<div class="sc-row"><span class="sc-dot sc-dot-task"></span><span class="sc-t">${escapeHtml(x.text)}</span>`
+      + `${x.at != null ? `<button class="sc-at" ${pageCall('click', 'seekPlayer', [Number(x.at) || 0])} title="${escapeHtml(t('recListenFrom'))}">▶ ${formatTime(x.at)}</button>` : '<span class="sc-at" aria-hidden="true"></span>'}</div>`).join('');
+  }
+  return `<div class="sc-quiet">${escapeHtml(t(anHasContent('protocol') ? 'recNoTasks' : 'recAfterAnalysis'))}</div>`;
+}
+function recTasksCount(next) {
+  const m = state.activeMeeting;
+  const got = state.recTasks && m && state.recTasks.id === m.id ? state.recTasks.items : null;
+  return (got && got.length) ? got.length : (next || []).length;
+}
+// The tasks come from the server: the card is drawn with what is known and filled again when they differ
+async function recFillTasks(box, next) {
+  const m = state.activeMeeting;
+  const paint = () => {
+    const cardEl = box.querySelector('[data-card="rec-tasks"]');
+    if (!cardEl) return;
+    cardEl.querySelector('.an-cardb').innerHTML = recTasksBody(next);
+    cardEl.querySelector('.sc-n').textContent = recTasksCount(next) || '';
+  };
+  paint();
+  if (!m) return;
+  const items = await fetch(`/api/meetings/${m.id}/commitments`).then(r => (r.ok ? r.json() : [])).catch(() => []);
+  if (state.activeMeeting !== m) return;
+  const list = Array.isArray(items) ? items : [];
+  const before = state.recTasks && state.recTasks.id === m.id ? JSON.stringify(state.recTasks.items) : '';
+  state.recTasks = { id: m.id, items: list };
+  if (JSON.stringify(list) !== before) paint();
+}
