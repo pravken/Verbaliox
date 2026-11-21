@@ -60,6 +60,35 @@ def api_worktime(start: str, end: str) -> Dict[str, Any]:
             "today": worktime.work_day(datetime.now()).isoformat(), "days": worktime.days(a, b)}
 
 
+@router.get("/api/worktime/apps")
+def api_worktime_apps(start: str, end: str) -> Dict[str, Any]:
+    """«Мои программы»: the minutes in each program of the days start…end and of as many days before
+    (app/worktime.py; only while apps_track is on, only on this computer)."""
+    from datetime import date, timedelta
+
+    from app import worktime
+
+    try:
+        a, b = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    if not a < b or (b - a).days > 120:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    now, before = worktime.apps(a, b), worktime.apps(a - (b - a), a)
+    items = [{"app": k, "name": worktime.app_name(k), "minutes": v, "before": before.get(k, 0)}
+             for k, v in sorted(now.items(), key=lambda x: -x[1])]
+    return {"enabled": worktime.apps_enabled(), "supported": worktime.idle_seconds() is not None, "apps": items}
+
+
+@router.delete("/api/worktime/apps")
+def api_worktime_apps_clear() -> Dict[str, Any]:
+    """«Удалить историю» of «Мои программы»."""
+    from app import worktime
+
+    worktime.clear_apps()
+    return {"ok": True}
+
+
 @router.get("/api/holidays/countries")
 def api_holiday_countries() -> Dict[str, Any]:
     """The countries (and their regions) whose public holidays the app knows (app/holidays_cal.py)."""
