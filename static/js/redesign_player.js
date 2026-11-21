@@ -485,6 +485,8 @@ function rpInitWave() {
     if (evt.button !== 0 || evt.target.closest('.rp-chapter')) return;
     rp.drag = true;
     wrap.setPointerCapture(evt.pointerId);
+    wrap.classList.add('rp-scrubbing');  // a bigger time bubble, no text selected while the pointer moves
+    evt.preventDefault();
     // Grabbing the time bubble or the knob keeps the spot under the pointer: no jump on the press,
     // and the drag moves the time by as much as the pointer moves
     rp.grabOffset = 0;
@@ -504,6 +506,7 @@ function rpInitWave() {
     if (p && rp.dragTime != null) p.currentTime = rp.dragTime;
     rp.drag = false;
     rp.dragTime = null;
+    wrap.classList.remove('rp-scrubbing');
     rpRender();
   };
   wrap.addEventListener('pointerup', end);

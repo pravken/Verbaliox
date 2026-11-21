@@ -3751,6 +3751,12 @@ button.sc-at:hover { color: var(--accent-text); }
 .rp-sep { height: 18px; }
 .rp-vol input[type="range"].rp-volume { width: 0; opacity: 0; transition: width var(--dur) ease, opacity var(--dur) ease; }
 .rp-vol:hover input[type="range"].rp-volume, .rp-vol:focus-within input[type="range"].rp-volume { width: 72px; opacity: 1; }
+/* Scrubbing: hold the button on the wave and move; the time bubble over the playhead grows while dragging */
+.rp-scrub { cursor: pointer; }  /* a hand over the wave; ew-resize on the playhead and while dragging */
+.rp-scrub .rp-bubble:not(.rp-bubble-hover), .rp-scrub .rp-knob { cursor: ew-resize; }
+.rp-scrub.rp-scrubbing, .rp-scrub.rp-scrubbing * { user-select: none; -webkit-user-select: none; cursor: ew-resize; }
+.rp-scrub.rp-scrubbing .rp-bubble:not(.rp-bubble-hover) { padding: 2px 8px; font-size: var(--fs-caption); top: -22px; }
+.rp-scrub.rp-scrubbing .rp-bubble-hover { display: none; }
 /* «Анализ»: the bar above the cards */
 .an-sumbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
   background: rgba(255, 255, 255, 0.03); font-size: var(--fs-ui); }
