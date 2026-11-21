@@ -407,6 +407,19 @@ function renderLoadIndicator() {
   const ramEl = document.getElementById('sb-ram');
   ramEl.textContent = ram ? gbText(ram.used_gb) : '—';
   ramEl.className = `sb-num${loadLevel(rp)}`;
+  // the video memory next to them, as before the redesign (asked by the user); only with a card that reports it
+  const gpu = data.gpu, gG = document.getElementById('sb-gpu-g');
+  if (gG) {
+    gG.classList.toggle('hidden', !gpu);
+    if (gpu) {
+      const vp = (100 * gpu.used_gb) / Math.max(0.1, gpu.total_gb);
+      set('sb-gpu-all', vp);
+      set('sb-gpu-own', own.gpu_gb != null ? (100 * own.gpu_gb) / Math.max(0.1, gpu.total_gb) : 0);
+      const gEl = document.getElementById('sb-gpu');
+      gEl.textContent = gbText(gpu.used_gb);
+      gEl.className = `sb-num${loadLevel(vp)}`;
+    }
+  }
   btn.title = `${t('sbLoadTip')}${own.ram_gb != null ? `\nVerbaliox: CPU ${Math.round(own.cpu_percent || 0)}%, RAM ${gbText(own.ram_gb)}` : ''}`;
 }
 
