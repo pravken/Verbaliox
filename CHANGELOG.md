@@ -55,6 +55,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - Fixes: the calendar from classic Outlook without a mail profile no longer opens Outlook's first-run wizard
   every 15 minutes; deleting an Ollama model starts Ollama when needed and deletes the name it really has;
   the shortcuts show the new icon after the next update; «About» shows the new icon.
+- **Accent to choose** in Settings → General: eight colours for the picked-out buttons and marks; the
+  background stays one.
+- Settings fill a wide window in two columns; «Reset this tab» is gone. Today's date tile has a green frame.
+  Model buttons are of one size; the agent's lines are copied with an icon in the code.
 
 ## 0.8.25 — English
 
@@ -812,6 +816,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Исправления: календарь из классического Outlook без почтового профиля больше не открывает мастер первого
   запуска Outlook каждые 15 минут; удаление модели Ollama при необходимости запускает Ollama и удаляет модель
   под её настоящим именем; ярлыки показывают новый значок после следующего обновления; в «О программе» — новый значок.
+- **Акцент на выбор** в «Настройки → Общие»: восемь цветов для выделенных кнопок и отметок; фон остаётся один.
+- Настройки на широком окне — в две колонки; «Сбросить вкладку» убрана. Сегодняшний день в «Сегодня» — в зелёной
+  рамке. Кнопки у моделей одного размера; строки для агента копируются значком в самом коде.
 
 ## 0.8.25
 
