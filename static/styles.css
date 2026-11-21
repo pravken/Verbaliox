@@ -5108,3 +5108,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .ld-sub { margin-left: 68px; }
 .db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 120px; }
 .db-sl-own { margin-left: 64px; }
+
+/* «Выйти» apart at the very bottom of the rail, a small mark without a label (asked by the user: it was clicked by
+   mistake next to «Настройки»); it always asks */
+.rail-quit { margin-top: 14px; padding: 6px 2px; }
+.rail-quit > span { display: none; }
+.rail-quit svg { width: 16px; height: 16px; opacity: 0.55; }
+.rail-quit:hover svg { opacity: 1; }
