@@ -166,6 +166,31 @@ class TranscriptionWaitsForTheMeetingTest(unittest.TestCase):
         with mock.patch("app.calendar_ics.current_meeting", return_value=None):
             self.assertFalse(meeting_guard.holds_queue())
 
+    def test_before_its_first_look_the_calendar_is_not_read_under_the_queue_lock(self):
+        """Found in the review: the queue asks under its lock, and a calendar read then (Outlook up to 90 s, a
+        link up to 60 s) held every new job. Only the calendar read already counts."""
+        from datetime import datetime, timedelta
+
+        from app import calendar_ics
+
+        meeting_guard._state.update(looked=False)
+        now = datetime.now()
+        ev = {"uid": "1", "title": "Планёрка", "start": now - timedelta(minutes=5), "end": now + timedelta(minutes=25),
+              "attendees": ["Анна", "Борис"], "rrule": "", "exdates": [], "all_day": False, "status": "",
+              "location": "", "join": "https://teams.microsoft.com/l/meetup-join/x", "online": True}
+        saved = dict(calendar_ics._cache)
+        try:
+            with mock.patch.object(calendar_ics, "_source", return_value="outlook"), \
+                 mock.patch("app.calendar_outlook.fetch", side_effect=AssertionError("read under the lock")), \
+                 mock.patch.object(calendar_ics, "_load_text", side_effect=AssertionError("read under the lock")):
+                calendar_ics._cache.update(source="", at=0.0, events=[], error="")
+                self.assertFalse(meeting_guard.holds_queue())  # nothing read yet: no meeting known
+                calendar_ics._cache.update(source="outlook", at=0.0, events=[ev], error="")  # read, now stale
+                self.assertTrue(meeting_guard.holds_queue())
+        finally:
+            calendar_ics._cache.clear()
+            calendar_ics._cache.update(saved)
+
     def test_a_transcription_waits_and_a_job_asked_by_hand_goes_on(self):
         transcribed, by_hand = threading.Event(), threading.Event()
 

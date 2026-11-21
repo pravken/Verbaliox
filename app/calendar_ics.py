@@ -526,11 +526,15 @@ def _load_text(source: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace")
 
 
-def events(force: bool = False) -> List[Dict[str, Any]]:
+def events(force: bool = False, cached: bool = False) -> List[Dict[str, Any]]:
+    """cached: only what was read already, never a read now (Outlook through PowerShell takes up to 90 s, a
+    link up to 60 s): for callers holding a lock others wait on."""
     source = _source()
     if not source:
         return []
     with _lock:
+        if cached:
+            return list(_cache["events"]) if _cache["source"] == source else []
         fresh = _cache["source"] == source and time.time() - _cache["at"] < CACHE_SEC
         if fresh and not force:
             return list(_cache["events"])
@@ -567,19 +571,20 @@ def status() -> Dict[str, Any]:
         return {"source": _cache["source"], "error": _cache["error"], "count": len(_cache["events"])}
 
 
-def window(start: datetime, end: datetime) -> List[Dict[str, Any]]:
+def window(start: datetime, end: datetime, cached: bool = False) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    for ev in events():
+    for ev in events(cached=cached):
         if ev["all_day"]:
             continue
         out.extend(occurrences(ev, start, end))
     return sorted(out, key=lambda e: e["start"])
 
 
-def current_meeting(at: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
-    """The meeting going on now (or starting within 10 minutes): the shortest one if several."""
+def current_meeting(at: Optional[datetime] = None, cached: bool = False) -> Optional[Dict[str, Any]]:
+    """The meeting going on now (or starting within 10 minutes): the shortest one if several. cached: by the
+    calendar read already, without reading it now (events)."""
     at = at or datetime.now()
-    found = [e for e in window(at - timedelta(hours=12), at + timedelta(minutes=10))
+    found = [e for e in window(at - timedelta(hours=12), at + timedelta(minutes=10), cached=cached)
              if e["start"] - timedelta(minutes=10) <= at < e["end"] and is_meeting(e)]
     return min(found, key=lambda e: e["end"] - e["start"]) if found else None
 
