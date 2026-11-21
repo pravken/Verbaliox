@@ -747,7 +747,13 @@ function renderAnalysisOverview(box) {
     cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { icon: 'note', open: 'mfu' }));
   }
   const ask = `<button class="sum-ask" data-click="runCustomQuestion" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`}>${recCardIcon('ask')}<span>${escapeHtml(t('recAskPh'))}</span></button>`;
-  box.innerHTML = `${recAnalysisBar()}<div class="sum-grid">
+  // the analysis failed and nothing was made: why, and «Повторить» (found by the user: an empty analysis said nothing)
+  const failed = sums.error && !anHasContent('tldr') && !anHasContent('protocol') && !anIsBusy('protocol')
+    ? `<div class="an-failed" role="alert"><span class="an-failed-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg></span>`
+      + `<span class="an-failed-text"><b>${escapeHtml(t('anFailedTitle'))}</b><span>${escapeHtml(serverText(String(sums.error)))}</span></span>`
+      + `<button class="an-btn an-btn-primary" data-click="generateSummaryForActiveTab" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`}>${escapeHtml(t('anFailedRetry'))}</button></div>`
+    : '';
+  box.innerHTML = `${recAnalysisBar()}${failed}<div class="sum-grid">
       <div class="sum-main">${lead}${decisions}${tasks}${mine}${cards.join('')}</div>
       <div class="sum-side">${topics}${ask}</div>
     </div>`

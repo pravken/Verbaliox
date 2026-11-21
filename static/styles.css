@@ -4913,3 +4913,20 @@ button.sc-at:hover { color: var(--accent-text); }
 
 /* Settings → Распознавание: the underline of the places the models heard differently, off */
 .no-disputed .word-disputed { text-decoration: none; }
+
+/* «Нагрузка»: the key of the bars once under the title; under each bar the hardware on the left and Verbaliox's own
+   share on the right, in the value's column (asked by the user: everything was piled under the GPU) */
+.vx-panel-load .ld-legend { margin: 2px 0 6px 0; }
+.ld-sub { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; margin: 1px 0 6px 54px; }
+.ld-sub .ld-note { margin: 0; min-width: 0; }
+.ld-own { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #C7C9CE; font-family: var(--font-mono); white-space: nowrap; }
+.ld-own i { width: 10px; height: 4px; border-radius: 2px; background: var(--accent); }
+
+/* «Анализ»: an analysis that failed says why over the cards, with «Повторить анализ» */
+.an-failed { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 12px 14px; border-radius: 12px;
+  background: rgb(255 69 58 / 0.08); border: 1px solid rgb(255 69 58 / 0.35); }
+.an-failed-ic { width: 32px; height: 32px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: rgb(255 69 58 / 0.16); color: #FF6961; }
+.an-failed-ic svg { width: 18px; height: 18px; }
+.an-failed-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-label); color: #C7C9CE; }
+.an-failed-text b { font-size: var(--fs-ui); color: #F5F5F7; font-weight: 600; }
