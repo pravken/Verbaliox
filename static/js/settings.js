@@ -437,7 +437,10 @@ function toggleModelsPop(e) {
   if (e) e.stopPropagation();
   if (modelsPop.open) { closeModelsPop(); return; }
   modelsPop.open = true;
-  document.getElementById('vram-row').setAttribute('aria-expanded', 'true');
+  // the button that opened it, when it is on screen (the downloads of the status bar); else the load there
+  const from = e && e.currentTarget && e.currentTarget.getClientRects && e.currentTarget.getClientRects().length ? e.currentTarget : null;
+  modelsPop.anchor = from || document.getElementById('sb-load');
+  modelsPop.anchor?.setAttribute('aria-expanded', 'true');
   renderModelsPop();
   const pop = document.getElementById('models-pop');
   pop.classList.remove('hidden');
@@ -449,17 +452,18 @@ function closeModelsPop() {
   if (!modelsPop.open) return;
   modelsPop.open = false;
   document.getElementById('models-pop').classList.add('hidden');
-  document.getElementById('vram-row').setAttribute('aria-expanded', 'false');
+  modelsPop.anchor?.setAttribute('aria-expanded', 'false');
 }
 
-// Right of the sidebar, its top level with the tile; moved up when it would run past the window
+// Above the status bar, at the button that opened it; kept inside the window
 function placeModelsPop() {
   const pop = document.getElementById('models-pop');
-  const side = document.getElementById('app-sidebar').getBoundingClientRect();
-  const tile = document.getElementById('vram-row').getBoundingClientRect();
-  pop.style.left = `${zpx(side.right) + 8}px`;
-  pop.style.maxHeight = `${viewH() - 16}px`;
-  pop.style.top = `${Math.max(8, Math.min(zpx(tile.top), viewH() - pop.offsetHeight - 8))}px`;
+  const at = (modelsPop.anchor || document.getElementById('app-statusbar')).getBoundingClientRect();
+  const bar = document.getElementById('app-statusbar').getBoundingClientRect();
+  const bottom = Math.min(zpx(at.top), zpx(bar.top)) - 8;
+  pop.style.maxHeight = `${bottom - 8}px`;
+  pop.style.left = `${Math.max(8, Math.min(zpx(at.left), viewW() - pop.offsetWidth - 8))}px`;
+  pop.style.top = `${Math.max(8, bottom - pop.offsetHeight)}px`;
 }
 
 // What a model is for: speech (recognition, voices, live captions, dubbing) or analysis and search
@@ -591,10 +595,10 @@ async function setIdleUnload(min) {
 }
 
 document.addEventListener('pointerdown', (e) => {
-  if (modelsPop.open && !e.target.closest('#models-pop, #vram-row, #text-menu')) closeModelsPop();  // its menu (unload delay) too
+  if (modelsPop.open && !e.target.closest('#models-pop, #vram-row, #sb-dl, #text-menu')) closeModelsPop();  // its menu (unload delay) too
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && modelsPop.open) { closeModelsPop(); document.getElementById('vram-row').focus(); }
+  if (e.key === 'Escape' && modelsPop.open) { closeModelsPop(); modelsPop.anchor?.focus(); }
 });
 window.addEventListener('resize', () => { if (modelsPop.open) placeModelsPop(); });
 
