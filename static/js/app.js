@@ -1966,9 +1966,31 @@ async function cancelPendingExports(id) {
 // the app can do with it (play from there, search, ask the assistant, add to the dictionary).
 const TEXT_AREAS = '#studio-captions, #transcript-container, #summary-content, #ask-thread, #info-content, .markdown-body';
 
-function closeTextMenu() {
+// The button a menu was opened from (asked by the user: a second click on it must close the menu, not draw it
+// again). The click that reaches the button closes the menu first (document click), so the button's own
+// handler then sees the menu just closed by this same press and opens nothing.
+let _menuOwner = null, _pressOwner = null, _closedOwner = null, _closedAt = 0;
+document.addEventListener('keydown', () => { _pressOwner = null; }, true);
+document.addEventListener('pointerdown', e => {
+  _pressOwner = e.button === 0 && (e.target instanceof Element && !e.target.closest('#text-menu') && e.target.closest('button, [role="button"], [data-click]')) || null;
+}, true);
+
+function closeTextMenu(e) {
   const menu = document.getElementById('text-menu');
-  if (menu && !menu.classList.contains('is-leaving')) { menu.id = ''; removeWithExit(menu); }
+  if (menu && !menu.classList.contains('is-leaving')) {
+    menu.id = '';
+    removeWithExit(menu);
+    if (_menuOwner) {
+      if (_menuOwner.dataset.menuTip != null) { _menuOwner.title = _menuOwner.dataset.menuTip; delete _menuOwner.dataset.menuTip; }
+      _menuOwner.setAttribute('aria-expanded', 'false');
+      // only a click on the menu's own button closed it «for this press»; an item chosen or a click elsewhere did not
+      if (e && e.type === 'click' && e.target instanceof Element && _menuOwner.contains(e.target)) {
+        _closedOwner = _menuOwner;
+        _closedAt = performance.now();
+      }
+    }
+    _menuOwner = null;
+  }
 }
 
 function textMenuItems(e) {
@@ -2881,17 +2903,30 @@ document.addEventListener('contextmenu', (e) => {
 
 // A small menu of items ({label, key, run, disabled} or {sep}) at a point of the window
 function openTextMenuAt(items, x, y, opts) {
+  const owner = (opts && opts.owner) || _pressOwner;
+  const wasOpen = !!document.getElementById('text-menu') && _menuOwner === owner;
   closeTextMenu();
+  // the same button pressed again while its menu was open: the menu stays closed
+  if (owner && (wasOpen || (_closedOwner === owner && performance.now() - _closedAt < 600))) { _closedOwner = null; return; }
   closeQuickLangMenu();
   const menu = document.createElement('div');
   menu.id = 'text-menu';
   menu.className = 'fixed min-w-[220px] macos-menu z-[60]';
   const clean = items.filter((it, i, a) => !it.sep || (i > 0 && !a[i - 1].sep && i < a.length - 1));
+  // the item chosen now is told by colour, not by a «✓» before it (asked by the user): a menu with a ticked item
+  // loses the ticks and the blanks that kept the others in line with it
+  if (clean.some(it => /^✓ /.test(it.label || ''))) {
+    clean.forEach((it, i) => {
+      if (it.sep || it.info || typeof it.label !== 'string') return;
+      const on = /^✓ {1,2}/.test(it.label);
+      clean[i] = { ...it, on: it.on || on, label: on ? it.label.replace(/^✓ {1,2}/, '') : it.label.replace(/^ {3}/, '') };
+    });
+  }
   menu.innerHTML = clean.map((it, i) => it.sep
     ? '<div class="my-1 h-px bg-white/10"></div>'
     : it.info  // a line that only says something (who chose a disputed word), not an action
     ? `<div class="tm-info">${escapeHtml(it.label)}</div>`
-    : `<button class="macos-menu-item gap-6${it.danger ? ' tm-danger' : ''}" data-i="${i}" ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
+    : `<button class="macos-menu-item gap-6${it.danger ? ' tm-danger' : ''}${it.on ? ' tm-on' : ''}" data-i="${i}" ${it.on ? 'aria-current="true"' : ''} ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
       + `<span class="tm-key">${escapeHtml(it.key || '')}</span></button>`).join('');
   // Keeps the selection: a click in the menu must not clear it before the action reads it
   menu.addEventListener('mousedown', ev => ev.preventDefault());
@@ -2906,6 +2941,12 @@ function openTextMenuAt(items, x, y, opts) {
   menu.style.maxHeight = `${viewH() - 8}px`;  // a long list scrolls instead of leaving the window
   menu.style.overflowY = 'auto';
   document.body.appendChild(menu);
+  _menuOwner = owner && document.contains(owner) ? owner : null;
+  if (_menuOwner) {
+    // its tooltip would cover the menu's first item while the pointer stays on the button
+    if (_menuOwner.hasAttribute('title')) { _menuOwner.dataset.menuTip = _menuOwner.title; _menuOwner.removeAttribute('title'); }
+    _menuOwner.setAttribute('aria-expanded', 'true');
+  }
   // x, y are a point of the window (clientX/Y); the menu is placed in the page's own pixels.
   // opts.right: x is the menu's right edge (a menu under a button at the right)
   const r = menu.getBoundingClientRect();

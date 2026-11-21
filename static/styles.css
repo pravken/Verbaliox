@@ -5053,3 +5053,8 @@ button.sc-at:hover { color: var(--accent-text); }
 .db-sl-use b { font-weight: 500; font-variant-numeric: tabular-nums; }
 .db-sl-name small, .db-sl-use small { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-sl-empty { padding: 6px 0 2px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+
+/* Menus: the item chosen now in the accent's tint and colour instead of a «✓» before it (asked by the user) */
+#text-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
+#text-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
+#text-menu .macos-menu-item.tm-on .tm-key { color: var(--accent-text); opacity: 0.8; }
