@@ -61,16 +61,8 @@ function hmIso(d) {
 
 // --- Data: refreshed when the page is shown, at most every half minute (events: 5 minutes) ---
 async function hmLoad(force) {
-  const now = Date.now();
+  // the latest recordings live in «Записи», the tasks in the cards of «Сегодня» (static/js/today.js)
   const jobs = [];
-  if (force || now - home.recentAt > 30000) {
-    home.recentAt = now;
-    jobs.push(fetch('/api/home/recent?limit=6').then(r => (r.ok ? r.json() : null)).then(v => { if (Array.isArray(v)) home.recent = v; }).catch(() => {}));
-  }
-  if (force || now - home.tasksAt > 30000) {
-    home.tasksAt = now;
-    jobs.push(fetch('/api/commitments').then(r => (r.ok ? r.json() : null)).then(v => { if (Array.isArray(v)) home.tasks = v; }).catch(() => {}));
-  }
   jobs.push(hmLoadEvents(force));
   await Promise.all(jobs);
 }
@@ -101,36 +93,11 @@ function renderHome() {
   renderHomeNow();
 }
 
+// «Сегодня» (static/js/today.js) draws its head, its calendar and its cards around the day's meetings
 function renderHomeNow() {
-  const now = new Date();
-  const loc = hmLocale();
-  document.getElementById('hm-tile-mon').textContent = now.toLocaleDateString(loc, { month: 'short' }).replace('.', '').toUpperCase();
-  document.getElementById('hm-tile-day').textContent = String(now.getDate());
-  document.getElementById('hm-weekday').textContent = `${now.toLocaleDateString(loc, { weekday: 'long' })} · ${now.getFullYear()}`.toUpperCase();
-  const h = now.getHours();
-  document.getElementById('hm-greeting').textContent = t(h < 5 ? 'hmNight' : h < 12 ? 'hmMorning' : h < 18 ? 'homeHello' : 'hmEvening');
-  const dk = document.getElementById('hm-dict-key');
-  if (dk) dk.textContent = hmSettings().dictation_hotkey || 'Ctrl+Alt+D';
-  renderHomeRecent();
-  const meetings = renderHomeMeetings();
-  const queue = renderHomeQueue();
-  const tasks = renderHomeTasks();
-  const ahead = meetings.filter(m => m.e > now).length;
-  const parts = [];
-  if (home.calConfigured) parts.push(`${plural(meetings.length, t('hmMeetingForms'))}${meetings.length ? `, ${t('hmAhead').replace('{n}', () => ahead)}` : ''}`);
-  if (queue) parts.push(t('hmLineWork').replace('{n}', () => queue));
-  parts.push(plural(tasks, t('hmTaskForms')));
-  // A card, not a grey line (asked by the user: the text was not noticed): the meeting going on or the
-  // next one with the time to it (orange in its last 5 minutes), then the counts of the day
-  const nx = typeof dbNextMeeting === 'function' && home.calConfigured ? dbNextMeeting() : null;
-  let next = '';
-  if (nx) {
-    const live = nx.s <= now, soon = !live && nx.s - now <= 5 * 60e3;
-    const when = live ? t('dbLiveLeft').replace('{t}', () => dbHm((nx.e - now) / 1000)) : t('hmNextIn').replace('{t}', () => dbIn(nx.s - now));
-    next = `<span class="hm-next${live ? ' live' : ''}${soon ? ' soon' : ''}"><i aria-hidden="true"></i><b>${escapeHtml(when)}</b>`
-      + `<span class="hm-next-t">${escapeHtml(nx.title || t('hmUntitled'))}</span></span>`;
-  }
-  document.getElementById('hm-line').innerHTML = next + parts.map(x => `<span class="hm-line-part">${escapeHtml(x)}</span>`).join('');
+  renderHomeMeetings();
+  renderHomeQueue();
+  if (typeof tdRender === 'function') tdRender();
 }
 
 // --- The latest recordings ---
@@ -154,6 +121,7 @@ function hmDuration(sec) {
 
 function renderHomeRecent() {
   const box = document.getElementById('hm-recent');
+  if (!box) return;
   // what is being processed now shows its progress (the list of the library is fresher than the page's own copy)
   const live = new Map((state.meetings || []).map(m => [m.id, m]));
   const rows = home.recent.filter(r => live.has(r.id) || !state.meetings.length);
@@ -247,8 +215,11 @@ function renderHomeMeetings() {
   // The time already past is filled, up to the line of "now" (asked by the user: where the border is and
   // which meetings are over was not clear); the whole scale once the day is over
   const nowMs = now.getTime();
-  const pastTo = nowMs <= a ? 0 : Math.min(nowMs, b);
-  const html = pastTo ? [`<div class="hm-pastfill" style="height: ${top(pastTo)}px" aria-hidden="true"></div>`] : [];
+  // the working time gone by is tinted from the start of the working day (work_day_start), not from the first hour
+  // shown; a plain tint: hatching means a day off
+  const pastTo = nowMs <= a ? 0 : Math.min(nowMs, b), pastFrom = Math.max(a, d.from.getTime());
+  const html = pastTo > pastFrom ? [`<div class="hm-pastfill" style="top: ${top(pastFrom)}px; height: ${top(pastTo) - top(pastFrom)}px" aria-hidden="true"></div>`] : [];
+  const workGone = Math.max(0, Math.min(nowMs, d.to.getTime()) - d.from.getTime());
   html.push(...hours.map(x => `<div class="hm-hour" style="top: ${top(x)}px"><span>${hmPad(new Date(x).getHours())}:00</span><i></i></div>`));
   // Meetings at the same time stand side by side, not on top of each other (reported by the user): a
   // group of meetings that overlap shares the width, each in the first column free at its start
@@ -332,7 +303,9 @@ function renderHomeMeetings() {
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
-  if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t">${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
+  // on the line of «now», at its right: how much of the working day is over
+  const gone = workGone && nowMs < d.to.getTime() ? `<span class="hm-now-gone">${escapeHtml(t('hmDayGone').replace('{t}', () => dbHm(workGone / 1000)))}</span>` : '';
+  if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t">${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b>${gone}</div>`);
   box.innerHTML = html.join('');
   return real;  // the header counts the meetings, not the blocks and the events that are none
 }
@@ -477,6 +450,7 @@ function renderHomeTasks() {
   const names = hmMyNames();
   // the whole name, as on the Tasks page (tkIsMe): «Ан» is not «Анна»
   const mine = names.length ? home.tasks.filter(c => names.includes(String(c.who || '').trim().toLowerCase())) : home.tasks;
+  if (!document.getElementById('hm-tasks')) return mine.length;
   document.getElementById('hm-tasks-title').textContent = t(names.length ? 'hmMyTasks' : 'hmOpenTasks');
   document.getElementById('hm-my-name').classList.toggle('hidden', !!names.length);
   const count = document.getElementById('hm-tasks-count');
@@ -740,7 +714,7 @@ async function openFromNotice(target) {
     switchAppView('studio');
     studioTab('text');
   } else if (kind === 'dashboard') {  // recordings whose transcription was cancelled (app/untranscribed.py)
-    switchAppView('dashboard');
+    switchAppView('home');  // the reminder stands on «Сегодня»
   } else if (kind === 'last') {
     openLastRecording();
   } else if (kind === 'settings') {
@@ -762,7 +736,7 @@ function openBriefFor(kind, value) {
   makeBrief();
 }
 
-registerView('home', { show: renderHome, refresh: (changed) => { if (changed) home.recentAt = 0; renderHome(); } });
+// the view «home» is «Сегодня»: registered by static/js/today.js
 
 document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
@@ -785,9 +759,10 @@ function calKey(d) { return `${d.getFullYear()}-${hmPad(d.getMonth() + 1)}-${hmP
 function calTime(d) { return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}`; }
 
 // The days shown: a week from Monday, or the weeks that hold the month (six at most)
-function calRange() {
-  const anchor = calView.anchor || new Date();
-  if (calView.mode === 'week') { const a = calMonday(anchor); return { a, b: calAddDays(a, 7), month: -1 }; }
+// cv: the state of the calendar window, or that of «Сегодня» (static/js/today.js), which shows the same week and month
+function calRange(cv = calView) {
+  const anchor = cv.anchor || new Date();
+  if (cv.mode === 'week') { const a = calMonday(anchor); return { a, b: calAddDays(a, 7), month: -1 }; }
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const a = calMonday(first);
   const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
@@ -843,13 +818,13 @@ function openCalendarView() {
 }
 
 // A day of the calendar: a day off of one's own, marked or taken back here (days_off, as in Settings → Календарь)
-function calDayMenu(day, x, y) {
+function calDayMenu(day, x, y, reload = calLoad) {
   let list = [];
   try { list = JSON.parse(((state.system && state.system.settings) || {}).days_off || '[]'); } catch (e) {}
   if (!Array.isArray(list)) list = [];
   const hit = list.find(p => p.from <= day && day <= (p.to || p.from));
   const save = async next => {
-    if (typeof saveDaysOff === 'function' && await saveDaysOff(next)) calLoad();
+    if (typeof saveDaysOff === 'function' && await saveDaysOff(next)) reload();
   };
   const shift = (k, n) => { const d = new Date(`${k}T12:00:00`); d.setDate(d.getDate() + n); return calKey(d); };
   const items = [];
@@ -904,10 +879,10 @@ async function calLoad() {
 }
 
 // What a day holds, by time: meetings (with their recording) and recordings of their own
-function calItems() {
+function calItems(cv = calView) {
   const byDay = {};
   const put = (d, item) => { (byDay[calKey(d)] = byDay[calKey(d)] || []).push(item); };
-  const data = calView.data || {};
+  const data = cv.data || {};
   for (const e of data.events || []) {
     const s = new Date(e.start), en = new Date(e.end);
     put(s, { kind: 'event', s, en, title: e.title || t('hmUntitled'), rec: e.recording, attendees: (e.attendees || []).length, location: e.location || '' });
@@ -933,44 +908,18 @@ function calItemHtml(it, compact) {
     <i class="cal-dot"></i><span class="cal-time">${time}</span><span class="cal-name">${escapeHtml(it.title)}</span></div>`;
 }
 
+// «16 нояб. – 22 нояб. 2026» or «ноябрь 2026 г.»: what a calendar state shows
+function calLabel(cv = calView) {
+  const { a, b } = calRange(cv), loc = hmLocale();
+  return cv.mode === 'week'
+    ? `${a.toLocaleDateString(loc, { day: 'numeric', month: 'short' })} – ${calAddDays(b, -1).toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' })}`
+    : new Date(cv.anchor || new Date()).toLocaleDateString(loc, { month: 'long', year: 'numeric' });
+}
+
 function renderCalendarView() {
   const wrap = document.getElementById('cal-view');
   if (!wrap) return;
-  const { a, b, month } = calRange();
-  const loc = hmLocale();
-  const today = calKey(new Date());
-  const items = calItems();
-  const label = calView.mode === 'week'
-    ? `${a.toLocaleDateString(loc, { day: 'numeric', month: 'short' })} – ${calAddDays(b, -1).toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' })}`
-    : new Date(calView.anchor).toLocaleDateString(loc, { month: 'long', year: 'numeric' });
-  const days = [];
-  for (let d = new Date(a); d < b; d = calAddDays(d, 1)) days.push(d);
-  const weekday = d => d.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
-  let body;
-  const hols = (calView.data && calView.data.holidays) || {};  // public holidays (Settings → Календарь → Праздники)
-  // «⋯» of a day: mark it a day off (shown on hover; a right click does the same)
-  const dayBtn = d => `<button data-cal="dayoff" data-day="${calKey(d)}" class="cal-day-more" title="${escapeHtml(t('calDayMenuTip'))}" aria-label="${escapeHtml(t('calDayMenuTip'))}">⋯</button>`;
-  // the hours worked of a day, by fact (app/worktime.py)
-  const wkTag = d => { const w = (calView.work || {})[calKey(d)]; return w && w.worked ? `<span class="cal-wk" title="${escapeHtml(`${t('dbWorkedTip').replace('{t}', () => dbHm(w.worked * 60))} · ${w.start}–${w.end}`)}">${escapeHtml(dbWorkedShort(w.worked))}</span>` : ''; };
-  const holTag = d => hols[calKey(d)] ? `<span class="cal-hol" title="${escapeHtml(hols[calKey(d)])}">${escapeHtml(hols[calKey(d)])}</span>` : '';
-  if (calView.mode === 'week') {
-    body = `<div class="cal-week">${days.map(d => {
-      const list = items[calKey(d)] || [];
-      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}" data-daykey="${calKey(d)}">
-        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
-        <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
-    }).join('')}</div>`;
-  } else {
-    const heads = days.slice(0, 7).map(d => `<div class="cal-mhead">${escapeHtml(weekday(d))}</div>`).join('');
-    body = `<div class="cal-month">${heads}${days.map(d => {
-      const list = items[calKey(d)] || [];
-      const more = list.length - 3;
-      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}" data-daykey="${calKey(d)}">
-        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
-        ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
-        ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
-    }).join('')}</div>`;
-  }
+  const body = calBodyHtml(calView), label = calLabel(calView);
   const data = calView.data || {};
   const note = !calView.loading && !data.configured ? `<p class="cal-note">${escapeHtml(t('calNoCalendar'))}</p>`
     : data.error ? `<p class="cal-note">${escapeHtml(t('calError'))}: ${escapeHtml(serverText(data.error))}</p>` : '';
@@ -994,4 +943,43 @@ function renderCalendarView() {
       <span><i class="cal-dot cal-lg-rec"></i>${escapeHtml(t('calLgRec'))}</span></div>
   </div>`;
   wrap.querySelector('.cal-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+}
+
+// The days of a calendar state (the window's, or that of «Сегодня»), a week or a month, with what they hold
+function calBodyHtml(cv) {
+  const { a, b, month } = calRange(cv);
+  const loc = hmLocale();
+  const today = calKey(new Date());
+  const items = calItems(cv);
+  const days = [];
+  for (let d = new Date(a); d < b; d = calAddDays(d, 1)) days.push(d);
+  const weekday = d => d.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
+  let body;
+  const hols = (cv.data && cv.data.holidays) || {};  // public holidays (Settings → Календарь → Праздники)
+  // «⋯» of a day: mark it a day off (shown on hover; a right click does the same)
+  const dayBtn = d => `<button data-cal="dayoff" data-day="${calKey(d)}" class="cal-day-more" title="${escapeHtml(t('calDayMenuTip'))}" aria-label="${escapeHtml(t('calDayMenuTip'))}">⋯</button>`;
+  // the hours worked of a day, by fact (app/worktime.py)
+  const wkTag = d => { const w = (cv.work || {})[calKey(d)]; return w && w.worked ? `<span class="cal-wk" title="${escapeHtml(`${t('dbWorkedTip').replace('{t}', () => dbHm(w.worked * 60))} · ${w.start}–${w.end}`)}">${escapeHtml(dbWorkedShort(w.worked))}</span>` : ''; };
+  // a day off (a weekend, a holiday or one's own) is hatched; a working day gone by is a step dimmer
+  const dayKind = d => ((d.getDay() + 6) % 7 >= 5 || hols[calKey(d)] ? ' cal-offday' : calKey(d) < today ? ' cal-pastday' : '');
+  const holTag = d => hols[calKey(d)] ? `<span class="cal-hol" title="${escapeHtml(hols[calKey(d)])}">${escapeHtml(hols[calKey(d)])}</span>` : '';
+  if (cv.mode === 'week') {
+    body = `<div class="cal-week">${days.map(d => {
+      const list = items[calKey(d)] || [];
+      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}${dayKind(d)}" data-daykey="${calKey(d)}">
+        <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
+        <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
+    }).join('')}</div>`;
+  } else {
+    const heads = days.slice(0, 7).map(d => `<div class="cal-mhead">${escapeHtml(weekday(d))}</div>`).join('');
+    body = `<div class="cal-month">${heads}${days.map(d => {
+      const list = items[calKey(d)] || [];
+      const more = list.length - 3;
+      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}${dayKind(d)}" data-daykey="${calKey(d)}">
+        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
+        ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
+        ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
+    }).join('')}</div>`;
+  }
+  return body;
 }

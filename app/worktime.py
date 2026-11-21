@@ -203,6 +203,15 @@ def apps(start: date, end: date) -> Dict[str, int]:
     return {r[0]: int(r[1]) for r in rows}
 
 
+def apps_since() -> str:
+    """The first day «Мои программы» counted (YYYY-MM-DD), '' with no minute noted: a period that begins earlier
+    holds the days since then only."""
+    with _conn() as conn:
+        conn.execute(_DDL_APPS)
+        row = conn.execute("SELECT MIN(day) FROM app_minutes").fetchone()
+    return (row[0] or "") if row else ""
+
+
 def clear_apps() -> None:
     """«Удалить историю»: every minute noted by «Мои программы»."""
     with _conn() as conn:

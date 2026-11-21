@@ -31,7 +31,6 @@ function onLibraryChanged() {
 }
 
 function switchAppView(view) {
-  if (view === 'home') view = 'dashboard';  // «Сегодня» is part of the dashboard now (its day, greeting, recent recordings)
   if (!APP_VIEWS.includes(view)) view = 'library';
   const prev = state.appView;
   if (state.theatre && view !== 'library') exitTheatre();
@@ -188,7 +187,7 @@ function renderTopbar() {
 // --- The rail of the sections (parts/rail.html) ---
 // The section on screen is marked, and the bar at the edge moves to it from the one left; an open recording
 // belongs to «Записи», the settings page to «Настройки»
-const RAIL_OF_VIEW = { dashboard: 'rail-dashboard', home: 'rail-dashboard', libtable: 'rail-libtable', library: 'rail-libtable',
+const RAIL_OF_VIEW = { home: 'rail-home', dashboard: 'rail-dashboard', libtable: 'rail-libtable', library: 'rail-libtable',
   tasks: 'rail-tasks', ask: 'rail-ask', settings: 'sb-settings-btn' };
 let _railOn = '';
 function renderRail() {
@@ -444,7 +443,7 @@ async function recMenuLive() {
 }
 
 async function recMenuDictate() {
-  switchAppView('dashboard');  // its text shows there
+  switchAppView('home');  // its text shows there
   await hmDictToggle();
 }
 

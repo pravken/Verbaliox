@@ -152,6 +152,55 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual((row["id"], row["my_share"]), (mid, 3.2))  # 1 s of 31
         self.assertEqual(row["reasons"], ["silent"])
 
+    def test_the_figures_of_six_periods(self):
+        """«Статистика»: every figure with the last six periods (the current one last, as the widgets count it),
+        the hours spent with each person; the protocols are read, not the transcripts."""
+        from unittest import mock
+
+        self._meeting("Сейчас", "2026-11-17", protocol="## Решения\n- Выпускать в пятницу\n")
+        self._meeting("Неделю назад", "2026-11-10", names=("Олег", "Мария", "Иван"))
+        self._meeting("Пустая", "2026-11-03", protocol="## Обзор\n- Поговорили\n")
+        self._meeting("Давно", "2026-08-01")  # before the six weeks
+        t = commitments.create("Прислать смету", "Олег")
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE commitments SET created_at = '2026-11-01T09:00:00', status = 'done', done_at = '2026-11-11T09:00:00' WHERE id = ?", (t["id"],))
+            conn.commit()
+            conn.close()
+        with mock.patch("app.database.get_meeting", side_effect=AssertionError("transcript read")), \
+                mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("week", today=self.TODAY)
+        h = d["history"]
+        self.assertEqual(h["starts"], ["2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16"])
+        v = h["values"]
+        self.assertEqual(v["meetings"], [0, 0, 0, 1, 1, 1])
+        self.assertEqual(v["hours"][-1], d["kpi"]["hours"])
+        self.assertEqual(v["decisions"], [0, 0, 0, 0, 0, 1])
+        self.assertEqual(v["useless"][3], 1)  # analysed, no decision, no task
+        self.assertEqual(v["people"][-2:], [2, 1])
+        self.assertEqual(v["avg"][-1], 30)
+        self.assertEqual(v["mine"][-3:], [1, 0, 0])  # open at the end of the week of 2 November, done on the 11th
+        self.assertEqual(v["closed"][-3:], [0, 1, 0])
+        # Monday to Wednesday gone by: 24 working hours, half an hour in meetings
+        self.assertEqual((v["share"][-1], v["focus"][-1]), (2, 23.5))
+        self.assertEqual(d["people"][0], {"name": "Мария", "color": "", "meetings": 1, "hours": 0.5})
+        # «Частые участники» with a period of its own: a month here
+        month = dashboard.people(date(2026, 11, 1), date(2026, 12, 1))
+        self.assertEqual([(p["name"], p["meetings"], p["hours"]) for p in month], [("Мария", 3, 1.5), ("Иван", 1, 0.5)])
+
+    def test_the_people_route_takes_up_to_a_year(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        self._meeting("Синк", "2026-11-17")
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        r = c.get("/api/dashboard/people", params={"start": "2026-01-01", "end": "2027-01-01"})
+        self.assertEqual([p["name"] for p in r.json()["people"]], ["Мария"])
+        self.assertEqual(c.get("/api/dashboard/people", params={"start": "2025-01-01", "end": "2027-01-01"}).status_code, 400)
+        self.assertEqual(c.get("/api/dashboard/people", params={"start": "x", "end": "2027-01-01"}).status_code, 400)
+
     def test_a_series_giving_nothing_lately(self):
         """Asked by the user: «Серии без результатов» — the newest meetings of a series, three in a row, gave
         no decision and no task; one with a decision before them does not count."""

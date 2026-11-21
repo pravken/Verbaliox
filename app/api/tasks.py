@@ -72,12 +72,13 @@ def api_worktime_apps(start: str, end: str) -> Dict[str, Any]:
         a, b = date.fromisoformat(start), date.fromisoformat(end)
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный промежуток времени")
-    if not a < b or (b - a).days > 120:
+    if not a < b or (b - a).days > 370:  # up to a year: the widget's own period «Год»
         raise HTTPException(status_code=400, detail="Неверный промежуток времени")
     now, before = worktime.apps(a, b), worktime.apps(a - (b - a), a)
     items = [{"app": k, "name": worktime.app_name(k), "minutes": v, "before": before.get(k, 0)}
              for k, v in sorted(now.items(), key=lambda x: -x[1])]
-    return {"enabled": worktime.apps_enabled(), "supported": worktime.idle_seconds() is not None, "apps": items}
+    return {"enabled": worktime.apps_enabled(), "supported": worktime.idle_seconds() is not None, "apps": items,
+            "since": worktime.apps_since()}
 
 
 @router.delete("/api/worktime/apps")
@@ -95,6 +96,23 @@ def api_holiday_countries() -> Dict[str, Any]:
     from app import holidays_cal
 
     return {"available": holidays_cal.available(), "countries": holidays_cal.countries(), "home": holidays_cal.home_country()}
+
+
+@router.get("/api/dashboard/people")
+def api_dashboard_people(start: str, end: str, feature: int = 0) -> Dict[str, Any]:
+    """«Частые участники» for the widget's own period (day, week, month, year): start…end, YYYY-MM-DD,
+    end not included (app/dashboard.people)."""
+    from datetime import date
+
+    from app.dashboard import people
+
+    try:
+        a, b = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    if not a < b or (b - a).days > 370:
+        raise HTTPException(status_code=400, detail="Неверный промежуток времени")
+    return {"start": a.isoformat(), "end": b.isoformat(), "people": people(a, b, feature or None)}
 
 
 @router.get("/api/dashboard/detail")

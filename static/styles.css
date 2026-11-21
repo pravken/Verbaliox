@@ -3238,10 +3238,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .mc-more.hidden { display: none; }
 
 /* «Дэшборд» (static/js/dashboard.js): widgets in a grid of 12 columns */
-.db-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; padding: 18px 28px 6px; }
-.db-hello { flex: 1 1 420px; min-width: 0; display: flex; }
-.db-qa { display: flex; }
-.db-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 28px 12px; border-bottom: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
 .db-body { flex: 1; min-height: 0; display: flex; position: relative; }
 .db-grid { flex: 1; min-width: 0; overflow: auto; padding: 16px 28px 28px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; align-content: start; }
 .db-grid { position: relative; grid-auto-flow: row dense; }  /* a hole a widget fits in is filled — while arranging too, so
@@ -3840,3 +3836,217 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 @media (prefers-reduced-motion: reduce) { .sb-dot.sb-dot-busy { animation: none; } .ld-bar b, .ld-bar i, .vx-pbar b { transition: none; } }
 .sb-load-lead { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 .rail-btn.rail-jobs:hover .ri-ring { animation: ri-twinkle 420ms ease-out; }
+/* --- «Сегодня» (static/parts/home.html, static/js/today.js) --- */
+.td-wrap { padding: 22px 28px 28px; display: flex; flex-direction: column; gap: 16px; }
+.td-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.td-tile { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 52px; height: 54px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); flex: none; }
+.td-tile small { font-size: 11px; line-height: 1.2; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.04em; }
+.td-tile b { font-size: 22px; line-height: 1.1; font-weight: 700; color: #F5F5F7; font-variant-numeric: tabular-nums; }
+.td-tile.td-tile-word { width: 64px; }
+.td-tile.td-tile-word small { font-size: 10px; text-transform: none; }
+.td-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.td-title h1 { margin: 0; font-size: var(--fs-title); font-weight: 650; letter-spacing: -0.015em; color: #F5F5F7; }
+.td-sub { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
+.td-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.td-pill { position: relative; overflow: hidden; height: 26px; display: inline-flex; align-items: center; padding: 0 11px; border-radius: 13px; border: 1px solid var(--line); font-size: var(--fs-caption); color: #E5E5EA; white-space: nowrap; }
+/* a pill fills as the period goes: the part over in the accent */
+.td-pill-fill { background: linear-gradient(90deg, rgb(var(--accent-rgb) / 0.22) var(--p), transparent var(--p)); border-color: rgb(var(--accent-rgb) / 0.4); }
+.td-grow { flex: 1; }
+.td-nav { display: inline-flex; align-items: center; gap: 6px; }
+.td-nav.hidden { display: none; }
+.td-cap { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
+.td-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.td-main, .td-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.td-cards { display: flex; flex-direction: column; gap: 14px; }
+/* a week or a month: the calendar over the width, the cards in a row under it */
+.td-body.td-row { grid-template-columns: minmax(0, 1fr); }
+.td-body.td-row .td-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; }
+.td-cal .cal-col { min-height: 240px; }
+.td-card .db-task { grid-template-columns: 18px minmax(80px, 1fr) minmax(0, auto) 88px; }
+.td-card .db-note { margin: 2px 0 4px; }
+.td-card-body { min-width: 0; }
+@media (max-width: 1000px) { .td-body { grid-template-columns: minmax(0, 1fr); } }
+
+/* «Рабочий день»: the bar fills from zero when the page opens (once, not at every redraw); while the day is counted a
+   soft light runs along the filled part and its end glows */
+.td-wd-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 2px 0 8px; }
+.td-wd-big { font-size: 24px; font-weight: 700; color: #F5F5F7; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-wd-big.over { color: #FF9F0A; }
+.td-wd-sub, .td-wd-note { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
+.td-wd-note { margin-top: 8px; }
+.td-wd { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); }
+.td-wd i { position: relative; display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, rgba(48, 209, 88, 0.75), #30D158); }
+.td-wd.over i { background: #FF9F0A; }
+.td-wd.live i { background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.35) 50%, transparent 65%) -150% 0 / 60% 100% no-repeat, linear-gradient(90deg, rgba(48, 209, 88, 0.75), #30D158); animation: td-wd-sheen 3.2s ease-in-out 1.2s infinite; }
+.td-wd.live.over i { background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.35) 50%, transparent 65%) -150% 0 / 60% 100% no-repeat, #FF9F0A; }
+.td-wd i.grow { animation: td-wd-fill 1.2s cubic-bezier(0.22, 0.8, 0.26, 1) both; }
+.td-wd.live i.grow { animation: td-wd-fill 1.2s cubic-bezier(0.22, 0.8, 0.26, 1) both, td-wd-sheen 3.2s ease-in-out 1.2s infinite; }
+.td-wd.live i::after { content: ''; position: absolute; right: -3px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #fff; animation: td-wd-tip 2s ease-out 1.2s infinite; }
+@keyframes td-wd-fill { from { width: 0; } }
+@keyframes td-wd-sheen { 0% { background-position: -150% 0, 0 0; } 60%, 100% { background-position: 250% 0, 0 0; } }
+@keyframes td-wd-tip { 0% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.6); } 100% { box-shadow: 0 0 0 7px rgba(48, 209, 88, 0); } }
+@media (prefers-reduced-motion: reduce) { .td-wd i, .td-wd i::after { animation: none !important; } }
+
+/* --- «Обзор»: its head, the tools in the head of a widget --- */
+.db-title { display: inline-flex; align-items: center; gap: 10px; }
+.db-title svg { width: 20px; height: 20px; color: var(--accent-text); }
+.db-h { min-height: 24px; flex-wrap: wrap; row-gap: 6px; }
+.db-h-t { min-width: 0; }
+.db-h-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.db-h-tools + .db-more { margin-left: 10px; }
+.db-chsw, .db-wp { display: inline-flex; gap: 1px; padding: 2px; border-radius: 7px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.db-chsw button { width: 24px; height: 20px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--hc-dim, #8E8E93); }
+.db-chsw button svg { width: 13px; height: 13px; }
+.db-wp button { height: 20px; padding: 0 7px; border-radius: 5px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.db-chsw button:hover, .db-wp button:hover { color: #F5F5F7; }
+.db-chsw button.on, .db-wp button.on { background: rgba(255, 255, 255, 0.14); color: #F5F5F7; }
+.db-kc-btn { height: 24px; padding: 0 9px; color: #C7C7CC; text-transform: none; letter-spacing: 0; }
+.db-kc-btn.on { background: rgba(255, 255, 255, 0.1); color: #F5F5F7; }
+.db-w-kpis { z-index: 2; }
+.db-dim { color: var(--hc-dim, #8E8E93); }
+.t-up { color: #30D158; } .t-warn { color: #FF9F0A; } .t-bad { color: #FF6961; } .t-flat { color: var(--hc-dim, #8E8E93); }
+
+/* «Статистика»: the tiles fill the rows without holes (60 columns: a row of 6, 5, 4 … tiles); every caption keeps
+   room for two lines, so the changes stand on one line across a row */
+.db-kts { display: grid; grid-template-columns: repeat(60, minmax(0, 1fr)); gap: 8px; }
+.db-kt { display: flex; flex-direction: column; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); text-align: left; color: #F5F5F7; }
+.db-kt-open { cursor: pointer; }
+.db-kt-open:hover { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.04); }
+.db-kt-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.db-kt-n { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.db-kt-spark { flex: 0 1 60px; min-width: 28px; opacity: 0.9; }
+.db-kt-spark svg { display: block; width: 100%; max-width: 60px; height: auto; }
+.db-kt-l { color: var(--hc-dim, #A1A1A6); font-size: var(--fs-caption); margin-top: 2px; line-height: 1.35; min-height: calc(2 * 1.35em); }
+.db-kt-d { font-size: var(--fs-caption); margin-top: 2px; line-height: 1.35; min-height: 1.35em; }
+.db-kt-me { margin: 2px 0 0; text-align: left; }
+/* «Показатели» */
+.db-kc { position: absolute; right: 12px; top: 44px; z-index: 5; width: min(400px, calc(100% - 24px)); padding: 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-menu); }
+.kc-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: var(--fs-ui); }
+.kc-h span { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
+.kc-lim { font-size: var(--fs-caption); line-height: 1.4; color: #FFB340; background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.3); border-radius: 8px; padding: 7px 10px; margin: 0 0 8px; transition: background 0.2s; }
+.kc-lim.hit { background: rgba(255, 159, 10, 0.24); }
+.kc-list { display: flex; flex-direction: column; gap: 2px; max-height: 330px; overflow: auto; }
+.kc-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto 52px; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 6px; font-size: var(--fs-ui); }
+.kc-row:hover { background: rgba(255, 255, 255, 0.05); }
+.kc-row:not(.on) .kc-n { color: var(--hc-dim, #A1A1A6); }
+.kc-v { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.kc-cb { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.25); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; cursor: pointer; }
+.kc-cb.on { background: var(--accent); border-color: transparent; }
+.kc-row.full .kc-cb { opacity: 0.35; cursor: not-allowed; }
+.kc-row.full .kc-n, .kc-row.full .kc-v { opacity: 0.5; }
+.kc-ar { display: flex; gap: 2px; justify-content: flex-end; }
+.kc-mv { width: 24px; height: 24px; border-radius: 6px; color: var(--hc-dim, #A1A1A6); font-size: 13px; }
+.kc-mv:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); color: #F5F5F7; }
+.kc-mv:disabled { opacity: 0.25; cursor: default; }
+.kc-f { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* the charts: columns, bars with the norm, a ring with its legend, a line (the text in HTML, never stretched) */
+.dbc-cols { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 112px; margin-top: 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+.dbc-col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
+.dbc-col i { display: block; width: 100%; max-width: 30px; border-radius: 4px 4px 0 0; background: rgb(var(--accent-rgb) / 0.8); }
+.dbc-col i.over { background: #FF9F0A; }
+.dbc-col.past i { opacity: 0.65; }
+.dbc-col span { position: absolute; left: 0; right: 0; text-align: center; font-size: 10.5px; color: #C7C7CC; white-space: nowrap; }
+.dbc-norm { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgba(255, 255, 255, 0.4); pointer-events: none; z-index: 1; }
+.dbc-axis { display: flex; gap: 8px; padding-top: 5px; }
+.dbc-axis span { flex: 1; text-align: center; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; overflow: hidden; min-width: 0; }
+.dbc-axis .today, .dbc-days .today, .dbc-hb.today .dbc-hb-d { color: var(--accent-text); font-weight: 600; }
+.dbc-axis .hol { color: #FF9F8A; }
+.dbc-bars { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.dbc-hb { display: grid; grid-template-columns: minmax(28px, auto) minmax(0, 1fr) 52px; align-items: center; gap: 8px; font-size: var(--fs-caption); }
+.dbc-hb-d { color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.dbc-hb-v { text-align: right; color: #C7C7CC; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dbc-hb-t { position: relative; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.05); }
+.dbc-hb-t b { display: block; height: 100%; border-radius: 5px; background: rgb(var(--accent-rgb) / 0.8); }
+.dbc-hb-t b.over { background: #FF9F0A; }
+.dbc-hb-t i { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 1px dashed rgba(255, 255, 255, 0.5); }
+.dbc-ring { display: flex; align-items: center; gap: 18px; padding-top: 4px; }
+.dbc-ring-svg { width: 124px; height: 124px; flex: none; }
+.dbc-ring-n { font-size: 7px; font-weight: 600; fill: #F5F5F7; }
+.dbc-ring-l { font-size: 3.4px; fill: #8E8E93; }
+.dbc-ring-over { stroke: #FF9F0A; }
+.dbc-lg { flex: 1; min-width: 0; display: grid; gap: 5px; font-size: var(--fs-caption); }
+.dbc-lg > div { display: grid; grid-template-columns: 10px minmax(24px, auto) minmax(30px, 1fr) 52px 36px; align-items: center; gap: 8px; }
+.dbc-lg i { width: 8px; height: 8px; border-radius: 2px; }
+.dbc-lg-d { color: var(--hc-dim, #A1A1A6); white-space: nowrap; }
+.dbc-lg-bar { position: relative; display: block; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.05); }
+.dbc-lg-bar u { display: block; height: 100%; border-radius: 3px; text-decoration: none; }
+.dbc-lg-bar em { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed rgba(255, 255, 255, 0.5); }
+.dbc-lg-h, .dbc-lg-p { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dbc-lg-h.over { color: #FF9F0A; font-weight: 600; }
+.dbc-lg-p { color: var(--hc-dim, #8E8E93); }
+.dbc-line { padding-top: 22px; }
+.dbc-plot { position: relative; height: 88px; }
+.dbc-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.dbc-plot i { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: rgb(var(--accent-rgb)); box-shadow: 0 0 0 2px var(--bg); }
+.dbc-plot i.over { background: #FF9F0A; }
+.dbc-l-v, .dbc-days span { position: absolute; transform: translateX(-50%); font-size: var(--fs-label); white-space: nowrap; }
+.dbc-l-v { margin-top: -22px; color: #C7C7CC; background: var(--bg); padding: 0 3px; border-radius: 3px; line-height: 15px; }
+.dbc-days { position: relative; height: 16px; margin-top: 6px; }
+.dbc-days span { color: var(--hc-dim, #8E8E93); }
+.dbc-l-line { fill: none; stroke: rgb(var(--accent-rgb)); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.dbc-l-area { fill: rgb(var(--accent-rgb) / 0.14); }
+.dbc-l-norm { stroke: rgba(255, 255, 255, 0.45); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+/* «Мои программы»: a program's name wraps, it is never cut; the ring and the columns */
+.db-app { grid-template-columns: 22px minmax(0, 10em) minmax(24px, 1fr) 4.4em 2.8em 4.4em; }
+.db-app-n { white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.3; }
+.db-app-ic { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 11px; }
+.db-app-ic svg { width: 13px; height: 13px; }
+.db-apps-ring { margin-top: 10px; }
+.db-apps-lg > div { grid-template-columns: 10px minmax(0, 11em) minmax(30px, 1fr) 4.4em 36px; }
+.db-apps-lg .dbc-lg-d { text-align: left; white-space: normal; overflow-wrap: anywhere; color: #E5E5EA; }
+.db-apps-cols { display: flex; align-items: flex-end; gap: 12px; height: 190px; margin-top: 12px; }
+.db-apps-cols > div { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; font-size: var(--fs-caption); }
+.db-ac-area { position: relative; flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; margin-top: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+.db-apps-cols b { display: block; width: 100%; max-width: 44px; border-radius: 5px 5px 0 0; min-height: 3px; }
+.db-ac-v { position: absolute; left: 0; right: 0; text-align: center; margin-bottom: 4px; color: #C7C7CC; white-space: nowrap; }
+.db-ac-n { color: var(--hc-dim, #A1A1A6); max-width: 100%; text-align: center; line-height: 1.25; min-height: 2.5em; overflow-wrap: anywhere; }
+
+/* «Частые участники»: the caption and the widget's own period, then a row a person */
+.db-pp-cap { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 8px; margin: -2px 0 6px; font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
+.db-pp { display: grid; grid-template-columns: 26px minmax(0, 1fr) minmax(24px, 0.8fr) auto 40px; align-items: center; gap: 10px; width: 100%; padding: 5px 0; color: #F5F5F7; text-align: left; cursor: pointer; }
+.db-pp:hover .db-pp-n { text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.3); }
+.db-pp-n { font-size: var(--fs-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-pp-bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
+.db-pp-bar i { display: block; height: 100%; border-radius: 3px; background: rgb(var(--accent-rgb) / 0.75); }
+.db-pp-m, .db-pp-h { font-size: var(--fs-caption); text-align: right; white-space: nowrap; }
+.db-pp-h { color: var(--hc-dim, #8E8E93); }
+
+/* «Фичи»: the colour of each feature, its weeks in that colour, its figures in columns */
+.db-ft-head, .db-ft-row { display: grid; grid-template-columns: minmax(0, 1fr) 120px 84px 84px 84px; align-items: center; gap: 10px; }
+.db-ft-head { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); padding: 0 0 4px; white-space: nowrap; }
+.db-ft-head span:not(:first-child) { text-align: right; }
+.db-ft-head span:nth-child(2) { text-align: left; }
+.db-ft-row { width: 100%; padding: 7px 0; border-top: 1px solid var(--line); color: #F5F5F7; text-align: left; cursor: pointer; font-size: var(--fs-ui); }
+.db-ft-row:hover .db-ft-n span { text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.3); }
+.db-ft-n { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.db-ft-n i { width: 10px; height: 10px; border-radius: 3px; background: var(--ft); flex: none; }
+.db-ft-n span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-ft-row .db-spark { margin: 0; height: 18px; }
+.db-ft-c { font-size: var(--fs-caption); text-align: right; white-space: nowrap; }
+.db-w-features .db-ft-c .neg { color: #FF6961; }
+.db-spark-l { display: block; }
+/* «Обзор»: the toolbar keeps one row (the toolbar of «Задачи» and «Записи»); in a narrower window the progress
+   of the period keeps its bar, its words go to the tip */
+.db-bar { flex-wrap: nowrap; }
+.db-bar #db-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-bar .db-progress { flex: none; }
+@media (max-width: 1500px) { .db-bar .db-progress > span { display: none; } .db-bar .db-progress-bar { width: 80px; } }
+.db-wp button { padding: 0 5px; }
+/* «Сегодня»: the working time gone by — the line of «now» says how much; in a week or a month a past working day is a
+   step dimmer, a day off hatched, today framed */
+.hm-now-gone { position: absolute; right: 0; top: -18px; font-size: var(--fs-label); color: #FF8A80; white-space: nowrap; }
+.td-cal .cal-pastday { background: rgba(255, 255, 255, 0.045); }
+.td-cal .cal-pastday > * { opacity: 0.72; }
+.td-cal .cal-offday { background-image: repeating-linear-gradient(135deg, rgba(255, 159, 138, 0.06) 0 6px, transparent 6px 12px); }
+.db-pp-cap { flex-wrap: nowrap; }
+.db-pp-cap > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-pp-cap .db-wp button { padding: 0 4px; }
+/* «Сегодня» opens with its cards rising one after another (static/js/today.js), as «Обзор» does */
+.td-wave .hm-card { animation: vx-rise 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .td-wave .hm-card { animation: none; } }
+.td-tools { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; margin-left: auto; }
+/* a narrow window: the day over the width, the cards in a row under it */
+@media (max-width: 1250px) { .td-body { grid-template-columns: minmax(0, 1fr); } .td-body .td-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; } }
+@media (max-width: 1250px) { .db-bar .db-progress { display: none; } }

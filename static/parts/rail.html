@@ -1,25 +1,29 @@
 <!-- The rail of the sections on the left edge («Пульт встреч», docs/pult-plan.md, stage 1): part of static/index.html.
-     The app's sections on top (Ctrl+1…5), the service ones at the bottom: the queue, the dictionary, the settings.
+     The app's sections on top (Ctrl+1…6), the service ones at the bottom: the queue, the dictionary, the settings.
      renderRail (static/js/shell.js) marks the section on screen and moves the bar at the edge to it. -->
   <nav id="app-rail" class="rail" data-i18n-aria="navAria" aria-label="Разделы программы">
     <span class="rail-ind" aria-hidden="true"></span>
-    <button data-click="switchAppView" data-click-args='["dashboard"]' id="rail-dashboard" class="rail-btn" type="button" data-i18n-title="rlTipHome" title="Главная: день, задачи и сводки (Ctrl+1)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><g class="ri-house"><path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1z"/></g></svg>
-      <span data-i18n="rlHome">Главная</span>
+    <button data-click="switchAppView" data-click-args='["home"]' id="rail-home" class="rail-btn" type="button" data-i18n-title="rlTipToday" title="Сегодня: встречи дня, календарь и срочные дела (Ctrl+1)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8.5 3v4M15.5 3v4"/><g class="ri-house"><circle cx="12" cy="15" r="1.6"/></g></svg>
+      <span data-i18n="rlToday">Сегодня</span>
     </button>
-    <button data-click="switchAppView" data-click-args='["libtable"]' id="rail-libtable" class="rail-btn" type="button" data-i18n-title="rlTipRecords" title="Записи: все встречи и файлы (Ctrl+2)">
+    <button data-click="switchAppView" data-click-args='["dashboard"]' id="rail-dashboard" class="rail-btn" type="button" data-i18n-title="rlTipOverview" title="Обзор: статистика и виджеты периода (Ctrl+2)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="4" rx="1.5"/><rect x="13" y="10" width="7" height="10" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/></svg>
+      <span data-i18n="rlOverview">Обзор</span>
+    </button>
+    <button data-click="switchAppView" data-click-args='["libtable"]' id="rail-libtable" class="rail-btn" type="button" data-i18n-title="rlTipRecords" title="Записи: все встречи и файлы (Ctrl+3)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path class="ri-l1" pathLength="1" d="M8 10h8"/><path class="ri-l2" pathLength="1" d="M8 14h5"/></svg>
       <span data-i18n="rlRecords">Записи</span>
     </button>
-    <button data-click="switchAppView" data-click-args='["tasks"]' id="rail-tasks" class="rail-btn" type="button" data-i18n-title="rlTipTasks" title="Задачи из всех записей (Ctrl+3)">
+    <button data-click="switchAppView" data-click-args='["tasks"]' id="rail-tasks" class="rail-btn" type="button" data-i18n-title="rlTipTasks" title="Задачи из всех записей (Ctrl+4)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="ri-c1" pathLength="1" d="M5 7l2 2 3-3"/><path class="ri-c2" pathLength="1" d="M5 15l2 2 3-3"/><path d="M13 8h6M13 16h6"/></svg>
       <span data-i18n="rlTasks">Задачи</span><span id="nav-tasks-n" class="rail-badge hidden"></span>
     </button>
-    <button data-click="openContacts" id="rail-people" class="rail-btn" type="button" data-i18n-title="rlTipPeople" title="Люди: участники записей, голоса и контакты (Ctrl+4)">
+    <button data-click="openContacts" id="rail-people" class="rail-btn" type="button" data-i18n-title="rlTipPeople" title="Люди: участники записей, голоса и контакты (Ctrl+5)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><g class="ri-p2"><path d="M16 6.5a3 3 0 010 5.5M17.5 14.6c1.6.6 2.6 2 3 4.4"/></g></svg>
       <span data-i18n="rlPeople">Люди</span>
     </button>
-    <button data-click="switchAppView" data-click-args='["ask"]' id="rail-ask" class="rail-btn" type="button" data-i18n-title="rlTipAsk" title="Ассистент: вопросы к записям (Ctrl+5)">
+    <button data-click="switchAppView" data-click-args='["ask"]' id="rail-ask" class="rail-btn" type="button" data-i18n-title="rlTipAsk" title="Ассистент: вопросы к записям (Ctrl+6)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path class="ri-star" d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path class="ri-spark" d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/></svg>
       <span data-i18n="rlAsk">Ассистент</span>
     </button>

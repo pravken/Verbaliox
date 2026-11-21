@@ -241,7 +241,7 @@ await step('join a meeting call', async () => {
   const sent = [];
   await page.route('**/api/meeting/join', r => { sent.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
   await page.evaluate(() => {
-    switchAppView('dashboard');
+    switchAppView('home');
     Object.assign(state.system.settings, { work_day_start: '0', work_day_end: '24' });  // the meeting is in the day shown, whatever the time
     const s = new Date(Date.now() + 5 * 60e3), e = new Date(s.getTime() + 30 * 60e3);
     home.calConfigured = true;
@@ -274,7 +274,7 @@ await step('feature card', async () => {
   await page.evaluate(() => { document.getElementById('feature-page')?.remove(); switchAppView('dashboard'); });
   await page.evaluate(() => { const l = dbPrefs().layout.filter(w => w.id !== 'features'); dbSave({ layout: [{ id: 'features', size: 'L' }, ...l] }); return loadDashboard(); });
   await sleep(800);
-  await page.click(`#db-grid .db-feat[data-click-args='[${fid}]']`);
+  await page.click(`#db-grid .db-ft-row[data-click-args='[${fid}]']`);
   await sleep(800);
   expect(await page.$('#feature-page'), 'the widget does not open the card');
   await page.evaluate(id => { document.getElementById('feature-page')?.remove(); return fetch('/api/features/' + id, { method: 'DELETE' }); }, fid);
@@ -355,11 +355,43 @@ await step('first run wizard, cloud', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
-// The calendar of a week or a month opens from the home page and closes with Esc
+// «Сегодня»: «Календарь» День · Неделя · Месяц — the week and the month over the width, the cards under them,
+// ‹ › move by a week, the day comes back with its meetings (docs/pult-plan.md, stage 3)
+await step('today calendar', async () => {
+  await page.evaluate(() => { dbSave({ span: 'day' }); switchAppView('home'); });
+  await sleep(500);
+  expect(await page.isVisible('#rail-home.rail-on'), '«Сегодня» is not marked on the rail');
+  expect(await page.isVisible('#td-day') && await page.locator('#td-cards .td-card').count() >= 3, 'the day or its cards are missing');
+  await page.click('#td-spans button >> nth=1');
+  await sleep(700);
+  expect(await page.isVisible('#td-cal .cal-week') && !(await page.isVisible('#td-day')), 'the week did not show');
+  expect(await page.evaluate(() => document.getElementById('td-body').classList.contains('td-row')), 'the cards are not under the week');
+  const label = await page.textContent('#td-sub');
+  await page.click('#td-nav button >> nth=2');
+  await sleep(500);
+  expect((await page.textContent('#td-sub')) !== label, '› did not move to the next week');
+  await page.click('#td-nav button >> nth=1');
+  await page.click('#td-spans button >> nth=2');
+  await sleep(700);
+  expect(await page.isVisible('#td-cal .cal-month .cal-cell.cal-today'), 'the month or its today did not show');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/today-month.png` });
+  await page.click('#td-spans button >> nth=0');
+  await sleep(300);
+  expect(await page.isVisible('#td-day') && !(await page.isVisible('#td-cal')), 'the day did not come back');
+  // Ctrl+2 opens «Обзор», Ctrl+1 «Сегодня»
+  await page.keyboard.press('Control+2');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'dashboard', 'Ctrl+2 did not open «Обзор»');
+  await page.keyboard.press('Control+1');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'home', 'Ctrl+1 did not open «Сегодня»');
+});
+
+// The calendar window of a week or a month opens and closes with Esc
 await step('calendar view', async () => {
   await page.evaluate(() => switchAppView('home'));
   await sleep(500);
-  await page.click('button[data-click="openCalendarView"]');
+  await page.evaluate(() => openCalendarView());
   await sleep(600);
   expect(await page.isVisible('#cal-view .cal-week, #cal-view .cal-month'), 'the calendar did not open');
   await page.click('#cal-view button[data-cal="month"]');
@@ -536,11 +568,37 @@ await step('captions do not start by themselves', async () => {
 
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
-  await page.evaluate(() => switchAppView('dashboard'));
+  await page.evaluate(() => { resetDashboard(); switchAppView('dashboard'); });  // the default layout, whatever was arranged before
   await sleep(1200);
   expect(await page.isVisible('#dashboard-view'), 'the dashboard did not open');
   expect(await page.locator('#db-grid .db-w').count() >= 8, 'the widgets are missing');
-  expect(await page.isVisible('#db-hello .hm-greeting'), 'the greeting did not move to the dashboard');
+  // «Статистика»: its tiles; «Показатели» turns one on, keeps the list where it was scrolled, says the limit at 8
+  expect(await page.locator('#db-grid .db-kts .db-kt').count() >= 2, 'no tiles in «Статистика»');
+  await page.click('#db-grid .db-kc-btn');
+  await sleep(200);
+  expect(await page.isVisible('#db-grid .db-kc'), '«Показатели» did not open');
+  const kpi0 = await page.evaluate(() => dbPrefs().kpis.length);
+  await page.evaluate(() => { const l = document.querySelector('#db-grid .kc-list'); l.scrollTop = 60; });
+  await page.click('#db-grid .kc-row:not(.on) .kc-cb >> nth=0');
+  await sleep(200);
+  expect(await page.evaluate(() => dbPrefs().kpis.length) === kpi0 + 1, 'a metric was not turned on');
+  expect(await page.locator('#db-grid .db-kts .db-kt').count() === kpi0 + 1, 'its tile did not come');
+  expect(await page.evaluate(() => document.querySelector('#db-grid .kc-list').scrollTop) > 0, 'the list jumped to its top');
+  await page.evaluate(() => dbSave({ kpis: Object.keys(DB_KPI).slice(0, 8) }));
+  await page.evaluate(() => dbKpiRedraw());
+  expect(await page.isVisible('#db-grid .kc-lim'), 'no note at 8 of 8');
+  await page.click('#db-grid .kc-row.full .kc-cb >> nth=0', { force: true });
+  expect(await page.evaluate(() => document.querySelector('#db-grid .kc-lim').classList.contains('hit')), 'the note did not flash');
+  expect(await page.evaluate(() => dbPrefs().kpis.length) === 8, 'a ninth metric was turned on');
+  await page.click('#db-grid .kc-f .tk-btn >> nth=0');  // «По умолчанию»
+  await page.click('#db-grid .kc-f .tk-btn-primary');
+  // the look of a chart, kept, and the page stays where it is
+  const scroll0 = await page.evaluate(() => { const g = document.getElementById('db-grid'); g.scrollTop = 120; return g.scrollTop; });
+  await page.click('#db-grid .db-w-time .db-chsw button >> nth=2');
+  await sleep(200);
+  expect(await page.evaluate(() => dbPrefs().charts.time) === 'ring', 'the look of «Время во встречах» was not kept');
+  expect(await page.evaluate(() => document.getElementById('db-grid').scrollTop) === scroll0, 'the switch moved the page');
+  await page.evaluate(() => dbSave({ charts: {} }));
   await page.click('#db-edit-btn');
   await sleep(200);
   const before = await page.locator('#db-grid .db-w').count();
@@ -590,7 +648,7 @@ await step('dashboard', async () => {
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
   await sleep(600);
-  expect((await page.textContent('#db-sub')).startsWith('Месяц'), 'the period did not change');
+  expect(await page.evaluate(() => DB.data && DB.data.period === 'month' && document.querySelector('#db-periods button[aria-checked="true"]').textContent === 'Месяц'), 'the period did not change');
   await page.click('#db-periods button >> nth=0');
   await sleep(300);
 });
