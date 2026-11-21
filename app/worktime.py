@@ -13,9 +13,9 @@ Settings: worktime_track (on), work_remind_hours (8; 0 = no notification).
 
 «Мои программы» (asked by the user, off until turned on: apps_track): a worked minute also notes the
 program in front, by its file name only (Teams, outlook.exe). Nothing else: no window titles (they hold the
-names of documents, letters and sites), no keys, no screen. A minute of a recording or a call is «meeting» in
-the call's program, in this app or while only listening; spent in another program with input, it is that program's.
-A game controller counts as input (only whether its state changed). It stays in this computer's database and goes nowhere.
+names of documents, letters and sites), no keys, no screen. Only a minute with input goes to a program (asked by
+the user: count what is really used; the time of meetings comes from the recordings). «meeting» rows of earlier
+versions are still shown. A game controller counts as input (only whether its state changed). It stays in this computer's database and goes nowhere.
 """
 
 import sys
@@ -33,7 +33,7 @@ CHECK_SEC = 60.0
 
 _DDL = "CREATE TABLE IF NOT EXISTS work_minutes (day TEXT NOT NULL, minute INTEGER NOT NULL, PRIMARY KEY (day, minute))"
 _DDL_APPS = "CREATE TABLE IF NOT EXISTS app_minutes (day TEXT NOT NULL, minute INTEGER NOT NULL, app TEXT NOT NULL, PRIMARY KEY (day, minute))"
-MEETING = "meeting"  # a minute of a recording or a call
+MEETING = "meeting"  # a minute of a recording or a call in earlier versions (no longer noted)
 
 # the names people know for the usual programs; any other one is its file name without «.exe»
 # The names in Russian are said in English by the page (static/i18n.js appName_<key>)
@@ -50,12 +50,6 @@ APP_NAMES = {
     "datagrip64": "DataGrip", "webstorm64": "WebStorm", "rider64": "Rider", "cursor": "Cursor", "postman": "Postman",
 }
 
-# The programs of calls: a minute of a recording or a call spent in one of them is a meeting minute; spent in
-# another program with the keyboard, the mouse or a game in hand, it is that program's (found by the user: an hour of
-# a game while a talk was recorded showed as «Встречи» only, the game was not there)
-CALL_APPS = {"ms-teams", "teams", "zoom", "webex", "ciscowebex", "atmgr", "skype", "discord", "telegram", "whatsapp",
-             "verbaliox"}
-LISTEN_SEC = 90  # no input for this long during a recording or a call: listening, the minute is the meeting's
 
 
 def foreground_app() -> Optional[str]:
@@ -309,13 +303,10 @@ def check(now: Optional[datetime] = None, idle: Optional[float] = None) -> bool:
     meeting = _recording() or _in_call()
     if not (idle < IDLE_MIN * 60 or meeting):
         return False
-    app = None
-    if apps_enabled():
-        front = foreground_app()
-        if meeting and (front is None or front in CALL_APPS or idle >= LISTEN_SEC):
-            app = MEETING  # in the call's program, in this app, or listening without input
-        else:
-            app = front
+    # «Мои программы»: the program actually used, with input in the last minutes; a recording or a call alone
+    # (only listening) counts the minute as work, not as a program's (the meetings' time is counted from the
+    # recordings, «Время во встречах»)
+    app = foreground_app() if apps_enabled() and idle < IDLE_MIN * 60 else None
     mark(now, app)
     hours = remind_hours()
     d = work_day(now).isoformat()

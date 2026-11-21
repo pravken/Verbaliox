@@ -85,28 +85,29 @@ class AppsTest(unittest.TestCase):
         for m in range(30, 40):
             self._tick(t + timedelta(minutes=m), "chrome")
         for m in range(40, 50):
-            self._tick(t + timedelta(minutes=m), "ms-teams", idle=900, meeting=True)  # a recording: no input needed
+            self._tick(t + timedelta(minutes=m), "ms-teams", idle=900, meeting=True)  # a recording, only listening
         self._tick(t + timedelta(minutes=60), "excel", idle=900)  # away: no minute
-        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {"outlook": 30, "chrome": 10, worktime.MEETING: 10})
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {"outlook": 30, "chrome": 10})
         worktime.clear_apps()
         self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {})
         self.assertEqual(worktime.app_name("ms-teams"), "Teams")
         self.assertEqual(worktime.app_name("someapp"), "Someapp")
         self.assertEqual(worktime.app_name("parsecd"), "Parsec")
 
-    def test_during_a_recording_the_program_used_gets_the_minute(self):
-        """Found by the user: an hour of a game while a talk was recorded showed as «Встречи» only. A minute of a
-        recording or a call goes to the program used with the keyboard or the mouse; to the meeting in the call's
-        program, in this app, or while only listening."""
+    def test_only_a_minute_with_input_goes_to_a_program(self):
+        """Asked by the user: count what is really used (an hour of a game while a talk was recorded showed as
+        «Встречи» only). A minute with input is the program's in front, the call's program too; a recording or a
+        call alone (only listening) is a worked minute of no program."""
         update_settings({"apps_track": "true"})
         t = datetime(2026, 11, 19, 20, 0)
         for m in range(20):
             self._tick(t + timedelta(minutes=m), "eldenring", idle=5, meeting=True)  # playing, the talk recorded
         for m in range(20, 25):
-            self._tick(t + timedelta(minutes=m), "eldenring", idle=600, meeting=True)  # only listening
+            self._tick(t + timedelta(minutes=m), "eldenring", idle=900, meeting=True)  # only listening
         for m in range(25, 30):
-            self._tick(t + timedelta(minutes=m), "ms-teams", idle=5, meeting=True)  # in the call's program
-        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {"eldenring": 20, worktime.MEETING: 10})
+            self._tick(t + timedelta(minutes=m), "ms-teams", idle=5, meeting=True)
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {"eldenring": 20, "ms-teams": 5})
+        self.assertEqual(worktime.days(date(2026, 11, 19), date(2026, 11, 20))["2026-11-19"]["worked"], 30)
 
     def test_an_unknown_program_still_counts_the_minute_as_work(self):
         update_settings({"apps_track": "true"})
