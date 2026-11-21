@@ -640,7 +640,9 @@ function dbAppsHtml(size) {
   if (!list.length) return `<div class="db-note">${escapeHtml(t('dbAppsNone'))}</div>`;
   const total = list.reduce((s, x) => s + x.minutes, 0), top = list[0].minutes;
   const shown = list.slice(0, size === 'M' ? 5 : 6), rest = list.slice(shown.length);
-  const rows = shown.map((x, i) => ({ ...x, name: x.app === 'meeting' ? t('dbAppsMeetings') : x.name, color: DB_SLICE[i % DB_SLICE.length] }));
+  // the names the server gives in Russian («Проводник», «Блокнот»…) are said in the language of the page by the
+  // program's key (app/worktime.py APP_NAMES)
+  const rows = shown.map((x, i) => ({ ...x, name: x.app === 'meeting' ? t('dbAppsMeetings') : tMaybe(`appName_${x.app}`) || x.name, color: DB_SLICE[i % DB_SLICE.length] }));
   if (rest.length) rows.push({ app: '', name: t('dbAppsOther').replace('{n}', () => rest.length), minutes: rest.reduce((s, x) => s + x.minutes, 0), before: rest.reduce((s, x) => s + x.before, 0), color: DB_OTHER, rest: true });
   // «5 ч 50», «10 ч», «40 мин»: short enough for a row
   const hm = m => m < 60 ? `${m} ${t('dbMinShort')}` : `${Math.floor(m / 60)} ${t('dbHoursShort')}${m % 60 ? ` ${String(m % 60).padStart(2, '0')}` : ''}`;
