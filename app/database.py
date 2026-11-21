@@ -181,6 +181,7 @@ def init_db() -> None:
             "vad_filter": "true",
             "audio_enhance": "true",
             "clean_fillers": "true",
+            "ui_accent": "steel",  # the accent colour (static/js/core.js THEME_ACCENTS); the background stays one
             "ui_scale": "100",  # the interface scale of the page, % (static/js/core.js applyUiScale)
             "record_source_mode": "both",
             "record_mic_device": "",

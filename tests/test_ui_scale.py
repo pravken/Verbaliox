@@ -77,3 +77,28 @@ class SystemInfoTest(unittest.TestCase):
             self.assertEqual(_scale(), v)
         self.assertEqual(c.post("/api/settings", json={"settings": {"ui_scale": "175"}}).status_code, 400)
         _put("100", True)
+
+
+class AccentTest(unittest.TestCase):
+    """Asked by the user: the accents approved on the try-on page to choose from, the background stays one."""
+
+    def test_the_accent_is_saved_and_only_from_the_presets(self):
+        import re
+        from pathlib import Path
+
+        from fastapi.testclient import TestClient
+        from app import main
+
+        database.init_db()
+        c = TestClient(main.app, base_url="http://127.0.0.1:8792")
+        c.get(f"/?token={main.SESSION_TOKEN}")
+        core = (Path(__file__).resolve().parent.parent / "static" / "js" / "core.js").read_text(encoding="utf-8")
+        block = core[core.index("const THEME_ACCENTS = {"):]
+        presets = re.findall(r"([a-z]+): '#", block[:block.index("};")])
+        self.assertEqual(len(presets), 8)
+        for key in presets:
+            r = c.post("/api/settings", json={"settings": {"ui_accent": key}})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual(r.json()["settings"]["ui_accent"], key)
+        self.assertEqual(c.post("/api/settings", json={"settings": {"ui_accent": "#ff0000"}}).status_code, 400)
+        self.assertEqual(c.post("/api/settings", json={"settings": {"ui_accent": "steel"}}).status_code, 200)

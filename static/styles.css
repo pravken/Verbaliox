@@ -4854,3 +4854,54 @@ button.sc-at:hover { color: var(--accent-text); }
 @media (prefers-reduced-motion: reduce) { .about-mark, .about-logo.about-shake .about-mark { animation: none; } }
 @keyframes mark-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 60% { transform: rotate(2deg); } }
 .about-logo:focus, .about-card:focus { outline: none; }  /* the easter egg is not in the tab order (tabindex -1): the window's focus goes on */
+
+/* Settings fill a wide window like the other sections (asked by the user: on 2000px they kept a 980px column
+   and an empty half): from 1280px of the content the cards of a section go into two columns, each card whole;
+   the head of the section spans both. Narrower, one column up to the width of the content. */
+.settings-page .sx-inner { max-width: none; }
+@container sxmain (min-width: 1280px) {
+  .settings-page .sx-section:not(.hidden) { columns: 2; column-gap: 16px; }
+  .settings-page .sx-section > * { break-inside: avoid; margin-top: 0 !important; margin-bottom: 12px !important; }
+  .settings-page .sx-section > .sx-section-head { column-span: all; }
+  .settings-page .sx-reset-row { max-width: none; }
+}
+
+/* «Сегодня»: today's date tile in a green frame, another day's in the usual one (asked by the user) */
+.td-tile.td-tile-today { border-color: #32D74B; box-shadow: 0 0 0 1px rgb(50 215 75 / 0.35), 0 0 12px rgb(50 215 75 / 0.18); }
+.td-tile.td-tile-today small { color: #32D74B; }
+.td-tile { transition: border-color var(--dur-fast, 120ms) ease, box-shadow var(--dur-fast, 120ms) ease; }
+
+/* Model lists: an icon button is a 32px square (the trash was 40x32 beside 32px buttons), a state chip
+   («Активна») has the weight of the buttons; the chosen model is told by its chip, not by a blue frame
+   (asked by the user: the frame was uneven and said nothing the chip did not) */
+.ui-btn.ui-btn-sq { width: var(--ctl-h, 32px); padding: 0; flex: none; }
+.ui-btn.ui-btn-state { font-weight: 600; cursor: default; }
+.ui-btn.ui-btn-state:active { transform: none; }
+
+/* Agent (MCP): «Копировать» is an icon in the corner of the code itself (asked by the user) */
+.mcp-wrap { position: relative; }
+.mcp-wrap .mcp-code { padding-right: 40px; }
+.mcp-copy { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 7px; border: 1px solid var(--line); background: var(--elevated, #2C2E32); color: #C7C7CC; cursor: pointer; opacity: 0.85;
+  transition: background-color var(--dur-fast, 120ms) ease, color var(--dur-fast, 120ms) ease, opacity var(--dur-fast, 120ms) ease; }
+.mcp-copy svg { width: 15px; height: 15px; }
+.mcp-wrap:hover .mcp-copy, .mcp-copy:focus-visible { opacity: 1; }
+.mcp-copy:hover { background: #34373B; color: #FFFFFF; }
+.mcp-copy:active { transform: scale(0.95); }
+
+/* Settings → Общие → «Акцент»: round swatches of the accents approved on the try-on page; the chosen one ringed */
+.theme-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-sw { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 0; background: none; display: inline-flex; align-items: center;
+  justify-content: center; cursor: pointer; box-shadow: 0 0 0 1px var(--line); transition: box-shadow var(--dur-fast, 120ms) ease, transform var(--dur-fast, 120ms) ease; }
+.theme-sw i { width: 20px; height: 20px; border-radius: 50%; display: block; }
+.theme-sw:hover { transform: scale(1.08); }
+.theme-sw.on { box-shadow: 0 0 0 2px #F5F5F7; }
+.theme-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The caret of «● Запись ▾» in the middle of its part (asked by the user: it sat off centre; a 2px padding
+   on the right of the former round button was left) */
+.tb-rec-more { padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+
+/* «Выйти» at the very bottom of the rail, under «Настройки»; it turns red only under the pointer */
+.rail-quit:hover { color: #FF6961; }
+.rail-btn.hidden { display: none; }
