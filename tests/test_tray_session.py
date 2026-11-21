@@ -128,6 +128,39 @@ class NoTrayIconTest(unittest.TestCase):
             self.assertIs(timer.call_args[0][1], win.minimize)
 
 
+class BackgroundNoticeTest(unittest.TestCase):
+    """Found in the review: «работает в фоне» became once for good, so a user closing the window during a
+    recording later could think it stopped. Told at every close while recording; the idle note stays once."""
+
+    def setUp(self):
+        import run
+
+        self.run = run
+        run.TRAY_READY.set()
+
+    def tearDown(self):
+        self.run.TRAY_READY.clear()
+
+    def test_told_at_every_close_while_recording_once_when_idle(self):
+        app = self.run.TrayController.__new__(self.run.TrayController)
+        app.quitting, app._told_tray = False, False
+        app._status = {"state": "recording", "recording": True}
+        app.window = mock.Mock()
+        told = []
+        app._notify = lambda title, text, **kw: told.append(title)
+        settings = {"close_to_tray": "true", "tray_told": "1"}
+        with mock.patch.object(self.run, "session_ending", return_value=False), \
+             mock.patch.object(self.run.threading, "Timer"), \
+             mock.patch("app.database.get_all_settings", return_value=settings), \
+             mock.patch("app.database.update_settings"):
+            self.assertFalse(app.on_closing())
+            self.assertFalse(app.on_closing())
+            self.assertEqual(told, ["Verbaliox работает в фоне"] * 2)
+            app._status = {"state": "idle", "recording": False}
+            self.assertFalse(app.on_closing())  # told once already (tray_told)
+            self.assertEqual(len(told), 2)
+
+
 class WebView2Test(unittest.TestCase):
     """Found in the audit: without the WebView2 Runtime the window stayed on «Запуск…» (the old IE engine)."""
 

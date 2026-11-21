@@ -1001,6 +1001,11 @@ class TrayController:
             return False
         # Something runs, or the app stays in the tray by choice (Settings → General): the window hides
         threading.Timer(0.05, self.window.hide).start()
+        if self._status.get("recording") or self._status.get("state") == "recording":
+            # told at every close while a recording runs: the user may think closing the window stopped it
+            self._notify("Verbaliox работает в фоне",
+                         "Запись продолжается. Значок в трее — открыть окно или остановить запись.")
+            return False
         # told once, for good (asked by the user: the note came at every close); kept in the settings
         if get_all_settings().get("tray_told") != "1" and not self._told_tray:
             self._told_tray = True
