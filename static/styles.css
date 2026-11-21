@@ -4514,3 +4514,29 @@ button.sc-at:hover { color: var(--accent-text); }
 .kv-mono { font-family: var(--font-mono); font-size: var(--fs-label); }
 .kv-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 @container (max-width: 860px) { .info-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* «Импорт» in the strip of the meeting, before the recording button */
+.strip-imp { margin-right: 8px; flex: none; }
+
+/* A window opens with motion (asked by the user, as on the try-on page): it fades in and grows a little from where
+   it was opened. A panel shown again after «hidden» plays it again; one redrawn while open does not */
+@keyframes vx-pop { from { opacity: 0; transform: translateY(4px) scale(.97); } }
+.vx-panel:not(.hidden), .imp-menu, .tk-colpop, .vx-pop-in, .models-pop:not(.hidden), .hm-pop:not(.hidden) { animation: vx-pop 160ms cubic-bezier(.2, .8, .2, 1) both; }
+.lt-colpop, .tk-colpop, .db-kc, .imp-menu { transform-origin: top right; }
+.vx-panel { transform-origin: bottom left; }
+.an-btn .tb-ai, .sc-act .tb-ai, .ui-btn .tb-ai { width: 14px; height: 14px; vertical-align: -2px; }
+@media (prefers-reduced-motion: reduce) { .vx-panel, .imp-menu, .tk-colpop, .vx-pop-in, .models-pop, .hm-pop { animation: none !important; } }
+
+.sb-gpu-g { display: inline-flex; align-items: center; gap: inherit; }
+.sb-gpu-g.hidden { display: none; }
+
+/* «Свернуть / Развернуть» on one spot in both states (asked by the user): pinned to the player's bottom right */
+#player-footer .rp-body { position: relative; }
+#rp-min-btn { position: absolute; right: 16px; bottom: 10px; }
+#player-footer:not(.rp-mini) .rp-right { padding-right: 40px; }
+#player-footer.rp-mini .rp-body { padding-right: 56px; }
+
+/* The old sidebar (hardware, models, the tree of recordings, the queue) is replaced by the rail, «Записи» (its
+   «Папки» view), the load window and «Очередь»: it no longer takes a column of the window (pult plan, stage 1).
+   Kept in the page for the scripts that still fill it; nothing of it is reachable only there */
+#app-sidebar { display: none !important; }

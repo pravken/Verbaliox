@@ -845,6 +845,7 @@ function dbKpiRedraw() {
 function dbKpiPanel() {
   DB.kpiCfg = !DB.kpiCfg;
   dbKpiRedraw();
+  if (DB.kpiCfg) document.querySelector('.db-kc')?.classList.add('vx-pop-in');  // the motion only on opening
 }
 
 function dbKpiToggle(k) {

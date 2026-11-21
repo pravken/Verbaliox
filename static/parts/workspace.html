@@ -16,6 +16,9 @@
         <span id="strip-grow" class="strip-grow"></span>
       </div>
       <span id="strip-acts" class="strip-acts"></span>
+      <!-- Import from any section (asked by the user): the same menu as in «Записи», next to the recording -->
+      <button id="strip-import" type="button" class="st-btn strip-imp" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
+        data-i18n-title="impMenuTip" title="Добавить записи: файлы, папка, ссылка · Ctrl+O"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="impBtn">Импорт</span></button>
       <!-- Recording: a round button at the right end; while recording it shows the time and «Стоп» -->
       <div class="relative tb-rec-wrap">
         <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">
