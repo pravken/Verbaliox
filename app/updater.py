@@ -199,7 +199,17 @@ def _auto_download(st: Dict[str, Any]) -> None:
 # --- A new version said in a Windows notification (asked by the user: the app lives in the tray for days, the
 # one check at start-up and a message inside a hidden window were missed). Once per version: when it is
 # found, and when it is downloaded and ready. Not in quiet mode; the window keeps its own mark of it
+# One tick at a time: two ticks at once (the 30-minute loop and another caller) both read «not told yet» and
+# both told the same version (found by CI on Windows: «Вышла Verbaliox» twice)
+_notice_lock = threading.Lock()
+
+
 def notice_tick() -> Dict[str, Any]:
+    with _notice_lock:
+        return _notice_tick()
+
+
+def _notice_tick() -> Dict[str, Any]:
     from app import app_status
     from app.database import get_all_settings, update_settings
 
