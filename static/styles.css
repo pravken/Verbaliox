@@ -4638,3 +4638,37 @@ button.sc-at:hover { color: var(--accent-text); }
 #hm-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .hm-pop .hm-preset { height: 28px; padding: 0 11px; border-radius: 8px; font-size: var(--fs-ui); }
 .hm-pop-fit { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-ui); color: #E5E5EA; }
+
+/* One button everywhere (asked by the user: the heads of the sections, the strip, the bars of the selection had
+   pills, round and square buttons side by side): 32px high, an 8px corner like the fields and the cards, 12px
+   inside, 13px text, a 6px gap to its icon; a secondary one on the raised surface, a primary one in the fill.
+   The «+» and the caret of a menu are the same line icons (VX_PLUS, VX_CARET in static/js/core.js) */
+:root { --ctl-h: 32px; --ctl-r: 8px; }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--ctl-h); box-sizing: border-box; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--ctl-r); background: var(--elevated); color: #E6E7EA;
+  font-size: var(--fs-ui); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-fast) ease; }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn):hover:not(:disabled) { background: #34373B; }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn):active:not(:disabled) { transform: scale(0.97); }
+:is(.st-btn-go, .tk-btn-primary, .lt-btn.lt-go, .an-btn-primary, .imp-btn-primary, .tb-pop-primary) {
+  border-color: transparent; background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+:is(.st-btn-go, .tk-btn-primary, .lt-btn.lt-go, .an-btn-primary, .imp-btn-primary, .tb-pop-primary):hover:not(:disabled) { background: var(--fill-bg-hover); border-color: transparent; }
+:is(.st-btn-ghost, .lt-btn.lt-ghost) { background: none; }
+:is(.tk-btn-sm, .an-btn-sm, .st-btn-sm) { height: 28px; padding: 0 10px; font-size: var(--fs-caption); }
+.tk-btn-sq { width: var(--ctl-h); padding: 0; }
+.tk-btn-wide { width: 100%; height: var(--ctl-h); border-radius: var(--ctl-r); }
+#tasks-view .tk-bar .tk-btn { height: var(--ctl-h); padding: 0 12px; border-radius: var(--ctl-r); background: var(--elevated); }
+#tasks-view .tk-bar .tk-btn.tk-btn-primary { background: var(--fill-bg); }
+.imp-btn-lg { height: 36px; padding: 0 16px; border-radius: var(--ctl-r); font-size: var(--fs-body); }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn) :is(.vx-plus, .vx-bic) { width: 14px; height: 14px; flex: none; }
+.vx-caret { width: 12px; height: 12px; flex: none; opacity: 0.7; }
+.lt-chip .vx-caret, .as-chip .vx-caret, .as-scope .vx-caret { margin-left: 2px; }
+.tb-rec-more .vx-caret { opacity: 0.85; }
+/* an icon-only button of a head (⋯ of «Ассистент»): the same square */
+.as-icon-btn { width: var(--ctl-h); height: var(--ctl-h); border-radius: var(--ctl-r); }
+@media (prefers-reduced-motion: reduce) { :is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn) { transition: none; } :is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn):active { transform: none; } }
+/* the bars under the heads end at the heads' right edge (24px), as the bar of «Записи» */
+.tk-bar { padding-left: 24px; padding-right: 24px; }
+/* a narrow window moves the actions of a head to a second line: still at the right edge, where the primary one is in every section */
+.tk-head-actions { margin-left: auto; }
