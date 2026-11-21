@@ -303,9 +303,10 @@ function renderHomeMeetings() {
       </div>`);
   }
   if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
-  // on the line of «now», at its right: how much of the working day is over
-  const gone = workGone && nowMs < d.to.getTime() ? `<span class="hm-now-gone">${escapeHtml(t('hmDayGone').replace('{t}', () => dbHm(workGone / 1000)))}</span>` : '';
-  if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t">${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b>${gone}</div>`);
+  // how much of the working day is over: the shaded part says it, the figure is in the hint of the time (a caption
+  // on the line itself crossed it — reported by the user)
+  const gone = workGone && nowMs < d.to.getTime() ? ` title="${escapeHtml(t('hmDayGone').replace('{t}', () => dbHm(workGone / 1000)))}"` : '';
+  if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t"${gone}>${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
   box.innerHTML = html.join('');
   return real;  // the header counts the meetings, not the blocks and the events that are none
 }
