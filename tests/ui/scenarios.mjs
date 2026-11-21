@@ -67,7 +67,9 @@ await step('read a recording', async () => {
   await page.click('#tx-model-chip');
   await sleep(200);
   const versions = await page.$$eval('#text-menu button', els => els.map(e => e.textContent));
-  expect(versions.some(x => x.includes('✓')), `the version shown is not marked: ${versions.join(' | ')}`);
+  // the version shown is told by the accent (aria-current), not by a «✓»
+  expect(await page.locator('#text-menu button.tm-on[aria-current="true"]').count() === 1, `the version shown is not marked: ${versions.join(' | ')}`);
+  expect(!versions.some(x => x.includes('✓')), `a tick is left in the menu: ${versions.join(' | ')}`);
   await page.keyboard.press('Escape');
   await page.click('#tx-more-btn');
   await sleep(200);
