@@ -24,6 +24,8 @@ const DB_WIDGETS = {
   worked: { title: 'dbWorked', sizes: ['S', 'M', 'L', 'W'], icon: '⏱' },
   // asked by the user: where the working time goes, by the program in front (app/worktime.py); off until turned on
   apps: { title: 'dbApps', sizes: ['M', 'L', 'W'], icon: '▤' },
+  // asked by the user: the load of the computer and the models in memory, as the «Нагрузка» window of the status bar
+  sysload: { title: 'dbSysload', sizes: ['S', 'M', 'L'], icon: '◫' },
 };
 // rows that add up to 12: W · M+M · L+S · M+M · W
 const DB_DEFAULT = [['kpis', 'W'], ['time', 'M'], ['load', 'M'], ['features', 'L'], ['people', 'S'], ['decisions', 'M'], ['dull', 'M'], ['summary', 'W']];
@@ -368,7 +370,7 @@ function dbNum(n) {
 
 // --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
 // They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
-const DB_LOCAL_WIDGETS = ['load', 'worked', 'apps', 'people'];
+const DB_LOCAL_WIDGETS = ['load', 'worked', 'apps', 'people', 'sysload'];
 const DB_TIME_WIDGETS = ['load'];  // redrawn as the time goes (dbTickNow); «Рабочий день» after its numbers come
 
 // The meeting going on or the next one of today (not an all-day one); null when there is none left
@@ -717,6 +719,64 @@ function dbDullHtml(d) {
     + `<span class="db-dull-sub">${escapeHtml(t('dbDullStreak').replace('{n}', () => x.streak).replace('{h}', () => dbNum(x.hours)))}</span></button>`).join('');
 }
 
+// --- «Нагрузка системы и моделей» (asked by the user): the figures of the «Нагрузка» window of the status bar
+// (static/js/pult.js renderLoadPop) in a widget. It reads vram.data, which the status bar's poll of /api/vram keeps
+// fresh (static/js/settings.js loadVram): no request of its own. Each new picture redraws the widget while «Обзор» is
+// shown (dbOnVramData from renderVram); hidden, nothing is drawn. S: the three bars; M and L: the models in memory too.
+// Verbaliox's share in the accent over the grey of the whole, the value orange above 85 % (loadLevel)
+function dbSysloadHtml(size) {
+  const data = vram.data;
+  if (!data) return `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
+  const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
+  const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
+  const row = (k, all, mine, value, tip, ownText) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${k}</span>`
+    + `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`
+    + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
+    + `<div class="db-sl-own">${ownText ? `<span class="ld-own"><i></i>Verbaliox ${escapeHtml(ownText)}</span>` : ''}</div>`;
+  const cpu = sys.cpu_percent;
+  let html = `<div class="ld-legend db-sl-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
+  html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`, `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`,
+    own.cpu_percent != null ? `${Math.round(own.cpu_percent)}%` : '');
+  html += ram
+    ? row('RAM', pct(ram.used_gb, ram.total_gb), pct(own.ram_gb, ram.total_gb), `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
+      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', own.ram_gb != null ? gbText(own.ram_gb) : '')
+    : row('RAM', 0, 0, '—', '', '');
+  // without a video card that reports its memory the row keeps its place, said in words
+  html += gpu
+    ? row('GPU', pct(gpu.used_gb, gpu.total_gb), pct(own.gpu_gb, gpu.total_gb), `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
+      own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '', own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '')
+    : row('GPU', 0, 0, t('dbSlNoGpu'), t('mpNoGpu'), '');
+  if (size === 'S') return html;
+  const models = loadModels();
+  html += `<div class="db-sl-cap">${escapeHtml(t('ldInMemory'))}</div>`;
+  if (!models.length) return `${html}<div class="db-sl-empty">${escapeHtml(t('dbSlEmpty'))}</div>`;
+  return html + models.map(({ c, i }) => {
+    const u = loadModelUse(c, own);
+    const can = !vram.busy && !c.loading && c.kind !== 'dub' && (c.can_unload || c.in_use);
+    const tip = c.kind === 'dub' ? t('tipVramDub') : vramChipTitle(c);
+    return `<div class="db-sl-model"><span class="db-sl-name"><b>${escapeHtml(loadModelName(c))}</b><small>${escapeHtml(loadModelPurpose(c))}</small></span>`
+      + `<span class="db-sl-use"><b>${escapeHtml(u.mem)}</b><small>${escapeHtml(u.more)}</small></span>`
+      + `<button data-click="vramChipClick" data-click-args='[${i}]' class="tk-btn tk-btn-sm" title="${escapeHtml(tip)}" ${can ? '' : 'disabled'}>${escapeHtml(t('mpActUnload'))}</button></div>`;
+  }).join('');
+}
+
+// A new picture of the load (renderVram in static/js/settings.js): the widget follows while «Обзор» is shown
+// (drawn only when it changed, so a refresh never swallows a click on «Выгрузить»); hidden, nothing is drawn
+function dbOnVramData() {
+  if (state.appView !== 'dashboard' || document.hidden || DB.edit || (DB.drag && DB.drag.on)) return;
+  dbPrefs().layout.forEach((w, i) => {
+    if (w.id !== 'sysload') return;
+    const c = document.querySelector(`#db-grid .db-w[data-i="${i}"] .db-c`);
+    const html = c && dbWidgetHtml('sysload', dbSize(w));
+    if (c && c._vxHtml !== html) { c._vxHtml = html; c.innerHTML = html; }
+  });
+}
+
+// While the widget is shown, the poll of the load keeps its pace even without a video card (static/js/settings.js)
+function dbSysloadLive() {
+  return state.appView === 'dashboard' && !document.hidden && dbPrefs().layout.some(w => w.id === 'sysload');
+}
+
 function dbWidgetHtml(id, size) {
   const d = DB.data;
   if (!d && !DB_LOCAL_WIDGETS.includes(id)) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
@@ -725,6 +785,7 @@ function dbWidgetHtml(id, size) {
     case 'load': return dbLoadHtml();
     case 'worked': return dbWorkedHtml(size);
     case 'apps': return dbAppsHtml(size);
+    case 'sysload': return dbSysloadHtml(size);
     case 'dull': return dbDullHtml(d);
     case 'mytasks': return dbTasks(d, size);
     case 'waiting': return dbWaitingHtml(d, size);
@@ -1222,6 +1283,7 @@ function addDashWidget(id) {
   if (!def) return;
   dbSave({ layout: [...dbPrefs().layout, { id, size: def.sizes[Math.min(1, def.sizes.length - 1)] }] });
   renderDashboard();
+  if (id === 'sysload' && typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);
   if (id === 'apps' && !DB.apps) dbLoadApps().then(() => { if (state.appView === 'dashboard') renderDashboard(); });
   document.querySelector('#db-grid .db-w:last-child')?.scrollIntoView({ block: 'nearest', behavior: scrollMotion() });
 }
@@ -1233,7 +1295,7 @@ function resetDashboard() {
 
 // the line icons of the widgets in the panel «Виджеты» (the icon language of the rail and the cards)
 const DB_LIB_IC = { kpis: 'grid', mytasks: 'task', waiting: 'clock', features: 'tag', time: 'chart', people: 'people', decisions: 'dec',
-  summary: 'spark', load: 'chart', dull: 'redo', worked: 'clock', apps: 'grid' };
+  summary: 'spark', load: 'chart', dull: 'redo', worked: 'clock', apps: 'grid', sysload: 'chart' };
 
 function renderDashDrawer() {
   const box = document.getElementById('db-drawer');
@@ -1444,6 +1506,7 @@ registerView('dashboard', {
       DB.waveTimer = setTimeout(() => grid.classList.remove('db-wave'), 1000);
     }
     loadDashboard();
+    if (dbPrefs().layout.some(w => w.id === 'sysload') && typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);
   },
   hide: () => { DB.edit = false; DB.kpiCfg = false; },
   refresh: (changed) => { if (changed) loadDashboard(); },

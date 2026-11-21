@@ -4977,3 +4977,19 @@ button.sc-at:hover { color: var(--accent-text); }
 #workspace-header .tb-rec-tabs .tb-active .tb-ai { fill: url(#vs-ai-grad); }
 #workspace-header .tb-rec-tabs .tb-badge, #workspace-header .tb-rec-tabs .tb-active .tb-badge { background: rgba(255, 255, 255, 0.1); color: var(--hc-dim, #AEAEB2); font-weight: 500; }
 #workspace-header .tb-rec-tabs .tb-active .tb-badge { color: #FFFFFF; }
+
+/* «Обзор» → «Нагрузка системы и моделей» (dbSysloadHtml in static/js/dashboard.js): the bars of the «Нагрузка» window,
+   Verbaliox's share in the accent over the grey of the whole, its figure under each bar on the right (the line kept
+   when there is none); M and L: the models in memory, each with «Выгрузить» at the same place */
+.db-sl-legend { margin: 0 0 6px; }
+.db-w-sysload .ld-row { grid-template-columns: 36px minmax(40px, 1fr) 120px; gap: 10px; padding: 2px 0 0; }  /* the bars end at one x */
+.db-sl-own { display: flex; justify-content: flex-end; min-height: 16px; margin: 2px 0 6px 46px; }
+.db-sl-cap { margin-top: 6px; padding: 10px 0 2px; border-top: 1px solid var(--line); font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #AEAEB2); }
+.db-sl-model { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 7px 0; }
+.db-sl-model + .db-sl-model { border-top: 1px solid var(--line); }
+.db-sl-name, .db-sl-use { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.db-sl-use { align-items: flex-end; white-space: nowrap; }
+.db-sl-name b, .db-sl-use b { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-sl-use b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.db-sl-name small, .db-sl-use small { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-sl-empty { padding: 6px 0 2px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
