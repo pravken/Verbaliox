@@ -90,6 +90,25 @@ await step('read a recording', async () => {
   await page.evaluate(() => txViewToggle('fillers'));
 });
 
+// The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the
+// name once for a run of one speaker; the phrase playing is lit; «Текст» brings the running text back, kept
+await step('transcript as a chat', async () => {
+  await page.evaluate(() => { openRecordTab('transcript'); setTxLayout('chat'); });
+  await sleep(300);
+  const bubbles = await page.locator('#transcript-inner .ch-bub.segment-row').count();
+  expect(bubbles > 0, 'no bubbles in «Чат»');
+  expect(await page.locator('#transcript-inner .ch-bub .ch-tm').count() === bubbles, 'a bubble without its time');
+  const runs = await page.locator('#transcript-inner .ch-group').count();
+  expect(await page.locator('#transcript-inner .ch-group > .ch-av').count() === runs, 'the face is not once per run');
+  await page.evaluate(() => updatePlaybackHighlight(1, true));
+  expect(await page.locator('#transcript-inner .ch-bub.segment-active').count() === 1, 'the phrase playing is not lit');
+  await page.click('#tx-layout-text');
+  await sleep(200);
+  expect(await page.locator('#transcript-inner .ch-bub').count() === 0 && await page.locator('#transcript-inner .segment-row').count() > 0, '«Текст» did not bring the text back');
+  expect(await page.evaluate(() => localStorage.getItem('verbaliox_tx_layout')) === 'text', 'the choice is not kept');
+  await page.click('#tx-layout-chat');
+});
+
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
 await step('menu at the bottom', async () => {
   const box = await page.evaluate(() => {

@@ -3027,6 +3027,11 @@ const I18N = {
     recAfterAnalysis: 'Появится после анализа',
     recTopics: 'Темы',
     recAskPh: 'Вопрос об этой записи…',
+    txLayoutAria: 'Вид расшифровки',
+    txLayoutChat: 'Чат',
+    txLayoutChatTip: 'Реплики облачками: аватар и имя один раз на серию реплик',
+    txLayoutText: 'Текст',
+    txLayoutTextTip: 'Сплошной текст: реплики одного говорящего одним абзацем',
 
   },
   en: {
@@ -6054,6 +6059,11 @@ const I18N = {
     recAfterAnalysis: 'Appears after the analysis',
     recTopics: 'Topics',
     recAskPh: 'A question about this recording…',
+    txLayoutAria: 'Transcript view',
+    txLayoutChat: 'Chat',
+    txLayoutChatTip: 'Phrases as bubbles: the avatar and the name once for a run of phrases',
+    txLayoutText: 'Text',
+    txLayoutTextTip: 'Running text: a speaker\'s phrases as one paragraph',
 
   }
 };

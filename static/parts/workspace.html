@@ -651,6 +651,11 @@
 
             <!-- Right: Transcript Editing, Auto-Scroll & Search Tools -->
             <div id="tx-tools" class="flex items-center gap-1.5 shrink-0 ml-auto">
+              <!-- The look of the text: a chat (a bubble for each phrase) or the text as before (setTxLayout in workspace.js) -->
+              <div class="tx-layout" role="radiogroup" data-i18n-aria="txLayoutAria" aria-label="Вид расшифровки">
+                <button data-click="setTxLayout" data-click-args='["chat"]' id="tx-layout-chat" role="radio" aria-checked="true" data-i18n="txLayoutChat" data-i18n-title="txLayoutChatTip" title="Реплики облачками: аватар и имя один раз на серию реплик">Чат</button>
+                <button data-click="setTxLayout" data-click-args='["text"]' id="tx-layout-text" role="radio" aria-checked="false" data-i18n="txLayoutText" data-i18n-title="txLayoutTextTip" title="Сплошной текст: реплики одного говорящего одним абзацем">Текст</button>
+              </div>
               <!-- Quick translation languages (the studio's): show the translation, or make it -->
               <div id="tx-quick-langs" class="flex items-center gap-1"></div>
               <!-- Language of the text: original, a translation, or both side by side (menu filled by renderTranslationControls) -->

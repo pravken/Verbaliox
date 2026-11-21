@@ -3688,3 +3688,31 @@ button.sc-at:hover { color: var(--accent-text); }
   .sum-side { position: static; }
   .sum-two { grid-template-columns: minmax(0, 1fr); }
 }
+/* «Чат | Текст» above the transcript */
+.tx-layout { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.tx-layout button { height: 22px; padding: 0 10px; border-radius: 6px; font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); cursor: pointer; }
+.tx-layout button:hover { color: #F5F5F7; }
+.tx-layout button[aria-checked="true"] { background: rgba(255, 255, 255, 0.14); color: #F5F5F7; font-weight: 500; }
+
+/* The transcript as a chat (workspace.js transcriptChatGroupHtml): the face and the name once for a run of a
+   speaker's phrases, each phrase a bubble with its time; the phrase playing is lit in the speaker's colour */
+.tx-chat .ch-group { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; max-width: 820px; padding: 6px 0 2px; }
+.tx-chat .ch-group:hover { background: none; }
+.ch-av { position: relative; width: 30px; height: 30px; margin-top: 2px; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; background: rgba(255, 255, 255, 0.1); color: #F5F5F7; }
+.ch-body { min-width: 0; }
+.ch-h { display: flex; align-items: center; min-width: 0; margin: 0 0 3px 2px; }
+.ch-bubs { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.tx-chat .ch-bub { position: relative; display: inline-flex; align-items: flex-end; gap: 10px; max-width: 100%; padding: 7px 12px; border-radius: 14px;
+  background: var(--card); border: 1px solid var(--line); font-size: 13.5px; line-height: 1.55; color: #E5E5EA; overflow-wrap: anywhere;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease; }
+.tx-chat .ch-bub:first-child { border-top-left-radius: 4px; }
+.tx-chat .ch-bub:hover { background: var(--elevated); }
+.tx-chat .ch-bub.segment-active { background: color-mix(in srgb, var(--pc) 13%, var(--card)); border-color: color-mix(in srgb, var(--pc) 50%, transparent); }
+.tx-chat .ch-bub .seg-piece-text { min-width: 0; }
+.ch-tm { flex: none; padding: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.9; color: var(--hc-dim, #8E8E93); cursor: pointer; }
+.ch-tm:hover { color: var(--accent-text); }
+.tx-chat .ch-bub .seg-piece-edit svg { left: -6px; top: -16px; }
+.tx-chat .ch-bub:has(textarea) { display: block; width: 100%; background: none; border-color: transparent; padding: 0; }
+.tx-chat .ch-bub:has(textarea) .ch-tm { display: none; }
+.tx-chat .ch-bub .tr-text.block { margin-top: 2px; }
