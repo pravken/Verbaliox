@@ -73,5 +73,8 @@ python -m compileall -q app run.py build_exe.py tests
 
 - `app/` — сервер (`app/api/` — маршруты), `static/` — страница (`static/parts/` — части разметки,
   `static/js/` — скрипты одной глобальной области, `core.js` первым).
+- `.claude/skills/` — скиллы проекта: `verbaliox-ui-check` (браузерные проверки и скриншоты), `verbaliox-release`,
+  `verbaliox-logs` (разбор логов пользователя), `frontend-design` и `mcp-builder` (из anthropics/skills, Apache 2.0,
+  дополнены под проект). В архив релиза не входят (`.gitattributes`: export-ignore).
 - `docs/audit-report.md` — аудит и что сделано, `docs/pc-session-audit.md` — что проверить на ПК,
   `bench-report/` — замеры моделей.
