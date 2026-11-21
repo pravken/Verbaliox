@@ -1,13 +1,18 @@
 <!-- Tasks from all recordings (package D, static/js/tasks.js): part of static/parts/workspace.html.
      A list (by person, by due date, by recording) or a month calendar, with the Summary panel on the right. -->
     <div id="tasks-view" class="hidden flex-1 min-h-0 tk-view">
-      <header class="tk-head">
-        <div class="tk-head-text">
-          <button class="tk-back" data-click="switchAppView" data-click-args='["dashboard"]' data-i18n="dbBack">← Главная</button>
-          <h1 class="tk-title" data-i18n="navTasks">Задачи</h1>
-          <p id="tk-sub" class="tk-sub"></p>
-        </div>
+      <!-- The head as in «Записи»: the section's icon, its name and numbers, the search and the actions -->
+      <header class="tk-head tk-head-lt">
+        <span class="tk-head-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l2 2 3-3M5 15l2 2 3-3M13 8h6M13 16h6"/></svg></span>
+        <h1 class="tk-title" data-i18n="navTasks">Задачи</h1>
+        <p id="tk-sub" class="tk-sub"></p>
+        <span class="tk-grow"></span>
         <div class="tk-head-actions">
+        <label class="tk-search">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+          <input id="tk-q" type="search" data-input="onTasksSearch" data-input-args='[{"$": "value"}]'
+                 data-i18n-placeholder="tkSearch" placeholder="Найти задачу" data-i18n-title="tkSearch" title="Найти задачу">
+        </label>
           <span id="tk-note" class="tk-note hidden" role="status"></span>
           <button id="tk-exp-btn" class="tk-btn" data-click="openTasksExportMenu" data-click-args='[{"$": "event"}]'
                   aria-haspopup="menu" data-i18n-title="tkExportTitle" title="Выгрузить задачи, которые видно сейчас">
@@ -20,21 +25,25 @@
       </header>
 
       <div class="tk-bar">
-        <div id="tk-views" class="tk-seg" role="radiogroup" data-i18n-title="tkViewLabel" title="Вид"></div>
-        <div id="tk-groups" class="tk-seg" role="radiogroup" data-i18n-title="tkGroupLabel" title="Группировать"></div>
-        <span class="tk-vsep" aria-hidden="true"></span>
+        <div class="tk-fl">
         <div id="tk-filters" class="tk-filters"></div>
         <span class="tk-vsep" aria-hidden="true"></span>
         <div class="tk-ppl-wrap">
           <button id="tk-ppl-btn" class="tk-chip" data-click="openTasksPeopleMenu" data-click-args='[{"$": "event"}]' aria-haspopup="true"></button>
           <button id="tk-ppl-clear" class="tk-x hidden" data-click="clearTasksPeople" data-i18n-title="tkPeopleClear" title="Сбросить фильтр по людям">✕</button>
         </div>
-        <span class="tk-grow"></span>
-        <label class="tk-search">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
-          <input id="tk-q" type="search" data-input="onTasksSearch" data-input-args='[{"$": "value"}]'
-                 data-i18n-placeholder="tkSearch" placeholder="Найти задачу" data-i18n-title="tkSearch" title="Найти задачу">
-        </label>
+        </div>
+        <div class="tk-fr">
+        <!-- Named groups of the toolbar: the view, and the grouping of the list (greyed in the calendar, its place kept) -->
+        <span class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkViewLabel">Вид</span>
+          <span id="tk-views" class="tk-seg" role="radiogroup" data-i18n-aria="tkViewLabel" aria-label="Вид"></span></span>
+        <span id="tk-groups-box" class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkGroupLabel">Группировка</span>
+          <span id="tk-groups" class="tk-seg" role="radiogroup" data-i18n-aria="tkGroupLabel" aria-label="Группировка"></span></span>
+        <!-- «Колонки»: the columns of the table and the fields of the cards; its place kept in the calendar -->
+        <button id="tk-cols-btn" class="tk-btn" data-click="openTasksCols" data-click-args='[{"$": "event"}]' aria-haspopup="true" data-i18n-title="tkColsTip" title="Колонки таблицы и сведения на карточках">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+          <span data-i18n="tkCols">Колонки</span></button>
+        </div>
       </div>
 
       <div class="tk-body">

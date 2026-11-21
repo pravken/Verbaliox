@@ -5,7 +5,7 @@
 // --- Views of the main area ---
 // "library" is the open recording (its transcript, analysis and speakers); its name stays for the
 // many places that open a recording. Ctrl+1…5 follow the top bar (video.js).
-const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable', 'dashboard'];
+const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable', 'dashboard', 'dict', 'people'];
 const VIEW_HOOKS = {};
 
 // A view of a package: show() runs each time it comes on screen, hide() when another one does,
@@ -188,7 +188,7 @@ function renderTopbar() {
 // The section on screen is marked, and the bar at the edge moves to it from the one left; an open recording
 // belongs to «Записи», the settings page to «Настройки»
 const RAIL_OF_VIEW = { home: 'rail-home', dashboard: 'rail-dashboard', libtable: 'rail-libtable', library: 'rail-libtable',
-  tasks: 'rail-tasks', ask: 'rail-ask', settings: 'sb-settings-btn' };
+  tasks: 'rail-tasks', ask: 'rail-ask', settings: 'sb-settings-btn', dict: 'rail-dict', people: 'rail-people' };
 let _railOn = '';
 function renderRail() {
   const rail = document.getElementById('app-rail');

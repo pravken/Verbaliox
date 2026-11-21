@@ -116,6 +116,118 @@ await step('undo a removal', async () => {
   expect(await page.evaluate(() => TK.data.tasks.length) === before, '«Отменить» did not bring it back');
 });
 
+// The tasks as a calendar of due dates: the grouping greys (its place kept), today framed, a task with its
+// whole text, «Без срока» with its empty slot; the week view has seven tall days
+await step('task calendar', async () => {
+  await page.evaluate(() => { switchAppView('tasks'); setTasksView('cal'); setTasksCalMode('month'); });
+  await sleep(500);
+  const r = await page.evaluate(() => ({
+    off: document.getElementById('tk-groups-box').classList.contains('tk-tbg-off'),
+    today: document.querySelectorAll('#tk-cal .tk-day.tk-today').length,
+    chips: [...document.querySelectorAll('#tk-cal .tk-grid .tk-cchip .tk-ctext')].map(e => e.scrollWidth <= e.clientWidth + 1),
+    weekdays: document.querySelectorAll('#tk-cal .tk-week span').length,
+    none: !!document.querySelector('#tk-cal .tk-nodue .pcd-h'),
+  }));
+  expect(r.off, 'the grouping is not greyed in the calendar');
+  expect(r.today === 1, 'today is not framed');
+  expect(r.chips.length > 0 && r.chips.every(Boolean), 'a task of the calendar is cut');
+  expect(r.weekdays === 7 && r.none, 'no weekdays or no «Без срока»');
+  await page.evaluate(() => setTasksCalMode('week'));
+  await sleep(300);
+  expect(await page.evaluate(() => document.querySelectorAll('#tk-cal .tk-day.tk-tall').length) === 7, 'the week has not seven days');
+  await page.evaluate(() => { setTasksCalMode('month'); setTasksView('list'); });
+  await sleep(300);
+  expect(await page.evaluate(() => !document.getElementById('tk-groups-box').classList.contains('tk-tbg-off')
+    && !!document.querySelector('#tk-list .tk-group.pcard .pcd-ic, #tk-list .tk-group.pcard .tk-ava')), 'the list has no group cards');
+  // the names of the columns: one bar above all the cards, each name over its column (the summary folded:
+  // room for the grid); «Колонки» adds a column to the bar and the rows alike; the cards have no bar
+  const cols = await page.evaluate(() => {
+    TK.rep = false; TK.cols = ['who', 'due', 'src']; renderTasks();
+    const bar = document.querySelectorAll('#tk-list > .tk-colbar > span');
+    const x = el => Math.round(el.getBoundingClientRect().left);
+    return [bar.length === 7, ...[...document.querySelectorAll('#tk-list .tk-group .tk-row')].map(row => {
+      const c = row.children;
+      return [x(bar[2]) === x(c[2]), x(bar[3]) === x(c[3]), x(bar[4]) === x(c[4]), x(bar[5]) === x(c[5])];
+    }).flat()];
+  });
+  expect(cols.length > 1 && cols.every(Boolean), `the column names are off their columns: ${cols}`);
+  await page.evaluate(() => setTasksView('cards'));
+  await sleep(300);
+  expect(await page.evaluate(() => !document.querySelector('#tk-list .tk-colbar') && document.querySelectorAll('#tk-list .tk-tcard').length > 0), 'the cards view is not cards');
+  await page.evaluate(() => { setTasksView('list'); TK.rep = true; resetTasksCols(); });
+});
+
+// «Словарь» is a section of the rail: a word added with its variants and group shows in its group with the
+// number of recordings that hold it; the old entry in the settings leads here
+await step('dictionary section', async () => {
+  await page.click('#rail-dict');
+  await sleep(600);
+  expect(await page.isVisible('#dict-view') && await page.evaluate(() => document.getElementById('rail-dict').classList.contains('rail-on')), 'the section did not open');
+  await page.fill('#settings-dict-term', 'Пиксель-Студио');
+  await page.fill('#settings-dict-variants', 'пиксель студия');
+  await page.fill('#settings-dict-cat', 'Компании');
+  await page.click('#settings-dict-add');
+  await sleep(600);
+  const r = await page.evaluate(() => ({
+    row: [...document.querySelectorAll('#dc-words .dc-row:not(.dc-thead)')].some(x => x.textContent.includes('Пиксель-Студио') && x.textContent.includes('пиксель студия')),
+    group: [...document.querySelectorAll('#dc-words .dc-filters button')].some(b => b.textContent.includes('Компании')),
+    used: document.querySelectorAll('#dc-words .dc-row:not(.dc-thead) .dc-used').length > 0,
+  }));
+  expect(r.row && r.group && r.used, `the word is not in its group: ${JSON.stringify(r)}`);
+  await page.evaluate(() => { const d = state.dictionary.find(x => x.term === 'Пиксель-Студио'); return deleteDictItem(d.id); });
+  await page.evaluate(() => { openModal('settings', 'dictionary'); });
+  await sleep(500);
+  await page.click('#modal-settings [data-stab="dictionary"] button[data-click="openDictionary"]');
+  await sleep(500);
+  expect(await page.isVisible('#dict-view'), 'the settings entry does not lead to the section');
+});
+
+// «Люди» is a section of the rail: the people on the left, the card of the one chosen on the right in cards
+await step('people section', async () => {
+  await page.click('#rail-people');
+  await sleep(800);
+  const r = await page.evaluate(() => ({
+    view: !document.getElementById('people-view').classList.contains('hidden'),
+    rows: document.querySelectorAll('#pv-list .pv-row').length,
+    cards: document.querySelectorAll('#pv-card .pcard .pcd-ic').length,
+    on: document.getElementById('rail-people').classList.contains('rail-on'),
+  }));
+  expect(r.view && r.rows >= 3 && r.cards >= 2 && r.on, `people: ${JSON.stringify(r)}`);
+});
+
+// Ассистент: the field has a send button; an answer's sources are moments «▶ 00:24» in the text, and under it
+// each recording by its full name with its moments
+await step('assistant sources', async () => {
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(500);
+  const r = await page.evaluate(async () => {
+    for (let i = 0; i < 30 && !ASSIST.loaded; i++) await new Promise(res => setTimeout(res, 100));
+    assistantNewChat();
+    currentChat().items.push({ id: 991, question: 'Что решили по срокам?', scope: state.askScope, scopeLabel: '', status: 'done', at: new Date().toISOString(),
+      data: { found: true, answer: 'Сроки уточнят до среды [1], список будет к пятнице [2].', sources: [
+        { n: 1, meeting_id: 1, title: 'Планёрка отдела', date: '21 ноября', start: 24, text: 'По срокам нужно уточнить.' },
+        { n: 2, meeting_id: 1, title: 'Планёрка отдела', date: '21 ноября', start: 12, text: 'Я подготовлю список к пятнице.' }] } });
+    renderAssistant();
+    return { refs: [...document.querySelectorAll('#ask-thread .markdown-body .as-ref')].map(b => b.textContent),
+      rows: document.querySelectorAll('#ask-thread .as-srcrow').length, send: !!document.querySelector('#library-ask-btn svg') };
+  });
+  expect(r.refs.join() === '▶ 00:24,▶ 00:12' && r.rows === 1 && r.send, `assistant: ${JSON.stringify(r)}`);
+});
+
+// Настройки: eight sections with their line icons, «Календарь» one of them; the cards with the icon of their section
+await step('settings sections', async () => {
+  await page.evaluate(() => openModal('settings', 'calendar'));
+  await sleep(500);
+  const r = await page.evaluate(() => ({
+    nav: document.querySelectorAll('#settings-nav .sx-nav-btn svg').length,
+    on: document.getElementById('stab-calendar').classList.contains('is-active'),
+    icons: [...document.querySelectorAll('#modal-settings [data-stab="calendar"] .settings-card')].every(c => !c.querySelector('h4') || c.querySelector('.sx-card-hd > .pcd-ic')),
+  }));
+  expect(r.nav === 8 && r.on && r.icons, `settings sections: ${JSON.stringify(r)}`);
+  await page.evaluate(() => closeModal('settings'));
+  await sleep(300);
+});
+
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
 await step('dialog keeps a selection', async () => {
   await page.evaluate(() => { askText('Название', 'текст'); });
@@ -198,40 +310,36 @@ await step('first run wizard', async () => {
   expect(cal.calendar_ics === 'https://example.com/basic.ics' && cal.meet_auto_all === 'true', `the calendar not saved: ${JSON.stringify(sent)}`);
 });
 
-// After an update: a small wizard asks the settings a new version brings (asked by the user), once
-await step('setup steps after an update', async () => {
+// After an update: ONE window — the settings a new version asks answered in place (amber «Нужен ответ», then
+// green «Сохранено»), the new features as cards, all the changes folded as «Новое» and «Исправлено»; «Готово»
+// marks every step answered, and they are not asked again
+await step('window after an update', async () => {
   await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
   await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
-  await page.waitForSelector('#setup-steps select[data-hol-country] option[value="RS"]', { state: 'attached' });
-  await page.selectOption('#setup-steps select[data-hol-country]', 'RS');
-  expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
-  // each step saved before the next shows (its buttons wait meanwhile): wait for that, not for a time
-  const next = async () => {
-    const was = await page.getAttribute('#setup-steps-dialog', 'data-step');
-    await page.click('#setup-steps button[data-a="next"]');
-    // polled with evaluate: waitForFunction is refused by the page's CSP (no eval) in CI's Playwright
-    for (let i = 0; i < 80; i++) {
-      const moved = await page.evaluate(prev => {
-        const d = document.getElementById('setup-steps-dialog');
-        return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
-      }, was);
-      if (moved) break;
-      await sleep(100);
-    }
-  };
-  await next();
-  // then the news of the version, one step each: the last one closes the wizard
-  for (let i = 0; i < 5 && await page.$('#setup-steps-dialog'); i++) {
-    expect(await page.$('#setup-steps .frw-points li'), 'a news step without its points');
-    await next();
-  }
-  expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
+  await page.waitForSelector('#upd-after select[data-hol-country] option[value="RS"]', { state: 'attached' });
+  await page.selectOption('#upd-after select[data-hol-country]', 'RS');
+  expect(!(await page.$('#upd-after select[data-hol-subdiv]')), 'a region offered for a country without them');
+  expect(await page.$('#upd-after .upd-chip-warn'), 'the step does not say it needs an answer');
+  await page.click('#upd-after button[data-a="save"]');
+  for (let i = 0; i < 50 && !(await page.$('#upd-after .upd-chip-ok')); i++) await sleep(100);
+  expect(await page.$('#upd-after .upd-chip-ok'), 'the step is not marked saved');
+  expect(await page.evaluate(() => document.querySelectorAll('#upd-after .upd-card').length) >= 1, 'no new features');
+  // the notes of the version join the same window: «Новое» and «Исправлено» as lists
+  await page.evaluate(() => openAfterUpdateNotes('- **Подключение к звонку**: кнопка в карточке встречи.\n- Субтитры больше не пропадают после переключения окна.\n', '0.8.27', ''));
+  expect(await page.evaluate(() => document.querySelectorAll('#upd-after').length) === 1, 'two windows after an update');
+  await page.click('#upd-after button[data-a="all"]');
+  const notes = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#upd-after .upd-all-h')].map(h => h.textContent),
+    items: document.querySelectorAll('#upd-after .upd-all li').length, bold: !!document.querySelector('#upd-after .upd-all li strong') }));
+  expect(notes.heads.join() === 'Новое,Исправлено' && notes.items === 2 && notes.bold, `the changes are not lists: ${JSON.stringify(notes)}`);
+  await page.click('#upd-after button[data-a="done"]');
+  for (let i = 0; i < 50 && await page.$('#upd-after'); i++) await sleep(100);
+  expect(!(await page.$('#upd-after')), 'the window stayed open');
   const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(set.holiday_country === 'RS', `the country not saved: ${set.holiday_country}`);
   // answered: not asked again
   await page.evaluate(sv => openSetupSteps(sv), set);
   await sleep(400);
-  expect(!(await page.$('#setup-steps')), 'asked again after it was answered');
+  expect(!(await page.$('#upd-after')), 'asked again after it was answered');
   await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
 });

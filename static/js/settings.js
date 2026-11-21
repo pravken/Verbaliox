@@ -2819,57 +2819,15 @@ document.addEventListener('change', (e) => {
 });
 
 // --- Dictionary ---
-// Audit 7.5: the dictionary has one place, its section of Settings. The sidebar button shows that very
-// section in a window of its own (asked by the user: the button opened the whole settings): it is moved
-// into the window while it is open and put back after, so there is one dictionary and one set of handlers
+// The dictionary is a section of its own at the bottom of the rail (static/js/dictionary.js); the settings
+// keep a card leading there. Its two switches are settings (dictionary_fuzzy, feature_suggest), loaded and
+// saved with the others, and saved at once when changed in the section
 const DICT_SWITCHES = { 'set-dict-fuzzy': 'dictionary_fuzzy', 'set-feature-suggest': 'feature_suggest' };
 
-async function openDictionary() {
-  if (document.getElementById('dict-dlg')) return;
-  mountSettingsPage();
-  const section = document.querySelector('#modal-settings [data-stab="dictionary"]');
-  if (!section) { openModal('settings', 'dictionary'); return; }
-  const home = { parent: section.parentElement, next: section.nextSibling, cls: section.className };
-  const wrap = document.createElement('div');
-  wrap.id = 'dict-dlg';
-  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
-  wrap.setAttribute('role', 'dialog');
-  wrap.setAttribute('aria-modal', 'true');
-  wrap.setAttribute('aria-label', t('dictionary'));
-  wrap.innerHTML = `<div class="an-dlg dict-dlg modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml(t('dictionary'))}</h2><button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
-      <div class="dict-dlg-body"></div></div>`;
-  section.classList.remove('hidden');
-  section.querySelector('.sx-section-head')?.classList.add('hidden');  // the window has its own title
-  wrap.querySelector('.dict-dlg-body').appendChild(section);
-  document.body.appendChild(wrap);
-  const close = () => {
-    section.querySelector('.sx-section-head')?.classList.remove('hidden');
-    section.className = home.cls;
-    home.parent.insertBefore(section, home.next);
-    wrap.remove();
-  };
-  wrap.addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (e.target === wrap || (b && b.dataset.a === 'close')) close();
-  });
-  wrap.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.target.closest('input, textarea')) { e.stopPropagation(); close(); } });
-  // its two switches are settings: saved here, as the settings page would (it saves only what is inside it)
-  wrap.addEventListener('change', async e => {
-    const key = DICT_SWITCHES[e.target.id];
-    if (!key) return;
-    const value = String(!!e.target.checked);
-    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => null);
-    if (!res || !res.ok) { showError(t('errorGeneric')); return; }
-    if (state.system && state.system.settings) state.system.settings[key] = value;
-    if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
-  });
-  await loadDictionary();
-  renderSettingsDictionary();
-  if (typeof renderDictFeatures === 'function') renderDictFeatures();
-  setTimeout(() => document.getElementById('settings-dict-term')?.focus(), 60);
+function openDictionary() {
+  switchAppView('dict');
 }
+
 async function loadDictionary() {
   const res = await fetch('/api/dictionary');
   const terms = await readJson(res);
@@ -2879,6 +2837,7 @@ async function loadDictionary() {
   if (dictN) dictN.textContent = state.dictionary.filter(d => d.active).length;
   document.getElementById('settings-dict-clear')?.classList.toggle('hidden', state.dictionary.length === 0);
   renderSettingsDictionary();
+  if (typeof renderDictPage === 'function') renderDictPage();
 }
 
 // Audit 6.1: cleared at once; «Отменить» adds the same words back, switched off ones stay off
@@ -3111,7 +3070,6 @@ const SETTINGS_RESET = {
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
-  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check'], ['set-feature-suggest', 'feature_suggest', 'check']],
   export: [['set-file-name-template', 'file_name_template', 'value'], ['set-date-folders', 'date_folders', 'value']],
   privacy: [['set-delete-media-after', 'delete_media_after', 'check'], ['set-media-retention', 'media_retention_days', 'value']],
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],
@@ -3172,6 +3130,7 @@ function onSettingsTabShown(name) {
   if (name === settingsTabOf('dictionary')) renderDictFeatures();  // the dictionary is a section of its tab
   const main = document.getElementById('settings-main');
   if (main) main.scrollTop = 0;
+  pultRise(main, '.sx-section:not(.hidden) .settings-card');  // a section shown: its cards rise
   refreshSettingsChanged();
 }
 
@@ -3416,70 +3375,168 @@ function setupDoneList(s) {
   try { const v = JSON.parse(s.setup_done || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
 
+// --- After an update: ONE window (asked by the user: two windows came one after another, the release notes and
+// the steps). On top what needs an answer («Настройка новых функций»: a setting asked in place, amber «Нужен
+// ответ» until saved, then green «Сохранено»), then the new features as cards with «Открыть», and all the
+// changes of the version folded at the bottom, as «Новое» and «Исправлено». «Позже» (and ✕, Esc) answers nothing:
+// the steps are asked again at the next start; the release notes are shown once per version (app.js
+// maybeShowWhatsNew); «Готово» saves the choices shown and marks every step as answered (setup_done).
+const NEWS_IC = { 'days-off': 'meet', worktime: 'clock', 'join-call': 'link' };
+const AU = { s: null, steps: [], notes: '', version: '', url: '', st: null, answered: {}, all: false, busy: false };
+
 async function openSetupSteps(s) {
-  if (document.getElementById('first-run-wizard') || document.getElementById('setup-steps')) return;
+  if (document.getElementById('first-run-wizard')) return;
   const done = setupDoneList(s);
   if (!SETUP_STEPS.some(x => !done.includes(x.id))) return;
   await holidayCountries();
   const steps = SETUP_STEPS.filter(x => !done.includes(x.id) && (!x.needed || x.needed(s)));
   if (!steps.length) return;
-  const st = { at: 0, country: holidayHomeCountry(), subdiv: '' };
-  const wrap = document.createElement('div');
-  wrap.id = 'setup-steps';
-  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
-  wrap.setAttribute('role', 'dialog');
-  wrap.setAttribute('aria-modal', 'true');
-  wrap.setAttribute('aria-label', t('setupStepsTitle'));
-  const save = async (ids, extra = {}) => {
-    const settings = { ...extra, setup_done: JSON.stringify([...new Set([...setupDoneList(s), ...ids])]) };
-    const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }) }).catch(() => null);
-    if (!r || !r.ok) showError(t('errorGeneric'));
-    else { Object.assign(s, settings); if (state.system && state.system.settings) Object.assign(state.system.settings, settings); }
+  AU.s = s;
+  AU.steps = steps;
+  AU.st = AU.st || { country: holidayHomeCountry(), subdiv: '' };
+  openAfterUpdate();
+}
+
+// The release notes of the version just installed (from app.js, once per version)
+function openAfterUpdateNotes(notes, version, url) {
+  if (document.getElementById('first-run-wizard')) return;
+  AU.notes = notes || '';
+  AU.version = version || '';
+  AU.url = url || '';
+  openAfterUpdate();
+}
+
+// The notes as lists: «### …» headings when the notes have them, otherwise «Новое» and «Исправлено» told apart by
+// their words; each point keeps its bold and links (sanitized Markdown)
+function auNotesGroups(md) {
+  const groups = [];
+  const FIX = /(исправ|больше не|снова|fix|no longer|again)/i;
+  let head = null, last = null;
+  const groupOf = text => {
+    if (head) return head;
+    const key = !/^\*\*/.test(text) && FIX.test(text) ? 'fix' : 'new';
+    let g = groups.find(x => x.key === key);
+    if (!g) { g = { key, title: t(key === 'fix' ? 'auFixed' : 'auNew'), items: [] }; groups.push(g); }
+    return g;
   };
-  const draw = () => {
-    const step = steps[st.at], last = st.at === steps.length - 1;
-    const dots = steps.length > 1 ? `<span class="frw-dots" aria-label="${st.at + 1} / ${steps.length}">${steps.map((_, i) => `<span class="frw-dot${i === st.at ? ' is-on' : ''}"></span>`).join('')}</span>` : '';
-    const body = step.kind === 'setup' ? step.body(st)
-      : `<ul class="frw-points">${(step.points || []).map(k => `<li>${escapeHtml(t(k))}</li>`).join('')}</ul>`;
-    const second = step.kind === 'setup' ? `<button data-a="skip" class="ui-btn ui-btn-subtle">${escapeHtml(t('setupSkip'))}</button>`
-      : step.open ? `<button data-a="open" class="ui-btn ui-btn-subtle">${escapeHtml(t(step.open.label))}</button>` : '';
-    wrap.innerHTML = `<div class="frw" id="setup-steps-dialog" data-step="${escapeHtml(step.id)}">
-      <div class="frw-kicker">${escapeHtml(t(step.kind === 'setup' ? 'setupStepsTitle' : 'setupNewsTitle'))}</div>
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(t(step.title))}</h2>${dots}</div>
-      <p class="frw-sub">${escapeHtml(t(step.text))}</p>
-      <div class="frw-body">${body}</div>
-      <div class="frw-foot">
-        <button data-a="later" class="frw-later" title="${escapeHtml(t('setupLaterTip'))}">${escapeHtml(t('setupLater'))}</button>
-        ${second}
-        <button data-a="next" class="ui-btn ui-btn-primary">${escapeHtml(t(!last ? 'frNext' : step.kind === 'setup' ? 'setupDone' : 'setupGotIt'))}</button>
-      </div></div>`;
-    wrap.querySelector('#setup-steps-dialog').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.trimEnd();
+    const h = /^#{2,4}\s+(.*)$/.exec(line);
+    if (h) { head = { key: `h${groups.length}`, title: h[1], items: [] }; groups.push(head); last = null; continue; }
+    const b = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (b) { last = groupOf(b[1]); last.items.push(b[1]); continue; }
+    if (line.trim() && last) last.items[last.items.length - 1] += ` ${line.trim()}`;  // a point continued on the next line
+  }
+  // the «Новое» first, then «Исправлено»
+  return groups.filter(g => g.items.length).sort((x, y) => (x.key === 'fix') - (y.key === 'fix'));
+}
+
+function auInline(md) { return sanitizedMarkdown(md).replace(/^\s*<p>/, '').replace(/<\/p>\s*$/, ''); }
+
+function openAfterUpdate() {
+  let wrap = document.getElementById('upd-after');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'upd-after';
+    wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.addEventListener('click', auClick);
+    wrap.addEventListener('change', e => {
+      if (e.target.matches('select[data-hol-country]')) { AU.st.country = e.target.value; AU.st.subdiv = ''; drawAfterUpdate(); }
+      else if (e.target.matches('select[data-hol-subdiv]')) AU.st.subdiv = e.target.value;
+    });
+    document.addEventListener('keydown', auKey, true);
+    document.body.appendChild(wrap);
+  }
+  drawAfterUpdate();
+}
+
+function drawAfterUpdate() {
+  const wrap = document.getElementById('upd-after');
+  if (!wrap) return;
+  const version = AU.version || (typeof updateState !== 'undefined' && updateState.info && updateState.info.current) || '';
+  const setups = AU.steps.filter(x => x.kind === 'setup');
+  const news = AU.steps.filter(x => x.kind === 'news');
+  const groups = auNotesGroups(AU.notes);
+  const total = groups.reduce((n, g) => n + g.items.length, 0);
+  const allOpen = AU.all || (!setups.length && !news.length);
+  const ask = step => {
+    const a = AU.answered[step.id];
+    const chip = a === 'saved' ? `<span class="upd-chip upd-chip-ok">${escapeHtml(t('auSaved'))}</span>`
+      : a === 'skipped' ? `<span class="upd-chip">${escapeHtml(t('setupSkip'))}</span>` : `<span class="upd-chip upd-chip-warn">${escapeHtml(t('auNeedAnswer'))}</span>`;
+    return `<section class="upd-ask${a ? ' upd-ask-done' : ''}" data-step="${escapeHtml(step.id)}"><span class="upd-ic">${pultIcon('globe')}</span>
+      <div class="upd-ask-b"><div class="upd-ask-h"><b>${escapeHtml(t(step.title))}</b>${chip}</div>
+        <div class="upd-faint">${escapeHtml(t(step.text))}</div>
+        ${a ? '' : `<div class="upd-ask-row">${step.body(AU.st)}<span class="tk-grow"></span>
+          <button class="tk-btn" data-a="skip" data-id="${escapeHtml(step.id)}">${escapeHtml(t('setupSkip'))}</button>
+          <button class="tk-btn tk-btn-primary" data-a="save" data-id="${escapeHtml(step.id)}">${escapeHtml(t('save'))}</button></div>`}</div></section>`;
   };
-  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey, true); };
-  const onKey = e => { if (e.key === 'Escape' && document.body.contains(wrap)) { e.stopPropagation(); close(); } };
-  wrap.addEventListener('change', e => {
-    if (e.target.matches('select[data-hol-country]')) { st.country = e.target.value; st.subdiv = ''; draw(); }
-    else if (e.target.matches('select[data-hol-subdiv]')) st.subdiv = e.target.value;
-  });
-  wrap.addEventListener('click', async e => {
-    const b = e.target.closest('button[data-a]');
-    if (!b || st.busy) return;
-    const step = steps[st.at];
-    if (b.dataset.a === 'later') { close(); return; }  // asked again at the next start
-    st.busy = true;  // a double click does not skip a step
-    wrap.querySelectorAll('.frw-foot button').forEach(x => { x.disabled = true; });
-    // «Не нужно»: not asked again (Settings keep it); «Далее»/«Готово»: the choice is saved; «Открыть»: seen,
-    // and the wizard gives way to the place the feature lives
-    const extra = b.dataset.a === 'next' && step.apply ? step.apply(st) : {};
-    await save([step.id], extra);
-    if (Object.keys(extra).length && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
-    st.busy = false;
-    if (b.dataset.a === 'open') { close(); step.open.run(); return; }
-    if (st.at < steps.length - 1) { st.at += 1; draw(); } else close();
-  });
-  document.addEventListener('keydown', onKey, true);
-  draw();
-  document.body.appendChild(wrap);
+  const card = step => `<div class="upd-card"><span class="upd-ic">${pultIcon(NEWS_IC[step.id] || 'spark')}</span>
+      <div><b>${escapeHtml(t(step.title))}</b><div class="upd-faint">${escapeHtml(t(step.text))}</div></div>
+      ${step.open ? `<button class="tk-btn tk-btn-sm" data-a="open" data-id="${escapeHtml(step.id)}" title="${escapeHtml(t(step.open.label))}">${escapeHtml(t('auOpen'))}</button>` : '<span></span>'}</div>`;
+  const all = groups.length ? `<button class="upd-more" data-a="all" aria-expanded="${allOpen}">${allOpen ? '▾' : '▸'} ${escapeHtml(t('auAllChanges'))}<span class="upd-faint">${total}</span></button>
+      ${allOpen ? `<div class="upd-all">${groups.map(g => `<div class="upd-all-h">${escapeHtml(g.title)}</div><ul>${g.items.map(x => `<li>${auInline(x)}</li>`).join('')}</ul>`).join('')}</div>` : ''}` : '';
+  wrap.innerHTML = `<div class="upd-win modal-card" id="upd-after-win">
+    <div class="upd-head"><span class="upd-logo" aria-hidden="true">V</span>
+      <div><div class="upd-kicker">${escapeHtml(t('auInstalled'))}</div><h2>${escapeHtml(t('updWhatsNew').replace('{v}', () => version))}</h2></div>
+      <span class="tk-grow"></span><button class="tk-x" data-a="later" title="${escapeHtml(t('setupLaterTip'))}" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+    <div class="upd-body">
+      ${setups.length ? `<div class="upd-sec">${escapeHtml(t('auSetupNew'))}</div>${setups.map(ask).join('')}` : ''}
+      ${news.length ? `<div class="upd-sec">${escapeHtml(t('auNewFeatures'))}<b class="pcd-n">${news.length}</b></div><div class="upd-cards">${news.map(card).join('')}</div>` : ''}
+      ${all}
+    </div>
+    <div class="upd-foot">${AU.url ? `<button class="tk-btn" data-a="page">${escapeHtml(t('updOnGithub'))}</button>` : ''}<span class="tk-grow"></span>
+      <button class="tk-btn" data-a="later" title="${escapeHtml(t('setupLaterTip'))}">${escapeHtml(t('setupLater'))}</button>
+      <button class="tk-btn tk-btn-primary" data-a="done">${escapeHtml(t('setupDone'))}</button></div>
+  </div>`;
+  wrap.querySelector('#upd-after-win').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+}
+
+async function auSave(ids, extra = {}) {
+  const s = AU.s || (state.system && state.system.settings) || {};
+  const settings = { ...extra, setup_done: JSON.stringify([...new Set([...setupDoneList(s), ...ids])]) };
+  const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }) }).catch(() => null);
+  if (!r || !r.ok) { showError(t('errorGeneric')); return false; }
+  Object.assign(s, settings);
+  if (state.system && state.system.settings && state.system.settings !== s) Object.assign(state.system.settings, settings);
+  if (Object.keys(extra).length && typeof loadDashboard === 'function' && state.appView === 'dashboard') loadDashboard();
+  return true;
+}
+
+function closeAfterUpdate() {
+  document.getElementById('upd-after')?.remove();
+  document.removeEventListener('keydown', auKey, true);
+  AU.steps = []; AU.notes = ''; AU.answered = {}; AU.all = false;
+}
+
+function auKey(e) {
+  if (e.key === 'Escape' && document.getElementById('upd-after')) { e.stopPropagation(); closeAfterUpdate(); }
+}
+
+async function auClick(e) {
+  const b = e.target.closest('button[data-a]');
+  if (!b || AU.busy) return;
+  const a = b.dataset.a, step = AU.steps.find(x => x.id === b.dataset.id);
+  if (a === 'later') { closeAfterUpdate(); return; }  // asked again at the next start
+  if (a === 'all') { AU.all = b.getAttribute('aria-expanded') !== 'true'; drawAfterUpdate(); return; }
+  if (a === 'page') { openExternal(AU.url); return; }
+  AU.busy = true;  // a double click does not save twice
+  document.querySelectorAll('#upd-after button').forEach(x => { x.disabled = true; });
+  try {
+    if ((a === 'save' || a === 'skip') && step) {
+      if (await auSave([step.id], a === 'save' && step.apply ? step.apply(AU.st) : {})) AU.answered[step.id] = a === 'save' ? 'saved' : 'skipped';
+    } else if (a === 'open' && step) {
+      if (await auSave([step.id])) { closeAfterUpdate(); step.open.run(); return; }
+    } else if (a === 'done') {
+      // the choices shown are saved as they stand; every step shown counts as answered
+      const extra = AU.steps.filter(x => x.kind === 'setup' && !AU.answered[x.id] && x.apply).reduce((o, x) => ({ ...o, ...x.apply(AU.st) }), {});
+      if (!AU.steps.length || await auSave(AU.steps.map(x => x.id), extra)) { closeAfterUpdate(); return; }
+    }
+  } finally {
+    AU.busy = false;
+  }
+  drawAfterUpdate();
 }
 
 // The country and region chosen; the saved ones as they are while the list is not there or does not hold them
@@ -3797,3 +3854,20 @@ function copyMcpConfig(which) {
   copyPlain(text);
   showToast(t('copied'), null, 'success');
 }
+
+// --- One card everywhere («Пульт встреч»): each card of the settings gets the icon of its section before its
+// title, the same line icons as the list of the sections on the left ---
+const SETTINGS_CARD_IC = { general: 'set', updates: 'spark', about: 'text', record: 'rec', hotkeys: 'key', recognition: 'wave',
+  models: 'wave', dictionary: 'book', analysis: 'spark', calendar: 'meet', export: 'link', privacy: 'lock', advanced: 'flask',
+  bench: 'chart', dub: 'globe' };
+function decorateSettingsCards() {
+  document.querySelectorAll('#modal-settings [data-stab] .settings-card').forEach(card => {
+    const h = card.querySelector('h4');
+    if (!h || h.previousElementSibling?.classList.contains('pcd-ic')) return;
+    const ic = SETTINGS_CARD_IC[card.closest('[data-stab]').dataset.stab] || 'set';
+    // beside the title, not in it: the title's text is put anew when the language changes
+    h.parentElement.classList.add('sx-card-hd');
+    h.insertAdjacentHTML('beforebegin', `<span class="pcd-ic">${pultIcon(ic)}</span>`);
+  });
+}
+decorateSettingsCards();
