@@ -393,7 +393,7 @@
       <div class="flex-1 min-w-0 min-h-0 flex flex-col">
         <!-- The conversation: its title, the model that answers, where the text goes -->
         <header class="as-head">
-          <button id="as-title" class="as-title" data-click="assistantRename" data-i18n-title="rdSasTipRename" title="Переименовать разговор"></button>
+          <button id="as-title" class="as-title" data-click="assistantRename" disabled><span id="as-title-text" class="as-title-text"></span><svg class="as-title-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
           <input id="as-title-input" type="text" class="hidden as-title-input" data-blur="assistantRenameDone" data-keydown="assistantTitleKey" data-keydown-args='[{"$": "event"}]'
             data-i18n-title="rdSasChatTitle" title="Название разговора" />
           <button id="as-model-btn" data-click="assistantModelMenu" data-click-args='[{"$": "event"}]' class="as-chip" data-i18n-title="rdSasTipModel" title="Модель, которая отвечает">

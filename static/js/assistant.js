@@ -183,7 +183,13 @@ function assistantModelOff(model) {
 function renderAssistantHead() {
   const chat = currentChat();
   const title = document.getElementById('as-title');
-  if (title) title.textContent = chat && chat.items.length ? chatTitle(chat) : t('rdSasNewChat');
+  if (title) {
+    // a conversation with questions is renamed by a click (the pencil on hover says so); a new one has no name to change
+    const named = !!(chat && chat.items.length);
+    document.getElementById('as-title-text').textContent = named ? chatTitle(chat) : t('rdSasNewChat');
+    title.disabled = !named;
+    if (named) title.title = t('rdSasTipRename'); else title.removeAttribute('title');
+  }
   const model = chat?.model || '';
   const label = document.getElementById('as-model-label');
   // Nothing can answer: said once, by the bar under the head with its buttons; the model's chip only

@@ -2203,7 +2203,13 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   max-width: 46%; font-size: var(--fs-sub); letter-spacing: -0.011em; font-weight: 600; color: #FFFFFF; text-align: left; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; border-radius: 6px; padding: 2px 4px; margin-left: -4px;
 }
-.as-title:hover { background: rgba(255, 255, 255, 0.06); }
+.as-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+.as-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.as-title-pen { flex: none; width: 14px; height: 14px; color: var(--hc-dim, #8E8E93); opacity: 0; transition: opacity var(--dur-fast) ease; }
+.as-title:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+.as-title:not(:disabled):hover .as-title-pen, .as-title:focus-visible .as-title-pen { opacity: 1; }
+.as-title:disabled { cursor: default; }
+.as-title-input { cursor: text; }
 .as-title-input {
   width: 340px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(0, 0, 0, 0.3);
   color: #F5F5F7; font-size: var(--fs-body); font-weight: 600;
