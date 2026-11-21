@@ -115,12 +115,24 @@ class McpServerTest(unittest.TestCase):
             conn = database.get_connection()
             conn.execute("UPDATE meetings SET local_only = 1 WHERE id = ?", (own["id"],))
             conn.execute("UPDATE folders SET local_only = 1 WHERE id = ? OR system_key = 'dictations'", (top["id"],))
+            conn.execute("DELETE FROM settings WHERE key = 'formerly_local_v1'")  # a database of an earlier version
             conn.commit()
             conn.close()
+        database.init_db()
         database.update_settings({"mcp_local_only": "true"})  # the dictations allowed
         found = {m["id"] for m in _call("search_meetings", query="туман")[1]["meetings"]}
         self.assertEqual(found, {self.mid, self.secret})
-        self.assertTrue(_call("get_meeting", id=inner["id"])[0])
+        err, msg = _call("get_meeting", id=inner["id"])
+        self.assertTrue(err)
+        self.assertNotIn("dictation", msg)
+        # Found in the review: told by the folder, the mark opened again when the folder was deleted or the
+        # recording moved out of it
+        database.delete_folder(sub["id"])
+        database.delete_folder(top["id"])
+        database.update_meeting_fields(own["id"], folder_id=None)
+        found = {m["id"] for m in _call("search_meetings", query="туман")[1]["meetings"]}
+        self.assertEqual(found, {self.mid, self.secret})
+        self.assertTrue({own["id"], inner["id"]} <= database.formerly_local_ids())
 
     def test_a_setting_changed_by_the_app_counts_at_once(self):
         """Found in the review: the MCP server is a process of its own and kept its cache of the settings, so
