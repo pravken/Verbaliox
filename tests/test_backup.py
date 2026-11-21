@@ -53,6 +53,31 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(moved.read_bytes(), b"sound")
         self.assertTrue(DB_PATH.exists())
 
+    def test_the_minutes_worked_and_the_programs_stay_on_this_computer(self):
+        """«Мои программы» and the working day are local (the page says so): not in a copy, and a copy never
+        turns the counting of programs on."""
+        from datetime import datetime
+
+        from app import worktime
+        from app.database import init_db, update_settings
+
+        init_db()
+        update_settings({"apps_track": "true"})
+        worktime.mark(datetime(2026, 11, 19, 10, 0), "outlook")
+        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        backup.make(out, with_media=False)
+        with zipfile.ZipFile(out) as z:
+            db = Path(z.extract("meetings.db", tempfile.mkdtemp()))
+        conn = sqlite3.connect(str(db))
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        track = conn.execute("SELECT value FROM settings WHERE key = 'apps_track'").fetchone()
+        conn.close()
+        self.assertNotIn("app_minutes", tables)
+        self.assertNotIn("work_minutes", tables)
+        self.assertIsNone(track)
+        self.assertIn("apps_track", backup.LOCAL_SETTINGS)
+        update_settings({"apps_track": "false"})
+
     def test_caches_of_numbers_that_change_hands_are_dropped(self):
         from app.audio_utils import peaks_file
         from app.paths import THUMBS_DIR
