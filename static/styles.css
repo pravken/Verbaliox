@@ -4202,9 +4202,9 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 /* «Задачи» to the pixel as «Записи» (the values of .lt-head, .lt-bar, .lt-card, .lt-row and .lt-hrow of
    static/js/libtable.js): the head, one bar of 36px (filters on the left; the view, the grouping and
    «Колонки» on the right), the cards, the rows and the bar of the column names */
-:is(#tasks-view, #people-view) .tk-head.tk-head-lt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; background: none; border-bottom: 0; }
-:is(#tasks-view, #people-view) .tk-head-lt .tk-title { font-size: var(--fs-title); }
-:is(#tasks-view, #people-view) .tk-head-lt .tk-sub { font-size: var(--fs-ui); }
+:is(#tasks-view, #people-view, #dashboard-view) .tk-head.tk-head-lt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; background: none; border-bottom: 0; }
+:is(#tasks-view, #people-view, #dashboard-view) .tk-head-lt .tk-title { font-size: var(--fs-title); }
+:is(#tasks-view, #people-view, #dashboard-view) .tk-head-lt .tk-sub { font-size: var(--fs-ui); }
 .tk-head-ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
 :is(#tasks-view, #people-view) .tk-head-lt .tk-search { border-radius: 8px; }
 #tasks-view .tk-bar { display: flex; align-items: center; gap: 6px; height: 36px; min-height: 0; flex: none; flex-wrap: nowrap; margin: 0 24px 8px; padding: 0; font-size: var(--fs-ui); background: none; border: 0; }
@@ -4558,3 +4558,38 @@ button.sc-at:hover { color: var(--accent-text); }
    «Папки» view), the load window and «Очередь»: it no longer takes a column of the window (pult plan, stage 1).
    Kept in the page for the scripts that still fill it; nothing of it is reachable only there */
 #app-sidebar { display: none !important; }
+
+/* Settings as a section like the others (reported by the user: it looked like a separate window): no frame,
+   no shadow, no «Закрыть» / «← Назад» — the rail leads away; the sections' list is the left column of the page */
+.settings-page { padding: 0; }
+.settings-page > .sx-shell { max-width: none; width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.settings-page .sx-close, .settings-page .sx-nav [data-click="closeModal"] { display: none; }
+.settings-page .sx-reset-row { padding-right: 0; }
+.settings-page .sx-nav { padding: 16px 12px 12px; }
+/* the section's content from the left edge of its column, wider than in the window it was */
+.settings-page .sx-inner { max-width: 980px; margin: 0; padding: 16px 28px 28px; }
+.settings-page .sx-head-ic { width: 40px; height: 40px; }
+.sx-head-ic { display: none; }
+.settings-page .sx-head-ic { display: inline-flex; }
+
+/* One page and one card in every section (reported by the user: the colours of the cards and of the ground
+   differed between the tabs): the ground --bg-deep, a card --card with the line and a 12px corner */
+#home-view, #dashboard-view, #libtable-view, #ask-view, #settings-view, .settings-page { background: var(--bg-deep); }
+.hm-card, .db-w, .settings-card, .lt-card, .pcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+/* «Словарь» and «Настройки»: the same head metrics as «Записи», «Задачи», «Обзор» — a 36px icon square 24px from
+   the edge, a 20px title beside it (measured: they sat 4–8px apart) */
+.dc-head { gap: 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; }
+.dc-head-ic, .settings-page .sx-head-ic { width: 36px; height: 36px; }
+.dc-head-ic svg, .settings-page .sx-head-ic svg { width: 20px; height: 20px; }
+.dc-head-text { flex-direction: row; align-items: baseline; gap: 10px; }
+.settings-page .sx-nav > div:first-child { padding: 0 12px 12px; }
+.settings-page .sx-nav { padding-top: 16px; }
+
+/* The record button of the strip as designed (● Записать ▾), at the height of the strip's other buttons
+   (reported by the user: a bare round dot was not the button made on the try-on page) */
+.tb-rec-wrap { height: 32px; box-sizing: border-box; border-radius: 8px; }
+.tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { width: auto; height: 30px; gap: 8px; padding: 0 12px; border-radius: 7px 0 0 7px; }
+.tb-rec:not(.tb-rec-on):not(.tb-rec-busy) #tb-rec-label { display: inline; color: #FFD7D3; font-size: var(--fs-ui); font-weight: 600; }
+.tb-rec-wrap .tb-rec-dot { width: 10px; height: 10px; border-radius: 5px; }
+.tb-rec-more { height: 30px; width: 26px; border-radius: 0 7px 7px 0; }
+.settings-page .sx-nav > div:first-child { gap: 12px; }
