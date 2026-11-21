@@ -2874,7 +2874,8 @@ async function loadDictionary() {
   const terms = await readJson(res);
   if (!res.ok || !Array.isArray(terms)) return;
   state.dictionary = terms;
-  document.getElementById('dict-count-badge').textContent = state.dictionary.filter(d => d.active).length;
+  const dictN = document.getElementById('dict-count-badge');
+  if (dictN) dictN.textContent = state.dictionary.filter(d => d.active).length;
   document.getElementById('settings-dict-clear')?.classList.toggle('hidden', state.dictionary.length === 0);
   renderSettingsDictionary();
 }

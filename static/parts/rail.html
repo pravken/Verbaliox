@@ -1,0 +1,35 @@
+<!-- The rail of the sections on the left edge («Пульт встреч», docs/pult-plan.md, stage 1): part of static/index.html.
+     The app's sections on top (Ctrl+1…5), the service ones at the bottom: the dictionary, the settings.
+     renderRail (static/js/shell.js) marks the section on screen and moves the bar at the edge to it. -->
+  <nav id="app-rail" class="rail" data-i18n-aria="navAria" aria-label="Разделы программы">
+    <span class="rail-ind" aria-hidden="true"></span>
+    <button data-click="switchAppView" data-click-args='["dashboard"]' id="rail-dashboard" class="rail-btn" type="button" data-i18n-title="rlTipHome" title="Главная: день, задачи и сводки (Ctrl+1)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><g class="ri-house"><path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1z"/></g></svg>
+      <span data-i18n="rlHome">Главная</span>
+    </button>
+    <button data-click="switchAppView" data-click-args='["libtable"]' id="rail-libtable" class="rail-btn" type="button" data-i18n-title="rlTipRecords" title="Записи: все встречи и файлы (Ctrl+2)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path class="ri-l1" pathLength="1" d="M8 10h8"/><path class="ri-l2" pathLength="1" d="M8 14h5"/></svg>
+      <span data-i18n="rlRecords">Записи</span>
+    </button>
+    <button data-click="switchAppView" data-click-args='["tasks"]' id="rail-tasks" class="rail-btn" type="button" data-i18n-title="rlTipTasks" title="Задачи из всех записей (Ctrl+3)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="ri-c1" pathLength="1" d="M5 7l2 2 3-3"/><path class="ri-c2" pathLength="1" d="M5 15l2 2 3-3"/><path d="M13 8h6M13 16h6"/></svg>
+      <span data-i18n="rlTasks">Задачи</span><span id="nav-tasks-n" class="rail-badge hidden"></span>
+    </button>
+    <button data-click="openContacts" id="rail-people" class="rail-btn" type="button" data-i18n-title="rlTipPeople" title="Люди: участники записей, голоса и контакты (Ctrl+4)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><g class="ri-p2"><path d="M16 6.5a3 3 0 010 5.5M17.5 14.6c1.6.6 2.6 2 3 4.4"/></g></svg>
+      <span data-i18n="rlPeople">Люди</span>
+    </button>
+    <button data-click="switchAppView" data-click-args='["ask"]' id="rail-ask" class="rail-btn" type="button" data-i18n-title="rlTipAsk" title="Ассистент: вопросы к записям (Ctrl+5)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path class="ri-star" d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path class="ri-spark" d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/></svg>
+      <span data-i18n="rlAsk">Ассистент</span>
+    </button>
+    <span class="rail-sp"></span>
+    <button data-click="openDictionary" id="rail-dict" class="rail-btn" type="button" data-i18n-title="rlTipDict" title="Словарь: как писать имена, проекты и термины">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5C10.5 5.3 8.3 4.8 4 5v13c4.3-.2 6.5.3 8 1.5 1.5-1.2 3.7-1.7 8-1.5V5c-4.3-.2-6.5.3-8 1.5z"/><path d="M12 6.5v13"/><g class="ri-pg"><path d="M7 9h2.5M7 12h2.5"/></g><g class="ri-pg2"><path d="M14.5 9H17M14.5 12H17"/></g></svg>
+      <span data-i18n="dictionary">Словарь</span>
+    </button>
+    <button id="sb-settings-btn" data-click="openModal" data-click-args='["settings"]' class="rail-btn" type="button" data-i18n-title="tipSettingsBtn" title="Открыть настройки приложения, звука и моделей ИИ">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g class="ri-gear"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></g></svg>
+      <span data-i18n="settings">Настройки</span>
+    </button>
+  </nav>

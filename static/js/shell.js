@@ -181,6 +181,36 @@ function renderTopbar() {
   }
   scheduleFitTopbar();
   placeTabIndicators();
+  renderRail();
+}
+
+// --- The rail of the sections (parts/rail.html) ---
+// The section on screen is marked, and the bar at the edge moves to it from the one left; an open recording
+// belongs to «Записи», the settings page to «Настройки»
+const RAIL_OF_VIEW = { dashboard: 'rail-dashboard', home: 'rail-dashboard', libtable: 'rail-libtable', library: 'rail-libtable',
+  tasks: 'rail-tasks', ask: 'rail-ask', settings: 'sb-settings-btn' };
+let _railOn = '';
+function renderRail() {
+  const rail = document.getElementById('app-rail');
+  if (!rail) return;
+  const id = RAIL_OF_VIEW[state.appView] || '';
+  if (id === _railOn) return;
+  const was = _railOn;
+  _railOn = id;
+  for (const b of rail.querySelectorAll('.rail-btn')) {
+    const on = b.id === id;
+    b.classList.toggle('rail-on', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  }
+  const ind = rail.querySelector('.rail-ind'), on = id && document.getElementById(id);
+  if (!ind) return;
+  if (!on) { ind.style.opacity = '0'; return; }
+  const top = `${on.offsetTop + 8}px`, height = `${on.offsetHeight - 16}px`;
+  ind.classList.toggle('rail-ind-still', !was);  // the first one is placed, not moved
+  Object.assign(ind.style, { top, height, opacity: '1' });
+  if (was && was !== id) {  // the icon of the section chosen gives a small press
+    on.classList.remove('rail-pick'); void on.offsetWidth; on.classList.add('rail-pick');
+  }
 }
 
 // The highlight of the chosen tab in a group moves to it (chosen with the user): one element under the
