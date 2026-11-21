@@ -454,6 +454,27 @@ await step('dashboard rises once', async () => {
 
 // Captions wait for the switch as a recording starts unless asked for, and never by themselves with «Не мешать
 // на встречах» (asked by the user: they loaded a model during a meeting)
+// Live captions in the look of the transcript's «Чат» (stage 5): a bubble for each line, the face and the name
+// once for a run of one speaker, the last line with text lit; the phrase not shown yet adds no bubble
+await step('live captions as a chat', async () => {
+  const rows = await page.evaluate(() => {
+    switchAppView('studio');
+    [[1, 'Начнём с плана.', 'Мария'], [2, 'Я посмотрю сроки.', 'Анна'], [3, 'И проверю оценку.', 'Анна']]
+      .forEach(([id, text, who]) => liveCap.lines.set(id, { id, text, who, lang: 'ru', translation: '' }));
+    liveCap.partial = 'ещё говорит';
+    syncStudioCaptions();
+    const out = [...document.querySelectorAll('#studio-cap-rows > .cap-row')].map(e => ({ cls: e.className, bub: !!e.querySelector('.cap-bub') }));
+    liveCap.lines.clear();
+    liveCap.partial = '';
+    capReset();
+    return out;
+  });
+  expect(rows.length === 4 && rows.every(r => r.bub), `the lines are not bubbles: ${JSON.stringify(rows)}`);
+  expect(!/cap-cont/.test(rows[1].cls) && /cap-cont/.test(rows[2].cls), 'the face and the name are not once per run');
+  expect(/cap-now/.test(rows[2].cls) && /cap-pending/.test(rows[3].cls) && !/cap-now/.test(rows[3].cls), `the last line is not lit: ${rows.map(r => r.cls).join(' | ')}`);
+  await page.evaluate(() => switchAppView('library'));
+});
+
 await step('captions do not start by themselves', async () => {
   const held = await page.evaluate(() => [
     captionsHeldAtStart({}),

@@ -1596,8 +1596,9 @@ function capWhoColor(name) {
 function createCapRow(key) {
   const el = document.createElement('div');
   el.className = 'cap-row';
-  el.innerHTML = '<span class="cap-av hidden" aria-hidden="true"></span><span class="cap-who hidden"></span><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
-    + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div>';
+  // the line as a bubble of the chat (the same look as the transcript's «Чат»)
+  el.innerHTML = '<span class="cap-av hidden" aria-hidden="true"></span><span class="cap-who hidden"></span><div class="cap-bub"><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
+    + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div></div>';
   document.getElementById('studio-cap-rows').appendChild(el);
   const row = { key, el, orig: new CapTyper(el.querySelector('.cap-orig')), tr: new CapTyper(el.querySelector('.cap-tr')) };
   capView.rows.set(key, row);
@@ -1723,6 +1724,7 @@ function capDrawLines(lines, fresh, target, view) {
       : isRecording() ? t('studioCaptionsOff')
       : t('studioIdleHint');
   }
+  capMarkRuns();
   renderUpcomingMeetings();
   capFollowBottom();
   renderStudioControls();
@@ -1731,6 +1733,24 @@ function capDrawLines(lines, fresh, target, view) {
   status.textContent = liveCap.error ? liveCap.error
     : target && liveCap.session && !liveCap.translationReady ? t('studioLoadingTranslator') : '';
   status.className = `text-[11.5px] ${liveCap.error ? 'text-apple-amber' : 'text-apple-tertiary'}`;
+}
+
+// The captions as a chat: the face and the name once for a run of one speaker's lines (a line of the same
+// speaker, or of nobody named, goes on the run), the last line with text lit as the one being said. The phrase
+// not shown yet (only «…») is no bubble of its own: it sits under the last one without a gap
+function capMarkRuns() {
+  const rows = [...document.querySelectorAll('#studio-cap-rows > .cap-row')];
+  const said = (el) => !!(el.querySelector('.cap-orig')?.textContent.trim() || el.querySelector('.cap-tr')?.textContent.trim());
+  const now = rows.filter(said).pop();
+  let prev = null;
+  rows.forEach((el) => {
+    const who = el.querySelector('.cap-who')?.textContent || '';
+    const waiting = el.classList.contains('cap-draft') && !said(el);
+    el.classList.toggle('cap-cont', !!prev && (!who || who === prev));
+    el.classList.toggle('cap-pending', waiting);
+    el.classList.toggle('cap-now', el === now);
+    if (who) prev = who;
+  });
 }
 
 // Stop pressed while a recording is still starting (the screen picker, the microphone, the server): the

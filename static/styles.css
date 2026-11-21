@@ -3716,3 +3716,24 @@ button.sc-at:hover { color: var(--accent-text); }
 .tx-chat .ch-bub:has(textarea) { display: block; width: 100%; background: none; border-color: transparent; padding: 0; }
 .tx-chat .ch-bub:has(textarea) .ch-tm { display: none; }
 .tx-chat .ch-bub .tr-text.block { margin-top: 2px; }
+/* Live captions in the look of the transcript's «Чат» (studio.js capMarkRuns): a bubble for each line, the face
+   and the name once for a run of one speaker, the last line lit and being written. The size is the user's */
+#studio-cap-rows.cap-rows { gap: 4px; }
+#studio-cap-rows > .cap-row:not(.cap-cont) + .cap-row { margin-top: 10px; }
+#studio-cap-rows > .cap-row:not(.cap-cont):first-child { margin-top: 0; }
+#studio-cap-rows > .cap-row.cap-cont .cap-who, #studio-cap-rows > .cap-row.cap-cont .cap-av { display: none; }
+.cap-bub { display: inline-block; max-width: 100%; padding: 8px 14px; border-radius: 4px 16px 16px 16px; background: var(--card); border: 1px solid var(--line);
+  transition: background-color var(--dur-slow) ease, border-color var(--dur-slow) ease; }
+.cap-cont .cap-bub { border-radius: 16px; }
+.cap-row.cap-now .cap-bub { background: rgb(var(--accent-rgb) / 0.1); border-color: rgb(var(--accent-rgb) / 0.45); }
+/* the line being said: a caret after its text (the quiet «…» while no text is shown yet) */
+.cap-row.cap-now.cap-draft .cap-orig:not(:empty)::after { content: ""; display: inline-block; width: 2px; height: 0.95em; margin-left: 3px; vertical-align: -0.1em;
+  background: currentColor; animation: cap-caret 1s steps(1) infinite; }
+@keyframes cap-caret { 50% { opacity: 0; } }
+/* original and translation side by side: the two columns stay the row's own, no bubble around both */
+.cap-view-side .cap-bub { display: contents; }
+@media (prefers-reduced-motion: reduce) { .cap-row.cap-now.cap-draft .cap-orig::after { animation: none; } }
+#studio-cap-rows > .cap-row.cap-pending { margin-top: 0; }
+.cap-row.cap-pending .cap-bub { padding: 0 14px; background: none; border-color: transparent; }
+.cap-row.cap-pending .cap-o { font-size: 18px; line-height: 1.2; }
+.cap-row.cap-pending .cap-who, .cap-row.cap-pending .cap-av { display: none; }
