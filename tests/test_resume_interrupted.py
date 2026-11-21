@@ -13,7 +13,7 @@ except ImportError:  # app dependencies are not installed (e.g. in the release C
 class ResumeInterruptedTest(unittest.TestCase):
     def setUp(self):
         database.init_db()
-        database.update_settings({main.INTERRUPTED_KEY: "{}"})
+        database.update_settings({main.INTERRUPTED_KEY: "{}", main.CLEAN_EXIT_KEY: "0"})
 
     def tearDown(self):
         database.update_settings({main.INTERRUPTED_KEY: "{}"})
@@ -36,6 +36,16 @@ class ResumeInterruptedTest(unittest.TestCase):
         m = database.get_meeting(crash)
         self.assertEqual(m["status"], "failed")
         self.assertEqual(m["error_message"], main.INTERRUPTED_TEXT)
+
+    def test_ends_by_quitting_are_no_crash(self):
+        """Found in review: quitting or switching the computer off twice during a long transcription marked it
+        failed. An end the server saw itself (CLEAN_EXIT_KEY) is not counted."""
+        mid = database.create_meeting("Длинная запись", "l.wav", "l.wav")["id"]
+        for _ in range(3):
+            database.update_meeting_progress(mid, status="transcribing", progress=30)
+            database.update_settings({main.CLEAN_EXIT_KEY: "1"})  # the program ended by itself
+            self.assertIn(mid, self._start())
+        self.assertEqual(database.get_meeting(mid)["status"], "transcribing")
 
     def test_a_job_that_finished_is_counted_afresh(self):
         mid = database.create_meeting("Встреча", "a.wav", "a.wav")["id"]

@@ -1103,6 +1103,13 @@ def _stop_work() -> None:
         shutdown.stop_all()
     except Exception as e:
         print(f"[exit] {e}", file=sys.stderr)
+    try:  # an end by quitting or by Windows shutting down: the next start counts no crash (app/main.py)
+        from app.database import update_settings
+        from app.main import CLEAN_EXIT_KEY
+
+        update_settings({CLEAN_EXIT_KEY: "1"})
+    except Exception as e:
+        print(f"[exit] {e}", file=sys.stderr)
 
 
 def _install_update_on_exit() -> None:

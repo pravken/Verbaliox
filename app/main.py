@@ -202,6 +202,7 @@ RESUME_STATES = {"queued", "extracting_audio", "transcribing", "diarizing", "sum
 MAX_INTERRUPTED_RUNS = 2
 INTERRUPTED_KEY = "interrupted_job_runs"
 INTERRUPTED_TEXT = "Обработка дважды прервалась вместе с программой — возможно, файл повреждён. Нажмите «Повторить»"
+CLEAN_EXIT_KEY = "clean_exit"  # "1" when the program ended by itself (quit, Windows shutting down): no crash to count
 
 
 def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
@@ -216,6 +217,9 @@ def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
         counts = counts if isinstance(counts, dict) else {}
     except ValueError:
         counts = {}
+    # an end by quitting or by Windows shutting down is no crash (found in review: two evenings of switching the
+    # computer off marked a long recording «файл повреждён»): only a start after an end without that mark counts
+    clean = get_all_settings().get(CLEAN_EXIT_KEY) == "1"
     resume, kept = set(), {}
     for m in meetings:
         if m.get("status") not in RESUME_STATES:
@@ -223,7 +227,7 @@ def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
         mid = int(m["id"])
         n = counts.get(str(mid))
         n = n if isinstance(n, int) else 0
-        if m.get("status") != "queued":  # it was running when the program ended
+        if m.get("status") != "queued" and not clean:  # it was running when the program crashed
             n += 1
         if n >= MAX_INTERRUPTED_RUNS:
             print(f"[resume] meeting {mid}: processing ended with the program {n} times, not queued again", flush=True)
@@ -233,7 +237,7 @@ def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
         if n:
             kept[str(mid)] = n
     try:
-        update_settings({INTERRUPTED_KEY: json.dumps(kept)})
+        update_settings({INTERRUPTED_KEY: json.dumps(kept), CLEAN_EXIT_KEY: "0"})  # until this run ends by itself
     except Exception:
         traceback.print_exc()
     return resume
@@ -338,6 +342,14 @@ async def lifespan(_app: FastAPI):
             # Partial translations are kept and can be completed with "Update translation"
             update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Задача прервана перезапуском")
     yield
+    # the server stops by itself (the window's process ends with os._exit after run.py _stop_work, which marks
+    # the clean end; this covers a server started on its own): the next start counts no crash
+    try:
+        from app.database import update_settings
+
+        update_settings({CLEAN_EXIT_KEY: "1"})
+    except Exception:
+        traceback.print_exc()
 
 
 from fastapi.exceptions import RequestValidationError  # noqa: E402
