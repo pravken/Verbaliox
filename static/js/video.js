@@ -374,7 +374,7 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey) {
     if (e.code === 'KeyO' && !e.shiftKey) {
       e.preventDefault();
-      openModal('import');
+      if (!impIsOpen()) openImport();  // «Файлы с компьютера» of the import menu, from any screen
     } else if (e.code === 'KeyF' && !e.shiftKey) {
       e.preventDefault();
       focusTranscriptSearch();

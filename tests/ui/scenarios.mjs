@@ -380,25 +380,110 @@ await step('calendar view', async () => {
   expect(!(await page.$('#cal-view')), 'Esc did not close the calendar');
 });
 
-// The library as a table on the whole window: sorted by a header, a column added, a double click opens
-await step('library table', async () => {
+// «Записи»: the table by day in cards, sorted by a header, a column added in «Колонки» (the view switch stays
+// where it was), the other views, the box selects and the bar of the selection takes the filters' place at
+// their height, the search shows the places found in the texts, a click opens the recording
+await step('records section', async () => {
   await page.click('#lib-table-btn');
   await sleep(500);
-  expect(await page.isVisible('#libtable-view'), 'the table did not open');
-  const rows = await page.$$eval('#lt-table tr[data-mid]', trs => trs.length);
+  expect(await page.isVisible('#libtable-view'), 'the section did not open');
+  const rows = await page.$$eval('#lt-body .lt-card [data-mid]', els => els.length);
   expect(rows > 0, 'the table has no rows');
-  await page.click('#lt-table th[data-col="name"]');
+  expect(await page.$eval('#lt-body .lt-card-h', h => !!h.querySelector('.lt-card-ic') && !!h.querySelector('.lt-card-n')), 'a day card has no icon or count');
+  expect(await page.$eval('#lt-body .lt-row', r => getComputedStyle(r).cursor) === 'pointer', 'a row has no hand cursor');
+  await page.click('#lt-body .lt-hc[data-col="name"]');
   await sleep(200);
-  expect(await page.isVisible('#lt-table th.lt-sorted[data-col="name"]'), 'the name header did not sort');
-  await page.click('button[data-click="openLibTableColumnsMenu"]');
-  await page.click('#lt-cols-menu button[data-col="size"]');
+  expect(await page.isVisible('#lt-body .lt-hc.lt-sorted[data-col="name"]'), 'the name header did not sort');
+  // the names of the columns: one bar above the cards, each name over its column
+  expect(await page.locator('#lt-body .lt-hrow').count() === 1, 'the column names are not one bar');
+  const offs = await page.$$eval('#lt-body .lt-hc[data-col]', hs => hs.map(h => {
+    const cell = document.querySelector(`#lt-body .lt-row .lt-c-${h.dataset.col}`);
+    return cell ? Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) : 99;
+  }));
+  expect(offs.every(d => d < 1), `a column name is off its column: ${offs.join(', ')}`);
+  const segAt = () => page.$eval('#lt-bar .lt-seg', el => Math.round(el.getBoundingClientRect().left));
+  const before = await segAt();
+  await page.click('[data-lt-cols]');
+  await page.click('#lt-cols-pop input[data-col="size"]');
   await sleep(200);
-  expect(await page.isVisible('#lt-table th[data-col="size"]'), 'the size column did not appear');
-  await page.click('#lt-cols-menu button[data-col="reset"]');
+  expect(await page.isVisible('#lt-body .lt-hc[data-col="size"]'), 'the size column did not appear');
+  expect(await segAt() === before, 'the view switch moved with the columns');
+  // «Строки: Компактные» in «Колонки» makes the rows lower
+  const rowH = () => page.$eval('#lt-body .lt-row', r => r.getBoundingClientRect().height);
+  const h1 = await rowH();
+  await page.click('#lt-cols-pop [data-dense="1"]');
+  await sleep(200);
+  expect(await rowH() < h1, 'compact rows are not lower');
+  await page.click('#lt-cols-pop [data-col-reset]');
   await page.keyboard.press('Escape');
-  await page.dblclick('#lt-table tr[data-mid] td.lt-c-name');
+  for (const v of ['cards', 'folders']) {
+    await page.click(`#lt-bar .lt-seg-b[data-click-args='["${v}"]']`);
+    await sleep(200);
+    expect(await page.locator('#lt-body [data-mid]').count() > 0, `no recordings in the view ${v}`);
+    expect(await segAt() === before, `the view switch moved in the view ${v}`);
+    expect(await page.isEnabled('[data-lt-cols]'), `«Колонки» is off in the view ${v}`);
+  }
+  // in «Карточки» «Колонки» chooses the details of the cards
+  await page.click(`#lt-bar .lt-seg-b[data-click-args='["cards"]']`);
+  await sleep(200);
+  await page.click('[data-lt-cols]');
+  await page.click('#lt-cols-pop input[data-col="status"]');
+  await sleep(200);
+  expect(await page.locator('#lt-body .lt-tile .lt-st').count() === 0, 'the state stays on the cards after it was unticked');
+  await page.click('#lt-cols-pop [data-col-reset]');
+  await page.keyboard.press('Escape');
+  await page.click(`#lt-bar .lt-seg-b[data-click-args='["table"]']`);
+  await sleep(200);
+  const barH = () => page.$eval('#lt-bar', el => Math.round(el.getBoundingClientRect().height + parseFloat(getComputedStyle(el).marginBottom)));
+  const h0 = await barH();
+  await page.click('#lt-body .lt-row .lt-cbx');
+  await sleep(200);
+  expect(await page.isVisible('#lt-bar.lt-selbar'), 'the selection bar did not show');
+  expect(/В папку/.test(await page.textContent('#lt-bar')) && /Расшифровать/.test(await page.textContent('#lt-bar')), 'the selection bar lacks its actions');
+  expect(await barH() === h0, 'the list moved when a recording was selected');
+  await page.click('#lt-bar button[data-click="clearLibSelection"]');
+  await page.fill('#lt-q', 'тема');
+  await sleep(900);
+  expect(await page.locator('#lt-body .lt-snip').count() > 0, 'the search shows no places in the text');
+  expect(/мест/.test(await page.textContent('#lt-count')), 'the count does not say how many places were found');
+  await page.fill('#lt-q', '');
+  await sleep(300);
+  await page.click('#lt-body .lt-row .lt-c-name');
   await sleep(600);
-  expect(await page.evaluate(() => state.appView) === 'library', 'a double click did not open the recording');
+  expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
+});
+
+// Import: «＋ Импорт ▾» in the title of «Записи» is a menu with an icon at each way to add; Ctrl+O and files
+// dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
+await step('import menu and drop veil', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await sleep(300);
+  await page.click('#lt-import-btn');
+  await sleep(200);
+  const rows = await page.$$eval('#imp-menu .imp-menu-row', els => els.map(e => [e.dataset.imp, !!e.querySelector('.imp-menu-ic svg')]));
+  expect(rows.map(r => r[0]).join() === 'files,folder,link,params' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
+  expect(/Ctrl\+O/.test(await page.textContent('#imp-menu')), 'the menu does not name Ctrl+O');
+  await page.click('#imp-menu [data-imp="link"]');
+  await sleep(400);
+  expect(await page.isVisible('#modal-import') && await page.evaluate(() => document.activeElement?.id) === 'url-import-input', '«Ссылка» did not open the window at the link');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  expect(!(await page.isVisible('#btn-new-recording')), 'the old import button of the sidebar is still there');
+  await page.evaluate(() => switchAppView('dashboard'));
+  await sleep(300);
+  await page.keyboard.press('Control+o');
+  await sleep(400);
+  expect(await page.isVisible('#modal-import'), 'Ctrl+O did not open the import from «Главная»');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['x'], 'call.mp3', { type: 'audio/mpeg' }));
+    document.body.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: dt }));
+  });
+  await sleep(200);
+  expect(await page.isVisible('#drop-overlay') && /Отпустите/.test(await page.textContent('#drop-overlay-title')), 'no veil while files are dragged over «Главная»');
+  await page.evaluate(() => hideDropOverlay());
 });
 
 // «Через минуту: …» goes by itself once a recording is going on (reported by the user: it stayed)
