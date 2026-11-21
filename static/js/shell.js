@@ -563,15 +563,27 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// «Выйти» (asked by the user): the whole program closes from its own window, not only from the tray icon. It always
-// asks first. Only in the app's window (window.pywebview): a browser has no such button.
-async function quitApp() {
+// «Выйти» (asked by the user, like the power button of Windows): a menu with «Свернуть в трей» (the window hides, the
+// program goes on) and «Выйти полностью» (the whole program closes, after a question). Only in the app's window
+// (window.pywebview): a browser has no such button.
+function quitApp() {
+  const api = window.pywebview && window.pywebview.api;
+  if (!api || !api.quit_app) return;
+  const btn = document.getElementById('rail-quit');
+  const r = btn.getBoundingClientRect();
+  // after this click, which closes the menus
+  setTimeout(() => openTextMenuAt([
+    { label: t('quitToTray'), run: () => { try { api.hide_to_tray && api.hide_to_tray(); } catch (e) {} } },
+    { label: t('quitFully'), key: 'Ctrl+Q', danger: true, run: () => quitFully() },
+  ], r.right + 6, r.top, { owner: btn }), 0);
+}
+async function quitFully() {
   const api = window.pywebview && window.pywebview.api;
   if (!api || !api.quit_app) return;
   let st = 'idle';
   try { st = await api.app_state(); } catch (e) {}
-  // always asked (asked by the user: a click by mistake closed the program); while something runs, what is lost
-  const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : st === 'idle' ? 'quitIdle' : 'quitBusyWork'), t('quitOk'), st !== 'idle');
+  // always asked; while something runs it says what is lost
+  const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : st === 'idle' ? 'quitIdle' : 'quitBusyWork'), t('quitOk'), true);
   if (!ok) return;
   try { await api.quit_app(); } catch (e) {}
 }
@@ -584,6 +596,6 @@ showQuitButton();
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === 'KeyQ') && window.pywebview && window.pywebview.api) {
     e.preventDefault();
-    quitApp();
+    quitFully();
   }
 });

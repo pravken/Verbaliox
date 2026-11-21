@@ -342,6 +342,7 @@ def open_app_when_ready(window, host: str, port: int, log_path: str) -> None:
 
 # «Выйти» on the page (WindowApi.quit_app): the window closes for good, not into the tray
 QUIT_REQUESTED = threading.Event()
+TRAY_READY = threading.Event()  # the tray icon is there: the window may hide into it
 
 
 class WindowApi:
@@ -390,6 +391,24 @@ class WindowApi:
             return str(snapshot().get("state") or "idle")
         except Exception:
             return "idle"
+
+    def hide_to_tray(self) -> bool:
+        """«Свернуть в трей» of the page's «Выйти» menu: the window hides, the program goes on in the tray (without a
+        tray icon the window is minimized instead, so it is never lost). Only the app's own page."""
+        import webview
+
+        try:
+            url = webview.windows[0].get_current_url() if webview.windows else None
+        except Exception:
+            url = None
+        if not self._is_own(url) or not webview.windows:
+            return False
+        win = webview.windows[0]
+        if TRAY_READY.is_set():
+            threading.Timer(0.05, win.hide).start()
+        else:
+            threading.Timer(0.05, win.minimize).start()
+        return True
 
     def quit_app(self) -> bool:
         """«Выйти» (asked by the user: the whole program closes from its own window, not only from the tray icon):
@@ -1326,6 +1345,7 @@ def main() -> None:
             try:
                 tray = TrayController(window)
                 tray.start()
+                TRAY_READY.set()
                 from app import updater
 
                 updater.exit_hooks.append(tray.stop)
