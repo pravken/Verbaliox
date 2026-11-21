@@ -577,15 +577,19 @@ function quitApp() {
     { label: t('quitFully'), key: 'Ctrl+Q', danger: true, run: () => quitFully() },
   ], r.right + 6, r.top, { owner: btn }), 0);
 }
+let quitAsking = false;  // one question at a time: Ctrl+Q pressed twice opened two
 async function quitFully() {
   const api = window.pywebview && window.pywebview.api;
-  if (!api || !api.quit_app) return;
-  let st = 'idle';
-  try { st = await api.app_state(); } catch (e) {}
-  // always asked; while something runs it says what is lost
-  const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : st === 'idle' ? 'quitIdle' : 'quitBusyWork'), t('quitOk'), true);
-  if (!ok) return;
-  try { await api.quit_app(); } catch (e) {}
+  if (!api || !api.quit_app || quitAsking) return;
+  quitAsking = true;
+  try {
+    let st = 'idle';
+    try { st = await api.app_state(); } catch (e) {}
+    // always asked; while something runs it says what is lost
+    const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : st === 'idle' ? 'quitIdle' : 'quitBusyWork'), t('quitOk'), true);
+    if (!ok) return;
+    try { await api.quit_app(); } catch (e) {}
+  } finally { quitAsking = false; }
 }
 function showQuitButton() {
   const api = window.pywebview && window.pywebview.api;
@@ -596,6 +600,6 @@ showQuitButton();
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === 'KeyQ') && window.pywebview && window.pywebview.api) {
     e.preventDefault();
-    quitFully();
+    if (!e.repeat) quitFully();
   }
 });
