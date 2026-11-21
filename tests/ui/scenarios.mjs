@@ -433,6 +433,22 @@ await step('dashboard rises once', async () => {
   expect(dip < 0.2, `a widget faded out again while rising (by ${dip.toFixed(2)})`);
 });
 
+// Captions wait for the switch as a recording starts unless asked for, and never by themselves with «Не мешать
+// на встречах» (asked by the user: they loaded a model during a meeting)
+await step('captions do not start by themselves', async () => {
+  const held = await page.evaluate(() => [
+    captionsHeldAtStart({}),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'false' }),
+    captionsHeldAtStart({ live_captions_auto: 'false', analysis_after_meetings: 'false' }),
+  ]);
+  expect(JSON.stringify(held) === '[true,true,false,true]', `the captions rule: ${held}`);
+  await page.evaluate(() => openModal('settings', 'recording'));
+  await sleep(600);
+  expect(!(await page.isChecked('#set-live-captions-auto')), 'captions are on by default');
+  await page.evaluate(() => closeModal('settings'));
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => switchAppView('dashboard'));

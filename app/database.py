@@ -174,7 +174,7 @@ def init_db() -> None:
             "economy_mode": "false",  # «Только запись»: no model works (app/economy.py; the tray menu)
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
-            "live_captions_auto": "true",  # captions start with a recording (the studio's switch as last set)
+            "live_captions_auto": "false",  # captions start with a recording; off by default (asked by the user: they load a model)
             "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
