@@ -495,6 +495,30 @@ def api_import_pick_folder() -> Dict[str, Any]:
                                timeout=900)
     return {"available": True, "path": (chosen or "").strip()}
 
+class FolderFilesPayload(BaseModel):
+    path: str
+
+@router.post("/api/import/folder-files")
+def api_import_folder_files(payload: FolderFilesPayload) -> Dict[str, Any]:
+    """The folder mode of the import window: the audio and video files a folder holds, listed before it is
+    added (the same choice /api/meetings/local-path makes). Not a folder: is_dir false and no files."""
+    raw_path = payload.path.strip().strip('"').strip("'")
+    target = Path(raw_path) if raw_path else None
+    try:
+        if target is None or not target.is_dir():
+            return {"is_dir": False, "count": 0, "files": []}
+        found = [p for p in sorted(target.iterdir()) if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS]
+    except OSError:
+        return {"is_dir": False, "count": 0, "files": []}
+    files = []
+    for p in found[:200]:
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        files.append({"name": p.name, "size": size})
+    return {"is_dir": True, "count": len(found), "files": files}
+
 class LocalPathPayload(BaseModel):
     path: str
     language: str = "auto"

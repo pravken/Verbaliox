@@ -3,11 +3,19 @@
   <div id="modal-import" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "import"]'>
     <div class="imp-card modal-card" aria-labelledby="imp-title">
       <div class="imp-head">
-        <span class="dc-head-ic imp-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg></span>
+        <span id="imp-head-ic" class="dc-head-ic imp-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg></span>
         <h3 id="imp-title" class="imp-title" data-i18n="impTitle">Импорт</h3>
         <span id="imp-summary" class="imp-summary"></span>
         <span class="flex-1"></span>
         <button data-click="closeModal" data-click-args='["import"]' class="imp-x" data-i18n-title="tipCloseModal" title="Закрыть окно">✕</button>
+      </div>
+
+      <!-- What is imported: the window in the mode of the ▾ menu's item, switched here (all the ways with «Все параметры») -->
+      <div id="imp-modes" class="imp-seg" role="radiogroup" data-i18n-aria="impModesAria" aria-label="Что импортировать">
+        <button type="button" role="radio" aria-checked="false" data-imp-mode="files" data-click="impSetMode" data-click-args='["files"]' data-i18n="impModeFiles">Файлы</button>
+        <button type="button" role="radio" aria-checked="false" data-imp-mode="folder" data-click="impSetMode" data-click-args='["folder"]' data-i18n="impModeFolder">Папка</button>
+        <button type="button" role="radio" aria-checked="false" data-imp-mode="link" data-click="impSetMode" data-click-args='["link"]' data-i18n="impModeLink">Ссылка</button>
+        <button type="button" role="radio" aria-checked="false" data-imp-mode="all" data-click="impSetMode" data-click-args='["all"]' data-i18n="impModeAll">Все параметры</button>
       </div>
 
       <div class="imp-body">
@@ -16,20 +24,29 @@
           <input id="file-input" type="file" multiple accept="video/*,audio/*,.mkv,.webm,.mov,.mp4,.mp3,.wav,.m4a,.ogg,.flac" class="hidden" data-change="handleFileSelect" data-change-args='[{"$": "files"}]' data-i18n-title="impPickFiles" title="Выбрать файлы" />
           <h4 class="pcd-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4"/></svg></span><span data-i18n="impWhat">Что добавить</span></h4>
           <div id="imp-list" class="flex flex-col gap-0.5"></div>
-          <div id="imp-empty" class="imp-empty" data-click="impPickFiles">
+          <div id="imp-empty" class="imp-empty" data-imp-modes="files all" data-click="impPickFiles">
             <span class="imp-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg></span>
             <span data-i18n="impDropHere">Перетащите файлы сюда</span>
             <span class="imp-empty-sub">MP4, MKV, MOV, WEBM, MP3, WAV, M4A</span>
             <span class="imp-btn imp-empty-btn" data-i18n="impChooseFiles">Выбрать файлы…</span>
           </div>
+          <!-- The folder mode: the folder picker; the files of a chosen folder are listed under it -->
+          <div id="imp-folder-empty" class="imp-empty" data-imp-modes="folder" data-click="impBrowsePath">
+            <span class="imp-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/></svg></span>
+            <span data-i18n="impFolderHere">Папка с записями</span>
+            <span class="imp-empty-sub" data-i18n="impFolderSub">Добавляются все аудио и видео из папки; файлы остаются на месте</span>
+            <span class="imp-btn imp-empty-btn" data-i18n="impChooseFolder">Выбрать папку…</span>
+          </div>
+          <!-- The link mode: what a link can be -->
+          <p class="imp-hint imp-link-lead" data-imp-modes="link" data-i18n="impLinkLead">YouTube, плейлисты и каналы, прямые ссылки на аудио и видео. Плейлист добавляется целиком или только первое видео.</p>
           <!-- A link and a path on the disk are typed right here, not behind a button -->
-          <div id="imp-link-row" class="imp-inline">
+          <div id="imp-link-row" class="imp-inline" data-imp-modes="link all">
             <span class="imp-row-label" data-i18n="impLinkLabel">Ссылка</span>
             <input id="url-import-input" type="url" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "impAddLink"]' placeholder="https://…" class="imp-input" data-i18n-title="impLinkTitle" title="Ссылка на видео или подкаст" />
             <button data-click="impAddLink" class="imp-btn imp-btn-primary" data-i18n="impAddLink">Добавить ссылку</button>
           </div>
-          <p id="imp-link-note" class="imp-hint imp-link-note" data-i18n="urlImportHint">Скачивается только звук. Используйте для записей, которые вы вправе скачивать.</p>
-          <div id="imp-path-row" class="imp-inline">
+          <p id="imp-link-note" class="imp-hint imp-link-note" data-imp-modes="link all" data-i18n="urlImportHint">Скачивается только звук. Используйте для записей, которые вы вправе скачивать.</p>
+          <div id="imp-path-row" class="imp-inline" data-imp-modes="folder all">
             <span class="imp-row-label" data-i18n="impPath" data-i18n-title="impPathTitle" title="Файл или папка на диске добавляются без копирования">Путь на диске</span>
             <input id="local-path-input" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "impAddPath"]' data-i18n-placeholder="impPathPlaceholder" placeholder="Полный путь к файлу или папке" class="imp-input" data-i18n-title="tipLocalPathInput" title="Укажите полный путь к файлу или папке на диске" />
             <button data-click="impBrowsePath" class="imp-btn" data-i18n="impBrowse" data-i18n-title="impBrowseTip" title="Выбрать папку в проводнике">Обзор…</button>
@@ -62,7 +79,7 @@
                 <option value="en">English (EN)</option>
               </select>
             </label>
-            <label class="imp-field imp-more-item"><span data-i18n="speakersCountLabel">Число участников</span>
+            <label class="imp-field"><span data-i18n="speakersCountLabel">Число участников</span>
               <select id="upload-speakers" class="imp-select" data-i18n-title="tipSelectSpeakersCount" title="Наибольшее число участников; программа найдёт не больше этого числа">
                 <option value="0" data-i18n="impLangAuto">Определить автоматически</option>
                 <option value="1">1</option>

@@ -40,15 +40,16 @@ await step('first run banner', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
-// Import: the model and the language in sight, the rest behind «Изменить» (8.3)
+// Import: the model, the language and the speakers in sight, the processing behind «Изменить» (8.3) in a mode of
+// its own (files, folder, link); «Все параметры» opens with it
 await step('import window', async () => {
-  await page.evaluate(() => openImportDialog());
+  await page.evaluate(() => openImportDialog({ mode: 'files' }));
   await sleep(400);
-  expect(await page.isVisible('#upload-model') && await page.isVisible('#upload-language'), 'model or language not shown');
-  expect(!(await page.isVisible('#upload-speakers')), 'the rare options are open');
+  expect(await page.isVisible('#upload-model') && await page.isVisible('#upload-language') && await page.isVisible('#upload-speakers'), 'model, language or speakers not shown');
+  expect(!(await page.isVisible('#imp-sound')), 'the rare options are open');
   await page.click('#imp-more-btn');
   await sleep(200);
-  expect(await page.isVisible('#upload-speakers'), '«Изменить» did not open the options');
+  expect(await page.isVisible('#imp-sound'), '«Изменить» did not open the options');
   await page.evaluate(() => closeModal('import'));
   await sleep(250);
 });
@@ -802,15 +803,15 @@ await step('records section', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
 });
 
-// Import: «＋ Импорт» in the strip on top is a menu with an icon at each way to add; Ctrl+O and files
-// dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
+// Import: «＋ Импорт ▾» in the strip on top is a split button; its ▾ is a menu with an icon at each way to add;
+// Ctrl+O and files dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
 await step('import menu and drop veil', async () => {
   await page.evaluate(() => switchAppView('libtable'));
   await sleep(300);
-  await page.click('#strip-import');
+  await page.click('#strip-import-more');
   await sleep(200);
   const rows = await page.$$eval('#imp-menu .imp-menu-row', els => els.map(e => [e.dataset.imp, !!e.querySelector('.imp-menu-ic svg')]));
-  expect(rows.map(r => r[0]).join() === 'files,folder,link,params' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
+  expect(rows.map(r => r[0]).join() === 'files,folder,link,all' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
   expect(/Ctrl\+O/.test(await page.textContent('#imp-menu')), 'the menu does not name Ctrl+O');
   await page.click('#imp-menu [data-imp="link"]');
   await sleep(400);
@@ -833,6 +834,79 @@ await step('import menu and drop veil', async () => {
   await sleep(200);
   expect(await page.isVisible('#drop-overlay') && /Отпустите/.test(await page.textContent('#drop-overlay-title')), 'no veil while files are dragged over «Главная»');
   await page.evaluate(() => hideDropOverlay());
+});
+
+// The import window in the mode of the ▾ menu's item (asked by the user: every item opened the same window):
+// «＋ Импорт» itself opens everything; each mode says what it is in the head and shows only its own fields, the
+// recognition card stays; the segmented control switches the mode; a second click on ▾ closes its menu; the split
+// button stands as «● Запись ▾» (same height, radius and ▾)
+await step('import window modes', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await sleep(300);
+  const vis = (sel) => page.evaluate(s => { const el = document.querySelector(s); return !!el && el.getClientRects().length > 0; }, sel);
+  const head = () => page.textContent('#imp-title');
+  await page.click('#strip-import');
+  await sleep(400);
+  expect(await page.isVisible('#modal-import'), '«＋ Импорт» did not open the window');
+  expect(await head() === 'Импорт' && await vis('#imp-empty') && await vis('#imp-link-row') && await vis('#imp-path-row'), '«＋ Импорт» does not show everything');
+  expect(await vis('#imp-sound'), '«＋ Импорт» does not show the processing');
+  expect(await page.getAttribute('#imp-modes [data-imp-mode="all"]', 'aria-checked') === 'true', 'the segment «Все параметры» is not chosen');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  const modes = { files: ['Импорт файлов', '#imp-empty'], folder: ['Импорт папки', '#imp-folder-empty'], link: ['Импорт по ссылке', '#imp-link-row'] };
+  for (const [mode, [title, own]] of Object.entries(modes)) {
+    await page.click('#strip-import-more');
+    await sleep(200);
+    await page.click(`#imp-menu [data-imp="${mode}"]`);
+    await sleep(400);
+    expect(await head() === title, `${mode}: the head says «${await head()}»`);
+    expect(await vis(own), `${mode}: its own field is not shown`);
+    for (const other of ['#imp-empty', '#imp-folder-empty', '#imp-link-row', '#imp-path-row']) {
+      const shown = await vis(other);
+      const want = other === own || (mode === 'folder' && other === '#imp-path-row');
+      expect(shown === want, `${mode}: ${other} is ${shown ? 'shown' : 'hidden'}`);
+    }
+    expect(await vis('#upload-model') && await vis('#upload-language') && await vis('#upload-speakers'), `${mode}: the recognition card is not whole`);
+    expect(await page.getAttribute(`#imp-modes [data-imp-mode="${mode}"]`, 'aria-checked') === 'true', `${mode}: its segment is not chosen`);
+    if (mode === 'link') {
+      expect(await page.evaluate(() => document.activeElement?.id) === 'url-import-input', '«Ссылка»: the cursor is not in the link');
+      expect(/YouTube/.test(await page.textContent('#modal-import .imp-link-lead')), '«Ссылка»: no hint of what a link can be');
+    }
+    await page.evaluate(() => closeModal('import'));
+    await sleep(250);
+  }
+  // the segmented control switches the mode inside the window
+  await page.evaluate(() => openImportDialog({ mode: 'files' }));
+  await sleep(300);
+  await page.click('#imp-modes [data-imp-mode="link"]');
+  await sleep(200);
+  expect(await head() === 'Импорт по ссылке' && await vis('#imp-link-row') && !(await vis('#imp-empty')), 'the segment did not switch to the link');
+  await page.click('#imp-modes [data-imp-mode="all"]');
+  await sleep(200);
+  expect(await head() === 'Импорт' && await vis('#imp-empty') && await vis('#imp-path-row'), 'the segment did not switch to everything');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  // Ctrl+O: the files mode
+  await page.keyboard.press('Control+o');
+  await sleep(400);
+  expect(await head() === 'Импорт файлов', 'Ctrl+O did not open the files mode');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  // a second click on ▾ closes its menu
+  await page.click('#strip-import-more');
+  await sleep(200);
+  expect(await page.isVisible('#imp-menu'), 'the ▾ did not open its menu');
+  await page.click('#strip-import-more');
+  await sleep(200);
+  expect(!(await page.isVisible('#imp-menu')), 'a second click on ▾ left its menu open');
+  // the split button as «● Запись ▾»
+  const box = await page.evaluate(() => {
+    const r = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return { top: Math.round(b.top), h: Math.round(b.height), w: Math.round(b.width) }; };
+    const rad = (s) => getComputedStyle(document.querySelector(s)).borderTopLeftRadius;
+    return { imp: r('.imp-split'), rec: r('.tb-rec-wrap'), impMore: r('#strip-import-more'), recMore: r('#tb-rec-more'), ri: rad('.imp-split'), rr: rad('.tb-rec-wrap') };
+  });
+  expect(box.imp.h === 32 && box.rec.h === 32 && box.imp.top === box.rec.top, `the split buttons differ: ${JSON.stringify(box)}`);
+  expect(box.ri === box.rr && box.impMore.w === box.recMore.w && box.impMore.h === box.recMore.h, `the ▾ parts differ: ${JSON.stringify(box)}`);
 });
 
 // «Через минуту: …» goes by itself once a recording is going on (reported by the user: it stayed)
