@@ -1726,6 +1726,7 @@ function renderTranscriptNow() {
     return;
   }
 
+  container.classList.toggle('tx-chat', state.txLayout === 'chat');
   const chunkCount = Math.ceil(filtered.length / TX_CHUNK);
   const eager = filtered.length <= TX_EAGER_LIMIT;
   container.innerHTML = Array.from({ length: chunkCount }, (_, k) =>
@@ -1751,6 +1752,7 @@ function estimateChunkHeight(k) {
   for (const g of transcriptGroups(tx.items.slice(k * TX_CHUNK, (k + 1) * TX_CHUNK), k * TX_CHUNK)) {
     const len = g.segs.reduce((n, seg) => n + (seg.text || '').length + 1, 0);
     h += 52 + 22 * Math.ceil(len / 95) + 6;
+    if (state.txLayout === 'chat') h += 26 * g.segs.length;  // a bubble for each phrase
     if (state.txView === 'both') h += 20 * Math.ceil(len / 95) + 6 * g.segs.length;
   }
   return h;
@@ -1838,6 +1840,7 @@ function segBodyHtml(seg) {
 }
 
 function transcriptGroupHtml(group) {
+  if (state.txLayout === 'chat') return transcriptChatGroupHtml(group);  // «Чат»: each phrase its own bubble
   const speakers = tx.speakers;
   const first = group.segs[0];
   const ids = group.segs.map(x => Number(x.id) || 0);
@@ -2353,4 +2356,74 @@ async function recFillTasks(box, next) {
   const before = state.recTasks && state.recTasks.id === m.id ? JSON.stringify(state.recTasks.items) : '';
   state.recTasks = { id: m.id, items: list };
   if (JSON.stringify(list) !== before) paint();
+}
+
+// --- The transcript as a chat («Чат») or as text («Текст»): chosen above the text, kept in this browser ---
+state.txLayout = (() => { try { return localStorage.getItem('verbaliox_tx_layout') === 'text' ? 'text' : 'chat'; } catch (e) { return 'chat'; } })();
+
+function setTxLayout(layout) {
+  state.txLayout = layout === 'text' ? 'text' : 'chat';
+  try { localStorage.setItem('verbaliox_tx_layout', state.txLayout); } catch (e) { /* this session only */ }
+  syncTxLayoutButtons();
+  renderTranscript();
+  // the phrase playing is lit again in the new drawing, and kept in sight
+  const p = document.getElementById('media-player');
+  if (p) updatePlaybackHighlight(p.currentTime || 0, true)?.scrollIntoView({ block: 'center' });
+}
+
+function syncTxLayoutButtons() {
+  for (const k of ['chat', 'text']) {
+    const b = document.getElementById(`tx-layout-${k}`);
+    if (b) b.setAttribute('aria-checked', String(state.txLayout === k));
+  }
+}
+document.addEventListener('DOMContentLoaded', syncTxLayoutButtons);
+
+// The face of a speaker in the chat: the person's photo, else the initials on the speaker's colour
+function txChatAvatar(spk) {
+  const name = String(spk.name || '');
+  const face = typeof personPhotoUrl === 'function' ? personPhotoUrl(name) : '';
+  const color = spk.color || '#0A84FF';
+  return face
+    ? `<span class="ch-av"><img class="sp-photo" src="${escapeHtml(face)}" alt=""></span>`
+    : `<span class="ch-av" style="background:${escapeHtml(rpHexA(color, 0.22))};color:${escapeHtml(color)}">${escapeHtml(capInitials(name))}</span>`;
+}
+
+// One run of a speaker's phrases as a chat: the face and the name once, each phrase a bubble with its time.
+// The bubble is the phrase's element (#seg-<id>, .segment-row): playback lights it, a click on a word plays
+// from there, the pencil, a double click or the right-click menu edit it, as in «Текст»
+function transcriptChatGroupHtml(group) {
+  const speakers = tx.speakers;
+  const first = group.segs[0];
+  const ids = group.segs.map(x => Number(x.id) || 0);
+  const spk = speakers[first.speaker] || { name: first.speaker || 'Speaker', color: '#0A84FF' };
+  const options = Object.keys(speakers).map(k =>
+    `<option value="${escapeHtml(k)}" ${k === first.speaker ? 'selected' : ''} class="bg-apple-card text-white">${escapeHtml(speakers[k].name)}</option>`).join('');
+  const lang = state.activeMeeting && state.activeMeeting.language;
+  const bubble = seg => {
+    const id = Number(seg.id) || 0;
+    const s0 = Number(seg.start) || 0;
+    const badge = seg.lang && seg.lang !== lang
+      ? `<span class="seg-lang" title="${escapeHtml(t('tipSegLang'))}">${escapeHtml(String(seg.lang).toUpperCase())}</span>` : '';
+    return `<div id="seg-${id}" data-start="${s0}" data-end="${Number(seg.end) || 0}" class="segment-row seg-piece ch-bub" data-dblclick="openInlineSegmentEditor" data-dblclick-args='[${id}]'>`
+      + `${badge}<span id="seg-text-${id}" class="seg-piece-text">${segBodyHtml(seg)}</span>`
+      + `<button data-click="seekPlayer" data-click-args='[${s0}]' class="ch-tm" title="${escapeHtml(t('recListenFrom'))}">${formatTime(s0)}</button>`
+      + `<button data-click="openInlineSegmentEditor" data-click-args='[${id}]' class="seg-piece-edit" title="${escapeHtml(t('tipEditSegment'))}" aria-label="${escapeHtml(t('tipEditSegment'))}">${SVG_ICONS.pencil}</button>`
+      + '</div>';
+  };
+  return `
+    <div class="segment-group ch-group" data-start="${Number(first.start) || 0}" style="--pc:${escapeHtml(spk.color || '#0A84FF')}">
+      ${txChatAvatar(spk)}
+      <div class="ch-body">
+        <div class="ch-h">
+          <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
+            title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
+            style="color: ${escapeHtml(spk.color)}"
+            class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">${options}</select>
+          ${speakers[first.speaker] ? `<button data-click="startInlineSpeakerRename" data-click-args='[${ids[0]}]' class="seg-icon-btn"
+            title="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}" aria-label="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}">${SVG_ICONS.pencil}</button>` : ''}
+        </div>
+        <div class="ch-bubs">${group.segs.map(bubble).join('')}</div>
+      </div>
+    </div>`;
 }
