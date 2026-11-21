@@ -123,6 +123,22 @@ class HomeApiTest(unittest.TestCase):
         with mock.patch("sys.platform", "win32"), mock.patch("app.native_dialog.run", return_value=None):
             self.assertEqual(c.post("/api/import/pick-folder").json()["path"], "")
 
+    def test_folder_files_of_the_import_window(self):
+        """The folder mode lists the audio and video files of a folder before it is added; not a folder: none."""
+        import tempfile
+        from pathlib import Path
+        c = self._client()
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("b.mp3", "a.mp4", "notes.txt"):
+                Path(d, name).write_bytes(b"xx")
+            Path(d, "sub.wav").mkdir()
+            out = c.post("/api/import/folder-files", json={"path": f'"{d}"'}).json()
+            self.assertEqual((out["is_dir"], out["count"]), (True, 2))
+            self.assertEqual([f["name"] for f in out["files"]], ["a.mp4", "b.mp3"])
+            self.assertEqual(out["files"][0]["size"], 2)
+            self.assertFalse(c.post("/api/import/folder-files", json={"path": str(Path(d, "b.mp3"))}).json()["is_dir"])
+        self.assertEqual(c.post("/api/import/folder-files", json={"path": ""}).json(), {"is_dir": False, "count": 0, "files": []})
+
     def test_upload_keeps_the_processing_of_the_import_window(self):
         c = self._client()
         proc = {"denoise": False, "vad": True, "summary": False}

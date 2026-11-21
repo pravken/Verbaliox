@@ -16,9 +16,14 @@
         <span id="strip-grow" class="strip-grow"></span>
       </div>
       <span id="strip-acts" class="strip-acts"></span>
-      <!-- Import from any section (asked by the user): the same menu as in «Записи», next to the recording -->
-      <button id="strip-import" type="button" class="st-btn strip-imp" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
-        data-i18n-title="impMenuTip" title="Добавить записи: файлы, папка, ссылка · Ctrl+O"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="impBtn">Импорт</span></button>
+      <!-- Import from any section (asked by the user), a split button as «● Запись ▾»: «＋ Импорт» opens the window
+           with everything; its ▾ the menu of what to import (files, a folder, a link), each opening the window in its mode -->
+      <div class="imp-split">
+        <button id="strip-import" type="button" class="imp-split-main" data-click="openImportFull"
+          data-i18n-title="impBtnTip" title="Импорт: файлы, папка или ссылка, со всеми параметрами"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="impBtn">Импорт</span></button>
+        <button id="strip-import-more" type="button" class="imp-split-more" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
+          data-i18n-title="impMenuTip" title="Что импортировать: файлы, папку или ссылку · Ctrl+O" data-i18n-aria="impMenuTip" aria-label="Что импортировать: файлы, папку или ссылку · Ctrl+O"><svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
       <!-- Recording: a round button at the right end; while recording it shows the time and «Стоп» -->
       <div class="relative tb-rec-wrap">
         <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">

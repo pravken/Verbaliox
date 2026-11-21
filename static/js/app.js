@@ -2960,49 +2960,72 @@ window.addEventListener('blur', closeTextMenu);
 // The page scrolling under the menu closes it; a long menu scrolling its own list does not
 document.addEventListener('scroll', (e) => { if (!(e.target instanceof Element && e.target.closest('#text-menu'))) closeTextMenu(); }, true);
 
-// --- About (GET /api/about) and its easter eggs: the willow hears everything ---
+// --- About (GET /api/about) and its easter eggs: the dragon hears everything ---
 const ABOUT_LINES = {
   ru: [
-    'Участник 3 просил не записывать. Записано.',
-    '[неразборчиво] — но мы поняли.',
-    'Ваша последняя фраза уже в протоколе. [00:00]',
-    'Пункт помечен [?]: доказательств нет. Пока.',
-    'Слова-паразиты удалены. Паразиты — нет.',
-    'Обещание найдено: «сделаю к пятнице». Пятница не найдена.',
-    'Верба не спит. Верба транскрибирует.',
-    'Тишина длилась 3 секунды. Расшифровано: «…».',
-    'Голос узнан: это вы. Опять.',
+    'Дракон проснулся. Протокол встречи — тоже.',
+    'Участник «Дракон» подключился. Микрофон: огнеопасно.',
+    'Искры распознаны как речь. Уверенность: 12%.',
+    '[рычание] — помечено как «согласен».',
+    'Задача назначена: Дракон. Срок: когда остынет.',
+    'Дракон не спит. Дракон конспектирует.',
+    'Сокровище найдено: час встречи без единого «эээ».',
+    'Слова-паразиты сожжены. Пепел сохранён в черновиках.',
+    'Голос узнан: это вы. Дракон кивнул.',
   ],
   en: [
-    'Participant 3 asked not to be recorded. Recorded.',
-    '[inaudible], but we got it.',
-    'Your last sentence is already in the minutes. [00:00]',
-    'Point marked [?]: no evidence. Yet.',
-    'Filler words removed. The fillers themselves are still here.',
-    'Promise found: "done by Friday". Friday not found.',
-    'The willow does not sleep. The willow transcribes.',
-    'Silence lasted 3 seconds. Transcribed: "…".',
-    'Voice recognized: it is you. Again.',
+    'The dragon woke up. So did the minutes.',
+    'Participant "Dragon" joined. Microphone: flammable.',
+    'Sparks recognized as speech. Confidence: 12%.',
+    '[growl], marked as "agreed".',
+    'Task assigned: Dragon. Due: once it cools down.',
+    'The dragon does not sleep. The dragon takes notes.',
+    'Treasure found: an hour-long meeting without a single "um".',
+    'Filler words burned. The ashes are kept in drafts.',
+    'Voice recognized: it is you. The dragon nodded.',
   ],
 };
 const ABOUT_EGG = {
   ru: [
-    ['00:00', 'Участник 1', '#64D2FF', '…он опять кликает по вербе.'],
-    ['00:02', 'Участник 2', '#BF5AF2', 'Пусть. Мы всё равно всё записываем.'],
-    ['00:04', 'Участник ?', '#FF453A', 'Тише. Он читает субтитры.'],
-    ['00:07', null, null, 'Разделение по голосам: найдено 4 участника. В комнате — 1 человек. [?]'],
-    ['00:09', null, null, 'Обещание: «больше не кликать по логотипу». Срок: никогда.'],
-    ['00:11', 'Участник 4', '#FF9F0A', 'Не оборачивайся.'],
+    ['00:00', 'Участник 1', '#64D2FF', '…он опять тыкает в дракона.'],
+    ['00:02', 'Участник 2', '#BF5AF2', 'Пусть. Дракон всё равно всё записывает.'],
+    ['00:04', 'Дракон', '#FF453A', 'Ррр. [перевод: «ещё раз — и подпалю протокол»]'],
+    ['00:07', null, null, 'Разделение по голосам: найдено 4 участника. Крыльев в комнате: 2. [?]'],
+    ['00:09', null, null, 'Обещание: «больше не тыкать в дракона». Срок: никогда.'],
+    ['00:11', 'Участник 4', '#FF9F0A', 'Не оборачивайся. За спиной стало тепло.'],
   ],
   en: [
-    ['00:00', 'Participant 1', '#64D2FF', '…he is clicking the willow again.'],
-    ['00:02', 'Participant 2', '#BF5AF2', 'Let him. We are recording everything anyway.'],
-    ['00:04', 'Participant ?', '#FF453A', 'Quiet. He is reading the captions.'],
-    ['00:07', null, null, 'Speaker separation: 4 participants found. People in the room: 1. [?]'],
-    ['00:09', null, null, 'Promise: "no more clicking the logo". Due: never.'],
-    ['00:11', 'Participant 4', '#FF9F0A', 'Do not turn around.'],
+    ['00:00', 'Participant 1', '#64D2FF', '…he is poking the dragon again.'],
+    ['00:02', 'Participant 2', '#BF5AF2', 'Let him. The dragon records everything anyway.'],
+    ['00:04', 'Dragon', '#FF453A', 'Grrr. [translated: "once more and the minutes catch fire"]'],
+    ['00:07', null, null, 'Speaker separation: 4 participants found. Wings in the room: 2. [?]'],
+    ['00:09', null, null, 'Promise: "no more poking the dragon". Due: never.'],
+    ['00:11', 'Participant 4', '#FF9F0A', 'Do not turn around. It just got warm behind you.'],
   ],
 };
+
+// A few sparks from the dragon's mouth (the head of the icon, at its top right): they rise and fade; more and
+// wider for the burst at the end of the big easter egg. Without motion: none
+function releaseDragonSparks(count, spread, origin) {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const logo = origin || document.getElementById('about-logo');
+  if (!logo) return;
+  const r = logo.getBoundingClientRect();
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('span');
+    el.className = 'about-spark';
+    el.style.left = `${zpx(r.left + r.width * (0.8 + Math.random() * 0.08))}px`;
+    el.style.top = `${zpx(r.top + r.height * (0.32 + Math.random() * 0.06))}px`;
+    // out of the mouth to the right, then up as embers do
+    el.style.setProperty('--x', `${(14 + Math.random() * 46) * spread}px`);
+    el.style.setProperty('--y', `${(-24 - Math.random() * 56) * spread}px`);
+    el.style.setProperty('--s', `${4 + Math.round(Math.random() * 3)}px`);
+    el.style.setProperty('--t', `${(0.9 + Math.random() * 0.7) * (spread > 1 ? 1.5 : 1)}s`);
+    el.style.animationDelay = `${Math.random() * (spread > 1 ? 600 : 180)}ms`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+}
 const about = { clicks: [], line: -1, typing: null, egg: [], eggOn: false };
 
 async function openAbout() {
@@ -3042,7 +3065,7 @@ function aboutLogoClick() {
   logo.classList.remove('about-shake');
   void logo.offsetWidth;  // restart the animation
   logo.classList.add('about-shake');
-  releaseWillowFluff(10, 1.3, logo);
+  releaseDragonSparks(8, 1, logo);
   const now = Date.now();
   about.clicks = about.clicks.filter(t => now - t < 2000).concat(now);
   if (about.clicks.length >= 5) { about.clicks = []; startAboutEgg(); return; }
@@ -3087,10 +3110,10 @@ function startAboutEgg() {
   about.egg.push(setTimeout(() => {
     const row = document.createElement('div');
     row.className = 'glitch pt-3';
-    row.textContent = en ? 'Kidding. Everything runs locally, the microphone is off. Probably.'
-      : 'Шутка. Всё работает локально, микрофон выключен. Наверное.';
+    row.textContent = en ? 'Kidding. Everything runs locally, the microphone is off. So is the dragon. Probably.'
+      : 'Шутка. Всё работает локально, микрофон выключен. Дракон — тоже. Наверное.';
     list.appendChild(row);
-    releaseWillowFluff(60, 3.4, document.getElementById('about-logo'));
+    releaseDragonSparks(36, 2.2, document.getElementById('about-logo'));
   }, 900 + lines.length * 1700 + 600));
   about.egg.push(setTimeout(endAboutEgg, 900 + lines.length * 1700 + 6000));
 }
