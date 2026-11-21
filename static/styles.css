@@ -4905,3 +4905,11 @@ button.sc-at:hover { color: var(--accent-text); }
 /* «Выйти» at the very bottom of the rail, under «Настройки»; it turns red only under the pointer */
 .rail-quit:hover { color: #FF6961; }
 .rail-btn.hidden { display: none; }
+
+/* «Время во встречах»: under the chart, the busiest day on the left and the hint on the right, each in one place */
+.db-time-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.db-time-top { font-size: var(--fs-ui); color: #E6E7EA; font-weight: 500; }
+.db-time-hint { font-size: var(--fs-label); color: var(--hc-dim, #98989D); }
+
+/* Settings → Распознавание: the underline of the places the models heard differently, off */
+.no-disputed .word-disputed { text-decoration: none; }

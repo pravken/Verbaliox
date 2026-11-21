@@ -237,6 +237,8 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     fillMemReserve(s);
     fillObsidianSettings(s);
     document.getElementById('set-mcp-local-only').checked = s.mcp_local_only === 'true';
+    document.getElementById('set-show-disputed').checked = s.show_disputed !== 'false';
+    applyDisputedMarks(s.show_disputed !== 'false');
     loadMcpConfig();
     fillDubSettings(s);
     renderRecordSaveHint();
@@ -2308,6 +2310,7 @@ function settingsFormValues() {
     quiet_mode: String(document.getElementById('set-quiet-mode').checked),
     economy_mode: String(document.getElementById('set-economy-mode').checked),
     mcp_local_only: String(document.getElementById('set-mcp-local-only').checked),
+    show_disputed: String(document.getElementById('set-show-disputed').checked),
     economy_for: document.getElementById('set-economy-for').value || '0',
     live_captions_auto: String(document.getElementById('set-live-captions-auto').checked),
     cpu_threads: document.getElementById('set-cpu-threads').value || 'auto',
@@ -3544,3 +3547,8 @@ function decorateSettingsCards() {
   });
 }
 decorateSettingsCards();
+
+// «Подчёркивать места, услышанные моделями по-разному» (show_disputed): off, the dotted underline of a merged
+// transcript goes (asked by the user); the variants still open by a click on the word
+function applyDisputedMarks(on) { document.documentElement.classList.toggle('no-disputed', !on); }
+document.getElementById('set-show-disputed')?.addEventListener('change', e => applyDisputedMarks(e.target.checked));

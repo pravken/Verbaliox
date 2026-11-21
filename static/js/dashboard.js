@@ -958,7 +958,9 @@ function dbTime(d) {
   const rows = b.map(x => ({ label: label(x), value: x.hours, cls: x.kind === 'day' && x.key === today ? 'today' : '',
     tip: `${label(x)}: ${dbNum(x.hours)} ${t('dbHoursShort')}${x.meetings.length ? '\n' + x.meetings.map(m => `· ${m.title}`).join('\n') : ''}` }));
   return dbChartHtml('time', rows, 0)
-    + `<div class="db-note">${escapeHtml(t('dbTimeTop').replace('{when}', () => label(top)).replace('{h}', () => dbNum(top.hours)).replace('{n}', () => top.meetings.length))}</div>`;
+    // the summary and the hint on lines of their own (asked by the user: one long line read oddly)
+    + `<div class="db-time-foot"><span class="db-time-top">${escapeHtml(t('dbTimeTop').replace('{when}', () => label(top)).replace('{h}', () => dbNum(top.hours)).replace('{n}', () => top.meetings.length))}</span>`
+    + `<span class="db-time-hint">${escapeHtml(t('dbTimeHover'))}</span></div>`;
 }
 
 // «Частые участники»: the meetings together in the widget's own period, a bar to the first one, the hours together
