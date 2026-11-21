@@ -4854,3 +4854,14 @@ button.sc-at:hover { color: var(--accent-text); }
 @media (prefers-reduced-motion: reduce) { .about-mark, .about-logo.about-shake .about-mark { animation: none; } }
 @keyframes mark-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 60% { transform: rotate(2deg); } }
 .about-logo:focus, .about-card:focus { outline: none; }  /* the easter egg is not in the tab order (tabindex -1): the window's focus goes on */
+
+/* Settings fill a wide window like the other sections (asked by the user: on 2000px they kept a 980px column
+   and an empty half): from 1280px of the content the cards of a section go into two columns, each card whole;
+   the head of the section spans both. Narrower, one column up to the width of the content. */
+.settings-page .sx-inner { max-width: none; }
+@container sxmain (min-width: 1280px) {
+  .settings-page .sx-section:not(.hidden) { columns: 2; column-gap: 16px; }
+  .settings-page .sx-section > * { break-inside: avoid; margin-top: 0 !important; margin-bottom: 12px !important; }
+  .settings-page .sx-section > .sx-section-head { column-span: all; }
+  .settings-page .sx-reset-row { max-width: none; }
+}
