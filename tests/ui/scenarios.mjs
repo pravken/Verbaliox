@@ -310,40 +310,36 @@ await step('first run wizard', async () => {
   expect(cal.calendar_ics === 'https://example.com/basic.ics' && cal.meet_auto_all === 'true', `the calendar not saved: ${JSON.stringify(sent)}`);
 });
 
-// After an update: a small wizard asks the settings a new version brings (asked by the user), once
-await step('setup steps after an update', async () => {
+// After an update: ONE window — the settings a new version asks answered in place (amber «Нужен ответ», then
+// green «Сохранено»), the new features as cards, all the changes folded as «Новое» and «Исправлено»; «Готово»
+// marks every step answered, and they are not asked again
+await step('window after an update', async () => {
   await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
   await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
-  await page.waitForSelector('#setup-steps select[data-hol-country] option[value="RS"]', { state: 'attached' });
-  await page.selectOption('#setup-steps select[data-hol-country]', 'RS');
-  expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
-  // each step saved before the next shows (its buttons wait meanwhile): wait for that, not for a time
-  const next = async () => {
-    const was = await page.getAttribute('#setup-steps-dialog', 'data-step');
-    await page.click('#setup-steps button[data-a="next"]');
-    // polled with evaluate: waitForFunction is refused by the page's CSP (no eval) in CI's Playwright
-    for (let i = 0; i < 80; i++) {
-      const moved = await page.evaluate(prev => {
-        const d = document.getElementById('setup-steps-dialog');
-        return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
-      }, was);
-      if (moved) break;
-      await sleep(100);
-    }
-  };
-  await next();
-  // then the news of the version, one step each: the last one closes the wizard
-  for (let i = 0; i < 5 && await page.$('#setup-steps-dialog'); i++) {
-    expect(await page.$('#setup-steps .frw-points li'), 'a news step without its points');
-    await next();
-  }
-  expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
+  await page.waitForSelector('#upd-after select[data-hol-country] option[value="RS"]', { state: 'attached' });
+  await page.selectOption('#upd-after select[data-hol-country]', 'RS');
+  expect(!(await page.$('#upd-after select[data-hol-subdiv]')), 'a region offered for a country without them');
+  expect(await page.$('#upd-after .upd-chip-warn'), 'the step does not say it needs an answer');
+  await page.click('#upd-after button[data-a="save"]');
+  for (let i = 0; i < 50 && !(await page.$('#upd-after .upd-chip-ok')); i++) await sleep(100);
+  expect(await page.$('#upd-after .upd-chip-ok'), 'the step is not marked saved');
+  expect(await page.evaluate(() => document.querySelectorAll('#upd-after .upd-card').length) >= 1, 'no new features');
+  // the notes of the version join the same window: «Новое» and «Исправлено» as lists
+  await page.evaluate(() => openAfterUpdateNotes('- **Подключение к звонку**: кнопка в карточке встречи.\n- Субтитры больше не пропадают после переключения окна.\n', '0.8.27', ''));
+  expect(await page.evaluate(() => document.querySelectorAll('#upd-after').length) === 1, 'two windows after an update');
+  await page.click('#upd-after button[data-a="all"]');
+  const notes = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#upd-after .upd-all-h')].map(h => h.textContent),
+    items: document.querySelectorAll('#upd-after .upd-all li').length, bold: !!document.querySelector('#upd-after .upd-all li strong') }));
+  expect(notes.heads.join() === 'Новое,Исправлено' && notes.items === 2 && notes.bold, `the changes are not lists: ${JSON.stringify(notes)}`);
+  await page.click('#upd-after button[data-a="done"]');
+  for (let i = 0; i < 50 && await page.$('#upd-after'); i++) await sleep(100);
+  expect(!(await page.$('#upd-after')), 'the window stayed open');
   const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(set.holiday_country === 'RS', `the country not saved: ${set.holiday_country}`);
   // answered: not asked again
   await page.evaluate(sv => openSetupSteps(sv), set);
   await sleep(400);
-  expect(!(await page.$('#setup-steps')), 'asked again after it was answered');
+  expect(!(await page.$('#upd-after')), 'asked again after it was answered');
   await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
 });

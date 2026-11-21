@@ -3843,3 +3843,46 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .pv-empty { margin: 0; padding: 4px 0 6px; color: var(--hc-dim, #8E8E93); }
 @media (max-width: 1240px) { .pv-grid { grid-template-columns: minmax(0, 1fr); } .pv-body { grid-template-columns: 250px minmax(0, 1fr); } }
 .tk-btn.hidden { display: none; }
+
+/* The window after an update (settings.js openAfterUpdate): the steps to answer, the new features as cards,
+   all the changes folded */
+.upd-win { width: 620px; max-width: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-dialog); color: #F5F5F7; font-size: var(--fs-ui); }
+.upd-head { display: flex; align-items: center; gap: 14px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+.upd-head h2 { margin: 2px 0 0; font-size: 18px; font-weight: 600; }
+.upd-kicker { font-size: var(--fs-caption); color: #30D158; font-weight: 600; }
+.upd-logo { flex: none; width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: #20252D; background: linear-gradient(#EEF1F5, #D9DEE6); }
+.upd-body { flex: 1; min-height: 0; padding: 6px 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.upd-sec { margin-top: 10px; font-size: var(--fs-caption); font-weight: 600; color: var(--hc-dim, #8E8E93); }
+.upd-faint { margin-top: 2px; line-height: 1.45; color: var(--hc-dim, #AEAEB2); }
+.upd-ic { flex: none; align-self: flex-start; width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.upd-ic svg { width: 17px; height: 17px; }
+.upd-ask { display: flex; gap: 12px; padding: 14px; border-radius: 10px; border: 1px solid rgba(255, 159, 10, 0.4); background: rgba(255, 159, 10, 0.06); }
+.upd-ask .upd-ic { background: rgba(255, 159, 10, 0.16); color: #FFB340; }
+.upd-ask.upd-ask-done { border-color: rgba(48, 209, 88, 0.35); background: rgba(48, 209, 88, 0.05); }
+.upd-ask.upd-ask-done .upd-ic { background: rgba(48, 209, 88, 0.14); color: #30D158; }
+.upd-ask-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.upd-ask-h { display: flex; align-items: center; gap: 10px; }
+.upd-chip { padding: 1px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: #C7C7CC; font-size: var(--fs-label); white-space: nowrap; }
+.upd-chip-warn { background: rgba(255, 159, 10, 0.16); color: #FFB340; }
+.upd-chip-ok { background: rgba(48, 209, 88, 0.14); color: #30D158; }
+.upd-ask-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.upd-ask-row .frw-toggle { padding: 0; border: 0; background: none; }
+.upd-ask-row .frw-select { min-width: 150px; }
+.upd-cards { display: flex; flex-direction: column; gap: 6px; }
+.upd-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); }
+.upd-card b { font-weight: 600; }
+.upd-more { display: flex; gap: 8px; padding: 8px 0 0; border: 0; background: none; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-ui); text-align: left; cursor: pointer; }
+.upd-more:hover { color: #F5F5F7; }
+.upd-all { padding: 4px 14px 2px; border-left: 2px solid var(--line); line-height: 1.5; }
+.upd-all-h { margin: 6px 0 2px; font-weight: 600; }
+.upd-all ul { margin: 0; padding-left: 18px; list-style: disc; }
+.upd-all li { margin: 2px 0; color: var(--hc-dim, #C7C7CC); }
+.upd-all li strong { color: #F5F5F7; font-weight: 600; }
+.upd-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); }
+/* the notes of a new version before it is installed (openUpdateDialog): the lists and headings of the Markdown */
+.upd-notes ul { list-style: disc; padding-left: 20px; margin: 4px 0 8px; }
+.upd-notes ol { list-style: decimal; padding-left: 20px; margin: 4px 0 8px; }
+.upd-notes li { margin: 3px 0; }
+.upd-notes h2, .upd-notes h3, .upd-notes h4 { margin: 12px 0 4px; font-size: var(--fs-body); font-weight: 600; }
+.upd-notes p { margin: 4px 0; }
+.upd-notes strong { font-weight: 600; color: #FFFFFF; }
