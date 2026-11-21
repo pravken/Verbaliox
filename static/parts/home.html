@@ -36,8 +36,9 @@
                     <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
                   <div id="hm-day-pop" class="hm-pop hidden" role="dialog" data-click="stopEvent" data-click-args='[{"$": "event"}]'>
-                    <div class="text-[13px] font-semibold text-white" data-i18n="hmWorkDay">Рабочий день</div>
-                    <div class="flex items-center gap-2 text-[12.5px] text-apple-secondary">
+                    <!-- In the look of the new windows (the queue, the load): a head with its icon, then the rows -->
+                    <div class="vx-panel-h"><span class="vx-panel-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span><h4 data-i18n="hmWorkDay">Рабочий день</h4></div>
+                    <div class="hm-pop-row">
                       <span data-i18n="hmFrom">с</span>
                       <select id="hm-day-start" data-change="hmSetDay" class="hm-select" data-i18n-title="hmDayStartTip" title="Начало рабочего дня"></select>
                       <span data-i18n="hmTo">до</span>
@@ -45,7 +46,7 @@
                     </div>
                     <span id="hm-overnight" class="hm-overnight hidden"></span>
                     <div id="hm-presets" class="flex flex-wrap gap-1.5"></div>
-                    <label class="hm-check"><input id="hm-fit" type="checkbox" role="switch" class="vs-switch" data-change="hmSetFit" data-change-args='[{"$": "checked"}]' /><span data-i18n="hmFit">Расширять, если встреча выходит за эти часы</span></label>
+                    <label class="hm-check hm-pop-fit"><input id="hm-fit" type="checkbox" role="switch" class="vs-switch" data-change="hmSetFit" data-change-args='[{"$": "checked"}]' /><span data-i18n="hmFit">Расширять, если встреча выходит за эти часы</span></label>
                   </div>
                 </div>
               </div>
