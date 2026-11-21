@@ -4121,7 +4121,14 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .dc-title { margin: 0; font-size: var(--fs-title); font-weight: 700; line-height: 1.15; }
 .dc-sub { margin: 0; color: var(--hc-dim, #8E8E93); font-size: var(--fs-ui); }
 .dc-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 28px 32px; }
-.dc-col { display: flex; flex-direction: column; gap: 12px; max-width: 1080px; }
+.dc-col { display: flex; flex-direction: column; gap: 12px; }
+/* a wide window (reported by the user: the page kept to 1080px and left the right half empty): the words on the
+   left, the correction and the features in a column on the right */
+@container (min-width: 1180px) {
+  .dc-col { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); align-items: start; gap: 16px; }
+}
+.dc-mcol, .dc-scol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dc-body { container-type: inline-size; }
 .dc-note { margin: 0 0 10px; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); max-width: 86ch; }
 .dc-add { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) 160px auto; gap: 8px; }
 .dc-add .tk-input { height: 32px; }
