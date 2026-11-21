@@ -13,7 +13,7 @@ Tasks page as they were found, not tracked here). Whose they are comes from «Э
 """
 
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 PERIODS = ("week", "month", "quarter")
 DETAILS = ("meetings", "useless", "decisions", "tasks", "waiting", "person")
@@ -26,6 +26,8 @@ SERIES_MIN = 3
 # «Серии без результатов» (asked by the user): a series whose last analysed meetings, this many at least in a row,
 # gave no decision and no task, looked at among its last SERIES_LOOK meetings (whatever the period)
 SERIES_LOOK = 6
+# «Статистика»: each figure with its trend over this many periods (the current one last)
+HISTORY_N = 6
 
 
 def _outcomes(ids: List[int], me: set) -> Dict[int, Dict[str, Any]]:
@@ -150,6 +152,118 @@ def _bounds(period: str, today: date) -> Tuple[date, date, date]:
     return start, end, prev
 
 
+def _periods_back(period: str, start: date, n: int = HISTORY_N) -> List[Tuple[date, date]]:
+    """(start, end exclusive) of the n periods up to the current one (whose start is given), oldest first."""
+    out = [(start, _bounds(period, start)[1])]
+    while len(out) < n:
+        s, e, _prev = _bounds(period, out[0][0] - timedelta(days=1))
+        out.insert(0, (s, e))
+    return out
+
+
+def _work_days(a: date, b: date, today: date, off: Dict[str, str]) -> int:
+    """The working days (Monday to Friday, not a holiday or a day off) of a…b; the days after today are left out."""
+    n, d = 0, a
+    while d < b and d <= today:
+        if d.weekday() < 5 and d.isoformat() not in off:
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
+def _protocols(ids: List[int]) -> Dict[int, str]:
+    """The protocol of each recording's analysis, without reading anything else of it."""
+    from app.database import _db_lock, get_connection
+
+    out: Dict[int, str] = {}
+    if not ids:
+        return out
+    with _db_lock:
+        conn = get_connection()
+        try:
+            for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+                part = ids[i:i + 500]
+                for r in conn.execute("SELECT id, CASE WHEN json_valid(summaries_json) THEN json_extract(summaries_json, '$.protocol') END "
+                                      f"FROM meetings WHERE id IN ({','.join('?' * len(part))})", part):
+                    out[r[0]] = r[1] if isinstance(r[1], str) else ""
+        finally:
+            conn.close()
+    return out
+
+
+def _history(period: str, start: date, today: date, meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]],
+             me: set, people_of: Callable[[Dict[str, Any]], set]) -> Dict[str, Any]:
+    """«Статистика»: every figure of the last HISTORY_N periods, oldest first, from what build has loaded
+    already (the library list, the tasks) and the protocols of those meetings: no transcript is read.
+    «Встречи без итогов» counts the analysed meetings with no decision and no task here; build puts the
+    current period's figures (with the silent meetings and the series) in the last place.
+    The share of the working time: the meeting hours of the working days against the norm of a day
+    (the reminder's hours, 8 without it) times the working days gone by; the time without meetings is the rest."""
+    from app.database import fill_durations
+    from app.features import decisions_of
+
+    spans = _periods_back(period, start)
+    first, last = spans[0][0], spans[-1][1]
+    inside = [m for m in meetings if first <= _day(m) < last]
+    fill_durations(inside)
+    protocols = _protocols([m["id"] for m in inside])
+    task_n: Dict[int, int] = {}
+    for t in tasks:
+        task_n[t.get("meeting_id") or 0] = task_n.get(t.get("meeting_id") or 0, 0) + 1
+    try:
+        from app import holidays_cal
+
+        off = holidays_cal.between(first, last)
+    except Exception:
+        off = {}
+    try:
+        from app import worktime
+
+        norm = worktime.remind_hours() or 8.0
+    except Exception:
+        norm = 8.0
+    low = lambda v: (v or "").strip().lower()  # noqa: E731
+    mine = [t for t in tasks if me and low(t.get("who")) in me]
+    waiting = [t for t in tasks if me and low(t.get("to_whom")) in me and low(t.get("who")) not in me]
+
+    def open_at(t: Dict[str, Any], end: date) -> bool:
+        made, done = str(t.get("created_at") or "")[:10], str(t.get("done_at") or "")[:10]
+        if made and made >= end.isoformat():
+            return False
+        return t.get("status") != "done" or (bool(done) and done >= end.isoformat())
+
+    values: Dict[str, List[float]] = {k: [] for k in ("meetings", "hours", "share", "focus", "mine", "closed", "waiting",
+                                                       "decisions", "useless", "avg", "people")}
+    for a, b in spans:
+        ms = [m for m in inside if a <= _day(m) < b]
+        sec = sum(float(m.get("duration") or 0) for m in ms)
+        work_h = _work_days(a, b, today, off) * norm
+        on_work = sum(float(m.get("duration") or 0) for m in ms
+                      if _day(m).weekday() < 5 and _day(m).isoformat() not in off and _day(m) <= today) / 3600
+        decided = useless = 0
+        names: set = set()
+        for m in ms:
+            p = protocols.get(m["id"]) or ""
+            n = len(decisions_of(p)) if p else 0
+            decided += n
+            if p and float(m.get("duration") or 0) >= NO_OUTCOME_MIN_SEC and not n and not task_n.get(m["id"]):
+                useless += 1
+            names |= people_of(m)
+        values["meetings"].append(len(ms))
+        values["hours"].append(round(sec / 3600, 1))
+        values["share"].append(round(min(100.0, on_work / work_h * 100)) if work_h else 0)
+        values["focus"].append(round(max(0.0, work_h - on_work), 1))
+        values["mine"].append(sum(1 for t in mine if open_at(t, b)))
+        values["closed"].append(sum(1 for t in mine if t.get("status") == "done"
+                                    and a.isoformat() <= str(t.get("done_at") or "")[:10] < b.isoformat()))
+        values["waiting"].append(sum(1 for t in waiting if open_at(t, b)))
+        values["decisions"].append(decided)
+        values["useless"].append(useless)
+        values["avg"].append(round(sec / 60 / len(ms)) if ms else 0)
+        values["people"].append(len(names))
+    return {"starts": [a.isoformat() for a, _e in spans], "norm": norm, "values": values}
+
+
 def _day(m: Dict[str, Any]) -> Optional[date]:
     raw = str(m.get("recorded_at") or m.get("created_at") or "")[:10]
     try:
@@ -252,19 +366,39 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         rows = _rows()
     except Exception:
         rows = []
+    known: Dict[str, str] = {}  # a name as the speakers have it → as the people list has it
+
+    def name_of(n: str) -> str:
+        if n not in known:
+            known[n] = canonical(n, rows)
+        return known[n]
+
+    def people_of(m: Dict[str, Any]) -> set:
+        """The people of a meeting, the user left out."""
+        return {name_of(n).lower() for n in ((sp or {}).get("name") if isinstance(sp, dict) else "" for sp in (m.get("speakers") or {}).values())
+                if n and not is_default_name(n) and name_of(n).lower() not in me}
+
     for m in now:
         seen = set()
         for sp in (m.get("speakers") or {}).values():
             n = (sp or {}).get("name") if isinstance(sp, dict) else ""
             if not n or is_default_name(n):
                 continue
-            n = canonical(n, rows)
+            n = name_of(n)
             if n.lower() in seen or n.lower() in me:
                 continue
             seen.add(n.lower())
-            e = met.setdefault(n.lower(), {"name": n, "color": (sp or {}).get("color") or "", "meetings": 0})
+            e = met.setdefault(n.lower(), {"name": n, "color": (sp or {}).get("color") or "", "meetings": 0, "hours": 0.0})
             e["meetings"] += 1
+            e["hours"] += float(m.get("duration") or 0) / 3600  # the hours of the meetings together
+    for e in met.values():
+        e["hours"] = round(e["hours"], 1)
     people = sorted(met.values(), key=lambda x: (-x["meetings"], x["name"].lower()))[:8]
+    history = _history(period, start, today, meetings, tasks, me, people_of)
+    hv = history["values"]  # the current period: as the widgets count it
+    hv["meetings"][-1], hv["mine"][-1], hv["waiting"][-1] = len(now), len(mine), len(waiting)
+    hv["hours"][-1] = round(sum(float(m.get("duration") or 0) for m in now) / 3600, 1)
+    hv["decisions"][-1], hv["useless"][-1] = len(decisions), len(useless)
 
     def task_brief(t: Dict[str, Any]) -> Dict[str, Any]:
         return {"id": t["id"], "what": t.get("what") or "", "who": t.get("who") or "", "due_date": t.get("due_date") or "",
@@ -284,6 +418,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
                 "waiting": len(waiting), "waiting_overdue": sum(1 for t in waiting if t.get("due_date") and t["due_date"] < iso)},
         "waiting": [dict(task_brief(t), days=_days_open(t, today)) for t in sorted(
             waiting, key=lambda t: (not (t.get("due_date") and t["due_date"] < iso), t.get("due_date") or "9999", t["id"]))[:8]],
+        "history": history,
         "buckets": buckets, "features": feats, "people": people,
         "decisions": decisions[:12], "tasks": [task_brief(t) for t in focus[:10]], "needs_me": not me,
         "dull_series": _dull_series(meetings, me, fmap),
