@@ -97,6 +97,8 @@ function personPhotosChanged(map) {
   if (state.activeMeeting) renderSpeakersPanel();
   if (document.getElementById('sp-dir-dlg')) drawDirectory();
   if (typeof capView !== 'undefined' && capView.rows.size) syncStudioCaptions();
+  // «Люди» shows the new photo at once (reported by the user: it showed only after another person was opened)
+  if (state.appView === 'people') { drawPeopleView(); drawPeopleCard(); }
 }
 
 document.addEventListener('DOMContentLoaded', () => { loadPersonPhotos(); });
