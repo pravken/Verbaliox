@@ -36,6 +36,34 @@ function leaveThen(el, done) {
   el.addEventListener('animationend', (e) => { if (e.target === el) end(); }, { once: true });
   setTimeout(end, 140);
 }
+// A side panel (the details and the widgets of «Обзор»): slides in from the right when it is shown, and out
+// before it is hidden; a redraw of a shown one does not move it. after() runs once it is hidden
+function drawerShow(el) {
+  if (!el) return;
+  const was = el.classList.contains('hidden') || el.classList.contains('vx-drawer-out');
+  el._drawer = (el._drawer || 0) + 1;
+  el.classList.remove('hidden', 'vx-drawer-out');
+  if (was) { el.classList.remove('vx-drawer-in'); void el.offsetWidth; el.classList.add('vx-drawer-in'); }
+}
+function drawerHide(el, after) {
+  if (!el) return;
+  if (el.classList.contains('hidden') || scrollMotion() === 'auto') { el.classList.add('hidden'); el.classList.remove('vx-drawer-in', 'vx-drawer-out'); if (after) after(); return; }
+  if (el.classList.contains('vx-drawer-out')) return;
+  const token = el._drawer = (el._drawer || 0) + 1;
+  el.classList.remove('vx-drawer-in');
+  el.classList.add('vx-drawer-out');
+  const end = () => {
+    el.removeEventListener('animationend', onEnd);
+    if (el._drawer !== token) return;
+    el._drawer++;
+    el.classList.remove('vx-drawer-out');
+    el.classList.add('hidden');
+    if (after) after();
+  };
+  const onEnd = (e) => { if (e.target === el) end(); };
+  el.addEventListener('animationend', onEnd);
+  setTimeout(end, 220);
+}
 function hideWithExit(el) { leaveThen(el, () => el.classList.add('hidden')); }
 function removeWithExit(el) { leaveThen(el, () => el.remove()); }
 function cancelLeave(el) {
