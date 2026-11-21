@@ -4248,8 +4248,20 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 
 /* Ассистент: the send button a circle with an arrow; the sources of an answer as moments «▶ 06:12» in the
    text, and under it each recording by its full name with its moments */
-#ask-view .as-send { width: 32px; height: 32px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
-#ask-view .as-send svg { width: 16px; height: 16px; }
+/* the send button (asked by the user: a circle set low and to the right): a 32px rounded square 6px from each edge
+   of the field, centred on its line; neutral and dim while there is nothing to send, the accent when there is */
+#ask-view .as-box { padding: 6px; gap: 6px; }
+#ask-view #library-question { height: 32px; }
+#ask-view .as-send { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--fill-bg); color: var(--fill-fg); transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) ease; }
+#ask-view .as-send svg { width: 16px; height: 16px; stroke-width: 2; }
+#ask-view .as-send:hover:not(:disabled) { background: var(--fill-bg-hover); }
+#ask-view .as-send:active:not(:disabled) { transform: scale(0.94); }
+#ask-view .as-send:disabled { opacity: 1; background: rgba(255, 255, 255, 0.06); color: #6E6E73; }
+#ask-view .as-send.as-send-stop { background: rgba(255, 255, 255, 0.12); color: #F5F5F7; }
+#ask-view .as-send.as-send-stop:hover { background: rgba(255, 255, 255, 0.18); }
+#ask-view .as-send.as-send-stop svg { fill: currentColor; }
+@media (prefers-reduced-motion: reduce) { #ask-view .as-send { transition: none; } #ask-view .as-send:active:not(:disabled) { transform: none; } }
 .as-ref { display: inline-flex; align-items: center; gap: 3px; margin: 0 1px; padding: 0 6px; border: 1px solid rgb(var(--accent-rgb) / 0.35); border-radius: 6px;
   background: rgb(var(--accent-rgb) / 0.12); color: var(--accent-text); font: 500 11.5px/18px var(--font-mono); white-space: nowrap; vertical-align: 1px; cursor: pointer; }
 .as-ref:hover { background: rgb(var(--accent-rgb) / 0.22); }
