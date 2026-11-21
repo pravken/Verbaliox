@@ -5115,3 +5115,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .rail-quit > span { display: none; }
 .rail-quit svg { width: 16px; height: 16px; opacity: 0.55; }
 .rail-quit:hover svg { opacity: 1; }
+
+/* Settings in two columns: a section with a single card no longer leaves the right column empty (asked by the user:
+   «Обновления» stood alone on the left) — that card spans both columns */
+@container sxmain (min-width: 1280px) {
+  .settings-page .sx-section:not(.hidden):not(:has(> :nth-child(3))) { columns: 1; }
+}
