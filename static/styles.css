@@ -3762,3 +3762,25 @@ button.sc-at:hover { color: var(--accent-text); }
   background: rgba(255, 255, 255, 0.03); font-size: var(--fs-ui); }
 .an-sumbar-k { color: var(--hc-dim, #8E8E93); font-size: var(--fs-caption); }
 .an-sumbar .an-chip span { margin-left: 4px; opacity: 0.6; }
+/* The player minimized (rpToggleMini): one line of ~51 px — play, the time, a thin track with the playhead dot
+   (the whole height of the line takes the click and the drag), the end, who speaks and the phrase, «Развернуть» */
+#rp-min-btn svg { transition: transform var(--dur) ease; }
+.rp-mini #rp-min-btn svg { transform: rotate(180deg); }
+.rp-mini .rp-body { flex-direction: row; align-items: center; gap: 12px; padding: 8px 16px; }
+.rp-mini .rp-row1, .rp-mini .rp-row2 { display: contents; }
+.rp-mini .rp-center { order: 0; }
+.rp-mini .rp-center > .rp-icon-btn { display: none; }
+.rp-mini .rp-play { width: 32px; height: 32px; margin: 0; }
+.rp-mini .rp-play-core { width: 26px; height: 26px; }
+.rp-mini .rp-play-core svg { width: 13px; height: 13px; }
+.rp-mini .rp-now { order: 1; width: auto; font-size: var(--fs-ui); }
+.rp-mini .rp-scrub { order: 2; flex: 1 1 40%; height: 34px; display: flex; align-items: center; }
+.rp-mini .rp-track { width: 100%; height: 4px; border-radius: 2px; box-shadow: none; overflow: visible;
+  background: linear-gradient(to right, var(--accent) calc(var(--rp-pos, 0) * 100%), rgba(255, 255, 255, 0.16) 0); }
+.rp-mini .rp-canvas, .rp-mini .rp-bubble, .rp-mini #rp-skip-note { display: none; }
+.rp-mini .rp-knob { bottom: auto; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 6px; }
+.rp-mini .rp-end { order: 3; width: auto; }
+.rp-mini .rp-left { order: 4; flex: 1 1 45%; min-width: 0; }
+.rp-mini .rp-right { order: 5; flex: none; gap: 0; }
+.rp-mini .rp-right > :not(#rp-min-btn) { display: none; }
+.rp-mini #video-drawer { display: none; }

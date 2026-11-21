@@ -180,6 +180,7 @@ function rpRender() {
   const dur = rpDuration();
   const cur = rp.drag && rp.dragTime != null ? rp.dragTime : ((p && p.currentTime) || 0);
   const ratio = dur > 0 ? Math.min(1, cur / dur) : 0;
+  document.getElementById('player-waveform-wrapper')?.style.setProperty('--rp-pos', ratio.toFixed(4));  // the thin track of the minimized player
   const x = (t) => (dur > 0 ? (t / dur) * w : 0);
   const segs = rpSegments();
   const idx = rpSegIndexAt(cur);
@@ -1164,3 +1165,26 @@ document.addEventListener('DOMContentLoaded', () => {
   p.addEventListener('leavepictureinpicture', rpRenderVideoButton);
   rpRenderSoundChip();
 });
+
+// --- The player minimized to one slim line (asked by the user): play, the time, a thin track, who speaks and
+// the phrase, «Развернуть». The choice is kept in this browser ---
+function rpApplyMini() {
+  const on = (() => { try { return localStorage.getItem('verbaliox_player_mini') === '1'; } catch (e) { return false; } })();
+  document.getElementById('player-footer')?.classList.toggle('rp-mini', on);
+  const b = document.getElementById('rp-min-btn');
+  if (b) {
+    const label = t(on ? 'rpExpand' : 'rpMinimize');
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.setAttribute('aria-expanded', String(!on));
+  }
+}
+
+function rpToggleMini() {
+  const on = !document.getElementById('player-footer')?.classList.contains('rp-mini');
+  try { localStorage.setItem('verbaliox_player_mini', on ? '1' : '0'); } catch (e) { /* this session only */ }
+  rpClosePop();
+  rpApplyMini();
+  requestAnimationFrame(() => rpRender());  // the wave's box changed
+}
+document.addEventListener('DOMContentLoaded', rpApplyMini);
