@@ -51,7 +51,8 @@ for title in ("Планёрка отдела", "Созвон по проекту
     m = db.create_meeting(title, "demo.wav", wav, language="ru")
     db.save_meeting_results(
         m["id"], speakers={k: {"id": k, "name": n, "color": c} for k, (n, c) in SPEAKERS.items()}, segments=segments(),
-        summaries={"protocol": "## Итоги\n- План согласован\n- Сроки уточнить", "tldr": "Обсудили план и сроки.",
+        summaries={"protocol": "## Итоги\n- План согласован\n- Сроки уточнить\n\n## Решения\n- Список к пятнице готовит Олег [00:12]\n\n"
+                               "## Следующие шаги\n- Анна посмотрит сроки до среды [00:30]", "tldr": "Обсудили план и сроки.",
                    "chapters": "- [00:00] Начало — темы встречи\n- [00:18] Сроки — что уточнить\n- [00:42] Итоги — прошлая неделя"},
         language="ru", transcript_model="gigaam-v3")
     conn = db.get_connection()
@@ -63,6 +64,8 @@ for title in ("Планёрка отдела", "Созвон по проекту
 from app import commitments  # noqa: E402
 
 today = date.today()
-commitments.create("Подготовить список к пятнице", who="Олег", who_kind="part", due_date=(today + timedelta(days=2)).isoformat(), meeting_id=ids[0])
-commitments.create("Посмотреть сроки", who="Анна", who_kind="part", due_date=(today + timedelta(days=1)).isoformat(), meeting_id=ids[0])
+commitments.create("Подготовить список к пятнице", who="Олег", who_kind="part", due_date=(today + timedelta(days=2)).isoformat(), meeting_id=ids[0], at=12)
+commitments.create("Посмотреть сроки", who="Анна", who_kind="part", due_date=(today + timedelta(days=1)).isoformat(), meeting_id=ids[0], at=30)
+# the notes of the first recording as the studio writes them: a mark (⚑) and a note, each with its moment
+db.update_meeting_fields(ids[0], user_notes="[00:24] ⚑ Сроки по проекту\n[00:40] Уточнить итоги прошлой недели")
 print("seeded", *ids)

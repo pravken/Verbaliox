@@ -462,27 +462,36 @@
     <!-- ACTIVE RECORDING WORKSPACE -->
     <div id="workspace-content" class="hidden flex-1 flex flex-col overflow-hidden">
 
-      <!-- TOP HEADER BAR: Recording Title, Primary View Tabs, and Document Export -->
-      <header id="workspace-header" class="border-b apple-border bg-apple-sidebar/80 apple-blur px-5 flex items-center justify-between shrink-0 gap-4 z-20" style="height: 52px;">
-
-        <!-- Left: Editable Recording Title + Meta -->
-        <div class="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
-          <input id="meeting-title-input" type="text"
-            data-blur="saveMeetingTitle"
-            data-keydown="blurOnEnter" data-keydown-args='[{"$": "event"}, {"$": "el"}]'
-            data-i18n-title="tipRenameInline"
-            title="Нажмите, чтобы переименовать запись"
-            class="bg-transparent hover:bg-white/5 focus:bg-apple-card focus:outline-none focus:ring-1 focus:ring-apple-blue px-2 h-7 -ml-2 rounded-md text-[14px] font-semibold text-white truncate min-w-[100px] transition" />
-          <span id="meeting-meta-badge" class="text-[11.5px] text-apple-secondary font-mono truncate min-w-0"></span>
+      <!-- THE HEADER OF A RECORDING (stage 5 of docs/pult-plan.md): «Записи / название» with the icon of the
+           section on the first line; the tabs («Итоги» first), translation and export on the second -->
+      <header id="workspace-header" class="rec-head shrink-0 z-20">
+        <div class="rec-head-row">
+          <span class="rec-ttl-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg></span>
+          <div class="rec-trail">
+            <button data-click="recOpenRecords" class="rec-crumb" data-i18n="recCrumbRecords" data-i18n-title="recCrumbTip" title="Все записи">Записи</button>
+            <span class="rec-crumb-sep" aria-hidden="true">/</span>
+            <input id="meeting-title-input" type="text"
+              data-blur="saveMeetingTitle"
+              data-keydown="blurOnEnter" data-keydown-args='[{"$": "event"}, {"$": "el"}]'
+              data-i18n-title="tipRenameInline"
+              title="Нажмите, чтобы переименовать запись"
+              class="rec-title-input" />
+          </div>
+          <span id="meeting-meta-badge" class="rec-meta"></span>
           <button data-click="openActiveRecordingMenu" data-click-args='[{"$": "event"}]' data-i18n-title="tipRecordingMore"
             title="Действия с записью: переименовать, серия, нарезка, повторная обработка, удаление"
             class="ui-btn ui-btn-subtle h-7 !px-2 shrink-0"><svg class="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+          <span class="flex-1"></span>
+          <!-- the features the recording is about (static/js/features.js): at the right, in one place for
+               every recording (after the title and its info they moved with their length) -->
+          <span id="meeting-features" class="ft-row"></span>
         </div>
 
-        <!-- The tabs of the open recording, next to its title (openRecordTab in static/js/shell.js) -->
+        <div class="rec-head-row rec-head-tabs">
+        <!-- The tabs of the open recording (openRecordTab in static/js/shell.js): «Итоги» first -->
         <div id="tb-record" class="tb-group tb-rec-tabs hidden" role="group" data-i18n-aria="tbRecordGroup" aria-label="Открытая запись">
+          <button data-click="openRecordTab" data-click-args='["summary"]' id="nav-summary" class="tb-subtab" data-i18n-title="tipTabSummary" title="Структурированный обзор, задачи и ответы на вопросы по записи"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="tabSummary">Итоги</span><span id="nav-summary-n" class="tb-badge hidden"></span></button>
           <button data-click="openRecordTab" data-click-args='["transcript"]' id="nav-transcript" class="tb-subtab" data-i18n-title="tipTabTranscript" title="Показать полную расшифровку речи по ролям и таймкодам (Ctrl+3)"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span class="tb-lbl" data-i18n="tabTranscript">Расшифровка</span></button>
-          <button data-click="openRecordTab" data-click-args='["summary"]' id="nav-summary" class="tb-subtab" data-i18n-title="tipTabSummary" title="Структурированный обзор, задачи и ответы на вопросы по записи"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="tabSummary">Анализ</span><span id="nav-summary-n" class="tb-badge hidden"></span></button>
           <button data-click="openRecordTab" data-click-args='["speakers"]' id="nav-speakers" class="tb-subtab" data-i18n-title="tipTabSpeakers" title="Управление участниками, прослушивание образцов голоса и переименование"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 6.2a3 3 0 0 1 0 5.6M17.5 14.4A5.5 5.5 0 0 1 20.5 19"/></svg><span class="tb-lbl" data-i18n="tabSpeakers">Участники</span><span id="nav-speakers-n" class="tb-badge hidden"></span></button>
         </div>
 
@@ -507,11 +516,9 @@
             class="apple-segment-btn text-apple-secondary hover:text-white" data-i18n="tabInfo">Сведения</button>
         </div>
 
+        <span class="flex-1"></span>
         <!-- Right: Translation menu (text translation / voice dub) + Document Export Menu -->
         <div class="flex items-center justify-end gap-2 shrink-0">
-          <!-- the features the recording is about (static/js/features.js): at the right, in one place for
-               every recording (after the title and its info they moved with their length) -->
-          <span id="meeting-features" class="ft-row"></span>
           <div class="relative shrink-0">
             <button data-click="toggleTranslateMenu" data-click-args='[{"$": "event"}]' id="translate-menu-btn"
               data-i18n-title="tipTranslateMenu" title="Перевод текста, субтитры и озвучка голосом"
@@ -548,6 +555,7 @@
             <!-- Every export in one place (renderExportMenu in static/js/menus.js); what is not made yet is made first -->
             <div id="export-menu" class="hidden absolute right-0 mt-1.5 w-80 macos-menu z-40 max-h-[75vh] overflow-y-auto" data-click="stopEvent" data-click-args='[{"$": "event"}]'></div>
           </div>
+        </div>
         </div>
       </header>
 
