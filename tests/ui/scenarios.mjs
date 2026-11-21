@@ -544,9 +544,9 @@ await step('own days off', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
-// The cloud choice keeps the speech settings: its consent is asked in Settings → Analysis (no stub here:
-// the real server must accept the request)
-await step('first run wizard, cloud', async () => {
+// The choice without analysis keeps the speech settings (no stub here: the real server must accept the
+// request); there is no cloud choice any more
+await step('first run wizard, no analysis', async () => {
   for (const url of ['**/api/models/setup', '**/api/onnx-models/**', '**/api/ffmpeg/install', '**/api/ollama/**']) {
     await page.route(url, r => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   }
@@ -555,7 +555,8 @@ await step('first run wizard, cloud', async () => {
   page.on('response', watch);
   await page.evaluate(() => openFirstRunWizard(state.system));
   await sleep(300);
-  await page.click('#first-run-wizard button[data-pick="ai:cloud"]');
+  expect(!(await page.$('#first-run-wizard button[data-pick="ai:cloud"]')), 'the cloud choice is still offered');
+  await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
@@ -566,6 +567,7 @@ await step('first run wizard, cloud', async () => {
   expect(status === 200, `the settings were refused (HTTP ${status})`);
   const v = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(v.speech_model_ru === 'gigaam-v3', `Russian model not saved: ${v.speech_model_ru}`);
+  expect(!('llm_provider' in v), 'a cloud setting is stored');
   await page.evaluate(() => closeModal('settings'));
 });
 
@@ -599,6 +601,61 @@ await step('today calendar', async () => {
   await page.keyboard.press('Control+1');
   await sleep(300);
   expect(await page.evaluate(() => state.appView) === 'home', 'Ctrl+1 did not open «Сегодня»');
+});
+
+// «Сегодня»: a day of the week opens in «День» with its date and its meetings; ‹ steps back a day, «Сегодня» returns
+// (asked by the user). The calendar of tests/ui/seed.py has a meeting every day around today
+await step('today open a day', async () => {
+  await page.evaluate(async () => {
+    await hmSave({ calendar_ics: `${state.system.paths.data}/demo-calendar.ics`, work_day_start: '9', work_day_end: '18' });
+    home.eventsAt = 0; home.days = {};
+    TD.cal.anchor = null; dbSave({ span: 'day' }); switchAppView('home');
+  });
+  await sleep(600);
+  await page.click('#td-spans button >> nth=1');
+  await page.waitForSelector('#td-cal .cal-week .cal-col.cal-open');
+  // a day of this week other than today, by a click on an empty part of its column
+  const key = await page.evaluate(() => [...document.querySelectorAll('#td-cal .cal-col')].map(c => c.dataset.daykey).find(k => k !== calKey(new Date())));
+  const col = page.locator(`#td-cal .cal-col[data-daykey="${key}"]`);
+  expect(await col.getAttribute('title') === await page.evaluate(() => t('calOpenDay')), 'the day has no «Открыть день» hint');
+  expect(await col.evaluate(el => getComputedStyle(el).cursor) === 'pointer', 'no hand over the day');
+  const box = await col.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
+  await sleep(900);
+  expect(await page.isVisible('#td-day') && !(await page.isVisible('#td-cal')), 'the click on a day did not open «День»');
+  const shown = await page.evaluate(() => ({ title: document.getElementById('td-title').textContent, card: document.getElementById('hm-mt-title').textContent,
+    view: hmViewDate() && calKey(hmViewDate()), meetings: [...document.querySelectorAll('#hm-timeline .hm-mt')].map(x => x.textContent),
+    now: !!document.querySelector('#hm-timeline .hm-now'), nav: !document.getElementById('td-nav').classList.contains('hidden') }));
+  const date = await page.evaluate(k => new Date(`${k}T12:00`).toLocaleDateString(hmLocale(), { day: 'numeric', month: 'long' }), key);
+  expect(shown.view === key, `«День» shows ${shown.view}, not ${key}`);
+  expect(shown.title.includes(date) && shown.card.includes(date), `the head or the card does not name the day: ${shown.title} / ${shown.card}`);
+  expect(shown.meetings.some(x => x.includes('Ежедневная встреча')), `the meetings of the day are missing: ${shown.meetings}`);
+  expect(!shown.now && shown.nav, 'the line of now on another day, or no ‹ Сегодня ›');
+  // ‹: the day before
+  await page.click('#td-nav button >> nth=0');
+  await sleep(900);
+  const prev = await page.evaluate(k => { const d = new Date(`${k}T12:00`); d.setDate(d.getDate() - 1); return calKey(d); }, key);
+  const back = await page.evaluate(() => hmViewDate() ? calKey(hmViewDate()) : calKey(hmDay().from));
+  expect(back === prev, `‹ went to ${back}, not ${prev}`);
+  // Неделя keeps the day: the week of the day shown
+  await page.click('#td-spans button >> nth=1');
+  await sleep(700);
+  expect(await page.locator(`#td-cal .cal-col[data-daykey="${prev}"]`).count() === 1, 'the week is not the one of the day shown');
+  await page.click('#td-spans button >> nth=0');
+  await sleep(500);
+  // «Сегодня»: today again, its line of now (the working day of the whole day, whatever the time)
+  await page.evaluate(() => hmSave({ work_day_start: '0', work_day_end: '0' }));
+  await page.click('#td-nav button >> nth=1');
+  await sleep(900);
+  const today = await page.evaluate(() => ({ view: hmViewDate(), title: document.getElementById('td-title').textContent, card: document.getElementById('hm-mt-title').textContent,
+    now: !!document.querySelector('#hm-timeline .hm-now') }));
+  expect(!today.view && today.title === await page.evaluate(() => t('tdToday')) && today.card === await page.evaluate(() => t('hmMeetings')), `«Сегодня» did not return: ${JSON.stringify(today)}`);
+  expect(today.now, 'no line of now on today');
+  await page.evaluate(async () => {
+    await hmSave({ calendar_ics: '', work_day_start: '9', work_day_end: '18' });
+    home.eventsAt = 0; home.days = {}; home.events = [];
+    await hmLoad(true);
+  });
 });
 
 // The calendar window of a week or a month opens and closes with Esc
@@ -699,12 +756,12 @@ await step('records section', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
 });
 
-// Import: «＋ Импорт ▾» in the title of «Записи» is a menu with an icon at each way to add; Ctrl+O and files
+// Import: «＋ Импорт» in the strip on top is a menu with an icon at each way to add; Ctrl+O and files
 // dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
 await step('import menu and drop veil', async () => {
   await page.evaluate(() => switchAppView('libtable'));
   await sleep(300);
-  await page.click('#lt-import-btn');
+  await page.click('#strip-import');
   await sleep(200);
   const rows = await page.$$eval('#imp-menu .imp-menu-row', els => els.map(e => [e.dataset.imp, !!e.querySelector('.imp-menu-ic svg')]));
   expect(rows.map(r => r[0]).join() === 'files,folder,link,params' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);

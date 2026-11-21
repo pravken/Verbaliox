@@ -235,7 +235,7 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
     """The protocol made in steps (see above). The tasks are saved on the way; the protocol is returned
     for the caller to save, already checked against the transcript (the caller does not check it again)."""
     from app import commitments
-    from app.database import get_meeting, is_local_only
+    from app.database import get_meeting
     from app.features import note_for as features_note_for
     from app.grounding import maybe_ground
     from app.ollama_client import generate_meeting_summary
@@ -248,7 +248,7 @@ def run(meeting_id: int, model_name: Optional[str] = None, answer_lang: Optional
     lang = _lang(answer_lang)
     common = dict(
         segments=m["segments"], speakers=m.get("speakers") or {}, model_name=model_name,
-        answer_lang=answer_lang, local_only=is_local_only(m),
+        answer_lang=answer_lang,
         user_notes=m.get("user_notes") or "", mfu=m.get("mfu") or "", features_note=features_note_for(m),
         part_notes={},  # a long recording's parts are read once for both requests, not twice
     )

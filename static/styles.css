@@ -2203,7 +2203,13 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   max-width: 46%; font-size: var(--fs-sub); letter-spacing: -0.011em; font-weight: 600; color: #FFFFFF; text-align: left; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; border-radius: 6px; padding: 2px 4px; margin-left: -4px;
 }
-.as-title:hover { background: rgba(255, 255, 255, 0.06); }
+.as-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+.as-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.as-title-pen { flex: none; width: 14px; height: 14px; color: var(--hc-dim, #8E8E93); opacity: 0; transition: opacity var(--dur-fast) ease; }
+.as-title:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+.as-title:not(:disabled):hover .as-title-pen, .as-title:focus-visible .as-title-pen { opacity: 1; }
+.as-title:disabled { cursor: default; }
+.as-title-input { cursor: text; }
 .as-title-input {
   width: 340px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(0, 0, 0, 0.3);
   color: #F5F5F7; font-size: var(--fs-body); font-weight: 600;
@@ -4121,7 +4127,14 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .dc-title { margin: 0; font-size: var(--fs-title); font-weight: 700; line-height: 1.15; }
 .dc-sub { margin: 0; color: var(--hc-dim, #8E8E93); font-size: var(--fs-ui); }
 .dc-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 28px 32px; }
-.dc-col { display: flex; flex-direction: column; gap: 12px; max-width: 1080px; }
+.dc-col { display: flex; flex-direction: column; gap: 12px; }
+/* a wide window (reported by the user: the page kept to 1080px and left the right half empty): the words on the
+   left, the correction and the features in a column on the right */
+@container (min-width: 1180px) {
+  .dc-col { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); align-items: start; gap: 16px; }
+}
+.dc-mcol, .dc-scol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dc-body { container-type: inline-size; }
 .dc-note { margin: 0 0 10px; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); max-width: 86ch; }
 .dc-add { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) 160px auto; gap: 8px; }
 .dc-add .tk-input { height: 32px; }
@@ -4195,9 +4208,9 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 /* «Задачи» to the pixel as «Записи» (the values of .lt-head, .lt-bar, .lt-card, .lt-row and .lt-hrow of
    static/js/libtable.js): the head, one bar of 36px (filters on the left; the view, the grouping and
    «Колонки» on the right), the cards, the rows and the bar of the column names */
-:is(#tasks-view, #people-view) .tk-head.tk-head-lt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; background: none; border-bottom: 0; }
-:is(#tasks-view, #people-view) .tk-head-lt .tk-title { font-size: var(--fs-title); }
-:is(#tasks-view, #people-view) .tk-head-lt .tk-sub { font-size: var(--fs-ui); }
+:is(#tasks-view, #people-view, #dashboard-view) .tk-head.tk-head-lt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; background: none; border-bottom: 0; }
+:is(#tasks-view, #people-view, #dashboard-view) .tk-head-lt .tk-title { font-size: var(--fs-title); }
+:is(#tasks-view, #people-view, #dashboard-view) .tk-head-lt .tk-sub { font-size: var(--fs-ui); }
 .tk-head-ic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
 :is(#tasks-view, #people-view) .tk-head-lt .tk-search { border-radius: 8px; }
 #tasks-view .tk-bar { display: flex; align-items: center; gap: 6px; height: 36px; min-height: 0; flex: none; flex-wrap: nowrap; margin: 0 24px 8px; padding: 0; font-size: var(--fs-ui); background: none; border: 0; }
@@ -4235,8 +4248,20 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 
 /* Ассистент: the send button a circle with an arrow; the sources of an answer as moments «▶ 06:12» in the
    text, and under it each recording by its full name with its moments */
-#ask-view .as-send { width: 32px; height: 32px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
-#ask-view .as-send svg { width: 16px; height: 16px; }
+/* the send button (asked by the user: a circle set low and to the right): a 32px rounded square 6px from each edge
+   of the field, centred on its line; neutral and dim while there is nothing to send, the accent when there is */
+#ask-view .as-box { padding: 6px; gap: 6px; }
+#ask-view #library-question { height: 32px; }
+#ask-view .as-send { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--fill-bg); color: var(--fill-fg); transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) ease; }
+#ask-view .as-send svg { width: 16px; height: 16px; stroke-width: 2; }
+#ask-view .as-send:hover:not(:disabled) { background: var(--fill-bg-hover); }
+#ask-view .as-send:active:not(:disabled) { transform: scale(0.94); }
+#ask-view .as-send:disabled { opacity: 1; background: rgba(255, 255, 255, 0.06); color: #6E6E73; }
+#ask-view .as-send.as-send-stop { background: rgba(255, 255, 255, 0.12); color: #F5F5F7; }
+#ask-view .as-send.as-send-stop:hover { background: rgba(255, 255, 255, 0.18); }
+#ask-view .as-send.as-send-stop svg { fill: currentColor; }
+@media (prefers-reduced-motion: reduce) { #ask-view .as-send { transition: none; } #ask-view .as-send:active:not(:disabled) { transform: none; } }
 .as-ref { display: inline-flex; align-items: center; gap: 3px; margin: 0 1px; padding: 0 6px; border: 1px solid rgb(var(--accent-rgb) / 0.35); border-radius: 6px;
   background: rgb(var(--accent-rgb) / 0.12); color: var(--accent-text); font: 500 11.5px/18px var(--font-mono); white-space: nowrap; vertical-align: 1px; cursor: pointer; }
 .as-ref:hover { background: rgb(var(--accent-rgb) / 0.22); }
@@ -4551,3 +4576,281 @@ button.sc-at:hover { color: var(--accent-text); }
    «Папки» view), the load window and «Очередь»: it no longer takes a column of the window (pult plan, stage 1).
    Kept in the page for the scripts that still fill it; nothing of it is reachable only there */
 #app-sidebar { display: none !important; }
+
+/* Settings as a section like the others (reported by the user: it looked like a separate window): no frame,
+   no shadow, no «Закрыть» / «← Назад» — the rail leads away; the sections' list is the left column of the page */
+.settings-page { padding: 0; }
+.settings-page > .sx-shell { max-width: none; width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.settings-page .sx-close, .settings-page .sx-nav [data-click="closeModal"] { display: none; }
+.settings-page .sx-reset-row { padding-right: 0; }
+.settings-page .sx-nav { padding: 16px 12px 12px; }
+/* the section's content from the left edge of its column, wider than in the window it was */
+.settings-page .sx-inner { max-width: 980px; margin: 0; padding: 16px 28px 28px; }
+.settings-page .sx-head-ic { width: 40px; height: 40px; }
+.sx-head-ic { display: none; }
+.settings-page .sx-head-ic { display: inline-flex; }
+
+/* One page and one card in every section (reported by the user: the colours of the cards and of the ground
+   differed between the tabs): the ground --bg-deep, a card --card with the line and a 12px corner */
+#home-view, #dashboard-view, #libtable-view, #ask-view, #settings-view, .settings-page { background: var(--bg-deep); }
+/* the cards of the sections a step darker than --card (asked by the user); menus and windows keep --card */
+:root { --sec-card: #1C1E22; }
+.hm-card, .db-w, .settings-card, .lt-card, .pcard, .imp-cardsec { background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
+/* «Словарь» and «Настройки»: the same head metrics as «Записи», «Задачи», «Обзор» — a 36px icon square 24px from
+   the edge, a 20px title beside it (measured: they sat 4–8px apart) */
+.dc-head { gap: 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; }
+.dc-head-ic, .settings-page .sx-head-ic { width: 36px; height: 36px; }
+.dc-head-ic svg, .settings-page .sx-head-ic svg { width: 20px; height: 20px; }
+.dc-head-text { flex-direction: row; align-items: baseline; gap: 10px; }
+.settings-page .sx-nav > div:first-child { padding: 0 12px 12px; }
+.settings-page .sx-nav { padding-top: 16px; }
+
+/* The record button of the strip as designed (● Записать ▾), at the height of the strip's other buttons
+   (reported by the user: a bare round dot was not the button made on the try-on page) */
+.tb-rec-wrap { height: 32px; box-sizing: border-box; border-radius: 8px; }
+.tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { width: auto; height: 30px; gap: 8px; padding: 0 12px; border-radius: 7px 0 0 7px; }
+.tb-rec:not(.tb-rec-on):not(.tb-rec-busy) #tb-rec-label { display: inline; color: #FFD7D3; font-size: var(--fs-ui); font-weight: 600; }
+.tb-rec-wrap .tb-rec-dot { width: 10px; height: 10px; border-radius: 5px; }
+.tb-rec-more { height: 30px; width: 26px; border-radius: 0 7px 7px 0; }
+.settings-page .sx-nav > div:first-child { gap: 12px; }
+
+/* The import window in the look of the sections (asked by the user): an icon square in the head, «Что добавить»
+   and «Распознавание» as cards with their heads; the empty zone with its own «Выбрать файлы…»; the path's «Обзор…»
+   opens the explorer, «Добавить путь» / «Добавить ссылку» say what they add (a bare «Добавить» read as a picker) */
+.imp-head-ic { width: 36px; height: 36px; }
+.imp-head-ic svg { width: 20px; height: 20px; }
+.imp-cardsec { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.imp-files.imp-cardsec { gap: 8px; }
+.imp-cardsec > .pcd-h, .imp-sec-h { margin: 0; text-transform: none; letter-spacing: 0; }
+.imp-empty { gap: 6px; padding: 20px 12px; cursor: pointer; }
+.imp-empty-ic { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.imp-empty-ic svg { width: 20px; height: 20px; }
+.imp-empty-btn { margin-top: 6px; }
+.imp-inline { padding: 4px 0 0; }
+
+.lt-btn.lt-danger { color: #FF8A80; }
+.lt-btn.lt-danger:hover { background: rgba(255, 69, 58, 0.16); color: #FFB4AB; }
+
+/* «Рабочий день» popover in the look of the queue and load windows (reported by the user: the old look) */
+.hm-pop { width: 320px; padding: 14px 16px; gap: 12px; border-radius: 12px; background: var(--card); backdrop-filter: none; border: 1px solid var(--line); box-shadow: var(--shadow-menu); }
+.hm-pop-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-ui); color: var(--hc-dim, #AEAEB2); }
+.hm-pop .hm-select { height: 32px; border-radius: 8px; background: var(--bg-deep); }
+#hm-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.hm-pop .hm-preset { height: 28px; padding: 0 11px; border-radius: 8px; font-size: var(--fs-ui); }
+.hm-pop-fit { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-ui); color: #E5E5EA; }
+
+/* One button everywhere (asked by the user: the heads of the sections, the strip, the bars of the selection had
+   pills, round and square buttons side by side): 32px high, an 8px corner like the fields and the cards, 12px
+   inside, 13px text, a 6px gap to its icon; a secondary one on the raised surface, a primary one in the fill.
+   The «+» and the caret of a menu are the same line icons (VX_PLUS, VX_CARET in static/js/core.js) */
+:root { --ctl-h: 32px; --ctl-r: 8px; }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--ctl-h); box-sizing: border-box; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--ctl-r); background: var(--elevated); color: #E6E7EA;
+  font-size: var(--fs-ui); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-fast) ease; }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn):hover:not(:disabled) { background: #34373B; }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn):active:not(:disabled) { transform: scale(0.97); }
+:is(.st-btn-go, .tk-btn-primary, .lt-btn.lt-go, .an-btn-primary, .imp-btn-primary, .tb-pop-primary) {
+  border-color: transparent; background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+:is(.st-btn-go, .tk-btn-primary, .lt-btn.lt-go, .an-btn-primary, .imp-btn-primary, .tb-pop-primary):hover:not(:disabled) { background: var(--fill-bg-hover); border-color: transparent; }
+:is(.st-btn-ghost, .lt-btn.lt-ghost) { background: none; }
+:is(.tk-btn-sm, .an-btn-sm, .st-btn-sm) { height: 28px; padding: 0 10px; font-size: var(--fs-caption); }
+.tk-btn-sq { width: var(--ctl-h); padding: 0; }
+.tk-btn-wide { width: 100%; height: var(--ctl-h); border-radius: var(--ctl-r); }
+#tasks-view .tk-bar .tk-btn { height: var(--ctl-h); padding: 0 12px; border-radius: var(--ctl-r); background: var(--elevated); }
+#tasks-view .tk-bar .tk-btn.tk-btn-primary { background: var(--fill-bg); }
+.imp-btn-lg { height: 36px; padding: 0 16px; border-radius: var(--ctl-r); font-size: var(--fs-body); }
+:is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn) :is(.vx-plus, .vx-bic) { width: 14px; height: 14px; flex: none; }
+.vx-caret { width: 12px; height: 12px; flex: none; opacity: 0.7; }
+.lt-chip .vx-caret, .as-chip .vx-caret, .as-scope .vx-caret { margin-left: 2px; }
+.tb-rec-more .vx-caret { opacity: 0.85; }
+/* an icon-only button of a head (⋯ of «Ассистент»): the same square */
+.as-icon-btn { width: var(--ctl-h); height: var(--ctl-h); border-radius: var(--ctl-r); }
+@media (prefers-reduced-motion: reduce) { :is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn) { transition: none; } :is(.st-btn, .tk-btn, .lt-btn, .an-btn, .imp-btn, .tb-pop-btn):active { transform: none; } }
+/* the bars under the heads end at the heads' right edge (24px), as the bar of «Записи» */
+.tk-bar { padding-left: 24px; padding-right: 24px; }
+/* a narrow window moves the actions of a head to a second line: still at the right edge, where the primary one is in every section */
+.tk-head-actions { margin-left: auto; }
+
+/* The head of every window and side panel (vxHead in static/js/pult_cards.js, and the same markup in the parts):
+   the icon of its kind in a 32px square, a 16px title with an optional line under it, «✕» at the right end */
+.vx-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.vx-head-ic { flex: none; width: 32px; height: 32px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+  background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.vx-head-ic svg { width: 18px; height: 18px; }
+.vx-head-ic.vx-tone-danger { background: rgba(255, 69, 58, 0.14); color: #FF8A80; }
+.vx-head-tt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vx-head-t { margin: 0; font-size: var(--fs-sub); font-weight: 600; line-height: 1.25; letter-spacing: -0.011em; color: #F5F5F7; overflow-wrap: anywhere; }
+.vx-head-sub { margin: 0; font-size: var(--fs-caption); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
+/* one «✕» for windows, panels and notices: a 28px square with the 8px corner, dim until pointed at */
+.vx-x { flex: none; align-self: flex-start; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--ctl-r, 8px); display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--hc-dim, #8E8E93); font-size: 14px; line-height: 1; cursor: pointer; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
+.vx-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
+.vx-head > .vx-x { align-self: center; }
+/* a compact empty state: the icon in a square and one line, centred in its place */
+.vx-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; text-align: center; font-size: var(--fs-ui); line-height: 1.4; color: var(--hc-dim, #AEAEB2); }
+.vx-empty-ic { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.06); color: #C7C7CC; }
+.vx-empty-ic svg { width: 20px; height: 20px; }
+
+/* Side panels (the details and the widgets of «Обзор»): one surface, a head as the windows have, and motion —
+   in from the right with a fade on opening, out the same way before they are hidden (drawerShow / drawerHide) */
+.db-detail, .db-drawer { background: var(--panel); border-left: 1px solid var(--line); padding: 16px 18px 24px; }
+.db-detail > .vx-head, .db-drawer > .vx-head { margin-bottom: 14px; }
+@keyframes vx-drawer-in { from { opacity: 0; transform: translateX(20px); } }
+@keyframes vx-drawer-out { to { opacity: 0; transform: translateX(20px); } }
+.vx-drawer-in { animation: vx-drawer-in 200ms var(--ease-out) both; }
+.vx-drawer-out { animation: vx-drawer-out 160ms ease-in forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .vx-drawer-in, .vx-drawer-out { animation: none; } }
+.db-drawer-hint { margin: -4px 0 0; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); }
+.db-cap { text-transform: none; letter-spacing: 0; font-size: var(--fs-caption); font-weight: 600; margin: 16px 0 8px; }
+.db-lib { align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.db-lib.on { opacity: 1; }
+.db-lib-ic { border-radius: 9px; }
+.db-lib-add { flex: none; margin-left: auto; }
+.db-lib-shown { flex: none; margin-left: auto; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: var(--ctl-r, 8px); background: rgba(255, 255, 255, 0.06); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); }
+.db-lib-ic svg { width: 18px; height: 18px; }
+.db-drawer { width: 360px; }
+
+/* ============================================================================================================
+   Every window in one style (asked by the user: many still had the old look). The reference: «Очередь»,
+   «Нагрузка», «Импорт» and the window after an update. One surface (--panel), the hairline --line, a 14px corner,
+   the dialog shadow; the head of vxHead (an icon square, a 16px title, a line under it, «✕» at the right end);
+   rows or cards inside; fields and buttons 32px with the 8px corner; the actions at the right of the footer,
+   the secondary one first. The windows open with the motion of the others and leave as they came.
+   ============================================================================================================ */
+.modal-backdrop > .modal-card:not(.sx-shell), #upd-after .modal-card, .tk-dlg, .frw {
+  background-color: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-dialog); color: #F5F5F7; }
+.modal-backdrop > .modal-card:not(.sx-shell), .tk-dlg, .frw { animation: vx-pop 180ms cubic-bezier(.2, .8, .2, 1) both; }
+/* a window drawn again in place (its step, its filter) does not play the opening again */
+.vx-drawn > .modal-card, .vx-drawn > .frw { animation: none; }
+@media (prefers-reduced-motion: reduce) { .modal-backdrop > .modal-card, .tk-dlg, .frw { animation: none !important; } }
+/* the dialogs built by the scripts (confirmDialog, askText, the correction of a word, a word of the dictionary) */
+.vx-dlg { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; box-sizing: border-box; font-size: var(--fs-ui); }
+.vx-dlg-sm { max-width: 440px; }
+.vx-dlg-text { margin: 0; font-size: var(--fs-ui); line-height: 1.5; color: var(--hc-dim, #C7C7CC); }
+.vx-dlg-foot, .an-dlg-foot, .tk-dlg-foot, .imp-foot, .upd-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.vx-dlg-foot { margin-top: 2px; }
+.vx-head-tag { font-size: var(--fs-caption); font-weight: 400; color: var(--hc-dim, #AEAEB2); }
+/* the danger button: the red of «delete» */
+.tk-btn.tk-btn-danger { border-color: transparent; background: #D70015; color: #FFFFFF; font-weight: 600; }
+.tk-btn.tk-btn-danger:hover:not(:disabled) { background: #B80012; }
+/* one field: 32px, the 8px corner, the field ground, the accent frame in focus */
+.vx-field, .modal-card :is(input[type="text"], input[type="url"], input[type="search"], input[type="number"], input[type="password"], input:not([type]), select):not(.vs-switch),
+.modal-card :is(.an-fld:not(textarea), .tk-input, .imp-input, .frw-select, .hm-select) {
+  height: var(--ctl-h, 32px); box-sizing: border-box; border-radius: var(--ctl-r, 8px); }
+.vx-field { width: 100%; padding: 0 10px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); background: rgba(0, 0, 0, 0.25); color: #F5F5F7; font-size: var(--fs-ui); outline: none; }
+.vx-field:focus { border-color: var(--accent); }
+.modal-card textarea { border-radius: var(--ctl-r, 8px); }
+/* the older buttons inside a window: the same component as everywhere */
+.modal-card .ui-btn, .frw .ui-btn { height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); font-weight: 500; gap: 6px; }
+.modal-card .ui-btn-subtle, .frw .ui-btn-subtle { border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
+.modal-card .ui-btn-subtle:hover, .frw .ui-btn-subtle:hover { background: #34373B; }
+.modal-card .ui-btn-primary, .frw .ui-btn-primary { background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+.modal-card .ui-btn.bg-apple-red { font-weight: 600; }
+/* the heads that keep their own markup (the import, the task, the person, a feature, the calendar, after an
+   update, the first start): the same icon square, title and «✕» */
+.imp-head-ic, .upd-logo { width: 32px; height: 32px; border-radius: 9px; }
+.imp-head-ic svg { width: 18px; height: 18px; }
+.upd-logo { font-size: 16px; }
+.imp-head, .upd-head, .cal-head, .frw-head { gap: 12px; }
+.imp-title, .tk-dlg-head h2, .an-dlg-head h2, .upd-head h2, .cal-title, .frw-title, .ri-title, .fp-title, .pc-who h2 { font-size: var(--fs-sub); font-weight: 600; letter-spacing: -0.011em; line-height: 1.25; }
+.imp-x, .an-dlg-x, .tk-x, .dlg-x, .tb-pop-x, .cal-close, #upd-after .tk-x { width: 28px; height: 28px; border-radius: var(--ctl-r, 8px); font-size: 14px; }
+.cal-head .vx-head-ic, .frw-head .vx-head-ic { margin-right: 0; }
+.ri-dialog, .an-dlg, .tk-dlg, .imp-card { padding: 18px 20px 16px; gap: 14px; }
+
+/* Menus: one surface (--card, the hairline, a 12px corner, the menu shadow, no blur), items of one height with an
+   icon column and a key column at the right, thin separators; they open with the motion of the windows */
+.macos-menu, .rp-pop, .tk-pop, .an-pop, .tb-pop, .models-pop, .lt-colpop, .tk-colpop, .db-kc, .imp-menu, .hm-ask, .hm-dict {
+  background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-menu); }
+.macos-menu { padding: 4px; animation: vx-pop 160ms cubic-bezier(.2, .8, .2, 1) both; }
+.macos-menu-item { min-height: 30px; padding: 0 10px; gap: 10px; border-radius: 7px; line-height: 1.3; }
+.macos-menu-item > svg:first-child { width: 16px; height: 16px; flex: none; }
+.macos-menu-item .tm-key, .macos-menu-item kbd { margin-left: auto; padding-left: 16px; }
+.macos-menu :is(hr, .h-px, .macos-menu-sep) { height: 1px; margin: 4px 6px; border: 0; background: var(--line); }
+.lt-colpop, .hm-pop { z-index: 40; }
+@media (prefers-reduced-motion: reduce) { .macos-menu { animation: none; } }
+/* the models panel: the head of the panels (an icon square, a 15px title), its buttons as the «✕» */
+.models-pop .mp-title { font-size: 15px; }
+.models-pop .mp-close { width: 28px; height: 28px; border-radius: var(--ctl-r, 8px); }
+/* the window of a new task: its fields as in the other windows */
+.tk-dlg :is(.tk-input, input[type="text"], input[type="date"], input[type="time"], select) { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); box-sizing: border-box; }
+.imp-btn-lg { height: var(--ctl-h, 32px); padding: 0 14px; font-size: var(--fs-ui); }
+
+/* Notices in the look of the windows (asked by the user): the card surface, the hairline, a 12px corner, the menu
+   shadow; the kind as an icon square in its colour (an error red, a warning amber, done green, a status blue) in
+   place of the bare glyph and the bar at the left; the action is the shared button, «✕» the windows' one; a thin
+   line at the bottom shows the life left (it stops under the pointer). They open as the windows and fade out */
+.toast { position: relative; overflow: hidden; gap: 10px; min-height: 48px; box-sizing: border-box; padding: 10px 10px 10px 10px; border-radius: 12px;
+  background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--line); box-shadow: var(--shadow-menu);
+  font-size: var(--fs-ui); line-height: 1.4; animation: vx-pop 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.toast-status { --toast-c: var(--accent-text); --toast-bg: rgb(var(--accent-rgb) / 0.16); }
+.toast-success { --toast-c: #30D158; --toast-bg: rgba(48, 209, 88, 0.14); }
+.toast-warning { --toast-c: #FFB340; --toast-bg: rgba(255, 159, 10, 0.16); }
+.toast-error { --toast-c: #FF6961; --toast-bg: rgba(255, 69, 58, 0.16); }
+.toast-icon { flex: none; align-self: flex-start; width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: var(--toast-bg); color: var(--toast-c); }
+.toast-icon svg { width: 16px; height: 16px; }
+.toast-text { align-self: center; padding: 4px 4px 4px 0; color: #F5F5F7; }
+.toast-action { flex: none; align-self: center; }
+.toast .toast-close { align-self: flex-start; }
+.toast-life { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--toast-c); opacity: 0.55; transform-origin: left; transform: scaleX(0); pointer-events: none; }
+.toast-life.is-on { animation: toast-life linear forwards; }
+.toast-life.hidden { display: none; }
+.toast:hover .toast-life { animation-play-state: paused; }
+@keyframes toast-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.toast.is-leaving { animation: fadeLeave 160ms ease-in forwards !important; }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } .toast-life { display: none; } }
+@media (prefers-reduced-transparency: reduce) { .toast { background: var(--card); } }
+
+/* «Словарь» (asked by the user: one column of stacked cards at 1180px, a gap at the right, paragraphs capped at
+   650px, a tall dashed empty box). The head as the other sections with «Добавить слово» at the right; the words as
+   the main card (a compact row to add one, a one-line hint with «Подробнее» in its tooltip, the groups as chips,
+   rows of the height of the tables of «Записи»); a 320px column on the right from a 900px-wide body (the window
+   about 1000px): the suggested words, «Исправление», «Фичи». The cards reach the same right edge as elsewhere */
+.dc-body { padding: 8px 24px 32px; }
+.dc-col { display: flex; flex-direction: column; gap: 16px; }
+@container (min-width: 900px) { .dc-col { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: 16px; } }
+@container (min-width: 1180px) { .dc-col { grid-template-columns: minmax(0, 1fr) 360px; } }
+.dc-note { max-width: none; }
+.dc-hint { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: -2px 0 12px; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); }
+.dc-more { padding: 0; border: 0; background: none; color: var(--accent-text); font-size: inherit; cursor: help; }
+.dc-more:hover { text-decoration: underline; }
+.dc-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) auto; gap: 8px; margin-bottom: 14px; }
+.dc-add .tk-input { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); }
+@container (max-width: 640px) { .dc-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.dc-filters { margin: 0 0 10px; }
+.dc-row { grid-template-columns: minmax(120px, 1fr) minmax(0, 1.5fr) minmax(80px, 0.7fr) 110px 40px 64px; gap: 12px; min-height: 38px; box-sizing: border-box;
+  padding: 4px 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; }
+.dc-row:not(.dc-thead):hover { background: rgba(255, 255, 255, 0.035); }
+.dc-row.dc-thead { min-height: 0; padding: 0 12px 6px; border-top: 0; }
+.dc-acts { display: inline-flex; justify-content: flex-end; gap: 4px; }
+.dc-ib { width: 28px; height: 28px; border-radius: var(--ctl-r, 8px); display: inline-flex; align-items: center; justify-content: center; color: var(--hc-dim, #8E8E93);
+  opacity: 0.55; transition: opacity var(--dur-fast) ease, background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
+.dc-ib svg { width: 15px; height: 15px; }
+.dc-row:hover .dc-ib, .dc-ib:focus-visible { opacity: 1; }
+.dc-ib:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
+.dc-ib-del:hover { background: rgba(255, 69, 58, 0.14); color: #FF8A80; }
+.dc-main .vx-empty { padding: 32px 16px; }
+.dc-offer { grid-template-columns: minmax(0, 1fr) auto auto; }
+.dc-offer-rec { grid-column: 1 / -1; grid-row: 2; }
+@media (max-width: 1180px) { .dc-row { grid-template-columns: minmax(100px, 1fr) minmax(0, 1.3fr) minmax(70px, 0.7fr) 96px 40px 64px; } }
+.dc-vars { flex-wrap: nowrap; overflow: hidden; } .dc-var { flex: none; white-space: nowrap; }
+/* --- «Сегодня»: a day of the week or the month opens in «День» (static/js/today.js tdOpenDay); a day gone by shows the
+   recordings made outside its meetings on its timeline (static/js/home.js renderHomeMeetings) --- */
+.hm-auto.hidden { display: none; }
+.td-cal .cal-open { cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.td-cal .cal-open:hover { border-color: rgb(var(--accent-rgb) / 0.55); box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.25); }
+.td-cal .cal-open div.cal-item { cursor: default; }
+.hm-mt.hm-mt-k-recording { --hm-tint: rgb(var(--accent-rgb) / 0.07); border-left: 3px dashed rgb(var(--accent-rgb) / 0.8); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.hm-mt.hm-mt-k-recording:hover { --hm-tint: rgb(var(--accent-rgb) / 0.15); }
+.hm-mt-slot { visibility: hidden; }  /* the place of «⋯»: the link of a recording stands where a meeting's does */
+
+/* About: the program's own icon (the dragon-V, assets/icon.ico) instead of the former willow drawing; it sways
+   twice on opening, a click shakes it, five quick clicks start the big easter egg (as before) */
+.about-logo { background: none; border: 0; box-shadow: none; border-radius: 24px; overflow: visible; }
+.about-mark { width: 104px; height: 104px; border-radius: 24px; display: block; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  transform-origin: 50% 90%; animation: mark-sway 2.4s ease-in-out 2; pointer-events: none; user-select: none; }
+.about-logo.about-shake .about-mark { animation: willow-shake .5s ease-in-out; }
+@media (prefers-reduced-motion: reduce) { .about-mark, .about-logo.about-shake .about-mark { animation: none; } }
+@keyframes mark-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 60% { transform: rotate(2deg); } }
+.about-logo:focus, .about-card:focus { outline: none; }  /* the easter egg is not in the tab order (tabindex -1): the window's focus goes on */

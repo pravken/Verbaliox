@@ -1,17 +1,11 @@
 <!-- The About window: part of static/index.html (assembled by app/page.py) -->
-  <!-- About (openAbout in static/js/app.js): a click on the willow is a small easter egg, five quick clicks a big one -->
+  <!-- About (openAbout in static/js/app.js): a click on the logo is a small easter egg, five quick clicks a big one -->
   <div id="modal-about" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "about"]'>
-    <div class="about-card relative w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl overflow-hidden modal-card">
+    <div tabindex="-1" data-autofocus class="about-card relative w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl overflow-hidden modal-card">
       <button data-click="closeModal" data-click-args='["about"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="dlg-x dlg-x-corner">✕</button>
       <div class="px-7 pt-7 pb-4 flex items-center gap-6">
-        <button id="about-logo" data-click="aboutLogoClick" class="about-logo shrink-0" data-i18n-title="tipAboutLogo" title="Это верба — символ Verbaliox">
-          <svg class="about-willow" viewBox="0 0 24 24" fill="none">
-              <path d="M5 20C8.5 15.5 13 10.5 18.5 4.5" stroke="#4ADE80" stroke-width="1.8" stroke-linecap="round"/>
-              <g class="catkin" style="--d: 0ms"><ellipse cx="8.2" cy="13.2" rx="2.1" ry="3.1" transform="rotate(-28 8.2 13.2)" fill="#F8FAFC"/></g>
-              <g class="catkin" style="--d: 300ms"><ellipse cx="14.2" cy="12.8" rx="2.0" ry="3.0" transform="rotate(32 14.2 12.8)" fill="#F8FAFC"/></g>
-              <g class="catkin" style="--d: 600ms"><ellipse cx="12.0" cy="7.5" rx="2.0" ry="3.0" transform="rotate(-22 12.0 7.5)" fill="#F8FAFC"/></g>
-              <g class="catkin" style="--d: 900ms"><ellipse cx="18.2" cy="5.2" rx="1.7" ry="2.5" transform="rotate(25 18.2 5.2)" fill="#F8FAFC"/></g>
-          </svg>
+        <button id="about-logo" data-click="aboutLogoClick" class="about-logo shrink-0" tabindex="-1" data-i18n-title="tipAboutLogo" title="Verbaliox">
+          <img class="about-mark" src="/static/brand/logo-256.png" alt="" width="104" height="104" draggable="false">
         </button>
         <div class="min-w-0 space-y-1.5">
           <h3 class="text-[22px] font-semibold text-white tracking-tight leading-tight">Verbaliox <span id="about-version" class="text-apple-secondary font-medium"></span></h3>

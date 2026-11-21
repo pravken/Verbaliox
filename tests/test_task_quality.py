@@ -61,7 +61,7 @@ class DismissedTest(unittest.TestCase):
         answer = ('{"who": "Анна", "what": "пошарить экран", "due": "", "time": "00:10", "quote": "Сейчас пошарю экран"}\n'
                   '{"who": "Анна", "what": "обновить бюджет", "due": "до пятницы", "time": "00:20", "quote": "Я обновлю бюджет до пятницы"}\n'
                   '{"who": "Анна", "what": "созвониться с подрядчиком", "due": "", "time": "00:30", "quote": "созвонюсь с подрядчиком по смете"}')
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = answer
         with mock.patch("app.llm.target", return_value=llm):
             items = commitments.extract(m["id"])
@@ -94,7 +94,7 @@ class MfuTest(unittest.TestCase):
                 return "\n".join(f"{i}: да" for i in range(1, 10))
             return talk
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.side_effect = chat
         return llm
 
@@ -139,7 +139,7 @@ class MfuTest(unittest.TestCase):
     def test_every_summary_is_told_the_mfu(self):
         from app import ollama_client
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm = mock.Mock(max_chars=100000, label="m")
         llm.chat.return_value = "обзор"
         segs = [{"start": 0, "end": 5, "speaker": "S1", "text": "обсудили бюджет"}]
         with mock.patch("app.llm.target", return_value=llm):
@@ -192,7 +192,7 @@ class DirectoryNamesTest(unittest.TestCase):
         m = create_meeting("Планёрка 3", "q.m4a", "/tmp/q.m4a")
         save_meeting_results(m["id"], speakers={"S1": {"name": "Анна"}}, segments=[
             {"id": 0, "start": 20, "end": 25, "speaker": "S1", "text": "Лёля сделает макет до пятницы"}])
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = ('{"who": "Лёля", "what": "сделать макет", "due": "до пятницы", "time": "00:20", '
                                  '"quote": "Лёля сделает макет до пятницы"}')
         with mock.patch("app.llm.target", return_value=llm):

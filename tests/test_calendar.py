@@ -172,3 +172,54 @@ class OutlookCalendarTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutlookNotSetUpTest(unittest.TestCase):
+    """Classic Outlook without a mail profile opens its first-run wizard: it is not started at all,
+    and an Outlook read that failed is not tried again at every 15-minute read."""
+
+    def setUp(self):
+        calendar_ics._cache.update(source="", at=0.0, events=[], error="")
+
+    def test_no_profile_does_not_start_outlook(self):
+        from app import calendar_outlook
+
+        with mock.patch.object(calendar_outlook, "supported", return_value=True), \
+             mock.patch.object(calendar_outlook, "has_profile", return_value=False), \
+             mock.patch.object(calendar_outlook.subprocess, "run") as run:
+            with self.assertRaises(RuntimeError) as e:
+                calendar_outlook.fetch()
+        run.assert_not_called()
+        self.assertEqual(str(e.exception), calendar_outlook.NO_PROFILE)
+
+    def test_a_failed_outlook_read_is_not_repeated(self):
+        from app import calendar_outlook
+
+        calls = []
+
+        def fail():
+            calls.append(1)
+            raise RuntimeError("Outlook не ответил за 90 секунд")
+
+        with mock.patch.object(calendar_ics, "_source", return_value="outlook"), \
+             mock.patch.object(calendar_outlook, "fetch", side_effect=fail), \
+             mock.patch.object(calendar_ics.time, "time", side_effect=[1000.0] * 4 + [1000.0 + 20 * 60] * 4):
+            calendar_ics.events()
+            calendar_ics.events(force=True)  # 20 minutes later, even forced: no new start
+        self.assertEqual(len(calls), 1)
+
+    def test_no_profile_is_checked_again(self):
+        """Without a profile nothing is started: the check is repeated, so setting Outlook up is seen."""
+        from app import calendar_outlook
+
+        calls = []
+
+        def fail():
+            calls.append(1)
+            raise RuntimeError(calendar_outlook.NO_PROFILE)
+
+        with mock.patch.object(calendar_ics, "_source", return_value="outlook"), \
+             mock.patch.object(calendar_outlook, "fetch", side_effect=fail):
+            calendar_ics.events()
+            calendar_ics.events(force=True)
+        self.assertEqual(len(calls), 2)

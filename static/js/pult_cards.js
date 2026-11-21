@@ -29,6 +29,17 @@ const PULT_IC = {
   send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
   play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="4" rx="1.5"/><rect x="13" y="10" width="7" height="10" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/>',
+  info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.5"/>',
+  keys: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/>',
+  redo: '<path d="M19 12a7 7 0 11-2.05-4.95M19 4.5V8h-3.5"/>',
+  pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 014.8.9c0 1.7-2.4 2.1-2.4 3.6M12 16.8v.2"/>',
+  down: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
+  trash: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12.5h8L17 7M10.5 11v5M13.5 11v5"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 012-2H10l2 2h6.5a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>',
+  cal: '<rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
+  dub: '<path d="M4 10v4M8 7v10M12 4v16"/><path d="M16 8.5a4.5 4.5 0 010 7M18.5 6a8 8 0 010 12"/>',
 };
 
 // The drawing of an icon (the stroke follows the colour of the text around it)
@@ -40,6 +51,19 @@ function pultIcon(k, cls = '') {
 // stays on the right
 function pultCardHead(title, n, ic, side = '') {
   return `<h3 class="pcd-h"><span class="pcd-ic">${pultIcon(ic)}</span><span class="pcd-t">${escapeHtml(title)}${n != null && n !== '' ? `<b class="pcd-n">${escapeHtml(String(n))}</b>` : ''}</span>${side ? `<span class="pcd-side">${side}</span>` : ''}</h3>`;
+}
+
+// A compact empty state: the icon of the kind in a square and one line (not a bare line atop a tall empty panel)
+function vxEmpty(ic, text) {
+  return `<div class="vx-empty"><span class="vx-empty-ic">${pultIcon(ic)}</span><span>${escapeHtml(text)}</span></div>`;
+}
+
+// The head of a window or a side panel: the icon of its kind in a square, the title, an optional line under it,
+// and «✕» at the right end (close: the attributes of the close button, e.g. 'data-a="close"')
+function vxHead(ic, title, { sub = '', close = '', id = '', tone = '' } = {}) {
+  return `<div class="vx-head"><span class="vx-head-ic${tone ? ` vx-tone-${tone}` : ''}" aria-hidden="true">${pultIcon(ic)}</span>`
+    + `<div class="vx-head-tt"><h2${id ? ` id="${id}"` : ''} class="vx-head-t">${escapeHtml(title)}</h2>${sub ? `<p class="vx-head-sub">${escapeHtml(sub)}</p>` : ''}</div>`
+    + (close ? `<button type="button" class="vx-x" ${close} title="${escapeHtml(t('close'))}" aria-label="${escapeHtml(t('close'))}">✕</button>` : '') + '</div>';
 }
 
 // A whole card: its head and what it holds (html); `cls` adds a tone («pcard-over» — red)

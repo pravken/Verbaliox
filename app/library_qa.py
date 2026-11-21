@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from app.audio_utils import format_timestamp
 from app.ollama_client import _segment_parts
-from app.database import _db_lock, get_connection, get_meeting, list_meetings, local_only_ids
+from app.database import _db_lock, get_connection, get_meeting
 
 MAX_FRAGMENTS = 14
 MAX_CONTEXT_CHARS = 11000
@@ -225,39 +225,22 @@ def ask_library(
     chosen = meeting_ids is not None  # a folder or recordings the user chose, not the whole library
     try:
         llm = target(model_name)  # an explicit user action: Ollama may be started
-        # Recordings marked "local analysis only" never reach a cloud model: they are left out of
-        # what is sent, and a scope made only of them is answered by the local model
-        excluded = 0
-        if llm.is_cloud:
-            private = local_only_ids()
-            if private:
-                all_ids = meeting_ids if meeting_ids is not None else [int(m["id"]) for m in list_meetings()]
-                allowed = [i for i in all_ids if int(i) not in private]
-                excluded = len(all_ids) - len(allowed)
-                if not allowed:
-                    llm = target(None if model_name == "cloud" else model_name, local_only=True)
-                    excluded = 0
-                elif excluded:
-                    meeting_ids = allowed
     except LlmError as e:
         raise RuntimeError(str(e)) from e
-    # A cloud model reads far more at once: bigger folders are read in full, more fragments fit
-    scale = 8 if llm.is_cloud else 1
     mode = "search"
-    max_chars = MAX_CONTEXT_CHARS * scale
+    max_chars = MAX_CONTEXT_CHARS
     fragments: List[Dict[str, Any]] = []
     scope_meetings: List[Dict[str, Any]] = []
-    # The whole library without its private recordings is still searched, not read in full
     if chosen:
         scope_meetings = [m for m in (get_meeting(i) for i in meeting_ids) if m and m.get("segments")]
         if not scope_meetings:
             return {"answer": "", "sources": [], "found": False, "mode": mode}
-        if sum(_transcript_chars(m) for m in scope_meetings) <= FULL_MODE_MAX_CHARS * scale:
+        if sum(_transcript_chars(m) for m in scope_meetings) <= FULL_MODE_MAX_CHARS:
             mode = "full"
-            max_chars = FULL_MODE_MAX_CHARS * scale + 4000
+            max_chars = FULL_MODE_MAX_CHARS + 4000
             fragments = full_fragments(scope_meetings)
     if mode == "search":
-        fragments = retrieve(question, meeting_ids, limit=MAX_FRAGMENTS * (3 if llm.is_cloud else 1))
+        fragments = retrieve(question, meeting_ids, limit=MAX_FRAGMENTS)
         if chosen and len(fragments) < 3:
             # Few keyword hits in a folder: its overviews still say what the recordings are about
             fragments = summary_fragments(scope_meetings)[:MAX_FRAGMENTS] + fragments
@@ -291,5 +274,4 @@ def ask_library(
         {k: f[k] for k in ("meeting_id", "title", "date", "start", "speaker", "text")} | {"n": n}
         for n, f in enumerate(fragments, start=1)
     ]
-    return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "mode": mode, "cloud": llm.is_cloud,
-            "excluded_local": excluded}
+    return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "mode": mode}

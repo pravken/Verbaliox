@@ -8,6 +8,8 @@
       <!-- Sections, the search and the note about saving -->
       <aside class="sx-nav">
         <div class="flex items-center gap-2 px-2 pt-1 pb-3">
+          <!-- the section's icon in a square, as at the head of every other section -->
+          <span class="dc-head-ic sx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.6 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></span>
           <h2 class="flex-1 text-[19px] font-bold text-white" data-i18n="settingsModalTitle">Настройки</h2>
           <button data-click="closeModal" data-click-args='["settings"]' data-i18n-title="tipSettingsBack" title="Вернуться туда, откуда открыты настройки"
             class="ui-btn ui-btn-subtle h-7 !px-2.5 text-[11.5px]" data-i18n="settingsBack">← Назад</button>
@@ -477,13 +479,9 @@
               </select>
               <span id="translate-hotkey-status" class="text-[11.5px] text-apple-tertiary"></span>
             </div>
-            <label class="vs-row cursor-pointer text-[11.5px] text-apple-label mt-1.5">
-              <span data-i18n="dictTrCloud">Разрешить облачную модель для перевода диктовки</span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-dictation-translate-cloud" />
-            </label>
-            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="dictTrHint">Говорите на любом языке — вставится перевод. Переводит локальная модель Ollama; облачная — только если отмечено выше и облако включено в «Анализе». Если перевод не удался, вставляется исходный текст.</p>
+            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="dictTrHint">Говорите на любом языке — вставится перевод. Переводит локальная модель Ollama. Если перевод не удался, вставляется исходный текст.</p>
             <label class="vs-row cursor-pointer text-[11.5px] text-apple-label mt-2.5" data-i18n-title="tipDictSave"
-              title="Звук, текст и перевод каждой диктовки сохраняются записью в папке «Диктовки» медиатеки. Эта папка только для локального анализа: в облако её записи не отправляются">
+              title="Звук, текст и перевод каждой диктовки сохраняются записью в папке «Диктовки» медиатеки">
               <span data-i18n="dictSave">Сохранять диктовки в медиатеку (папка «Диктовки»)</span>
               <input type="checkbox" role="switch" class="vs-switch" id="set-dictation-save" checked />
             </label>
@@ -713,72 +711,8 @@
         <div data-stab="analysis" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavAnalysis">ИИ-анализ</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescAnalysis">Где работает анализ, локальные модели и что делать после распознавания.</p>
+            <p class="sx-section-desc" data-i18n="rdSasDescAnalysis">Локальные модели анализа и что делать после распознавания.</p>
           </div>
-        <!-- Where analysis runs: the local Ollama or a cloud model over its API (app/llm.py) -->
-        <div class="settings-card">
-          <div>
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="llmModeTitle">Модель для анализа</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="llmModeDesc">Обзоры, задачи, главы, ответы на вопросы, названия записей и заметки Obsidian. Перевод текста, живые субтитры и дубляж всегда работают через Ollama.</p>
-          </div>
-          <div class="apple-segmented w-full settings-tabs">
-            <button data-click="setLlmMode" data-click-args='["ollama"]' id="llm-mode-ollama" class="apple-segment-btn" data-i18n="llmModeLocal">На компьютере (Ollama)</button>
-            <button data-click="setLlmMode" data-click-args='["cloud"]' id="llm-mode-cloud" class="apple-segment-btn" data-i18n="llmModeCloud">Облачная модель по API</button>
-          </div>
-          <div id="llm-cloud-panel" class="hidden space-y-3">
-            <div class="rounded-lg border border-apple-amber/40 bg-apple-amber/10 px-3 py-2.5 text-[11.5px] text-apple-amber leading-relaxed" data-i18n="llmCloudWarning">Текст расшифровки анализируемой записи (а для вопросов по медиатеке — найденные фрагменты) отправляется в выбранный сервис через интернет и обрабатывается по его правилам. Аудио и видео не отправляются. Запросы оплачиваются по тарифам сервиса.</div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="set-llm-provider" class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="llmProviderLabel">Сервис</label>
-                <select id="set-llm-provider" data-change="renderLlmProvider" class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
-                  <option value="openai">OpenAI (ChatGPT)</option>
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="gemini">Google (Gemini)</option>
-                  <option value="openai_compat" data-i18n="llmProviderCompat">OpenAI-совместимый (OpenRouter, DeepSeek, LM Studio…)</option>
-                </select>
-              </div>
-              <div>
-                <label for="set-llm-model-select" class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="llmModelLabel">Модель</label>
-                <div class="flex items-center gap-1.5">
-                  <select id="set-llm-model-select" data-change="onLlmModelSelect" data-change-args='[{"$": "value"}]' class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white font-mono focus:outline-none"></select>
-                  <button data-click="loadLlmModels" data-click-args='[true]' id="llm-models-btn" class="ui-btn ui-btn-subtle h-8 !px-2 shrink-0" data-i18n-title="tipLlmModels" title="Загрузить список моделей, доступных по ключу">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
-                  </button>
-                </div>
-                <input id="set-llm-model" type="text" data-i18n-placeholder="llmModelCustomPh" placeholder="Название модели"
-                  class="hidden mt-1.5 w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white font-mono placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-                <p id="llm-model-hint" class="mt-1 text-[11px] text-apple-tertiary leading-snug"></p>
-              </div>
-            </div>
-            <div id="llm-base-url-row" class="hidden">
-              <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="llmBaseUrlLabel">Адрес API (Base URL)</label>
-              <input id="set-llm-base-url" type="text" placeholder="https://openrouter.ai/api/v1"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white font-mono placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-            </div>
-            <div>
-              <div class="flex items-center justify-between gap-2 mb-1">
-                <label class="text-[11.5px] text-apple-secondary" data-i18n="llmKeyLabel">API-ключ</label>
-                <span id="llm-key-badge" class="hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-apple-green/15 text-apple-green"></span>
-              </div>
-              <div class="flex items-center gap-2">
-                <input id="set-llm-key" type="password" autocomplete="off" spellcheck="false"
-                  class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white font-mono placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-                <button data-click="saveLlmKey" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px] shrink-0" data-i18n="llmKeySave">Сохранить ключ</button>
-                <button data-click="deleteLlmKey" id="llm-key-delete" class="hidden ui-btn ui-btn-subtle h-8 px-2.5 text-[11.5px] shrink-0 text-apple-red" data-i18n="llmKeyDelete">Удалить</button>
-              </div>
-              <p id="llm-key-hint" class="mt-1 text-[11.5px] text-apple-tertiary leading-snug break-words select-text"></p>
-              <div id="llm-key-links" class="hidden mt-1 flex items-center gap-1.5">
-                <button data-click="openExternal" data-click-args='[{"$": "data", "k": "url"}]' id="llm-key-open" class="ui-btn ui-btn-subtle h-6 px-2 text-[11.5px]" data-i18n="llmKeyOpenSite">Открыть сайт</button>
-                <button data-click="copyText" data-click-args='[{"$": "data", "k": "url"}]' id="llm-key-copy" class="ui-btn ui-btn-subtle h-6 px-2 text-[11.5px]" data-i18n="llmKeyCopyLink">Копировать ссылку</button>
-              </div>
-            </div>
-            <div class="space-y-1.5">
-              <button data-click="testLlmConnection" id="llm-test-btn" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="llmTest">Проверить подключение</button>
-              <div id="llm-test-result" class="hidden text-[11.5px] leading-snug break-words select-text rounded-lg px-3 py-2"></div>
-            </div>
-          </div>
-        </div>
-
         <!-- Section 3: Ollama Local AI Model Manager -->
         <div class="settings-card">
           <div class="sx-card-head">
@@ -1147,8 +1081,8 @@
             <pre id="mcp-code" class="mcp-code"></pre>
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="mcpLocalToggle">Отдавать агенту и записи «только локально»</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="mcpLocalHint">Выключено: такие записи агент не видит — он может отправить прочитанное в облачную модель.</span></span>
+            <span><span data-i18n="mcpLocalToggle">Отдавать агенту и диктовки</span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="mcpLocalHint">Выключено: записи папки «Диктовки» агент не видит — в них может быть любая продиктованная информация.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-mcp-local-only" />
           </label>
         </div>
@@ -1169,12 +1103,12 @@
           </div>
         </div>
 
-        <!-- Privacy: the sound of recordings, and what went to a cloud model -->
+        <!-- Privacy: the sound of recordings -->
         <div class="settings-card">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <h4 class="text-[13px] font-semibold text-white" data-i18n="privacyTitle">Приватность</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="privacyDesc">Сколько хранится звук записей и что отправлялось облачной модели.</p>
+              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="privacyDesc">Сколько хранится звук записей.</p>
             </div>
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
@@ -1192,14 +1126,13 @@
               <option value="365" data-i18n="retention365">1 год</option>
             </select>
           </div>
-          <button data-click="openCloudLog" class="ui-btn ui-btn-subtle h-7 text-[11.5px]" data-i18n="cloudLogBtn">Журнал облачных запросов</button>
         </div>
 
         <!-- Backup of the library (app/backup.py) -->
         <div class="settings-card">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="backupTitle">Резервная копия</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="backupDesc">Все записи, расшифровки, анализ, заметки, папки, голоса и настройки в одном файле .zip — перед переустановкой или переездом на другой компьютер. Ключи облачных моделей в копию не попадают.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="backupDesc">Все записи, расшифровки, анализ, заметки, папки, голоса и настройки в одном файле .zip — перед переустановкой или переездом на другой компьютер.</p>
           </div>
           <label class="flex items-center gap-2 cursor-pointer text-xs text-apple-label">
             <input type="checkbox" id="backup-with-media" class="rounded bg-apple-sidebar border-white/20 text-apple-blue" />

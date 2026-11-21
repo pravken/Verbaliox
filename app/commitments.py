@@ -486,14 +486,13 @@ def supported(item: Dict[str, Any], m: Dict[str, Any]) -> bool:
 def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[str] = None) -> List[Dict[str, Any]]:
     """Finds the promises of a recording (again: the earlier list of this recording is replaced,
     keeping what was ticked off). hints: more to tell the model (none by default)."""
-    from app.database import is_local_only
     from app.llm import target
     from app.ollama_client import build_transcript_lines
 
     m = get_meeting(meeting_id)
     if not m or not m.get("segments"):
         raise ValueError("Нет текста записи")
-    llm = target(model_name, local_only=is_local_only(m))
+    llm = target(model_name)
     from app.ollama_client import speakers_in_language
 
     # «Speaker 2» in an English meeting, as its overview calls them (tasks said «Участник 2»: an audit)
@@ -513,7 +512,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
     try:  # the user's contacts besides the participants: a task for someone not in the meeting (app/people.known_people)
         from app.people import known_people
 
-        known = known_people(m, exclude=roster, cloud=bool(getattr(llm, "is_cloud", False)))
+        known = known_people(m, exclude=roster)
     except Exception:
         known = []
     if known:
@@ -534,7 +533,7 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
         head += language_note(m.get("language"))
     except Exception as e:
         print(f"[commitments] no glossary: {e}", flush=True)
-    system = _SYSTEM + _dismissed_examples(cloud=bool(getattr(llm, "is_cloud", False)))
+    system = _SYSTEM + _dismissed_examples()
     unreadable = False  # an answer with no list in it: the model failed, not «no tasks» (found in the audit)
     for part in transcript_parts(lines, max(8000, llm.max_chars - 3000)):
         answer = llm.chat(system, head + "Расшифровка:\n" + part)
@@ -928,18 +927,18 @@ def _period_text(lo: str, hi: str, ru: bool) -> str:
     return f"{a.day} {gen[a.month - 1]} – {b.day} {gen[b.month - 1]}"
 
 
-def report_by_model(facts: Dict[str, Any], local_only: bool = False, model_name: Optional[str] = None) -> Dict[str, Any]:
+def report_by_model(facts: Dict[str, Any], model_name: Optional[str] = None) -> Dict[str, Any]:
     """The same summary told by the analysis model from its facts (only them: the facts go in, the
     model writes the sentences)."""
     from app.llm import target
 
-    llm = target(model_name, local_only=local_only)
+    llm = target(model_name)
     text = llm.chat(_REPORT_SYSTEM, facts["text"]).strip()
     if not text:
         return facts
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     return {**facts, "lines": [{"text": p, "tone": ""} for p in paragraphs], "text": facts["title"] + "\n\n" + "\n\n".join(paragraphs),
-            "model": llm.label, "cloud": llm.is_cloud}
+            "model": llm.label}
 
 
 def rename_person(meeting_id: int, old: str, new: str) -> int:
@@ -993,17 +992,10 @@ def _was_dismissed(item: Dict[str, Any], dismissed: List[Dict[str, Any]]) -> boo
                or _same_task(item, d) for d in dismissed)
 
 
-def _dismissed_examples(cloud: bool = False) -> str:
-    """The tasks the user deleted lately, as the model's examples of what is not a task here (for a cloud
-    model, none of a recording kept to local analysis)."""
+def _dismissed_examples() -> str:
+    """The tasks the user deleted lately, as the model's examples of what is not a task here."""
     _init()
-    rows = _rows("SELECT meeting_id, what FROM commitments_dismissed ORDER BY id DESC LIMIT ?", (DISMISSED_EXAMPLES * 3,))
-    if cloud:
-        from app.database import local_only_ids
-
-        private = local_only_ids()
-        rows = [r for r in rows if r["meeting_id"] not in private]
-    rows = rows[:DISMISSED_EXAMPLES]
+    rows = _rows("SELECT meeting_id, what FROM commitments_dismissed ORDER BY id DESC LIMIT ?", (DISMISSED_EXAMPLES,))
     whats = [r["what"].strip()[:120] for r in rows if (r["what"] or "").strip()]
     if not whats:
         return ""

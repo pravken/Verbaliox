@@ -845,3 +845,14 @@ class UpdateNoticeTest(unittest.TestCase):
         with mock.patch.object(updater, "check", return_value=self._status("9.9.10")):
             updater.notice_tick()
         self.assertEqual(app_status.take_notices(), [])
+
+
+class ShellIconsTest(unittest.TestCase):
+    def test_the_icon_cache_is_refreshed_after_an_update_and_never_fails_it(self):
+        from app import updater
+
+        with mock.patch.object(updater.sys, "platform", "win32"), \
+             mock.patch.object(updater.Path, "is_file", return_value=True), \
+             mock.patch.object(updater.subprocess, "run", side_effect=OSError("blocked")) as run:
+            updater.refresh_shell_icons()  # no windll here and the tool refused: still no exception
+        self.assertEqual(run.call_args[0][0][1], "-show")

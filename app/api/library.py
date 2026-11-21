@@ -16,7 +16,7 @@ from app import __version__
 from app import speech_route
 from app.paths import UPLOADS_DIR
 from app.settings_schema import as_int
-from app.database import create_meeting, delete_meeting, edit_meeting, get_all_settings, get_meeting, is_local_only, list_meetings, update_meeting_fields, update_meeting_progress, update_settings
+from app.database import create_meeting, delete_meeting, edit_meeting, get_all_settings, get_meeting, list_meetings, update_meeting_fields, update_meeting_progress, update_settings
 from app.transcriber import enqueue_meeting_job, is_job_active, request_cancel
 
 from fastapi import APIRouter
@@ -85,36 +85,6 @@ def api_semantic_index() -> Dict[str, Any]:
 
 router.get('/api/meetings/{meeting_id}')(api_get_meeting)
 
-@router.get("/api/meetings/{meeting_id}/llm-estimate")
-def api_llm_estimate(meeting_id: int, model: str = "") -> Dict[str, Any]:
-    """Where the analysis of a recording would go and how big the request is, shown before it runs."""
-    from app import llm
-    from app.ollama_client import build_transcript_lines
-
-    m = get_meeting(meeting_id)
-    if not m:
-        raise HTTPException(status_code=404, detail="Встреча не найдена")
-    local_only = is_local_only(m)
-    settings = get_all_settings()
-    cloud = (model == "cloud" or (not model and llm.uses_cloud(settings))) and not local_only
-    text = "\n".join(build_transcript_lines(m.get("segments") or [], m.get("speakers") or {}))
-    out: Dict[str, Any] = {"cloud": cloud, "local_only": local_only, "chars": len(text),
-                           "tokens": llm.estimate_tokens(text) + 600}  # + the instructions
-    if cloud:
-        p = llm.cloud_provider(settings)
-        out["label"] = f"{llm.PROVIDERS[p]['name']} · {llm.cloud_model(p, settings)}"
-    return out
-
-class LocalOnlyPayload(BaseModel):
-    local_only: bool
-
-@router.patch("/api/meetings/{meeting_id}/local-only")
-def api_meeting_local_only(meeting_id: int, payload: LocalOnlyPayload) -> Dict[str, Any]:
-    """Marks a recording "local analysis only": it is never sent to a cloud model."""
-    if not get_meeting(meeting_id):
-        raise HTTPException(status_code=404, detail="Встреча не найдена")
-    update_meeting_fields(meeting_id, local_only=1 if payload.local_only else 0)
-    return api_get_meeting(meeting_id)
 
 @router.get("/api/calls/status")
 def api_calls_status() -> Dict[str, Any]:
@@ -641,7 +611,6 @@ class MeetingTitlePayload(BaseModel):
 @router.post("/api/meetings/{meeting_id}/title/generate")
 def api_generate_title(meeting_id: int) -> Dict[str, Any]:
     """A title made from the transcript by the analysis model (for several recordings at once)."""
-    from app.database import is_local_only
     from app.llm import LlmError
     from app.naming import rename_recording_file
     from app.obsidian import refresh_if_exported
@@ -652,8 +621,7 @@ def api_generate_title(meeting_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="Встреча не найдена")
     lang = m.get("language") if m.get("language") not in (None, "", "auto") else "ru"
     try:
-        title = generate_meeting_title(m.get("segments") or [], m.get("speakers") or {}, answer_lang=lang,
-                                       local_only=is_local_only(m))
+        title = generate_meeting_title(m.get("segments") or [], m.get("speakers") or {}, answer_lang=lang)
     except (LlmError, RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e)[:300])
     update_meeting_fields(meeting_id, title=title[:300], title_is_default=0)
@@ -947,7 +915,7 @@ def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports:
     from app import app_status
 
     if meeting_id in app_status.mixing:  # its tracks are being mixed: deleted once it has its file
-        raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся — удалите её через минуту.")
+        raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся. Удалить её можно будет через минуту.")
     from app import url_import
 
     url_import.drop(meeting_id)  # a download of it stops and its file is removed
