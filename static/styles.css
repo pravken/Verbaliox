@@ -4618,3 +4618,11 @@ button.sc-at:hover { color: var(--accent-text); }
 
 .lt-btn.lt-danger { color: #FF8A80; }
 .lt-btn.lt-danger:hover { background: rgba(255, 69, 58, 0.16); color: #FFB4AB; }
+
+/* «Рабочий день» popover in the look of the queue and load windows (reported by the user: the old look) */
+.hm-pop { width: 320px; padding: 14px 16px; gap: 12px; border-radius: 12px; background: var(--card); backdrop-filter: none; border: 1px solid var(--line); box-shadow: var(--shadow-menu); }
+.hm-pop-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-ui); color: var(--hc-dim, #AEAEB2); }
+.hm-pop .hm-select { height: 32px; border-radius: 8px; background: var(--bg-deep); }
+#hm-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.hm-pop .hm-preset { height: 28px; padding: 0 11px; border-radius: 8px; font-size: var(--fs-ui); }
+.hm-pop-fit { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-ui); color: #E5E5EA; }
