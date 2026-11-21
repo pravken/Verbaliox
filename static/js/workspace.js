@@ -37,14 +37,16 @@ async function selectMeeting(id, reloadPlayer = true) {
   }
   const res = await fetch(`/api/meetings/${id}`).catch(() => null);
   if (seq !== _selectSeq) return;
-  if (state.pendingMeetingId === id) {
+  // the last request answered: nothing else is opening any more. Cleared whatever recording was pending (a click on
+  // A, then back on the open C before A's answer: C wins, and A's pending state stayed with the screen inert)
+  if (state.pendingMeetingId != null) {
     state.pendingMeetingId = null;
-    setRecPending(false);
     if (!res || !res.ok) {
       renderMeetingsSidebar();
       if (state.activeMeeting) document.getElementById('meeting-title-input').value = state.activeMeeting.title || '';
     }
   }
+  setRecPending(false);
   if (!res || !res.ok) return;
   const m = await readJson(res);
   const prevId = state.activeMeeting ? state.activeMeeting.id : null;
