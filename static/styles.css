@@ -737,6 +737,9 @@ label.settings-toggle { display: flex; }
    does the same when the speakers would not fit beside the labels (fitTranscriptToolbar) */
 #wview-transcript > div:first-child { container-type: inline-size; }
 .tx-toolbar.tx-compact .tx-tool-label { display: none; }
+/* the speakers keep one row: when the tools do not fit beside them, the bar takes a second line as a whole */
+#wview-transcript .tx-toolbar { flex-wrap: wrap; row-gap: 8px; }
+#wview-transcript #speaker-pills-container { flex: 1 0 auto; max-width: 100%; }
 @container (max-width: 900px) {
   .tx-toolbar .tx-tool-label, .tx-section-panel .tx-tool-label { display: none; }
 }

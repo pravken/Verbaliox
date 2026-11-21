@@ -1534,8 +1534,11 @@ function fitTranscriptToolbar() {
     [bar.parentElement, document.getElementById('tx-tools'), pills].forEach(el => el && txToolbarObserver.observe(el));
   }
   bar.classList.remove('tx-compact');
+  // the bar wraps as a whole (the speakers stay in one row): the labels go first, before a second line
+  const tools = document.getElementById('tx-tools');
+  const wrapped = tools && Math.abs(tools.getBoundingClientRect().top - pills.getBoundingClientRect().top) > 4;
   const crowded = pills.children.length && (pills.scrollWidth > pills.clientWidth + 1 || pills.offsetHeight > 34);
-  if (crowded || bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('tx-compact');
+  if (wrapped || crowded || bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('tx-compact');
 }
 
 // The speakers tab (cards, how the talk went): people.js, renderSpeakersPanel and renderTalkAnalytics
