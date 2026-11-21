@@ -596,7 +596,7 @@ async function loadDirectory() {
 
 // --- «Контакты»: the directory from the sidebar, a person's card, the names of the analysis as links
 // (asked by the user: a person named in a summary opens their card, with their recordings and tasks) ---
-function openContacts() { openPeopleDirectory(); }
+// openContacts: the section «Люди» (below)
 
 const contacts = { list: null, at: 0, loading: null };
 
@@ -792,3 +792,140 @@ async function dirMerge() {
   spCtx.data = null;
   showToast(t('spDirMerged').replace('{name}', () => data.name));
 }
+
+// --- «Люди»: a section of the rail («Пульт встреч», stage 6). The directory on the left (the same list as the
+// window «Контакты», dir.items), the card of the one chosen on the right in cards with the icon of their kind ---
+const PV = { sel: '', card: null, q: '' };
+
+async function renderPeopleView(rise = false) {
+  await loadPersonPhotos();
+  await loadDirectory();
+  const shown = pvRows();
+  if (!PV.sel || !dir.items.some(p => p.name === PV.sel)) PV.sel = (shown[0] || {}).name || '';
+  drawPeopleView();
+  await pvLoadCard();
+  if (rise) pultRise(document.getElementById('people-view'), '.pv-row, #pv-card .pcard');
+}
+
+function pvRows() {
+  const q = PV.q.trim().toLowerCase();
+  return dir.items.filter(p => p.kind === dir.tab && (!q || p.name.toLowerCase().includes(q)
+    || (p.aliases || []).some(a => a.toLowerCase().includes(q)) || (p.role || '').toLowerCase().includes(q)));
+}
+
+function drawPeopleView() {
+  if (state.appView !== 'people') return;
+  const n = kind => dir.items.filter(p => p.kind === kind).length;
+  document.getElementById('pv-sub').textContent = plural(n('person'), t('pvPeopleForms'));
+  document.getElementById('pv-tabs').innerHTML = [['person', t('spPeople')], ['dept', t('spDepts')]].map(([k, label]) =>
+    `<button role="radio" aria-checked="${dir.tab === k}" class="tk-seg-btn${dir.tab === k ? ' tk-on' : ''}" ${pageCall('click', 'setPeopleTab', [k])}>${escapeHtml(label)} <span class="tk-chip-n">${n(k)}</span></button>`).join('');
+  const rows = pvRows();
+  const where = p => (p.recordings ? plural(p.recordings, t('dcRecForms')) : p.calendar ? t('spInCalendar') : t('spAddedByHand'));
+  document.getElementById('pv-list').innerHTML = rows.map(p => {
+    const on = dir.picked.includes(p.name);
+    return `<div class="pv-row${p.name === PV.sel ? ' pv-sel' : ''}" ${pageCall('click', 'selectPerson', [p.name])}>
+      <input type="checkbox" class="tk-check" ${on ? 'checked' : ''} ${pageCall('click', 'stopEvent', [{ $: 'event' }])} ${pageCall('change', 'pickPerson', [p.name, { $: 'checked' }])} aria-label="${escapeHtml(t('spPick'))}" title="${escapeHtml(t('spMergeTip'))}">
+      <span class="sp-mav${p.kind === 'dept' ? ' sp-mav-dept' : ''}">${p.kind === 'dept' ? '▦' : spFaceHtml(p.name, spInitial(p.name))}</span>
+      <span class="pv-row-t"><b>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</b><span>${escapeHtml(p.role || (p.aliases || []).join(', ') || '')}</span></span>
+      <span class="pv-row-n">${escapeHtml(where(p))}</span>
+    </div>`;
+  }).join('') || `<div class="sp-empty">${escapeHtml(t(PV.q ? 'spNothingFound' : 'spDirEmpty'))}</div>`;
+  const merge = document.getElementById('pv-merge');
+  merge.classList.toggle('hidden', dir.picked.length < 2);
+  merge.textContent = t('spMergeN').replace('{n}', () => String(dir.picked.length));
+}
+
+async function pvLoadCard() {
+  const box = document.getElementById('pv-card');
+  if (!PV.sel) { PV.card = null; box.innerHTML = `<div class="sp-empty">${escapeHtml(t('spDirEmpty'))}</div>`; return; }
+  const res = await fetch(`/api/people/card?name=${encodeURIComponent(PV.sel)}`).catch(() => null);
+  const data = res ? await readJson(res) : null;
+  if (!res || !res.ok) { box.innerHTML = `<div class="sp-empty">${escapeHtml(serverText(data && data.detail) || t('errorGeneric'))}</div>`; return; }
+  PV.card = data;
+  drawPeopleCard();
+}
+
+// The card: the face, the name and role, the actions; the open tasks, then the recordings by how the person is in them
+function drawPeopleCard() {
+  const data = PV.card;
+  if (!data) return;
+  const p = data.person;
+  const open = data.tasks.filter(x => x.status !== 'done');
+  const done = data.tasks.length - open.length;
+  const rec = (r, extra = '') => `<button class="pv-rec" ${pageCall('click', 'openPersonRecord', [Number(r.meeting_id), Number(r.first_at || 0)])}>
+      <span class="pv-rec-t">${escapeHtml(r.title || '')}</span>${extra}<span class="pv-rec-d">${escapeHtml(pcDate(r.date))}</span></button>`;
+  const task = x => `<div class="pv-task">
+      <button class="pv-task-t" ${x.meeting_id ? pageCall('click', 'openPersonRecord', [Number(x.meeting_id), Number(x.at || 0)]) : 'disabled'}>${escapeHtml(x.what)}
+        <span>${escapeHtml(x.meeting_title || '')}</span></button>
+      <span class="pv-task-due">${escapeHtml(x.due_date ? pcDate(x.due_date) : t('tkNoDue'))}</span></div>`;
+  const group = (key, rows, ic, fmt) => (rows.length ? pultCard(t(key), rows.length, ic, `<div class="pv-list-in">${rows.map(fmt).join('')}</div>`) : '');
+  const sub = [p.role, (p.aliases || []).length ? `${t('spAlso')}: ${p.aliases.join(', ')}` : ''].filter(Boolean).join(' · ');
+  const nothing = !data.spoke.length && !data.invited.length && !data.mentioned.length;
+  document.getElementById('pv-card').innerHTML = `
+    <div class="pv-card-head">
+      <span class="sp-mav pv-ava">${spFaceHtml(p.name, spInitial(p.name))}</span>
+      <div class="pv-who"><h2>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</h2><span>${escapeHtml(sub || t('pvSpokeIn').replace('{n}', () => String(data.spoke.length)))}</span></div>
+      <span class="tk-grow"></span>
+      <button class="tk-btn tk-btn-primary" data-click="peopleCardTask">+ ${escapeHtml(t('pcTask'))}</button>
+      <button class="tk-btn" data-click="peopleCardEdit">${escapeHtml(t('pcEdit'))}</button>
+      <button class="tk-btn" data-click="peopleCardPhoto">${escapeHtml(t(personPhotoUrl(p.name) ? 'spPhotoChange' : 'spPhoto'))}</button>
+      ${p.kind === 'dept' ? '' : `<button class="tk-btn" data-click="peopleCardMe" title="${escapeHtml(t('spMeTip'))}">${escapeHtml(t(p.is_me ? 'spNotMe' : 'spMe'))}</button>`}
+    </div>
+    <div class="pv-grid">
+      ${pultCard(t('pcTasks'), done ? `${open.length} · ${t('pcDoneN').replace('{n}', () => String(done))}` : open.length, 'task',
+        open.length ? `<div class="pv-list-in">${open.map(task).join('')}</div>` : `<p class="pv-empty">${escapeHtml(t('pcNoTasks'))}</p>`)}
+      ${group('pcSpoke', data.spoke, 'meet', r => rec(r))}
+      ${group('pcMentioned', data.mentioned, 'text', r => rec(r, `<span class="pv-rec-n">${escapeHtml(t('pcTimes').replace('{n}', () => String(r.count)))}</span>`))}
+      ${group('pcInvited', data.invited, 'people', r => rec(r))}
+      ${nothing ? pultCard(t('pcSpoke'), 0, 'meet', `<p class="pv-empty">${escapeHtml(t('pcNothing'))}</p>`) : ''}
+    </div>`;
+}
+
+function openContacts() { switchAppView('people'); }
+function setPeopleTab(k) { dir.tab = k; dir.picked = []; PV.sel = ''; renderPeopleView(); }
+function onPeopleSearch(v) { PV.q = v; drawPeopleView(); }
+async function selectPerson(name) { PV.sel = name; drawPeopleView(); await pvLoadCard(); }
+function pickPerson(name, on) { dir.picked = on ? dir.picked.concat(name) : dir.picked.filter(x => x !== name); drawPeopleView(); }
+async function peopleMergePicked() { await dirMerge(); renderPeopleView(); }
+async function openPersonRecord(id, at) { switchAppView('library'); await selectMeetingAndSeek(id, at || 0); }
+
+async function peopleAdd() {
+  const name = await askText(t(dir.tab === 'dept' ? 'spNewDeptPh' : 'spNamePh'), '');
+  if (!name || !name.trim()) return;
+  await dirAdd(name.trim());
+  PV.sel = name.trim();
+  renderPeopleView();
+}
+
+async function peopleCardTask() {
+  const p = PV.card?.person;
+  if (!p) return;
+  const what = await askText(t('pcTaskAsk').replace('{name}', () => p.name), '');
+  if (!what || !what.trim()) return;
+  const r = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ what: what.trim(), who: p.name }) });
+  const made = await readJson(r);
+  if (!r.ok) { showError(serverText(made.detail)); return; }
+  showToast(t('pcTaskMade'), null, 'success');
+  pvLoadCard();
+}
+
+async function peopleCardEdit() {
+  const p = PV.card?.person;
+  if (!p) return;
+  const newName = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
+  if (newName === null || !newName.trim()) return;
+  const role = await askText(t('spDirRole').replace('{name}', () => newName.trim()), p.role || '');
+  await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) });
+  PV.sel = newName.trim();
+  renderPeopleView();
+}
+
+function peopleCardPhoto() { if (PV.card) pickPersonPhoto(PV.card.person.name); }
+async function peopleCardMe() {
+  const p = PV.card?.person;
+  if (!p) return;
+  await dirUpdate({ name: p.name, is_me: !p.is_me });
+  renderPeopleView();
+}
+
+registerView('people', { show: () => renderPeopleView(true), refresh: (changed) => { if (changed) renderPeopleView(); } });

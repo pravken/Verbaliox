@@ -93,7 +93,10 @@ function maybeShowWhatsNew() {
   if (!info || !info.current) return;
   let seen = null;
   try { seen = localStorage.getItem('vx-seen-version'); localStorage.setItem('vx-seen-version', info.current); } catch (e) { return; }
-  if (seen && seen !== info.current && info.latest && info.latest.version === info.current && info.latest.notes) openUpdateDialog(true);
+  // the window after an update (settings.js openAfterUpdate): the notes of this version join the steps it asks
+  if (seen && seen !== info.current && info.latest && info.latest.version === info.current && info.latest.notes) {
+    openAfterUpdateNotes(releaseNotesFor(info.latest.notes), info.current, info.latest.url || '');
+  }
 }
 
 async function updateViaGit() {
