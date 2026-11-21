@@ -35,6 +35,7 @@ _DDL_APPS = "CREATE TABLE IF NOT EXISTS app_minutes (day TEXT NOT NULL, minute I
 MEETING = "meeting"  # a minute of a recording or a call
 
 # the names people know for the usual programs; any other one is its file name without «.exe»
+# The names in Russian are said in English by the page (static/i18n.js appName_<key>)
 APP_NAMES = {
     "ms-teams": "Teams", "teams": "Teams", "outlook": "Outlook", "olk": "Outlook", "chrome": "Chrome", "msedge": "Edge",
     "firefox": "Firefox", "browser": "Яндекс Браузер", "opera": "Opera", "code": "Visual Studio Code", "devenv": "Visual Studio",
