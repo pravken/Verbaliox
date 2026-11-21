@@ -5099,3 +5099,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .pv-who h2, .pc-who h2 { display: flex; align-items: center; }
 .pv-row-t b, .sp-dname b { display: inline-flex; align-items: center; }
 :is(.pv-row-t b, .pv-who h2, .pc-who h2, .sp-dname b) em { vertical-align: 0; line-height: 1; }
+
+/* CPU, RAM, GPU with their marks (asked by the user: the icons of the former sidebar back): the status bar, the load
+   window and the widget of «Обзор»; the label column a step wider so the bars still start at one x */
+.hw-ic { width: 14px; height: 14px; flex: none; opacity: 0.8; }
+.sb-k, .ld-k { display: inline-flex; align-items: center; gap: 5px; }
+.ld-row { grid-template-columns: 58px 1fr 136px; }
+.ld-sub { margin-left: 68px; }
+.db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 120px; }
+.db-sl-own { margin-left: 64px; }

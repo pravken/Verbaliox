@@ -435,6 +435,14 @@ function renderLoadIndicator() {
   btn.title = `${t('sbLoadTip')}${own.ram_gb != null ? `\nVerbaliox: CPU ${Math.round(own.cpu_percent || 0)}%, RAM ${gbText(own.ram_gb)}` : ''}`;
 }
 
+// The marks of the processor, the memory and the video card (asked by the user: the icons of the former sidebar
+// back), before CPU, RAM and GPU in the status bar, the load window and the widget of «Обзор»
+const HW_IC = {
+  CPU: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z"/></svg>',
+  RAM: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5h18v8.25H3V7.5zM6.75 10.5v2.25m3.75-2.25v2.25m3.75-2.25v2.25m3.75-2.25v2.25M6 15.75v2.25m4-2.25v2.25m4-2.25v2.25m4-2.25v2.25"/></svg>',
+  GPU: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 6.75h19.5v10.5H2.25V6.75zM4.5 17.25v2.25M9 13.875a1.875 1.875 0 100-3.75 1.875 1.875 0 000 3.75zM14.25 9.75h4.5m-4.5 2.25h4.5m-4.5 2.25h4.5"/></svg>',
+};
+
 function renderLoadPop() {
   const pop = document.getElementById('load-pop');
   const data = vram.data;
@@ -444,7 +452,7 @@ function renderLoadPop() {
   const bar = (all, mine) => `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`;
   // each resource: its bar and value, under them the hardware on the left and Verbaliox's own share on the right
   // (asked by the user: the shares of the program in one line under the GPU read as a part of the GPU)
-  const row = (k, all, mine, value, tip, note, own) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
+  const row = (k, all, mine, value, tip, note, own) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
     + (note || own ? `<div class="ld-sub"><span class="ld-note">${escapeHtml(note || '')}</span>${own ? `<span class="ld-own"><i class="ld-me"></i>${escapeHtml(own)}</span>` : ''}</div>` : '');
   const cpu = sys.cpu_percent;
   let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`
