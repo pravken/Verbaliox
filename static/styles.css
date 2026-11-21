@@ -515,12 +515,7 @@ label.settings-toggle { display: flex; }
 .settings-tabs { display: flex; }
 .settings-tabs .apple-segment-btn { flex: 1 1 0; justify-content: center; text-align: center; }
 
-/* Logo easter egg: the willow sways, its catkins puff up and fluff drifts away */
-.app-logo { position: relative; cursor: default; }
-.app-logo-branch { transform-origin: 20% 85%; }
-.app-logo:hover .app-logo-branch { animation: willow-sway 1.6s ease-in-out infinite; }
-.app-logo .catkin { transform-box: fill-box; transform-origin: center; }
-.app-logo:hover .catkin { animation: catkin-puff 1.6s ease-in-out infinite; animation-delay: var(--d); }
+/* The willow of «О программе» (its easter egg): it sways, its catkins puff up and fluff drifts away */
 @keyframes willow-sway {
   0%, 100% { transform: rotate(0deg); }
   25% { transform: rotate(-7deg); }
@@ -590,7 +585,6 @@ label.settings-toggle { display: flex; }
   100% { text-shadow: none; transform: none; filter: none; clip-path: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app-logo:hover .app-logo-branch, .app-logo:hover .catkin { animation: none; }
   .willow-fluff { display: none; }
   .about-willow, .about-willow .catkin, .about-logo.about-shake .about-willow, .about-egg .glitch,
   .about-egg.egg-glitch { animation: none; }
@@ -884,7 +878,6 @@ html select:focus-visible { outline-offset: -2px; }
 .seg-merge-btn { padding: 0 6px; border-radius: 6px; }
 .row-more { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; margin: -4px 0; }
 .sb-icon-btn { padding: 5px; }
-.sb-about { min-height: 24px; }
 .vs-link { display: inline-flex; align-items: center; min-height: 24px; }
 label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 /* --- A date field shown in the interface language (core.js enhanceDateInput): the native field under its button --- */
@@ -923,7 +916,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
   border-bottom: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); background: rgba(255, 255, 255, 0.035); position: relative; z-index: 30;
 }
 /* The sidebar's head is as tall as the top bar, so their bottom borders make one line */
-.side-head { height: 56px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
 /* Recording (asked by the user): a round red button at the right end of the bar; while it records it opens
    into «● 12:34 ■ Стоп», while it starts it says «Запуск…» */
 .tb-rec-wrap { margin-left: auto; }

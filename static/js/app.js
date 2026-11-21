@@ -187,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(saveOrphanRecordings, 35000);  // past the 30 s of silence the server waits for
   state.autoScroll = true;
   loadSummaryTemplates();
-  initLogoEasterEgg();
   setUILanguage(state.uiLang);
   updateVolumeUI();
 
