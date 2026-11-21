@@ -839,7 +839,7 @@ const _modalReturnFocus = {};
 
 function focusablesIn(root) {
   return [...root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-    .filter(el => !el.disabled && el.getClientRects().length);  // shown (offsetParent is null for fixed ones)
+    .filter(el => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);  // shown (offsetParent is null for fixed ones), in the tab order
 }
 
 document.addEventListener('keydown', e => {
@@ -877,7 +877,8 @@ function openModal(name, tab) {
   if (name === 'settings' && state.appView !== 'settings') switchAppView('settings');
   setTimeout(() => {
     if (modal.contains(document.activeElement)) return;
-    const first = name === 'settings' ? document.getElementById('settings-search') : null;  // the search, not «Закрыть»
+    // the search of Settings, not «Закрыть»; a window with nothing to fill marks its own start (data-autofocus)
+    const first = name === 'settings' ? document.getElementById('settings-search') : modal.querySelector('[data-autofocus]');
     // Audit 7.2: the first field or action, not the ✕ of the window (Enter must not close it)
     const items = focusablesIn(modal);
     (first || items.find(el => !el.matches('.dlg-x, .imp-x, .vx-x')) || items[0] || modal).focus();
