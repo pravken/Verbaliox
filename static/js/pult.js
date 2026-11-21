@@ -256,8 +256,75 @@ function jobsHold() {
   return '';
 }
 
+// «Очередь» as an island in the top strip (asked by the user: the rail's button said «Очередь пуста» most of the
+// time): nothing while nothing runs; a capsule before «＋ Импорт» with a progress ring and the job, «+N в очереди»;
+// «Готово» for a moment when the last job ends. The strip itself already tells about its recording: then the capsule
+// keeps only the count of the others, or hides. A click opens the queue's window under it.
+const island = { had: false, doneTimer: null, html: '' };
+function islandRing(pct) {
+  const c = 56.5, d = Math.max(2, Math.min(100, pct || 0)) / 100 * c;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="3"/>`
+    + `<circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="${d.toFixed(1)} ${c}" transform="rotate(-90 12 12)"/></svg>`;
+}
+function renderJobsIsland() {
+  let el = document.getElementById('strip-island');
+  if (!el) {
+    const acts = document.getElementById('strip-acts');
+    if (!acts) return;
+    el = document.createElement('button');
+    el.id = 'strip-island';
+    el.type = 'button';
+    el.className = 'st-island hidden';
+    el.setAttribute('aria-haspopup', 'dialog');
+    el.dataset.click = 'toggleJobsPop';
+    el.dataset.clickArgs = '["island"]';
+    acts.after(el);
+  }
+  const items = state.queue || [];
+  const q = items.find(x => x.state === 'running');
+  let html = '', cls = '';
+  if (items.length) {
+    island.had = true;
+    clearTimeout(island.doneTimer);
+    island.doneTimer = null;
+    const others = items.filter(x => x !== q).length;
+    const more = others ? `<span class="st-island-n">${escapeHtml(t('islandMore').replace('{n}', () => others))}</span>` : '';
+    // the strip already says how its own recording goes: only the others then
+    const told = q && strip.kind === 'after' && strip.click === q.id;
+    if (q && !told) {
+      const m = (state.meetings || []).find(x => x.id === q.id) || {};
+      const pct = m.progress ?? q.progress ?? 0;
+      html = `${islandRing(pct)}<span class="st-island-t">${escapeHtml(`${queueKindLabel(q)} · ${pct}%`)}</span>${more}`;
+    } else if (!q) {
+      html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity=".45"/><path d="M10 9v6M14 9v6"/></svg>`
+        + `<span class="st-island-t">${escapeHtml(jobsHold() || t('islandWaiting'))}</span>${more}`;
+      cls = 'st-island-wait';
+    } else if (others) {
+      html = `<span class="st-island-n st-island-solo">${escapeHtml(t('islandMore').replace('{n}', () => others))}</span>`;
+    }
+  } else if (island.had) {
+    // the last job ended: «Готово» for a moment
+    island.had = false;
+    html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.8"/></svg><span class="st-island-t">${escapeHtml(t('islandDone'))}</span>`;
+    cls = 'st-island-done';
+    island.doneTimer = setTimeout(() => { island.doneTimer = null; island.html = ''; el.classList.add('hidden'); el.innerHTML = ''; }, 2600);
+  } else if (island.doneTimer) {
+    return;  // «Готово» is shown
+  }
+  const sig = cls + html;
+  if (sig === island.html) return;
+  const appear = el.classList.contains('hidden') && !!html;
+  island.html = sig;
+  el.innerHTML = html;
+  el.className = `st-island ${cls}${html ? '' : ' hidden'}`;
+  el.title = t('rlTipQueue');
+  if (appear) animateIn(el);
+  if (!html && jobs.open && jobs.at === 'island') closeJobsPop();
+}
+
 // The rail button: a turning arc while a job runs, a pause while all wait, a check when nothing is left; the count
 function renderJobsRail() {
+  renderJobsIsland();
   const btn = document.getElementById('rail-jobs');
   if (!btn) return;
   const items = state.queue || [];
@@ -306,7 +373,7 @@ function renderJobsPop() {
 }
 
 function toggleJobsPop(at) {
-  const where = at === 'status' ? 'status' : 'rail';
+  const where = at === 'status' ? 'status' : at === 'island' ? 'island' : 'rail';
   if (jobs.open && jobs.at === where) { closeJobsPop(); return; }
   closeLoadPop();
   jobs.open = true;
@@ -316,9 +383,13 @@ function toggleJobsPop(at) {
   pop.classList.remove('hidden');
   document.getElementById('rail-jobs')?.setAttribute('aria-expanded', String(where === 'rail'));
   renderJobsPop();
-  placePanel(pop, where === 'rail' ? document.getElementById('rail-jobs') : document.getElementById('sb-queue'), where);
+  placePanel(pop, jobsAnchor(where), where);
   animateIn(pop);
   if (typeof loadQueue === 'function') loadQueue().catch(() => {});
+}
+
+function jobsAnchor(where) {
+  return document.getElementById(where === 'island' ? 'strip-island' : where === 'rail' ? 'rail-jobs' : 'sb-queue');
 }
 
 function closeJobsPop() {
@@ -340,7 +411,10 @@ function placePanel(pop, anchor, where) {
   const r = anchor.getBoundingClientRect();
   Object.assign(pop.style, { left: '', right: '', top: '', bottom: '' });
   pop.style.maxHeight = `${viewH() - 60}px`;
-  if (where === 'rail') {
+  if (where === 'island') {  // under the strip's island, its right edge with the island's
+    pop.style.top = `${zpx(r.bottom) + 8}px`;
+    pop.style.right = `${Math.max(8, viewW() - zpx(r.right))}px`;
+  } else if (where === 'rail') {
     pop.style.left = `${zpx(r.right) + 8}px`;
     pop.style.top = `${Math.max(8, Math.min(zpx(r.bottom) - pop.offsetHeight, viewH() - pop.offsetHeight - 38))}px`;
   } else {
@@ -532,15 +606,15 @@ function onVramData() {
 
 // Outside click and Escape close the windows; the status bar and the rail follow the queue
 document.addEventListener('pointerdown', e => {
-  if (jobs.open && !e.target.closest('#jobs-pop, #rail-jobs, #sb-queue, .macos-menu')) closeJobsPop();
+  if (jobs.open && !e.target.closest('#jobs-pop, #rail-jobs, #sb-queue, #strip-island, .macos-menu')) closeJobsPop();
   if (load.open && !e.target.closest('#load-pop, #sb-load')) closeLoadPop();
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (jobs.open) { const at = jobs.at; closeJobsPop(); document.getElementById(at === 'rail' ? 'rail-jobs' : 'sb-queue')?.focus(); }
+  if (jobs.open) { const at = jobs.at; closeJobsPop(); jobsAnchor(at)?.focus(); }
   if (load.open) { closeLoadPop(); document.getElementById('sb-load')?.focus(); }
 });
 window.addEventListener('resize', () => {
-  if (jobs.open) placePanel(document.getElementById('jobs-pop'), document.getElementById(jobs.at === 'rail' ? 'rail-jobs' : 'sb-queue'), jobs.at);
+  if (jobs.open) placePanel(document.getElementById('jobs-pop'), jobsAnchor(jobs.at), jobs.at);
   if (load.open) placePanel(document.getElementById('load-pop'), document.getElementById('sb-load'), 'status-left');
 });
