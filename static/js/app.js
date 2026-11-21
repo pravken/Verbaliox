@@ -783,7 +783,8 @@ function openAnalysisMenu(kind, el) {
     at([...opts.map(o => ({ label: `${o.value === sel.value ? '✓ ' : '   '}${o.textContent}`, run: () => {
         sel.value = o.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
-        renderAnalysisHead();
+        // the overview's bar above the cards has the model's chip too (it kept the model before)
+        if (state.activeSummaryTab === 'protocol') renderSummaryPanel(); else renderAnalysisHead();
       } })),
       { sep: true }, { label: t('anModelsSettings'), run: () => openModal('settings', 'analysis') }]);
   } else if (kind === 'cfg') {
