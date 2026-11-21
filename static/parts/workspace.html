@@ -4,14 +4,18 @@
        ========================================================================= -->
   <main class="flex-1 flex flex-col overflow-hidden bg-apple-bg select-text relative">
 
-    <!-- The top bar (static/js/shell.js): record at once, the parts of the app, the open recording -->
-    <nav id="app-bar" class="topbar" data-i18n-aria="navAria" aria-label="Разделы программы">
+    <!-- The strip of the meeting («Пульт встреч», docs/pult-plan.md, stage 2; renderStrip in static/js/pult.js): the state
+         of the day as a pill, the meeting, its details, then the buttons of that state and the record button -->
+    <header id="app-strip" class="strip" data-i18n-aria="stripAria" aria-label="Текущая встреча">
       <!-- The gradient of the "AI" marks of the page (fill: url(#vs-ai-grad)) -->
       <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="vs-ai-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D4B3FF"/><stop offset="1" stop-color="#6CC8FF"/></linearGradient></defs></svg>
-      <!-- The app's sections are on the rail on the left (parts/rail.html); here the studio while it is needed -->
-      <button data-click="switchAppView" data-click-args='["studio"]' id="nav-studio" class="tb-tab hidden" data-i18n-title="tipNavStudio" title="Запись звука и экрана с субтитрами и переводом в реальном времени (Ctrl+4)">
-        <span id="nav-studio-dot" class="hidden w-2 h-2 rounded-full bg-apple-red animate-pulse"></span><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><span id="nav-studio-label" class="tb-lbl" data-i18n="navStudio">Студия</span>
-      </button>
+      <div id="strip-main" data-click="stripOpen" class="strip-main" aria-live="polite">
+        <span id="strip-pill" class="st-pill stp-grey"><i aria-hidden="true"></i><span id="strip-pill-t"></span></span>
+        <span id="strip-lead" class="strip-lead"></span>
+        <span id="strip-meta" class="strip-meta"></span>
+        <span id="strip-grow" class="strip-grow"></span>
+      </div>
+      <span id="strip-acts" class="strip-acts"></span>
       <!-- Recording: a round button at the right end; while recording it shows the time and «Стоп» -->
       <div class="relative tb-rec-wrap">
         <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">
@@ -29,7 +33,7 @@
           </div>
         </div>
       </div>
-    </nav>
+    </header>
 
     <!-- The views of the shell (registerView in static/js/shell.js); each lives in its own part -->
     <!-- @include parts/home.html -->

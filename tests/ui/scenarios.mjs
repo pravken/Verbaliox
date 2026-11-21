@@ -590,6 +590,58 @@ await step('progress redraws one row', async () => {
   expect(r.afterStatus === 1, 'a status change did not draw the list');
 });
 
+// The strip of the meeting («Пульт встреч»): a meeting within 15 minutes, one going on without a recording
+// (its «Подключиться» joins the call), and the recording just made with its summary ready
+await step('meeting strip', async () => {
+  const sent = [];
+  await page.route('**/api/meeting/join', r => { sent.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  const setEvents = list => page.evaluate(list => {
+    strip.events = list.map(([title, a, b]) => ({ key: `s|${title}`, title, s: new Date(Date.now() + a * 60e3), e: new Date(Date.now() + b * 60e3),
+      attendees: [], online: true, join: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_s%40thread.v2/0' }));
+    strip.configured = true; strip.at = Date.now(); strip.html = ''; renderStrip();
+  }, list);
+  const pill = () => page.textContent('#strip-pill-t');
+  await setEvents([['Планёрка отдела', 4, 34]]);
+  expect((await pill()).startsWith('Через'), `soon: ${await pill()}`);
+  expect((await page.textContent('#strip-lead')) === 'Планёрка отдела', 'the meeting is not named');
+  await setEvents([['Планёрка отдела', -6, 24]]);
+  expect(await pill() === 'Идёт без записи', `going on: ${await pill()}`);
+  await page.click('#strip-acts button:has-text("Подключиться")');
+  await sleep(300);
+  expect(sent.length === 1, 'the call was not joined');
+  await page.click('#strip-acts button:has-text("Не записывать")');
+  expect(await pill() !== 'Идёт без записи', '«Не записывать» did not leave the meeting');
+  await page.unroute('**/api/meeting/join');
+  await setEvents([]);
+  await page.evaluate(() => {
+    const at = new Date().toISOString();
+    state.meetings.unshift({ id: 9901, title: 'Созвон с подрядчиком', source: 'recording', status: 'completed', has_summary: 1, duration: 600, created_at: at, completed_at: at });
+    strip.html = ''; renderStrip();
+  });
+  expect(await pill() === 'Итоги готовы', `ready: ${await pill()}`);
+  await page.click('#strip-acts button:has-text("Скрыть")');
+  expect(await pill() !== 'Итоги готовы', 'the summary was not hidden');
+  await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
+});
+
+// «Очередь» on the rail and the load of the status bar: each opens its window next to it, Escape and a click
+// outside close it
+await step('queue and load windows', async () => {
+  await page.click('#rail-jobs');
+  await sleep(300);
+  expect(await page.isVisible('#jobs-pop'), 'the queue window did not open');
+  const r = await page.evaluate(() => [document.getElementById('jobs-pop').getBoundingClientRect().left, document.getElementById('app-rail').getBoundingClientRect().right]);
+  expect(r[0] >= r[1] && r[0] - r[1] < 20, `the queue window is not next to the rail: ${r}`);
+  await page.keyboard.press('Escape');
+  expect(!(await page.isVisible('#jobs-pop')), 'Escape did not close the queue window');
+  await page.click('#sb-load');
+  await sleep(500);
+  expect(await page.isVisible('#load-pop'), 'the load window did not open');
+  expect((await page.textContent('#load-pop')).includes('CPU'), 'the load window has no processor');
+  await page.mouse.click(700, 26);
+  expect(!(await page.isVisible('#load-pop')), 'a click outside did not close the load window');
+});
+
 // The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is
 // busy the app starts on another port, whose storage is empty (audit: an English user got Russian)
 await step('language from the server', async () => {
