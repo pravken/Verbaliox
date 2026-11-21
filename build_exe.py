@@ -319,6 +319,49 @@ class VerbalioxLauncher
         }
     }
 
+    // The app's data folder: VERBALIOX_DATA_DIR, else %LOCALAPPDATA%\Verbaliox (app/paths.py)
+    internal static string DataDir()
+    {
+        string data = Environment.GetEnvironmentVariable("VERBALIOX_DATA_DIR");
+        if (string.IsNullOrEmpty(data))
+            data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox");
+        return data;
+    }
+
+    static string UiLanguage()
+    {
+        try
+        {
+            string f = Path.Combine(DataDir(), "ui-lang.txt");
+            if (File.Exists(f)) return File.ReadAllText(f).Trim();
+        }
+        catch { }
+        // Before the first start of the app: the language of Windows
+        return System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ru" ? "ru" : "en";
+    }
+
+    // assets/icon.ico stores PNG images, which System.Drawing.Icon cannot read: take the biggest PNG
+    internal static System.Drawing.Image LoadLogo(string icoPath)
+    {
+        try
+        {
+            byte[] d = File.ReadAllBytes(icoPath);
+            int count = BitConverter.ToUInt16(d, 4);
+            int bestSize = 0, bestOff = 0, bestLen = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int e = 6 + 16 * i;
+                int w = d[e] == 0 ? 256 : d[e];
+                int len = BitConverter.ToInt32(d, e + 8), off = BitConverter.ToInt32(d, e + 12);
+                if (w <= 128 && w > bestSize) { bestSize = w; bestOff = off; bestLen = len; }
+            }
+            if (bestLen > 0)
+                return System.Drawing.Image.FromStream(new MemoryStream(d, bestOff, bestLen));
+        }
+        catch { }
+        return null;
+    }
+
     // The window shown while the app starts: the first start after an update can take a while (Python
     // compiles its files, the speech libraries load), and without it nothing seems to happen. It closes
     // when the app window appears or the app process ends (errors are shown by the app). It says the
