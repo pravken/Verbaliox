@@ -77,7 +77,8 @@ def api_worktime_apps(start: str, end: str) -> Dict[str, Any]:
     now, before = worktime.apps(a, b), worktime.apps(a - (b - a), a)
     items = [{"app": k, "name": worktime.app_name(k), "minutes": v, "before": before.get(k, 0)}
              for k, v in sorted(now.items(), key=lambda x: -x[1])]
-    return {"enabled": worktime.apps_enabled(), "supported": worktime.idle_seconds() is not None, "apps": items}
+    return {"enabled": worktime.apps_enabled(), "supported": worktime.idle_seconds() is not None, "apps": items,
+            "since": worktime.apps_since()}
 
 
 @router.delete("/api/worktime/apps")

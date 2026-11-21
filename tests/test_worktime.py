@@ -112,6 +112,7 @@ class AppsTest(unittest.TestCase):
         c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
         r = c.get("/api/worktime/apps", params={"start": "2026-11-16", "end": "2026-11-23"}).json()
         self.assertTrue(r["enabled"])
+        self.assertEqual(r["since"], "2026-11-12")  # the first day counted
         self.assertEqual(r["apps"], [{"app": "outlook", "name": "Outlook", "minutes": 1, "before": 2}])
         self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-11-23", "end": "2026-11-16"}).status_code, 400)
         # the widget's own period «Год»: a year is taken, more is not
