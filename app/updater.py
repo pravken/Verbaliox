@@ -828,6 +828,28 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
             raise UpdateFailed(str(e), outcome) from e
 
 
+def refresh_shell_icons() -> None:
+    """Explorer shows the new icon of Verbaliox.exe on the desktop and Start menu shortcuts. It keeps
+    the old picture in its icon cache after the file is replaced in place (found by the user: the
+    shortcut kept the previous icon after an update that changed it). Never fails the update."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        SHCNE_ASSOCCHANGED, SHCNF_IDLIST = 0x08000000, 0x0000
+        ctypes.windll.shell32.SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None)
+    except Exception:
+        pass
+    ie4uinit = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "ie4uinit.exe"
+    if ie4uinit.is_file():  # rebuilds the icon cache of this user (Windows 10 and 11)
+        try:
+            subprocess.run([str(ie4uinit), "-show"], capture_output=True, timeout=30,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
 def _main(argv: List[str]) -> int:
     import argparse
 
@@ -856,6 +878,7 @@ def _main(argv: List[str]) -> int:
             if a.sha256 and _sha256(Path(a.zip)) != a.sha256.lower():
                 raise UpdateFailed("Архив обновления изменился после проверки — обновление отменено")
             apply_update(Path(a.zip), app_dir, data_dir, ui.set)
+            refresh_shell_icons()
             ui.set("Готово." if a.no_restart else "Готово. Запуск Verbaliox…")
             (data_dir / FAILED_NAME).unlink(missing_ok=True)
         except Exception as e:
