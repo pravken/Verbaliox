@@ -3886,3 +3886,13 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .upd-notes h2, .upd-notes h3, .upd-notes h4 { margin: 12px 0 4px; font-size: var(--fs-body); font-weight: 600; }
 .upd-notes p { margin: 4px 0; }
 .upd-notes strong { font-weight: 600; color: #FFFFFF; }
+/* a narrower «Задачи»: the names of the toolbar groups go to the tips, the right part may take two lines; in the
+   calendar «Без срока» goes under the month, so the days keep the width the words of a task need */
+@container (max-width: 900px) {
+  #tasks-view .tk-tbg-lbl { display: none; }
+  #tasks-view .tk-bar { height: auto; min-height: 76px; }
+  #tasks-view .tk-fr { flex: 0 1 auto; max-width: 100%; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+  #tasks-view .tk-cal-body { grid-template-columns: minmax(0, 1fr); }
+}
+/* a narrow list: the checkbox, the icon and the task on the first line, the columns under the task's words */
+@container tklist (max-width: 760px) { .tk-group .tk-row .tk-row-main { flex-basis: calc(100% - 120px); } .tk-group .tk-row .tk-who { margin-left: 46px; } }
