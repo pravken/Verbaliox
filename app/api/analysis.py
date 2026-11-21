@@ -705,7 +705,14 @@ def api_edit_summary(meeting_id: int, key: str, payload: SummaryTextPayload) -> 
     if stale["yes"]:
         raise HTTPException(status_code=409, detail="Раздел изменился, пока вы его правили: откройте его заново")
     refresh_if_exported(meeting_id)
-    return {"summaries": summaries, "suggest": word_changes(old, text)}
+    suggest = word_changes(old, text)
+    try:  # kept for «Словарь → Предложено из записей» until learned or hidden
+        from app.dictionary_page import remember
+
+        remember(meeting_id, suggest)
+    except Exception:
+        pass
+    return {"summaries": summaries, "suggest": suggest}
 
 class SummaryFixPayload(BaseModel):
     wrong: str
