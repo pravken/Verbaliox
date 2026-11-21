@@ -168,6 +168,17 @@ await step('scrub the wave', async () => {
   await page.evaluate(() => document.getElementById('media-player').pause());
 });
 
+// «Сведения»: four cards of «key — value» rows, the actions of each under a line (only the program's own)
+await step('recording details', async () => {
+  await page.evaluate(() => openRecordTab('info'));
+  await sleep(1200);
+  const cards = await page.$$eval('#info-content [data-info]', els => els.map(e => e.dataset.info));
+  expect(cards.join() === 'file,transcript,analysis,storage', `the cards: ${cards}`);
+  const acts = await page.$$eval('#info-content .kv-acts button', els => els.map(e => e.dataset.click));
+  for (const fn of ['recReconfigure', 'openResplitDialog', 'recRegenFromInfo', 'recMoveFromInfo']) expect(acts.includes(fn), `no ${fn} in «Сведения»`);
+  await page.evaluate(() => openRecordTab('transcript'));
+});
+
 // The player minimized to one line and back; the choice is kept; the thin track still seeks
 await step('minimized player', async () => {
   await page.click('#rp-min-btn');

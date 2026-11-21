@@ -3045,6 +3045,13 @@ const I18N = {
     recRegenAnalysis: 'Пересоздать анализ',
     rpMinimize: 'Свернуть проигрыватель',
     rpExpand: 'Развернуть проигрыватель',
+    infoTranscriptCard: 'Расшифровка',
+    infoAnalysisCard: 'Анализ',
+    infoStorageCard: 'Хранение',
+    infoResplit: 'Разделить по говорящим заново',
+    infoNoAnalysis: 'Не создан',
+    infoMoveFolder: 'В другую папку…',
+    recRegenAnalysisDlg: 'Пересоздать анализ…',
 
   },
   en: {
@@ -6090,6 +6097,13 @@ const I18N = {
     recRegenAnalysis: 'Make the analysis again',
     rpMinimize: 'Minimize the player',
     rpExpand: 'Expand the player',
+    infoTranscriptCard: 'Transcript',
+    infoAnalysisCard: 'Analysis',
+    infoStorageCard: 'Storage',
+    infoResplit: 'Split by speakers again',
+    infoNoAnalysis: 'Not made',
+    infoMoveFolder: 'Move to another folder…',
+    recRegenAnalysisDlg: 'Make the analysis again…',
 
   }
 };

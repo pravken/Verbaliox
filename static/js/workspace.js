@@ -2253,6 +2253,7 @@ const REC_CARD_ICONS = {
   mark: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
   note: '<path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4M8.5 12h7M8.5 16h5"/>',
   topic: '<path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>',
   mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>',
   doc: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 16h4"/>',
   ask: '<path d="M4 5.5h16v10H9l-5 4z"/><path d="M9.5 9.2a2.5 2.5 0 114 2c-.9.5-1.5 1-1.5 2"/>',
@@ -2469,4 +2470,18 @@ function recTemplateMenu(el) {
     { sep: true }, { label: `+ ${t('anNewTemplate')}`, run: () => openTemplateDialog(null) },
     { label: t('anAllTemplates'), run: () => openTemplatesEditor() }];
   setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6), 0);
+}
+
+// «Сведения»: «Пересоздать анализ…» opens «Анализ» and makes the overview again (the model chosen there);
+// «В другую папку…» is the folder menu of the recording's own menu
+function recRegenFromInfo() {
+  state.activeSummaryTab = 'protocol';
+  openRecordTab('summary');
+  generateSummaryForActiveTab();
+}
+function recMoveFromInfo(el) {
+  const m = (state.meetings || []).find(x => state.activeMeeting && x.id === state.activeMeeting.id) || state.activeMeeting;
+  if (!m) return;
+  const r = el.getBoundingClientRect();
+  setTimeout(() => openMoveRecordMenu(m, { right: r.right, bottom: r.bottom }), 0);
 }
