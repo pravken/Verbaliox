@@ -485,7 +485,7 @@ function openTasksCols(e) {
     : `<div class="tk-hint">${escapeHtml(t('tkColsCardsHint'))}</div>`;
   tkOpenPop(`<div class="tk-colpop"><b>${escapeHtml(t('tkCols'))}</b>${dense}${Object.keys(TK_COLS).map(check).join('')}
     <div class="tk-row2"><button class="tk-btn tk-btn-sm" data-click="resetTasksCols">${escapeHtml(t('tkColsReset'))}</button><span class="tk-grow"></span>
-      <button class="tk-btn tk-btn-sm tk-btn-primary" data-click="tkClosePop">${escapeHtml(t('tkColsDone'))}</button></div></div>`, e.currentTarget, 260);
+      <button class="tk-btn tk-btn-sm tk-btn-primary" data-click="tkClosePop">${escapeHtml(t('tkColsDone'))}</button></div></div>`, e.currentTarget, 290);
 }
 function tkColsChanged() {
   tkSaveCols();

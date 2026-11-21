@@ -5155,3 +5155,7 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
   100% { transform: translate(var(--x), var(--y)) scale(0.2); opacity: 0; filter: hue-rotate(-30deg); }
 }
 @media (prefers-reduced-motion: reduce) { .about-spark { display: none; } .about-logo.about-shake .about-mark { animation: none; } }
+
+/* «Колонки» of «Записи» and «Задачи»: wide enough for «Строки» and its two choices (the segment overflowed the
+   panel by a few pixels); the same width in both sections */
+.lt-colpop { width: 290px; }
