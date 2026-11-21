@@ -729,7 +729,7 @@ function dbSysloadHtml(size) {
   if (!data) return `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
   const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
-  const row = (k, all, mine, value, tip, ownText) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${k}</span>`
+  const row = (k, all, mine, value, tip, ownText) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>`
     + `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`
     + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
     + `<div class="db-sl-own">${ownText ? `<span class="ld-own"><i></i>Verbaliox ${escapeHtml(ownText)}</span>` : ''}</div>`;
