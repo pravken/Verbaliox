@@ -3737,3 +3737,8 @@ button.sc-at:hover { color: var(--accent-text); }
 .cap-row.cap-pending .cap-bub { padding: 0 14px; background: none; border-color: transparent; }
 .cap-row.cap-pending .cap-o { font-size: 18px; line-height: 1.2; }
 .cap-row.cap-pending .cap-who, .cap-row.cap-pending .cap-av { display: none; }
+/* An unloaded player (stage 5): less height, three buttons in the middle, the volume's slider on hover */
+.rp-body { gap: 10px; padding: 16px 28px 10px; }
+.rp-track { height: 64px; }
+.rp-vol input[type="range"].rp-volume { width: 0; opacity: 0; transition: width var(--dur) ease, opacity var(--dur) ease; }
+.rp-vol:hover input[type="range"].rp-volume, .rp-vol:focus-within input[type="range"].rp-volume { width: 72px; opacity: 1; }

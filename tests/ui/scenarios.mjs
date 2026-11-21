@@ -109,6 +109,26 @@ await step('transcript as a chat', async () => {
   await page.click('#tx-layout-chat');
 });
 
+// The unloaded player (stage 5): three buttons in the middle, the phrase's repeat and loop in «⋯»; J goes back
+// 10 s; the play button is the same element while it plays (a hover on it is not restarted)
+await step('unloaded player', async () => {
+  expect(await page.locator('.rp-center button').count() === 3, 'more than three buttons in the middle of the player');
+  const items = await page.evaluate(() => { rpTogglePop('more'); const x = [...document.querySelectorAll('#rp-pop-more .rp-item')].map(b => b.textContent.trim()); rpClosePop(); return x; });
+  expect(items.some(x => /Повторить реплику/.test(x)) && items.some(x => /по кругу/.test(x)), `«⋯» lacks the phrase's repeat: ${items.join(' | ')}`);
+  const res = await page.evaluate(async () => {
+    const p = document.getElementById('media-player');
+    p.muted = true;
+    const btn = document.getElementById('play-pause-btn');
+    p.currentTime = 30;
+    await new Promise(r => setTimeout(r, 200));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ', key: 'j', bubbles: true }));
+    await new Promise(r => setTimeout(r, 200));
+    return { at: p.currentTime, same: document.getElementById('play-pause-btn') === btn };
+  });
+  expect(res.at > 15 && res.at < 25, `J did not go back 10 s: ${res.at}`);
+  expect(res.same, 'the play button was drawn again');
+});
+
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
 await step('menu at the bottom', async () => {
   const box = await page.evaluate(() => {
