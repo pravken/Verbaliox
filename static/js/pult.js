@@ -140,12 +140,17 @@ function stripState() {
     const q = (state.queue || []).find(x => x.id === m.id);
     const running = q && q.state === 'running';
     const mins = Math.max(1, Math.round((m.duration || 0) / 60));
-    const grow = running ? serverText(m.stage_text || q.stage_text || '')
+    // the tracks of a stopped recording being mixed: not a wait for the transcription (reported by the user)
+    const mixing = m.status === 'mixing';
+    const open = state.appView === 'library' && state.activeMeeting && state.activeMeeting.id === m.id;
+    const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
       : state.queueMeeting ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
-    return { kind: 'after', pill: running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running ? 'blue' : 'grey',
+    return { kind: 'after', pill: mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
+      : running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running || mixing ? 'blue' : 'grey',
       lead: m.title || t('hmUntitled'), meta: m.duration ? t('stripRecorded').replace('{n}', () => mins) : '', grow, click: m.id, tip: t('tbRecOpen'),
-      acts: [act('openMeeting', [m.id], t('tbRecOpen'), 'ghost')] };
+      // the recording already open: no «Открыть запись» that does nothing
+      acts: open ? [] : [act('openMeeting', [m.id], t('tbRecOpen'), 'ghost')] };
   }
   if (m && m.status === 'completed' && !stripSeen.has(m.id)) {
     const mins = Math.max(1, Math.round((m.duration || 0) / 60));
