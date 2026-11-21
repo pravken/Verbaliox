@@ -47,7 +47,10 @@ async function stripCallTick() {
   if (!st) return;
   if (!st.supported) { strip.callOff = true; strip.call = null; return; }
   const app = (st.apps || []).find(a => a.id === st.meeting_app);  // a browser alone is no call
+  const prev = strip.call;
   strip.call = app ? app.name : null;
+  // «Не записывать» was for that call: once it is over, the next call of the same app is shown again
+  if (prev && prev !== strip.call) strip.skip.delete(`call:${prev}`);
 }
 
 // The service of a meeting's call, from its link
@@ -112,11 +115,14 @@ function stripState() {
     const e = liveMeeting;
     const min = e ? Math.max(1, Math.round((now - e.s.getTime()) / 60e3)) : 0;
     const st = e ? hmMeetingState(e) : '';
-    const why = { off: 'stripWhyOff', never: 'stripWhyNever', skipped: 'stripWhySkipped', on: 'stripWhyLate', ask: 'stripWhyLate' }[st] || 'stripWhyCall';
-    return { kind: 'unrec', pill: t('stripUnrec'), cls: 'amber', lead: e ? e.title || t('hmUntitled') : strip.call,
+    // its recording was made and stopped before the meeting's end: said so, not «Автозапись не началась»
+    const stopped = !!e && (home.started.has(e.key) || !!e.recording);
+    const why = stopped ? 'stripWhyStopped'
+      : { off: 'stripWhyOff', never: 'stripWhyNever', skipped: 'stripWhySkipped', on: 'stripWhyLate', ask: 'stripWhyLate' }[st] || 'stripWhyCall';
+    return { kind: 'unrec', pill: t(stopped ? 'stripRecStopped' : 'stripUnrec'), cls: 'amber', lead: e ? e.title || t('hmUntitled') : strip.call,
       meta: e ? [stripService(e) || strip.call, t('stripMinGoing').replace('{n}', () => min)].filter(Boolean).join(' · ') : t('stripCall'),
       grow: t(why),
-      acts: [joinAct(e), act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t('stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
+      acts: [joinAct(e), act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t(stopped ? 'stripRecordAgain' : 'stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
         act('stripSkip', [e ? e.key : `call:${strip.call}`], t('stripDontRecord'), 'ghost')].filter(Boolean) };
   }
   if (next && next.s.getTime() - now <= STRIP_SOON_MS) {
