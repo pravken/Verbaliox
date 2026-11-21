@@ -1128,6 +1128,17 @@ def _install_update_on_exit() -> None:
         print(f"[update] not installed on exit: {e}", file=sys.stderr)
 
 
+def show_info_box(text: str) -> None:
+    if sys.platform == "win32" and "--headless" not in sys.argv:
+        try:
+            MB_ICONINFORMATION = 0x40
+            _user32().MessageBoxW(None, text, "Verbaliox", MB_ICONINFORMATION | MB_ON_TOP)
+            return
+        except Exception:
+            pass
+    print(text)
+
+
 def show_error_box(text: str) -> None:
     # --headless runs without a window, maybe with nobody at the screen: a message box would wait forever
     if sys.platform == "win32" and "--headless" not in sys.argv:
@@ -1192,6 +1203,11 @@ def main() -> None:
             from app import updater as _upd
             from app.paths import APP_DIR as _APP, DATA_DIR as _DATA
 
+            if _upd.installer_running(_DATA):
+                # files are being replaced now: this start waits for the installer instead of rolling them back
+                show_info_box("Идёт установка обновления Verbaliox.\n\n"
+                              "Когда она закончится, программа откроется сама или её можно будет открыть снова.")
+                return
             if _upd.recover_interrupted(_APP, _DATA):
                 print("[update] an update cut off half-way: the previous version was put back")
         except Exception as e:
