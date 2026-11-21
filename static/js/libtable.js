@@ -293,8 +293,27 @@ function ltWidth(col) {
   return w >= 40 ? Math.min(w, 900) : LT_COLS[col].w;
 }
 
+// The narrowest a column gets in a narrow window: the wide ones (the people, the feature) give a quarter of their
+// width before the table needs a scroll (at 1100 px the default columns overflowed the card by a few pixels)
+const LT_NAME_MIN = 150;
+function ltMinWidth(col) {
+  const w = ltWidth(col);
+  return w >= 120 ? Math.round(w * 0.75) : w;
+}
+
 function ltTableTpl(cols) {
-  return `${LT_LEAD} minmax(180px, 1fr) ${cols.filter(c => c !== 'name').map(c => `${ltWidth(c)}px`).join(' ')}`.trim();
+  const track = (c) => {
+    const w = ltWidth(c), min = ltMinWidth(c);
+    return min < w ? 'minmax(' + min + 'px, ' + w + 'px)' : w + 'px';
+  };
+  return [LT_LEAD, 'minmax(' + LT_NAME_MIN + 'px, 1fr)', ...cols.filter(c => c !== 'name').map(track)].join(' ');
+}
+
+// The table's least width: the lead columns, the name, the others at their least, the gaps (12 px) and the
+// padding and border of the head row (2 × 24 + 2)
+function ltTableMinW(cols) {
+  const others = cols.filter(c => c !== 'name');
+  return 22 + 18 + LT_NAME_MIN + others.reduce((s, c) => s + ltMinWidth(c), 0) + 12 * (others.length + 2) + 50;
 }
 
 function ltRowAttrs(m, extra = '') {
@@ -316,7 +335,7 @@ function ltTableHtml(groups, inFolders = false) {
     LT.ids.push(m.id);
     return `<div ${ltRowAttrs(m)}>${ltBox(m)}${ltKind(m)}` + cols.map(c => `<span class="lt-c lt-c-${c}">${ltCell(c, m)}</span>`).join('') + '</div>';
   }).join('') || `<div class="lt-none">${escapeHtml(t('ltFolderEmpty'))}</div>`)).join('');
-  const minW = 40 + 180 + cols.filter(c => c !== 'name').reduce((s, c) => s + ltWidth(c) + 12, 0) + 40;
+  const minW = ltTableMinW(cols);
   return { html: `<div class="lt-hrow">${head}</div>${body}`, tpl: ltTableTpl(cols), minW };
 }
 
@@ -824,7 +843,7 @@ function ltOpen(id) {
     const move = (ev) => {
       w = Math.max(40, Math.min(900, Math.round(start + zpx(ev.clientX - x0))));
       const widths = { ...ltPrefs().widths, [c]: w };
-      body.style.setProperty('--lt-tpl', `${LT_LEAD} minmax(180px, 1fr) ${ltShownCols().filter(x => x !== 'name').map(x => `${x === c ? w : (Number(widths[x]) >= 40 ? Math.min(widths[x], 900) : LT_COLS[x].w)}px`).join(' ')}`);
+      body.style.setProperty('--lt-tpl', `${LT_LEAD} minmax(${LT_NAME_MIN}px, 1fr) ${ltShownCols().filter(x => x !== 'name').map(x => `${x === c ? w : (Number(widths[x]) >= 40 ? Math.min(widths[x], 900) : LT_COLS[x].w)}px`).join(' ')}`);
     };
     // the end is heard on the window and when the capture is lost (the handle redrawn, the window left):
     // the cursor «col-resize» and the selection off must never stay behind
