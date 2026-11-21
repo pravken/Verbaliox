@@ -838,8 +838,10 @@ function drawPeopleView() {
 async function pvLoadCard() {
   const box = document.getElementById('pv-card');
   if (!PV.sel) { PV.card = null; box.innerHTML = `<div class="sp-empty">${escapeHtml(t('spDirEmpty'))}</div>`; return; }
-  const res = await fetch(`/api/people/card?name=${encodeURIComponent(PV.sel)}`).catch(() => null);
+  const name = PV.sel;
+  const res = await fetch(`/api/people/card?name=${encodeURIComponent(name)}`).catch(() => null);
   const data = res ? await readJson(res) : null;
+  if (PV.sel !== name) return;  // another person chosen meanwhile: this late answer is not theirs
   if (!res || !res.ok) { box.innerHTML = `<div class="sp-empty">${escapeHtml(serverText(data && data.detail) || t('errorGeneric'))}</div>`; return; }
   PV.card = data;
   drawPeopleCard();

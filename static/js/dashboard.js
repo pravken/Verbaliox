@@ -166,8 +166,11 @@ function dbWSince(id, since = '') {
 async function dbLoadPeople() {
   if (!dbPrefs().layout.some(w => w.id === 'people')) return;
   const [a, b] = dbWRange('people'), f = dbPrefs().feature;
+  const asked = `${a}|${b}|${f}`;
   const r = await fetch(`/api/dashboard/people?start=${a}&end=${b}${f ? `&feature=${f}` : ''}`).then(x => (x.ok ? x.json() : null)).catch(() => null);
-  if (r) DB.people = { period: dbWPeriod('people'), list: r.people || [] };
+  // the period or the feature changed meanwhile: a late answer does not replace the newer one
+  const [a2, b2] = dbWRange('people');
+  if (r && asked === `${a2}|${b2}|${dbPrefs().feature}`) DB.people = { period: dbWPeriod('people'), list: r.people || [] };
 }
 
 // The hours worked of this week (app/worktime.py): asked again at each tick, the minutes go on
@@ -183,7 +186,8 @@ async function dbLoadApps() {
   if (!dbPrefs().layout.some(w => w.id === 'apps')) return;
   const [a, b] = dbWRange('apps');
   const r = await fetch(`/api/worktime/apps?start=${a}&end=${b}`).then(x => (x.ok ? x.json() : null)).catch(() => null);
-  if (r) DB.apps = { ...r, period: dbWPeriod('apps') };
+  const [a2, b2] = dbWRange('apps');
+  if (r && a === a2 && b === b2) DB.apps = { ...r, period: dbWPeriod('apps') };  // not a late answer of another period
 }
 
 // «7 ч 45» for a day's head: the hours worked, short
