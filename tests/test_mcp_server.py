@@ -100,6 +100,25 @@ class McpServerTest(unittest.TestCase):
         database.update_settings({"mcp_local_only": "true"})  # allowed by the user
         self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
 
+    def test_a_setting_changed_by_the_app_counts_at_once(self):
+        """Found in the review: the MCP server is a process of its own and kept its cache of the settings, so
+        «only local» recordings stayed open to the agent after the user took the permission back in the app."""
+        def app_sets(value):  # the app writes the table from its own process (here: its own connection)
+            import sqlite3
+
+            conn = sqlite3.connect(str(database.DB_PATH))
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('mcp_local_only', ?)", (value,))
+            conn.commit()
+            conn.close()
+
+        self.assertIn(self.secret, mcp_server._hidden())
+        app_sets("true")
+        self.assertEqual(mcp_server._hidden(), set())
+        self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
+        app_sets("false")
+        self.assertIn(self.secret, mcp_server._hidden())
+        self.assertEqual([m["id"] for m in _call("search_meetings", query="туман")[1]["meetings"]], [self.mid])
+
     def test_people_heard_only_in_local_only_recordings_are_not_listed(self):
         """Found in the audit: list_people counted the local-only recordings, so their speakers, calendar
         attendees and task owners reached the agent."""
