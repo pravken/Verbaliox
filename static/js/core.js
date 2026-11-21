@@ -447,6 +447,10 @@ function setUILanguage(lang) {
 // A styled yes/no question (instead of the browser's confirm): resolves true or false.
 // Cancel is focused, so Enter does not confirm by accident.
 // opts.cancel: the label of the other button; opts.single: one button only (a message, not a question)
+// One caret for every menu button and one «+» for every add button (the same line icons, never ▾ or a text plus)
+const VX_CARET = '<svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const VX_PLUS = '<svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
 function confirmDialog(title, text, okLabel, danger = true, opts = {}) {
   return new Promise(resolve => {
     const wrap = document.createElement('div');

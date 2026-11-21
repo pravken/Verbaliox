@@ -350,7 +350,7 @@ function dbRenderHead() {
     `<button role="radio" aria-checked="${p.period === k}" class="tk-seg-btn${p.period === k ? ' tk-on' : ''}" data-click="setDashPeriod" data-click-args='["${k}"]'>${escapeHtml(t(`dbPeriod_${k}`))}</button>`).join('');
   const f = p.feature ? featureById(p.feature) : null;
   const fb = document.getElementById('db-feature-btn');
-  fb.textContent = `${f ? f.name : t('dbAllFeatures')} ▾`;
+  fb.innerHTML = `<span class="lt-ell">${escapeHtml(f ? f.name : t('dbAllFeatures'))}</span>${VX_CARET}`;
   fb.classList.toggle('lt-btn-on', !!f);
   document.getElementById('db-edit-label').textContent = t(DB.edit ? 'dbDone' : 'dbEdit');
   document.getElementById('db-edit-btn').setAttribute('aria-pressed', DB.edit ? 'true' : 'false');
