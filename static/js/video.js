@@ -381,11 +381,11 @@ document.addEventListener('keydown', (e) => {
     } else if (e.code === 'KeyI' && !e.shiftKey && state.activeMeeting && !anyModalOpen()) {
       e.preventDefault();  // the details of the open recording (its ⋯ in the top bar)
       rpOpenInfo();
-    } else if (/^(Digit|Numpad)[1-5]$/.test(e.code) && !e.shiftKey && !anyModalOpen()) {
-      // Ctrl+1…5: the rail's sections in their order (Главная, Записи, Задачи, Люди, Ассистент)
+    } else if (/^(Digit|Numpad)[1-6]$/.test(e.code) && !e.shiftKey && !anyModalOpen()) {
+      // Ctrl+1…6: the rail's sections in their order (Сегодня, Обзор, Записи, Задачи, Люди, Ассистент)
       e.preventDefault();
       const n = Number(e.code.slice(-1));
-      if (n === 4) openContacts(); else switchAppView(['dashboard', 'libtable', 'tasks', '', 'ask'][n - 1]);
+      if (n === 5) openContacts(); else switchAppView(['home', 'dashboard', 'libtable', 'tasks', '', 'ask'][n - 1]);
     }
     return;
   }
