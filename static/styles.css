@@ -4607,3 +4607,6 @@ button.sc-at:hover { color: var(--accent-text); }
 .imp-empty-ic svg { width: 20px; height: 20px; }
 .imp-empty-btn { margin-top: 6px; }
 .imp-inline { padding: 4px 0 0; }
+
+.lt-btn.lt-danger { color: #FF8A80; }
+.lt-btn.lt-danger:hover { background: rgba(255, 69, 58, 0.16); color: #FFB4AB; }
