@@ -3032,6 +3032,11 @@ const I18N = {
     txLayoutChatTip: 'Реплики облачками: аватар и имя один раз на серию реплик',
     txLayoutText: 'Текст',
     txLayoutTextTip: 'Сплошной текст: реплики одного говорящего одним абзацем',
+    rpLoopItem: 'Повторять реплику по кругу',
+    scBack10: 'Назад на 10 секунд / пауза',
+    scLoopPhrase: 'Повторять реплику по кругу',
+    scMarkMoment: 'Отметка в плеере / к следующей отметке',
+    scAbRepeat: 'Повтор отрезка: начало и конец',
 
   },
   en: {
@@ -6064,6 +6069,11 @@ const I18N = {
     txLayoutChatTip: 'Phrases as bubbles: the avatar and the name once for a run of phrases',
     txLayoutText: 'Text',
     txLayoutTextTip: 'Running text: a speaker\'s phrases as one paragraph',
+    rpLoopItem: 'Play the phrase in a loop',
+    scBack10: 'Back 10 seconds / pause',
+    scLoopPhrase: 'Play the phrase in a loop',
+    scMarkMoment: 'Mark in the player / to the next mark',
+    scAbRepeat: 'Repeat a stretch: its start and end',
 
   }
 };

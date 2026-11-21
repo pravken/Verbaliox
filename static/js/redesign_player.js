@@ -619,6 +619,7 @@ function rpToggleLoop() {
 function rpUpdateLoopButton() {
   const b = document.getElementById('rp-loop-btn');
   if (b) b.setAttribute('aria-pressed', String(!!rp.loopSeg));
+  if (rp.open === 'more') rpRenderPop();  // its tick in «⋯»
 }
 
 function rpToggleRemain() {
@@ -834,6 +835,10 @@ function rpMoreHtml() {
   const hasMedia = !!(m && !m.media_removed && p && p.src);
   const done = !!(m && (m.segments || []).length);
   let html = '';
+  // the phrase again and its loop: out of the bar (stage 5, an unloaded player), here and on L
+  html += rpItem(t('rdPlyrTipRepeat'), 'rpRepeatPhrase', [], { disabled: !hasMedia || !done });
+  html += rpItem(t('rpLoopItem'), 'rpToggleLoop', [], { key: 'L', mark: rp.loopSeg ? '✓' : '', disabled: !hasMedia || !done });
+  html += '<div class="rp-divider"></div>';
   if (!rp.ab) html += rpItem(t('rdPlyrAbStart'), 'rpSetA', [], { key: 'A', disabled: !hasMedia });
   else if (rp.ab.b == null) html += rpItem(t('rdPlyrAbEnd'), 'rpSetB', [], { key: `B · ${formatTime(rp.ab.a)}` });
   else html += rpItem(t('rdPlyrAbClear'), 'rpClearAb', [], { mark: '✓', key: `${formatTime(rp.ab.a)}–${formatTime(rp.ab.b)}` });
@@ -1142,6 +1147,8 @@ document.addEventListener('keydown', (e) => {
   const p = rpPlayer();
   if (state.appView !== 'library' || !state.activeMeeting || !p || !p.src) return;
   if (e.code === 'KeyL') { e.preventDefault(); rpToggleLoop(); }
+  else if (e.code === 'KeyJ' && !e.shiftKey) { e.preventDefault(); skipPlayer(-10); }  // J, K: as in video players
+  else if (e.code === 'KeyK' && !e.shiftKey) { e.preventDefault(); togglePlayPause(); }
   else if (e.code === 'KeyA' && !e.shiftKey) { e.preventDefault(); rpSetA(); }
   else if (e.code === 'KeyB' && !e.shiftKey) { e.preventDefault(); if (rp.ab && rp.ab.b != null) rpClearAb(); else rpSetB(); }
   else if (e.code === 'KeyM') { e.preventDefault(); if (e.shiftKey) rpNextMark(); else rpMarkMoment(); }
