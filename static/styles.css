@@ -4897,3 +4897,7 @@ button.sc-at:hover { color: var(--accent-text); }
 .theme-sw:hover { transform: scale(1.08); }
 .theme-sw.on { box-shadow: 0 0 0 2px #F5F5F7; }
 .theme-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The caret of «● Запись ▾» in the middle of its part (asked by the user: it sat off centre; a 2px padding
+   on the right of the former round button was left) */
+.tb-rec-more { padding: 0; display: inline-flex; align-items: center; justify-content: center; }
