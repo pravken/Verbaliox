@@ -1360,8 +1360,15 @@ function libSelectionShown() {
   return state.multi.size > 0 || !state.appView || state.appView === 'library';
 }
 
+// The recordings in the order on screen: the rows of «Записи» (the list of the old sidebar is hidden)
 function libVisibleIds() {
+  if (state.appView === 'libtable' && typeof LT !== 'undefined') return [...LT.ids];
   return [...document.querySelectorAll('#meetings-list [data-mid]')].map(el => Number(el.dataset.mid));
+}
+
+// The open recording among the ones just renamed: its title is read again, the section on screen stays
+function libRefreshActiveIn(ids) {
+  if (state.activeMeeting && ids.has(state.activeMeeting.id)) selectMeeting(state.activeMeeting.id, false);
 }
 
 function libRowClick(e, id) {
@@ -1471,7 +1478,7 @@ async function bulkRename() {
     if (!res.ok) failed++;
   }
   await loadMeetingsList();
-  if (state.activeMeeting && state.multi.has(state.activeMeeting.id)) openMeeting(state.activeMeeting.id);
+  libRefreshActiveIn(state.multi);
   if (failed) showError(t('bulkSomeFailed').replace('{n}', () => failed));
 }
 
@@ -1486,7 +1493,7 @@ async function bulkAutoTitles() {
     if (!res.ok) failed++;
     await loadMeetingsList();
   }
-  if (state.activeMeeting && state.multi.has(state.activeMeeting.id)) openMeeting(state.activeMeeting.id);
+  libRefreshActiveIn(state.multi);
   showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('bulkAutoTitleDone'));
 }
 
