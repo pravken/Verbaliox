@@ -168,6 +168,19 @@ class HomeApiTest(unittest.TestCase):
         self.assertIsNone(evs[1]["recording"])
         self.assertEqual(c.get("/api/calendar/day", params={"start": "2026-10-24T18:00", "end": "2026-10-24T09:00"}).status_code, 400)
 
+    def test_calendar_day_gives_the_recordings_made_outside_its_meetings(self):
+        """A day gone by shows on its timeline the recordings made that day outside any meeting, not the meetings' own."""
+        c = self._client()
+        rec = database.create_meeting(title="Созвон", filename="s.wav", media_path="s.wav", recorded_at="2026-10-24T10:05:00")
+        own = database.create_meeting(title="Сама по себе", filename="o.wav", media_path="o.wav", recorded_at="2026-10-24T16:30:00")
+        other = database.create_meeting(title="Другой день", filename="d.wav", media_path="d.wav", recorded_at="2026-10-25T16:30:00")
+        with mock.patch.object(calendar_ics, "events", return_value=calendar_ics.parse(ICS)):
+            data = c.get("/api/calendar/day", params={"start": "2026-10-24T09:00", "end": "2026-10-24T18:00"}).json()
+        self.assertEqual(data["events"][0]["recording"]["id"], rec["id"])
+        self.assertEqual([x["id"] for x in data["recordings"]], [own["id"]])
+        self.assertEqual(data["recordings"][0]["at"], "2026-10-24T16:30")
+        self.assertNotIn(other["id"], [x["id"] for x in data["recordings"]])
+
     def test_a_recording_time_with_a_zone_does_not_break_the_day(self):
         """An imported recording may carry «+03:00»: compared as local time, not with a 500."""
         from datetime import datetime
