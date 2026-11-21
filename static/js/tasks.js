@@ -8,7 +8,7 @@
 const TK = {
   data: { tasks: [], people: [], meetings: {}, today: '' },
   loaded: false,
-  view: 'list',            // list | cal
+  view: 'list',            // list (the table) | cards | cal
   by: 'due',               // due | person | feature | record
   filter: 'open',          // open | mine | over | done | all
   people: [],              // casefolded names the list is limited to
@@ -197,10 +197,14 @@ function tkSeg(id, items, current, fn) {
 }
 
 const TK_ICON_LIST = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17.5" r="1"/></svg>';
+const TK_ICON_CARDS = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="4" width="7" height="7" rx="1.5"/><rect x="13.5" y="4" width="7" height="7" rx="1.5"/><rect x="3.5" y="13" width="7" height="7" rx="1.5"/><rect x="13.5" y="13" width="7" height="7" rx="1.5"/></svg>';
 const TK_ICON_CAL = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
 
 function renderTasksBar() {
-  tkSeg('tk-views', [['list', t('tkViewList'), TK_ICON_LIST], ['cal', t('tkViewCal'), TK_ICON_CAL]], TK.view, 'setTasksView');
+  tkSeg('tk-views', [['list', t('tkViewTable'), TK_ICON_LIST], ['cards', t('tkViewCards'), TK_ICON_CARDS], ['cal', t('tkViewCal'), TK_ICON_CAL]], TK.view, 'setTasksView');
+  const cols = document.getElementById('tk-cols-btn');
+  cols.disabled = TK.view === 'cal';
+  cols.title = TK.view === 'cal' ? t('tkColsInCal') : t('tkColsTip');
   // the grouping belongs to the list: in the calendar it is greyed and keeps its place
   const box = document.getElementById('tk-groups-box');
   box.classList.toggle('tk-tbg-off', TK.view === 'cal');
@@ -339,9 +343,13 @@ function renderTasksList() {
       <div class="tk-group-head">${icon}${dot}${title}<b class="pcd-n">${g.items.length}</b>${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
-      ${tkHeadRow()}${tkGroupRowsHtml(g)}
+      ${tkGroupRowsHtml(g)}
     </section>`;
   }).join('');
+  // the names of the columns: one bar above the cards, framed like them and kept in sight (as in «Записи»);
+  // the cards view has none
+  if (TK.view === 'list') box.insertAdjacentHTML('afterbegin', tkColBar());
+  box.classList.toggle('tk-dense', TK.view === 'list' && !!TK.dense);
   linkPeople(box, '.tk-row-text');  // a person the task names opens their card (people.js)
 }
 
@@ -352,13 +360,8 @@ function tkGroupRowsHtml(g) {
   TK.open = TK.open || new Set();
   const all = TK.open.has(g.key) || g.items.length <= _tkGroupRows + 5;
   const shown = all ? g.items : g.items.slice(0, _tkGroupRows);
-  return shown.map(tkRowHtml).join('') + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
-}
-
-// The names of the columns, inside each card under its title, on the grid of its rows
-function tkHeadRow() {
-  return `<div class="tk-row tk-thead" aria-hidden="true"><span></span><span>${escapeHtml(t('tkColTask'))}</span><span>${escapeHtml(t('tkColWho'))}</span>`
-    + `<span>${escapeHtml(t('tkColDue'))}</span><span>${escapeHtml(t('tkColFrom'))}</span><span></span></div>`;
+  const body = TK.view === 'cards' ? `<div class="tk-tcards">${shown.map(tkCardHtml).join('')}</div>` : shown.map(tkRowHtml).join('');
+  return body + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
 }
 
 function showAllInTaskGroup(key) {
@@ -367,22 +370,118 @@ function showAllInTaskGroup(key) {
   renderTasksList();
 }
 
-function tkRowHtml(x) {
-  const done = tkIsDone(x);
-  const rec = x.meeting_id
+// --- The columns of the table (and the fields of the cards), chosen in «Колонки»: the task's words always stay ---
+const TK_COLS_KEY = 'vx-tasks-cols';
+const TK_COLS_DEFAULT = ['who', 'due'];
+const TK_COLS = {
+  who: { label: 'tkColWho', width: '11rem' },
+  due: { label: 'tkColDue', width: '8.5rem' },
+  src: { label: 'tkColMeeting', width: '11rem' },
+  feature: { label: 'tkColFeature', width: '9rem' },
+  made: { label: 'tkColMade', width: '7rem' },
+};
+function tkLoadCols() {
+  try {
+    const v = JSON.parse(localStorage.getItem(TK_COLS_KEY) || 'null');
+    if (v && Array.isArray(v.cols)) { TK.cols = Object.keys(TK_COLS).filter(k => v.cols.includes(k)); TK.dense = !!v.dense; }
+  } catch { /* the defaults */ }
+  if (!TK.cols) TK.cols = [...TK_COLS_DEFAULT];
+}
+tkLoadCols();
+function tkSaveCols() {
+  try { localStorage.setItem(TK_COLS_KEY, JSON.stringify({ cols: TK.cols, dense: !!TK.dense })); } catch { /* kept for this session */ }
+}
+function tkGridTemplate() {
+  return `22px 18px minmax(180px, 1.6fr) ${TK.cols.map(k => TK_COLS[k].width).join(' ')} 26px`;
+}
+
+function tkColBar() {
+  return `<div class="tk-row tk-colbar" aria-hidden="true" style="grid-template-columns:${tkGridTemplate()}"><span></span><span></span><span>${escapeHtml(t('tkColTask'))}</span>`
+    + TK.cols.map(k => `<span>${escapeHtml(t(TK_COLS[k].label))}</span>`).join('') + '<span></span></div>';
+}
+
+function tkRecHtml(x) {
+  return x.meeting_id
     ? `<button class="tk-src" ${pageCall('click', 'openTaskSource', [x.id])} title="${escapeHtml(t('tkOpenAt'))}">${escapeHtml(x.meeting_title || t('tkUntitled'))}${x.at != null ? ` · <span class="tk-mono">${tkClock(x.at)}</span>` : ''}</button>`
     : `<span class="tk-src tk-src-none">${escapeHtml(t('tkNoRecord'))}</span>`;
-  const kind = x.who && tkKindLabel(x.who_kind) ? `<span class="tk-kind">${escapeHtml(tkKindLabel(x.who_kind))}</span>` : '';
-  return `<div class="tk-row${done ? ' tk-done' : ''}" data-tid="${x.id}">
+}
+
+// The lead icon of a row (as the kind of a recording in «Записи»): the meeting the task came from, which it opens
+const TK_SRC_IC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>';
+function tkSrcIcon(x) {
+  return x.meeting_id
+    ? `<button class="tk-kindic" ${pageCall('click', 'openTaskSource', [x.id])} title="${escapeHtml(t('tkOpenMeeting').replace('{title}', () => x.meeting_title || t('tkUntitled')))}" aria-label="${escapeHtml(t('tkOpenAt'))}">${TK_SRC_IC}</button>`
+    : '<span class="tk-kindic tk-kindic-none" aria-hidden="true"></span>';
+}
+
+// What a column holds for a task
+function tkCell(k, x) {
+  if (k === 'who') {
+    const kind = x.who && tkKindLabel(x.who_kind) ? `<span class="tk-kind">${escapeHtml(tkKindLabel(x.who_kind))}</span>` : '';
+    return `<button class="tk-who" ${pageCall('click', 'openTaskAssign', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">
+      ${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-who-name${x.who ? '' : ' tk-dim'}">${escapeHtml(tkWhoName(x))}</span>${kind}</button>`;
+  }
+  if (k === 'due') return `<button class="tk-due ${tkDueTone(x)}" ${pageCall('click', 'openTaskDue', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(tkDueText(x))}</button>`;
+  if (k === 'src') return `<span class="tk-cell">${tkRecHtml(x)}</span>`;
+  if (k === 'feature') return `<span class="tk-cell">${taskFeatureChipsHtml(x.meeting_id, x.features) || '<span class="tk-dim">—</span>'}</span>`;
+  const made = String(x.created_at || '').slice(0, 10);
+  return `<span class="tk-cell tk-dim">${/^\d{4}-\d\d-\d\d$/.test(made) ? escapeHtml(tkShortDate(made)) : '—'}</span>`;
+}
+
+// The second line under the task: its meeting (when not a column of its own) and its features
+function tkSubLine(x) {
+  const rec = TK.cols.includes('src') ? '' : tkRecHtml(x);
+  const ft = TK.by === 'feature' || TK.cols.includes('feature') ? '' : taskFeatureChipsHtml(x.meeting_id, x.features);
+  return rec || ft ? `<span class="tk-row-src">${rec}${ft}</span>` : '';
+}
+
+function tkRowHtml(x) {
+  const done = tkIsDone(x);
+  return `<div class="tk-row${done ? ' tk-done' : ''}" data-tid="${x.id}" style="grid-template-columns:${tkGridTemplate()}">
     <input type="checkbox" ${done ? 'checked' : ''} class="tk-check" ${pageCall('change', 'toggleTaskDone', [x.id, { $: 'checked' }])} aria-label="${escapeHtml(t('tkDone'))}">
-    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span><span class="tk-row-src">${rec}${TK.by === 'feature' ? '' : taskFeatureChipsHtml(x.meeting_id, x.features)}</span></span>
-    <button class="tk-who" ${pageCall('click', 'openTaskAssign', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">
-      ${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-who-name${x.who ? '' : ' tk-dim'}">${escapeHtml(tkWhoName(x))}</span>${kind}</button>
-    <button class="tk-due ${tkDueTone(x)}" ${pageCall('click', 'openTaskDue', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(tkDueText(x))}</button>
-    <span class="tk-from" title="${escapeHtml(t('tkFromTitle'))}">${escapeHtml(tkSourceText(x))}</span>
+    ${tkSrcIcon(x)}
+    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span>${tkSubLine(x)}</span>
+    ${TK.cols.map(k => tkCell(k, x)).join('')}
     <button class="tk-more" ${pageCall('click', 'openTaskMenu', [x.id, { $: 'event' }])} aria-label="${escapeHtml(t('tkMore'))}" title="${escapeHtml(t('tkMore'))}">⋯</button>
   </div>`;
 }
+
+// «Карточки»: each task a small card in its group, the chosen fields as lines of a name and a value;
+// an overdue one framed in red
+function tkCardHtml(x) {
+  const done = tkIsDone(x);
+  return `<div class="tk-tcard${done ? ' tk-done' : ''}${tkIsOver(x) ? ' tk-tcard-over' : ''}" data-tid="${x.id}">
+    <div class="tk-tcard-t"><input type="checkbox" ${done ? 'checked' : ''} class="tk-check" ${pageCall('change', 'toggleTaskDone', [x.id, { $: 'checked' }])} aria-label="${escapeHtml(t('tkDone'))}">
+      <span class="tk-row-text">${escapeHtml(x.what)}</span>
+      <button class="tk-more" ${pageCall('click', 'openTaskMenu', [x.id, { $: 'event' }])} aria-label="${escapeHtml(t('tkMore'))}" title="${escapeHtml(t('tkMore'))}">⋯</button></div>
+    ${TK.cols.map(k => `<div class="tk-tcard-f"><span class="tk-dim">${escapeHtml(t(TK_COLS[k].label))}</span>${tkCell(k, x)}</div>`).join('')}
+    ${tkSubLine(x)}
+  </div>`;
+}
+
+// «Колонки»: the rows (the table only) and the columns, saved
+function openTasksCols(e) {
+  e.stopPropagation();
+  if (TK.view === 'cal') return;
+  const check = k => `<label class="tk-colrow"><input type="checkbox" ${TK.cols.includes(k) ? 'checked' : ''} ${pageCall('change', 'toggleTasksCol', [k, { $: 'checked' }])}>
+    <span>${escapeHtml(t(TK_COLS[k].label))}</span>${k === 'src' ? `<span class="tk-dim tk-small">${escapeHtml(t('tkColMeetingHint'))}</span>` : ''}</label>`;
+  const dense = TK.view === 'list'
+    ? `<div class="tk-colpop-dn"><span>${escapeHtml(t('tkRows'))}</span><span class="tk-seg">${[[false, 'tkRowsNormal'], [true, 'tkRowsCompact']].map(([v, k]) =>
+      `<button class="tk-seg-btn${!!TK.dense === v ? ' tk-on' : ''}" ${pageCall('click', 'setTasksDense', [v])}>${escapeHtml(t(k))}</button>`).join('')}</span></div>`
+    : `<div class="tk-hint">${escapeHtml(t('tkColsCardsHint'))}</div>`;
+  tkOpenPop(`<div class="tk-colpop"><b>${escapeHtml(t('tkCols'))}</b>${dense}${Object.keys(TK_COLS).map(check).join('')}
+    <div class="tk-row2"><button class="tk-btn tk-btn-sm" data-click="resetTasksCols">${escapeHtml(t('tkColsReset'))}</button><span class="tk-grow"></span>
+      <button class="tk-btn tk-btn-sm tk-btn-primary" data-click="tkClosePop">${escapeHtml(t('tkColsDone'))}</button></div></div>`, e.currentTarget, 260);
+}
+function tkColsChanged() {
+  tkSaveCols();
+  renderTasksList();
+  const b = document.getElementById('tk-cols-btn');
+  if (b && document.getElementById('tk-pop')) openTasksCols({ stopPropagation() {}, currentTarget: b });
+}
+function toggleTasksCol(k, on) { TK.cols = Object.keys(TK_COLS).filter(x => (x === k ? on : TK.cols.includes(x))); tkColsChanged(); }
+function setTasksDense(v) { TK.dense = !!v; tkColsChanged(); }
+function resetTasksCols() { TK.cols = [...TK_COLS_DEFAULT]; TK.dense = false; tkColsChanged(); }
 
 function tkTask(id) { return TK.data.tasks.find(x => x.id === id); }
 
