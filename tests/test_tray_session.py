@@ -30,6 +30,44 @@ class SessionEndTest(unittest.TestCase):
         self.assertTrue(app.quitting)
 
 
+class QuitFromPageTest(unittest.TestCase):
+    """Asked by the user: «Выйти» in the window closes the whole program, past the tray, and only the app's
+    own page may ask for it."""
+
+    def setUp(self):
+        import run
+
+        self.run = run
+
+    def tearDown(self):
+        self.run.QUIT_REQUESTED.clear()
+
+    def test_quit_closes_past_the_tray(self):
+        app = self.run.TrayController.__new__(self.run.TrayController)
+        app.quitting, app._status, app._told_tray = False, {"state": "busy"}, False
+        self.run.QUIT_REQUESTED.set()
+        with mock.patch.object(self.run, "session_ending", return_value=False):
+            self.assertTrue(app.on_closing())
+        self.assertTrue(app.quitting)
+
+    def test_only_the_own_page_quits(self):
+        import sys
+        import types
+
+        api = self.run.WindowApi("127.0.0.1", 8765)
+        win = mock.Mock()
+        fake = types.SimpleNamespace(windows=[win])
+        with mock.patch.dict(sys.modules, {"webview": fake}):
+            win.get_current_url.return_value = "https://example.com/"
+            self.assertFalse(api.quit_app())
+            self.assertFalse(self.run.QUIT_REQUESTED.is_set())
+            win.get_current_url.return_value = "http://127.0.0.1:8765/"
+            with mock.patch.object(self.run.threading, "Timer") as timer:
+                self.assertTrue(api.quit_app())
+            self.assertTrue(self.run.QUIT_REQUESTED.is_set())
+            timer.return_value.start.assert_called_once()
+
+
 class WebView2Test(unittest.TestCase):
     """Found in the audit: without the WebView2 Runtime the window stayed on «Запуск…» (the old IE engine)."""
 
