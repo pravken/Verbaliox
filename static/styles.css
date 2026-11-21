@@ -3465,6 +3465,24 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-wk-bar { height: 6px; margin: 8px 0 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .db-wk-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .db-wk-bar.over i { background: #FF9F0A; }
+/* «Мои программы» */
+.db-apps-off { display: flex; align-items: flex-start; gap: 12px; }
+.db-apps-off .db-note { flex: 1; line-height: 1.45; }
+.db-apps-off .tk-btn { flex: none; }
+.db-apps-head { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--text-secondary, rgba(255,255,255,.6)); }
+.db-apps-head b { font-size: 18px; font-weight: 600; color: var(--text-primary, #fff); }
+.db-apps-local { margin-left: auto; font-size: 11.5px; opacity: .8; }
+.db-apps-strip { display: flex; gap: 2px; height: 8px; margin: 8px 0 10px; border-radius: 4px; overflow: hidden; }
+.db-apps-strip i { display: block; min-width: 2px; background: rgba(255, 255, 255, 0.16); }
+.db-apps-list { display: grid; grid-template-columns: 1fr; column-gap: 24px; row-gap: 5px; }
+.db-apps-list.two { grid-template-columns: 1fr 1fr; }
+.db-app { display: grid; grid-template-columns: 8px minmax(0, 9em) minmax(24px, 1fr) 4.4em 2.8em 4.4em; align-items: center; gap: 8px; font-size: 12px; }
+.db-app-dot { width: 8px; height: 8px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+.db-app-n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-app-bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
+.db-app-bar i { display: block; height: 100%; border-radius: 3px; background: rgba(255, 255, 255, 0.3); }
+.db-app-h, .db-app-p, .db-app-d { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.db-app-p, .db-app-d { opacity: .6; }
 .db-wk-sub { color: var(--hc-dim, #A1A1A6); font-size: var(--fs-caption); margin-bottom: 10px; }
 .db-wk-week { height: 96px; }
 /* the hours worked of a day in its head: the week and the calendar */

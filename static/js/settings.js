@@ -3106,7 +3106,7 @@ const SETTINGS_RESET = {
     ['set-semantic', 'semantic_search', 'check']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
     ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check'],
-    ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
+    ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
@@ -3122,7 +3122,7 @@ const SETTINGS_DEFAULTS = {
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
-  holiday_country: '', holiday_subdiv: '', meet_notify: 'true', meet_notify_before: '300', worktime_track: 'true', work_remind_hours: '8',
+  holiday_country: '', holiday_subdiv: '', meet_notify: 'true', meet_notify_before: '300', worktime_track: 'true', apps_track: 'false', work_remind_hours: '8',
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
   dictation_save: 'true', dictation_translate_cloud: 'false',
   file_name_template: '{date} {title}', date_folders: 'off',
@@ -3248,6 +3248,8 @@ function fillWorkdaySettings(s) {
   if (nb) nb.value = [...nb.options].some(o => o.value === String(s.meet_notify_before)) ? String(s.meet_notify_before) : '300';
   const wt = document.getElementById('set-worktime-track');
   if (wt) wt.checked = s.worktime_track !== 'false';
+  const at = document.getElementById('set-apps-track');
+  if (at) at.checked = s.apps_track === 'true';
   const wr = document.getElementById('set-work-remind');
   if (wr) {
     const h = String(Math.round(Number(s.work_remind_hours ?? 8)));
@@ -3502,6 +3504,8 @@ function workdaySettingsPayload() {
     meet_notify: String(document.getElementById('set-meet-notify')?.checked !== false),
     meet_notify_before: document.getElementById('set-meet-notify-before')?.value || '300',
     worktime_track: String(document.getElementById('set-worktime-track')?.checked !== false),
+    // only from the switch itself: turned on from «Главная», it is not turned off by a page without the switch
+    ...(document.getElementById('set-apps-track') ? { apps_track: String(document.getElementById('set-apps-track').checked) } : {}),
     work_remind_hours: document.getElementById('set-work-remind')?.value || '8',
     // before the list of countries came, the saved choice stays as it is
     ...holidayPayload(),

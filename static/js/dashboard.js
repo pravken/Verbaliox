@@ -32,6 +32,8 @@ const DB_WIDGETS = {
   dull: { title: 'dbDull', sizes: ['S', 'M', 'L', 'W'], icon: '↻' },
   // asked by the user: how long the working day lasted (app/worktime.py), against the norm
   worked: { title: 'dbWorked', sizes: ['S', 'M', 'L', 'W'], icon: '⏱' },
+  // asked by the user: where the working time goes, by the program in front (app/worktime.py); off until turned on
+  apps: { title: 'dbApps', sizes: ['M', 'L', 'W'], icon: '▤' },
 };
 // rows that add up to 12: W · M+M · M+M · M+M · S+L · L+S · S+S+S · M+M
 const DB_DEFAULT = [['kpis', 'W'], ['today', 'M'], ['week', 'M'], ['prep', 'M'], ['due', 'M'], ['mytasks', 'M'], ['waiting', 'M'],
@@ -111,6 +113,7 @@ async function loadDashboard() {
     dbLoadWeek(),
     fetch('/api/untranscribed').then(r => (r.ok ? r.json() : null)).catch(() => null),
     dbLoadWork(),
+    dbLoadApps(),
   ]);
   if (seq !== DB.seq) return;
   DB.loading = false;
@@ -133,6 +136,15 @@ async function dbLoadWork() {
   b.setDate(a.getDate() + 7);
   const w = await fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
   if (w) DB.work = w;
+}
+
+// «Мои программы» of this week and the one before (app/worktime.py), only while the widget is on «Главная»
+async function dbLoadApps() {
+  if (!dbPrefs().layout.some(w => w.id === 'apps')) return;
+  const a = dbMonday(), b = new Date(a);
+  b.setDate(a.getDate() + 7);
+  const r = await fetch(`/api/worktime/apps?start=${calKey(a)}&end=${calKey(b)}`).then(x => (x.ok ? x.json() : null)).catch(() => null);
+  if (r) DB.apps = r;
 }
 
 // «7 ч 45» for a day's head: the hours worked, short
@@ -292,7 +304,7 @@ function dbNum(n) { return String(n); }  // a point for fractions in both langua
 
 // --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
 // They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
-const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load', 'worked'];
+const DB_LOCAL_WIDGETS = ['week', 'prep', 'free', 'load', 'worked', 'apps'];
 const DB_TIME_WIDGETS = ['week', 'prep', 'free', 'load', 'worked'];  // redrawn as the time goes (dbTickNow)
 
 // The meeting going on or the next one of today (not an all-day one); null when there is none left
@@ -466,6 +478,53 @@ function dbWorkedHtml(size) {
   return html;
 }
 
+// «Мои программы»: the week's time by program, with the share and the change to the week before. Off: what it
+// counts and what it does not, and «Включить» (asks once more with the same words)
+const DB_APP_COLORS = ['#4C7FD9', '#0F6CBD', '#2F80ED', '#E8A33D', '#5B5FC7', '#1F8F4E', '#8A94A6', '#C0617A'];
+function dbAppsHtml(size) {
+  const r = DB.apps;
+  if (!r) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  if (!r.supported) return `<div class="db-note">${escapeHtml(t('dbWorkedNoSupport'))}</div>`;
+  if (!r.enabled) return `<div class="db-apps-off"><div class="db-note">${escapeHtml(t('dbAppsOff'))}</div><button class="tk-btn" data-click="dbAppsTurnOn">${escapeHtml(t('dbAppsOn'))}</button></div>`;
+  const list = r.apps || [];
+  if (!list.length) return `<div class="db-note">${escapeHtml(t('dbAppsNone'))}</div>`;
+  const total = list.reduce((s, x) => s + x.minutes, 0), top = list[0].minutes;
+  const shown = list.slice(0, size === 'M' ? 5 : 8), rest = list.slice(shown.length);
+  const rows = shown.map((x, i) => ({ ...x, name: x.app === 'meeting' ? t('dbAppsMeetings') : x.name, color: DB_APP_COLORS[i % DB_APP_COLORS.length] }));
+  if (rest.length) rows.push({ app: '', name: t('dbAppsOther').replace('{n}', () => rest.length), minutes: rest.reduce((s, x) => s + x.minutes, 0), before: rest.reduce((s, x) => s + x.before, 0), color: '' });
+  // «5 ч 50», «10 ч», «40 мин»: short enough for a row
+  const hm = m => m < 60 ? `${m} ${t('dbMinShort')}` : `${Math.floor(m / 60)} ${t('dbHoursShort')}${m % 60 ? ` ${String(m % 60).padStart(2, '0')}` : ''}`;
+  const delta = x => {
+    const d = x.minutes - x.before;
+    if (!x.before || Math.abs(d) < 6) return '';
+    return `${d > 0 ? '+' : '−'}${hm(Math.abs(d))}`;
+  };
+  return `<div class="db-apps-head"><b>${escapeHtml(dbHm(total * 60))}</b> <span>${escapeHtml(t('dbAppsTotal'))}</span><span class="db-apps-local">${escapeHtml(t('dbAppsLocal'))}</span></div>`
+    + `<div class="db-apps-strip">${rows.map(x => `<i style="flex:${x.minutes};${x.color ? `background:${x.color}` : ''}" title="${escapeHtml(`${x.name}: ${hm(x.minutes)}`)}"></i>`).join('')}</div>`
+    + `<div class="db-apps-list${size === 'W' ? ' two' : ''}">` + rows.map(x => `<div class="db-app">`
+      + `<span class="db-app-dot" style="${x.color ? `background:${x.color}` : ''}"></span><span class="db-app-n" title="${escapeHtml(x.app || '')}">${escapeHtml(x.name)}</span>`
+      + `<span class="db-app-bar"><i style="width:${(x.minutes / top * 100).toFixed(1)}%;${x.color ? `background:${x.color}` : ''}"></i></span>`
+      + `<span class="db-app-h">${escapeHtml(hm(x.minutes))}</span><span class="db-app-p">${Math.round(x.minutes / total * 100)}%</span>`
+      + `<span class="db-app-d">${escapeHtml(delta(x))}</span></div>`).join('') + '</div>';
+}
+
+async function dbAppsTurnOn() {
+  if (!(await askConfirm(`${t('dbAppsAskQ')}\n${t('rdSasAppsHint')}`, false, t('dbAppsOn')))) return;
+  saveUiSetting('apps_track', 'true');
+  const sw = document.getElementById('set-apps-track');
+  if (sw) sw.checked = true;  // the settings' switch says the same
+  DB.apps = { ...(DB.apps || {}), enabled: true, apps: [] };
+  renderDashboard();
+}
+
+async function clearAppsHistory() {
+  if (!(await askConfirm(t('rdSasAppsClearQ'), true, t('rdSasAppsClear')))) return;
+  const r = await fetch('/api/worktime/apps', { method: 'DELETE' }).catch(() => null);
+  if (!r || !r.ok) { showError(t('errorGeneric')); return; }
+  DB.apps = DB.apps ? { ...DB.apps, apps: [] } : null;
+  showToast(t('rdSasAppsCleared'), null, 'status');
+}
+
 function openWorkSettings() {
   openModal('settings', 'general');
   selectSettingsTab('calendar');
@@ -498,6 +557,7 @@ function dbWidgetHtml(id, size) {
     case 'free': return dbFreeHtml();
     case 'load': return dbLoadHtml();
     case 'worked': return dbWorkedHtml(size);
+    case 'apps': return dbAppsHtml(size);
     case 'dull': return dbDullHtml(d);
     case 'mytasks': return dbTasks(d, size);
     case 'waiting': return dbWaitingHtml(d, size);
@@ -898,6 +958,7 @@ function addDashWidget(id) {
   if (!def) return;
   dbSave({ layout: [...dbPrefs().layout, { id, size: def.sizes[Math.min(1, def.sizes.length - 1)] }] });
   renderDashboard();
+  if (id === 'apps' && !DB.apps) dbLoadApps().then(() => { if (state.appView === 'dashboard') renderDashboard(); });
   document.querySelector('#db-grid .db-w:last-child')?.scrollIntoView({ block: 'nearest', behavior: scrollMotion() });
 }
 

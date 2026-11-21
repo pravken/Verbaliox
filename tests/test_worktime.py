@@ -56,6 +56,69 @@ class WorkTimeTest(unittest.TestCase):
 
 
 @unittest.skipIf(worktime is None, "app dependencies not installed")
+class AppsTest(unittest.TestCase):
+    """Asked by the user: where the working time goes, by program; off until turned on, only names."""
+
+    def setUp(self):
+        init_db()
+        with worktime._conn() as conn:
+            conn.execute("DELETE FROM work_minutes")
+        worktime.clear_apps()
+        update_settings({"worktime_track": "true", "work_remind_hours": "0", "apps_track": "false"})
+
+    def _tick(self, at, app="outlook", idle=10, meeting=False):
+        with mock.patch.object(worktime, "_in_call", return_value=False), mock.patch.object(worktime, "_recording", return_value=meeting), \
+                mock.patch.object(worktime, "foreground_app", return_value=app) as fg:
+            worktime.check(at, idle=idle)
+        return fg
+
+    def test_off_by_default_nothing_is_noted_and_the_program_is_not_even_asked(self):
+        fg = self._tick(datetime(2026, 11, 19, 10, 0))
+        fg.assert_not_called()
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {})
+
+    def test_on_the_worked_minutes_go_to_the_program_in_front_and_a_meeting_to_meeting(self):
+        update_settings({"apps_track": "true"})
+        t = datetime(2026, 11, 19, 10, 0)
+        for m in range(30):
+            self._tick(t + timedelta(minutes=m), "outlook")
+        for m in range(30, 40):
+            self._tick(t + timedelta(minutes=m), "chrome")
+        for m in range(40, 50):
+            self._tick(t + timedelta(minutes=m), "ms-teams", idle=900, meeting=True)  # a recording: no input needed
+        self._tick(t + timedelta(minutes=60), "excel", idle=900)  # away: no minute
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {"outlook": 30, "chrome": 10, worktime.MEETING: 10})
+        worktime.clear_apps()
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {})
+        self.assertEqual(worktime.app_name("ms-teams"), "Teams")
+        self.assertEqual(worktime.app_name("someapp"), "someapp")
+
+    def test_an_unknown_program_still_counts_the_minute_as_work(self):
+        update_settings({"apps_track": "true"})
+        self._tick(datetime(2026, 11, 19, 11, 0), None)
+        self.assertIn("2026-11-19", worktime.days(date(2026, 11, 19), date(2026, 11, 20)))
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {})
+
+    def test_the_route_gives_the_period_and_the_one_before_and_deletes(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        update_settings({"apps_track": "true"})
+        self._tick(datetime(2026, 11, 19, 10, 0), "outlook")
+        self._tick(datetime(2026, 11, 12, 10, 0), "outlook")
+        self._tick(datetime(2026, 11, 12, 10, 1), "outlook")
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        r = c.get("/api/worktime/apps", params={"start": "2026-11-16", "end": "2026-11-23"}).json()
+        self.assertTrue(r["enabled"])
+        self.assertEqual(r["apps"], [{"app": "outlook", "name": "Outlook", "minutes": 1, "before": 2}])
+        self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-11-23", "end": "2026-11-16"}).status_code, 400)
+        self.assertEqual(c.delete("/api/worktime/apps").status_code, 200)
+        self.assertEqual(worktime.apps(date(2026, 11, 1), date(2026, 11, 30)), {})
+
+
+@unittest.skipIf(worktime is None, "app dependencies not installed")
 class ApiTest(unittest.TestCase):
     def test_the_routes_of_worktime_holidays_and_join(self):
         from fastapi.testclient import TestClient

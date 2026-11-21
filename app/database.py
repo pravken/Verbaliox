@@ -262,6 +262,7 @@ def init_db() -> None:
             "holiday_subdiv": "",  # ...and of its region
             "days_off": "[]",  # the user's own days off and vacations: [{from, to, title}] (app/holidays_cal.py)
             "worktime_track": "true",  # count the minutes this computer is in use: the working day (app/worktime.py)
+            "apps_track": "false",  # ...and the program in front of each worked minute: «Мои программы», off until turned on
             "work_remind_hours": "8",  # ...and tell when this many hours are worked; 0 = never
             "work_reminded_day": "",  # the working day told about already
             "setup_done": "[]",  # the steps of the setup after an update already answered (static/js/settings.js SETUP_STEPS)
