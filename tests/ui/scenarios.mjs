@@ -141,6 +141,33 @@ await step('unloaded player', async () => {
   expect(res.same, 'the play button was drawn again');
 });
 
+// Scrubbing (asked by the user): hold the button on the wave and move — the time follows, the bubble over the
+// playhead shows it and grows while dragging; a click without moving seeks too
+await step('scrub the wave', async () => {
+  await page.evaluate(() => { const p = document.getElementById('media-player'); p.muted = true; p.pause(); });
+  const box = await page.locator('#player-waveform-wrapper').boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.1, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, y, { steps: 8 });
+  const during = await page.evaluate(() => ({
+    on: document.getElementById('player-waveform-wrapper').classList.contains('rp-scrubbing'),
+    bubble: document.getElementById('rp-head-bubble').textContent,
+  }));
+  await page.mouse.up();
+  await sleep(200);
+  const at = await page.evaluate(() => document.getElementById('media-player').currentTime);
+  expect(during.on, 'no dragging state while the button is held');
+  expect(/^00:(2[7-9]|3[0-3])\b/.test(during.bubble), `the bubble shows ${during.bubble} in the middle of a minute`);
+  expect(at > 27 && at < 33, `the drag left the time at ${at}`);
+  expect(!(await page.evaluate(() => document.getElementById('player-waveform-wrapper').classList.contains('rp-scrubbing'))), 'the dragging state stays');
+  await page.mouse.click(box.x + box.width * 0.25, y);
+  await sleep(200);
+  const click = await page.evaluate(() => document.getElementById('media-player').currentTime);
+  expect(click > 12 && click < 18, `a click left the time at ${click}`);
+  await page.evaluate(() => document.getElementById('media-player').pause());
+});
+
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
 await step('menu at the bottom', async () => {
   const box = await page.evaluate(() => {
