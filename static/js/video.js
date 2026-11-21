@@ -426,16 +426,12 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// Alt+Space: play and pause from anywhere. Alt+← / Alt+→ are «Назад» / «Вперёд» of the app (shell.js), not a
+// seek: both ran at once (← → alone seek in the player)
 document.addEventListener('keydown', (e) => {
   if (e.altKey && e.code === 'Space') {
     e.preventDefault();
     togglePlayPause();
-  } else if (e.altKey && e.code === 'ArrowLeft') {
-    e.preventDefault();
-    skipPlayer(-5);
-  } else if (e.altKey && e.code === 'ArrowRight') {
-    e.preventDefault();
-    skipPlayer(5);
   }
 });
 
