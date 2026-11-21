@@ -319,7 +319,9 @@ async function loadVram() {
   } finally {
     // Without a video card only the models in memory change: asked less often
     const noGpu = state.system && state.system.hardware && !state.system.hardware.cuda_available;
-    scheduleVramRefresh(VRAM_POLL_MS * (document.hidden ? 4 : 1) * (noGpu ? 3 : 1));
+    // «Нагрузка системы и моделей» on «Обзор» follows at the pace of a video card (dbSysloadLive, dashboard.js)
+    const live = typeof dbSysloadLive === 'function' && dbSysloadLive();
+    scheduleVramRefresh(VRAM_POLL_MS * (document.hidden ? 4 : 1) * (noGpu && !live ? 3 : 1));
   }
 }
 
@@ -451,6 +453,7 @@ function renderVram(data) {
   vram.chips = chips;
   renderIdleStatus(data.idle);
   if (typeof onVramData === 'function') onVramData();  // the load of the status bar (pult.js)
+  if (typeof dbOnVramData === 'function') dbOnVramData();  // «Нагрузка системы и моделей» on «Обзор» (dashboard.js)
 }
 
 const MODEL_TIMER_ICON = '<svg class="vr-timer-ico" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6.5" r="4.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 4.3v2.4l1.5 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
