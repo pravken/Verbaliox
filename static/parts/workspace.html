@@ -410,7 +410,7 @@
         <div id="as-noai" class="an-noai hidden" role="status">
           <span class="an-noai-text" data-i18n="rdSasNoAiText">Ответы недоступны: модель анализа не установлена.</span>
           <button data-click="openLlmPicker" class="an-noai-main" data-i18n="noAiLocal">Выбрать локальную модель</button>
-          <button data-click="openModal" data-click-args='["settings", "analysis"]' class="an-noai-alt" data-i18n="noAiCloud">Подключить облачную</button>
+          <button data-click="openModal" data-click-args='["settings", "analysis"]' class="an-noai-alt" data-i18n="noAiCloud">Настройки анализа</button>
         </div>
 
         <div id="library-answer" class="flex-1 min-h-0 overflow-y-auto px-6 py-5">
@@ -746,7 +746,7 @@
         <div id="an-noai" class="an-noai hidden" role="status">
           <span class="an-noai-text" data-i18n="anNoAiText" data-i18n-title="anNoAiText">Модель анализа не подключена. Готовые разделы видны и копируются; создать новые или обновить — после подключения.</span>
           <button data-click="openLlmPicker" class="an-noai-main" data-i18n="noAiLocal">Выбрать локальную модель</button>
-          <button data-click="openModal" data-click-args='["settings", "analysis"]' class="an-noai-alt" data-i18n="noAiCloud">Подключить облачную</button>
+          <button data-click="openModal" data-click-args='["settings", "analysis"]' class="an-noai-alt" data-i18n="noAiCloud">Настройки анализа</button>
         </div>
         <div class="flex-1 min-h-0 flex">
           <nav id="an-nav" class="an-nav" aria-label="Разделы анализа" data-i18n-aria="anNavAria"></nav>
@@ -804,8 +804,6 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
                   </button>
                 </div>
-                <!-- Where the analysis goes and how big the cloud request is (settings.js) -->
-                <div id="analysis-estimate" class="hidden text-[11.5px] -mt-1 flex items-center gap-1.5"></div>
                 <div id="summary-content" class="an-body"></div>
               </div>
             </div>

@@ -13,7 +13,7 @@
 - **Сервер:** FastAPI на `127.0.0.1` со случайным токеном сессии. Код: `app/main.py` (приложение, middleware безопасности, запуск, общие помощники) и `app/api/*.py` (обработчики). Окно — pywebview (WebView2), трей и горячие клавиши — `app/tray.py`, `run.py`.
 - **Страница:** `static/index.html` и части `static/parts/*.html`, их собирает `app/page.py`. Скрипты `static/js/*.js` (классические, с общим глобальным пространством), тексты `static/i18n.js`, Tailwind собирается заранее (`npm run vendor`). Вывод LLM рендерится через marked и DOMPurify.
 - **Распознавание:** faster-whisper (`app/transcriber.py`), GigaAM и Parakeet на onnx-asr (`app/asr_onnx.py`), сборка ONNX Runtime для видеокарты в отдельной папке (`app/onnx_gpu.py`), разделение по голосам на SpeechBrain ECAPA (`app/diarizer.py`), профили голосов, живые субтитры (`app/live.py`, `app/live_worker.py`, `app/live_translate.py`), диктовка (`app/dictation.py`).
-- **Анализ:** Ollama (`app/ollama_client.py`) или облачные API (`app/llm.py`, ключи под DPAPI в `app/secret_store.py`); проверка пересказа (`app/grounding.py`), обещания (`app/commitments.py`), серии (`app/series.py`), смысловой поиск (`app/semantic.py`), стенд сравнения моделей (`app/bench.py`, `tools/model_bench.py`).
+- **Анализ:** только локальная Ollama (`app/ollama_client.py`, выбор модели — `app/llm.py`); проверка пересказа (`app/grounding.py`), обещания (`app/commitments.py`), серии (`app/series.py`), смысловой поиск (`app/semantic.py`), стенд сравнения моделей (`app/bench.py`, `tools/model_bench.py`).
 - **Внешнее:**
   - FFmpeg, yt-dlp (ставится по запросу, `app/url_import.py`);
   - календарь .ics по ссылке или из Outlook через PowerShell (`app/calendar_ics.py`, `app/calendar_outlook.py`);
@@ -36,7 +36,7 @@
    - Аргументы и окружение subprocess: FFmpeg, yt-dlp, PowerShell, pip/uv; инъекции через имена файлов, названия встреч и URL.
    - XSS в интерфейсе: всё, что попадает в innerHTML из записей, LLM, календаря, имён файлов и спикеров.
    - Updater и установка пакетов: целостность и откат.
-   - Утечки: что уходит в облако, логи, ключи, журнал облачных запросов.
+   - Утечки: что уходит с компьютера (обновление, календарь, скачивание моделей), логи.
    - Импорт .ics и медиа: парсинг недоверенных данных.
 2. **Логика и ошибки.**
    - Гонки потоков: очередь заданий, живые сессии, загрузки моделей, SSE.

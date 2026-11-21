@@ -303,8 +303,7 @@ class AutoChaptersTest(unittest.TestCase):
                                           "analysis_chain": "true"})
         from app import llm
 
-        for p in (mock.patch.object(llm, "available", return_value=True),
-                  mock.patch.object(llm, "uses_cloud", return_value=False)):
+        for p in (mock.patch.object(llm, "available", return_value=True),):
             p.start()
             self.addCleanup(p.stop)
 

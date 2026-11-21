@@ -12,7 +12,7 @@ model, and each gets
 Analysis: every chosen local (Ollama) model writes the protocol of the same recording; each gets the
 time, the length, and the share of points the transcript does not support (app/grounding.py).
 
-Nothing leaves the computer: the cloud model is not compared. One comparison at a time, and not
+Nothing leaves the computer. One comparison at a time, and not
 while recordings are being transcribed or live captions run (they would share the GPU and the
 times would mean nothing). The latest results are kept in bench.json in the data folder.
 """
@@ -445,7 +445,7 @@ def _run_llm(m: Dict[str, Any], models: List[str], clip_sec: int) -> Dict[str, A
             _set(stage="Пишет протокол…")
             t0 = time.perf_counter()
             md = generate_meeting_summary(m["segments"], m.get("speakers") or {}, "protocol", model_name=mid,
-                                          answer_lang=_answer_lang(m), local_only=True)
+                                          answer_lang=_answer_lang(m))
             sec = time.perf_counter() - t0
             grounded = ground_summary(md, m["segments"], m.get("speakers") or {})
             points = [ln for ln in grounded.splitlines() if re.match(r"\s*(?:[-*+]|\d+[.)])\s+\S", ln)]

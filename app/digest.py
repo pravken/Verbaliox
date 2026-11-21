@@ -4,14 +4,13 @@ days, as one Markdown summary of the topics, the decisions, who promised what by
 questions left open, with [n] links to the recordings.
 
 Each recording is given by its overview when it has one (short and already checked by the user),
-otherwise by the beginning of its transcript. Recordings marked "local analysis only" never reach a
-cloud model: they are left out, and a digest made only of them uses the local model.
+otherwise by the beginning of its transcript.
 """
 
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from app.database import get_meeting, list_meetings, local_only_ids, meeting_ids_in_folder
+from app.database import get_meeting, list_meetings, meeting_ids_in_folder
 
 MAX_MEETINGS = 40
 PER_MEETING_CHARS = 2500
@@ -57,15 +56,6 @@ def make_digest(folder_id: Optional[int] = None, days: Optional[int] = None, ans
         raise ValueError("Нет расшифрованных записей за выбранный период")
     try:
         llm = target(model_name)
-        excluded = 0
-        if llm.is_cloud:
-            private = local_only_ids()
-            kept = [m for m in rows if m["id"] not in private]
-            excluded = len(rows) - len(kept)
-            if not kept:
-                llm, excluded = target(None if model_name == "cloud" else model_name, local_only=True), 0
-            else:
-                rows = kept
     except LlmError as e:
         raise RuntimeError(str(e)) from e
 
@@ -89,5 +79,5 @@ def make_digest(folder_id: Optional[int] = None, days: Optional[int] = None, ans
     answer = llm.chat(system, "Материалы записей:\n\n" + "\n\n".join(blocks) + "\n\nСоставь дайджест.")
     sources = [{"n": n, "meeting_id": int(m["id"]), "title": m.get("title") or "", "date": _when(m)[:10],
                 "start": 0.0, "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
-    return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "cloud": llm.is_cloud,
-            "mode": "digest", "count": len(meetings), "excluded_local": excluded}
+    return {"answer": answer, "sources": sources, "found": True, "model": llm.label,
+            "mode": "digest", "count": len(meetings)}

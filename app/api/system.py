@@ -1,6 +1,7 @@
 """System, models, settings, dictionary and live progress (SSE)."""
 
 import json
+import os
 import sys
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request
@@ -165,14 +166,13 @@ def api_mcp_config() -> Dict[str, Any]:
 
 @router.post("/api/settings")
 def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
-    # Sending transcripts to a cloud service needs the consent given in Settings → Analysis
-    if payload.settings.get("llm_provider") == "cloud" and get_all_settings().get("llm_cloud_consent") != "true" \
-            and str(payload.settings.get("llm_cloud_consent")) != "true":
-        raise HTTPException(status_code=400, detail="Подтвердите отправку текста в облачный сервис в «Настройки → Анализ»")
+    from app.database import _CLOUD_SETTINGS
     from app.settings_schema import clean_all
 
     try:
-        values = clean_all({k: v for k, v in payload.settings.items() if not str(k).startswith("llm_key_")})
+        # the cloud settings of earlier versions are not stored again (an older page may still send them)
+        values = clean_all({k: v for k, v in payload.settings.items()
+                            if not str(k).startswith("llm_") and k not in _CLOUD_SETTINGS})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     before = get_all_settings()
@@ -379,3 +379,28 @@ async def api_events(request: Request) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+# --- Opening links in the default browser ---
+class OpenUrlPayload(BaseModel):
+    url: str
+
+@router.post("/api/open-url")
+def api_open_url(payload: OpenUrlPayload) -> Dict[str, Any]:
+    """Opens a web link in the default browser (the app window itself never navigates away)."""
+    import webbrowser
+    from urllib.parse import urlparse
+
+    u = urlparse(payload.url.strip())
+    if u.scheme == "mailto":  # a draft in the mail app (no address: the user picks the recipients)
+        if len(payload.url) > 8000:
+            raise HTTPException(status_code=400, detail="Слишком длинное письмо")
+        if sys.platform == "win32":
+            os.startfile(payload.url.strip())  # noqa: S606 - a mailto: link the user asked to open
+        else:
+            webbrowser.open(payload.url.strip())
+        return {"ok": True}
+    if u.scheme not in ("https", "http") or not u.netloc:
+        raise HTTPException(status_code=400, detail="Можно открыть только веб-ссылку")
+    webbrowser.open(u.geturl())
+    return {"ok": True}

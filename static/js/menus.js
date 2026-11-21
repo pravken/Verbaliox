@@ -265,13 +265,7 @@ function openRecordingContextMenu(e, meetingId) {
   document.getElementById('ctx-cancel-item').classList.toggle('hidden', DONE_STATUSES.includes(m.status));
   const hasBackup = state.activeMeeting && state.activeMeeting.id === m.id && state.activeMeeting.has_segments_backup;
   document.getElementById('ctx-restore-item').classList.toggle('hidden', !hasBackup);
-  // Inherited from a folder: shown as on, and changed on that folder
-  const inherited = !m.local_only && folderLocalOnly(m.folder_id);
-  document.getElementById('ctx-local-item-check').textContent = m.local_only || inherited ? '✓' : '';
   document.getElementById('ctx-series-name').textContent = ((state.series || []).find(s => s.id === m.series_id) || {}).name || '';
-  document.getElementById('ctx-local-item').disabled = inherited;
-  document.getElementById('ctx-local-item').style.opacity = inherited ? '.5' : '';
-  document.getElementById('ctx-local-item').title = inherited ? t('tipLocalOnlyInherited') : t('tipLocalOnly');
   const menu = document.getElementById('recording-context-menu');
   menu.classList.remove('hidden');
 
@@ -296,39 +290,6 @@ function openBulkMenu(e) {
   document.body.appendChild(menu);
   placeMenuAt(menu, e);
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
-}
-
-// "Local analysis only" set on a folder covers everything inside it, at any depth
-function folderLocalOnly(folderId) {
-  const seen = new Set();
-  let f = folderById(folderId);
-  while (f && !seen.has(f.id)) {
-    if (f.local_only) return true;
-    seen.add(f.id);
-    f = folderById(f.parent_id);
-  }
-  return false;
-}
-
-function meetingLocalOnly(m) {
-  return !!m && (m.local_only || folderLocalOnly(m.folder_id));
-}
-
-async function ctxToggleLocalOnly() {
-  hideContextMenu();
-  const m = state.meetings.find(x => x.id === state.contextMeetingId);
-  if (!m) return;
-  const res = await fetch(`/api/meetings/${m.id}/local-only`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ local_only: !m.local_only }),
-  });
-  if (!res.ok) return;
-  m.local_only = !m.local_only;
-  if (state.activeMeeting && state.activeMeeting.id === m.id) {
-    state.activeMeeting.local_only = m.local_only;
-    renderAnalysisEstimate();
-  }
-  showToast(m.local_only ? t('localOnlyOn') : t('localOnlyOff'));
-  renderMeetingsSidebar();
 }
 
 // --- Series menu of a recording ---

@@ -27,7 +27,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **Tasks** as a table, cards or a calendar; **People** and **Dictionary** are sections of their own; the
   assistant shows its sources as ▶ time marks; one window after an update instead of two.
 - Fixes: quitting or shutting Windows down during a transcription is no longer counted as a crash; a start
-  during an update no longer rolls the installation back; the MCP server follows «local only» at once;
+  during an update no longer rolls the installation back; the MCP server follows its setting for
+  dictations at once;
   backups keep the minutes worked on this computer.
 - **«Don't disturb in meetings» holds everything now**: while a meeting goes on and two minutes after it, the
   transcription, the mix of a stopped recording and the speaker models wait; Nemotron leaves memory with the
@@ -42,6 +43,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - Settings: switching tabs fades like the views.
 - The sidebar has no header of its own: more room for the sections.
 - Interface texts in a plainer, neutral tone.
+- **Analysis on the computer only**: sending text to cloud models over their API is removed. Saved API keys,
+  the cloud request log and the «local only» marks are deleted; Ollama always does the analysis.
 
 ## 0.8.25 — English
 
@@ -772,7 +775,7 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **«Задачи»** — таблицей, карточками или календарём; **«Люди»** и **«Словарь»** — отдельные разделы; ассистент
   показывает источники метками ▶ времени; после обновления — одно окно вместо двух.
 - Исправления: выход из программы или выключение Windows во время расшифровки больше не считаются сбоем; запуск
-  во время обновления больше не откатывает установку; MCP-сервер сразу учитывает «только локально»; резервная
+  во время обновления больше не откатывает установку; MCP-сервер сразу учитывает настройку диктовок; резервная
   копия и восстановление сохраняют отработанное время этого компьютера.
 - **«Не мешать на встречах» держит всё**: пока идёт встреча и две минуты после неё, ждут расшифровка, сведение
   остановленной записи и модели участников; Nemotron выгружается вместе с остальными моделями речи. Модели
@@ -787,6 +790,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - Настройки: вкладки переключаются с плавным появлением, как разделы.
 - У боковой панели больше нет своего заголовка: места для разделов больше.
 - Тексты интерфейса — проще и в спокойном, деловом тоне.
+- **Анализ только на компьютере**: возможность отправлять текст в облачные модели по API убрана. Сохранённые
+  API-ключи, журнал облачных запросов и пометки «только локально» удаляются; анализ всегда выполняет Ollama.
 
 ## 0.8.25
 

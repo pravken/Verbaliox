@@ -544,9 +544,9 @@ await step('own days off', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
-// The cloud choice keeps the speech settings: its consent is asked in Settings → Analysis (no stub here:
-// the real server must accept the request)
-await step('first run wizard, cloud', async () => {
+// The choice without analysis keeps the speech settings (no stub here: the real server must accept the
+// request); there is no cloud choice any more
+await step('first run wizard, no analysis', async () => {
   for (const url of ['**/api/models/setup', '**/api/onnx-models/**', '**/api/ffmpeg/install', '**/api/ollama/**']) {
     await page.route(url, r => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   }
@@ -555,7 +555,8 @@ await step('first run wizard, cloud', async () => {
   page.on('response', watch);
   await page.evaluate(() => openFirstRunWizard(state.system));
   await sleep(300);
-  await page.click('#first-run-wizard button[data-pick="ai:cloud"]');
+  expect(!(await page.$('#first-run-wizard button[data-pick="ai:cloud"]')), 'the cloud choice is still offered');
+  await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
   await page.click('#first-run-wizard button[data-a="next"]');
@@ -566,6 +567,7 @@ await step('first run wizard, cloud', async () => {
   expect(status === 200, `the settings were refused (HTTP ${status})`);
   const v = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(v.speech_model_ru === 'gigaam-v3', `Russian model not saved: ${v.speech_model_ru}`);
+  expect(!('llm_provider' in v), 'a cloud setting is stored');
   await page.evaluate(() => closeModal('settings'));
 });
 

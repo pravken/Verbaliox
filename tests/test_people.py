@@ -122,7 +122,6 @@ class PeopleDirectoryTest(unittest.TestCase):
         self.assertEqual(local[0], "Олег — тимлид")  # named in the talk: first
         self.assertIn("Анна", local)                 # a local model hears of the others too
         self.assertNotIn("Мария", " ".join(local))   # a participant is in the roster already
-        self.assertEqual(people.known_people(m, cloud=True), ["Олег — тимлид"])  # a cloud: only the named ones
 
     def test_a_contact_card_has_recordings_and_tasks(self):
         talk = self._meeting(names=("Олег", "Мария"))
