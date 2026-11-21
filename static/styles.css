@@ -5136,3 +5136,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-island-wait { color: var(--hc-dim, #AEAEB2); }
 .st-island-done { color: #7EE787; }
 #sb-queue { display: none !important; }
+
+/* The top-left corner without a notch (asked by the user): the first button of the rail exactly as high as the strip,
+   from the top, its line where the strip's line is (the strip keeps its colours of the states) */
+.rail { padding-top: 0; }
+.rail > .rail-btn:first-of-type { height: 52px; box-sizing: border-box; justify-content: center; padding-top: 4px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--line); }
