@@ -76,7 +76,7 @@ class TasksTest(unittest.TestCase):
     def _extract(self, answer):
         from app import commitments
 
-        llm = mock.Mock(is_cloud=False, max_chars=100000)
+        llm = mock.Mock(max_chars=100000)
         llm.chat.return_value = answer
         with mock.patch("app.llm.target", return_value=llm):
             return commitments.extract(self.m["id"])

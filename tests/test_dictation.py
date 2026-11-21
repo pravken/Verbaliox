@@ -41,19 +41,15 @@ class DictationBusyTest(unittest.TestCase):
 class DictationTranslateTest(unittest.TestCase):
     def setUp(self):
         init_db()
-        update_settings({"dictation_translate_cloud": "false", "dictation_translate_to": "en"})
+        update_settings({"dictation_translate_to": "en"})
 
-    def test_text_is_translated_by_the_local_model_unless_the_cloud_is_allowed(self):
+    def test_text_is_translated_by_the_local_model(self):
         tgt = _Target(answer="<think>x</think> «Hello, I will send the report tomorrow.»")
         with mock.patch.object(llm, "target", return_value=tgt) as pick:
             out, note = dictation.translate("Привет, завтра пришлю отчёт.", "en")
         self.assertEqual((out, note), ("Hello, I will send the report tomorrow.", ""))
-        self.assertEqual(pick.call_args.kwargs, {"local_only": True})
+        self.assertEqual(pick.call_args.args, (None,))
         self.assertIn("English", tgt.asked[0][0])
-        update_settings({"dictation_translate_cloud": "true"})
-        with mock.patch.object(llm, "target", return_value=tgt) as pick:
-            dictation.translate("Привет, завтра пришлю отчёт.", "en")
-        self.assertEqual(pick.call_args.kwargs, {"local_only": False})
 
     def test_text_already_in_the_language_is_typed_as_it_is(self):
         with mock.patch.object(llm, "target") as pick:
@@ -152,7 +148,7 @@ class DictationTranslateTest(unittest.TestCase):
         m = database.get_meeting(mid)
         folder = next(f for f in database.list_folders() if f["id"] == m["folder_id"])
         self.assertEqual(folder["system_key"], "dictations")
-        self.assertTrue(database.is_local_only(m))  # never sent to a cloud model
+        self.assertIn(mid, database.dictation_ids())  # not given to an agent (app/mcp_server.py)
         self.assertEqual((m["status"], m["duration"], m["transcript_model"]), ("completed", 2.0, "gigaam-v3"))
         self.assertEqual([s["text"] for s in m["segments"]], ["Привет, завтра пришлю отчёт."])
         self.assertEqual(m["translations"]["en"]["segments"]["0"]["text"], "Hi, I will send it tomorrow.")
@@ -190,12 +186,12 @@ class OllamaModelChoiceTest(unittest.TestCase):
         status["chat_models"] = ollama_client.chat_models(status["models"])
         with mock.patch("app.ollama_client.ensure_ollama_running"), \
                 mock.patch("app.ollama_client.get_ollama_status", return_value=status):
-            self.assertEqual(llm.target(None, local_only=True).model, "qwen3:8b")
+            self.assertEqual(llm.target(None).model, "qwen3:8b")
         with mock.patch("app.ollama_client.ensure_ollama_running"), \
                 mock.patch("app.ollama_client.get_ollama_status",
                            return_value={"running": True, "models": ["bge-m3:latest"], "chat_models": []}):
             with self.assertRaises(llm.LlmError):  # only an embedding model: "no model downloaded"
-                llm.target(None, local_only=True)
+                llm.target(None)
 
     def test_ollama_error_text_is_kept(self):
         import httpx

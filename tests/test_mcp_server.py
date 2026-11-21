@@ -57,7 +57,7 @@ class McpServerTest(unittest.TestCase):
         secret = database.create_meeting(title="Секретная туманная встреча", filename="b.wav", media_path="b.wav")
         database.save_meeting_results(secret["id"], segments=SEGMENTS, speakers=SPEAKERS, language="ru")
         database.update_meeting_progress(secret["id"], status="completed", progress=100, duration=70.0)
-        database.update_meeting_fields(secret["id"], local_only=1)
+        database.update_meeting_fields(secret["id"], folder_id=database.system_folder_id("dictations"))
         self.secret = secret["id"]
 
     def tearDown(self):
@@ -80,10 +80,10 @@ class McpServerTest(unittest.TestCase):
         for tool in mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]:
             self.assertIn("untrusted", tool["description"], tool["name"])
 
-    def test_search_sections_tasks_and_local_only_hidden(self):
+    def test_search_sections_tasks_and_dictations_hidden(self):
         err, found = _call("search_meetings", query="туман")
         self.assertFalse(err)
-        self.assertEqual([m["id"] for m in found["meetings"]], [self.mid])  # the local-only one is not given
+        self.assertEqual([m["id"] for m in found["meetings"]], [self.mid])  # the dictation is not given
         err, meeting = _call("get_meeting", id=self.mid, sections=["decisions", "summary"])
         self.assertFalse(err)
         self.assertIn("Выпускать в пятницу", meeting["text"])
@@ -93,8 +93,8 @@ class McpServerTest(unittest.TestCase):
         self.assertTrue(err)
         err, tasks = _call("list_tasks", scope="waiting")
         self.assertEqual([t["task"] for t in tasks["tasks"]], ["Прислать смету"])
-        # the list of local-only recordings cannot be read: the call fails, nothing is handed out
-        with mock.patch("app.database.local_only_ids", side_effect=RuntimeError("database is locked")):
+        # the list of dictations cannot be read: the call fails, nothing is handed out
+        with mock.patch("app.database.dictation_ids", side_effect=RuntimeError("database is locked")):
             with self.assertRaises(RuntimeError):
                 mcp_server._hidden()
         database.update_settings({"mcp_local_only": "true"})  # allowed by the user
@@ -102,7 +102,7 @@ class McpServerTest(unittest.TestCase):
 
     def test_a_setting_changed_by_the_app_counts_at_once(self):
         """Found in the review: the MCP server is a process of its own and kept its cache of the settings, so
-        «only local» recordings stayed open to the agent after the user took the permission back in the app."""
+        the hidden recordings stayed open to the agent after the user took the permission back in the app."""
         def app_sets(value):  # the app writes the table from its own process (here: its own connection)
             import sqlite3
 
@@ -119,14 +119,14 @@ class McpServerTest(unittest.TestCase):
         self.assertIn(self.secret, mcp_server._hidden())
         self.assertEqual([m["id"] for m in _call("search_meetings", query="туман")[1]["meetings"]], [self.mid])
 
-    def test_people_heard_only_in_local_only_recordings_are_not_listed(self):
-        """Found in the audit: list_people counted the local-only recordings, so their speakers, calendar
+    def test_people_heard_only_in_dictations_are_not_listed(self):
+        """Found in the audit: list_people counted the hidden recordings, so their speakers, calendar
         attendees and task owners reached the agent."""
         lone = database.create_meeting(title="Ещё одна закрытая", filename="c.wav", media_path="c.wav")
         database.save_meeting_results(lone["id"], segments=SEGMENTS, speakers={"SPEAKER_00": {"name": "Вера"}, "SPEAKER_01": {"name": "Анна"}},
                                       language="ru")
         database.update_meeting_progress(lone["id"], status="completed", progress=100, duration=70.0)
-        database.update_meeting_fields(lone["id"], local_only=1, user_notes="Участники по календарю: Глеб")
+        database.update_meeting_fields(lone["id"], folder_id=database.system_folder_id("dictations"), user_notes="Участники по календарю: Глеб")
         commitments.create("Подписать договор", "Дина", meeting_id=lone["id"])
 
         names = {p["name"]: p for p in _call("list_people")[1]["people"]}

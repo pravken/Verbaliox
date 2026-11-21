@@ -248,7 +248,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadSystemInfo();
   loadSeries();  // the series name in the context menu of a recording
-  loadLlmStatus();
   setTimeout(() => checkForUpdates(false), 4000);  // after the page has settled; only if enabled in settings
   setInterval(() => checkForUpdates(false), 3600e3);  // the window may stay open for days (the server asks GitHub every 6 h)
   loadDictionary();
@@ -1201,7 +1200,6 @@ async function openOpenCommitments() {
   document.body.appendChild(wrap);
 }
 
-// An analysis model is there: a local one downloaded in Ollama, or a cloud one with its key
 // A press that needs the analysis model while there is none: the banner with its two ways is shown,
 // scrolled to and lit for a moment instead of doing nothing
 function flashNoAiBanner(id = 'an-noai') {
@@ -1214,10 +1212,9 @@ function flashNoAiBanner(id = 'an-noai') {
 }
 
 function aiAvailable() {
+  // An analysis model is there: a local one downloaded in Ollama
   const ollamaModels = ((state.lastOllama && state.lastOllama.models) || []).length;
-  const st = state.llm;
-  const cloud = st && st.consent && st.providers && st.providers[st.provider] && st.providers[st.provider].key && st.providers[st.provider].key.saved;
-  return state.lastOllama === undefined || ollamaModels > 0 || !!cloud;  // not loaded yet: assume yes
+  return state.lastOllama === undefined || ollamaModels > 0;  // not loaded yet: assume yes
 }
 
 // --- The organizer's meeting follow-up (MFU), pasted by hand: saved by its button, which also makes the
@@ -1412,13 +1409,9 @@ function linkifyTimestamps(root, maxSec, onSeek) {
   }
 }
 
-// The model for this request: "cloud" for the cloud model, otherwise an Ollama tag
+// The model for this request: an Ollama tag
 function summaryModelChoice() {
   const value = document.getElementById('summary-llm-select')?.value || '';
-  if (value === '__cloud') {
-    const c = cloudLlmChoice();
-    return { chosenModel: 'cloud', prettyModel: c ? c.label : 'Cloud' };
-  }
   return { chosenModel: value || undefined, prettyModel: formatModelName(value || 'Ollama') };
 }
 

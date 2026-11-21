@@ -1115,7 +1115,6 @@ def generate_meeting_summary(
     model_name: Optional[str] = None,
     base_url: Optional[str] = None,
     answer_lang: Optional[str] = "ru",
-    local_only: bool = False,
     user_notes: str = "",
     template_prompt: str = "",
     progress: Optional[Callable[[int, int], None]] = None,
@@ -1135,8 +1134,7 @@ def generate_meeting_summary(
     of a long recording are made once (the overview and the chapters asked for the very same ones)."""
     from app.llm import target
 
-    # Ollama, or the cloud model chosen in Settings → Analysis ("cloud" asks for it explicitly)
-    llm = target(model_name, local_only=local_only)
+    llm = target(model_name)
     lines = build_transcript_lines(segments, speakers_in_language(speakers, answer_lang))
     transcript_text = "\n".join(lines)
     if not transcript_text.strip():
@@ -1197,13 +1195,13 @@ def generate_meeting_summary(
         "ни в этом списке, ни в расшифровке; если не ясно, о ком речь, пиши имя так, как оно сказано."
     ) if roster else ""
     # The user's contacts besides the participants: a person named in the talk is written as in the contacts
-    # (app/people.known_people; a cloud service gets only the ones the transcript names)
+    # (app/people.known_people)
     known: List[str] = []
     if participants is not None:
         try:
             from app.people import known_people
 
-            known = known_people({"segments": segments, "speakers": speakers}, exclude=roster, cloud=llm.is_cloud)
+            known = known_people({"segments": segments, "speakers": speakers}, exclude=roster)
         except Exception:
             known = []
     if roster or known:
@@ -1225,7 +1223,7 @@ def generate_meeting_summary(
     if known_rule:
         roster_note = roster_note + "\n" + known_rule
     source_label = "Вот точная расшифровка аудио/видеозаписи"
-    single_pass_max = single_pass_max_chars() if not llm.is_cloud else llm.max_chars
+    single_pass_max = single_pass_max_chars()
     # the user's notes go in the same request: the transcript gets the room they leave (a recording
     # just under the limit with notes did not fit, and Ollama dropped its beginning without a word)
     # and so do the feature's note and the glossary (the PC check of 0.8.7-beta.2: room was left, but the
@@ -1234,7 +1232,7 @@ def generate_meeting_summary(
     whole_max = max(8000, single_pass_max - len((user_notes or "").strip()[:6000]) - len(mfu_text) - added)
     if len(transcript_text) > whole_max:
         # Map step: condense each part of a long recording into detailed timestamped notes
-        chunks = _chunk_lines(lines, chunk_max_chars() if not llm.is_cloud else llm.max_chars // 2)
+        chunks = _chunk_lines(lines, chunk_max_chars())
         focus = (
             f"Особенно подробно выпиши всё, что относится к вопросу: {custom_prompt.strip()}\n"
             if custom_prompt.strip()
@@ -1317,13 +1315,12 @@ def generate_meeting_title(
     speakers: Dict[str, Dict[str, Any]],
     answer_lang: Optional[str] = "ru",
     model_name: Optional[str] = None,
-    local_only: bool = False,
 ) -> str:
     """A short title (3-8 words) for the recording from the beginning of its transcript."""
     from app.llm import target
 
     # the title by content is turned on by the user (auto_title): a stopped Ollama is started, as for the overview
-    llm = target(model_name, local_only=local_only)
+    llm = target(model_name)
     text = "\n".join(build_transcript_lines(segments, speakers))[:7000]
     if not text.strip():
         raise RuntimeError("Транскрипт пуст")

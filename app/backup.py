@@ -4,7 +4,6 @@ A backup of the library in one .zip (Settings -> General -> Backup), and its res
 In the copy:
 - meetings.db: recordings, transcripts, analysis, notes, folders, series, promises, voice profiles,
   the dictionary and the settings, copied with SQLite's own backup (consistent while the app works);
-  without the API keys of cloud models: they are encrypted for this Windows user and stay here;
 - bench.json: the model comparisons;
 - with "with media": the sound and video files the app keeps (recordings, imported copies), under
   media/, with the place each came from.
@@ -16,8 +15,7 @@ user may have been sent, so nothing in it decides where files go or where data i
   (uploads, audio, recordings; never over an existing file, never under another extension); a file
   that lived anywhere else goes to the recordings folder under RESTORED_FOLDER, and the restored
   database points to it;
-- the settings that hold addresses, folders and the cloud choice (LOCAL_SETTINGS) stay this computer's,
-  and so do the cloud API keys (they are moved into the restored database at the next start);
+- the settings that hold addresses and folders (LOCAL_SETTINGS) stay this computer's;
 - the copy's database brings data only: its triggers and views are dropped (SQL of its own that would
   run here), its queue of files to delete is emptied, and the paths in its recordings are kept only
   where they cannot reach this computer's other files (_clean_paths).
@@ -39,8 +37,7 @@ busy = 0  # a copy is being written or read (app/app_status.py: the app does not
 FORMAT = 1
 RESTORED_FOLDER = "Восстановлено из копии"
 # Where data is sent and where files are written: taken from this computer, not from the copy
-LOCAL_SETTINGS = ("ollama_url", "llm_provider", "llm_cloud_provider", "llm_cloud_consent", "llm_base_url_openai_compat",
-                  "calendar_ics", "recordings_dir", "export_dir", "obsidian_vault", "obsidian_subfolder",
+LOCAL_SETTINGS = ("ollama_url", "calendar_ics", "recordings_dir", "export_dir", "obsidian_vault", "obsidian_subfolder",
                   "watch_folder", "watch_folder_baseline", "watch_folder_recursive", "media_retention_days",
                   # «Мои программы» are turned on by a person on this computer, never by a copy
                   "apps_track")
@@ -91,7 +88,7 @@ def _make(dest: Path, with_media: bool) -> Dict[str, Any]:
         dst = sqlite3.connect(str(copy))
         try:
             src.backup(dst)
-            dst.execute("DROP TABLE IF EXISTS secrets")  # cloud API keys stay on this computer
+            dst.execute("DROP TABLE IF EXISTS secrets")  # the API keys of earlier versions, if still there
             for table in LOCAL_TABLES:
                 dst.execute(f"DROP TABLE IF EXISTS {table}")
             # So do the settings that are not restored from a copy anyway: among them the calendar's
@@ -292,8 +289,8 @@ def _restore(src: Path) -> Dict[str, Any]:
                     restored += 1
                 _clean_paths(conn, roots, put_back)
                 _keep_local_settings(conn)
-                conn.execute("DROP TABLE IF EXISTS secrets")  # keys come from this computer (apply_pending)
-                # so do the minutes worked and «Мои программы» (a copy of an older version may still have them)
+                conn.execute("DROP TABLE IF EXISTS secrets")  # the API keys of a copy of an earlier version
+                # the minutes worked and «Мои программы» (a copy of an older version may still have them)
                 for table in LOCAL_TABLES:
                     conn.execute(f"DROP TABLE IF EXISTS {table}")
                 conn.commit()
@@ -306,20 +303,6 @@ def _restore(src: Path) -> Dict[str, Any]:
             (DATA_DIR / "bench.json").write_bytes(z.read("bench.json"))
     return {"recordings": n, "media_restored": restored, "media_kept": skipped, "created": manifest.get("created", ""),
             "restart_needed": True}
-
-
-def _carry_secrets(old_db: Path, new_db: Path) -> None:
-    """The cloud API keys of this computer (encrypted for this Windows user) into the restored database."""
-    conn = sqlite3.connect(str(new_db))
-    try:
-        conn.execute("ATTACH DATABASE ? AS old", (str(old_db),))
-        if conn.execute("SELECT 1 FROM old.sqlite_master WHERE type = 'table' AND name = 'secrets'").fetchone():
-            conn.execute("CREATE TABLE IF NOT EXISTS secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)")
-            conn.execute("INSERT OR REPLACE INTO secrets (name, value, updated_at) SELECT name, value, updated_at FROM old.secrets")
-        conn.commit()
-        conn.execute("DETACH DATABASE old")
-    finally:
-        conn.close()
 
 
 def _carry_local_tables(old_db: Path, new_db: Path) -> None:
@@ -387,10 +370,6 @@ def apply_pending() -> Optional[str]:
                 if side.exists():
                     shutil.copyfile(side, Path(str(kept) + suffix))
         shutil.copyfile(DB_PATH, kept)
-        try:
-            _carry_secrets(kept, PENDING)
-        except sqlite3.DatabaseError as e:
-            print(f"[backup] the API keys were not carried over: {e}", flush=True)
         try:
             _carry_local_tables(kept, PENDING)
         except sqlite3.DatabaseError as e:

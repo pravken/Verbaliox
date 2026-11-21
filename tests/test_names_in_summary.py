@@ -42,7 +42,7 @@ class NamesInSummaryTest(unittest.TestCase):
 
     def test_the_summary_is_told_who_was_there_and_its_answer_put_right(self):
         sent = []
-        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm = mock.Mock(max_chars=100000, label="m")
         llm.chat = lambda system, user: (sent.append(user), "Яцкевич рассказал про сроки.")[1]
         segs = [{"start": 0, "end": 5, "speaker": "SPEAKER_00", "text": "Сегодня расскажу про сроки."}]
         with mock.patch("app.llm.target", return_value=llm):
@@ -59,13 +59,13 @@ class NamesInSummaryTest(unittest.TestCase):
         people.update("Дмитрий Захарченко", role="тимлид")
         people.add("Ксения Лебедева")
         sent = []
-        llm = mock.Mock(is_cloud=True, max_chars=100000, label="m")
+        llm = mock.Mock(max_chars=100000, label="m")
         llm.chat = lambda system, user: (sent.append(user), "Дмитрий Захарчено проверит.")[1]
         segs = [{"start": 0, "end": 5, "speaker": "SPEAKER_00", "text": "Это проверит Дмитрий Захарченко."}]
         with mock.patch("app.llm.target", return_value=llm):
             out = ollama_client.generate_meeting_summary(segs, {"SPEAKER_00": {"name": "Мария"}}, participants=["Мария"])
         self.assertIn("Дмитрий Захарченко — тимлид", sent[0])
-        self.assertNotIn("Ксения", sent[0])  # a cloud model hears only of the contacts the transcript names
+        self.assertIn("Ксения Лебедева", sent[0])  # the other contacts follow (a misheard name can still match)
         self.assertEqual(out, "Дмитрий Захарченко проверит.")
 
 
@@ -76,7 +76,7 @@ class NamesInSummaryTest(unittest.TestCase):
         self.assertEqual(people.expand_names(text),
                          "Дмитрий Орлов проверит сроки, Дмитрий Орлов согласен. Диме прислать смету. Димитрий не придёт.")
         sent = []
-        llm = mock.Mock(is_cloud=False, max_chars=100000, label="m")
+        llm = mock.Mock(max_chars=100000, label="m")
         llm.chat = lambda system, user: (sent.append(user), "Дима проверит сроки.")[1]
         segs = [{"start": 0, "end": 5, "speaker": "SPEAKER_00", "text": "Дима проверит сроки."}]
         with mock.patch("app.llm.target", return_value=llm):
