@@ -319,6 +319,13 @@ function enhanceDateInput(input) {
   btn.type = 'button';
   btn.className = `${input.className} vs-date-btn`;
   btn.title = input.title;
+  // the button is what the keyboard and a screen reader reach: it takes the field's name, and its keys for a
+  // change of the language
+  const label = input.getAttribute('aria-label') || input.title;
+  if (label) btn.setAttribute('aria-label', label);
+  const tKey = input.getAttribute('data-i18n-title'), aKey = input.getAttribute('data-i18n-aria') || tKey;
+  if (tKey) btn.setAttribute('data-i18n-title', tKey);
+  if (aKey) btn.setAttribute('data-i18n-aria', aKey);
   btn.addEventListener('click', () => { try { input.showPicker(); } catch (e) { input.focus(); } });
   input.tabIndex = -1;
   input.setAttribute('aria-hidden', 'true');
@@ -395,6 +402,7 @@ function setUILanguage(lang) {
   document.querySelectorAll('[data-i18n-aria]').forEach(el => {
     el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
   });
+  document.querySelectorAll('input[data-vs-date]').forEach(syncDateField);  // «Выбрать дату» and the date's order
 
   renderMeetingsSidebar();
   loadDictionary();
@@ -402,6 +410,7 @@ function setUILanguage(lang) {
   if (typeof renderMeetingFeatures === 'function') renderMeetingFeatures();
   if (typeof refreshTasksCount === 'function') refreshTasksCount(true);
   if (typeof scheduleFitTopbar === 'function') scheduleFitTopbar();
+  if (typeof rpApplyMini === 'function') rpApplyMini();  // the minimize button's title and label
   if (state.system) {
     const p = state.system.paths;
     const dirEl = document.getElementById('settings-data-dir');
