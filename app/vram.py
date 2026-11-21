@@ -56,6 +56,31 @@ def _nvml_memory() -> Optional[Tuple[int, int]]:
             return None
 
 
+class _NvmlProcess(ctypes.Structure):  # nvmlProcessInfo_v1_t: what the unversioned call fills
+    _fields_ = [("pid", ctypes.c_uint), ("usedGpuMemory", ctypes.c_ulonglong)]
+
+
+_NVML_NOT_AVAILABLE = 0xFFFFFFFFFFFFFFFF  # the driver does not know it (Windows in its WDDM mode)
+
+
+def nvml_process_memory() -> Optional[Dict[int, int]]:
+    """{pid: bytes} of the video memory each process holds on GPU 0, for the processes the driver tells it
+    of; None without NVML or when it tells none (the load window then shows what Ollama reports)."""
+    if not _nvml_memory():
+        return None
+    with _nvml_lock:
+        try:
+            count = ctypes.c_uint(64)
+            procs = (_NvmlProcess * 64)()
+            if _nvml["lib"].nvmlDeviceGetComputeRunningProcesses(_nvml["handle"], ctypes.byref(count), procs) != 0:
+                return None
+            out = {int(p.pid): int(p.usedGpuMemory) for p in procs[:min(64, count.value)]
+                   if p.usedGpuMemory and p.usedGpuMemory != _NVML_NOT_AVAILABLE}
+            return out or None
+        except Exception:
+            return None
+
+
 def nvml_device() -> Optional[Tuple[str, int, int]]:
     """(name, used bytes, total bytes) of GPU 0 from NVML, or None."""
     mem = _nvml_memory()
@@ -516,7 +541,37 @@ def vram_snapshot() -> Dict[str, Any]:
         elif c["kind"] == "ollama":
             c["where"] = "cpu" if c.get("loaded") and not c.get("size_gb") else "gpu"
             c["embedding"] = is_embedding_model(c["name"])  # the model of search by meaning
-    return {"gpu": gpu, "chips": chips, "busy": busy, "system": sysinfo.snapshot(), "idle": idle_unload.status()}
+    return {"gpu": gpu, "chips": chips, "busy": busy, "system": sysinfo.snapshot(), "idle": idle_unload.status(),
+            "own": _own_share(chips, gpu)}
+
+
+def _own_share(chips: List[Dict[str, Any]], gpu: Optional[Dict[str, float]]) -> Optional[Dict[str, Any]]:
+    """The program's own share for the load window (app/procstat.py); the live-caption and dub chips get the
+    memory and processor of their processes. None when it cannot be measured."""
+    try:
+        from app import procstat
+        from app.dubbing import live_workers
+
+        workers: Dict[str, List[int]] = {"dub": [int(w["pid"]) for w in live_workers() if w.get("pid")]}
+        try:
+            from app import live
+
+            w = live._worker
+            if w is not None and w.proc is not None and w.proc.poll() is None:
+                workers["live"] = [int(w.proc.pid)]
+        except Exception:
+            pass
+        ollama_vram = sum(float(c.get("size_gb") or 0) for c in chips
+                          if c["kind"] == "ollama" and c.get("loaded") and c.get("where") == "gpu")
+        own = procstat.snapshot(workers, ollama_vram if gpu else 0.0, nvml_process_memory() if gpu else None)
+        for c in chips:
+            part = own["parts"].get(c["kind"]) if c["kind"] in ("live", "dub") else None
+            if part:
+                c["ram_gb"], c["cpu_percent"] = part["ram_gb"], part["cpu_percent"]
+        return own
+    except Exception:
+        traceback.print_exc()
+        return None
 
 
 # What the running job does now (the status of its recording): a speech model is in use only while
