@@ -336,7 +336,8 @@ function hmMeetingMenu(key, el) {
 
 // A meeting going on: record the rest of it, stopped with the meeting like an automatic one
 async function hmRecordNow(key) {
-  const ev = home.events.find(e => e.key === key);
+  // the strip shows the meetings of the week (strip.events), «Сегодня» those of the working day ±3 h
+  const ev = home.events.find(e => e.key === key) || (typeof strip !== 'undefined' ? (strip.events || []).find(e => e.key === key) : null);
   if (!ev || isRecording() || hmAutoRec) return;
   home.started.add(key);
   hmAutoRec = { key, end: ev.e.getTime(), title: ev.title || '' };
