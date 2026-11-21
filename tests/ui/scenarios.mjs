@@ -182,6 +182,25 @@ await step('dictionary section', async () => {
   expect(await page.isVisible('#dict-view'), 'the settings entry does not lead to the section');
 });
 
+// Ассистент: the field has a send button; an answer's sources are moments «▶ 00:24» in the text, and under it
+// each recording by its full name with its moments
+await step('assistant sources', async () => {
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(500);
+  const r = await page.evaluate(async () => {
+    for (let i = 0; i < 30 && !ASSIST.loaded; i++) await new Promise(res => setTimeout(res, 100));
+    assistantNewChat();
+    currentChat().items.push({ id: 991, question: 'Что решили по срокам?', scope: state.askScope, scopeLabel: '', status: 'done', at: new Date().toISOString(),
+      data: { found: true, answer: 'Сроки уточнят до среды [1], список будет к пятнице [2].', sources: [
+        { n: 1, meeting_id: 1, title: 'Планёрка отдела', date: '21 ноября', start: 24, text: 'По срокам нужно уточнить.' },
+        { n: 2, meeting_id: 1, title: 'Планёрка отдела', date: '21 ноября', start: 12, text: 'Я подготовлю список к пятнице.' }] } });
+    renderAssistant();
+    return { refs: [...document.querySelectorAll('#ask-thread .markdown-body .as-ref')].map(b => b.textContent),
+      rows: document.querySelectorAll('#ask-thread .as-srcrow').length, send: !!document.querySelector('#library-ask-btn svg') };
+  });
+  expect(r.refs.join() === '▶ 00:24,▶ 00:12' && r.rows === 1 && r.send, `assistant: ${JSON.stringify(r)}`);
+});
+
 // Настройки: eight sections with their line icons, «Календарь» one of them; the cards with the icon of their section
 await step('settings sections', async () => {
   await page.evaluate(() => openModal('settings', 'calendar'));

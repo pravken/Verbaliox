@@ -463,7 +463,10 @@ function assistantSyncSend() {
   if (!btn || !input) return;
   const pending = assistantPending();
   const empty = assistantScopeCount(state.askScope) === 0;
-  btn.textContent = t(pending ? 'rdSasStop' : 'askBtn');
+  const label = pending ? t('rdSasStop') : t('asSendTip');
+  btn.innerHTML = pultIcon(pending ? 'stop' : 'send');
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
   btn.classList.toggle('as-send-stop', !!pending);
   btn.disabled = !pending && (empty || !input.value.trim());
   input.disabled = empty && !pending;
@@ -705,16 +708,11 @@ function renderAssistantItem(item, isLast) {
       const cited = new Set([...(data.answer || '').matchAll(/\[(\d{1,3})\]/g)].map(x => Number(x[1])));
       const shown = (data.sources || []).filter(s => !cited.size || cited.has(s.n)).slice(0, 20);
       const recs = new Set(shown.map(s => s.meeting_id)).size;
-      const sources = shown.map(s => `
-        <button data-click="openLibrarySource" data-click-args='[${Number(item.id) || 0}, ${Number(s.n) || 0}]' class="as-src">
-          <span class="lib-cite">${Number(s.n) || 0}</span><span class="as-src-title">${escapeHtml(s.title)}</span>
-          <span class="as-src-time">${escapeHtml(formatTime(s.start))}</span>
-          <span class="as-src-quote">«${escapeHtml(s.text)}»</span>
-        </button>`).join('');
+      const sources = assistantSourcesHtml(item, shown);
       const model = data.model ? `${data.cloud ? '☁ ' : ''}${escapeHtml(data.cloud ? data.model : formatModelName(data.model))}` : '';
       body = `<div class="as-a">
         <div class="markdown-body text-[13.5px]" data-as-answer="${Number(item.id) || 0}"></div>
-        ${sources ? `<details class="as-sources"><summary>${escapeHtml(t('rdSasSourcesCount').replace('{r}', () => recs).replace('{n}', () => shown.length))}</summary>${sources}</details>` : ''}
+        ${sources ? `<div class="as-srclist"><div class="as-srclist-h">${escapeHtml(t('rdSasSourcesCount').replace('{r}', () => recs).replace('{n}', () => shown.length))}</div>${sources}</div>` : ''}
         <div class="as-actions">
           <button data-click="assistantCopy" data-click-args='[${Number(item.id) || 0}, {"$": "el"}]' class="as-act">${escapeHtml(t('rdSasCopy'))}</button>
           <button data-click="assistantSaveMenu" data-click-args='[{"$": "event"}, ${Number(item.id) || 0}]' class="as-act">${escapeHtml(t('rdSasSave'))}</button>
@@ -728,6 +726,22 @@ function renderAssistantItem(item, isLast) {
   const follow = isLast && item.status === 'done' && item.data?.found
     ? `<div class="as-follow"><span>${escapeHtml(t('rdSasAskNext'))}</span>${ASSIST_FOLLOW.map((k, i) => `<button data-click="assistantFollow" data-click-args='[${i}]' class="as-chip-q">${escapeHtml(t(k))}</button>`).join('')}</div>` : '';
   return q + body + follow;
+}
+
+// The sources of an answer: one line per recording, its full name and date, then its moments («06:12, 19:40»),
+// each opening the recording there
+function assistantSourcesHtml(item, shown) {
+  const byRec = new Map();
+  for (const s of shown) {
+    if (!byRec.has(s.meeting_id)) byRec.set(s.meeting_id, []);
+    byRec.get(s.meeting_id).push(s);
+  }
+  return [...byRec.values()].map(list => {
+    const first = list[0];
+    const moments = list.sort((a, b) => a.start - b.start).map(s => `<button data-click="openLibrarySource" data-click-args='[${Number(item.id) || 0}, ${Number(s.n) || 0}]'
+        class="as-ref" title="${escapeHtml(`«${s.text}»`)}">▶ ${escapeHtml(formatTime(s.start))}</button>`).join('');
+    return `<div class="as-srcrow"><span class="as-srcrow-t">${escapeHtml(first.title)}${first.date ? `<span class="as-srcrow-d">, ${escapeHtml(first.date)}</span>` : ''}</span><span class="as-srcrow-m">${moments}</span></div>`;
+  }).join('');
 }
 
 function renderAskThread() {
@@ -771,7 +785,10 @@ function renderAssistant(scrollDown) {
     linkifyCitations(el, byN, item.id);
     el.querySelectorAll('.lib-cite').forEach(b => {
       const s = byN[b.textContent];
-      if (s) b.title = `${s.title} · ${formatTime(s.start)}\n«${s.text}»`;
+      if (!s) return;
+      b.title = `${s.title}, ${formatTime(s.start)} — ${t('asOpenAt')}\n«${s.text}»`;
+      b.className = 'as-ref';
+      b.textContent = `▶ ${formatTime(s.start)}`;
     });
   }
   if (scrollDown) {
@@ -786,3 +803,6 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   assistantNewChat();
 });
+
+// Entering the section: its cards (the suggestions, or the questions and answers) rise one after another
+registerView('ask', { show: () => pultRise(document.getElementById('ask-thread'), '.as-card, .as-q, .as-a') });
