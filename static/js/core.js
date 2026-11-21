@@ -693,12 +693,12 @@ function showToast(msg, action, kind) {
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
   el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-  el.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICONS[kind]}</span><span class="toast-text"></span>`;
+  el.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICONS[kind]}</span><span class="toast-text"></span><span class="toast-life" aria-hidden="true"></span>`;
   el.querySelector('.toast-text').textContent = msg;
   const dismiss = () => { clearTimeout(el._timer); removeWithExit(el); };
   if (action && action.label && typeof action.onClick === 'function') {
     const btn = document.createElement('button');
-    btn.className = 'toast-action';
+    btn.className = 'tk-btn tk-btn-sm toast-action';
     btn.textContent = action.label;
     if (action.title) btn.title = action.title;
     btn.onclick = () => { dismiss(); action.onClick(); };
@@ -706,16 +706,25 @@ function showToast(msg, action, kind) {
   }
   if (kind === 'warning' || kind === 'error') {
     const x = document.createElement('button');
-    x.className = 'toast-close';
+    x.className = 'vx-x toast-close';
     x.setAttribute('aria-label', t('close'));
     x.textContent = '✕';
     x.onclick = dismiss;
     el.appendChild(x);
   }
   const life = action && kind === 'success' ? 7000 : action && kind === 'error' ? 0 : TOAST_LIFE[kind];
-  const arm = (ms) => { clearTimeout(el._timer); if (ms) el._timer = setTimeout(dismiss, ms); };
+  // the thin line at the bottom shows the life left; it stops while the pointer is on the notice and starts
+  // again, over the shorter time, when it leaves
+  const line = el.querySelector('.toast-life');
+  const arm = (ms) => {
+    clearTimeout(el._timer);
+    if (ms) el._timer = setTimeout(dismiss, ms);
+    line.classList.toggle('hidden', !ms);
+    if (ms) { line.style.animationDuration = `${ms}ms`; line.classList.remove('is-on'); void line.offsetWidth; line.classList.add('is-on'); }
+  };
   el.addEventListener('mouseenter', () => clearTimeout(el._timer));
   el.addEventListener('mouseleave', () => arm(life && Math.max(1500, life / 2)));
+  el.appendChild(line);
   stack.appendChild(el);
   const live = [...stack.children].filter(c => !c.classList.contains('is-leaving'));
   live.slice(0, Math.max(0, live.length - 3)).forEach(c => removeWithExit(c));
