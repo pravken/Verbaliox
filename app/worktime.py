@@ -68,6 +68,10 @@ def foreground_app() -> Optional[str]:
             return None
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        import os
+
+        if pid.value == os.getpid():  # the window of this program: its process is python, not Verbaliox.exe
+            return "verbaliox"
         h = kernel32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
             return None

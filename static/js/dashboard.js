@@ -142,7 +142,9 @@ function dbWPeriod(id) {
 }
 
 function dbWRange(id) {
-  const now = new Date(), p = dbWPeriod(id);
+  // «Мои программы» follow the working day of app/worktime.py: before 4 in the morning it is still the day before
+  // (a night's work counted «сегодня» showed nothing — found in review)
+  const now = new Date(Date.now() - (id === 'apps' ? 4 * 3600 * 1000 : 0)), p = dbWPeriod(id);
   let a, b;
   if (p === 'day') { a = new Date(now.getFullYear(), now.getMonth(), now.getDate()); b = new Date(a); b.setDate(a.getDate() + 1); }
   else if (p === 'month') { a = new Date(now.getFullYear(), now.getMonth(), 1); b = new Date(now.getFullYear(), now.getMonth() + 1, 1); }
