@@ -799,9 +799,9 @@ function updateWhisperModelsUI(models) {
       } else if (item.installed && isSelected) {
         actionHtml = `
           <div class="flex items-center gap-1.5">
-            <span class="ui-btn bg-apple-green/20 text-apple-green">${SVG_ICONS.check}<span>${t('uiActive')}</span></span>
+            <span class="ui-btn ui-btn-state bg-apple-green/20 text-apple-green">${SVG_ICONS.check}<span>${t('uiActive')}</span></span>
             <button data-id="${escapeHtml(item.id)}" data-click="${item.engine === 'onnx' ? 'deleteOnnxModel' : 'deleteWhisperModel'}" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
-              class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button>
+              class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button>
           </div>
         `;
       } else if (item.installed) {
@@ -812,7 +812,7 @@ function updateWhisperModelsUI(models) {
               ${t('uiSelect')}
             </button>
             <button data-id="${escapeHtml(item.id)}" data-click="${item.engine === 'onnx' ? 'deleteOnnxModel' : 'deleteWhisperModel'}" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
-              class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button>
+              class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button>
           </div>
         `;
       } else {
@@ -827,7 +827,7 @@ function updateWhisperModelsUI(models) {
 
       return `
         <div class="mc-card sx-model-card p-3 rounded-xl border transition ${
-          isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
+          'bg-apple-sidebar border-white/10'
         }">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0 flex-1">
@@ -1472,9 +1472,9 @@ function updateOllamaUI(ollama) {
         actionHtml = `<span class="ui-btn bg-apple-blue/20 text-apple-blue font-mono animate-pulse">${ps.progress || 1}%</span>`;
       } else if (item.installed) {
         const del = `<button data-id="${escapeHtml(item.installed_as || item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
-              class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button>`;
+              class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button>`;
         actionHtml = isSelected
-          ? `<div class="flex items-center gap-1.5"><span class="ui-btn bg-apple-green/20 text-apple-green">${SVG_ICONS.check}<span>${t('uiActive')}</span></span>${del}</div>`
+          ? `<div class="flex items-center gap-1.5"><span class="ui-btn ui-btn-state bg-apple-green/20 text-apple-green">${SVG_ICONS.check}<span>${t('uiActive')}</span></span>${del}</div>`
           : `<div class="flex items-center gap-1.5">
           <button data-id="${escapeHtml(item.id)}" data-click="selectActiveOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipSelectModel'))}"
             class="ui-btn ui-btn-subtle text-white hover:bg-apple-blue">
@@ -1492,7 +1492,7 @@ function updateOllamaUI(ollama) {
 
       return `
         <div class="mc-card p-3 rounded-xl border transition ${
-          isSelected ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'
+          'bg-apple-sidebar border-white/10'
         }">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0 flex-1">
@@ -2122,9 +2122,9 @@ function renderSemanticModelCard() {
     : installed
       ? `<div class="flex items-center gap-1.5"><button data-click="buildSemanticIndex" class="ui-btn ui-btn-subtle text-white hover:bg-apple-blue">${escapeHtml(t('semanticBuild'))}</button>
           <button data-id="${escapeHtml((ollama.models || []).find(n => n === model || n.startsWith(model + ':')) || model)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
-            class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button></div>`
+            class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button></div>`
       : `<button data-click="pullSemanticModel" class="ui-btn ui-btn-primary">${SVG_ICONS.download}<span>${escapeHtml(t('semanticDownload'))} (1.2 GB)</span></button>`;
-  box.innerHTML = `<div class="mc-card p-3 rounded-xl border transition ${installed ? 'bg-apple-blue/10 border-apple-blue/50' : 'bg-apple-sidebar border-white/10'}">
+  box.innerHTML = `<div class="mc-card p-3 rounded-xl border transition bg-apple-sidebar border-white/10">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0 flex-1">
         <div class="flex items-center flex-wrap gap-2">
