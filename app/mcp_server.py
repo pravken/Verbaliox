@@ -5,7 +5,8 @@ written here without a library (the protocol needs initialize, tools/list and to
 
 Read only, on the same database as the app (it works with the app closed). The dictations (the «Диктовки»
 folder) are left out: they can hold anything said, and an agent may send what it reads to a service of its
-own; the setting mcp_local_only («Отдавать агенту и диктовки») lets them in.
+own; the setting mcp_local_only («Отдавать агенту и диктовки») lets them in. The recordings marked «только
+локально» in earlier versions stay out.
 
 Started by the agent's client: `<the app's python> <app folder>/app/mcp_server.py` (Settings → Агент shows
 the lines for Claude Desktop and Claude Code). Tools:
@@ -42,13 +43,15 @@ def _settings() -> Dict[str, str]:
 
 
 def _hidden() -> set:
-    """The recordings an agent does not get (the dictations), unless the user allowed them."""
-    if (_settings().get("mcp_local_only") or "false").lower() == "true":
-        return set()
-    from app.database import dictation_ids
+    """The recordings an agent does not get: the dictations, unless the user allowed them, and the ones the
+    user had marked «только локально» in earlier versions (always)."""
+    from app.database import dictation_ids, formerly_local_ids
 
     # no try: a failed read must fail the call, not hand the agent the dictations
-    return set(dictation_ids())
+    hidden = set(formerly_local_ids())
+    if (_settings().get("mcp_local_only") or "false").lower() != "true":
+        hidden |= set(dictation_ids())
+    return hidden
 
 
 def _day(m: Dict[str, Any]) -> str:
