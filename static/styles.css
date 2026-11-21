@@ -2988,10 +2988,11 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-none { padding: 12px 8px; color: var(--hc-dim, #8E8E93); }
 .lt-empty { padding: 48px 16px; text-align: center; color: var(--hc-dim, #8E8E93); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .lt-empty.hidden { display: none; }
-/* A narrow window: the views on the first line, the filters under them; the selection keeps the same place */
+/* A narrow window (as «Задачи», the same width: the bar of either does not fit there in one line): the views on
+   the first line, the filters under them; the selection keeps the same place */
 #libtable-view { container-type: inline-size; }
 html #lt-scroll:focus-visible { outline: none; }  /* the row under the keyboard shows the focus (.lt-cur) */
-@container (max-width: 1040px) {
+@container (max-width: 1180px) {
   .lt-bar { height: 76px; flex-wrap: wrap; align-content: center; row-gap: 10px; }
   .lt-fr { order: 1; margin-left: auto; }
   .lt-fl { order: 2; flex-basis: 100%; }
@@ -4067,7 +4068,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-tbg { display: inline-flex; align-items: center; gap: 8px; }
 .tk-tbg-lbl { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
 .tk-tbg-off { opacity: 0.45; }
-.tk-tbg-off .tk-seg-btn { cursor: default; }
+.tk-tbg-off .tk-chip { cursor: default; }
 /* the groups of the list as cards */
 .tk-group .tk-group-head { padding: 0 2px 2px; }
 .tk-group .pcd-n { margin-left: 0; }
@@ -4214,9 +4215,10 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 #tasks-view .tk-colbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #tasks-view .tk-tcards { padding: 0 0 6px; }
 #tasks-view .tk-cal-main { padding: 0 24px 16px; }
-/* a narrow window: the view, the grouping and «Колонки» on the first line, the filters under them */
+/* a narrow window (as «Записи», the same width): the view and «Колонки» on the first line, the filters and the
+   grouping under them */
 #tasks-view { container-type: inline-size; }
-@container (max-width: 1040px) {
+@container (max-width: 1180px) {
   #tasks-view .tk-bar { height: 76px; flex-wrap: wrap; align-content: center; row-gap: 10px; }
   #tasks-view .tk-fr { order: 1; margin-left: auto; }
   #tasks-view .tk-fl { order: 2; flex-basis: 100%; }
