@@ -1370,6 +1370,17 @@ function clearLibSelection() {
 function renderLibSelectionBar() {
   let bar = document.getElementById('lib-selection-bar');
   const n = state.multi.size;
+  // «Записи» on screen: its own bar takes the place of the filters (libtable.js)
+  if (state.appView === 'libtable' && typeof renderLibTableBar === 'function') {
+    bar?.remove();
+    renderLibTableBar();
+    for (const el of document.querySelectorAll('#lt-body [data-mid]')) {
+      const on = state.multi.has(Number(el.dataset.mid));
+      el.classList.toggle('lt-on', on);
+      el.querySelector('.lt-cbx')?.classList.toggle('on', on);
+    }
+    return;
+  }
   if (!n) { bar?.remove(); return; }
   if (!bar) {
     bar = document.createElement('div');
