@@ -525,7 +525,7 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
                 from app.database import update_meeting_progress
 
                 update_meeting_progress(meeting_id, progress=max(1, min(80, int(pct * 0.8))),
-                                        stage_text=f"Сведение дорожек: убираем эхо колонок… {pct}%")
+                                        stage_text=f"Сведение дорожек: удаление эха колонок… {pct}%")
 
         if clean_microphone(tool_cmd("ffmpeg"), page, system, system_skip, cleaned, lined_up, progress=progress):
             mic, echo_done = cleaned, True

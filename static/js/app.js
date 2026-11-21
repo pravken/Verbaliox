@@ -2947,7 +2947,7 @@ async function openAbout() {
     const recs = en ? (n === 1 ? 'recording' : 'recordings') : (n % 10 === 1 && n % 100 !== 11 ? 'записи' : 'записях');
     document.getElementById('about-stats').textContent = n
       ? (en ? `Transcribed ${amount} of speech in ${n} ${recs} since ${since}` : `Расшифровано ${amount} речи в ${n} ${recs} с ${since}`)
-      : (en ? 'Nothing transcribed yet: the willow is waiting' : 'Пока ничего не расшифровано — верба ждёт');
+      : (en ? 'Nothing transcribed yet' : 'Расшифрованных записей пока нет');
   }
   document.getElementById('about-caption').textContent = '';
   endAboutEgg();

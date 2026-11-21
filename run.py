@@ -311,7 +311,7 @@ setInterval(() => { const s = Math.round((Date.now() - t0) / 1000); if (s > 20) 
   'Идёт запуск (' + s + ' с). Первый запуск после установки может занять несколько минут: Windows проверяет файлы библиотек.'; }, 1000);
 function showError(text, log, sac) {
   document.getElementById('box').innerHTML = '<h1>Сервер Verbaliox не запустился</h1><pre></pre>'
-    + (sac ? '<p>Похоже, файл заблокировала функция Windows «Интеллектуальное управление приложениями». Выключите её: Безопасность Windows → Управление приложениями/браузером → Параметры интеллектуального управления приложениями → Выкл., затем запустите Verbaliox снова.</p>' : '')
+    + (sac ? '<p>Возможно, файл заблокировала функция Windows «Интеллектуальное управление приложениями». Выключите её: Безопасность Windows → Управление приложениями/браузером → Параметры интеллектуального управления приложениями → Выкл., затем запустите Verbaliox снова.</p>' : '')
     + '<p>Журнал: <code></code></p>';
   document.querySelector('pre').textContent = text;
   document.querySelector('code').textContent = log;
@@ -637,7 +637,7 @@ class TrayController:
             when = f" — до {time.strftime('%H:%M', time.localtime(end))}" if end else ""
             return [("Только запись" + when, "economy:off", 0x8)]  # MF_CHECKED: a click turns it off
         return [("Только запись", [
-            ("Пока не выключу", "economy:0", 0),
+            ("До выключения", "economy:0", 0),
             ("На 30 минут", "economy:30", 0),
             ("На 1 час", "economy:60", 0),
             ("На 2 часа", "economy:120", 0),
@@ -651,8 +651,8 @@ class TrayController:
         now = economy.set_mode(choice != "off", choice if choice != "off" else "0")
         end = economy.until() if now else 0
         self.tray.notify("Только запись" if now else "«Только запись» выключено",
-                         ("Расшифровка, анализ и субтитры подождут"
-                          + (f" до {time.strftime('%H:%M', time.localtime(end))}" if end else ", пока режим не выключат"))
+                         ("Расшифровка, анализ и субтитры отложены"
+                          + (f" до {time.strftime('%H:%M', time.localtime(end))}" if end else " до выключения режима"))
                          if now else "Расшифровка и анализ продолжаются", target="")
 
     def _meetings_quiet(self) -> bool:
@@ -840,7 +840,7 @@ class TrayController:
         from app.database import get_all_settings
 
         settings = get_all_settings()
-        presets = [("call", "Созвон"), ("note", "Голосовая заметка"), ("system", "Звук компьютера")]
+        presets = [("call", "Звонок"), ("note", "Голосовая заметка"), ("system", "Звук компьютера")]
         try:
             presets += [(p["id"], p["name"]) for p in json.loads(settings.get("record_presets") or "[]")
                         if isinstance(p, dict) and p.get("id") and p.get("name")]

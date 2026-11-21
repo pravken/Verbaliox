@@ -214,7 +214,7 @@ def notice_tick() -> Dict[str, Any]:
     if settings.get("update_notified") != ver:
         update_settings({"update_notified": ver})
         if not quiet:
-            how = ("Скачается сама и установится, когда программа будет свободна. " if st.get("auto") and st.get("can_install")
+            how = ("Скачается и установится автоматически, когда программа будет свободна. " if st.get("auto") and st.get("can_install")
                    else "")
             app_status.add_notice(f"Вышла Verbaliox {ver}", how + "Нажмите, чтобы посмотреть, что нового", "update")
     elif dl.get("done") and not dl.get("stale") and settings.get("update_ready_notified") != ver:

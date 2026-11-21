@@ -85,7 +85,7 @@ def check(now: datetime = None) -> int:
         if info:
             tasks = info["open_tasks"]
             parts.append((f"Открытых задач с прошлых встреч: {tasks}. " if tasks else "") +
-                         f"Прошлый раз: «{info['last']['title']}», {info['last']['date']}. Нажмите — бриф перед встречей")
+                         f"Прошлая встреча: «{info['last']['title']}», {info['last']['date']}. Нажмите — бриф перед встречей")
             target = f"brief:series:{info['series_id']}" if info["series_id"] else f"brief:person:{info['person']}"
         else:
             parts.append("Нажмите — открыть «Главную»")

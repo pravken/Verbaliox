@@ -989,7 +989,7 @@ function openLlmPicker() {
 // (the source, the microphone with a level check, the noise filter); calls (recorded by themselves, Teams
 // captions; Windows only); the calendar; then what downloads, with the precise mode (every speech model)
 // and the start with Windows as switches. Asked by the user to be offered here, not only in Settings. The language is not asked: the
-// recommended set detects it (Russian by GigaAM, the rest by the other model); «Настрою сам» opens
+// recommended set detects it (Russian by GigaAM, the rest by the other model); «Настроить вручную» opens
 // Settings → Recognition to choose the models
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
 function openFirstRunWizard(data) {

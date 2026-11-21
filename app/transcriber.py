@@ -2092,7 +2092,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                     asr_onnx.release(model_name, gpu=True)
                     onnx_done.clear()
                     where["gpu"] = " на процессоре"
-                    update_meeting_progress(meeting_id, stage_text="Видеокарта не справилась — распознавание на процессоре")
+                    update_meeting_progress(meeting_id, stage_text="Сбой видеокарты — распознавание на процессоре")
                     raw_segments = asr_onnx.transcribe(model_name, wav_path, total_dur, _onnx_progress_and_partial,
                                                        lambda: _check_cancel(meeting_id), out=onnx_done,
                                                        leveling=processing.get("leveling", True))
@@ -2266,7 +2266,7 @@ def _process_meeting_job(meeting_id: int) -> None:
                                      + (f", по смыслу выбрано {res['by_llm']}" if res["chat"] else
                                         " (модель анализа недоступна: решено по точности моделей)"))
                 elif not ensemble_note:
-                    ensemble_note = "точный режим: другие модели не справились, оставлена расшифровка основной"
+                    ensemble_note = "точный режим: другие модели завершились с ошибкой, оставлена расшифровка основной"
 
         try:  # recorded during a calendar meeting: are the voices its invitees (else a call meanwhile)
             from app import calendar_match
@@ -2332,7 +2332,7 @@ def _process_meeting_job(meeting_id: int) -> None:
             meeting_id,
             status="completed",
             progress=100,
-            stage_text=f"Готово! Участников: {len(speakers_meta)}, реплик: {len(merged_segments)}" + "".join(f"; {n}" for n in notes),
+            stage_text=f"Готово. Участников: {len(speakers_meta)}, реплик: {len(merged_segments)}" + "".join(f"; {n}" for n in notes),
         )
         if settings.get("delete_media_after", "false").lower() == "true":
             # Privacy setting: the transcript stays, the sound goes

@@ -238,7 +238,7 @@ def cut_command(ffmpeg: str, media: Path, intervals: List[Interval], has_video: 
 def run_cut(ffmpeg: str, media: Path, intervals: List[Interval], has_video: bool, out: Path,
             on_progress: Callable[[float], None], check_cancel: Callable[[], None], afilter: str = "") -> Path:
     if not intervals:
-        raise ValueError("Нечего оставить: в записи не найдено речи")
+        raise ValueError("Нарезка невозможна: в записи не найдено речи")
     total = max(0.1, kept_seconds(intervals))
     # written beside it and put in place when done: a file of that name the user agreed to replace is
     # not lost when FFmpeg fails or the cut is cancelled half way

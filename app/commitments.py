@@ -752,7 +752,7 @@ def update(task_id: int, changes: Dict[str, Any]) -> Dict[str, Any]:
     recording are found again."""
     fields = {k: v for k, v in changes.items() if k in _EDITABLE and v is not None}
     if not fields:
-        raise ValueError("Нечего менять")
+        raise ValueError("Изменений нет")
     if "status" in fields and fields["status"] not in ("open", "done"):
         raise ValueError("Неизвестное состояние")
     if "what" in fields:
