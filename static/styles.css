@@ -4361,6 +4361,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .rec-title-input:focus { outline: none; background: var(--card); box-shadow: 0 0 0 1px var(--accent); }
 .rec-meta { min-width: 0; flex-shrink: 4; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rec-head-tabs { min-height: 36px; }
+/* another recording loading (setRecPending in static/js/workspace.js): only its title shows */
+#workspace-content.rec-pending > :not(#workspace-header), #workspace-content.rec-pending .rec-head-tabs, #workspace-content.rec-pending .rec-meta, #workspace-content.rec-pending #meeting-features { visibility: hidden; }
 #workspace-header.rec-head .tb-rec-tabs { margin-left: 0; }
 @container (max-width: 760px) {
   .rec-head { padding-left: 12px; padding-right: 12px; }
