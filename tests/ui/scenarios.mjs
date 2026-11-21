@@ -699,12 +699,12 @@ await step('records section', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
 });
 
-// Import: «＋ Импорт ▾» in the title of «Записи» is a menu with an icon at each way to add; Ctrl+O and files
+// Import: «＋ Импорт» in the strip on top is a menu with an icon at each way to add; Ctrl+O and files
 // dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
 await step('import menu and drop veil', async () => {
   await page.evaluate(() => switchAppView('libtable'));
   await sleep(300);
-  await page.click('#lt-import-btn');
+  await page.click('#strip-import');
   await sleep(200);
   const rows = await page.$$eval('#imp-menu .imp-menu-row', els => els.map(e => [e.dataset.imp, !!e.querySelector('.imp-menu-ic svg')]));
   expect(rows.map(r => r[0]).join() === 'files,folder,link,params' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
