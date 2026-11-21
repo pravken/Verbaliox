@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 CACHE_SEC = 15 * 60
+# Outlook that failed (not set up, waiting for a password) is not started again every 15 minutes,
+# even by a forced read: each start may put its window in front of the user.
+OUTLOOK_RETRY_SEC = 6 * 60 * 60
 _cache: Dict[str, Any] = {"source": "", "at": 0.0, "events": [], "error": ""}
 _lock = threading.Lock()
 _fetch_lock = threading.Lock()
@@ -530,6 +533,10 @@ def events(force: bool = False) -> List[Dict[str, Any]]:
     with _lock:
         fresh = _cache["source"] == source and time.time() - _cache["at"] < CACHE_SEC
         if fresh and not force:
+            return list(_cache["events"])
+        if (source.lower() == "outlook" and _cache["source"] == source and _cache["error"]
+                and not _cache["error"].startswith("Классический Outlook не настроен")  # checked without starting it
+                and time.time() - _cache["at"] < OUTLOOK_RETRY_SEC):
             return list(_cache["events"])
     try:
         with _fetch_lock:  # Outlook (PowerShell) and links take seconds: one read at a time

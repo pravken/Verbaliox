@@ -121,6 +121,7 @@ const SERVER_TEXT_EN = {
   "Исходный видеофайл не найден": "The source video file was not found",
   "Исходный файл не найден": "The source file was not found",
   "Календарь по ссылке больше 5 МБ": "The calendar at the link is larger than 5 MB",
+  "Классический Outlook не настроен: в нём нет почтового профиля. Для нового Outlook и Outlook в браузере добавьте опубликованную ссылку .ics": "Classic Outlook is not set up: it has no mail profile. For the new Outlook and Outlook on the web, add a published .ics link",
   "Классический Outlook на этом компьютере не найден. Для нового Outlook и Outlook в браузере добавьте опубликованную ссылку .ics": "Classic Outlook was not found on this computer. For the new Outlook and Outlook on the web, add a published .ics link",
   "Неверный формат ключа": "The key format is invalid",
   "Контрольная сумма архива FFmpeg не совпала — файл отклонён": "The FFmpeg archive checksum did not match — the file was rejected",
