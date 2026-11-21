@@ -116,6 +116,31 @@ await step('undo a removal', async () => {
   expect(await page.evaluate(() => TK.data.tasks.length) === before, '«Отменить» did not bring it back');
 });
 
+// The tasks as a calendar of due dates: the grouping greys (its place kept), today framed, a task with its
+// whole text, «Без срока» with its empty slot; the week view has seven tall days
+await step('task calendar', async () => {
+  await page.evaluate(() => { switchAppView('tasks'); setTasksView('cal'); setTasksCalMode('month'); });
+  await sleep(500);
+  const r = await page.evaluate(() => ({
+    off: document.getElementById('tk-groups-box').classList.contains('tk-tbg-off'),
+    today: document.querySelectorAll('#tk-cal .tk-day.tk-today').length,
+    chips: [...document.querySelectorAll('#tk-cal .tk-grid .tk-cchip .tk-ctext')].map(e => e.scrollWidth <= e.clientWidth + 1),
+    weekdays: document.querySelectorAll('#tk-cal .tk-week span').length,
+    none: !!document.querySelector('#tk-cal .tk-nodue .pcd-h'),
+  }));
+  expect(r.off, 'the grouping is not greyed in the calendar');
+  expect(r.today === 1, 'today is not framed');
+  expect(r.chips.length > 0 && r.chips.every(Boolean), 'a task of the calendar is cut');
+  expect(r.weekdays === 7 && r.none, 'no weekdays or no «Без срока»');
+  await page.evaluate(() => setTasksCalMode('week'));
+  await sleep(300);
+  expect(await page.evaluate(() => document.querySelectorAll('#tk-cal .tk-day.tk-tall').length) === 7, 'the week has not seven days');
+  await page.evaluate(() => { setTasksCalMode('month'); setTasksView('list'); });
+  await sleep(300);
+  expect(await page.evaluate(() => !document.getElementById('tk-groups-box').classList.contains('tk-tbg-off')
+    && !!document.querySelector('#tk-list .tk-group.pcard .pcd-ic, #tk-list .tk-group.pcard .tk-ava')), 'the list has no group cards');
+});
+
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
 await step('dialog keeps a selection', async () => {
   await page.evaluate(() => { askText('Название', 'текст'); });
