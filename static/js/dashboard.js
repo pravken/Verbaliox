@@ -362,7 +362,12 @@ function dbProgressMenu(el) {
   ], r.left, r.bottom + 6), 0);
 }
 
-function dbNum(n) { return String(n); }  // a point for fractions in both languages (asked by the user)
+// One way to write hours (and other numbers) in all the widgets: one decimal place at most, the decimal comma in
+// Russian and the point in English (asked by the user: «0.1 ч» beside «0 ч» and «0.05 ч» for one week)
+function dbNum(n) {
+  const v = Math.round((Number(n) || 0) * 10) / 10 || 0;  // «|| 0»: no «-0»
+  return v.toLocaleString(state.uiLang === 'en' ? 'en-US' : 'ru-RU', { maximumFractionDigits: 1, useGrouping: false });
+}
 
 // --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
 // They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
