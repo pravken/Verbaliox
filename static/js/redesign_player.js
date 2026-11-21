@@ -1136,8 +1136,9 @@ document.addEventListener('keydown', (e) => {
   if (isTypingTarget(e.target) || anyModalOpen()) return;
   const p = rpPlayer();
   if (state.appView !== 'library' || !state.activeMeeting || !p || !p.src) return;
+  // L repeats the phrase in a loop (not «forward», as in video players); J goes 10 seconds back, K plays and pauses
   if (e.code === 'KeyL') { e.preventDefault(); rpToggleLoop(); }
-  else if (e.code === 'KeyJ' && !e.shiftKey) { e.preventDefault(); skipPlayer(-10); }  // J, K: as in video players
+  else if (e.code === 'KeyJ' && !e.shiftKey) { e.preventDefault(); skipPlayer(-10); }
   else if (e.code === 'KeyK' && !e.shiftKey) { e.preventDefault(); togglePlayPause(); }
   else if (e.code === 'KeyA' && !e.shiftKey) { e.preventDefault(); rpSetA(); }
   else if (e.code === 'KeyB' && !e.shiftKey) { e.preventDefault(); if (rp.ab && rp.ab.b != null) rpClearAb(); else rpSetB(); }
