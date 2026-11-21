@@ -91,7 +91,22 @@ class AppsTest(unittest.TestCase):
         worktime.clear_apps()
         self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {})
         self.assertEqual(worktime.app_name("ms-teams"), "Teams")
-        self.assertEqual(worktime.app_name("someapp"), "someapp")
+        self.assertEqual(worktime.app_name("someapp"), "Someapp")
+        self.assertEqual(worktime.app_name("parsecd"), "Parsec")
+
+    def test_during_a_recording_the_program_used_gets_the_minute(self):
+        """Found by the user: an hour of a game while a talk was recorded showed as «Встречи» only. A minute of a
+        recording or a call goes to the program used with the keyboard or the mouse; to the meeting in the call's
+        program, in this app, or while only listening."""
+        update_settings({"apps_track": "true"})
+        t = datetime(2026, 11, 19, 20, 0)
+        for m in range(20):
+            self._tick(t + timedelta(minutes=m), "eldenring", idle=5, meeting=True)  # playing, the talk recorded
+        for m in range(20, 25):
+            self._tick(t + timedelta(minutes=m), "eldenring", idle=600, meeting=True)  # only listening
+        for m in range(25, 30):
+            self._tick(t + timedelta(minutes=m), "ms-teams", idle=5, meeting=True)  # in the call's program
+        self.assertEqual(worktime.apps(date(2026, 11, 19), date(2026, 11, 20)), {"eldenring": 20, worktime.MEETING: 10})
 
     def test_an_unknown_program_still_counts_the_minute_as_work(self):
         update_settings({"apps_track": "true"})
