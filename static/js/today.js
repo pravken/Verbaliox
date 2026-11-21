@@ -7,28 +7,44 @@
 // The cards are drawn by the functions of static/js/dashboard.js, from /api/dashboard of this week (no feature
 // filter: the filter belongs to «Обзор»). The parts are classic scripts sharing one global scope.
 
-const TD = { data: null, seq: 0, shownAt: 0, cal: { mode: 'week', anchor: null, data: null, work: {}, loading: false, seq: 0 } };
+// cal.anchor: the day shown (null: today), kept across День · Неделя · Месяц; dayTip: a click on a day opens it
+const TD = { data: null, seq: 0, shownAt: 0, cal: { mode: 'week', anchor: null, data: null, work: {}, loading: false, seq: 0, dayTip: 'calOpenDay' } };
 const TD_SPANS = ['day', 'week', 'month'];
 const TD_GROW_MS = 1200;  // «Рабочий день»: the bar fills from zero this long, once, as the page opens
 
 function tdSpan() { return TD_SPANS.includes(dbPrefs().span) ? dbPrefs().span : 'day'; }
 
+// the span changes, the day shown stays: a week or a month shows the week or the month of that day
 function tdSetSpan(span) {
   if (!TD_SPANS.includes(span)) return;
   dbSave({ span });
-  TD.cal.anchor = new Date();
-  if (span !== 'day') tdCalLoad(); else tdRender();
+  if (span !== 'day') tdCalLoad(); else renderHome();
 }
 
-// ‹ Сегодня ›: the week or the month before, this one, the one after
+// A day of the week or the month opens in «День» (YYYY-MM-DDTHH:MM); today's date is today's working day
+function tdOpenDay(day) {
+  const x = new Date(day);
+  if (Number.isNaN(x.getTime())) return;
+  TD.cal.anchor = calKey(x) === calKey(new Date()) ? null : x;
+  dbSave({ span: 'day' });
+  renderHome();
+}
+
+// ‹ Сегодня ›: the day, the week or the month before, this one, the one after
 function tdNav(k) {
   const cv = TD.cal;
-  if (!k) cv.anchor = new Date();
-  else {
+  if (!k) cv.anchor = null;
+  else if (tdSpan() === 'day') {
+    const x = calDayStart(hmViewDate() || hmDay().from);  // today: from the date its working day began (a night shift)
+    x.setDate(x.getDate() + k);
+    x.setHours(12);
+    cv.anchor = calKey(x) === calKey(hmDay().from) ? null : x;
+  } else {
     const x = new Date(cv.anchor || new Date());
     if (cv.mode === 'week') x.setDate(x.getDate() + 7 * k); else { x.setDate(1); x.setMonth(x.getMonth() + k); }
     cv.anchor = x;
   }
+  if (tdSpan() === 'day') { renderHome(); return; }
   tdCalLoad();
 }
 
@@ -54,7 +70,6 @@ async function tdCalLoad() {
   const cv = TD.cal;
   cv.mode = tdSpan();
   if (cv.mode === 'day') { tdRender(); return; }
-  cv.anchor = cv.anchor || new Date();
   const { a, b } = calRange(cv);
   const seq = ++cv.seq;
   cv.loading = true;
@@ -107,7 +122,17 @@ function tdPillsHtml(span) {
   };
   const pills = [];
   let worked = 0;
-  if (span === 'day') {
+  const view = span === 'day' ? hmViewDate() : null;
+  if (view) {  // another day: its meetings and its hours worked (home.days, static/js/home.js)
+    const d = hmDay(view), key = calKey(d.from), other = home.days[key];
+    if (!other) return '';
+    if (home.calConfigured) pills.push(...meetPills(tdMeetings(other.events, []).filter(m => m.s < d.to && m.e > d.from)));
+    else {
+      const recs = (state.meetings || []).filter(m => String(m.recorded_at || m.created_at || '').slice(0, 10) === key).length;
+      pills.push(tdPill(recs ? plural(recs, t('tdRecForms')) : t('tdNoRecordings')));
+    }
+    worked = other.worked || 0;
+  } else if (span === 'day') {
     const today = calKey(new Date());
     if (home.calConfigured) pills.push(...meetPills(tdMeetings(home.events, []).filter(m => calKey(m.s) === today)));
     else {
@@ -131,7 +156,14 @@ function tdRenderHead(span) {
   const at = span === 'day' ? now : new Date(cv.anchor || now);
   const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-  if (span === 'day') {
+  const view = span === 'day' ? hmViewDate() : null;
+  if (view) {  // another day: «Вт, 24 ноября» and its year
+    const day = hmDay(view).from, wd = day.toLocaleDateString(loc, { weekday: 'short' }).replace('.', '');
+    set('td-tile-k', wd);
+    set('td-tile-n', String(day.getDate()));
+    set('td-title', `${cap(wd)}, ${day.toLocaleDateString(loc, { day: 'numeric', month: 'long' })}`);
+    set('td-sub', String(day.getFullYear()));
+  } else if (span === 'day') {
     set('td-tile-k', now.toLocaleDateString(loc, { weekday: 'short' }).replace('.', ''));
     set('td-tile-n', String(now.getDate()));
     set('td-title', t('tdToday'));
@@ -150,7 +182,7 @@ function tdRenderHead(span) {
   document.getElementById('td-tile')?.classList.toggle('td-tile-word', span !== 'day');
   const pills = document.getElementById('td-pills');
   if (pills) pills.innerHTML = tdPillsHtml(span);
-  document.getElementById('td-nav')?.classList.toggle('hidden', span === 'day');
+  document.getElementById('td-nav')?.classList.remove('hidden');  // the day steps by a day, the week and the month by theirs
   const seg = document.getElementById('td-spans');
   if (seg) seg.innerHTML = TD_SPANS.map(k => `<button role="radio" aria-checked="${span === k}" class="tk-seg-btn${span === k ? ' tk-on' : ''}" data-click="tdSetSpan" data-click-args='["${k}"]'>${escapeHtml(t(`tdSpan_${k}`))}</button>`).join('');
 }
@@ -228,15 +260,20 @@ function tdRender() {
 }
 const TD_WAVE_MS = 1000;
 
-// The calendar of the week or the month: a day opens its week, «⋯» or a right click marks a day off, a recording opens
+// The calendar of the week or the month: a day (its number, its head, «ещё N», an empty part of it — not a meeting
+// or a recording) opens in «День», «⋯» or a right click marks a day off, a recording opens
 (function wireToday() {
   const cal = document.getElementById('td-cal');
   if (!cal) return;
   cal.addEventListener('click', e => {
     const b = e.target.closest('[data-cal]');
-    if (!b) return;
+    if (!b) {
+      const cell = !e.target.closest('.cal-item') && e.target.closest('[data-daykey]');
+      if (cell) tdOpenDay(`${cell.dataset.daykey}T12:00`);
+      return;
+    }
     const act = b.dataset.cal;
-    if (act === 'day') { TD.cal.anchor = new Date(b.dataset.day); dbSave({ span: 'week' }); tdCalLoad(); }
+    if (act === 'day') tdOpenDay(b.dataset.day);
     else if (act === 'dayoff') { const r = b.getBoundingClientRect(); calDayMenu(b.dataset.day, r.left, r.bottom + 4, tdCalLoad); }
     else if (act === 'rec') openMeeting(Number(b.dataset.id));
   });
