@@ -813,6 +813,9 @@ document.addEventListener('keydown', e => {
 
 function openModal(name, tab) {
   if (name === 'settings') mountSettingsPage();  // the settings are a page of the main area (shell.js)
+  // «Очередь» and «Нагрузка» stand above the windows (z 60): they close when a window opens
+  if (typeof closeJobsPop === 'function') closeJobsPop();
+  if (typeof closeLoadPop === 'function') closeLoadPop();
   const modal = document.getElementById(`modal-${name}`);
   _modalReturnFocus[name] = document.activeElement;
   if (name !== 'settings') {
