@@ -192,6 +192,47 @@ class OutlookNotSetUpTest(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual(str(e.exception), calendar_outlook.NO_PROFILE)
 
+    def test_a_timeout_ends_only_a_new_hidden_outlook_without_force(self):
+        from app import calendar_outlook
+
+        kills = []
+
+        def run(args, **kw):
+            if args[0] == "powershell":
+                raise calendar_outlook.subprocess.TimeoutExpired(args, 90)
+            if args[0] == "taskkill":
+                kills.append(args)
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        pids = iter([{100}, {100, 200, 300}])
+        with mock.patch.object(calendar_outlook, "supported", return_value=True), \
+             mock.patch.object(calendar_outlook, "has_profile", return_value=True), \
+             mock.patch.object(calendar_outlook, "_outlook_pids", side_effect=lambda: next(pids)), \
+             mock.patch.object(calendar_outlook, "_has_visible_window", side_effect=lambda pid: pid == 300), \
+             mock.patch.object(calendar_outlook.subprocess, "run", side_effect=run):
+            with self.assertRaises(RuntimeError):
+                calendar_outlook.fetch()
+        # 100 was there before (the user's), 300 shows a window (a password typed in): only 200 is asked to close
+        self.assertEqual(kills, [["taskkill", "/PID", "200"]])
+
+    def test_a_timeout_ends_nothing_when_the_running_outlook_is_not_known(self):
+        from app import calendar_outlook
+
+        with mock.patch.object(calendar_outlook, "_outlook_pids", return_value={5}), \
+             mock.patch.object(calendar_outlook.subprocess, "run") as run:
+            calendar_outlook._close_started_outlook(None)
+        run.assert_not_called()
+
+    def test_outlook_pids_read_from_tasklist(self):
+        from app import calendar_outlook
+
+        out = '"OUTLOOK.EXE","4321","Console","1","200,000 K"\n"OUTLOOK.EXE","99","Console","1","1 K"\n'
+        with mock.patch.object(calendar_outlook.subprocess, "run", return_value=mock.Mock(stdout=out)):
+            self.assertEqual(calendar_outlook._outlook_pids(), {4321, 99})
+        with mock.patch.object(calendar_outlook.subprocess, "run",
+                               return_value=mock.Mock(stdout="INFO: No tasks are running which match the specified criteria.")):
+            self.assertEqual(calendar_outlook._outlook_pids(), set())
+
     def test_a_failed_outlook_read_is_not_repeated(self):
         from app import calendar_outlook
 
