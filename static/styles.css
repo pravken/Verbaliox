@@ -5089,3 +5089,13 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
    by the user: the chip sat 2px lower, aligned on the text's baseline) */
 .ft-chip-btn, .ft-add { display: inline-flex; align-items: center; vertical-align: middle; }
 #meeting-features .ft-chip { line-height: 18px; }
+
+/* «Это я» after a name: a small tag apart from the name (reported by the user: it stood almost against it) */
+:is(.pv-row-t b, .pv-who h2, .pc-who h2, .sp-dname b) em { display: inline-flex; align-items: center; margin-left: 8px; padding: 0 6px; height: 18px;
+  border-radius: 6px; background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-style: normal; font-size: 11px; font-weight: 500;
+  vertical-align: middle; white-space: nowrap; }
+
+/* the name and its tag on one centred line (reported by the user: the tag sat off centre) */
+.pv-who h2, .pc-who h2 { display: flex; align-items: center; }
+.pv-row-t b, .sp-dname b { display: inline-flex; align-items: center; }
+:is(.pv-row-t b, .pv-who h2, .pc-who h2, .sp-dname b) em { vertical-align: 0; line-height: 1; }
