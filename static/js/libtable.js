@@ -32,7 +32,8 @@ const LT_KEY = 'verbaliox_library_table';
 // The box and the kind of file before the name, in every view
 const LT_LEAD = '22px 18px';
 
-const LT = { prefs: null, cur: null, anchor: null, q: '', ids: [], taskCounts: null, hits: null, hitsQ: '', chip: 'all', colsOpen: false };
+const LT = { prefs: null, cur: null, anchor: null, q: '', ids: [], taskCounts: null, hits: null, hitsQ: '', chip: 'all', colsOpen: false,
+  pressed: false, later: false };  // a press in the table (a click, a column dragged): the progress waits for its end
 
 const LT_SVG = (d, w = 14) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const LT_ICON = {
@@ -382,7 +383,33 @@ async function ltDropOnFolder(e, folderId) {
   renderLibTable();
 }
 
-function renderLibTable() {
+// The progress of the recordings being processed (live events, library.js): only the state of a row
+// changes, so only that is drawn again; the whole table waits for a press to end (a click between the down
+// and the up of a row, or a column being dragged, would lose its element), and the open «Колонки» panel is
+// not made again under the pointer
+function renderLibTableLive(rows) {
+  if (state.appView !== 'libtable') return;
+  if (LT.pressed) { LT.later = true; return; }
+  if (rows && [...rows].every(ltRenderRowState)) return;
+  renderLibTable({ live: true });
+}
+
+function ltRenderRowState(id) {
+  const m = (state.meetings || []).find(x => x.id === id);
+  if (!m) return false;
+  const row = document.querySelector(`#lt-body [data-mid="${id}"]`);
+  if (row) row.querySelectorAll('.lt-st').forEach(el => { el.outerHTML = ltStatusChip(m); });
+  return true;  // a row not shown: its progress does not change what is shown
+}
+
+window.addEventListener('pointerup', () => {
+  if (!LT.pressed) return;
+  LT.pressed = false;
+  // after the click that follows this up: the row clicked is still the one under it
+  if (LT.later) setTimeout(() => { if (LT.later && !LT.pressed) { LT.later = false; renderLibTable({ live: true }); } }, 0);
+}, true);
+
+function renderLibTable(opts = {}) {
   if (state.appView !== 'libtable') return;
   const p = ltPrefs();
   const box = document.getElementById('lt-body');
@@ -397,7 +424,7 @@ function renderLibTable() {
   LT.taskCounts = null;
   LT.ids = [];
   renderLibTableCount(all, shown);
-  renderLibTableBar();
+  if (!(opts.live && LT.colsOpen)) renderLibTableBar();
   let html = '', tpl = '', minW = 0;
   if (p.view === 'table') {
     ({ html, tpl, minW } = ltTableHtml(ltGroups(shown)));
@@ -767,6 +794,7 @@ function ltOpen(id) {
     }
   });
   // The width of a column: dragged at the right edge of its header
+  body.addEventListener('pointerdown', () => { LT.pressed = true; }, true);  // ends on the window (above)
   body.addEventListener('pointerdown', (e) => {
     const rs = e.target.closest && e.target.closest('.lt-rs');
     if (!rs) return;
@@ -774,25 +802,33 @@ function ltOpen(id) {
     e.stopPropagation();
     const c = rs.dataset.rs;
     const start = ltWidth(c), x0 = e.clientX;
-    rs.setPointerCapture(e.pointerId);
+    try { rs.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is already gone */ }
     document.body.classList.add('lt-resizing');
-    let w = start;
+    let w = start, done = false;
     const move = (ev) => {
       w = Math.max(40, Math.min(900, Math.round(start + zpx(ev.clientX - x0))));
       const widths = { ...ltPrefs().widths, [c]: w };
       body.style.setProperty('--lt-tpl', `${LT_LEAD} minmax(180px, 1fr) ${ltShownCols().filter(x => x !== 'name').map(x => `${x === c ? w : (Number(widths[x]) >= 40 ? Math.min(widths[x], 900) : LT_COLS[x].w)}px`).join(' ')}`);
     };
+    // the end is heard on the window and when the capture is lost (the handle redrawn, the window left):
+    // the cursor «col-resize» and the selection off must never stay behind
     const up = () => {
-      rs.removeEventListener('pointermove', move);
-      rs.removeEventListener('pointerup', up);
-      rs.removeEventListener('pointercancel', up);
+      if (done) return;
+      done = true;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      rs.removeEventListener('lostpointercapture', up);
       document.body.classList.remove('lt-resizing');
+      LT.pressed = false;
+      LT.later = false;
       ltSave({ widths: { ...ltPrefs().widths, [c]: w } });
       renderLibTable();
     };
-    rs.addEventListener('pointermove', move);
-    rs.addEventListener('pointerup', up);
-    rs.addEventListener('pointercancel', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    rs.addEventListener('lostpointercapture', up);
   });
 })();
 
