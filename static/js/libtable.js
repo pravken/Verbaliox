@@ -500,6 +500,8 @@ function renderLibTableBar() {
       + `<button type="button" class="lt-btn" data-click="ltBulkFeature" data-click-args='[{"$": "event"}]'>${escapeHtml(t('ltToFeature'))}</button>`
       + `<button type="button" class="lt-btn" data-click="ltBulkExport" data-click-args='[{"$": "event"}]'>${escapeHtml(t('export'))}</button>`
       + `<button type="button" class="lt-btn" data-click="ltBulkTranscribe" title="${escapeHtml(t('ltTranscribeTip'))}">${escapeHtml(t('ltTranscribe'))}</button>`
+      // «Удалить» in sight (asked by the user: it was only in «⋯»); bulkDelete asks before anything goes
+      + `<button type="button" class="lt-btn lt-danger" data-click="bulkDelete" title="Delete">${escapeHtml(t('ltDelete'))}</button>`
       + `<button type="button" class="lt-btn" data-click="ltBulkMore" data-click-args='[{"$": "event"}]' title="${escapeHtml(t('ltMoreTip'))}" aria-haspopup="menu">⋯</button>`
       + `<button type="button" class="lt-btn lt-ghost" data-click="clearLibSelection" title="Esc">${escapeHtml(t('ltClearSel'))}</button>`;
     return;
