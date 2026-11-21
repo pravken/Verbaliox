@@ -12,12 +12,7 @@
           <input id="lt-q" type="search" data-input="onLibTableSearch" data-input-args='[{"$": "value"}]'
                  data-i18n-placeholder="ltSearch" placeholder="Поиск по названию, людям и тексту" data-i18n-title="ltSearchTip" title="Поиск по названию, участникам, фичам и тексту расшифровок">
         </label>
-        <!-- Import: a menu of the ways to add (static/js/importdlg.js openImportMenu); also Ctrl+O and files dropped on the window -->
-        <button id="lt-import-btn" type="button" class="lt-btn" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
-                data-i18n-title="impBtnTip" title="Файлы, папка или ссылка (Ctrl+O). Файлы можно перетащить в окно">
-          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          <span data-i18n="impBtn">Импорт</span><span aria-hidden="true">▾</span>
-        </button>
+        <!-- Import lives in the strip on top (one button for every section; asked by the user: two were one too many) -->
       </header>
       <div id="lt-bar" class="lt-bar"></div>
       <div id="lt-scroll" class="lt-scroll" tabindex="0" data-i18n-aria="ltTitle" aria-label="Записи">
