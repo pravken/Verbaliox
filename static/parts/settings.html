@@ -325,8 +325,8 @@
           </div>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="liveAutoToggle">Включать субтитры при начале записи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="liveAutoHint">Выключено: запись начинается без субтитров, их можно включить в студии во время записи. Субтитры нагружают процессор. Субтитры Teams сохраняются с записью в любом случае.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-live-captions-auto" checked />
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="liveAutoHint">Выключено: запись начинается без субтитров, их можно включить на экране записи. Субтитры нагружают процессор и память. При «Не мешать на встречах» сами не включаются. Субтитры Teams сохраняются с записью в любом случае.</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-live-captions-auto" />
           </label>
           <div>
             <label class="block text-[11.5px] text-apple-secondary mb-1" for="set-cpu-threads" data-i18n="cpuThreadsLabel">Потоки процессора для GigaAM и Parakeet</label>
@@ -995,7 +995,7 @@
           </label>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="afterMeetingsToggle">Анализ — только когда нет встречи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="afterMeetingsHint">Только на время встречи (идёт запись или встреча по календарю): расшифровка и анализ ждут её конца, начатый анализ останавливается, модели выгружаются из памяти — компьютер не тормозит, экран можно показывать. Записи расшифровываются и разбираются сами через пару минут после встречи. Субтитры, перевод и анализ, запущенные вручную, не ждут. Переключается и в меню значка в трее.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="afterMeetingsHint">Только на время встречи (идёт запись или встреча по календарю): расшифровка и анализ ждут её конца, начатый анализ останавливается, модели выгружаются из памяти — компьютер не тормозит, экран можно показывать. Записи расшифровываются и разбираются сами через пару минут после встречи. Субтитры сами не включаются; включённые вручную, перевод и анализ, запущенные вручную, не ждут. Переключается и в меню значка в трее.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-analysis-after-meetings" checked />
           </label>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
