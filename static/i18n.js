@@ -1338,7 +1338,7 @@ const I18N = {
     scTheatre: 'Режим кинотеатра (для видео)',
     scSearch: 'Поиск в тексте записи',
     scImport: 'Открыть файлы',
-    scAppTabs: 'Разделы по порядку панели: Сегодня, Задачи, запись, Студия, Ассистент',
+    scAppTabs: 'Разделы по порядку полосы слева: Главная, Записи, Задачи, Люди, Ассистент',
     scRecord: 'Новая запись звука (с подтверждением)',
     scEsc: 'Закрыть окно или режим кинотеатра',
     scHelp: 'Эта справка',
@@ -2985,6 +2985,19 @@ const I18N = {
     rdSasDiskLeft: 'Свободно ~{time} записи',
     rdSasSavedTo: 'сохранится в «{dir}»',
 
+    // --- pult: rail (parts/rail.html, renderRail in static/js/shell.js) ---
+    rlHome: 'Главная',
+    rlRecords: 'Записи',
+    rlTasks: 'Задачи',
+    rlPeople: 'Люди',
+    rlAsk: 'Ассистент',
+    rlTipHome: 'Главная: день, задачи и сводки (Ctrl+1)',
+    rlTipRecords: 'Записи: все встречи и файлы (Ctrl+2)',
+    rlTipTasks: 'Задачи из всех записей (Ctrl+3)',
+    rlTipPeople: 'Люди: участники записей, голоса и контакты (Ctrl+4)',
+    rlTipAsk: 'Ассистент: вопросы к записям (Ctrl+5)',
+    rlTipDict: 'Словарь: как писать имена, проекты и термины',
+
   },
   en: {
     // --- Cloud language models for analysis ---
@@ -4322,7 +4335,7 @@ const I18N = {
     scTheatre: 'Theatre mode (video)',
     scSearch: 'Search the transcript',
     scImport: 'Open files',
-    scAppTabs: 'Sections in the order of the top bar: Today, Tasks, the recording, Studio, Assistant',
+    scAppTabs: 'Sections in the order of the left rail: Home, Recordings, Tasks, People, Assistant',
     scRecord: 'New audio recording (asks first)',
     scEsc: 'Close a window or theatre mode',
     scHelp: 'This help',
@@ -5968,6 +5981,19 @@ const I18N = {
     rdSasAskIdle: 'Questions about the conversation work while recording, with the text shown as people speak.',
     rdSasDiskLeft: 'Free for ~{time} of recording',
     rdSasSavedTo: 'saved to “{dir}”',
+
+    // --- pult: rail (parts/rail.html, renderRail in static/js/shell.js) ---
+    rlHome: 'Home',
+    rlRecords: 'Recordings',
+    rlTasks: 'Tasks',
+    rlPeople: 'People',
+    rlAsk: 'Assistant',
+    rlTipHome: 'Home: the day, tasks and summaries (Ctrl+1)',
+    rlTipRecords: 'Recordings: all meetings and files (Ctrl+2)',
+    rlTipTasks: 'Tasks from all recordings (Ctrl+3)',
+    rlTipPeople: 'People: participants, voices and contacts (Ctrl+4)',
+    rlTipAsk: 'Assistant: questions about the recordings (Ctrl+5)',
+    rlTipDict: 'Dictionary: how names, projects and terms are spelled',
 
   }
 };

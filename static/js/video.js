@@ -382,9 +382,10 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();  // the details of the open recording (its ⋯ in the top bar)
       rpOpenInfo();
     } else if (/^(Digit|Numpad)[1-5]$/.test(e.code) && !e.shiftKey && !anyModalOpen()) {
-      // Ctrl+1…5: the dashboard (1 and 2: the former Home and Tasks), the open recording, the Studio, the Assistant
+      // Ctrl+1…5: the rail's sections in their order (Главная, Записи, Задачи, Люди, Ассистент)
       e.preventDefault();
-      switchAppView(['dashboard', 'dashboard', 'library', 'studio', 'ask'][Number(e.code.slice(-1)) - 1]);
+      const n = Number(e.code.slice(-1));
+      if (n === 4) openContacts(); else switchAppView(['dashboard', 'libtable', 'tasks', '', 'ask'][n - 1]);
     }
     return;
   }
