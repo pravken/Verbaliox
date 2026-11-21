@@ -926,9 +926,10 @@ function renderCalendarView() {
   const note = !calView.loading && !data.configured ? `<p class="cal-note">${escapeHtml(t('calNoCalendar'))}</p>`
     : data.error ? `<p class="cal-note">${escapeHtml(t('calError'))}: ${escapeHtml(serverText(data.error))}</p>` : '';
   const seg = m => `<button data-cal="${m}" class="cal-seg${calView.mode === m ? ' cal-seg-on' : ''}" aria-pressed="${calView.mode === m}">${escapeHtml(t(m === 'week' ? 'calWeek' : 'calMonth'))}</button>`;
+  vxRedraw(wrap);
   wrap.innerHTML = `<div class="cal-dialog modal-card">
     <div class="cal-head">
-      <h2 class="cal-title">${escapeHtml(t('calTitle'))}</h2>
+      <span class="vx-head-ic" aria-hidden="true">${pultIcon('cal')}</span><h2 class="cal-title">${escapeHtml(t('calTitle'))}</h2>
       <div class="cal-segs" role="group">${seg('week')}${seg('month')}</div>
       <div class="cal-navs">
         <button data-cal="prev" class="cal-nav" aria-label="${escapeHtml(t('calPrev'))}" title="${escapeHtml(t('calPrev'))}">‹</button>
@@ -936,7 +937,7 @@ function renderCalendarView() {
         <button data-cal="next" class="cal-nav" aria-label="${escapeHtml(t('calNext'))}" title="${escapeHtml(t('calNext'))}">›</button>
         <span class="cal-label">${escapeHtml(label)}</span>
       </div>
-      <button data-cal="close" class="mp-close cal-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button>
+      <button data-cal="close" class="vx-x cal-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">✕</button>
     </div>
     ${note}
     <div class="cal-body${calView.loading ? ' cal-loading' : ''}">${body}</div>

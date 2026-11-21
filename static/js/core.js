@@ -64,6 +64,11 @@ function drawerHide(el, after) {
   el.addEventListener('animationend', onEnd);
   setTimeout(end, 220);
 }
+// A window drawn again in place (its next step, a filter): the opening motion plays on the first draw only
+function vxRedraw(wrap) {
+  if (wrap.dataset.drawn) wrap.classList.add('vx-drawn');
+  wrap.dataset.drawn = '1';
+}
 function hideWithExit(el) { leaveThen(el, () => el.classList.add('hidden')); }
 function removeWithExit(el) { leaveThen(el, () => el.remove()); }
 function cancelLeave(el) {
@@ -485,12 +490,14 @@ function confirmDialog(title, text, okLabel, danger = true, opts = {}) {
     wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
-    wrap.innerHTML = `<div class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
-      <div class="text-sm font-semibold text-white">${escapeHtml(title)}</div>
-      ${text ? `<p class="text-xs text-apple-secondary leading-relaxed whitespace-pre-line break-words">${escapeHtml(text)}</p>` : ''}
-      <div class="flex justify-end gap-2">
-        ${opts.single ? '' : `<button data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(opts.cancel || t('cancel'))}</button>`}
-        <button data-a="yes" class="ui-btn ${danger ? 'bg-apple-red text-white hover:opacity-90' : 'ui-btn-primary'}">${escapeHtml(okLabel)}</button>
+    // the head: a warning in red for what cannot be undone, a question mark for a question, «i» for a message
+    const ic = opts.single ? 'info' : danger ? 'over' : 'help';
+    wrap.innerHTML = `<div class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead(ic, title, { close: 'data-a="no"', tone: danger && !opts.single ? 'danger' : '' })}
+      ${text ? `<p class="vx-dlg-text whitespace-pre-line break-words">${escapeHtml(text)}</p>` : ''}
+      <div class="vx-dlg-foot">
+        ${opts.single ? '' : `<button data-a="no" class="tk-btn">${escapeHtml(opts.cancel || t('cancel'))}</button>`}
+        <button data-a="yes" class="tk-btn ${danger ? 'tk-btn-danger' : 'tk-btn-primary'}">${escapeHtml(okLabel)}</button>
       </div></div>`;
     const done = v => { removeWithExit(wrap); document.removeEventListener('keydown', onKey, true); resolve(v); };
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
@@ -501,7 +508,7 @@ function confirmDialog(title, text, okLabel, danger = true, opts = {}) {
     });
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(wrap);
-    wrap.querySelector('button[data-a="no"]') ? wrap.querySelector('button[data-a="no"]').focus() : wrap.querySelector('button[data-a="yes"]').focus();
+    (wrap.querySelector('.vx-dlg-foot button[data-a="no"]') || wrap.querySelector('button[data-a="yes"]')).focus();
   });
 }
 
@@ -530,13 +537,14 @@ function askText(label, value = '', opts = {}) {
     wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
-    wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
-      ${opts.title ? `<div class="text-sm font-semibold text-white">${escapeHtml(opts.title)}</div>` : ''}
-      <label class="block text-xs text-apple-label leading-relaxed whitespace-pre-line">${escapeHtml(label)}</label>
-      <input type="text" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
-      <div class="flex justify-end gap-2">
-        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
-        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(opts.ok || t('ok'))}</button>
+    // the head names what is typed (the title, or the question itself when there is no title)
+    wrap.innerHTML = `<form class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead(opts.ic || 'pen', opts.title || label, { close: 'data-a="no"' })}
+      ${opts.title ? `<label class="vx-dlg-text whitespace-pre-line">${escapeHtml(label)}</label>` : ''}
+      <input type="text" class="vx-field" aria-label="${escapeHtml(label)}" />
+      <div class="vx-dlg-foot">
+        <button type="button" data-a="no" class="tk-btn">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="tk-btn tk-btn-primary">${escapeHtml(opts.ok || t('ok'))}</button>
       </div></form>`;
     const input = wrap.querySelector('input');
     input.value = value || '';
@@ -863,7 +871,7 @@ function openModal(name, tab) {
     const first = name === 'settings' ? document.getElementById('settings-search') : null;  // the search, not «Закрыть»
     // Audit 7.2: the first field or action, not the ✕ of the window (Enter must not close it)
     const items = focusablesIn(modal);
-    (first || items.find(el => !el.matches('.dlg-x, .imp-x')) || items[0] || modal).focus();
+    (first || items.find(el => !el.matches('.dlg-x, .imp-x, .vx-x')) || items[0] || modal).focus();
   }, 60);
   if (name === 'import') onImportDialogOpen();  // importdlg.js: the list, the processing from the settings
   if (name === 'settings') {

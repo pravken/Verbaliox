@@ -4711,3 +4711,68 @@ button.sc-at:hover { color: var(--accent-text); }
 .db-lib-shown { flex: none; margin-left: auto; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: var(--ctl-r, 8px); background: rgba(255, 255, 255, 0.06); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); }
 .db-lib-ic svg { width: 18px; height: 18px; }
 .db-drawer { width: 360px; }
+
+/* ============================================================================================================
+   Every window in one style (asked by the user: many still had the old look). The reference: «Очередь»,
+   «Нагрузка», «Импорт» and the window after an update. One surface (--panel), the hairline --line, a 14px corner,
+   the dialog shadow; the head of vxHead (an icon square, a 16px title, a line under it, «✕» at the right end);
+   rows or cards inside; fields and buttons 32px with the 8px corner; the actions at the right of the footer,
+   the secondary one first. The windows open with the motion of the others and leave as they came.
+   ============================================================================================================ */
+.modal-backdrop > .modal-card:not(.sx-shell), #upd-after .modal-card, .tk-dlg, .frw {
+  background-color: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-dialog); color: #F5F5F7; }
+.modal-backdrop > .modal-card:not(.sx-shell), .tk-dlg, .frw { animation: vx-pop 180ms cubic-bezier(.2, .8, .2, 1) both; }
+/* a window drawn again in place (its step, its filter) does not play the opening again */
+.vx-drawn > .modal-card, .vx-drawn > .frw { animation: none; }
+@media (prefers-reduced-motion: reduce) { .modal-backdrop > .modal-card, .tk-dlg, .frw { animation: none !important; } }
+/* the dialogs built by the scripts (confirmDialog, askText, the correction of a word, a word of the dictionary) */
+.vx-dlg { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; box-sizing: border-box; font-size: var(--fs-ui); }
+.vx-dlg-sm { max-width: 440px; }
+.vx-dlg-text { margin: 0; font-size: var(--fs-ui); line-height: 1.5; color: var(--hc-dim, #C7C7CC); }
+.vx-dlg-foot, .an-dlg-foot, .tk-dlg-foot, .imp-foot, .upd-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.vx-dlg-foot { margin-top: 2px; }
+.vx-head-tag { font-size: var(--fs-caption); font-weight: 400; color: var(--hc-dim, #AEAEB2); }
+/* the danger button: the red of «delete» */
+.tk-btn.tk-btn-danger { border-color: transparent; background: #D70015; color: #FFFFFF; font-weight: 600; }
+.tk-btn.tk-btn-danger:hover:not(:disabled) { background: #B80012; }
+/* one field: 32px, the 8px corner, the field ground, the accent frame in focus */
+.vx-field, .modal-card :is(input[type="text"], input[type="url"], input[type="search"], input[type="number"], input[type="password"], input:not([type]), select):not(.vs-switch),
+.modal-card :is(.an-fld:not(textarea), .tk-input, .imp-input, .frw-select, .hm-select) {
+  height: var(--ctl-h, 32px); box-sizing: border-box; border-radius: var(--ctl-r, 8px); }
+.vx-field { width: 100%; padding: 0 10px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); background: rgba(0, 0, 0, 0.25); color: #F5F5F7; font-size: var(--fs-ui); outline: none; }
+.vx-field:focus { border-color: var(--accent); }
+.modal-card textarea { border-radius: var(--ctl-r, 8px); }
+/* the older buttons inside a window: the same component as everywhere */
+.modal-card .ui-btn, .frw .ui-btn { height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); font-weight: 500; gap: 6px; }
+.modal-card .ui-btn-subtle, .frw .ui-btn-subtle { border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
+.modal-card .ui-btn-subtle:hover, .frw .ui-btn-subtle:hover { background: #34373B; }
+.modal-card .ui-btn-primary, .frw .ui-btn-primary { background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+.modal-card .ui-btn.bg-apple-red { font-weight: 600; }
+/* the heads that keep their own markup (the import, the task, the person, a feature, the calendar, after an
+   update, the first start): the same icon square, title and «✕» */
+.imp-head-ic, .upd-logo { width: 32px; height: 32px; border-radius: 9px; }
+.imp-head-ic svg { width: 18px; height: 18px; }
+.upd-logo { font-size: 16px; }
+.imp-head, .upd-head, .cal-head, .frw-head { gap: 12px; }
+.imp-title, .tk-dlg-head h2, .an-dlg-head h2, .upd-head h2, .cal-title, .frw-title, .ri-title, .fp-title, .pc-who h2 { font-size: var(--fs-sub); font-weight: 600; letter-spacing: -0.011em; line-height: 1.25; }
+.imp-x, .an-dlg-x, .tk-x, .dlg-x, .tb-pop-x, .cal-close, #upd-after .tk-x { width: 28px; height: 28px; border-radius: var(--ctl-r, 8px); font-size: 14px; }
+.cal-head .vx-head-ic, .frw-head .vx-head-ic { margin-right: 0; }
+.ri-dialog, .an-dlg, .tk-dlg, .imp-card { padding: 18px 20px 16px; gap: 14px; }
+
+/* Menus: one surface (--card, the hairline, a 12px corner, the menu shadow, no blur), items of one height with an
+   icon column and a key column at the right, thin separators; they open with the motion of the windows */
+.macos-menu, .rp-pop, .tk-pop, .an-pop, .tb-pop, .models-pop, .lt-colpop, .tk-colpop, .db-kc, .imp-menu, .hm-ask, .hm-dict {
+  background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-menu); }
+.macos-menu { padding: 4px; animation: vx-pop 160ms cubic-bezier(.2, .8, .2, 1) both; }
+.macos-menu-item { min-height: 30px; padding: 0 10px; gap: 10px; border-radius: 7px; line-height: 1.3; }
+.macos-menu-item > svg:first-child { width: 16px; height: 16px; flex: none; }
+.macos-menu-item .tm-key, .macos-menu-item kbd { margin-left: auto; padding-left: 16px; }
+.macos-menu :is(hr, .h-px, .macos-menu-sep) { height: 1px; margin: 4px 6px; border: 0; background: var(--line); }
+.lt-colpop, .hm-pop { z-index: 40; }
+@media (prefers-reduced-motion: reduce) { .macos-menu { animation: none; } }
+/* the models panel: the head of the panels (an icon square, a 15px title), its buttons as the «✕» */
+.models-pop .mp-title { font-size: 15px; }
+.models-pop .mp-close { width: 28px; height: 28px; border-radius: var(--ctl-r, 8px); }
+/* the window of a new task: its fields as in the other windows */
+.tk-dlg :is(.tk-input, input[type="text"], input[type="date"], input[type="time"], select) { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); box-sizing: border-box; }
+.imp-btn-lg { height: var(--ctl-h, 32px); padding: 0 14px; font-size: var(--fs-ui); }
