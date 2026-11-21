@@ -19,7 +19,7 @@ async function renderDictionaryPage(rise = false) {
   document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
   await loadDictionary();  // draws the page (renderDictPage)
   if (typeof renderDictFeatures === 'function') renderDictFeatures();
-  if (rise) pultRise(document.querySelector('#dict-view .dc-col'), ':scope > .pcard:not(.hidden)');
+  if (rise) pultRise(document.querySelector('#dict-view .dc-col'), '.pcard:not(.hidden)');
 }
 
 function dcGroups() {
@@ -34,7 +34,7 @@ function renderDictPage() {
   const groups = dcGroups();
   if (DC.group && !groups.some(([g]) => g === DC.group)) DC.group = '';
   document.getElementById('dc-sub').textContent = terms.length
-    ? `${plural(terms.length, t('dcWordsForms'))} · ${plural(groups.length, t('dcGroupsForms'))}` : t('rdSasDictEmpty');
+    ? `${plural(terms.length, t('dcWordsForms'))} · ${plural(groups.length, t('dcGroupsForms'))}` : '';
   document.getElementById('dc-groups').innerHTML = groups.map(([g]) => `<option value="${escapeHtml(g)}"></option>`).join('');
   renderDictOffers();
   const q = DC.q.trim().toLocaleLowerCase();
@@ -42,25 +42,30 @@ function renderDictPage() {
     && (!q || `${d.term} ${d.variants || ''} ${d.category}`.toLocaleLowerCase().includes(q)));
   const chip = (key, label, n) => `<button class="tk-chip${DC.group === key ? ' tk-on' : ''}" aria-pressed="${DC.group === key}" ${pageCall('click', 'setDictGroup', [key])}>${escapeHtml(label)} <span class="tk-chip-n">${n}</span></button>`;
   const filters = `<div class="dc-filters">${chip('', t('tkFAll'), terms.length)}${groups.map(([g, n]) => chip(g, g, n)).join('')}</div>`;
+  // a row as the rows of «Записи» and «Задачи»: one height, the same slots in every row (no variants: «—»)
   const row = d => {
     const n = Number(DC.usage[String(d.id)] || 0);
     const variants = String(d.variants || '').split(',').map(v => v.trim()).filter(Boolean);
     return `<div class="dc-row${d.active ? '' : ' dc-off'}">
       <span class="dc-word" title="${escapeHtml(d.term)}">${escapeHtml(d.term)}</span>
-      <span class="dc-vars">${variants.length ? variants.map(v => `<span class="dc-var">${escapeHtml(v)}</span>`).join('') : '<span class="tk-dim">—</span>'}</span>
-      <span class="dc-group">${escapeHtml(d.category)}</span>
+      <span class="dc-vars"${variants.length ? ` title="${escapeHtml(variants.join(', '))}"` : ''}>${variants.length ? variants.map(v => `<span class="dc-var">${escapeHtml(v)}</span>`).join('') : '<span class="tk-dim">—</span>'}</span>
+      <span class="dc-group" title="${escapeHtml(d.category)}">${escapeHtml(d.category)}</span>
       <span class="dc-used">${escapeHtml(n ? plural(n, t('dcRecForms')) : t('dcRecNone'))}</span>
       <input type="checkbox" role="switch" class="vs-switch vs-sm" ${d.active ? 'checked' : ''} ${pageCall('change', 'toggleDictItem', [d.id, { $: 'checked' }])}
         title="${escapeHtml(t(d.active ? 'dcOnTip' : 'dcOffTip'))}" aria-label="${escapeHtml(t('dcOnTip'))}">
-      <button class="tk-more" ${pageCall('click', 'openDictRowMenu', [d.id, { $: 'event' }])} title="${escapeHtml(t('dcRowMenu'))}" aria-label="${escapeHtml(t('dcRowMenu'))}">⋯</button>
+      <span class="dc-acts">
+        <button class="dc-ib" ${pageCall('click', 'editDictItem', [d.id])} title="${escapeHtml(t('editBtn'))}" aria-label="${escapeHtml(t('editBtn'))}">${pultIcon('pen')}</button>
+        <button class="dc-ib dc-ib-del" ${pageCall('click', 'deleteSettingsDictItem', [d.id])} title="${escapeHtml(t('dcDelete'))}" aria-label="${escapeHtml(t('dcDelete'))}">${pultIcon('trash')}</button>
+      </span>
     </div>`;
   };
   const head = `<div class="dc-row dc-thead" aria-hidden="true"><span>${escapeHtml(t('dcColWord'))}</span><span>${escapeHtml(t('dcColVars'))}</span>`
     + `<span>${escapeHtml(t('dcColGroup'))}</span><span>${escapeHtml(t('dcColUsed'))}</span><span>${escapeHtml(t('dcColOn'))}</span><span></span></div>`;
-  const body = !terms.length ? `<div class="dc-empty">${escapeHtml(t('rdSasDictEmpty'))}</div>`
-    : shown.length ? head + shown.map(row).join('') : `<div class="dc-empty">${escapeHtml(t('tkNothing'))}</div>`;
-  const clear = terms.length ? `<button id="settings-dict-clear" data-click="clearDictionary" class="tk-btn tk-btn-sm" data-i18n="cfDeleteWords">${escapeHtml(t('cfDeleteWords'))}</button>` : '';
-  document.getElementById('dc-words').innerHTML = pultCardHead(t('dcWords'), terms.length, 'book', clear) + (terms.length ? filters : '') + body;
+  const body = !terms.length ? vxEmpty('book', t('rdSasDictEmpty'))
+    : shown.length ? head + shown.map(row).join('') : vxEmpty('book', t('tkNothing'));
+  document.getElementById('dc-count').textContent = terms.length ? String(terms.length) : '';
+  document.getElementById('dc-clear-slot').innerHTML = terms.length ? `<button id="settings-dict-clear" data-click="clearDictionary" class="tk-btn tk-btn-sm">${escapeHtml(t('cfDeleteWords'))}</button>` : '';
+  document.getElementById('dc-words').innerHTML = (terms.length ? filters : '') + body;
 }
 
 function renderDictOffers() {
@@ -79,6 +84,12 @@ function renderDictOffers() {
 }
 
 function setDictGroup(g) { DC.group = g; renderDictPage(); }
+// «Добавить слово» in the head: to the row that adds one
+function dcFocusAdd() {
+  const input = document.getElementById('settings-dict-term');
+  input.scrollIntoView({ block: 'nearest', behavior: scrollMotion() });
+  input.focus();
+}
 function onDictSearch(value) { DC.q = value; renderDictPage(); }
 
 async function acceptDictOffer(i) {
@@ -98,15 +109,6 @@ async function hideDictOffer(i) {
     body: JSON.stringify({ wrong: o.wrong, right: o.right }) }).catch(() => null);
   DC.offers.splice(i, 1);
   renderDictPage();
-}
-
-function openDictRowMenu(id, e) {
-  e.stopPropagation();
-  const r = e.currentTarget.getBoundingClientRect();
-  openTextMenuAt([
-    { label: t('editBtn'), run: () => editDictItem(id) },
-    { label: t('dcDelete'), run: () => deleteSettingsDictItem(id) },
-  ], r.right, r.bottom + 4, { right: true });
 }
 
 // The two switches of the section are settings: saved at once

@@ -4801,3 +4801,37 @@ button.sc-at:hover { color: var(--accent-text); }
 .toast.is-leaving { animation: fadeLeave 160ms ease-in forwards !important; }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } .toast-life { display: none; } }
 @media (prefers-reduced-transparency: reduce) { .toast { background: var(--card); } }
+
+/* «Словарь» (asked by the user: one column of stacked cards at 1180px, a gap at the right, paragraphs capped at
+   650px, a tall dashed empty box). The head as the other sections with «Добавить слово» at the right; the words as
+   the main card (a compact row to add one, a one-line hint with «Подробнее» in its tooltip, the groups as chips,
+   rows of the height of the tables of «Записи»); a 320px column on the right from a 900px-wide body (the window
+   about 1000px): the suggested words, «Исправление», «Фичи». The cards reach the same right edge as elsewhere */
+.dc-body { padding: 8px 24px 32px; }
+.dc-col { display: flex; flex-direction: column; gap: 16px; }
+@container (min-width: 900px) { .dc-col { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: 16px; } }
+@container (min-width: 1180px) { .dc-col { grid-template-columns: minmax(0, 1fr) 360px; } }
+.dc-note { max-width: none; }
+.dc-hint { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: -2px 0 12px; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); }
+.dc-more { padding: 0; border: 0; background: none; color: var(--accent-text); font-size: inherit; cursor: help; }
+.dc-more:hover { text-decoration: underline; }
+.dc-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) auto; gap: 8px; margin-bottom: 14px; }
+.dc-add .tk-input { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); }
+@container (max-width: 640px) { .dc-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.dc-filters { margin: 0 0 10px; }
+.dc-row { grid-template-columns: minmax(120px, 1fr) minmax(0, 1.5fr) minmax(80px, 0.7fr) 110px 40px 64px; gap: 12px; min-height: 38px; box-sizing: border-box;
+  padding: 4px 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; }
+.dc-row:not(.dc-thead):hover { background: rgba(255, 255, 255, 0.035); }
+.dc-row.dc-thead { min-height: 0; padding: 0 12px 6px; border-top: 0; }
+.dc-acts { display: inline-flex; justify-content: flex-end; gap: 4px; }
+.dc-ib { width: 28px; height: 28px; border-radius: var(--ctl-r, 8px); display: inline-flex; align-items: center; justify-content: center; color: var(--hc-dim, #8E8E93);
+  opacity: 0.55; transition: opacity var(--dur-fast) ease, background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
+.dc-ib svg { width: 15px; height: 15px; }
+.dc-row:hover .dc-ib, .dc-ib:focus-visible { opacity: 1; }
+.dc-ib:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
+.dc-ib-del:hover { background: rgba(255, 69, 58, 0.14); color: #FF8A80; }
+.dc-main .vx-empty { padding: 32px 16px; }
+.dc-offer { grid-template-columns: minmax(0, 1fr) auto auto; }
+.dc-offer-rec { grid-column: 1 / -1; grid-row: 2; }
+@media (max-width: 1180px) { .dc-row { grid-template-columns: minmax(100px, 1fr) minmax(0, 1.3fr) minmax(70px, 0.7fr) 96px 40px 64px; } }
+.dc-vars { flex-wrap: nowrap; overflow: hidden; } .dc-var { flex: none; white-space: nowrap; }

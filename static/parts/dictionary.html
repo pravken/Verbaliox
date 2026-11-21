@@ -1,24 +1,29 @@
 <!-- «Словарь»: a section of its own at the bottom of the rail (static/js/dictionary.js, docs/pult-plan.md stage 6):
-     part of static/parts/workspace.html. A new word with its variants and group; the words suggested by
-     corrections in the recordings; the words by group, how many recordings hold each, each switched on alone;
-     the correction by sound; what the features are. -->
+     part of static/parts/workspace.html. The words as the main card (a compact row to add one, the groups as
+     filters, each word with its variants, group, recordings, switch, edit and delete); on the right the words
+     suggested by corrections in the recordings, the correction by sound and what the features are. -->
     <div id="dict-view" class="hidden flex-1 min-h-0 dc-view">
       <header class="dc-head">
         <span class="dc-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.5 5.3 8.3 4.8 4 5v13c4.3-.2 6.5.3 8 1.5 1.5-1.2 3.7-1.7 8-1.5V5c-4.3-.2-6.5.3-8 1.5z"/><path d="M12 6.5v13"/></svg></span>
         <div class="dc-head-text"><h1 class="dc-title" data-i18n="dictionary">Словарь</h1><p id="dc-sub" class="dc-sub"></p></div>
         <span class="tk-grow"></span>
-        <label class="tk-search">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
-          <input id="dc-q" type="search" data-input="onDictSearch" data-input-args='[{"$": "value"}]'
-                 data-i18n-placeholder="dcSearch" placeholder="Найти слово" data-i18n-title="dcSearch" title="Найти слово">
-        </label>
+        <div class="tk-head-actions">
+          <label class="tk-search">
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+            <input id="dc-q" type="search" data-input="onDictSearch" data-input-args='[{"$": "value"}]'
+                   data-i18n-placeholder="dcSearch" placeholder="Найти слово" data-i18n-title="dcSearch" title="Найти слово">
+          </label>
+          <button class="tk-btn tk-btn-primary" data-click="dcFocusAdd"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="dcAddWord">Добавить слово</span></button>
+        </div>
       </header>
       <div class="dc-body"><div class="dc-col">
-        <!-- A new word: the word, how it may be recognized (comma separated), its group -->
         <div class="dc-mcol">
-        <section class="pcard">
-          <h3 class="pcd-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5C10.5 5.3 8.3 4.8 4 5v13c4.3-.2 6.5.3 8 1.5 1.5-1.2 3.7-1.7 8-1.5V5c-4.3-.2-6.5.3-8 1.5z"/><path d="M12 6.5v13"/></svg></span><span class="pcd-t" data-i18n="dcNewWord">Новое слово</span></h3>
-          <p class="dc-note" data-i18n="rdSasDictDesc">Имена, термины и названия, которые нужно писать правильно.</p>
+        <!-- The words: a compact row to add one (the word, how it may be recognized, its group), the groups as
+             filters, each word with its variants, group, recordings, switch, edit and delete -->
+        <section class="pcard dc-main">
+          <h3 class="pcd-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5C10.5 5.3 8.3 4.8 4 5v13c4.3-.2 6.5.3 8 1.5 1.5-1.2 3.7-1.7 8-1.5V5c-4.3-.2-6.5.3-8 1.5z"/><path d="M12 6.5v13"/></svg></span><span class="pcd-t"><span data-i18n="dcWords">Слова</span><b id="dc-count" class="pcd-n"></b></span><span id="dc-clear-slot" class="pcd-side"></span></h3>
+          <p class="dc-hint"><span data-i18n="dcHint">Имена, термины и названия, которые нужно писать правильно.</span>
+            <button type="button" class="dc-more" data-i18n="dcMore" data-i18n-title="rdSasDictDesc" title="Whisper получает слова словаря как подсказку при распознавании; после распознавания слово заменяется по вариантам и по похожему звучанию. Модели анализа и перевода пишут слова так же и не переводят их. Уже расшифрованные записи не меняются.">Подробнее</button></p>
           <div class="dc-add">
             <input id="settings-dict-term" type="text" class="tk-input" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]' data-input="checkSettingsDictTerm"
               data-i18n-placeholder="rdSasDictTermPh" placeholder="Слово или фраза" data-i18n-title="rdSasDictTermPh" title="Слово или фраза">
@@ -27,16 +32,15 @@
             <input id="settings-dict-cat" type="text" class="tk-input" list="dc-groups" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
               data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа" data-i18n-title="rdSasDictCatPh" title="Группа">
             <datalist id="dc-groups"></datalist>
-            <button id="settings-dict-add" data-click="addSettingsDictItem" class="tk-btn tk-btn-primary" data-i18n="rdSasDictAdd">Добавить</button>
+            <button id="settings-dict-add" data-click="addSettingsDictItem" class="tk-btn tk-btn-primary"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="rdSasDictAdd">Добавить</span></button>
           </div>
           <div id="settings-dict-dup" class="dict-dup hidden" role="status" data-i18n="rdSasDictDup">Это слово уже есть в словаре</div>
+          <div id="dc-words"></div>
         </section>
+        </div><div class="dc-scol">
         <!-- Corrections made by hand in the recordings, not in the dictionary yet -->
         <section id="dc-offers" class="pcard hidden"></section>
-        <!-- The words: the groups as filters, each word with its variants, group, recordings, switch and menu -->
-        <section id="dc-words" class="pcard"></section>
         <!-- The correction by sound (the setting dictionary_fuzzy) -->
-        </div><div class="dc-scol">
         <section class="pcard">
           <h3 class="pcd-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span><span class="pcd-t" data-i18n="dcCorrection">Исправление</span></h3>
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
