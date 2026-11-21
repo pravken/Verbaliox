@@ -99,6 +99,8 @@
     <div id="fctx-title" class="px-2.5 py-1 text-[11.5px] font-semibold text-apple-secondary truncate border-b border-white/10 mb-1"></div>
     <button data-click="fctxRename" class="macos-menu-item"><span data-i18n="folderRename">Переименовать…</span></button>
     <button data-click="fctxNewSubfolder" class="macos-menu-item"><span data-i18n="folderNewSub">Новая вложенная папка…</span></button>
+    <!-- the place of the folder: into another folder or to the top level (also by dragging it in «Записи → Папки») -->
+    <button id="fctx-move" data-click="fctxMove" data-click-args='[{"$": "event"}]' class="macos-menu-item"><span data-i18n="folderMoveTo">Переместить в…</span></button>
     <button data-click="fctxAsk" class="macos-menu-item"><span data-i18n="folderAsk">Спросить по папке…</span></button>
     <button data-click="fctxDigest" class="macos-menu-item"><span data-i18n="folderDigest">Дайджест папки</span></button>
     <button id="fctx-local" data-click="fctxToggleLocalOnly" data-i18n-title="tipLocalOnly" title="Не отправлять в облачную модель: анализ, названия и ответы ассистента — только локальной моделью" class="macos-menu-item">

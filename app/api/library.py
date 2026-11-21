@@ -510,6 +510,21 @@ def api_import_pick_files() -> Dict[str, Any]:
                                timeout=900)
     return {"available": True, "paths": [p for p in (chosen or "").splitlines() if p.strip()]}
 
+@router.post("/api/import/pick-folder")
+def api_import_pick_folder() -> Dict[str, Any]:
+    """«Папка…» of the import menu: the Windows folder picker; the page adds the folder by its path
+    (/api/meetings/local-path takes every audio and video file in it). "" when cancelled; unavailable:
+    the page opens the import window with the path field instead."""
+    import sys
+
+    from app import native_dialog
+
+    if sys.platform != "win32":
+        return {"available": False, "path": ""}
+    chosen = native_dialog.run(["--mode", "folder", "--dir", str(Path.home()), "--title", "Добавить папку с записями"],
+                               timeout=900)
+    return {"available": True, "path": (chosen or "").strip()}
+
 class LocalPathPayload(BaseModel):
     path: str
     language: str = "auto"

@@ -1,5 +1,10 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
+import json
+import os
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -12,6 +17,21 @@ def _release_zip(path: Path, files: dict) -> None:
     with zipfile.ZipFile(path, "w") as z:
         for name, text in files.items():
             z.writestr(f"Verbaliox-v9.0.0/{name}", text)
+
+
+def _dead_pid() -> int:
+    """The number of a process that has ended (a fake installer)."""
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    return p.pid
+
+
+def _mark_dead(data: Path) -> None:
+    """The installer of the mark gone: its number is that of an ended process."""
+    marker = data / updater.IN_PROGRESS
+    info = json.loads(marker.read_text(encoding="utf-8"))
+    info["pid"] = _dead_pid()
+    marker.write_text(json.dumps(info), encoding="utf-8")
 
 
 class VersionTest(unittest.TestCase):
@@ -204,6 +224,38 @@ class ApplyUpdateTest(unittest.TestCase):
         self.assertEqual(failed, ["Verbaliox.exe"])
         self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
 
+    def test_a_start_during_the_installation_waits_for_the_installer(self):
+        """Found in the review: a start while the installer replaced files rolled them back under it."""
+        marker = self.data / updater.IN_PROGRESS
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        backup = self.data / "updates" / "backup.zip"
+        with zipfile.ZipFile(backup, "w") as z:
+            z.writestr("app/main.py", "old main")
+        (self.app / "app" / "main.py").write_text("new main")
+        marker.write_text(json.dumps({"backup": str(backup), "added": [], "pid": os.getpid(), "started": time.time()}))
+        self.assertTrue(updater.installer_running(self.data))
+        self.assertFalse(updater.recover_interrupted(self.app, self.data))
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "new main")
+        self.assertTrue(marker.exists())
+        # the installer's number gone: cut off, put back
+        _mark_dead(self.data)
+        self.assertFalse(updater.installer_running(self.data))
+        self.assertTrue(updater.recover_interrupted(self.app, self.data))
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+        self.assertFalse(marker.exists())
+
+    def test_a_mark_of_an_older_version_without_a_process_is_put_back(self):
+        marker = self.data / updater.IN_PROGRESS
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"backup": "", "added": []}))
+        self.assertFalse(updater.installer_running(self.data))
+        self.assertTrue(updater.recover_interrupted(self.app, self.data))
+
+    def test_the_installer_process_is_known_by_its_number(self):
+        self.assertTrue(updater._process_running(os.getpid()))
+        self.assertFalse(updater._process_running(_dead_pid()))
+        self.assertFalse(updater._process_running(0))
+
     def test_an_update_cut_off_half_way_is_put_back_at_the_next_start(self):
         """Found in the audit: a switched-off computer during an update left two versions mixed."""
         _release_zip(self.zip, {"app/main.py": "new main", "app/new.py": "added"})
@@ -220,6 +272,11 @@ class ApplyUpdateTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
         self.assertTrue((self.data / updater.IN_PROGRESS).exists())
+        # the mark names this process, which still runs: as if the installer were at work, nothing is touched
+        half = (self.app / "app" / "main.py").read_text()
+        self.assertFalse(updater.recover_interrupted(self.app, self.data))
+        self.assertEqual((self.app / "app" / "main.py").read_text(), half)
+        _mark_dead(self.data)  # the installer gone: the next start puts the previous version back
         self.assertTrue(updater.recover_interrupted(self.app, self.data))
         self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
         self.assertFalse((self.app / "app" / "new.py").exists())

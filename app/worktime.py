@@ -10,6 +10,11 @@ an account sign-in to Microsoft, this needs nothing and stays on this computer.
 A day runs from DAY_START_HOUR (a night past midnight belongs to the day before). The hours worked of a
 day are its spans of work: pauses shorter than JOIN_MIN are part of the work, longer ones are breaks.
 Settings: worktime_track (on), work_remind_hours (8; 0 = no notification).
+
+«Мои программы» (asked by the user, off until turned on: apps_track): a worked minute also notes the
+program in front, by its file name only (Teams, outlook.exe). Nothing else: no window titles (they hold the
+names of documents, letters and sites), no keys, no screen. A minute of a recording or a call is «meeting»,
+whatever program is in front. It stays in this computer's database and goes nowhere.
 """
 
 import sys
@@ -26,6 +31,66 @@ DAY_START_HOUR = 4    # the day's first minute; earlier ones belong to the day b
 CHECK_SEC = 60.0
 
 _DDL = "CREATE TABLE IF NOT EXISTS work_minutes (day TEXT NOT NULL, minute INTEGER NOT NULL, PRIMARY KEY (day, minute))"
+_DDL_APPS = "CREATE TABLE IF NOT EXISTS app_minutes (day TEXT NOT NULL, minute INTEGER NOT NULL, app TEXT NOT NULL, PRIMARY KEY (day, minute))"
+MEETING = "meeting"  # a minute of a recording or a call
+
+# the names people know for the usual programs; any other one is its file name without «.exe»
+# The names in Russian are said in English by the page (static/i18n.js appName_<key>)
+APP_NAMES = {
+    "ms-teams": "Teams", "teams": "Teams", "outlook": "Outlook", "olk": "Outlook", "chrome": "Chrome", "msedge": "Edge",
+    "firefox": "Firefox", "browser": "Яндекс Браузер", "opera": "Opera", "code": "Visual Studio Code", "devenv": "Visual Studio",
+    "excel": "Excel", "winword": "Word", "powerpnt": "PowerPoint", "onenote": "OneNote", "explorer": "Проводник",
+    "telegram": "Telegram", "slack": "Slack", "zoom": "Zoom", "notepad": "Блокнот", "acrord32": "Acrobat Reader",
+    "acrobat": "Acrobat", "obsidian": "Obsidian", "notion": "Notion", "figma": "Figma", "verbaliox": "Verbaliox",
+    "windowsterminal": "Терминал", "cmd": "Командная строка", "powershell": "PowerShell", "pycharm64": "PyCharm",
+    "idea64": "IntelliJ IDEA", "1cv8": "1С:Предприятие", "1cv8c": "1С:Предприятие",
+}
+
+
+def foreground_app() -> Optional[str]:
+    """The file name of the program in front («outlook»), None where it cannot be known. Only the name:
+    the window's title is never read."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        # own instances: the types set below stay off the shared ctypes.windll the other watchers use
+        user32, kernel32 = ctypes.WinDLL("user32"), ctypes.WinDLL("kernel32")
+        # handles are pointer-sized: without these a 64-bit handle would be cut to an int
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        import os
+
+        if pid.value == os.getpid():  # the window of this program: its process is python, not Verbaliox.exe
+            return "verbaliox"
+        h = kernel32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return None
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            size = wintypes.DWORD(len(buf))
+            if not kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return None
+        finally:
+            kernel32.CloseHandle(h)
+        name = buf.value.replace("/", "\\").rsplit("\\", 1)[-1]
+        return (name[:-4] if name.lower().endswith(".exe") else name).lower()[:64] or None
+    except Exception:
+        return None
+
+
+def app_name(app: str) -> str:
+    return APP_NAMES.get(app, app)
 
 
 def idle_seconds() -> Optional[float]:
@@ -85,13 +150,20 @@ def _conn():
             conn.close()
 
 
-def mark(at: datetime) -> None:
-    """The minute of `at` was worked."""
+def _day_minute(at: datetime):
     d = work_day(at)
     start = datetime.combine(d, datetime.min.time()) + timedelta(hours=DAY_START_HOUR)
-    minute = int((at - start).total_seconds() // 60)
+    return d.isoformat(), int((at - start).total_seconds() // 60)
+
+
+def mark(at: datetime, app: Optional[str] = None) -> None:
+    """The minute of `at` was worked (in the program `app`, when «Мои программы» are on)."""
+    d, minute = _day_minute(at)
     with _conn() as conn:
-        conn.execute("INSERT OR IGNORE INTO work_minutes (day, minute) VALUES (?, ?)", (d.isoformat(), minute))
+        conn.execute("INSERT OR IGNORE INTO work_minutes (day, minute) VALUES (?, ?)", (d, minute))
+        if app:
+            conn.execute(_DDL_APPS)
+            conn.execute("INSERT OR IGNORE INTO app_minutes (day, minute, app) VALUES (?, ?, ?)", (d, minute, app))
 
 
 def _sessions(minutes: List[int]) -> List[List[int]]:
@@ -127,6 +199,37 @@ def days(start: date, end: date) -> Dict[str, Dict[str, Any]]:
     return {k: summary(date.fromisoformat(k), v) for k, v in by.items()}
 
 
+def apps(start: date, end: date) -> Dict[str, int]:
+    """{program: minutes} of the days start…end (end not included)."""
+    with _conn() as conn:
+        conn.execute(_DDL_APPS)
+        rows = conn.execute("SELECT app, COUNT(*) FROM app_minutes WHERE day >= ? AND day < ? GROUP BY app",
+                            (start.isoformat(), end.isoformat())).fetchall()
+    return {r[0]: int(r[1]) for r in rows}
+
+
+def apps_since() -> str:
+    """The first day «Мои программы» counted (YYYY-MM-DD), '' with no minute noted: a period that begins earlier
+    holds the days since then only."""
+    with _conn() as conn:
+        conn.execute(_DDL_APPS)
+        row = conn.execute("SELECT MIN(day) FROM app_minutes").fetchone()
+    return (row[0] or "") if row else ""
+
+
+def clear_apps() -> None:
+    """«Удалить историю»: every minute noted by «Мои программы»."""
+    with _conn() as conn:
+        conn.execute(_DDL_APPS)
+        conn.execute("DELETE FROM app_minutes")
+
+
+def apps_enabled() -> bool:
+    from app.database import get_all_settings
+
+    return get_all_settings().get("apps_track", "false") == "true"
+
+
 def enabled() -> bool:
     from app.database import get_all_settings
 
@@ -151,10 +254,11 @@ def check(now: Optional[datetime] = None, idle: Optional[float] = None) -> bool:
     idle = idle_seconds() if idle is None else idle
     if idle is None:  # not known here (not Windows): nothing is counted
         return False
-    active = idle < IDLE_MIN * 60 or _recording() or _in_call()
-    if not active:
+    meeting = _recording() or _in_call()
+    if not (idle < IDLE_MIN * 60 or meeting):
         return False
-    mark(now)
+    app = (MEETING if meeting else foreground_app()) if apps_enabled() else None
+    mark(now, app)
     hours = remind_hours()
     d = work_day(now).isoformat()
     from app.database import get_all_settings, update_settings

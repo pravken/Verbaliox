@@ -4,6 +4,15 @@
 // --- Active Meeting Workspace ---
 let _selectSeq = 0;
 
+// While another recording loads, the title already names it, so the text, the tabs and the player of the
+// previous one are hidden and take no input (an edit or a play would have gone to the previous recording)
+function setRecPending(on) {
+  const box = document.getElementById('workspace-content');
+  if (!box) return;
+  box.classList.toggle('rec-pending', on);
+  box.inert = on;
+}
+
 async function selectMeeting(id, reloadPlayer = true) {
   // A refresh of the recording open (new lines, a status change) while another one is being opened by
   // a click: skipped — it took the place of the click, whose answer was then dropped as older, and the
@@ -14,16 +23,23 @@ async function selectMeeting(id, reloadPlayer = true) {
   const seq = ++_selectSeq;
   // Audit 3.2. The click answers at once: the row lights up and the title shows the recording,
   // the rest comes with the server's answer
+  // Another recording opens on «Расшифровка» (asked by the user); done before the answer, so a caller that
+  // opens another tab right after (the dashboard: «Анализ») has the last word
+  if (reloadPlayer && (!state.activeMeeting || state.activeMeeting.id !== id) && state.activeWorkspaceTab && state.activeWorkspaceTab !== 'transcript') {
+    switchWorkspaceTab('transcript');
+  }
   const known = (state.meetings || []).find(x => x.id === id);
   if (known && (!state.activeMeeting || state.activeMeeting.id !== id)) {
     state.pendingMeetingId = id;
     renderMeetingsSidebar();
     document.getElementById('meeting-title-input').value = known.title || '';
+    setRecPending(true);
   }
   const res = await fetch(`/api/meetings/${id}`).catch(() => null);
   if (seq !== _selectSeq) return;
   if (state.pendingMeetingId === id) {
     state.pendingMeetingId = null;
+    setRecPending(false);
     if (!res || !res.ok) {
       renderMeetingsSidebar();
       if (state.activeMeeting) document.getElementById('meeting-title-input').value = state.activeMeeting.title || '';
@@ -1529,8 +1545,11 @@ function fitTranscriptToolbar() {
     [bar.parentElement, document.getElementById('tx-tools'), pills].forEach(el => el && txToolbarObserver.observe(el));
   }
   bar.classList.remove('tx-compact');
+  // the bar wraps as a whole (the speakers stay in one row): the labels go first, before a second line
+  const tools = document.getElementById('tx-tools');
+  const wrapped = tools && Math.abs(tools.getBoundingClientRect().top - pills.getBoundingClientRect().top) > 4;
   const crowded = pills.children.length && (pills.scrollWidth > pills.clientWidth + 1 || pills.offsetHeight > 34);
-  if (crowded || bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('tx-compact');
+  if (wrapped || crowded || bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('tx-compact');
 }
 
 // The speakers tab (cards, how the talk went): people.js, renderSpeakersPanel and renderTalkAnalytics
@@ -1726,6 +1745,7 @@ function renderTranscriptNow() {
     return;
   }
 
+  container.classList.toggle('tx-chat', state.txLayout === 'chat');
   const chunkCount = Math.ceil(filtered.length / TX_CHUNK);
   const eager = filtered.length <= TX_EAGER_LIMIT;
   container.innerHTML = Array.from({ length: chunkCount }, (_, k) =>
@@ -1751,6 +1771,7 @@ function estimateChunkHeight(k) {
   for (const g of transcriptGroups(tx.items.slice(k * TX_CHUNK, (k + 1) * TX_CHUNK), k * TX_CHUNK)) {
     const len = g.segs.reduce((n, seg) => n + (seg.text || '').length + 1, 0);
     h += 52 + 22 * Math.ceil(len / 95) + 6;
+    if (state.txLayout === 'chat') h += 26 * g.segs.length;  // a bubble for each phrase
     if (state.txView === 'both') h += 20 * Math.ceil(len / 95) + 6 * g.segs.length;
   }
   return h;
@@ -1838,6 +1859,7 @@ function segBodyHtml(seg) {
 }
 
 function transcriptGroupHtml(group) {
+  if (state.txLayout === 'chat') return transcriptChatGroupHtml(group);  // «Чат»: each phrase its own bubble
   const speakers = tx.speakers;
   const first = group.segs[0];
   const ids = group.segs.map(x => Number(x.id) || 0);
@@ -2224,4 +2246,256 @@ async function changeSegmentSpeaker(segId, newSpeaker) {
   renderSpeakerPillsBar();
   renderSpeakersPanel();
   renderTranscript();
+}
+
+// =====================================================================================================
+// The recording screen (docs/pult-plan.md, stage 5)
+// =====================================================================================================
+
+// «Записи» in the header of a recording: the list of all recordings (the records section)
+function recOpenRecords() {
+  switchAppView(APP_VIEWS.includes('libtable') ? 'libtable' : 'library');
+}
+
+
+// --- «Итоги» in cards (renderAnalysisOverview in app.js) ---
+// The icon of a card's kind, drawn in its square (the same set as the cards of the other screens)
+const REC_CARD_ICONS = {
+  sum: '<path d="M4 6h16M4 10h16M4 14h10"/>',
+  dec: '<path d="M5 12.5l4 4L19 7"/>',
+  task: '<path d="M4.5 7.5l2 2 3-3.5M4.5 15.5l2 2 3-3.5M13 8h7M13 16h7"/>',
+  mark: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+  note: '<path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4M8.5 12h7M8.5 16h5"/>',
+  topic: '<path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>',
+  mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>',
+  doc: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 16h4"/>',
+  ask: '<path d="M4 5.5h16v10H9l-5 4z"/><path d="M9.5 9.2a2.5 2.5 0 114 2c-.9.5-1.5 1-1.5 2"/>',
+};
+function recCardIcon(kind) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${REC_CARD_ICONS[kind] || REC_CARD_ICONS.doc}</svg>`;
+}
+
+// The headings of the protocol's result sections (app/analysis_chain.py writes «## Решения» and
+// «## Следующие шаги», «## Decisions» and «## Next steps»; a model may write them in bold)
+const REC_DECISION_HEADS = /^(решения|принятые решения|договор[её]нности|decisions|agreements)(?!\p{L})/iu;
+const REC_NEXT_HEADS = /^(следующие шаги|задачи|поручения|next steps|action items|tasks)(?!\p{L})/iu;
+// «Решений не принималось», «No next steps were named»: a section that says there is nothing
+const REC_NONE_RE = /^(решений не принималось|следующие шаги не назывались|задач нет|no decisions were made|no next steps were named|none)\.?$/i;
+
+// One section of a Markdown text: its top-level points (the text and the first moment named in it) and
+// the text without it. A heading is «## Name» or a line of bold «**Name**»
+function recMdSection(md, heads) {
+  const lines = String(md || '').split('\n');
+  const headOf = (line) => {
+    const h = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/) || line.match(/^\s{0,3}(?:\*\*|__)(.+?)(?:\*\*|__):?\s*$/);
+    return h ? h[1].replace(/[*_:]/g, '').trim() : null;
+  };
+  let from = -1, to = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const h = headOf(lines[i]);
+    if (h === null) continue;
+    if (from < 0 && heads.test(h)) from = i;
+    else if (from >= 0) { to = i; break; }
+  }
+  if (from < 0) return { found: false, items: [], rest: String(md || '') };
+  const items = [];
+  for (const line of lines.slice(from + 1, to)) {
+    const it = line.match(/^(\s*)(?:[-*+]|\d+[.)])\s+(.+)$/);
+    if (!it || it[1].length > 1) continue;  // only the top-level points
+    let at = null;
+    const text = it[2].replace(/\[(\d{1,2}):([0-5]\d)(?::([0-5]\d))?(?:\s*[-–—]\s*\d{1,2}:[0-5]\d(?::[0-5]\d)?)?\]|\((\d{1,2}):([0-5]\d)\)/g, (x, a, b, c, d, e) => {
+      if (at === null) at = a !== undefined ? tsSeconds(a, b, c) : tsSeconds(d, e);
+      return '';
+    }).replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+([.,;:])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+    if (text && !REC_NONE_RE.test(text)) items.push({ text, at });
+  }
+  return { found: true, items, rest: [...lines.slice(0, from), ...lines.slice(to)].join('\n') };
+}
+
+// The user's notes of a recording (the studio writes «[12:03] text», a mark «[12:03] ⚑ text»): the
+// marks apart from the other lines, each with its moment
+function recNotes(text) {
+  const marks = [], lines = [];
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^\[(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\]\s*(.*)$/);
+    const at = m ? tsSeconds(m[1], m[2], m[3]) : null;
+    const body = m ? m[4] : line;
+    if (/^⚑/.test(body)) marks.push({ text: body.replace(/^⚑\s*/, ''), at });
+    else lines.push({ text: body, at });
+  }
+  return { marks, lines };
+}
+
+// «Задачи»: the tasks of the recording, the protocol's «Следующие шаги» while there are none. Each row
+// has its places for the box, the text, who, the due date and the moment, filled or empty
+function recTaskRowHtml(c) {
+  const done = c.status === 'done';
+  const due = c.due_date ? tkDueText(c) : c.due || t('tkNoDue');
+  const at = c.at != null
+    ? `<button class="sc-at" ${pageCall('click', 'seekPlayer', [Number(c.at) || 0])} title="${escapeHtml(t('recListenFrom'))}">▶ ${formatTime(c.at)}</button>`
+    : '<span class="sc-at" aria-hidden="true"></span>';
+  return `<div class="sc-row task-r${done ? ' sc-done' : ''}">
+      <input type="checkbox" ${done ? 'checked' : ''} data-cid="${Number(c.id) || 0}" data-change="toggleCommitment" data-change-args='[{"$": "el"}]' class="tk-check" aria-label="${escapeHtml(t('tkDone'))}" />
+      <span class="sc-t">${escapeHtml(c.what || '')}</span>
+      <span class="sc-who">${c.who ? `${tkAvatar(c.who, c.who_kind, 18)}<span>${escapeHtml(c.who)}</span>` : ''}</span>
+      <span class="sc-due ${c.due_date ? tkDueTone(c).replace('tk-', 'sc-') : ''}">${escapeHtml(due)}</span>${at}
+    </div>`;
+}
+function recTasksBody(next) {
+  const m = state.activeMeeting;
+  const got = state.recTasks && m && state.recTasks.id === m.id ? state.recTasks.items : null;
+  if (got && got.length) return got.map(recTaskRowHtml).join('');
+  if (next && next.length) {
+    return next.map(x => `<div class="sc-row"><span class="sc-dot sc-dot-task"></span><span class="sc-t">${escapeHtml(x.text)}</span>`
+      + `${x.at != null ? `<button class="sc-at" ${pageCall('click', 'seekPlayer', [Number(x.at) || 0])} title="${escapeHtml(t('recListenFrom'))}">▶ ${formatTime(x.at)}</button>` : '<span class="sc-at" aria-hidden="true"></span>'}</div>`).join('');
+  }
+  return `<div class="sc-quiet">${escapeHtml(t(anHasContent('protocol') ? 'recNoTasks' : 'recAfterAnalysis'))}</div>`;
+}
+function recTasksCount(next) {
+  const m = state.activeMeeting;
+  const got = state.recTasks && m && state.recTasks.id === m.id ? state.recTasks.items : null;
+  return (got && got.length) ? got.length : (next || []).length;
+}
+// The tasks come from the server: the card is drawn with what is known and filled again when they differ
+async function recFillTasks(box, next) {
+  const m = state.activeMeeting;
+  const paint = () => {
+    const cardEl = box.querySelector('[data-card="rec-tasks"]');
+    if (!cardEl) return;
+    cardEl.querySelector('.an-cardb').innerHTML = recTasksBody(next);
+    cardEl.querySelector('.sc-n').textContent = recTasksCount(next) || '';
+  };
+  paint();
+  if (!m) return;
+  const items = await fetch(`/api/meetings/${m.id}/commitments`).then(r => (r.ok ? r.json() : [])).catch(() => []);
+  if (state.activeMeeting !== m) return;
+  const list = Array.isArray(items) ? items : [];
+  const before = state.recTasks && state.recTasks.id === m.id ? JSON.stringify(state.recTasks.items) : '';
+  state.recTasks = { id: m.id, items: list };
+  if (JSON.stringify(list) !== before) paint();
+}
+
+// --- The transcript as a chat («Чат») or as text («Текст»): chosen above the text, kept in this browser ---
+state.txLayout = (() => { try { return localStorage.getItem('verbaliox_tx_layout') === 'text' ? 'text' : 'chat'; } catch (e) { return 'chat'; } })();
+
+function setTxLayout(layout) {
+  state.txLayout = layout === 'text' ? 'text' : 'chat';
+  try { localStorage.setItem('verbaliox_tx_layout', state.txLayout); } catch (e) { /* this session only */ }
+  syncTxLayoutButtons();
+  renderTranscript();
+  // the phrase playing is lit again in the new drawing, and kept in sight
+  const p = document.getElementById('media-player');
+  if (p) updatePlaybackHighlight(p.currentTime || 0, true)?.scrollIntoView({ block: 'center' });
+}
+
+function syncTxLayoutButtons() {
+  for (const k of ['chat', 'text']) {
+    const b = document.getElementById(`tx-layout-${k}`);
+    if (b) b.setAttribute('aria-checked', String(state.txLayout === k));
+  }
+}
+document.addEventListener('DOMContentLoaded', syncTxLayoutButtons);
+
+// The face of a speaker in the chat: the person's photo, else the initials on the speaker's colour
+function txChatAvatar(spk) {
+  const name = String(spk.name || '');
+  const face = typeof personPhotoUrl === 'function' ? personPhotoUrl(name) : '';
+  const color = spk.color || '#0A84FF';
+  return face
+    ? `<span class="ch-av"><img class="sp-photo" src="${escapeHtml(face)}" alt=""></span>`
+    : `<span class="ch-av" style="background:${escapeHtml(rpHexA(color, 0.22))};color:${escapeHtml(color)}">${escapeHtml(capInitials(name))}</span>`;
+}
+
+// One run of a speaker's phrases as a chat: the face and the name once, each phrase a bubble with its time.
+// The bubble is the phrase's element (#seg-<id>, .segment-row): playback lights it, a click on a word plays
+// from there, the pencil, a double click or the right-click menu edit it, as in «Текст»
+function transcriptChatGroupHtml(group) {
+  const speakers = tx.speakers;
+  const first = group.segs[0];
+  const ids = group.segs.map(x => Number(x.id) || 0);
+  const spk = speakers[first.speaker] || { name: first.speaker || 'Speaker', color: '#0A84FF' };
+  const options = Object.keys(speakers).map(k =>
+    `<option value="${escapeHtml(k)}" ${k === first.speaker ? 'selected' : ''} class="bg-apple-card text-white">${escapeHtml(speakers[k].name)}</option>`).join('');
+  const lang = state.activeMeeting && state.activeMeeting.language;
+  const bubble = seg => {
+    const id = Number(seg.id) || 0;
+    const s0 = Number(seg.start) || 0;
+    const badge = seg.lang && seg.lang !== lang
+      ? `<span class="seg-lang" title="${escapeHtml(t('tipSegLang'))}">${escapeHtml(String(seg.lang).toUpperCase())}</span>` : '';
+    return `<div id="seg-${id}" data-start="${s0}" data-end="${Number(seg.end) || 0}" class="segment-row seg-piece ch-bub" data-dblclick="openInlineSegmentEditor" data-dblclick-args='[${id}]'>`
+      + `${badge}<span id="seg-text-${id}" class="seg-piece-text">${segBodyHtml(seg)}</span>`
+      + `<button data-click="seekPlayer" data-click-args='[${s0}]' class="ch-tm" title="${escapeHtml(t('recListenFrom'))}">${formatTime(s0)}</button>`
+      + `<button data-click="openInlineSegmentEditor" data-click-args='[${id}]' class="seg-piece-edit" title="${escapeHtml(t('tipEditSegment'))}" aria-label="${escapeHtml(t('tipEditSegment'))}">${SVG_ICONS.pencil}</button>`
+      + '</div>';
+  };
+  return `
+    <div class="segment-group ch-group" data-start="${Number(first.start) || 0}" style="--pc:${escapeHtml(spk.color || '#0A84FF')}">
+      ${txChatAvatar(spk)}
+      <div class="ch-body">
+        <div class="ch-h">
+          <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
+            title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
+            style="color: ${escapeHtml(spk.color)}"
+            class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">${options}</select>
+          ${speakers[first.speaker] ? `<button data-click="startInlineSpeakerRename" data-click-args='[${ids[0]}]' class="seg-icon-btn"
+            title="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}" aria-label="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}">${SVG_ICONS.pencil}</button>` : ''}
+        </div>
+        <div class="ch-bubs">${group.segs.map(bubble).join('')}</div>
+      </div>
+    </div>`;
+}
+
+// «↻ Расшифровать заново…» of the open recording: the dialog of the recording's menu (the model, the language,
+// the number of speakers), for the recording shown
+function recReconfigure() {
+  const m = state.activeMeeting;
+  if (!m) return;
+  state.contextMeetingId = m.id;
+  ctxOpenReconfigureModal();
+}
+
+// --- «Анализ»: the bar above the cards — the template, the model, «Настроить», «Пересоздать анализ» ---
+// (the program keeps no time of an analysis, so the bar does not say when it was made)
+function recAnalysisBar() {
+  const ai = aiAvailable();
+  const sel = document.getElementById('summary-llm-select');
+  const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+  const busy = anIsBusy('protocol');
+  return `<div class="an-sumbar">
+      <span class="an-sumbar-k">${escapeHtml(t('recTemplate'))}</span>
+      <button class="an-chip" data-click="recTemplateMenu" data-click-args='[{"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('recTemplateTip'))}">${escapeHtml(t('sumProtocol'))}<span aria-hidden="true">▾</span></button>
+      <span class="an-sumbar-k">${escapeHtml(t('recModel'))}</span>
+      <button class="an-chip${opt && opt.dataset.off === '1' ? ' an-model-off' : ''}" data-click="openAnalysisMenu" data-click-args='["model", {"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('anModelTip'))}">${escapeHtml(opt ? opt.textContent : '—')}<span aria-hidden="true">▾</span></button>
+      <span class="flex-1"></span>
+      <button class="an-btn" data-click="openAnalysisMenu" data-click-args='["cfg", {"$": "el"}]' title="${escapeHtml(t('anCfgTip'))}">${escapeHtml(t('anCfg'))}</button>
+      <button class="an-btn" data-click="generateSummaryForActiveTab" ${busy ? 'disabled' : ''} ${ai ? '' : 'aria-disabled="true"'} title="${escapeHtml(ai ? t('tipGenerateSummary') : t('anNeedModel'))}">${AI_MARK} ${escapeHtml(busy ? t('anMaking') : t('recRegenAnalysis'))}</button>
+    </div>`;
+}
+
+// «Шаблон ▾»: the overview and the user's own templates (each opens its section), the editor of the templates
+function recTemplateMenu(el) {
+  const r = el.getBoundingClientRect();
+  const tpls = state.summaryTemplates || [];
+  const items = [{ label: `✓ ${t('sumProtocol')}`, run: () => selectSummaryTab('protocol') },
+    ...tpls.map(x => ({ label: `   ${x.name}`, run: () => selectSummaryTab(`tpl:${x.id}`) })),
+    { sep: true }, { label: `+ ${t('anNewTemplate')}`, run: () => openTemplateDialog(null) },
+    { label: t('anAllTemplates'), run: () => openTemplatesEditor() }];
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6), 0);
+}
+
+// «Сведения»: «Пересоздать анализ…» opens «Анализ» and makes the overview again (the model chosen there);
+// «В другую папку…» is the folder menu of the recording's own menu
+function recRegenFromInfo() {
+  state.activeSummaryTab = 'protocol';
+  openRecordTab('summary');
+  generateSummaryForActiveTab();
+}
+function recMoveFromInfo(el) {
+  const m = (state.meetings || []).find(x => state.activeMeeting && x.id === state.activeMeeting.id) || state.activeMeeting;
+  if (!m) return;
+  const r = el.getBoundingClientRect();
+  setTimeout(() => openMoveRecordMenu(m, { right: r.right, bottom: r.bottom }), 0);
 }

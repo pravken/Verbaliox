@@ -308,6 +308,31 @@ def api_toggle_dictionary(term_id: int, payload: DictionaryTogglePayload) -> Dic
     vocab.invalidate()
     return {"ok": True}
 
+@router.get("/api/dictionary/usage")
+def api_dictionary_usage() -> Dict[str, int]:
+    """How many recordings hold each word (the section «Словарь»): {term id: recordings}."""
+    from app.dictionary_page import usage
+
+    return {str(k): v for k, v in usage().items()}
+
+@router.get("/api/dictionary/offers")
+def api_dictionary_offers() -> List[Dict[str, Any]]:
+    """«Предложено из записей»: words corrected by hand that the dictionary has not learned."""
+    from app.dictionary_page import offers
+
+    return offers()
+
+class DictionaryOfferPayload(BaseModel):
+    wrong: str
+    right: str
+
+@router.post("/api/dictionary/offers/hide")
+def api_dictionary_offer_hide(payload: DictionaryOfferPayload) -> Dict[str, Any]:
+    from app.dictionary_page import hide
+
+    hide(payload.wrong, payload.right)
+    return {"ok": True}
+
 @router.delete("/api/dictionary")
 def api_clear_dictionary() -> Dict[str, Any]:
     from app.database import clear_dictionary

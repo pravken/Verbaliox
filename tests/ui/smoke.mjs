@@ -22,17 +22,16 @@ const step = async (name, fn) => {
 await page.goto(`${base}/?token=${token}`);
 await page.waitForTimeout(2000);
 await page.evaluate(() => document.getElementById('first-run-wizard')?.remove());
-for (const view of ['home', 'tasks', 'studio', 'ask', 'library']) {
+for (const view of ['home', 'dashboard', 'tasks', 'studio', 'ask', 'library']) {
   await step(`view ${view}`, () => page.evaluate(v => switchAppView(v), view));
   await page.waitForTimeout(400);
 }
 // Handlers that use their element (event.currentTarget): the view menu is placed under its button,
 // a click on a window's backdrop closes it
-await step('library view menu', async () => {
-  await page.evaluate(() => switchAppView('library'));
-  await page.click('button[data-click="openLibViewMenu"]');
+await step('import menu under its button', async () => {
+  await page.click('#strip-import');
   await page.waitForTimeout(200);
-  if (!(await page.isVisible('#lib-view-menu'))) throw new Error('not opened');
+  if (!(await page.isVisible('#imp-menu'))) throw new Error('not opened');
   await page.mouse.click(5, 5);
 });
 await step('backdrop closes a window', async () => {
@@ -49,8 +48,12 @@ await step('import window', async () => {
   if (!(await page.isVisible('#imp-link-row'))) throw new Error('not opened');
   await page.evaluate(() => closeModal('import'));
 });
-await step('hardware in the sidebar', async () => {
-  if (!(await page.isVisible('#app-sidebar #hw-block'))) throw new Error('not shown');
+// the hardware is in the load window of the status bar now (the old sidebar is gone)
+await step('hardware in the load window', async () => {
+  await page.evaluate(() => toggleLoadPop());
+  await page.waitForTimeout(400);
+  if (!(await page.isVisible('#load-pop'))) throw new Error('not shown');
+  await page.evaluate(() => closeLoadPop());
 });
 await step('settings', () => page.evaluate(() => openModal('settings', 'general')));
 for (const tab of await page.evaluate(() => SETTINGS_TABS)) {

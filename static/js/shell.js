@@ -5,7 +5,7 @@
 // --- Views of the main area ---
 // "library" is the open recording (its transcript, analysis and speakers); its name stays for the
 // many places that open a recording. Ctrl+1…5 follow the top bar (video.js).
-const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable', 'dashboard'];
+const APP_VIEWS = ['home', 'library', 'tasks', 'studio', 'ask', 'settings', 'libtable', 'dashboard', 'dict', 'people'];
 const VIEW_HOOKS = {};
 
 // A view of a package: show() runs each time it comes on screen, hide() when another one does,
@@ -31,7 +31,6 @@ function onLibraryChanged() {
 }
 
 function switchAppView(view) {
-  if (view === 'home') view = 'dashboard';  // «Сегодня» is part of the dashboard now (its day, greeting, recent recordings)
   if (!APP_VIEWS.includes(view)) view = 'library';
   const prev = state.appView;
   if (state.theatre && view !== 'library') exitTheatre();
@@ -172,6 +171,7 @@ function renderTopbar() {
   set('nav-transcript', view === 'library' && tab === 'transcript');
   set('nav-summary', view === 'library' && tab === 'summary');
   set('nav-speakers', view === 'library' && tab === 'speakers');
+  set('nav-info', view === 'library' && tab === 'info');
   syncAnalysisMark();
   if (m) {
     // the sections made (summaries["error"] is the last failure, not a section)
@@ -181,6 +181,37 @@ function renderTopbar() {
   }
   scheduleFitTopbar();
   placeTabIndicators();
+  renderRail();
+  if (typeof renderStrip === 'function') renderStrip();  // the strip of the meeting (pult.js)
+}
+
+// --- The rail of the sections (parts/rail.html) ---
+// The section on screen is marked, and the bar at the edge moves to it from the one left; an open recording
+// belongs to «Записи», the settings page to «Настройки»
+const RAIL_OF_VIEW = { home: 'rail-home', dashboard: 'rail-dashboard', libtable: 'rail-libtable', library: 'rail-libtable',
+  tasks: 'rail-tasks', ask: 'rail-ask', settings: 'sb-settings-btn', dict: 'rail-dict', people: 'rail-people' };
+let _railOn = '';
+function renderRail() {
+  const rail = document.getElementById('app-rail');
+  if (!rail) return;
+  const id = RAIL_OF_VIEW[state.appView] || '';
+  if (id === _railOn) return;
+  const was = _railOn;
+  _railOn = id;
+  for (const b of rail.querySelectorAll('.rail-btn')) {
+    const on = b.id === id;
+    b.classList.toggle('rail-on', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  }
+  const ind = rail.querySelector('.rail-ind'), on = id && document.getElementById(id);
+  if (!ind) return;
+  if (!on) { ind.style.opacity = '0'; return; }
+  const top = `${on.offsetTop + 8}px`, height = `${on.offsetHeight - 16}px`;
+  ind.classList.toggle('rail-ind-still', !was);  // the first one is placed, not moved
+  Object.assign(ind.style, { top, height, opacity: '1' });
+  if (was && was !== id) {  // the icon of the section chosen gives a small press
+    on.classList.remove('rail-pick'); void on.offsetWidth; on.classList.add('rail-pick');
+  }
 }
 
 // The highlight of the chosen tab in a group moves to it (chosen with the user): one element under the
@@ -361,12 +392,7 @@ function updateRecordButtonState() {
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
   btn.title = recording ? t('tipTbRecordStop') : t('tipTbRecord');
   btn.setAttribute('aria-label', btn.title);  // in its idle state the button is a dot without words
-  // The recording's screen (the former «Студия» tab) is in the bar only while it records or its settings are open
-  const studio = document.getElementById('nav-studio');
-  studio.classList.toggle('hidden', !recording && state.appView !== 'studio');
-  studio.classList.toggle('tb-tab-live', recording);
-  document.getElementById('nav-studio-dot').classList.toggle('hidden', !recording);
-  document.getElementById('nav-studio-label').textContent = recording ? t('navRecording') : t('navRecSetup');
+  // The recording's screen opens from the strip of the meeting while it records (pult.js), its settings from ▾
   document.getElementById('tb-rec-more').classList.toggle('hidden', recording || starting);
   // While it records, its screen is the text, the notes and the people: the presets and the sources fold away
   document.getElementById('studio-view')?.classList.toggle('st-live', recording);
@@ -418,7 +444,7 @@ async function recMenuLive() {
 }
 
 async function recMenuDictate() {
-  switchAppView('dashboard');  // its text shows there
+  switchAppView('home');  // its text shows there
   await hmDictToggle();
 }
 
@@ -444,7 +470,7 @@ function leaveSettingsPage() {
   stopSettingsAudioTest();
 }
 
-// --- The status bar: the queue (the load of the computer is in the sidebar) ---
+// --- The status bar: the queue; the load of the computer and its window are in pult.js ---
 // The economy mode (app/economy.py): recording only; set in Settings → Общие or the tray icon's menu
 function economyOn() {
   const s = (state.system && state.system.settings) || {};
@@ -498,6 +524,7 @@ function renderStatusbar() {
   const text = (id) => (document.getElementById(id)?.textContent || '').trim();
   const put = (id, v) => { const el = document.getElementById(id); if (el && el.textContent !== v) el.textContent = v || '—'; };
   const items = state.queue || [];
+  if (typeof renderJobsRail === 'function') { renderJobsRail(); renderJobsPop(); }  // the rail's «Очередь» and its window
   const q = document.getElementById('sb-queue');
   if (!q) return;
   const run = items.find(x => x.state === 'running');
@@ -520,9 +547,9 @@ function openStatusbarDownloads(e) {
   if (typeof toggleModelsPop === 'function') toggleModelsPop(e);
 }
 
+// The queue of the status bar opens the same window as «Очередь» on the rail (pult.js)
 function openStatusbarQueue() {
-  const run = (state.queue || []).find(x => x.state === 'running') || (state.queue || [])[0];
-  if (run) openMeeting(run.id);
+  toggleJobsPop('status');
 }
 setInterval(() => { if (!document.hidden) renderStatusbar(); }, 2000);
 

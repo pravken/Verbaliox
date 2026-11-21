@@ -4,19 +4,21 @@
        ========================================================================= -->
   <main class="flex-1 flex flex-col overflow-hidden bg-apple-bg select-text relative">
 
-    <!-- The top bar (static/js/shell.js): record at once, the parts of the app, the open recording -->
-    <nav id="app-bar" class="topbar" data-i18n-aria="navAria" aria-label="Разделы программы">
+    <!-- The strip of the meeting («Пульт встреч», docs/pult-plan.md, stage 2; renderStrip in static/js/pult.js): the state
+         of the day as a pill, the meeting, its details, then the buttons of that state and the record button -->
+    <header id="app-strip" class="strip" data-i18n-aria="stripAria" aria-label="Текущая встреча">
       <!-- The gradient of the "AI" marks of the page (fill: url(#vs-ai-grad)) -->
       <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="vs-ai-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D4B3FF"/><stop offset="1" stop-color="#6CC8FF"/></linearGradient></defs></svg>
-      <!-- The app's own views, framed as one group (asked by the user: higher than a recording's tabs, which
-           live in the recording's header; nothing in the bar comes and goes as a recording opens) -->
-      <div id="tb-main" class="tb-group tb-main" role="group" data-i18n-aria="navAria" aria-label="Разделы программы">
-      <button data-click="switchAppView" data-click-args='["dashboard"]' id="nav-tasks" class="tb-tab" data-i18n-title="tipNavDashboard" title="Мои задачи, неделя, фичи и сводки (Ctrl+2)"><svg class="tb-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="4.5" rx="1.6"/><rect x="13" y="11" width="7" height="9" rx="1.6"/><rect x="4" y="13.5" width="7" height="6.5" rx="1.6"/></svg><span class="tb-lbl" data-i18n="navDashboard">Главная</span><span id="nav-tasks-n" class="tb-badge hidden"></span></button>
-      <button data-click="switchAppView" data-click-args='["studio"]' id="nav-studio" class="tb-tab hidden" data-i18n-title="tipNavStudio" title="Запись звука и экрана с субтитрами и переводом в реальном времени (Ctrl+4)">
-        <span id="nav-studio-dot" class="hidden w-2 h-2 rounded-full bg-apple-red animate-pulse"></span><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><span id="nav-studio-label" class="tb-lbl" data-i18n="navStudio">Студия</span>
-      </button>
-      <button data-click="switchAppView" data-click-args='["ask"]' id="nav-ask" class="tb-tab" data-i18n-title="tipNavAsk" title="Вопросы к одной записи, к папке или ко всей медиатеке (Ctrl+5)"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="navAsk">Ассистент</span></button>
+      <div id="strip-main" data-click="stripOpen" class="strip-main" aria-live="polite">
+        <span id="strip-pill" class="st-pill stp-grey"><i aria-hidden="true"></i><span id="strip-pill-t"></span></span>
+        <span id="strip-lead" class="strip-lead"></span>
+        <span id="strip-meta" class="strip-meta"></span>
+        <span id="strip-grow" class="strip-grow"></span>
       </div>
+      <span id="strip-acts" class="strip-acts"></span>
+      <!-- Import from any section (asked by the user): the same menu as in «Записи», next to the recording -->
+      <button id="strip-import" type="button" class="st-btn strip-imp" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
+        data-i18n-title="impMenuTip" title="Добавить записи: файлы, папка, ссылка · Ctrl+O"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="impBtn">Импорт</span></button>
       <!-- Recording: a round button at the right end; while recording it shows the time and «Стоп» -->
       <div class="relative tb-rec-wrap">
         <button data-click="shellQuickRecord" id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">
@@ -34,11 +36,13 @@
           </div>
         </div>
       </div>
-    </nav>
+    </header>
 
     <!-- The views of the shell (registerView in static/js/shell.js); each lives in its own part -->
     <!-- @include parts/home.html -->
     <!-- @include parts/tasks.html -->
+    <!-- @include parts/dictionary.html -->
+    <!-- @include parts/people.html -->
     <!-- @include parts/dashboard.html -->
     <!-- @include parts/libtable.html -->
     <div id="settings-view" class="hidden flex-1 min-h-0 flex flex-col overflow-hidden"></div>
@@ -467,28 +471,39 @@
     <!-- ACTIVE RECORDING WORKSPACE -->
     <div id="workspace-content" class="hidden flex-1 flex flex-col overflow-hidden">
 
-      <!-- TOP HEADER BAR: Recording Title, Primary View Tabs, and Document Export -->
-      <header id="workspace-header" class="border-b apple-border bg-apple-sidebar/80 apple-blur px-5 flex items-center justify-between shrink-0 gap-4 z-20" style="height: 52px;">
-
-        <!-- Left: Editable Recording Title + Meta -->
-        <div class="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
-          <input id="meeting-title-input" type="text"
-            data-blur="saveMeetingTitle"
-            data-keydown="blurOnEnter" data-keydown-args='[{"$": "event"}, {"$": "el"}]'
-            data-i18n-title="tipRenameInline"
-            title="Нажмите, чтобы переименовать запись"
-            class="bg-transparent hover:bg-white/5 focus:bg-apple-card focus:outline-none focus:ring-1 focus:ring-apple-blue px-2 h-7 -ml-2 rounded-md text-[14px] font-semibold text-white truncate min-w-[100px] transition" />
-          <span id="meeting-meta-badge" class="text-[11.5px] text-apple-secondary font-mono truncate min-w-0"></span>
+      <!-- THE HEADER OF A RECORDING (stage 5 of docs/pult-plan.md): «Записи / название» with the icon of the
+           section on the first line; the tabs, translation and export on the second -->
+      <header id="workspace-header" class="rec-head shrink-0 z-20">
+        <div class="rec-head-row">
+          <span class="rec-ttl-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg></span>
+          <div class="rec-trail">
+            <button data-click="recOpenRecords" class="rec-crumb" data-i18n="recCrumbRecords" data-i18n-title="recCrumbTip" title="Все записи">Записи</button>
+            <span class="rec-crumb-sep" aria-hidden="true">/</span>
+            <input id="meeting-title-input" type="text"
+              data-blur="saveMeetingTitle"
+              data-keydown="blurOnEnter" data-keydown-args='[{"$": "event"}, {"$": "el"}]'
+              data-i18n-title="tipRenameInline"
+              title="Нажмите, чтобы переименовать запись"
+              class="rec-title-input" />
+          </div>
+          <span id="meeting-meta-badge" class="rec-meta"></span>
           <button data-click="openActiveRecordingMenu" data-click-args='[{"$": "event"}]' data-i18n-title="tipRecordingMore"
             title="Действия с записью: переименовать, серия, нарезка, повторная обработка, удаление"
             class="ui-btn ui-btn-subtle h-7 !px-2 shrink-0"><svg class="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+          <span class="flex-1"></span>
+          <!-- the features the recording is about (static/js/features.js): at the right, in one place for
+               every recording (after the title and its info they moved with their length) -->
+          <span id="meeting-features" class="ft-row"></span>
         </div>
 
-        <!-- The tabs of the open recording, next to its title (openRecordTab in static/js/shell.js) -->
+        <div class="rec-head-row rec-head-tabs">
+        <!-- The tabs of the open recording (openRecordTab in static/js/shell.js), in the order the user chose:
+             «Расшифровка» (opened first), «Анализ», «Участники», «Сведения» -->
         <div id="tb-record" class="tb-group tb-rec-tabs hidden" role="group" data-i18n-aria="tbRecordGroup" aria-label="Открытая запись">
           <button data-click="openRecordTab" data-click-args='["transcript"]' id="nav-transcript" class="tb-subtab" data-i18n-title="tipTabTranscript" title="Показать полную расшифровку речи по ролям и таймкодам (Ctrl+3)"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span class="tb-lbl" data-i18n="tabTranscript">Расшифровка</span></button>
           <button data-click="openRecordTab" data-click-args='["summary"]' id="nav-summary" class="tb-subtab" data-i18n-title="tipTabSummary" title="Структурированный обзор, задачи и ответы на вопросы по записи"><svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="tb-lbl" data-i18n="tabSummary">Анализ</span><span id="nav-summary-n" class="tb-badge hidden"></span></button>
           <button data-click="openRecordTab" data-click-args='["speakers"]' id="nav-speakers" class="tb-subtab" data-i18n-title="tipTabSpeakers" title="Управление участниками, прослушивание образцов голоса и переименование"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 6.2a3 3 0 0 1 0 5.6M17.5 14.4A5.5 5.5 0 0 1 20.5 19"/></svg><span class="tb-lbl" data-i18n="tabSpeakers">Участники</span><span id="nav-speakers-n" class="tb-badge hidden"></span></button>
+          <button data-click="openRecordTab" data-click-args='["info"]' id="nav-info" class="tb-subtab" data-i18n-title="tipTabInfo" title="Где лежит файл, его формат, даты и состояние обработки"><svg class="tb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.4"/></svg><span class="tb-lbl" data-i18n="tabInfo">Сведения</span></button>
         </div>
 
         <!-- The views of the recording are chosen in the tabs above (openRecordTab in static/js/shell.js);
@@ -512,11 +527,9 @@
             class="apple-segment-btn text-apple-secondary hover:text-white" data-i18n="tabInfo">Сведения</button>
         </div>
 
+        <span class="flex-1"></span>
         <!-- Right: Translation menu (text translation / voice dub) + Document Export Menu -->
         <div class="flex items-center justify-end gap-2 shrink-0">
-          <!-- the features the recording is about (static/js/features.js): at the right, in one place for
-               every recording (after the title and its info they moved with their length) -->
-          <span id="meeting-features" class="ft-row"></span>
           <div class="relative shrink-0">
             <button data-click="toggleTranslateMenu" data-click-args='[{"$": "event"}]' id="translate-menu-btn"
               data-i18n-title="tipTranslateMenu" title="Перевод текста, субтитры и озвучка голосом"
@@ -553,6 +566,7 @@
             <!-- Every export in one place (renderExportMenu in static/js/menus.js); what is not made yet is made first -->
             <div id="export-menu" class="hidden absolute right-0 mt-1.5 w-80 macos-menu z-40 max-h-[75vh] overflow-y-auto" data-click="stopEvent" data-click-args='[{"$": "event"}]'></div>
           </div>
+        </div>
         </div>
       </header>
 
@@ -648,6 +662,14 @@
 
             <!-- Right: Transcript Editing, Auto-Scroll & Search Tools -->
             <div id="tx-tools" class="flex items-center gap-1.5 shrink-0 ml-auto">
+              <!-- Again, with the choice of the model, the language and the number of speakers (the dialog of the recording's menu) -->
+              <button data-click="recReconfigure" class="ui-btn ui-btn-subtle shrink-0" data-i18n-title="recRedoTip" title="Расшифровать заново с выбором модели, языка и числа говорящих">
+                <span aria-hidden="true">↻</span><span data-i18n="recRedo">Расшифровать заново…</span></button>
+              <!-- The look of the text: a chat (a bubble for each phrase) or the text as before (setTxLayout in workspace.js) -->
+              <div class="tx-layout" role="radiogroup" data-i18n-aria="txLayoutAria" aria-label="Вид расшифровки">
+                <button data-click="setTxLayout" data-click-args='["chat"]' id="tx-layout-chat" role="radio" aria-checked="true" data-i18n="txLayoutChat" data-i18n-title="txLayoutChatTip" title="Реплики облачками: аватар и имя один раз на серию реплик">Чат</button>
+                <button data-click="setTxLayout" data-click-args='["text"]' id="tx-layout-text" role="radio" aria-checked="false" data-i18n="txLayoutText" data-i18n-title="txLayoutTextTip" title="Сплошной текст: реплики одного говорящего одним абзацем">Текст</button>
+              </div>
               <!-- Quick translation languages (the studio's): show the translation, or make it -->
               <div id="tx-quick-langs" class="flex items-center gap-1"></div>
               <!-- Language of the text: original, a translation, or both side by side (menu filled by renderTranslationControls) -->
@@ -796,7 +818,7 @@
         <div class="sp-wrap">
           <section class="sp-col" aria-label="Участники" data-i18n-aria="speakersTitle">
             <div class="sp-head">
-              <h2 class="sp-h2" data-i18n="spWhoSpoke">Кто говорил</h2>
+              <h2 class="sp-h2" data-i18n="spWhoSpoke">Говорящие</h2>
               <span class="sp-note" data-i18n="spWhoSpokeNote">Имя меняется во всех репликах сразу</span>
               <span class="flex-1"></span>
               <button data-click="openResplitDialog" class="an-btn" data-i18n-title="spResplitTip" title="Разделить реплики по голосам заново, не распознавая текст">
@@ -813,13 +835,13 @@
             <div id="sp-mentions"></div>
           </section>
           <!-- Conversation analytics (app/analytics.py) -->
-          <section id="talk-analytics" class="sp-side" aria-label="Как шёл разговор" data-i18n-aria="spHowTalk"></section>
+          <section id="talk-analytics" class="sp-side" aria-label="Ход обсуждения" data-i18n-aria="spHowTalk"></section>
         </div>
       </div>
 
       <!-- TAB 4: FILE DETAILS -->
-      <div id="wview-info" class="hidden flex-1 overflow-y-auto px-6 py-6 tab-pane-anim">
-        <div id="info-content" class="max-w-2xl mx-auto space-y-4"></div>
+      <div id="wview-info" class="hidden flex-1 overflow-y-auto px-6 py-5 tab-pane-anim">
+        <div id="info-content" class="info-wrap"></div>
       </div>
 
       <!-- =====================================================================
@@ -890,10 +912,9 @@
               </button>
             </div>
 
+            <!-- Unloaded (docs/pult-plan.md, stage 5): the previous phrase, play, the next one; «repeat the phrase»
+                 and its loop are in «⋯» (and the key L; J goes 10 seconds back, K plays and pauses) -->
             <div class="rp-center" role="group" data-i18n-aria="rdPlyrTransport" aria-label="Управление">
-              <button class="rp-icon-btn" data-click="rpRepeatPhrase" data-i18n-title="rdPlyrTipRepeat" title="Повторить реплику с начала">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.5v4.3h4.3"/></svg>
-              </button>
               <button class="rp-icon-btn" data-click="rpStepPhrase" data-click-args='[-1, {"$": "event"}]' data-i18n-title="rdPlyrTipPrev" title="К предыдущей реплике (Shift — к главе)">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M6 5.5v13" stroke-width="2.2" stroke-linecap="round"/><path d="M18.5 6v12L9 12z"/></svg>
               </button>
@@ -907,9 +928,6 @@
               </button>
               <button class="rp-icon-btn" data-click="rpStepPhrase" data-click-args='[1, {"$": "event"}]' data-i18n-title="rdPlyrTipNext" title="К следующей реплике (Shift — к главе)">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M18 5.5v13" stroke-width="2.2" stroke-linecap="round"/><path d="M5.5 6v12L15 12z"/></svg>
-              </button>
-              <button id="rp-loop-btn" class="rp-icon-btn" data-click="rpToggleLoop" aria-pressed="false" data-i18n-title="rdPlyrTipLoop" title="Повторять реплику по кругу (L)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3.5l3 3-3 3"/><path d="M4 11.5v-1a4 4 0 0 1 4-4h12"/><path d="M7 20.5l-3-3 3-3"/><path d="M20 12.5v1a4 4 0 0 1-4 4H4"/></svg>
               </button>
             </div>
 
@@ -946,6 +964,11 @@
                 </button>
                 <div id="rp-pop-more" class="rp-pop rp-menu hidden" role="menu"></div>
               </div>
+              <!-- Minimize the player to one line and back (rpToggleMini; the title and the label are set by rpApplyMini,
+                   again on a change of the language) -->
+              <button id="rp-min-btn" class="rp-icon-btn" data-click="rpToggleMini" aria-expanded="true" title="Свернуть проигрыватель" aria-label="Свернуть проигрыватель">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
             </div>
           </div>
         </div>

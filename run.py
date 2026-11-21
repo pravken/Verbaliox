@@ -1103,6 +1103,13 @@ def _stop_work() -> None:
         shutdown.stop_all()
     except Exception as e:
         print(f"[exit] {e}", file=sys.stderr)
+    try:  # an end by quitting or by Windows shutting down: the next start counts no crash (app/main.py)
+        from app.database import update_settings
+        from app.main import CLEAN_EXIT_KEY
+
+        update_settings({CLEAN_EXIT_KEY: "1"})
+    except Exception as e:
+        print(f"[exit] {e}", file=sys.stderr)
 
 
 def _install_update_on_exit() -> None:
@@ -1119,6 +1126,17 @@ def _install_update_on_exit() -> None:
             print("[update] installing the downloaded update on exit")
     except Exception as e:
         print(f"[update] not installed on exit: {e}", file=sys.stderr)
+
+
+def show_info_box(text: str) -> None:
+    if sys.platform == "win32" and "--headless" not in sys.argv:
+        try:
+            MB_ICONINFORMATION = 0x40
+            _user32().MessageBoxW(None, text, "Verbaliox", MB_ICONINFORMATION | MB_ON_TOP)
+            return
+        except Exception:
+            pass
+    print(text)
 
 
 def show_error_box(text: str) -> None:
@@ -1185,6 +1203,11 @@ def main() -> None:
             from app import updater as _upd
             from app.paths import APP_DIR as _APP, DATA_DIR as _DATA
 
+            if _upd.installer_running(_DATA):
+                # files are being replaced now: this start waits for the installer instead of rolling them back
+                show_info_box("Идёт установка обновления Verbaliox.\n\n"
+                              "Когда она закончится, программа откроется сама или её можно будет открыть снова.")
+                return
             if _upd.recover_interrupted(_APP, _DATA):
                 print("[update] an update cut off half-way: the previous version was put back")
         except Exception as e:
