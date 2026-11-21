@@ -437,25 +437,30 @@ function renderLoadPop() {
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
   const hw = (state.system && state.system.hardware) || {};
   const bar = (all, mine) => `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`;
-  const row = (k, all, mine, value, tip, note) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
-    + (note ? `<div class="ld-note">${escapeHtml(note)}</div>` : '');
+  // each resource: its bar and value, under them the hardware on the left and Verbaliox's own share on the right
+  // (asked by the user: the shares of the program in one line under the GPU read as a part of the GPU)
+  const row = (k, all, mine, value, tip, note, own) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
+    + (note || own ? `<div class="ld-sub"><span class="ld-note">${escapeHtml(note || '')}</span>${own ? `<span class="ld-own"><i class="ld-me"></i>${escapeHtml(own)}</span>` : ''}</div>` : '');
   const cpu = sys.cpu_percent;
-  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`;
+  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`
+    + `<div class="ld-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
   html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`,
-    `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`, [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '));
+    `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`, [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '),
+    own.cpu_percent != null ? `${Math.round(own.cpu_percent || 0)}%` : '');
   if (ram) {
     const rp = (100 * ram.used_gb) / Math.max(0.1, ram.total_gb);
     html += row('RAM', rp, own.ram_gb != null ? (100 * own.ram_gb) / Math.max(0.1, ram.total_gb) : 0, `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
-      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)));
+      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)),
+      own.ram_gb != null ? gbText(own.ram_gb) : '');
   }
   if (gpu) {
     const vp = (100 * gpu.used_gb) / Math.max(0.1, gpu.total_gb);
     const mine = own.gpu_gb != null ? (100 * own.gpu_gb) / Math.max(0.1, gpu.total_gb) : 0;
     html += row('GPU', vp, mine, `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
       own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}${own.gpu_exact ? '' : `\n${t('ldGpuApprox')}`}` : '',
-      hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '');
+      hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '',
+      own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '');
   }
-  html += `<div class="ld-legend"><span><i class="ld-me"></i>Verbaliox${own.ram_gb != null ? ` · CPU ${Math.round(own.cpu_percent || 0)}%, RAM ${gbText(own.ram_gb)}${gpu && own.gpu_gb != null ? `, ${t('ldVramShort')} ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : ''}` : ''}</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
   const models = loadModels();
   const vramSum = models.reduce((s, { c }) => s + (c.kind === 'ollama' && c.where === 'gpu' ? Number(c.size_gb || 0) : 0), 0);
   const ramSum = models.reduce((s, { c }) => s + (c.ram_gb != null ? Number(c.ram_gb) : c.kind === 'ollama' && c.where !== 'gpu' ? Number(c.size_gb || 0) : 0), 0);
