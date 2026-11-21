@@ -3129,6 +3129,7 @@ function onSettingsTabShown(name) {
   if (name === settingsTabOf('dictionary')) renderDictFeatures();  // the dictionary is a section of its tab
   const main = document.getElementById('settings-main');
   if (main) main.scrollTop = 0;
+  pultRise(main, '.sx-section:not(.hidden) .settings-card');  // a section shown: its cards rise
   refreshSettingsChanged();
 }
 
@@ -3754,3 +3755,20 @@ function copyMcpConfig(which) {
   copyPlain(text);
   showToast(t('copied'), null, 'success');
 }
+
+// --- One card everywhere («Пульт встреч»): each card of the settings gets the icon of its section before its
+// title, the same line icons as the list of the sections on the left ---
+const SETTINGS_CARD_IC = { general: 'set', updates: 'spark', about: 'text', record: 'rec', hotkeys: 'key', recognition: 'wave',
+  models: 'wave', dictionary: 'book', analysis: 'spark', calendar: 'meet', export: 'link', privacy: 'lock', advanced: 'flask',
+  bench: 'chart', dub: 'globe' };
+function decorateSettingsCards() {
+  document.querySelectorAll('#modal-settings [data-stab] .settings-card').forEach(card => {
+    const h = card.querySelector('h4');
+    if (!h || h.previousElementSibling?.classList.contains('pcd-ic')) return;
+    const ic = SETTINGS_CARD_IC[card.closest('[data-stab]').dataset.stab] || 'set';
+    // beside the title, not in it: the title's text is put anew when the language changes
+    h.parentElement.classList.add('sx-card-hd');
+    h.insertAdjacentHTML('beforebegin', `<span class="pcd-ic">${pultIcon(ic)}</span>`);
+  });
+}
+decorateSettingsCards();

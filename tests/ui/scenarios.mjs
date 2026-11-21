@@ -182,6 +182,20 @@ await step('dictionary section', async () => {
   expect(await page.isVisible('#dict-view'), 'the settings entry does not lead to the section');
 });
 
+// Настройки: eight sections with their line icons, «Календарь» one of them; the cards with the icon of their section
+await step('settings sections', async () => {
+  await page.evaluate(() => openModal('settings', 'calendar'));
+  await sleep(500);
+  const r = await page.evaluate(() => ({
+    nav: document.querySelectorAll('#settings-nav .sx-nav-btn svg').length,
+    on: document.getElementById('stab-calendar').classList.contains('is-active'),
+    icons: [...document.querySelectorAll('#modal-settings [data-stab="calendar"] .settings-card')].every(c => !c.querySelector('h4') || c.querySelector('.sx-card-hd > .pcd-ic')),
+  }));
+  expect(r.nav === 8 && r.on && r.icons, `settings sections: ${JSON.stringify(r)}`);
+  await page.evaluate(() => closeModal('settings'));
+  await sleep(300);
+});
+
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
 await step('dialog keeps a selection', async () => {
   await page.evaluate(() => { askText('Название', 'текст'); });

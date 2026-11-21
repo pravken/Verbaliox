@@ -3738,3 +3738,14 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-colrow { display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer; }
 .tk-colrow input { accent-color: var(--accent); margin: 0; }
 .tk-colpop .tk-row2 { margin-top: 8px; }
+
+/* Настройки: the line icon of each section in the list (the chosen one in the accent), the cards with the icon of
+   their section before the title */
+.sx-nav-btn .sx-nav-ico { opacity: 0.75; }
+.sx-nav-btn.is-active .sx-nav-ico { opacity: 1; color: var(--accent-text); }
+.sx-card-hd { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+.sx-card-hd > * { grid-column: 1 / -1; }
+.sx-card-hd > .pcd-ic { grid-column: 1; }
+.sx-card-hd > .pcd-ic + h4 { grid-column: 2; line-height: 24px; }
+.sx-card-hd > .pcd-ic + h4 + * { margin-top: 6px; }
+

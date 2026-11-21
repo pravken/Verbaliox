@@ -729,10 +729,10 @@ function formatTime(sec) {
 // ([data-stab]): the sections of the former tabs are listed in SETTINGS_SECTION_TAB, and their old
 // names (openModal('settings', 'hotkeys'), "settings:hotkeys" of a notification, #settings/models)
 // open the tab and scroll to the section
-const SETTINGS_TABS = ['general', 'record', 'recognition', 'analysis', 'export', 'privacy', 'advanced'];
+const SETTINGS_TABS = ['general', 'record', 'recognition', 'analysis', 'calendar', 'export', 'privacy', 'advanced'];
 const SETTINGS_SECTION_TAB = {
   updates: 'general', about: 'general',
-  hotkeys: 'record', calendar: 'record',
+  hotkeys: 'record',
   models: 'recognition', dictionary: 'recognition',
   bench: 'advanced', dub: 'advanced',
 };

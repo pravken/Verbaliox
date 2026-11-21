@@ -56,13 +56,13 @@ class SettingsPageTest(unittest.TestCase):
             self.assertIn(f"{name}: '", CORE)
 
     def test_the_former_tabs_are_sections_of_a_tab(self):
-        """The 14 tabs of before are 7: the old names (openModal('settings', 'hotkeys'), "settings:hotkeys"
+        """The 14 tabs of before are 8 (the calendar a tab of its own again, «Пульт встреч»): the old names (openModal('settings', 'hotkeys'), "settings:hotkeys"
         of a notification) open the tab they moved into, on their section."""
         tabs = re.findall(r"'([a-z]+)'", re.search(r"const SETTINGS_TABS = \[([^\]]+)\]", CORE).group(1))
-        self.assertEqual(len(tabs), 7)
+        self.assertEqual(len(tabs), 8)
         block = CORE[CORE.index("const SETTINGS_SECTION_TAB = {"):]
         moved = dict(re.findall(r"([a-z]+): '([a-z]+)'", block[:block.index("};")]))
-        self.assertEqual(set(moved), {"updates", "about", "hotkeys", "calendar", "models", "dictionary", "bench", "dub"})
+        self.assertEqual(set(moved), {"updates", "about", "hotkeys", "models", "dictionary", "bench", "dub"})
         for section, tab in moved.items():
             self.assertIn(tab, tabs, section)
             self.assertIn(f'data-stab="{section}"', HTML, section)
