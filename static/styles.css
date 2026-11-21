@@ -4776,3 +4776,28 @@ button.sc-at:hover { color: var(--accent-text); }
 /* the window of a new task: its fields as in the other windows */
 .tk-dlg :is(.tk-input, input[type="text"], input[type="date"], input[type="time"], select) { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); box-sizing: border-box; }
 .imp-btn-lg { height: var(--ctl-h, 32px); padding: 0 14px; font-size: var(--fs-ui); }
+
+/* Notices in the look of the windows (asked by the user): the card surface, the hairline, a 12px corner, the menu
+   shadow; the kind as an icon square in its colour (an error red, a warning amber, done green, a status blue) in
+   place of the bare glyph and the bar at the left; the action is the shared button, «✕» the windows' one; a thin
+   line at the bottom shows the life left (it stops under the pointer). They open as the windows and fade out */
+.toast { position: relative; overflow: hidden; gap: 10px; min-height: 48px; box-sizing: border-box; padding: 10px 10px 10px 10px; border-radius: 12px;
+  background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--line); box-shadow: var(--shadow-menu);
+  font-size: var(--fs-ui); line-height: 1.4; animation: vx-pop 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.toast-status { --toast-c: var(--accent-text); --toast-bg: rgb(var(--accent-rgb) / 0.16); }
+.toast-success { --toast-c: #30D158; --toast-bg: rgba(48, 209, 88, 0.14); }
+.toast-warning { --toast-c: #FFB340; --toast-bg: rgba(255, 159, 10, 0.16); }
+.toast-error { --toast-c: #FF6961; --toast-bg: rgba(255, 69, 58, 0.16); }
+.toast-icon { flex: none; align-self: flex-start; width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: var(--toast-bg); color: var(--toast-c); }
+.toast-icon svg { width: 16px; height: 16px; }
+.toast-text { align-self: center; padding: 4px 4px 4px 0; color: #F5F5F7; }
+.toast-action { flex: none; align-self: center; }
+.toast .toast-close { align-self: flex-start; }
+.toast-life { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--toast-c); opacity: 0.55; transform-origin: left; transform: scaleX(0); pointer-events: none; }
+.toast-life.is-on { animation: toast-life linear forwards; }
+.toast-life.hidden { display: none; }
+.toast:hover .toast-life { animation-play-state: paused; }
+@keyframes toast-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.toast.is-leaving { animation: fadeLeave 160ms ease-in forwards !important; }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } .toast-life { display: none; } }
+@media (prefers-reduced-transparency: reduce) { .toast { background: var(--card); } }
