@@ -100,6 +100,28 @@ class McpServerTest(unittest.TestCase):
         database.update_settings({"mcp_local_only": "true"})  # allowed by the user
         self.assertEqual(len(_call("search_meetings", query="туман")[1]["meetings"]), 2)
 
+    def test_recordings_marked_local_in_earlier_versions_stay_hidden(self):
+        """The «только локально» mark went with the cloud models: what the user had closed to the agent stays
+        closed (a recording, a folder and the folders inside it); the dictations still follow the setting."""
+        own = database.create_meeting(title="Туман: личное", filename="c.wav", media_path="c.wav")
+        inner = database.create_meeting(title="Туман: в закрытой папке", filename="d.wav", media_path="d.wav")
+        for mid in (own["id"], inner["id"]):
+            database.save_meeting_results(mid, segments=SEGMENTS, speakers=SPEAKERS, language="ru")
+            database.update_meeting_progress(mid, status="completed", progress=100, duration=70.0)
+        top = database.create_folder("Закрытое")
+        sub = database.create_folder("Внутри", parent_id=top["id"])
+        database.update_meeting_fields(inner["id"], folder_id=sub["id"])
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE meetings SET local_only = 1 WHERE id = ?", (own["id"],))
+            conn.execute("UPDATE folders SET local_only = 1 WHERE id = ? OR system_key = 'dictations'", (top["id"],))
+            conn.commit()
+            conn.close()
+        database.update_settings({"mcp_local_only": "true"})  # the dictations allowed
+        found = {m["id"] for m in _call("search_meetings", query="туман")[1]["meetings"]}
+        self.assertEqual(found, {self.mid, self.secret})
+        self.assertTrue(_call("get_meeting", id=inner["id"])[0])
+
     def test_a_setting_changed_by_the_app_counts_at_once(self):
         """Found in the review: the MCP server is a process of its own and kept its cache of the settings, so
         the hidden recordings stayed open to the agent after the user took the permission back in the app."""

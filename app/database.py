@@ -2301,6 +2301,36 @@ def dictation_ids() -> set:
     return {int(r["id"]) for r in rows}
 
 
+def formerly_local_ids() -> set:
+    """Ids of the recordings the user had marked «только локально» (themselves, or by a folder and the folders
+    inside it) while that mark existed: the agent keeps not getting them (the mark is gone with the cloud
+    models, what the user once closed does not open by itself). The «Диктовки» folder had the mark on its
+    own: it follows the setting of the agent (dictation_ids)."""
+    dict_fid = system_folder_id("dictations")
+    skip = set(folder_subtree_ids(dict_fid)) if dict_fid is not None else set()
+    with _db_lock:
+        conn = get_connection()
+        try:
+            marked = [int(r["id"]) for r in conn.execute("SELECT id FROM folders WHERE local_only = 1").fetchall()]
+            own = {int(r["id"]) for r in conn.execute("SELECT id FROM meetings WHERE local_only = 1").fetchall()}
+        except sqlite3.OperationalError:  # a database made after the mark was gone has no such column
+            marked, own = [], set()
+        conn.close()
+    folders = set()
+    for fid in marked:
+        if fid not in skip:
+            folders.update(folder_subtree_ids(fid))
+    folders -= skip
+    if folders:
+        with _db_lock:
+            conn = get_connection()
+            ids = list(folders)
+            own |= {int(r["id"]) for r in conn.execute(
+                f"SELECT id FROM meetings WHERE folder_id IN ({','.join('?' * len(ids))})", ids).fetchall()}
+            conn.close()
+    return own - dictation_ids()
+
+
 def folder_subtree_ids(folder_id: int) -> List[int]:
     """The folder and every folder inside it."""
     folders = list_folders()
