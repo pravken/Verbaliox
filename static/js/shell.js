@@ -172,6 +172,7 @@ function renderTopbar() {
   set('nav-transcript', view === 'library' && tab === 'transcript');
   set('nav-summary', view === 'library' && tab === 'summary');
   set('nav-speakers', view === 'library' && tab === 'speakers');
+  set('nav-info', view === 'library' && tab === 'info');
   syncAnalysisMark();
   if (m) {
     // the sections made (summaries["error"] is the last failure, not a section)

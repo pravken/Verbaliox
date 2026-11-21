@@ -93,6 +93,15 @@ await step('read a recording', async () => {
 // The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the
 // name once for a run of one speaker; the phrase playing is lit; «Текст» brings the running text back, kept
 await step('transcript as a chat', async () => {
+  // the tabs in the order the user chose; another recording opens on «Расшифровка»
+  const order = await page.$$eval('#tb-record > button', els => els.map(e => e.id));
+  expect(order.join() === 'nav-transcript,nav-summary,nav-speakers,nav-info', `the tabs: ${order}`);
+  await page.evaluate(() => openRecordTab('summary'));
+  await page.evaluate(() => openMeeting(2));
+  await sleep(800);
+  expect(await page.evaluate(() => state.activeWorkspaceTab) === 'transcript', 'another recording did not open on «Расшифровка»');
+  await page.evaluate(() => openMeeting(1));
+  await sleep(800);
   await page.evaluate(() => { openRecordTab('transcript'); setTxLayout('chat'); });
   await sleep(300);
   const bubbles = await page.locator('#transcript-inner .ch-bub.segment-row').count();
