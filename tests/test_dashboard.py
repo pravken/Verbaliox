@@ -184,6 +184,22 @@ class DashboardTest(unittest.TestCase):
         # Monday to Wednesday gone by: 24 working hours, half an hour in meetings
         self.assertEqual((v["share"][-1], v["focus"][-1]), (2, 23.5))
         self.assertEqual(d["people"][0], {"name": "Мария", "color": "", "meetings": 1, "hours": 0.5})
+        # «Частые участники» with a period of its own: a month here
+        month = dashboard.people(date(2026, 11, 1), date(2026, 12, 1))
+        self.assertEqual([(p["name"], p["meetings"], p["hours"]) for p in month], [("Мария", 3, 1.5), ("Иван", 1, 0.5)])
+
+    def test_the_people_route_takes_up_to_a_year(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        self._meeting("Синк", "2026-11-17")
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        r = c.get("/api/dashboard/people", params={"start": "2026-01-01", "end": "2027-01-01"})
+        self.assertEqual([p["name"] for p in r.json()["people"]], ["Мария"])
+        self.assertEqual(c.get("/api/dashboard/people", params={"start": "2025-01-01", "end": "2027-01-01"}).status_code, 400)
+        self.assertEqual(c.get("/api/dashboard/people", params={"start": "x", "end": "2027-01-01"}).status_code, 400)
 
     def test_a_series_giving_nothing_lately(self):
         """Asked by the user: «Серии без результатов» — the newest meetings of a series, three in a row, gave

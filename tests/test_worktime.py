@@ -114,6 +114,9 @@ class AppsTest(unittest.TestCase):
         self.assertTrue(r["enabled"])
         self.assertEqual(r["apps"], [{"app": "outlook", "name": "Outlook", "minutes": 1, "before": 2}])
         self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-11-23", "end": "2026-11-16"}).status_code, 400)
+        # the widget's own period «Год»: a year is taken, more is not
+        self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-01-01", "end": "2027-01-01"}).status_code, 200)
+        self.assertEqual(c.get("/api/worktime/apps", params={"start": "2025-01-01", "end": "2027-01-01"}).status_code, 400)
         self.assertEqual(c.delete("/api/worktime/apps").status_code, 200)
         self.assertEqual(worktime.apps(date(2026, 11, 1), date(2026, 11, 30)), {})
 

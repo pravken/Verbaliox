@@ -264,6 +264,66 @@ def _history(period: str, start: date, today: date, meetings: List[Dict[str, Any
     return {"starts": [a.isoformat() for a, _e in spans], "norm": norm, "values": values}
 
 
+class _Names:
+    """The people of the meetings by their names in the people list (a name looked up once), the user left out."""
+
+    def __init__(self, me: set):
+        from app.people import canonical
+        from app.voice_profiles import is_default_name
+
+        try:
+            from app.people import _rows
+
+            self.rows = _rows()
+        except Exception:
+            self.rows = []
+        self.me, self.known, self._canonical, self._default = me, {}, canonical, is_default_name
+
+    def name_of(self, n: str) -> str:
+        if n not in self.known:
+            self.known[n] = self._canonical(n, self.rows)
+        return self.known[n]
+
+    def _speakers(self, m: Dict[str, Any]):
+        for sp in (m.get("speakers") or {}).values():
+            n = (sp or {}).get("name") if isinstance(sp, dict) else ""
+            if n and not self._default(n) and self.name_of(n).lower() not in self.me:
+                yield self.name_of(n), sp
+
+    def people_of(self, m: Dict[str, Any]) -> set:
+        return {n.lower() for n, _sp in self._speakers(m)}
+
+    def most(self, meetings: List[Dict[str, Any]], n: int = 8) -> List[Dict[str, Any]]:
+        """The people met most: their meetings together and the hours of those meetings."""
+        met: Dict[str, Dict[str, Any]] = {}
+        for m in meetings:
+            seen = set()
+            for name, sp in self._speakers(m):
+                if name.lower() in seen:
+                    continue
+                seen.add(name.lower())
+                e = met.setdefault(name.lower(), {"name": name, "color": (sp or {}).get("color") or "", "meetings": 0, "hours": 0.0})
+                e["meetings"] += 1
+                e["hours"] += float(m.get("duration") or 0) / 3600
+        for e in met.values():
+            e["hours"] = round(e["hours"], 1)
+        return sorted(met.values(), key=lambda x: (-x["meetings"], x["name"].lower()))[:n]
+
+
+def people(start: date, end: date, feature_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """«Частые участники» of start…end (end not included): the widget has a period of its own."""
+    from app.database import fill_durations, list_meetings
+    from app.features import feature_map
+    from app.people import my_names
+
+    meetings = [m for m in list_meetings() if _counted(m) and start <= _day(m) < end]
+    if feature_id:
+        fmap = feature_map()
+        meetings = [m for m in meetings if feature_id in fmap.get(m["id"], [])]
+    fill_durations(meetings)
+    return _Names(set(my_names())).most(meetings)
+
+
 def _day(m: Dict[str, Any]) -> Optional[date]:
     raw = str(m.get("recorded_at") or m.get("created_at") or "")[:10]
     try:
@@ -282,8 +342,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     from app import commitments
     from app.database import fill_durations, list_meetings
     from app.features import decisions_of, feature_map, list_features
-    from app.people import canonical, my_names
-    from app.voice_profiles import is_default_name
+    from app.people import my_names
 
     period = period if period in PERIODS else "week"
     today = today or date.today()
@@ -358,43 +417,10 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
                       "spark": spark, "last": {"id": last["id"], "title": last.get("title") or "", "date": _day(last).isoformat()}})
     feats.sort(key=lambda x: (-x["meetings"], -x["open"], x["name"].lower()))
 
-    # the people met most in the period, with the open tasks on them
-    met: Dict[str, Dict[str, Any]] = {}
-    try:
-        from app.people import _rows
-
-        rows = _rows()
-    except Exception:
-        rows = []
-    known: Dict[str, str] = {}  # a name as the speakers have it → as the people list has it
-
-    def name_of(n: str) -> str:
-        if n not in known:
-            known[n] = canonical(n, rows)
-        return known[n]
-
-    def people_of(m: Dict[str, Any]) -> set:
-        """The people of a meeting, the user left out."""
-        return {name_of(n).lower() for n in ((sp or {}).get("name") if isinstance(sp, dict) else "" for sp in (m.get("speakers") or {}).values())
-                if n and not is_default_name(n) and name_of(n).lower() not in me}
-
-    for m in now:
-        seen = set()
-        for sp in (m.get("speakers") or {}).values():
-            n = (sp or {}).get("name") if isinstance(sp, dict) else ""
-            if not n or is_default_name(n):
-                continue
-            n = name_of(n)
-            if n.lower() in seen or n.lower() in me:
-                continue
-            seen.add(n.lower())
-            e = met.setdefault(n.lower(), {"name": n, "color": (sp or {}).get("color") or "", "meetings": 0, "hours": 0.0})
-            e["meetings"] += 1
-            e["hours"] += float(m.get("duration") or 0) / 3600  # the hours of the meetings together
-    for e in met.values():
-        e["hours"] = round(e["hours"], 1)
-    people = sorted(met.values(), key=lambda x: (-x["meetings"], x["name"].lower()))[:8]
-    history = _history(period, start, today, meetings, tasks, me, people_of)
+    # the people met most in the period
+    names = _Names(me)
+    people = names.most(now)
+    history = _history(period, start, today, meetings, tasks, me, names.people_of)
     hv = history["values"]  # the current period: as the widgets count it
     hv["meetings"][-1], hv["mine"][-1], hv["waiting"][-1] = len(now), len(mine), len(waiting)
     hv["hours"][-1] = round(sum(float(m.get("duration") or 0) for m in now) / 3600, 1)
