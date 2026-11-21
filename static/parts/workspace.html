@@ -601,48 +601,7 @@
       <div id="wview-transcript" class="flex-1 flex flex-col overflow-hidden tab-pane-anim">
 
         <!-- Contextual Transcript Sub-Toolbar: Speaker Pills on Left + Transcript Action Buttons & Search on Right -->
-        <div class="border-b apple-border bg-apple-bg/95 px-6 py-2 shrink-0">
-          <!-- Two parts: "Recognition" (a panel of its own: the model the text was made with, each model's
-               transcript kept, picking one shows it; renderTxModelBar in static/js/workspace.js) and
-               "Text" (the row below: what is done with the text shown) -->
-          <div id="tx-model-bar" class="hidden tx-section-panel max-w-6xl mx-auto flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 min-w-0">
-            <label for="tx-model-select" class="tx-section-label" data-i18n="txSectionRecognition">Распознавание</label>
-            <!-- The models as chips: a click picks one; each says whether its text is there (the list below
-                 holds the choice for the code that reads it) -->
-            <div id="tx-model-chips" class="tx-chips" role="radiogroup" data-i18n-aria="txSectionRecognition" aria-label="Распознавание"></div>
-            <select id="tx-model-select" data-change="pickTxModel" data-change-args='[{"$": "el"}]' aria-hidden="true" tabindex="-1"
-              class="hidden"></select>
-            <!-- What is done to the sound before recognition and to the text after it, for this recording -->
-            <div class="relative shrink-0">
-              <button data-click="toggleTxProcMenu" data-click-args='[{"$": "event"}]' id="tx-proc-btn" class="ui-btn ui-btn-subtle"
-                data-i18n-title="tipTxProc" title="Что сделать со звуком перед распознаванием и с текстом после: для этой записи">
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/></svg>
-                <span class="tx-tool-label" data-i18n="txProcBtn">Параметры</span>
-              </button>
-              <div id="tx-proc-menu" class="hidden absolute left-0 top-full mt-1.5 w-80 macos-menu z-40 p-3 space-y-3" data-click="stopEvent" data-click-args='[{"$": "event"}]'></div>
-            </div>
-            <button data-click="transcribeWithPickedModel" id="tx-transcribe-btn" class="ui-btn ui-btn-subtle shrink-0"
-              data-i18n-title="tipTxTranscribe" title="Расшифровать запись выбранной моделью. Тексты других моделей остаются">
-              <svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
-              <span id="tx-transcribe-label" class="tx-tool-label" data-i18n="txTranscribe">Расшифровать</span>
-            </button>
-            <button data-click="mergeAllTranscripts" id="tx-merge-btn" class="hidden ui-btn ui-btn-subtle shrink-0"
-              data-i18n-title="tipTxMergeAll" title="Один текст из всех моделей: недостающие модели распознают запись по очереди, затем версии сводятся — где модели согласны, их слово, спорные места выбирает модель анализа">
-              <svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
-              <span class="tx-tool-label" data-i18n="txMergeAll">Свести всё</span>
-            </button>
-            <button data-click="openResplitDialog" id="tx-resplit-btn" class="hidden ui-btn ui-btn-subtle shrink-0"
-              data-i18n-title="spResplitTip" title="Разделить реплики по голосам заново, не распознавая текст">
-              <svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
-              <span class="tx-tool-label" data-i18n="txResplit">Разделить по голосам</span>
-            </button>
-            <button data-click="deletePickedTranscript" id="tx-delete-version-btn" class="hidden ui-btn ui-btn-subtle shrink-0"
-              data-i18n-title="tipTxDeleteVersion" title="Удалить расшифровку выбранной модели. Тексты других моделей останутся">
-              <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
-              <span class="tx-tool-label" data-i18n="txDeleteVersion">Удалить эту версию</span>
-            </button>
-            <span id="tx-model-status" class="tx-model-status"></span>
-          </div>
+        <div id="tx-subbar" class="border-b apple-border bg-apple-bg/95 px-6 py-2 shrink-0">
           <div class="tx-toolbar max-w-6xl mx-auto flex items-center justify-between gap-3">
             <!-- With a text there, recognition is one short row (asked by the user, variant B): the version (a menu of
                  the models), «Расшифровать заново», «⋯» with the rare actions, and when the text was made -->
@@ -651,6 +610,11 @@
                 data-i18n-title="tipTxModelChip" title="Версия текста: модель, которой он расшифрован. Выбрать другую"></button>
               <button id="tx-redo-btn" data-click="txRedo" class="tx-model-chip" data-i18n-title="tipTxTranscribeAgain" title="Расшифровать запись заново той же моделью">
                 <span aria-hidden="true">↻</span><span class="tx-tool-label" data-i18n="txTranscribeAgain">Расшифровать заново</span></button>
+              <!-- «Свести всё» in sight while it applies (two versions, or two downloaded models) -->
+              <button id="tx-quick-merge" data-click="mergeAllTranscripts" class="tx-model-chip hidden"
+                data-i18n-title="tipTxMergeAll" title="Один текст из всех моделей: недостающие модели распознают запись по очереди, затем версии сводятся — где модели согласны, их слово, спорные места выбирает модель анализа">
+                <svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
+                <span class="tx-tool-label" data-i18n="txMergeAll">Свести всё</span></button>
               <button id="tx-more-btn" data-click="openTxMoreMenu" data-click-args='[{"$": "el"}]' class="tx-model-chip tx-more" aria-haspopup="menu"
                 data-i18n-title="txMoreTip" title="Ещё: голоса, параметры, удаление версии" data-i18n-aria="txMoreTip" aria-label="Ещё">⋯</button>
               <span id="tx-quick-status" class="tx-quick-status"></span>
@@ -735,6 +699,67 @@
 
         <!-- Scrollable Transcript Document -->
         <div id="transcript-container" class="flex-1 overflow-y-auto px-6 py-5">
+          <!-- Recognition as a card of the content column (renderTxModelBar in static/js/workspace.js): without a text it
+               stands in its place — the model, «Параметры», «Расшифровать», or the progress of the mix or the recognition;
+               with a text it opens above it from «⋯ → Все модели и параметры» -->
+          <section id="tx-model-bar" class="tx-rc hidden max-w-4xl mx-auto" aria-labelledby="tx-rc-title">
+            <div class="vx-head">
+              <span id="tx-rc-ic" class="vx-head-ic" aria-hidden="true"></span>
+              <div class="vx-head-tt"><h2 id="tx-rc-title" class="vx-head-t"></h2><p id="tx-rc-sub" class="vx-head-sub"></p></div>
+              <button id="tx-rc-close" type="button" class="vx-x hidden" data-click="toggleTxModelBar" data-click-args='[false]'
+                data-i18n-title="txHideModels" title="Свернуть панель моделей" data-i18n-aria="txHideModels" aria-label="Свернуть панель моделей">✕</button>
+            </div>
+            <!-- The model: one segmented control of the downloaded models (and the versions there); the others behind «Скачать…».
+                 The hidden list holds the choice for the code that reads it -->
+            <div id="tx-rc-pick" class="tx-rc-row">
+              <span class="tx-rc-label" data-i18n="txRcModel">Модель</span>
+              <div id="tx-model-chips" class="tx-seg" role="radiogroup" data-i18n-aria="txSectionRecognition" aria-label="Распознавание"></div>
+              <button id="tx-rc-download" type="button" data-click="openTxDownloadMenu" data-click-args='[{"$": "el"}]' class="ui-btn ui-btn-subtle hidden"
+                aria-haspopup="menu" data-i18n-title="txRcDownloadTip" title="Модели, которые ещё не скачаны: выбранная скачивается перед расшифровкой">
+                <span data-i18n="txRcDownload">Скачать…</span></button>
+              <select id="tx-model-select" data-change="pickTxModel" data-change-args='[{"$": "el"}]' aria-hidden="true" tabindex="-1" data-i18n-aria="txRcModel" aria-label="Модель"
+                class="hidden"></select>
+            </div>
+            <!-- At work: the stage the server names, one bar of the whole job, its percent (and the stage's own, labelled) -->
+            <div id="tx-rc-prog" class="tx-rc-prog hidden">
+              <div class="tx-rc-track"><i id="tx-rc-fill"></i></div>
+              <div class="tx-rc-row">
+                <span id="tx-rc-pct" class="tx-rc-pct"></span>
+                <span id="tx-rc-time" class="tx-rc-time"></span>
+                <button id="tx-rc-cancel" type="button" data-click="cancelActiveProcessing" class="ui-btn ui-btn-subtle ml-auto"
+                  data-i18n="cancelProcessingBtn" data-i18n-title="tipCancelProcessing" title="Остановить обработку этой записи">Отменить</button>
+              </div>
+            </div>
+            <div id="tx-rc-foot" class="tx-rc-row tx-rc-foot">
+              <span id="tx-model-status" class="tx-model-status"></span>
+              <button data-click="openResplitDialog" id="tx-resplit-btn" class="hidden ui-btn ui-btn-subtle shrink-0"
+                data-i18n-title="spResplitTip" title="Разделить реплики по голосам заново, не распознавая текст">
+                <span class="tx-tool-label" data-i18n="txResplit">Разделить по голосам</span>
+              </button>
+              <button data-click="deletePickedTranscript" id="tx-delete-version-btn" class="hidden ui-btn ui-btn-subtle shrink-0"
+                data-i18n-title="tipTxDeleteVersion" title="Удалить расшифровку выбранной модели. Тексты других моделей останутся">
+                <span class="tx-tool-label" data-i18n="txDeleteVersion">Удалить эту версию</span>
+              </button>
+              <button data-click="mergeAllTranscripts" id="tx-merge-btn" class="hidden ui-btn ui-btn-subtle shrink-0"
+                data-i18n-title="tipTxMergeAll" title="Один текст из всех моделей: недостающие модели распознают запись по очереди, затем версии сводятся — где модели согласны, их слово, спорные места выбирает модель анализа">
+                <span class="tx-tool-label" data-i18n="txMergeAll">Свести всё</span>
+              </button>
+              <!-- What is done to the sound before recognition and to the text after it, for this recording -->
+              <div class="relative shrink-0">
+                <button data-click="toggleTxProcMenu" data-click-args='[{"$": "event"}]' id="tx-proc-btn" class="ui-btn ui-btn-subtle"
+                  data-i18n-title="tipTxProc" title="Что сделать со звуком перед распознаванием и с текстом после: для этой записи">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/></svg>
+                  <span data-i18n="txProcBtn">Параметры</span>
+                </button>
+                <div id="tx-proc-menu" class="hidden absolute right-0 top-full mt-1.5 w-80 macos-menu z-40 p-3 space-y-3" data-click="stopEvent" data-click-args='[{"$": "event"}]'></div>
+              </div>
+              <button data-click="transcribeWithPickedModel" id="tx-transcribe-btn" class="ui-btn ui-btn-primary shrink-0"
+                data-i18n-title="tipTxTranscribe" title="Расшифровать запись выбранной моделью. Тексты других моделей остаются">
+                <svg class="tb-ai" aria-hidden="true" viewBox="0 0 24 24"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
+                <span id="tx-transcribe-label" data-i18n="txTranscribe">Расшифровать</span>
+              </button>
+            </div>
+          </section>
           <div id="transcript-inner" class="max-w-4xl mx-auto space-y-1.5">
             <!-- Populated dynamically -->
           </div>

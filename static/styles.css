@@ -4922,6 +4922,61 @@ button.sc-at:hover { color: var(--accent-text); }
 .ld-own { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #C7C9CE; font-family: var(--font-mono); white-space: nowrap; }
 .ld-own i { width: 10px; height: 4px; border-radius: 2px; background: var(--accent); }
 
+/* «Расшифровка» without a text (asked by the user: the old «РАСПОЗНАВАНИЕ» panel, its row of chips and a full-width
+   band with two percents): one card of the content column (#tx-model-bar, renderTxModelBar in static/js/workspace.js)
+   — the head with its icon, the model as one segmented control, «Параметры» and «Расшифровать» on the right; at work,
+   the stage the server names, one bar and one percent. With a text the same card opens above it on request, and the
+   short row of the toolbar (model ▾, «Свести всё», ↻, ⋯) and the rest of that line take the shared 32px buttons */
+.tx-rc { display: flex; flex-direction: column; gap: 14px; padding: 16px; box-sizing: border-box; background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
+.tx-rc.hidden, .tx-rc .hidden { display: none; }
+.tx-rc.tx-rc-alone { margin-top: 6vh; }
+.tx-rc:not(.tx-rc-alone) { margin-bottom: 16px; }
+.tx-rc .vx-head-sub.hidden { display: none; }
+.tx-rc-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.tx-rc-label { flex: none; min-width: 56px; font-size: var(--fs-caption); font-weight: 500; color: var(--hc-dim, #AEAEB2); }
+.tx-rc-foot { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--line); }
+.tx-rc-foot .tx-model-status { flex: 1 1 12rem; min-width: 0; margin-right: auto; font-size: var(--fs-caption); }
+.tx-rc-foot .tx-model-status:empty { display: none; }
+.tx-rc .ui-btn { height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); font-weight: 500; gap: 6px; }
+.tx-rc .ui-btn-subtle { border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
+.tx-rc .ui-btn-subtle:hover { background: #34373B; color: #FFFFFF; }
+.tx-rc .ui-btn-primary { border-color: transparent; background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+.tx-rc .ui-btn-primary:hover { background: var(--fill-bg-hover); }
+/* the model: one segmented control, 32px like the buttons; a long list scrolls inside it instead of wrapping */
+.tx-seg { display: inline-flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; height: var(--ctl-h, 32px); box-sizing: border-box;
+  padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: var(--ctl-r, 8px); background: var(--bg-deep, #0E0F12); }
+.tx-seg::-webkit-scrollbar { display: none; }
+.tx-seg-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 12px; border-radius: 6px; font-size: var(--fs-ui);
+  color: var(--hc-dim, #AEAEB2); white-space: nowrap; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease, color var(--dur-fast, 120ms) ease; }
+.tx-seg-btn:hover:not(:disabled) { color: #F5F5F7; background: rgba(255, 255, 255, 0.05); }
+.tx-seg-btn.is-picked { background: var(--elevated); color: #F5F5F7; font-weight: 600; box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, 0.35); }
+.tx-seg-btn.is-picked:hover:not(:disabled) { background: var(--elevated); }
+.tx-seg-btn:disabled { cursor: default; opacity: 0.55; }
+.tx-seg-btn.is-busy:disabled, .tx-seg-btn.is-picked:disabled { opacity: 1; }
+.tx-seg-btn.is-in-merge { color: var(--accent-text); }
+.tx-seg-ok { font-size: 11px; line-height: 1; color: #30D158; }
+.tx-seg-btn .tx-chip-size { font-weight: 400; }
+/* at work: one bar of the whole job (the shared look of a progress bar), the percent, the time, «Отменить» */
+.tx-rc-prog { display: flex; flex-direction: column; gap: 10px; }
+.tx-rc-track { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.tx-rc-track > i { display: block; height: 100%; width: 0; border-radius: 3px; background-color: var(--accent); transition: width 0.3s ease; }
+.tx-rc-pct { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-rc-time { font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-rc-time:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .tx-rc-track > i { transition: none; } }
+/* the toolbar of a text: the short row and the tools in the shared 32px controls */
+.tx-quick .tx-model-chip { height: var(--ctl-h, 32px); box-sizing: border-box; padding: 0 12px; gap: 6px; border-radius: var(--ctl-r, 8px); border: 1px solid var(--line);
+  background: var(--elevated); color: #E6E7EA; font-size: var(--fs-ui); }
+.tx-quick .tx-model-chip:hover:not(:disabled) { background: #34373B; color: #FFFFFF; }
+.tx-quick .tx-more { width: var(--ctl-h, 32px); padding: 0; }
+.tx-quick .tx-model-chip .tb-ai { width: 14px; height: 14px; flex: none; }
+#tx-tools .ui-btn { height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); gap: 6px; }
+#tx-tools .tx-layout { height: var(--ctl-h, 32px); box-sizing: border-box; align-items: center; }
+#tx-tools .tx-layout button { height: 26px; font-size: var(--fs-ui); }
+#tx-tools #transcript-search { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); }
+#tx-tools .quick-lang { height: var(--ctl-h, 32px); min-width: var(--ctl-h, 32px); box-sizing: border-box; border-radius: var(--ctl-r, 8px); }
+.tx-rc-prog .tx-rc-row { min-height: var(--ctl-h, 32px); }  /* with «Отменить» or without it, the card keeps its height */
+
 /* «Анализ»: an analysis that failed says why over the cards, with «Повторить анализ» */
 .an-failed { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 12px 14px; border-radius: 12px;
   background: rgb(255 69 58 / 0.08); border: 1px solid rgb(255 69 58 / 0.35); }
