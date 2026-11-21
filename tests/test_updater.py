@@ -838,6 +838,30 @@ class UpdateNoticeTest(unittest.TestCase):
             updater.notice_tick()
         self.assertEqual([n["title"] for n in app_status.take_notices()], ["Verbaliox 9.9.9 готова к установке"])
 
+    def test_two_ticks_at_once_tell_a_version_once(self):
+        """Found by CI on Windows: the app's own 30-minute loop ticked while another tick ran, and both told
+        «Вышла Verbaliox» (both read «not told yet» before either wrote it)."""
+        import threading as th
+        from app import app_status
+
+        started, go = th.Event(), th.Event()
+
+        def slow_check():
+            started.set()
+            go.wait(2)
+            return self._status("9.9.11")
+
+        with mock.patch.object(updater, "check", side_effect=slow_check):
+            other = th.Thread(target=updater.notice_tick)
+            other.start()
+            started.wait(2)
+            second = th.Thread(target=updater.notice_tick)
+            second.start()
+            go.set()
+            other.join(5)
+            second.join(5)
+        self.assertEqual([n["title"] for n in app_status.take_notices()], ["Вышла Verbaliox 9.9.11"])
+
     def test_quiet_mode_says_nothing(self):
         from app import app_status, database
 
