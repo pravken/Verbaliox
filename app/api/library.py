@@ -180,12 +180,13 @@ def api_hotkey() -> Dict[str, Any]:
     return {**hotkey_state, "dictation": dict(dictation_hotkey_state), "translate": dict(translate_hotkey_state)}
 
 @router.get("/api/calendar/upcoming")
-def api_calendar_upcoming(refresh: bool = False) -> Dict[str, Any]:
+def api_calendar_upcoming(refresh: bool = False, user: bool = False) -> Dict[str, Any]:
     """The next meetings of the user's calendar (Settings -> General -> Calendar), with the series they continue."""
     from app import calendar_ics, series
 
-    if refresh:
-        calendar_ics.events(force=True)
+    if refresh or user:
+        # «Проверить» in Settings sends refresh: an action of the user, as user does (calendar_ics.events)
+        calendar_ics.events(force=True, user=True)
     items = calendar_ics.upcoming()
     done = sorted((r for r in list_meetings() if r.get("status") == "completed"),
                   key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)

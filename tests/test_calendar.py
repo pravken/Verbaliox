@@ -249,6 +249,42 @@ class OutlookNotSetUpTest(unittest.TestCase):
             calendar_ics.events(force=True)  # 20 minutes later, even forced: no new start
         self.assertEqual(len(calls), 1)
 
+    def test_the_user_asking_tries_a_failed_outlook_again(self):
+        """Found in the review: the 6-hour pause also ignored «Проверить» the user pressed. A forced read
+        (a page refresh) waits after a timeout, not after another error."""
+        from app import calendar_outlook
+
+        calls, errors = [], ["Outlook не ответил за 90 секунд", "Outlook не ответил за 90 секунд", "Outlook: ошибка"]
+
+        def fail():
+            calls.append(1)
+            raise RuntimeError(errors[len(calls) - 1])
+
+        with mock.patch.object(calendar_ics, "_source", return_value="outlook"), \
+             mock.patch.object(calendar_outlook, "fetch", side_effect=fail):
+            calendar_ics.events()
+            calendar_ics.events(force=True)  # a page refresh after a timeout: not started again
+            self.assertEqual(len(calls), 1)
+            calendar_ics.events(user=True)  # the user asked
+            self.assertEqual(len(calls), 2)
+            calendar_ics.events(user=True)
+            self.assertEqual(len(calls), 3)  # another error now
+            calendar_ics.events(force=True)  # forced, after an error other than the timeout
+            self.assertEqual(len(calls), 4)
+            calendar_ics.events()  # not forced: the pause holds
+            self.assertEqual(len(calls), 4)
+
+    def test_the_settings_check_counts_as_the_user_asking(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        with mock.patch.object(calendar_ics, "events", return_value=[]) as ev:
+            self.assertEqual(c.get("/api/calendar/upcoming", params={"refresh": "true"}).status_code, 200)
+        self.assertTrue(any(call.kwargs.get("user") for call in ev.call_args_list))
+
     def test_no_profile_is_checked_again(self):
         """Without a profile nothing is started: the check is repeated, so setting Outlook up is seen."""
         from app import calendar_outlook
