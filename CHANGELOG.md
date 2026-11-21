@@ -35,16 +35,26 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   other speech models. Models no longer load in the middle of a call and slow the computer down.
 - **Live captions are off by default** and never start by themselves while «Don't disturb in meetings» holds;
   turn them on on the recording screen or in Settings → Recording.
-- **Meeting hours on Home** count every recording again, the ones not transcribed yet and cancelled included.
-- **Home opens smoothly**: the widgets rise once, not twice.
+- **Meeting hours in Overview** count every recording again, the ones not transcribed yet and cancelled included.
 - **Dragging widgets** in «Customize»: the widget lifts and a slot shows where it lands.
 - **Calendar month**: today is marked again.
 - «Customize» names each widget instead of its internal key.
 - Settings: switching tabs fades like the views.
-- The sidebar has no header of its own: more room for the sections.
 - Interface texts in a plainer, neutral tone.
 - **Analysis on the computer only**: sending text to cloud models over their API is removed. Saved API keys,
-  the cloud request log and the «local only» marks are deleted; Ollama always does the analysis.
+  the cloud request log and the «local only» marks are deleted; Ollama always does the analysis. Recordings
+  marked «local only» before stay hidden from the agent (MCP).
+- **One look for every window, menu and notice**: a head with its icon, the close button in one place, one
+  button everywhere (32 px, the same corners), the side panels of Overview slide in and out; notices show
+  their kind in a coloured square and the time left as a thin line.
+- **Dictionary**: the words are the main card with group chips and rows like in Recordings; suggestions,
+  correction and features in a column on the right from 1100 px.
+- **A click on a day of the week or the month opens that day**: its meetings, the recordings made that day
+  and the hours worked; ‹ › step a day.
+- **Assistant**: a clear send button; the conversation title shows that it can be renamed.
+- Fixes: the calendar from classic Outlook without a mail profile no longer opens Outlook's first-run wizard
+  every 15 minutes; deleting an Ollama model starts Ollama when needed and deletes the name it really has;
+  the shortcuts show the new icon after the next update.
 
 ## 0.8.25 — English
 
@@ -782,16 +792,26 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   больше не загружаются посреди звонка и не тормозят компьютер.
 - **Субтитры по умолчанию выключены** и не включаются сами, пока действует «Не мешать на встречах»; включить
   можно на экране записи или в «Настройки → Запись».
-- **Часы встреч на «Главной»** снова считают все записи, в том числе ещё не расшифрованные и отменённые.
-- **«Главная» открывается плавно**: виджеты появляются один раз, без двойного рывка.
+- **Часы встреч в «Обзоре»** снова считают все записи, в том числе ещё не расшифрованные и отменённые.
 - **Перетаскивание виджетов** в «Настроить»: виджет приподнимается, а место показывает, куда он встанет.
 - **Календарь, месяц**: сегодняшний день снова выделен.
 - В «Настроить» у каждого виджета своё название вместо служебного ключа.
 - Настройки: вкладки переключаются с плавным появлением, как разделы.
-- У боковой панели больше нет своего заголовка: места для разделов больше.
 - Тексты интерфейса — проще и в спокойном, деловом тоне.
 - **Анализ только на компьютере**: возможность отправлять текст в облачные модели по API убрана. Сохранённые
   API-ключи, журнал облачных запросов и пометки «только локально» удаляются; анализ всегда выполняет Ollama.
+  Записи, помеченные раньше «только локально», по-прежнему скрыты от агента (MCP).
+- **Один вид у всех окон, меню и уведомлений**: заголовок со значком, кнопка закрытия на одном месте, одна
+  кнопка везде (32 px, одинаковые углы), боковые панели «Обзора» выезжают и уезжают; уведомления показывают
+  свой вид цветным квадратом и оставшееся время тонкой полоской.
+- **«Словарь»**: слова — главная карточка с группами и строками как в «Записях»; предложения, исправление и
+  фичи — в колонке справа начиная с 1100 px.
+- **Щелчок по дню недели или месяца открывает этот день**: его встречи, записи этого дня и отработанные часы;
+  ‹ › — на день назад и вперёд.
+- **Ассистент**: понятная кнопка отправки; по заголовку разговора видно, что его можно переименовать.
+- Исправления: календарь из классического Outlook без почтового профиля больше не открывает мастер первого
+  запуска Outlook каждые 15 минут; удаление модели Ollama при необходимости запускает Ollama и удаляет модель
+  под её настоящим именем; ярлыки показывают новый значок после следующего обновления.
 
 ## 0.8.25
 
