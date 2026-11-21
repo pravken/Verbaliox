@@ -104,22 +104,24 @@ class AppsTest(unittest.TestCase):
 
         from app import main
 
+        # dates of a past year: on Windows the app's own worktime thread runs during the test and may note the
+        # real current minute (CI on Windows counted one more in the week of today)
         update_settings({"apps_track": "true"})
-        self._tick(datetime(2026, 11, 19, 10, 0), "outlook")
-        self._tick(datetime(2026, 11, 12, 10, 0), "outlook")
-        self._tick(datetime(2026, 11, 12, 10, 1), "outlook")
+        self._tick(datetime(2025, 11, 19, 10, 0), "outlook")
+        self._tick(datetime(2025, 11, 12, 10, 0), "outlook")
+        self._tick(datetime(2025, 11, 12, 10, 1), "outlook")
         c = TestClient(main.app, base_url="http://127.0.0.1:8790")
         c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
-        r = c.get("/api/worktime/apps", params={"start": "2026-11-16", "end": "2026-11-23"}).json()
+        r = c.get("/api/worktime/apps", params={"start": "2025-11-17", "end": "2025-11-24"}).json()
         self.assertTrue(r["enabled"])
-        self.assertEqual(r["since"], "2026-11-12")  # the first day counted
+        self.assertEqual(r["since"], "2025-11-12")  # the first day counted
         self.assertEqual(r["apps"], [{"app": "outlook", "name": "Outlook", "minutes": 1, "before": 2}])
         self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-11-23", "end": "2026-11-16"}).status_code, 400)
         # the widget's own period «Год»: a year is taken, more is not
         self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-01-01", "end": "2027-01-01"}).status_code, 200)
         self.assertEqual(c.get("/api/worktime/apps", params={"start": "2025-01-01", "end": "2027-01-01"}).status_code, 400)
         self.assertEqual(c.delete("/api/worktime/apps").status_code, 200)
-        self.assertEqual(worktime.apps(date(2026, 11, 1), date(2026, 11, 30)), {})
+        self.assertEqual(worktime.apps(date(2025, 11, 1), date(2025, 11, 30)), {})
 
 
 @unittest.skipIf(worktime is None, "app dependencies not installed")
