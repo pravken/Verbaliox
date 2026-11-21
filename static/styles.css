@@ -517,29 +517,7 @@ label.settings-toggle { display: flex; }
 .settings-tabs { display: flex; }
 .settings-tabs .apple-segment-btn { flex: 1 1 0; justify-content: center; text-align: center; }
 
-/* The willow of «О программе» (its easter egg): it sways, its catkins puff up and fluff drifts away */
-@keyframes willow-sway {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-7deg); }
-  60% { transform: rotate(5deg); }
-}
-@keyframes catkin-puff {
-  0%, 100% { transform: scale(1); }
-  40% { transform: scale(1.18); }
-}
-.willow-fluff {
-  position: fixed; z-index: 80; pointer-events: none;
-  width: 5px; height: 5px; border-radius: 50%;
-  background: radial-gradient(circle, #ffffff 0%, rgba(248, 250, 252, 0.85) 45%, rgba(248, 250, 252, 0) 72%);
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.55);
-  animation: fluff-drift var(--t, 2.6s) cubic-bezier(.25, .6, .4, 1) forwards;
-}
-@keyframes fluff-drift {
-  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
-  12% { opacity: 1; }
-  100% { transform: translate(var(--x), var(--y)) scale(1.1) rotate(var(--r)); opacity: 0; }
-}
-/* About: the willow sways by itself; a click shakes it, five quick clicks start the big easter egg */
+/* About: the logo; a click shakes it, five quick clicks start the big easter egg (static/js/app.js aboutLogoClick) */
 .about-logo {
   width: 104px; height: 104px; border-radius: 26px; display: flex; align-items: center; justify-content: center;
   background: radial-gradient(circle at 50% 30%, #1d4a68 0%, #0E2233 70%); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.1));
@@ -547,15 +525,6 @@ label.settings-toggle { display: flex; }
   transition: transform var(--dur) ease;
 }
 .about-logo:active { transform: scale(0.96); }
-.about-willow { width: 64px; height: 64px; transform-origin: 20% 85%; animation: willow-sway 2.4s ease-in-out 2;  /* audit 3.21: two sways on opening, then still */ }
-.about-willow .catkin { transform-box: fill-box; transform-origin: center; animation: catkin-puff 3.2s ease-in-out 2; animation-delay: var(--d); }
-.about-logo.about-shake .about-willow { animation: willow-shake .5s ease-in-out; }
-@keyframes willow-shake {
-  0%, 100% { transform: rotate(0deg); }
-  20% { transform: rotate(-14deg); }
-  45% { transform: rotate(11deg); }
-  70% { transform: rotate(-6deg); }
-}
 .about-caption { min-height: 26px; font-size: var(--fs-body); color: #fff; }
 .about-caption:not(:empty) { padding-bottom: 8px; }
 .about-caption .caret { display: inline-block; width: 7px; height: 1em; vertical-align: -0.12em; margin-left: 2px; background: var(--accent); animation: caret-blink 1s steps(1) infinite; }
@@ -587,9 +556,7 @@ label.settings-toggle { display: flex; }
   100% { text-shadow: none; transform: none; filter: none; clip-path: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .willow-fluff { display: none; }
-  .about-willow, .about-willow .catkin, .about-logo.about-shake .about-willow, .about-egg .glitch,
-  .about-egg.egg-glitch { animation: none; }
+  .about-egg .glitch, .about-egg.egg-glitch { animation: none; }
 }
 
 /* Studio captions: small language label in front of a line */
@@ -4827,12 +4794,11 @@ button.sc-at:hover { color: var(--accent-text); }
 .hm-mt.hm-mt-k-recording:hover { --hm-tint: rgb(var(--accent-rgb) / 0.15); }
 .hm-mt-slot { visibility: hidden; }  /* the place of «⋯»: the link of a recording stands where a meeting's does */
 
-/* About: the program's own icon (the dragon-V, assets/icon.ico) instead of the former willow drawing; it sways
-   twice on opening, a click shakes it, five quick clicks start the big easter egg (as before) */
+/* About: the program's own icon (the dragon-V, assets/icon.ico); it sways twice on opening, a click makes it flap
+   and breathe sparks (the block «About: the dragon's sparks» below), five quick clicks start the big easter egg */
 .about-logo { background: none; border: 0; box-shadow: none; border-radius: 24px; overflow: visible; }
 .about-mark { width: 104px; height: 104px; border-radius: 24px; display: block; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   transform-origin: 50% 90%; animation: mark-sway 2.4s ease-in-out 2; pointer-events: none; user-select: none; }
-.about-logo.about-shake .about-mark { animation: willow-shake .5s ease-in-out; }
 @media (prefers-reduced-motion: reduce) { .about-mark, .about-logo.about-shake .about-mark { animation: none; } }
 @keyframes mark-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 60% { transform: rotate(2deg); } }
 .about-logo:focus, .about-card:focus { outline: none; }  /* the easter egg is not in the tab order (tabindex -1): the window's focus goes on */
@@ -5125,3 +5091,26 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .imp-sub-size { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); text-align: right; }
 .imp-sub-more { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); padding: 1px 0; }
 .imp-card:not(.imp-more-open) .imp-grid3 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+
+/* About: the dragon's sparks. A click on the logo makes the dragon flap once (a short squash and tilt) and breathe a
+   few sparks from its mouth that rise and fade; the big easter egg ends with a burst. Without motion: none of it */
+.about-logo.about-shake .about-mark { animation: mark-flap .55s cubic-bezier(.3, .7, .4, 1); }
+@keyframes mark-flap {
+  0%, 100% { transform: none; }
+  18% { transform: rotate(-5deg) scale(1.05, 0.95); }
+  42% { transform: rotate(4deg) scale(0.97, 1.04); }
+  68% { transform: rotate(-1.5deg) scale(1.01, 0.99); }
+}
+.about-spark {
+  position: fixed; z-index: 80; pointer-events: none; width: var(--s, 4px); height: var(--s, 4px); border-radius: 50%;
+  background: radial-gradient(circle, #FFF4C2 0%, #FFB340 45%, rgba(255, 94, 58, 0) 75%);
+  box-shadow: 0 0 8px 2px rgba(255, 159, 10, 0.7);
+  animation: spark-rise var(--t, 1.2s) cubic-bezier(.2, .7, .4, 1) forwards;
+}
+@keyframes spark-rise {
+  0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+  12% { opacity: 1; }
+  60% { filter: hue-rotate(-18deg); }
+  100% { transform: translate(var(--x), var(--y)) scale(0.2); opacity: 0; filter: hue-rotate(-30deg); }
+}
+@media (prefers-reduced-motion: reduce) { .about-spark { display: none; } .about-logo.about-shake .about-mark { animation: none; } }
