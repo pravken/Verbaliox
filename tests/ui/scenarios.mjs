@@ -630,7 +630,7 @@ await step('calendar view', async () => {
 // where it was), the other views, the box selects and the bar of the selection takes the filters' place at
 // their height, the search shows the places found in the texts, a click opens the recording
 await step('records section', async () => {
-  await page.click('#lib-table-btn');
+  await page.click('#rail-libtable');  // the rail's «Записи» (the old sidebar's button is gone)
   await sleep(500);
   expect(await page.isVisible('#libtable-view'), 'the section did not open');
   const rows = await page.$$eval('#lt-body .lt-card [data-mid]', els => els.length);

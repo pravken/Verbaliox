@@ -599,6 +599,8 @@ function ltColumnsPopHtml() {
 function toggleLibTableColumns() {
   LT.colsOpen = !LT.colsOpen;
   renderLibTableBar();
+  // the motion only on opening: the panel redrawn by a tick inside it comes without it
+  if (LT.colsOpen) document.getElementById('lt-cols-pop')?.classList.add('vx-pop-in');
 }
 
 function closeLibTableColumnsMenu() {
