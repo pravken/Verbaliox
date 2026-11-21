@@ -7,7 +7,7 @@
 
 const DC = { group: '', q: '', usage: {}, offers: [] };
 
-async function renderDictionaryPage() {
+async function renderDictionaryPage(rise = false) {
   const [usage, offers] = await Promise.all([
     fetch('/api/dictionary/usage').then(r => (r.ok ? r.json() : {})).catch(() => ({})),
     fetch('/api/dictionary/offers').then(r => (r.ok ? r.json() : [])).catch(() => []),
@@ -19,6 +19,7 @@ async function renderDictionaryPage() {
   document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
   await loadDictionary();  // draws the page (renderDictPage)
   if (typeof renderDictFeatures === 'function') renderDictFeatures();
+  if (rise) pultRise(document.querySelector('#dict-view .dc-col'), ':scope > .pcard:not(.hidden)');
 }
 
 function dcGroups() {
@@ -120,4 +121,4 @@ document.addEventListener('change', async e => {
   if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
 });
 
-registerView('dict', { show: renderDictionaryPage, refresh: (changed) => { if (changed) renderDictionaryPage(); } });
+registerView('dict', { show: () => renderDictionaryPage(true), refresh: (changed) => { if (changed) renderDictionaryPage(); } });
