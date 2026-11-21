@@ -947,7 +947,7 @@ def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports:
     from app import app_status
 
     if meeting_id in app_status.mixing:  # its tracks are being mixed: deleted once it has its file
-        raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся — удалите её через минуту.")
+        raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся. Удалить её можно будет через минуту.")
     from app import url_import
 
     url_import.drop(meeting_id)  # a download of it stops and its file is removed

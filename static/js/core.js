@@ -636,7 +636,8 @@ async function readJson(res) {
 // a warning and an error. An error stays until it is closed and is read out by the screen reader at
 // once; the others leave by themselves, but not while the pointer is on them. A new status or done
 // notice replaces the previous one; errors and warnings stack, three at most, the newest below
-const TOAST_LIFE = { status: 3000, success: 3000, warning: 8000, error: 0 };
+// an error goes away by itself too (reported by the user: it stayed until closed); one with a button stays
+const TOAST_LIFE = { status: 3000, success: 3000, warning: 8000, error: 10000 };
 const TOAST_ICONS = {
   status: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v3.6M8 5.1v.1" stroke-linecap="round"/></svg>',
   success: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.4l3 3 6-6.4"/></svg>',
@@ -671,7 +672,7 @@ function showToast(msg, action, kind) {
     x.onclick = dismiss;
     el.appendChild(x);
   }
-  const life = action && kind === 'success' ? 7000 : TOAST_LIFE[kind];
+  const life = action && kind === 'success' ? 7000 : action && kind === 'error' ? 0 : TOAST_LIFE[kind];
   const arm = (ms) => { clearTimeout(el._timer); if (ms) el._timer = setTimeout(dismiss, ms); };
   el.addEventListener('mouseenter', () => clearTimeout(el._timer));
   el.addEventListener('mouseleave', () => arm(life && Math.max(1500, life / 2)));
