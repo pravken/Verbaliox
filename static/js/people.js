@@ -169,7 +169,7 @@ function renderSpeakersPanel(opts = {}) {
     const r = talk[id] || { lines: 0, seconds: 0 };
     const share = Math.round((r.seconds / total) * 100);
     const color = /^#[0-9a-f]{6}$/i.test(s.color || '') ? s.color : '#0A84FF';
-    const stats = [`${r.lines} ${t('turns')}`, spMinutes(r.seconds), `${share}%`].join(' · ');
+    const stats = [plural(r.lines, t('turnsForms')), spMinutes(r.seconds), `${share}%`].join(' · ');
     const hints = [];
     if (s.voice_profile) hints.push(`<div class="sp-hint"><span class="sp-ok">✓</span>${escapeHtml(t('spKnownVoice'))}</div>`);
     if (s.voice_suggest) {
