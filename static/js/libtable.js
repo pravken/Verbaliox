@@ -363,7 +363,9 @@ function ltFolderTree() {
     if (m.folder_id != null && folderById(m.folder_id)) count.set(m.folder_id, (count.get(m.folder_id) || 0) + 1);
     else loose++;
   }
+  // a folder of the user's is dragged onto another folder, or onto «Без папки» for the top level (libraryDrop)
   const row = (f, depth) => `<button type="button" class="lt-frow${open === f.id ? ' on' : ''}" data-folder="${f.id}" style="--d:${depth}"`
+    + (f.system_key ? '' : ` draggable="true" data-dragstart="libraryDragStart" data-dragstart-args='[{"$": "event"}, "f", ${f.id}]'`)
     + ` data-dragover="libraryDragOver" data-dragover-args='[{"$": "event"}, ${f.id}]' data-dragleave="libraryDragLeave" data-dragleave-args='[{"$": "event"}]' data-drop="ltDropOnFolder" data-drop-args='[{"$": "event"}, ${f.id}]'>`
     + `<span class="lt-fname">${folderIcon(f)}<span class="lt-ell">${escapeHtml(folderName(f))}</span></span><span class="lt-dim">${count.get(f.id) || 0}</span></button>`
     + sortedFolders(f.id).map(c => row(c, depth + 1)).join('');

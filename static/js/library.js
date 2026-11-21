@@ -674,6 +674,7 @@ function openFolderMenu(e, id) {
   const menu = document.getElementById('folder-context-menu');
   document.getElementById('fctx-title').textContent = folderName(f);
   document.getElementById('fctx-delete').classList.toggle('hidden', !!f.system_key);
+  document.getElementById('fctx-move').classList.toggle('hidden', !!f.system_key);  // the program's own folders stay at the top
   const inherited = !f.local_only && folderLocalOnly(f.parent_id);
   document.getElementById('fctx-local-check').textContent = f.local_only || inherited ? '✓' : '';
   document.getElementById('fctx-local').disabled = inherited;
@@ -704,6 +705,23 @@ async function fctxToggleLocalOnly() {
     showToast(!f.local_only ? t('localOnlyFolderOn') : t('localOnlyOff'));
     renderAnalysisEstimate();
   }
+}
+
+// «Переместить в…»: the folders it may go into (not itself or a folder inside it), and the top level
+function fctxMove(e) {
+  const f = folderById(state.contextFolderId);
+  if (!f) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  hideFolderMenu();
+  const inside = folderSubtreeIds(f.id);
+  const items = [{ label: `${f.parent_id == null ? '✓' : ' '}  ${t('folderTopLevel')}`, run: () => patchFolder(f.id, { parent_id: null }).then(() => renderLibTable()) }];
+  const walk = (parentId, depth) => sortedFolders(parentId).forEach(x => {
+    if (inside.has(x.id)) return;
+    items.push({ label: `${f.parent_id === x.id ? '✓' : ' '}  ${'  '.repeat(depth)}${folderName(x)}`, run: () => patchFolder(f.id, { parent_id: x.id }).then(() => renderLibTable()) });
+    walk(x.id, depth + 1);
+  });
+  walk(null, 0);
+  openTextMenuAt(items, r.right + 4, r.top);
 }
 
 function fctxNewSubfolder() {
