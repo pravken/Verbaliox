@@ -202,21 +202,22 @@ function tkSeg(id, items, current, fn) {
   }).join('');
 }
 
-const TK_ICON_LIST = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17.5" r="1"/></svg>';
-const TK_ICON_CARDS = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="4" width="7" height="7" rx="1.5"/><rect x="13.5" y="4" width="7" height="7" rx="1.5"/><rect x="3.5" y="13" width="7" height="7" rx="1.5"/><rect x="13.5" y="13" width="7" height="7" rx="1.5"/></svg>';
-const TK_ICON_CAL = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
+const TK_GROUPS = [['due', 'tkByDue'], ['person', 'tkByPerson'], ['feature', 'tkByFeature'], ['record', 'tkByRecord']];
+const TK_CHEVRON = '<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 
 function renderTasksBar() {
-  tkSeg('tk-views', [['list', t('tkViewTable'), TK_ICON_LIST], ['cards', t('tkViewCards'), TK_ICON_CARDS], ['cal', t('tkViewCal'), TK_ICON_CAL]], TK.view, 'setTasksView');
+  tkSeg('tk-views', [['list', t('tkViewTable')], ['cards', t('tkViewCards')], ['cal', t('tkViewCal')]], TK.view, 'setTasksView');
   const cols = document.getElementById('tk-cols-btn');
   cols.disabled = TK.view === 'cal';
   cols.title = TK.view === 'cal' ? t('tkColsInCal') : t('tkColsTip');
   // the grouping belongs to the list: in the calendar it is greyed and keeps its place
-  const box = document.getElementById('tk-groups-box');
-  box.classList.toggle('tk-tbg-off', TK.view === 'cal');
-  box.title = TK.view === 'cal' ? t('tkGroupInList') : '';
-  tkSeg('tk-groups', [['due', t('tkByDue')], ['person', t('tkByPerson')], ['feature', t('tkByFeature')], ['record', t('tkByRecord')]], TK.by, 'setTasksGroup');
-  document.querySelectorAll('#tk-groups .tk-seg-btn').forEach(b => { b.disabled = TK.view === 'cal'; });
+  const inCal = TK.view === 'cal';
+  document.getElementById('tk-groups-box').classList.toggle('tk-tbg-off', inCal);
+  const gb = document.getElementById('tk-group-btn');
+  gb.disabled = inCal;
+  gb.title = inCal ? t('tkGroupInList') : t('tkGroupLabel');
+  const by = TK_GROUPS.find(([k]) => k === TK.by) || TK_GROUPS[0];
+  gb.innerHTML = `<span>${escapeHtml(t(by[1]))}</span>${TK_CHEVRON}`;
   const base = TK.data.tasks.filter(tkMatchesPeopleAndSearch);
   const filters = [['open', t('tkFOpen')], ['mine', t('tkFMine')], ['over', t('tkFOver')], ['done', t('tkFDone')], ['all', t('tkFAll')]];
   document.getElementById('tk-filters').innerHTML = filters.map(([key, label]) => {
@@ -251,6 +252,12 @@ function setTasksView(view) {
   TK.sel = null;
   TK.rise = true;
   renderTasks();
+}
+
+function openTasksGroupMenu(e) {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  openTextMenuAt(TK_GROUPS.map(([k, label]) => ({ label: `${TK.by === k ? '✓' : ' '}  ${t(label)}`, run: () => setTasksGroup(k) })), r.left, r.bottom + 4);
 }
 
 function setTasksGroup(by) { TK.by = by; TK.open = new Set(); renderTasks(); }  // a group opened in full belongs to its grouping

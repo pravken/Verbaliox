@@ -32,16 +32,16 @@
           <button id="tk-ppl-btn" class="tk-chip" data-click="openTasksPeopleMenu" data-click-args='[{"$": "event"}]' aria-haspopup="true"></button>
           <button id="tk-ppl-clear" class="tk-x hidden" data-click="clearTasksPeople" data-i18n-title="tkPeopleClear" title="Сбросить фильтр по людям">✕</button>
         </div>
+        <!-- The grouping of the list, as «По дням ▾» in «Записи»: greyed in the calendar, its place kept -->
+        <span id="tk-groups-box" class="tk-tbg">
+          <button id="tk-group-btn" class="tk-chip" data-click="openTasksGroupMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" data-i18n-aria="tkGroupLabel" aria-label="Группировка"></button></span>
         </div>
         <div class="tk-fr">
-        <!-- Named groups of the toolbar: the view, and the grouping of the list (greyed in the calendar, its place kept) -->
-        <span class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkViewLabel">Вид</span>
-          <span id="tk-views" class="tk-seg" role="radiogroup" data-i18n-aria="tkViewLabel" aria-label="Вид"></span></span>
-        <span id="tk-groups-box" class="tk-tbg"><span class="tk-tbg-lbl" data-i18n="tkGroupLabel">Группировка</span>
-          <span id="tk-groups" class="tk-seg" role="radiogroup" data-i18n-aria="tkGroupLabel" aria-label="Группировка"></span></span>
+        <!-- The view as in «Записи»: one switch without a caption; the grouping is a chip on the left -->
+        <span id="tk-views" class="tk-seg" role="radiogroup" data-i18n-aria="tkViewLabel" aria-label="Вид"></span>
         <!-- «Колонки»: the columns of the table and the fields of the cards; its place kept in the calendar -->
         <button id="tk-cols-btn" class="tk-btn" data-click="openTasksCols" data-click-args='[{"$": "event"}]' aria-haspopup="true" data-i18n-title="tkColsTip" title="Колонки таблицы и сведения на карточках">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
           <span data-i18n="tkCols">Колонки</span></button>
         </div>
       </div>
