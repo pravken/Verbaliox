@@ -66,8 +66,7 @@ async function openUpdateDialog(after = false) {
   const canGo = !after && info.available && (info.can_install || info.git_checkout);
   const goLabel = info.git_checkout ? t('updateGitBtn') : dl.done && !dl.stale ? t('updateRestartBtn') : t('updateInstallBtn');
   wrap.innerHTML = `<div class="an-dlg upd-dlg modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml((after ? t('updWhatsNew') : t('updNewTitle')).replace('{v}', () => latest.version || info.current))}</h2>
-        <button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${vxHead('down', (after ? t('updWhatsNew') : t('updNewTitle')).replace('{v}', () => latest.version || info.current), { close: 'data-a="close"' })}
       ${after ? '' : `<p class="an-dlg-text">${escapeHtml(t('updNewText').replace('{cur}', () => info.current))}</p>`}
       <div class="upd-notes an-md">${notes ? sanitizedMarkdown(notes) : `<p>${escapeHtml(t('updNoNotes'))}</p>`}</div>
       <div class="an-dlg-foot">
@@ -910,8 +909,7 @@ function openTemplateDialog(tpl) {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   wrap.innerHTML = `<div class="an-dlg modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml(t(editing ? 'anTplEditTitle' : 'anTplNewTitle'))}</h2>
-        <button data-a="no" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${vxHead('note', t(editing ? 'anTplEditTitle' : 'anTplNewTitle'), { close: 'data-a="no"' })}
       <label class="an-fld-label">${escapeHtml(t('anTplName'))}
         <input data-f="name" maxlength="60" class="an-fld" value="${escapeHtml(editing ? tpl.name : '')}"></label>
       <label class="an-fld-label">${escapeHtml(t('anTplPrompt'))}
@@ -1035,11 +1033,9 @@ function openTemplatesEditor() {
   wrap.setAttribute('aria-modal', 'true');
   const presets = TEMPLATE_PRESETS[state.uiLang === 'en' ? 'en' : 'ru'];
   const draw = () => {
+    vxRedraw(wrap);
     wrap.innerHTML = `<div class="w-full max-w-2xl max-h-[85vh] flex flex-col bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
-      <div class="px-5 pt-5 pb-3 border-b apple-border">
-        <div class="text-sm font-semibold text-white">${escapeHtml(t('templatesTitle'))}</div>
-        <p class="text-[11.5px] text-apple-secondary mt-1">${escapeHtml(t('templatesDesc'))}</p>
-      </div>
+      <div class="px-5 pt-5 pb-3 border-b apple-border">${vxHead('note', t('templatesTitle'), { sub: t('templatesDesc') })}</div>
       <div class="flex-1 overflow-y-auto px-5 py-3 space-y-3">
         ${items.map((x, i) => `<div class="p-3 rounded-xl bg-apple-sidebar border border-white/10 space-y-2">
           <div class="flex items-center gap-2">
@@ -1053,7 +1049,7 @@ function openTemplatesEditor() {
         <div class="flex flex-wrap items-center gap-1.5 pt-1">
           <span class="text-[11.5px] text-apple-secondary">${escapeHtml(t('templatesAddFrom'))}</span>
           ${presets.map((p, i) => `<button data-preset="${i}" class="ui-btn ui-btn-subtle h-7 text-[11.5px]">${escapeHtml(p.name)}</button>`).join('')}
-          <button data-add="1" class="ui-btn ui-btn-subtle h-7 text-[11.5px]">+ ${escapeHtml(t('templateBlank'))}</button>
+          <button data-add="1" class="ui-btn ui-btn-subtle h-7 text-[11.5px]">${VX_PLUS}${escapeHtml(t('templateBlank'))}</button>
         </div>
       </div>
       <div class="px-5 py-3 border-t apple-border flex justify-end gap-2">
@@ -1189,11 +1185,7 @@ async function openOpenCommitments() {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   wrap.innerHTML = `<div class="w-full max-w-2xl max-h-[85vh] flex flex-col bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
-      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-center justify-between gap-3">
-        <div><div class="text-sm font-semibold text-white">${escapeHtml(t('openCommitmentsBtn'))}</div>
-          <p class="text-[11.5px] text-apple-secondary mt-1">${escapeHtml(t('openCommitmentsDesc'))}</p></div>
-        <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
-      </div>
+      <div class="px-5 pt-5 pb-3 border-b apple-border">${vxHead('task', t('openCommitmentsBtn'), { sub: t('openCommitmentsDesc'), close: 'data-a="close"' })}</div>
       <div class="flex-1 overflow-y-auto px-5 py-2">${items.length ? `<div class="an-tasks">${items.map(c => commitmentRowHtml(c, true)).join('')}</div>` + commitmentExportBar(null)
         : `<div class="py-10 text-center text-xs text-apple-tertiary">${escapeHtml(t('commitmentsNoneOpen'))}</div>`}</div>
     </div>`;
@@ -2177,23 +2169,23 @@ function openWordFixDialog(selected, section) {
   wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
-  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
-      <div class="text-sm font-semibold text-white">${escapeHtml(t('fixWordTitle'))}</div>
+  wrap.innerHTML = `<form class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead('pen', t('fixWordTitle'), { close: 'data-a="no"' })}
       <div class="space-y-1">
         <div class="text-xs text-apple-secondary">${escapeHtml(t('fixWordWas'))}</div>
         <div class="text-sm text-white break-words"><s class="opacity-70">${escapeHtml(wrong)}</s></div>
       </div>
       <label class="block space-y-1">
         <span class="block text-xs text-apple-secondary">${escapeHtml(t('fixWordRight'))}</span>
-        <input type="text" name="right" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+        <input type="text" name="right" class="vx-field" />
       </label>
       <label class="flex items-start gap-2 text-xs text-apple-label"><input type="checkbox" name="all" checked class="mt-0.5">
         <span>${escapeHtml(t('fixWordAll'))}</span></label>
       <label class="flex items-start gap-2 text-xs text-apple-label"><input type="checkbox" name="learn" checked class="mt-0.5">
         <span><span>${escapeHtml(t('fixWordLearn'))}</span><span class="block text-apple-secondary mt-0.5" data-hint></span></span></label>
-      <div class="flex justify-end gap-2">
-        <button type="button" data-a="no" class="ui-btn ui-btn-subtle">${escapeHtml(t('cancel'))}</button>
-        <button type="submit" class="ui-btn ui-btn-primary">${escapeHtml(t('fixWordOk'))}</button>
+      <div class="vx-dlg-foot">
+        <button type="button" data-a="no" class="tk-btn">${escapeHtml(t('cancel'))}</button>
+        <button type="submit" class="tk-btn tk-btn-primary">${escapeHtml(t('fixWordOk'))}</button>
       </div></form>`;
   const form = wrap.querySelector('form');
   const input = form.elements.right;

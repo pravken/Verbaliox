@@ -358,7 +358,7 @@ function openResplitDialog() {
   wrap.setAttribute('aria-modal', 'true');
   const opts = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}"${n === now ? ' selected' : ''}>${escapeHtml(n ? t('spResplitUpTo').replace('{n}', () => String(n)) : t('spResplitAuto'))}</option>`).join('');
   wrap.innerHTML = `<div class="an-dlg modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml(t('spResplitTitle'))}</h2><button data-a="no" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${vxHead('people', t('spResplitTitle'), { close: 'data-a="no"' })}
       <p class="an-dlg-text">${escapeHtml(t('spResplitText'))}</p>
       <label class="sp-split-name"><span>${escapeHtml(t('spResplitCount'))}</span>
         <select data-f="n" class="an-fld">${opts}</select></label>
@@ -404,7 +404,7 @@ function openSplitDialog(id) {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   wrap.innerHTML = `<div class="an-dlg sp-dlg-split modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml(t('spSplitTitle'))}</h2><button data-a="no" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${vxHead('people', t('spSplitTitle'), { close: 'data-a="no"' })}
       <p class="an-dlg-text">${escapeHtml(t('spSplitText').replace('{name}', () => s.name))}</p>
       <div class="sp-lines">${lines.map(x => `<label class="sp-lrow">
           <input type="checkbox" data-pos="${x.i}">
@@ -529,7 +529,7 @@ async function openPeopleDirectory() {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   wrap.innerHTML = `<div class="an-dlg sp-dir modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml(t('spAllPeople'))}</h2><button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
+      ${vxHead('people', t('spAllPeople'), { close: 'data-a="close"' })}
       <p class="an-dlg-text">${escapeHtml(t('spDirText'))}</p>
       <div class="sp-dir-bar">
         <div class="sp-seg" role="radiogroup" aria-label="${escapeHtml(t('spDirWho'))}" data-f="tabs"></div>
@@ -647,10 +647,10 @@ async function openPersonCard(name) {
       <div class="pc-head">
         <span class="sp-mav pc-ava">${spFaceHtml(p.name, spInitial(p.name))}</span>
         <div class="pc-who"><h2>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</h2>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div>
-        <button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button>
+        <button data-a="close" class="vx-x" title="${escapeHtml(t('close'))}" aria-label="${escapeHtml(t('close'))}">✕</button>
       </div>
       <div class="pc-actions">
-        <button data-a="task" class="an-btn an-btn-primary">+ ${escapeHtml(t('pcTask'))}</button>
+        <button data-a="task" class="an-btn an-btn-primary">${VX_PLUS}${escapeHtml(t('pcTask'))}</button>
         <button data-a="edit" class="an-btn">${escapeHtml(t('pcEdit'))}</button>
         <button data-a="photo" class="an-btn">${escapeHtml(t(personPhotoUrl(p.name) ? 'spPhotoChange' : 'spPhoto'))}</button>
       </div>
@@ -734,7 +734,7 @@ function drawDirectory() {
   wrap.querySelector('[data-f="foot"]').innerHTML = dir.adding
     ? `<input data-f="new" class="an-fld sp-new" maxlength="120" placeholder="${escapeHtml(t(dir.tab === 'dept' ? 'spNewDeptPh' : 'spNamePh'))}">
        <button data-a="add-ok" class="an-btn an-btn-primary">${escapeHtml(t('spAdd'))}</button><button data-a="add-no" class="an-btn">${escapeHtml(t('cancel'))}</button>`
-    : `<button data-a="add" class="an-btn">+ ${escapeHtml(t(dir.tab === 'dept' ? 'spAddDept' : 'spAddPerson'))}</button>
+    : `<button data-a="add" class="an-btn">${VX_PLUS}${escapeHtml(t(dir.tab === 'dept' ? 'spAddDept' : 'spAddPerson'))}</button>
        <span class="flex-1"></span><span class="sp-note">${escapeHtml(t('spVoiceLocal'))}</span>`;
 }
 

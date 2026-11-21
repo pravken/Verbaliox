@@ -267,6 +267,7 @@ async function openFeaturePage(id, refresh = false) {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   wrap.setAttribute('aria-label', f.name);
+  if (refresh && before) wrap.dataset.drawn = '1';  // redrawn after a change: no opening motion again
   const more = (key, n, label) => n > 0 ? `<button class="fp-more" ${pageCall('click', 'fpShowAll', [f.id, key])}>${escapeHtml(label)}</button>` : '';
   // decisions: the latest first, each with its meeting's date
   const decisions = data.meetings.flatMap(m => m.decisions.map(d => ({ d, m })));
@@ -288,6 +289,7 @@ async function openFeaturePage(id, refresh = false) {
       <span class="fp-meet2-t">${escapeHtml(m.title || t('tkUntitled'))}</span><span class="fp-meet2-d">${escapeHtml(tkShortDate(m.date.slice(0, 10)))} · ${formatTime(m.duration)}</span>
       ${m.tldr ? `<span class="fp-meet2-l">${escapeHtml(m.tldr)}</span>` : ''}</button>`;
   }).join('');
+  vxRedraw(wrap);
   wrap.innerHTML = `<div class="fp-card modal-card" style="--ft:${color}">
       <div class="fp-head">
         <div class="fp-sw" aria-hidden="true">${escapeHtml((f.name || '?').slice(0, 1).toUpperCase())}</div>
@@ -296,7 +298,7 @@ async function openFeaturePage(id, refresh = false) {
         <div class="fp-hb">
           <button class="an-btn an-btn-primary" ${pageCall('click', 'askAboutFeature', [f.id])}>✦ ${escapeHtml(t('fpAskShort'))}</button>
           <button class="an-btn" ${pageCall('click', 'editFeatureFromPage')}>${escapeHtml(t('fpEdit'))}</button>
-          <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
+          <button data-a="close" class="vx-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
         </div>
       </div>
       <div class="fp-body">

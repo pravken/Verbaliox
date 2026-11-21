@@ -544,11 +544,11 @@ function renderModelsPop() {
       ${m.downloading ? `<span class="mp-dl-btn mp-dl-busy">${escapeHtml(t('mpDownloading'))}${(() => { const d = modelDownloadsNow().find(x => x.id === m.id); return d && d.pct ? ` · ${d.pct}%` : ''; })()}</span>`
         : `<button data-click="${m.fn}" data-click-args='[${jsArg(m.id)}]' class="mp-dl-btn" title="${escapeHtml(t('tipDownloadModel'))}">↓ ${escapeHtml(m.size)}</button>`}</div>`).join('');
   const anyLoaded = (vram.chips || []).some(c => c.loaded && c.kind !== 'dub');
-  pop.innerHTML = `<div class="mp-head"><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
+  pop.innerHTML = `<div class="mp-head vx-panel-h"><span class="vx-panel-ic" aria-hidden="true">${pultIcon('wave')}</span><span class="mp-title">${escapeHtml(t('mpTitle'))}</span>
       ${anyLoaded ? `<button data-click="unloadAllModelsNow" class="mp-unload" title="${escapeHtml(t('tipUnloadAll'))}" ${vram.busy ? 'disabled' : ''}>${escapeHtml(t('mpUnloadAll'))}</button>` : ''}
       <button data-click="toggleModelsLegend" class="mp-close mp-info${modelsPop.legend ? ' is-on' : ''}" aria-expanded="${!!modelsPop.legend}"
         aria-label="${escapeHtml(t('mpLegendTip'))}" title="${escapeHtml(t('mpLegendTip'))}">i</button>
-      <button data-click="closeModelsPop" class="mp-close" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">×</button></div>
+      <button data-click="closeModelsPop" class="vx-x" aria-label="${escapeHtml(t('close'))}" title="${escapeHtml(t('close'))}">✕</button></div>
     ${modelsPop.legend ? `<div class="mp-legend">
       <span><i class="mp-lg-dot mp-lg-on"></i>${escapeHtml(t('mpLgOn'))}</span>
       <span><i class="mp-lg-dot mp-lg-loading"></i>${escapeHtml(t('mpLgLoading'))}</span>
@@ -949,9 +949,9 @@ function openLlmPicker() {
         <span class="llm-line"><b>${escapeHtml(t('llmPickWeak'))}</b> ${escapeHtml(en ? m.weak_en : m.weak_ru)}</span>
       </button>`;
     }).join('');
+    vxRedraw(wrap);
     wrap.innerHTML = `<div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-3 modal-card llm-dialog">
-      <div class="text-sm font-semibold text-white">${escapeHtml(t('llmPickTitle'))}</div>
-      <p class="text-[11.5px] text-apple-secondary leading-relaxed">${escapeHtml(t('llmPickIntro'))}</p>
+      ${vxHead('spark', t('llmPickTitle'), { sub: t('llmPickIntro') })}
       <div class="flex items-center gap-1.5 text-[11.5px] text-apple-tertiary">${escapeHtml(t('frHardware'))}: <span class="text-apple-label">${escapeHtml(gpuText)}</span>
         <button data-a="info" class="llm-info-btn${showInfo ? ' llm-info-btn-on' : ''}" aria-expanded="${showInfo}" title="${escapeHtml(t('llmMemTitle'))}" aria-label="${escapeHtml(t('llmMemTitle'))}">i</button></div>
       ${showInfo ? `<div class="llm-info"><div class="font-medium text-apple-label">${escapeHtml(t('llmMemTitle'))}</div>
@@ -996,6 +996,8 @@ function openLlmPicker() {
 // and the start with Windows as switches. Asked by the user to be offered here, not only in Settings. The language is not asked: the
 // recommended set detects it (Russian by GigaAM, the rest by the other model); «Настроить вручную» opens
 // Settings → Recognition to choose the models
+// the icon of each step of the first-run window, in its head
+const FRW_IC = { ai: 'spark', sound: 'mic', calls: 'people', cal: 'cal', sum: 'dec' };
 const ENSEMBLE_ALL = ['gigaam-v3', 'large-v3-turbo', 'large-v3', 'parakeet-v3'];
 function openFirstRunWizard(data) {
   document.getElementById('first-run-wizard')?.remove();
@@ -1171,8 +1173,9 @@ function openFirstRunWizard(data) {
     }
     const list = pages(), at = list.indexOf(st.page);
     const dots = list.map((_, i) => `<span class="frw-dot${i === at ? ' is-on' : ''}"></span>`).join('');
+    vxRedraw(wrap);
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
+      <div class="frw-head"><span class="vx-head-ic" aria-hidden="true">${pultIcon(FRW_IC[st.page] || 'set')}</span><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
@@ -2483,12 +2486,11 @@ async function openCloudLog() {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   wrap.innerHTML = `<div class="w-full max-w-2xl max-h-[85vh] flex flex-col bg-apple-card border apple-border rounded-2xl shadow-2xl modal-card">
-      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-center justify-between gap-3">
-        <div><div class="text-sm font-semibold text-white">${escapeHtml(t('cloudLogBtn'))}</div>
-          <p class="text-[11.5px] text-apple-secondary mt-1">${escapeHtml(t('cloudLogDesc'))}</p></div>
+      <div class="px-5 pt-5 pb-3 border-b apple-border flex items-start gap-3">
+        <div class="flex-1 min-w-0">${vxHead('lock', t('cloudLogBtn'), { sub: t('cloudLogDesc') })}</div>
         <div class="flex gap-2 shrink-0">
-          ${rows.length ? `<button data-a="clear" class="ui-btn ui-btn-subtle">${escapeHtml(t('cloudLogClear'))}</button>` : ''}
-          <button data-a="close" class="dlg-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
+          ${rows.length ? `<button data-a="clear" class="tk-btn">${escapeHtml(t('cloudLogClear'))}</button>` : ''}
+          <button data-a="close" class="vx-x" title="${escapeHtml(t('tipCloseModal'))}" aria-label="${escapeHtml(t('tipCloseModal'))}">✕</button>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto px-5 py-2">${rows.length ? rows.map(r => `<div class="py-2 border-b border-white/5 text-[11.5px]">
@@ -3491,6 +3493,7 @@ function drawAfterUpdate() {
       ${step.open ? `<button class="tk-btn tk-btn-sm" data-a="open" data-id="${escapeHtml(step.id)}" title="${escapeHtml(t(step.open.label))}">${escapeHtml(t('auOpen'))}</button>` : '<span></span>'}</div>`;
   const all = groups.length ? `<button class="upd-more" data-a="all" aria-expanded="${allOpen}">${allOpen ? '▾' : '▸'} ${escapeHtml(t('auAllChanges'))}<span class="upd-faint">${total}</span></button>
       ${allOpen ? `<div class="upd-all">${groups.map(g => `<div class="upd-all-h">${escapeHtml(g.title)}</div><ul>${g.items.map(x => `<li>${auInline(x)}</li>`).join('')}</ul>`).join('')}</div>` : ''}` : '';
+  vxRedraw(wrap);
   wrap.innerHTML = `<div class="upd-win modal-card" id="upd-after-win">
     <div class="upd-head"><span class="upd-logo" aria-hidden="true">V</span>
       <div><div class="upd-kicker">${escapeHtml(t('auInstalled'))}</div><h2>${escapeHtml(t('updWhatsNew').replace('{v}', () => version))}</h2></div>
@@ -3747,10 +3750,10 @@ function editDictItem(id) {
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-modal', 'true');
   const field = (key, label, value, hint = '') => `<label class="block space-y-1"><span class="text-xs text-apple-label">${escapeHtml(label)}</span>
-    <input data-k="${key}" type="text" value="${escapeHtml(value || '')}" class="w-full h-9 bg-apple-sidebar border apple-border rounded-lg px-3 text-sm text-white focus:outline-none focus:border-apple-blue" />
+    <input data-k="${key}" type="text" value="${escapeHtml(value || '')}" class="vx-field" />
     ${hint ? `<span class="block text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(hint)}</span>` : ''}</label>`;
-  wrap.innerHTML = `<form class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-3.5 modal-card">
-      <div class="text-sm font-semibold text-white">${escapeHtml(t('dictEditTitle'))}</div>
+  wrap.innerHTML = `<form class="vx-dlg vx-dlg-sm modal-card">
+      ${vxHead('book', t('dictEditTitle'), { close: 'data-a="no"' })}
       ${field('term', t('dictEditWord'), item.term)}
       ${field('variants', t('dictVariantsEdit'), item.variants, t('dictEditVariantsHint'))}
       ${field('category', t('dictEditCategory'), item.category)}

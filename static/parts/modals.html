@@ -2,9 +2,8 @@
   <div id="modal-shortcuts" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "shortcuts"]'>
     <div class="w-full max-w-sm bg-apple-card border apple-border rounded-2xl shadow-2xl overflow-hidden modal-card">
       <div class="p-6 space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-white" data-i18n="shortcutsTitle">Горячие клавиши</h3>
-          <button data-click="closeModal" data-click-args='["shortcuts"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="dlg-x">✕</button>
+        <div class="vx-head"><span class="vx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg></span><div class="vx-head-tt"><h2 class="vx-head-t" data-i18n="shortcutsTitle">Горячие клавиши</h2></div>
+          <button data-click="closeModal" data-click-args='["shortcuts"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="vx-x">✕</button>
         </div>
         <div>
           <div class="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
@@ -87,11 +86,9 @@
   <div id="modal-reconfigure" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "reconfigure"]'>
     <div class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl overflow-hidden modal-card">
       <div class="p-6 space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-white" data-i18n="reconfigTitle">Расшифровать заново</h3>
-          <button data-click="closeModal" data-click-args='["reconfigure"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="dlg-x">✕</button>
+        <div class="vx-head"><span class="vx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12a7 7 0 11-2.05-4.95M19 4.5V8h-3.5"/></svg></span><div class="vx-head-tt"><h2 class="vx-head-t" data-i18n="reconfigTitle">Расшифровать заново</h2><p id="reconfig-recording-name" class="vx-head-sub truncate"></p></div>
+          <button data-click="closeModal" data-click-args='["reconfigure"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="vx-x">✕</button>
         </div>
-        <p id="reconfig-recording-name" class="text-xs text-apple-secondary truncate"></p>
 
         <div class="settings-card">
           <div>
@@ -139,9 +136,9 @@
   <div id="modal-translate" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "translate"]'>
     <div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl overflow-hidden modal-card">
       <div class="p-6 space-y-4 overflow-y-auto" style="max-height: 85vh">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-white" data-i18n="translateTitle">Перевод текста</h3>
-          <button data-click="closeModal" data-click-args='["translate"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="dlg-x">✕</button>
+        <div class="vx-head">
+          <span class="vx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5z"/></svg></span><div class="vx-head-tt"><h2 class="vx-head-t" data-i18n="translateTitle">Перевод текста</h2></div>
+          <button data-click="closeModal" data-click-args='["translate"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="vx-x">✕</button>
         </div>
         <p class="text-xs text-apple-secondary leading-relaxed" data-i18n="translateIntro">Каждая реплика переводится выбранной моделью Ollama на этом компьютере — текст никуда не отправляется. Это машинный перевод: качество зависит от модели, имена и термины проверьте. Таймкоды реплик сохраняются.</p>
         <div id="translate-last-error" class="hidden text-xs rounded-lg border border-apple-red/30 bg-apple-red/15 text-apple-red px-3 py-2"></div>
@@ -202,9 +199,9 @@
   <div id="modal-dub" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "dub"]'>
     <div class="w-full max-w-lg bg-apple-card border apple-border rounded-2xl shadow-2xl overflow-hidden modal-card">
       <div class="p-6 space-y-4 overflow-y-auto" style="max-height: 85vh">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-white"><span data-i18n="dubTitle">Перевод и дубляж</span> <span class="text-[11px] font-normal text-apple-secondary" data-i18n="dubProto">(бета)</span></h3>
-          <button data-click="closeModal" data-click-args='["dub"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="dlg-x">✕</button>
+        <div class="vx-head">
+          <span class="vx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 7v10M12 4v16"/><path d="M16 8.5a4.5 4.5 0 010 7M18.5 6a8 8 0 010 12"/></svg></span><div class="vx-head-tt"><h2 class="vx-head-t"><span data-i18n="dubTitle">Перевод и дубляж</span> <span class="vx-head-tag" data-i18n="dubProto">(бета)</span></h2></div>
+          <button data-click="closeModal" data-click-args='["dub"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="vx-x">✕</button>
         </div>
         <p class="text-xs text-apple-secondary leading-relaxed" data-i18n="dubIntro">Каждая фраза переводится локальной моделью Ollama, озвучивается клоном голоса её участника (VoxCPM2), фон сохраняется (Demucs), результат пишется в новый файл. Всё работает локально.</p>
         <div id="dub-env-panel" class="hidden rounded-xl border apple-border bg-apple-amber/15 p-3 space-y-2">
@@ -272,9 +269,8 @@
   <!-- «Сведения о записи» (Ctrl+I, ⋯ of the record, «Сведения…» in «Звук»): rpOpenInfo in redesign_player.js — here, not in the record view, so it opens over every view -->
   <div id="modal-recinfo" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" data-click="closeModalOnBackdrop" data-click-args='[{"$": "event"}, "recinfo"]'>
     <div class="ri-dialog modal-card">
-      <div class="flex items-center gap-2.5">
-        <h2 class="ri-title" data-i18n="rdPlyrInfoTitle">Сведения о записи</h2>
-        <button data-click="closeModal" data-click-args='["recinfo"]' data-i18n-title="tipCloseModal" title="Закрыть окно" class="rp-icon-btn" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно">✕</button>
+      <div class="vx-head"><span class="vx-head-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.5"/></svg></span><div class="vx-head-tt"><h2 class="vx-head-t" data-i18n="rdPlyrInfoTitle">Сведения о записи</h2></div>
+        <button data-click="closeModal" data-click-args='["recinfo"]' data-i18n-title="tipCloseModal" title="Закрыть окно" data-i18n-aria="tipCloseModal" aria-label="Закрыть окно" class="vx-x">✕</button>
       </div>
       <div id="recinfo-body" class="ri-scroll"></div>
     </div>
