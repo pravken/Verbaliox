@@ -1,7 +1,7 @@
 <!-- The status bar under the whole window (renderStatusbar in static/js/shell.js): part of static/index.html.
      On the left the load of the computer with the program's own share (a click opens #load-pop: the processor,
      the memory, the video card and the models in memory), on the right the queue (a click opens #jobs-pop,
-     the same window as «Очередь» on the rail; static/js/pult.js). Above it: the question before an in-person
+     the same window as «Очередь» on the rail; static/js/pult.js) and before it a new version (#upd-pill). Above it: the question before an in-person
      meeting and the dictation of the home page (static/js/home.js). -->
   <footer id="app-statusbar" class="statusbar" role="status">
     <button data-click="toggleLoadPop" id="sb-load" class="sb-load" aria-haspopup="dialog" aria-expanded="false"
@@ -14,6 +14,11 @@
     </button>
     <button data-click="openStatusbarDownloads" data-click-args='[{"$": "event"}]' id="sb-dl" class="sb-queue sb-dl hidden" data-i18n-title="tipSbDownloads" title="Скачивание моделей: открыть список моделей"></button>
     <span class="flex-1"></span>
+    <!-- A new version: stays in sight until it is installed (app.js renderUpdatePill); a click opens what is new -->
+    <button id="upd-pill" data-click="openUpdateDialog" class="upd-pill hidden" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      <span id="upd-pill-text" class="truncate"></span>
+    </button>
     <!-- the economy mode (app/economy.py): a click turns it off -->
     <button data-click="economyOff" id="sb-economy" class="sb-queue sb-economy hidden" data-i18n-title="sbEconomyTip" title="Расшифровка, анализ и субтитры ждут. Нажмите, чтобы выключить">Только запись</button>
     <button data-click="openStatusbarQueue" id="sb-queue" class="sb-queue" aria-haspopup="dialog" data-i18n-title="sbQueueTip" title="Открыть очередь"></button>

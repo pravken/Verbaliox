@@ -5,7 +5,7 @@
 const updateState = { info: null, notified: false, polling: false };
 
 function renderUpdateStatus() {
-  renderUpdatePill();  // the mark in the sidebar, whatever page is open
+  renderUpdatePill();  // the mark in the status bar, whatever page is open
   const info = updateState.info;
   const text = document.getElementById('update-status-text');
   const btn = document.getElementById('update-install-btn');
