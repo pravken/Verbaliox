@@ -103,9 +103,8 @@ function applyUiScale(pct) {
 
 // --- The look: the accent colour and the background. Every colour of the page reads the variables of
 // static/styles.css :root, set here ---
-// One look, chosen with the user on the try-on page (asked by the user: one look instead of themes): the
-// steel blue on the cold slate, a solid fill. The other presets stay here to make it from, not chosen in the
-// app; the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
+// One background, chosen with the user on the try-on page: the cold slate with a solid fill. The accent is
+// chosen in Settings → Общие from the presets approved then (ui_accent); the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
 const THEME_ACCENTS = {
   steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
   emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#A8324A',
@@ -165,11 +164,14 @@ function applyTheme(accent, bg, fill) {
   }[fill];
   ['fill-bg', 'fill-bg-hover', 'fill-fg', 'fill-ring'].forEach((k, i) => st.setProperty(`--${k}`, fills[i]));
   Object.assign(document.documentElement.dataset, { accent, bg, fill });
+  try { localStorage.setItem('verbaliox_ui_accent', accent); } catch (e) {}
 }
 // the accent as a colour for a canvas (it cannot read a CSS variable)
 function accentColor() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0A84FF'; }
 // Before anything is drawn: the last theme, so the window does not flash the default one
-applyTheme('steel', 'slate', 'solid');  // before anything is drawn
+// the accent chosen in Settings → Общие (ui_accent), remembered here so the window does not flash the default one;
+// the background and the fill stay one (asked by the user: accents to choose, not backgrounds)
+(() => { let v = null; try { v = localStorage.getItem('verbaliox_ui_accent'); } catch (e) {} applyTheme(v || 'steel', 'slate', 'solid'); })();
 
 // --- Events without inline handlers ---
 // The page's Content-Security-Policy runs no inline script, so markup does not say onclick="…".

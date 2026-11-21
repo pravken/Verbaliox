@@ -31,6 +31,8 @@ INTS = {"num_speakers": (0, 20), "idle_unload_minutes": (0, 24 * 60), "media_ret
 FLOATS = {"dub_voice_cfg": (1.0, 3.0), "work_remind_hours": (0.0, 16.0)}  # VoxCPM2 guidance (cfg_value)
 CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "record_source_mode": {"mic", "system", "both"}, "ui_scale": {"75", "90", "100", "115", "130", "150"},
+           # the accent colour (static/js/core.js THEME_ACCENTS)
+           "ui_accent": {"steel", "lavender", "slate", "turquoise", "emerald", "sage", "ochre", "cherry"},
            # the memory left to the system (app/mem_reserve.py)
            # GigaAM / Parakeet on the video card or always on the processor (app/onnx_gpu.gpu_for_job)
            "economy_for": {"0", "30", "60", "120", "240", "day"},
