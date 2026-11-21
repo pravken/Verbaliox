@@ -1,14 +1,25 @@
 <!-- The status bar under the whole window (renderStatusbar in static/js/shell.js): part of static/index.html.
-     It shows the queue; the processor, memory, video card and the models in memory are in the sidebar,
-     under the logo. Above it: the question before an in-person meeting and the dictation of the home
-     page (static/js/home.js). -->
+     On the left the load of the computer with the program's own share (a click opens #load-pop: the processor,
+     the memory, the video card and the models in memory), on the right the queue (a click opens #jobs-pop,
+     the same window as «Очередь» on the rail; static/js/pult.js). Above it: the question before an in-person
+     meeting and the dictation of the home page (static/js/home.js). -->
   <footer id="app-statusbar" class="statusbar" role="status">
+    <button data-click="toggleLoadPop" id="sb-load" class="sb-load" aria-haspopup="dialog" aria-expanded="false"
+      data-i18n-title="sbLoadTip" title="Процессор, память и модели в памяти">
+      <span id="sb-load-dot" class="sb-dot" aria-hidden="true"></span><span id="sb-load-lead" class="sb-load-lead"></span>
+      <span class="sb-sep" aria-hidden="true"></span><span class="sb-k">CPU</span><span class="ld-bar" aria-hidden="true"><b id="sb-cpu-all"></b><i id="sb-cpu-own"></i></span><span id="sb-cpu" class="sb-num"></span>
+      <span class="sb-k">RAM</span><span class="ld-bar" aria-hidden="true"><b id="sb-ram-all"></b><i id="sb-ram-own"></i></span><span id="sb-ram" class="sb-num"></span>
+    </button>
     <button data-click="openStatusbarDownloads" data-click-args='[{"$": "event"}]' id="sb-dl" class="sb-queue sb-dl hidden" data-i18n-title="tipSbDownloads" title="Скачивание моделей: открыть список моделей"></button>
     <span class="flex-1"></span>
     <!-- the economy mode (app/economy.py): a click turns it off -->
     <button data-click="economyOff" id="sb-economy" class="sb-queue sb-economy hidden" data-i18n-title="sbEconomyTip" title="Расшифровка, анализ и субтитры ждут. Нажмите, чтобы выключить">Только запись</button>
-    <button data-click="openStatusbarQueue" id="sb-queue" class="sb-queue"></button>
+    <button data-click="openStatusbarQueue" id="sb-queue" class="sb-queue" aria-haspopup="dialog" data-i18n-title="sbQueueTip" title="Открыть очередь"></button>
   </footer>
+
+  <!-- «Нагрузка» and «Очередь»: windows of one design, opened next to what was clicked (static/js/pult.js) -->
+  <div id="load-pop" class="vx-panel vx-panel-load hidden" role="dialog" aria-labelledby="load-pop-title"></div>
+  <div id="jobs-pop" class="vx-panel hidden" role="dialog" aria-labelledby="jobs-pop-title"></div>
 
   <!-- Before an in-person meeting with the automatic recording on: record it from the microphone? -->
   <div id="hm-ask" class="hm-ask hidden" role="alertdialog" aria-labelledby="hm-ask-title">

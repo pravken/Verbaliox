@@ -182,6 +182,7 @@ function renderTopbar() {
   scheduleFitTopbar();
   placeTabIndicators();
   renderRail();
+  if (typeof renderStrip === 'function') renderStrip();  // the strip of the meeting (pult.js)
 }
 
 // --- The rail of the sections (parts/rail.html) ---
@@ -391,12 +392,7 @@ function updateRecordButtonState() {
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
   btn.title = recording ? t('tipTbRecordStop') : t('tipTbRecord');
   btn.setAttribute('aria-label', btn.title);  // in its idle state the button is a dot without words
-  // The recording's screen (the former «Студия» tab) is in the bar only while it records or its settings are open
-  const studio = document.getElementById('nav-studio');
-  studio.classList.toggle('hidden', !recording && state.appView !== 'studio');
-  studio.classList.toggle('tb-tab-live', recording);
-  document.getElementById('nav-studio-dot').classList.toggle('hidden', !recording);
-  document.getElementById('nav-studio-label').textContent = recording ? t('navRecording') : t('navRecSetup');
+  // The recording's screen opens from the strip of the meeting while it records (pult.js), its settings from ▾
   document.getElementById('tb-rec-more').classList.toggle('hidden', recording || starting);
   // While it records, its screen is the text, the notes and the people: the presets and the sources fold away
   document.getElementById('studio-view')?.classList.toggle('st-live', recording);
@@ -474,7 +470,7 @@ function leaveSettingsPage() {
   stopSettingsAudioTest();
 }
 
-// --- The status bar: the queue (the load of the computer is in the sidebar) ---
+// --- The status bar: the queue; the load of the computer and its window are in pult.js ---
 // The economy mode (app/economy.py): recording only; set in Settings → Общие or the tray icon's menu
 function economyOn() {
   const s = (state.system && state.system.settings) || {};
@@ -528,6 +524,7 @@ function renderStatusbar() {
   const text = (id) => (document.getElementById(id)?.textContent || '').trim();
   const put = (id, v) => { const el = document.getElementById(id); if (el && el.textContent !== v) el.textContent = v || '—'; };
   const items = state.queue || [];
+  if (typeof renderJobsRail === 'function') { renderJobsRail(); renderJobsPop(); }  // the rail's «Очередь» and its window
   const q = document.getElementById('sb-queue');
   if (!q) return;
   const run = items.find(x => x.state === 'running');
@@ -550,9 +547,9 @@ function openStatusbarDownloads(e) {
   if (typeof toggleModelsPop === 'function') toggleModelsPop(e);
 }
 
+// The queue of the status bar opens the same window as «Очередь» on the rail (pult.js)
 function openStatusbarQueue() {
-  const run = (state.queue || []).find(x => x.state === 'running') || (state.queue || [])[0];
-  if (run) openMeeting(run.id);
+  toggleJobsPop('status');
 }
 setInterval(() => { if (!document.hidden) renderStatusbar(); }, 2000);
 
