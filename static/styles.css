@@ -4672,3 +4672,42 @@ button.sc-at:hover { color: var(--accent-text); }
 .tk-bar { padding-left: 24px; padding-right: 24px; }
 /* a narrow window moves the actions of a head to a second line: still at the right edge, where the primary one is in every section */
 .tk-head-actions { margin-left: auto; }
+
+/* The head of every window and side panel (vxHead in static/js/pult_cards.js, and the same markup in the parts):
+   the icon of its kind in a 32px square, a 16px title with an optional line under it, «✕» at the right end */
+.vx-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.vx-head-ic { flex: none; width: 32px; height: 32px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+  background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.vx-head-ic svg { width: 18px; height: 18px; }
+.vx-head-ic.vx-tone-danger { background: rgba(255, 69, 58, 0.14); color: #FF8A80; }
+.vx-head-tt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vx-head-t { margin: 0; font-size: var(--fs-sub); font-weight: 600; line-height: 1.25; letter-spacing: -0.011em; color: #F5F5F7; overflow-wrap: anywhere; }
+.vx-head-sub { margin: 0; font-size: var(--fs-caption); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
+/* one «✕» for windows, panels and notices: a 28px square with the 8px corner, dim until pointed at */
+.vx-x { flex: none; align-self: flex-start; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--ctl-r, 8px); display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--hc-dim, #8E8E93); font-size: 14px; line-height: 1; cursor: pointer; transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
+.vx-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
+.vx-head > .vx-x { align-self: center; }
+/* a compact empty state: the icon in a square and one line, centred in its place */
+.vx-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; text-align: center; font-size: var(--fs-ui); line-height: 1.4; color: var(--hc-dim, #AEAEB2); }
+.vx-empty-ic { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.06); color: #C7C7CC; }
+.vx-empty-ic svg { width: 20px; height: 20px; }
+
+/* Side panels (the details and the widgets of «Обзор»): one surface, a head as the windows have, and motion —
+   in from the right with a fade on opening, out the same way before they are hidden (drawerShow / drawerHide) */
+.db-detail, .db-drawer { background: var(--panel); border-left: 1px solid var(--line); padding: 16px 18px 24px; }
+.db-detail > .vx-head, .db-drawer > .vx-head { margin-bottom: 14px; }
+@keyframes vx-drawer-in { from { opacity: 0; transform: translateX(20px); } }
+@keyframes vx-drawer-out { to { opacity: 0; transform: translateX(20px); } }
+.vx-drawer-in { animation: vx-drawer-in 200ms var(--ease-out) both; }
+.vx-drawer-out { animation: vx-drawer-out 160ms ease-in forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .vx-drawer-in, .vx-drawer-out { animation: none; } }
+.db-drawer-hint { margin: -4px 0 0; font-size: var(--fs-caption); line-height: 1.45; color: var(--hc-dim, #AEAEB2); }
+.db-cap { text-transform: none; letter-spacing: 0; font-size: var(--fs-caption); font-weight: 600; margin: 16px 0 8px; }
+.db-lib { align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.db-lib.on { opacity: 1; }
+.db-lib-ic { border-radius: 9px; }
+.db-lib-add { flex: none; margin-left: auto; }
+.db-lib-shown { flex: none; margin-left: auto; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: var(--ctl-r, 8px); background: rgba(255, 255, 255, 0.06); color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); }
+.db-lib-ic svg { width: 18px; height: 18px; }
+.db-drawer { width: 360px; }
