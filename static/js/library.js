@@ -470,7 +470,16 @@ function openDigestMenu(e) {
 
 document.addEventListener('click', () => document.getElementById('digest-menu')?.remove());
 
+// A brief or a digest needs the analysis model: without one the bar «модель не установлена» says so, and no
+// request is sent (it was answered by «503» in the console)
+function askNeedsModel() {
+  if (typeof assistantModelOff !== 'function' || !assistantModelOff(currentChat()?.model || '')) return false;
+  flashNoAiBanner(state.appView === 'ask' ? 'as-noai' : '');
+  return true;
+}
+
 async function makeBrief() {
+  if (askNeedsModel()) return;
   const scope = { ...state.askScope };
   const item = { id: newAskItemId(), question: t('briefBtn'), scopeLabel: askScopeLabel(scope), status: 'pending', data: null, error: '' };
   askThread.unshift(item);
@@ -493,6 +502,7 @@ async function makeBrief() {
 }
 
 async function makeDigest(days) {
+  if (askNeedsModel()) return;
   const scope = state.askScope.type === 'folder' ? { ...state.askScope } : { type: 'all' };
   const period = days === 7 ? t('digestWeek') : days === 30 ? t('digestMonth') : t('digestEverything');
   const item = { id: newAskItemId(), question: `${t('digestBtn')} · ${period}`, scopeLabel: askScopeLabel(scope), status: 'pending', data: null, error: '' };
