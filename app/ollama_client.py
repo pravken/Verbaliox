@@ -295,15 +295,35 @@ def use_program_folder_for_ollama_models() -> None:
         pass
 
 
+def installed_name(name: str, models: List[str]) -> Optional[str]:
+    """The name Ollama lists a model of the catalog under: the same, or a variant of the tag
+    («gemma4:e4b» installed as «gemma4:e4b-it-q4_K_M»), or «:latest» of a name without a tag."""
+    if name in models:
+        return name
+    if ":" not in name:
+        return next((m for m in models if m == f"{name}:latest" or m.startswith(name + ":")), None)
+    return next((m for m in models if m.startswith(name + "-")), None)
+
+
 def delete_ollama_model(name: str) -> None:
+    """Deletes a model by the name the page shows. Ollama is started for it (the program stops it when idle,
+    and the list of models then comes from its folder); a model Ollama does not have is gone already."""
     base = (get_all_settings().get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
-    if not _is_ollama_port_open(*_ollama_address(base)):
-        raise RuntimeError("Ollama не запущена — запустите её, чтобы удалить модель")
+    if not ensure_ollama_running(base):
+        if installed_name(name, models_on_disk()) is None:
+            return  # not in its folder either: nothing to delete
+        raise RuntimeError("Не удалось запустить Ollama: модель не удалена")
     with httpx.Client(timeout=30.0) as client:
-        r = client.request("DELETE", f"{base}/api/delete", json={"model": name})
-    if r.status_code == 404:
-        raise RuntimeError("Модель не найдена в Ollama")
-    r.raise_for_status()
+        tags = client.get(f"{base}/api/tags")
+        listed = [m["name"] for m in tags.json().get("models", [])] if tags.status_code == 200 else [name]
+        target = installed_name(name, listed)
+        if target is None:
+            print(f"[ollama] {name} is not in Ollama's list: already deleted", flush=True)
+            return
+        r = client.request("DELETE", f"{base}/api/delete", json={"model": target})
+    if r.status_code == 404:  # deleted in the meantime (another window, the Ollama app itself)
+        return
+    raise_for_ollama(r)
 
 
 # Models that only turn text into vectors (search by meaning, app/semantic.py): Ollama answers a
@@ -375,12 +395,11 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
 
     # Build catalog with installed flags
     catalog = []
-    installed_set = set(models)
     for item in RECOMMENDED_LLM_MODELS:
-        is_inst = item["id"] in installed_set or any(
-            m.startswith(item["id"] + "-") for m in installed_set
-        )
-        catalog.append({**item, "installed": is_inst})
+        # the name it is installed under: the trash deletes that one (the catalog's own name is not in
+        # Ollama's list when a variant of the tag was downloaded)
+        as_name = installed_name(item["id"], models)
+        catalog.append({**item, "installed": as_name is not None, "installed_as": as_name or ""})
 
     # Also append any other custom models the user has in Ollama
     known_ids = {item["id"] for item in RECOMMENDED_LLM_MODELS}

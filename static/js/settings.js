@@ -1469,7 +1469,7 @@ function updateOllamaUI(ollama) {
       if (isPullingThis) {
         actionHtml = `<span class="ui-btn bg-apple-blue/20 text-apple-blue font-mono animate-pulse">${ps.progress || 1}%</span>`;
       } else if (item.installed) {
-        const del = `<button data-id="${escapeHtml(item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
+        const del = `<button data-id="${escapeHtml(item.installed_as || item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
               class="ui-btn ui-btn-subtle px-2 hover:text-apple-red">${SVG_ICONS.trash}</button>`;
         actionHtml = isSelected
           ? `<div class="flex items-center gap-1.5"><span class="ui-btn bg-apple-green/20 text-apple-green">${SVG_ICONS.check}<span>${t('uiActive')}</span></span>${del}</div>`
