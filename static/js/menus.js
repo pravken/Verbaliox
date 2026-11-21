@@ -111,7 +111,7 @@ async function ctxClearResults() {
   const res = await fetch(`/api/meetings/${id}/clear-results`, { method: 'POST' });
   if (!res.ok) { showError((await readJson(res)).detail); return; }
   await loadMeetingsList();
-  if (state.activeMeeting && state.activeMeeting.id === id) await selectMeeting(id, true);
+  if (state.activeMeeting && state.activeMeeting.id === id && state.pendingMeetingId == null) await selectMeeting(id, true);
 }
 
 async function ctxRemoveMedia() {
@@ -122,7 +122,7 @@ async function ctxRemoveMedia() {
   const res = await fetch(`/api/meetings/${id}/remove-media`, { method: 'POST' });
   if (!res.ok) { showError((await readJson(res)).detail); return; }
   await loadMeetingsList();
-  if (state.activeMeeting && state.activeMeeting.id === id) await selectMeeting(id, true);
+  if (state.activeMeeting && state.activeMeeting.id === id && state.pendingMeetingId == null) await selectMeeting(id, true);
 }
 
 async function ctxCut(kind) {

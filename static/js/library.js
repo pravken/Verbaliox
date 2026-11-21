@@ -35,7 +35,8 @@ async function loadMeetingsList(opts = {}) {
       const input = document.getElementById('meeting-title-input');
       if (document.activeElement !== input) input.value = updated.title;
     }
-    if (updated && updated.status !== state.activeMeeting.status) {
+    // another recording being opened by a click: this refresh must not take its place
+    if (updated && updated.status !== state.activeMeeting.status && (state.pendingMeetingId == null || state.pendingMeetingId === updated.id)) {
       // Segments and speakers only change when a processing stage finishes
       const finished = updated.status === 'completed';
       // a recording opened while its tracks were mixed had no file: its player is loaded now it has one
@@ -293,6 +294,8 @@ function handleLiveEvent(ev) {
   const active = state.activeMeeting;
   if (!active || active.id !== ev.id) return;
   if (ev.status && ev.status !== active.status) {
+    // another recording being opened by a click: this refresh must not take its place
+    if (state.pendingMeetingId != null && state.pendingMeetingId !== ev.id) return;
     // Segments and speakers only change when a processing stage finishes
     selectMeeting(ev.id, active.status === 'mixing').then(() => {
       if (ev.status === 'completed') buildPlayerWaveformEnvelope(state.activeMeeting);

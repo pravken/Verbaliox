@@ -1231,6 +1231,22 @@ await step('strip back-off', async () => {
   await page.evaluate(() => { strip.failAt = 0; });
 });
 
+// Opening a recording, then back on the open one before the answer: the open one wins and the screen takes input
+// again (the pending state of the first stayed: the text hidden and the screen inert)
+await step('pending race', async () => {
+  await page.evaluate(() => openMeeting(1));
+  await sleep(1200);
+  await page.route(/\/api\/meetings\/2$/, async r => { await new Promise(f => setTimeout(f, 1200)); await r.continue(); });
+  await page.evaluate(() => { selectMeeting(2); selectMeeting(1); });
+  await sleep(2200);
+  await page.unroute(/\/api\/meetings\/2$/);
+  const st = await page.evaluate(() => {
+    const box = document.getElementById('workspace-content');
+    return { pending: state.pendingMeetingId, cls: box.classList.contains('rec-pending'), inert: box.inert, id: state.activeMeeting && state.activeMeeting.id };
+  });
+  expect(st.pending == null && !st.cls && !st.inert && st.id === 1, `the screen stayed pending: ${JSON.stringify(st)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
