@@ -2685,7 +2685,7 @@ const I18N = {
 
     // --- redesign: tasks (D: tasks — static/js/tasks.js) ---
     tkFromAll: 'Из всех записей',
-    tkOpenN: '{n} открытых',
+    tkOpenForms: 'открытая|открытые|открытых',
     tkOverN: '{n} просрочено',
     tkDoneN: '{n} выполнено',
     tkExport: 'Экспорт',
@@ -2727,7 +2727,7 @@ const I18N = {
     tkUntitled: 'Без названия',
     tkNoRecord: 'Без записи',
     tkNobody: 'Не назначено',
-    tkGroupSub: '{open} открытых · {done} выполнено',
+    tkGroupSub: '{open} · {done} выполнено',
     tkDonePct: 'Выполнено {n}%',
     tkEmptyTitle: 'Задач пока нет',
     tkEmptyText: 'Задачи появятся из анализа записей, или добавьте их кнопкой «+ Задача».',
@@ -6026,7 +6026,7 @@ const I18N = {
 
     // --- redesign: tasks (D: tasks — static/js/tasks.js) ---
     tkFromAll: 'From all recordings',
-    tkOpenN: '{n} open',
+    tkOpenForms: 'open|open|open',
     tkOverN: '{n} overdue',
     tkDoneN: '{n} done',
     tkExport: 'Export',
@@ -6068,7 +6068,7 @@ const I18N = {
     tkUntitled: 'Untitled',
     tkNoRecord: 'No recording',
     tkNobody: 'Unassigned',
-    tkGroupSub: '{open} open · {done} done',
+    tkGroupSub: '{open} · {done} done',
     tkDonePct: '{n}% done',
     tkEmptyTitle: 'No tasks yet',
     tkEmptyText: 'Tasks come from the analysis of recordings, or add one with “+ Task”.',

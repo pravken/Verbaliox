@@ -190,7 +190,7 @@ function renderTasksHeader() {
   const all = TK.data.tasks;
   const open = all.filter(x => !tkIsDone(x)).length, over = all.filter(tkIsOver).length;
   document.getElementById('tk-sub').innerHTML = escapeHtml(t('tkFromAll')) + ' · '
-    + `<b>${escapeHtml(t('tkOpenN').replace('{n}', () => open))}</b> · `
+    + `<b>${escapeHtml(plural(open, t('tkOpenForms')))}</b> · `
     + `<span class="tk-red">${escapeHtml(t('tkOverN').replace('{n}', () => over))}</span> · `
     + escapeHtml(t('tkDoneN').replace('{n}', () => all.length - open));
 }
@@ -342,7 +342,7 @@ function renderTasksList() {
     const done = c.done;
     const kind = g.person && tkKindLabel(g.kind) ? `<span class="tk-kind" title="${escapeHtml(tkKindTitle(g.kind))}">${escapeHtml(tkKindLabel(g.kind))}</span>` : '';
     const me = g.person && g.key && tkIsMe(g.key) ? `<span class="tk-kind tk-kind-me">${escapeHtml(t('tkItsMe'))}</span>` : '';
-    const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);
+    const sub = g.sub || t('tkGroupSub').replace('{open}', () => plural(all.length - done, t('tkOpenForms'))).replace('{done}', () => done);
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
     // a card of its kind: the icon of the grouping in its square (a person's face, a feature's colour),
     // «Просрочено» in red
