@@ -186,13 +186,7 @@ function rpRender() {
   const curSeg = idx >= 0 ? segs[idx] : null;
   const curColor = curSeg ? rpSpeaker(curSeg.speaker).color : '#0A84FF';
 
-  // Chapter bands, every other one a shade lighter, a dark line at each start
-  const chapters = rpChapters();
-  chapters.forEach((c, i) => {
-    const a = x(c.start), b = i + 1 < chapters.length ? x(chapters[i + 1].start) : w;
-    if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.025)'; ctx.fillRect(a, 0, b - a, h); }
-    if (i > 0) { ctx.fillStyle = '#0B0C0F'; ctx.fillRect(a, 0, 2, h); }
-  });
+  // No chapter bands or titles over the wave (asked by the user, stage 5): the topics are in «Анализ → Темы»
   // What has been played, a little lighter; a trail of the speaker's colour behind the playhead
   ctx.fillStyle = 'rgba(255,255,255,0.025)';
   ctx.fillRect(0, 0, ratio * w, h);
@@ -208,7 +202,7 @@ function rpRender() {
   if (curSeg) {
     const a = x(Number(curSeg.start) || 0) - 2;
     const b = x(Number(curSeg.end) || Number(curSeg.start) || 0) + 2;
-    rpRoundRect(ctx, a, 20, Math.max(5, b - a), h - 25, 6);
+    rpRoundRect(ctx, a, 3, Math.max(5, b - a), h - 6, 6);
     ctx.fillStyle = rpHexA(curColor, 0.08);
     ctx.fill();
     ctx.strokeStyle = rpHexA(curColor, 0.33);
@@ -234,9 +228,9 @@ function rpRender() {
       const a = x(a0), bw = Math.max(3, x(b0) - a);
       ctx.save();
       ctx.beginPath();
-      ctx.rect(a, 18, bw, h - 36);
+      ctx.rect(a, 6, bw, h - 16);
       ctx.clip();
-      for (let k = a - h; k < a + bw; k += 4) { ctx.beginPath(); ctx.moveTo(k, h - 18); ctx.lineTo(k + h, 18 - h + 36); ctx.stroke(); }
+      for (let k = a - h; k < a + bw; k += 4) { ctx.beginPath(); ctx.moveTo(k, h - 10); ctx.lineTo(k + h, -10); ctx.stroke(); }
       ctx.restore();
     }
     ctx.restore();
@@ -247,7 +241,7 @@ function rpRender() {
   const n = peaks.length;
   const gap = 2;
   const barW = Math.max(1.5, (w - gap * (n - 1)) / n);
-  const bandTop = 24, bandH = Math.max(20, h - 32);
+  const bandTop = 8, bandH = Math.max(20, h - 18);  // bars from 8 px at the top to 10 px above the bottom
   const base = bandTop + bandH * 0.58;
   const pos = ratio * n;
   const filter = state.speakerFilter;
@@ -300,7 +294,7 @@ function rpRender() {
     ctx.fillStyle = 'rgba(255,214,10,0.6)';
     ctx.fillRect(mx - 1, 0, 2, h);
     ctx.save();
-    ctx.translate(mx, 7);
+    ctx.translate(mx, 8);  // the diamond at the top (4 px)
     ctx.rotate(Math.PI / 4);
     ctx.fillStyle = '#FFD60A';
     ctx.fillRect(-4, -4, 8, 8);
@@ -331,19 +325,11 @@ function rpChapters() {
   return (typeof _chapters !== 'undefined' && Array.isArray(_chapters)) ? _chapters : [];
 }
 
-// The chapter titles over their bands (buttons: a click plays the chapter)
+// No chapter titles over the wave (asked by the user, stage 5: they did not work there); the topics are in
+// «Анализ → Темы», Shift+←/→ of the buttons still steps by chapter
 function rpRenderChapters() {
   const box = document.getElementById('rp-chapters');
-  if (!box) return;
-  const dur = rpDuration();
-  const list = rpChapters();
-  if (!dur || list.length < 2) { box.innerHTML = ''; return; }
-  box.innerHTML = list.map((c, i) => {
-    const a = (c.start / dur) * 100;
-    const b = i + 1 < list.length ? (list[i + 1].start / dur) * 100 : 100;
-    return `<button class="rp-chapter" data-rp-chapter="${i}" data-click="seekPlayer" data-click-args='[${Number(c.start) || 0}]'
-      style="left: calc(${a}% + 8px); max-width: calc(${b - a}% - 16px)" title="${escapeHtml(c.desc || c.title)}">${escapeHtml(c.title)}</button>`;
-  }).join('');
+  if (box) box.innerHTML = '';
 }
 
 function rpPlaceBubbles(ratio, cur, seg, color) {

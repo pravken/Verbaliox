@@ -113,6 +113,9 @@ await step('transcript as a chat', async () => {
 // 10 s; the play button is the same element while it plays (a hover on it is not restarted)
 await step('unloaded player', async () => {
   expect(await page.locator('.rp-center button').count() === 3, 'more than three buttons in the middle of the player');
+  expect(await page.locator('#rp-chapters .rp-chapter').count() === 0, 'chapter titles over the wave');
+  const tall = await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height);
+  expect(tall <= 135, `the player is ${tall}px tall`);
   const items = await page.evaluate(() => { rpTogglePop('more'); const x = [...document.querySelectorAll('#rp-pop-more .rp-item')].map(b => b.textContent.trim()); rpClosePop(); return x; });
   expect(items.some(x => /Повторить реплику/.test(x)) && items.some(x => /по кругу/.test(x)), `«⋯» lacks the phrase's repeat: ${items.join(' | ')}`);
   const res = await page.evaluate(async () => {
