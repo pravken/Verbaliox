@@ -4575,7 +4575,9 @@ button.sc-at:hover { color: var(--accent-text); }
 /* One page and one card in every section (reported by the user: the colours of the cards and of the ground
    differed between the tabs): the ground --bg-deep, a card --card with the line and a 12px corner */
 #home-view, #dashboard-view, #libtable-view, #ask-view, #settings-view, .settings-page { background: var(--bg-deep); }
-.hm-card, .db-w, .settings-card, .lt-card, .pcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+/* the cards of the sections a step darker than --card (asked by the user); menus and windows keep --card */
+:root { --sec-card: #1C1E22; }
+.hm-card, .db-w, .settings-card, .lt-card, .pcard, .imp-cardsec { background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
 /* «Словарь» and «Настройки»: the same head metrics as «Записи», «Задачи», «Обзор» — a 36px icon square 24px from
    the edge, a 20px title beside it (measured: they sat 4–8px apart) */
 .dc-head { gap: 12px; min-height: 64px; padding: 12px 24px 8px; box-sizing: border-box; }
