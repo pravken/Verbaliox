@@ -197,12 +197,13 @@ function stripOpen() {
   else openMeeting(c);
 }
 
-function stripOpenSummary(id) {
+// «Открыть итоги»: the recording on «Анализ» once it is loaded (a slow answer opened «Расшифровка»)
+async function stripOpenSummary(id) {
   stripSeen.add(id);
   stripRemember();
-  openMeeting(id);
-  setTimeout(() => { if (state.activeMeeting && state.activeMeeting.id === id && typeof openRecordTab === 'function') openRecordTab('summary'); }, 400);
   renderStrip();
+  await openMeeting(id);
+  if (state.activeMeeting && state.activeMeeting.id === id && typeof openRecordTab === 'function') openRecordTab('summary');
 }
 
 function stripHide(id) {
