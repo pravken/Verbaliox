@@ -103,7 +103,8 @@ function applyUiScale(pct) {
 
 // --- The look: the accent colour and the background. Every colour of the page reads the variables of
 // static/styles.css :root, set here ---
-// One background, chosen with the user on the try-on page: the cold slate with a solid fill. The accent is
+// One background, chosen with the user on the try-on page: the cold slate with the soft fill (asked by the user: the
+// paler accent, as on the icon squares, for the buttons and switches too). The accent is
 // chosen in Settings → Общие from the presets approved then (ui_accent); the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
 const THEME_ACCENTS = {
   steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
@@ -155,6 +156,8 @@ function applyTheme(accent, bg, fill) {
   st.setProperty('--bg-deep', hexMix(page, -0.22));  // a page under cards, a step darker
   st.setProperty('--accent-text', hexMix(a, 0.45));
   st.setProperty('--accent-pale', hexMix(a, 0.78));
+  // the muted accent of the switches and the check boxes, the same as the soft fill (asked by the user: one, paler accent)
+  st.setProperty('--accent-soft', hexBlend(page, a, 0.5));
   // «Заливка выделенного»: solid (white text on the darkened accent), soft (a tint of it, its light text),
   // outline (a frame and the light text)
   const fills = {
@@ -171,7 +174,7 @@ function accentColor() { return getComputedStyle(document.documentElement).getPr
 // Before anything is drawn: the last theme, so the window does not flash the default one
 // the accent chosen in Settings → Общие (ui_accent), remembered here so the window does not flash the default one;
 // the background and the fill stay one (asked by the user: accents to choose, not backgrounds)
-(() => { let v = null; try { v = localStorage.getItem('verbaliox_ui_accent'); } catch (e) {} applyTheme(v || 'steel', 'slate', 'solid'); })();
+(() => { let v = null; try { v = localStorage.getItem('verbaliox_ui_accent'); } catch (e) {} applyTheme(v || 'steel', 'slate', 'soft'); })();
 
 // --- Events without inline handlers ---
 // The page's Content-Security-Policy runs no inline script, so markup does not say onclick="…".
