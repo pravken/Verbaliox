@@ -13,8 +13,9 @@ Settings: worktime_track (on), work_remind_hours (8; 0 = no notification).
 
 «Мои программы» (asked by the user, off until turned on: apps_track): a worked minute also notes the
 program in front, by its file name only (Teams, outlook.exe). Nothing else: no window titles (they hold the
-names of documents, letters and sites), no keys, no screen. A minute of a recording or a call is «meeting»,
-whatever program is in front. It stays in this computer's database and goes nowhere.
+names of documents, letters and sites), no keys, no screen. A minute of a recording or a call is «meeting» in
+the call's program, in this app or while only listening; spent in another program with input, it is that program's.
+A game controller counts as input (only whether its state changed). It stays in this computer's database and goes nowhere.
 """
 
 import sys
@@ -44,7 +45,17 @@ APP_NAMES = {
     "acrobat": "Acrobat", "obsidian": "Obsidian", "notion": "Notion", "figma": "Figma", "verbaliox": "Verbaliox",
     "windowsterminal": "Терминал", "cmd": "Командная строка", "powershell": "PowerShell", "pycharm64": "PyCharm",
     "idea64": "IntelliJ IDEA", "1cv8": "1С:Предприятие", "1cv8c": "1С:Предприятие",
+    "claude": "Claude", "parsecd": "Parsec", "steam": "Steam", "discord": "Discord", "skype": "Skype", "whatsapp": "WhatsApp",
+    "spotify": "Spotify", "webex": "Webex", "ciscowebex": "Webex", "atmgr": "Webex", "vlc": "VLC", "photoshop": "Photoshop",
+    "datagrip64": "DataGrip", "webstorm64": "WebStorm", "rider64": "Rider", "cursor": "Cursor", "postman": "Postman",
 }
+
+# The programs of calls: a minute of a recording or a call spent in one of them is a meeting minute; spent in
+# another program with the keyboard, the mouse or a game in hand, it is that program's (found by the user: an hour of
+# a game while a talk was recorded showed as «Встречи» only, the game was not there)
+CALL_APPS = {"ms-teams", "teams", "zoom", "webex", "ciscowebex", "atmgr", "skype", "discord", "telegram", "whatsapp",
+             "verbaliox"}
+LISTEN_SEC = 90  # no input for this long during a recording or a call: listening, the minute is the meeting's
 
 
 def foreground_app() -> Optional[str]:
@@ -90,11 +101,12 @@ def foreground_app() -> Optional[str]:
 
 
 def app_name(app: str) -> str:
-    return APP_NAMES.get(app, app)
+    """The name people know; another program's file name with its first letter capital («parsecd» → «Parsecd»)."""
+    return APP_NAMES.get(app) or (app[:1].upper() + app[1:])
 
 
 def idle_seconds() -> Optional[float]:
-    """Seconds since the last keyboard or mouse input (Windows), None where it cannot be known."""
+    """Seconds since the last keyboard, mouse or game controller input (Windows), None where it cannot be known."""
     if sys.platform != "win32":
         return None
     try:
@@ -107,9 +119,49 @@ def idle_seconds() -> Optional[float]:
         info.cbSize = ctypes.sizeof(LASTINPUTINFO)
         if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
             return None
-        return ((ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000.0
+        idle = ((ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000.0
     except Exception:
         return None
+    return 0.0 if gamepad_used() else idle
+
+
+_pad_packets: Dict[int, int] = {}
+
+
+def gamepad_used() -> bool:
+    """A game controller (XInput) changed since the last check: Windows does not count it as input, so a game
+    played with one looked like time away. Only whether its state changed is read, never what was pressed."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+
+        class XINPUT_STATE(ctypes.Structure):
+            _fields_ = [("dwPacketNumber", ctypes.c_uint), ("buttons", ctypes.c_ushort), ("lt", ctypes.c_ubyte),
+                        ("rt", ctypes.c_ubyte), ("lx", ctypes.c_short), ("ly", ctypes.c_short), ("rx", ctypes.c_short),
+                        ("ry", ctypes.c_short)]
+
+        dll = None
+        for name in ("xinput1_4", "xinput9_1_0", "xinput1_3"):
+            try:
+                dll = ctypes.WinDLL(name)
+                break
+            except OSError:
+                continue
+        if dll is None:
+            return False
+        used = False
+        for pad in range(4):
+            st = XINPUT_STATE()
+            if dll.XInputGetState(pad, ctypes.byref(st)) != 0:  # not connected
+                _pad_packets.pop(pad, None)
+                continue
+            before = _pad_packets.get(pad)
+            _pad_packets[pad] = st.dwPacketNumber
+            used = used or (before is not None and before != st.dwPacketNumber)
+        return used
+    except Exception:
+        return False
 
 
 def _in_call() -> bool:
@@ -257,7 +309,13 @@ def check(now: Optional[datetime] = None, idle: Optional[float] = None) -> bool:
     meeting = _recording() or _in_call()
     if not (idle < IDLE_MIN * 60 or meeting):
         return False
-    app = (MEETING if meeting else foreground_app()) if apps_enabled() else None
+    app = None
+    if apps_enabled():
+        front = foreground_app()
+        if meeting and (front is None or front in CALL_APPS or idle >= LISTEN_SEC):
+            app = MEETING  # in the call's program, in this app, or listening without input
+        else:
+            app = front
     mark(now, app)
     hours = remind_hours()
     d = work_day(now).isoformat()
