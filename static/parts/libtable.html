@@ -1,24 +1,27 @@
-<!-- The library as a table on the whole window, like the columns of Windows Explorer (static/js/libtable.js):
-     part of static/parts/workspace.html. Opened by the table button in the library header of the sidebar. -->
+<!-- The section «Записи» (static/js/libtable.js, docs/pult-plan.md, stage 4): part of static/parts/workspace.html.
+     The title with the search, the bar of the filters and the views (or of the selection, at the same height),
+     and the recordings: a table, a compact list, cards or the folders. -->
     <div id="libtable-view" class="hidden flex-1 min-h-0 tk-view">
       <header class="lt-head">
-        <h1 class="tk-title" data-i18n="ltTitle">Медиатека</h1>
+        <span class="lt-head-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8"/><path d="M8 14h5"/></svg></span>
+        <h1 class="tk-title" data-i18n="ltTitle">Записи</h1>
         <span id="lt-count" class="tk-sub"></span>
         <span class="tk-grow"></span>
         <label class="tk-search lt-search">
           <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
           <input id="lt-q" type="search" data-input="onLibTableSearch" data-input-args='[{"$": "value"}]'
-                 data-i18n-placeholder="ltSearch" placeholder="Поиск по названию, людям, фичам" data-i18n-title="ltSearch" title="Поиск по названию, людям, фичам">
+                 data-i18n-placeholder="ltSearch" placeholder="Поиск по названию, людям и тексту" data-i18n-title="ltSearchTip" title="Поиск по названию, участникам, фичам и тексту расшифровок">
         </label>
-        <button id="lt-feature-btn" class="tk-btn" data-click="openLibTableFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"></button>
-        <button id="lt-group-btn" class="tk-btn" data-click="openLibTableGroupMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"></button>
-        <button class="tk-btn" data-click="openLibTableColumnsMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" data-i18n-title="ltColumnsTip" title="Какие столбцы показывать">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15M15 4.5v15"/></svg>
-          <span data-i18n="ltColumns">Столбцы</span>
+        <!-- Import: a menu of the ways to add (static/js/importdlg.js openImportMenu); also Ctrl+O and files dropped on the window -->
+        <button id="lt-import-btn" type="button" class="lt-btn" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
+                data-i18n-title="impBtnTip" title="Файлы, папка или ссылка (Ctrl+O). Файлы можно перетащить в окно">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span data-i18n="impBtn">Импорт</span><span aria-hidden="true">▾</span>
         </button>
       </header>
-      <div id="lt-scroll" class="lt-scroll" tabindex="0" data-i18n-aria="ltTitle" aria-label="Медиатека">
-        <table id="lt-table" class="lt-table"></table>
+      <div id="lt-bar" class="lt-bar"></div>
+      <div id="lt-scroll" class="lt-scroll" tabindex="0" data-i18n-aria="ltTitle" aria-label="Записи">
+        <div id="lt-body" class="lt-body"></div>
         <div id="lt-empty" class="lt-empty hidden"></div>
       </div>
     </div>
