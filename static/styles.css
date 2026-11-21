@@ -4593,3 +4593,17 @@ button.sc-at:hover { color: var(--accent-text); }
 .tb-rec-wrap .tb-rec-dot { width: 10px; height: 10px; border-radius: 5px; }
 .tb-rec-more { height: 30px; width: 26px; border-radius: 0 7px 7px 0; }
 .settings-page .sx-nav > div:first-child { gap: 12px; }
+
+/* The import window in the look of the sections (asked by the user): an icon square in the head, «Что добавить»
+   and «Распознавание» as cards with their heads; the empty zone with its own «Выбрать файлы…»; the path's «Обзор…»
+   opens the explorer, «Добавить путь» / «Добавить ссылку» say what they add (a bare «Добавить» read as a picker) */
+.imp-head-ic { width: 36px; height: 36px; }
+.imp-head-ic svg { width: 20px; height: 20px; }
+.imp-cardsec { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.imp-files.imp-cardsec { gap: 8px; }
+.imp-cardsec > .pcd-h, .imp-sec-h { margin: 0; text-transform: none; letter-spacing: 0; }
+.imp-empty { gap: 6px; padding: 20px 12px; cursor: pointer; }
+.imp-empty-ic { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.imp-empty-ic svg { width: 20px; height: 20px; }
+.imp-empty-btn { margin-top: 6px; }
+.imp-inline { padding: 4px 0 0; }
