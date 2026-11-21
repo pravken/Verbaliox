@@ -402,12 +402,15 @@ function ltRenderRowState(id) {
   return true;  // a row not shown: its progress does not change what is shown
 }
 
-window.addEventListener('pointerup', () => {
+// the press ends with the up, and also when the browser takes the pointer over (a native drag of a row or of a
+// link: pointercancel and dragend, no up), or the progress waited for good
+function ltPressEnd() {
   if (!LT.pressed) return;
   LT.pressed = false;
   // after the click that follows this up: the row clicked is still the one under it
   if (LT.later) setTimeout(() => { if (LT.later && !LT.pressed) { LT.later = false; renderLibTable({ live: true }); } }, 0);
-}, true);
+}
+['pointerup', 'pointercancel', 'dragend'].forEach(type => window.addEventListener(type, ltPressEnd, true));
 
 function renderLibTable(opts = {}) {
   if (state.appView !== 'libtable') return;
