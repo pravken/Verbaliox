@@ -402,7 +402,6 @@ function setUILanguage(lang) {
   document.querySelectorAll('[data-i18n-aria]').forEach(el => {
     el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
   });
-  document.querySelectorAll('input[data-vs-date]').forEach(syncDateField);  // «Выбрать дату» and the date's order
 
   renderMeetingsSidebar();
   loadDictionary();
@@ -434,6 +433,8 @@ function setUILanguage(lang) {
   if (typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);  // the memory badges
   if (typeof renderUpdateStatus === 'function') renderUpdateStatus();
   renderQueuePanel();
+  if (typeof renderDictPage === 'function') renderDictPage();  // «Словарь», drawn by its script
+  if (typeof renderLoadIndicator === 'function') renderLoadIndicator();  // «Модели не в памяти» of the status bar
   if (state.activeMeeting) { renderTranslationControls(); updateProcessingBanner(state.activeMeeting); }
   if (typeof renderRecordSaveHint === 'function') renderRecordSaveHint();
   applyVideoLayout();
