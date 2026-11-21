@@ -293,6 +293,9 @@ def _restore(src: Path) -> Dict[str, Any]:
                 _clean_paths(conn, roots, put_back)
                 _keep_local_settings(conn)
                 conn.execute("DROP TABLE IF EXISTS secrets")  # keys come from this computer (apply_pending)
+                # so do the minutes worked and «Мои программы» (a copy of an older version may still have them)
+                for table in LOCAL_TABLES:
+                    conn.execute(f"DROP TABLE IF EXISTS {table}")
                 conn.commit()
             except sqlite3.DatabaseError:
                 raise ValueError("База в копии повреждена")
@@ -313,6 +316,25 @@ def _carry_secrets(old_db: Path, new_db: Path) -> None:
         if conn.execute("SELECT 1 FROM old.sqlite_master WHERE type = 'table' AND name = 'secrets'").fetchone():
             conn.execute("CREATE TABLE IF NOT EXISTS secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)")
             conn.execute("INSERT OR REPLACE INTO secrets (name, value, updated_at) SELECT name, value, updated_at FROM old.secrets")
+        conn.commit()
+        conn.execute("DETACH DATABASE old")
+    finally:
+        conn.close()
+
+
+def _carry_local_tables(old_db: Path, new_db: Path) -> None:
+    """The minutes worked and «Мои программы» of this computer into the restored database: a copy never has
+    them, and the restore must not wipe them (found in the review)."""
+    conn = sqlite3.connect(str(new_db))
+    try:
+        conn.execute("ATTACH DATABASE ? AS old", (str(old_db),))
+        for table in LOCAL_TABLES:
+            row = conn.execute("SELECT sql FROM old.sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
+            if not row or not row[0]:
+                continue
+            conn.execute(f"DROP TABLE IF EXISTS main.{table}")
+            conn.execute(row[0])  # the table as this computer has it, then its rows
+            conn.execute(f"INSERT INTO main.{table} SELECT * FROM old.{table}")
         conn.commit()
         conn.execute("DETACH DATABASE old")
     finally:
@@ -369,6 +391,10 @@ def apply_pending() -> Optional[str]:
             _carry_secrets(kept, PENDING)
         except sqlite3.DatabaseError as e:
             print(f"[backup] the API keys were not carried over: {e}", flush=True)
+        try:
+            _carry_local_tables(kept, PENDING)
+        except sqlite3.DatabaseError as e:
+            print(f"[backup] the minutes worked were not carried over: {e}", flush=True)
         try:
             _drop_stale_caches(kept, PENDING)
         except (sqlite3.DatabaseError, OSError) as e:
