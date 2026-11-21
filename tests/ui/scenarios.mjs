@@ -90,6 +90,112 @@ await step('read a recording', async () => {
   await page.evaluate(() => txViewToggle('fillers'));
 });
 
+// The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the
+// name once for a run of one speaker; the phrase playing is lit; «Текст» brings the running text back, kept
+await step('transcript as a chat', async () => {
+  // the tabs in the order the user chose; another recording opens on «Расшифровка»
+  const order = await page.$$eval('#tb-record > button', els => els.map(e => e.id));
+  expect(order.join() === 'nav-transcript,nav-summary,nav-speakers,nav-info', `the tabs: ${order}`);
+  await page.evaluate(() => openRecordTab('summary'));
+  await page.evaluate(() => openMeeting(2));
+  await sleep(800);
+  expect(await page.evaluate(() => state.activeWorkspaceTab) === 'transcript', 'another recording did not open on «Расшифровка»');
+  await page.evaluate(() => openMeeting(1));
+  await sleep(800);
+  await page.evaluate(() => { openRecordTab('transcript'); setTxLayout('chat'); });
+  await sleep(300);
+  const bubbles = await page.locator('#transcript-inner .ch-bub.segment-row').count();
+  expect(bubbles > 0, 'no bubbles in «Чат»');
+  expect(await page.locator('#transcript-inner .ch-bub .ch-tm').count() === bubbles, 'a bubble without its time');
+  const runs = await page.locator('#transcript-inner .ch-group').count();
+  expect(await page.locator('#transcript-inner .ch-group > .ch-av').count() === runs, 'the face is not once per run');
+  await page.evaluate(() => updatePlaybackHighlight(1, true));
+  expect(await page.locator('#transcript-inner .ch-bub.segment-active').count() === 1, 'the phrase playing is not lit');
+  await page.click('#tx-layout-text');
+  await sleep(200);
+  expect(await page.locator('#transcript-inner .ch-bub').count() === 0 && await page.locator('#transcript-inner .segment-row').count() > 0, '«Текст» did not bring the text back');
+  expect(await page.evaluate(() => localStorage.getItem('verbaliox_tx_layout')) === 'text', 'the choice is not kept');
+  await page.click('#tx-layout-chat');
+});
+
+// The unloaded player (stage 5): three buttons in the middle, the phrase's repeat and loop in «⋯»; J goes back
+// 10 s; the play button is the same element while it plays (a hover on it is not restarted)
+await step('unloaded player', async () => {
+  expect(await page.locator('.rp-center button').count() === 3, 'more than three buttons in the middle of the player');
+  expect(await page.locator('#rp-chapters .rp-chapter').count() === 0, 'chapter titles over the wave');
+  const tall = await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height);
+  expect(tall <= 135, `the player is ${tall}px tall`);
+  const items = await page.evaluate(() => { rpTogglePop('more'); const x = [...document.querySelectorAll('#rp-pop-more .rp-item')].map(b => b.textContent.trim()); rpClosePop(); return x; });
+  expect(items.some(x => /Повторить реплику/.test(x)) && items.some(x => /по кругу/.test(x)), `«⋯» lacks the phrase's repeat: ${items.join(' | ')}`);
+  const res = await page.evaluate(async () => {
+    const p = document.getElementById('media-player');
+    p.muted = true;
+    const btn = document.getElementById('play-pause-btn');
+    p.currentTime = 30;
+    await new Promise(r => setTimeout(r, 200));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ', key: 'j', bubbles: true }));
+    await new Promise(r => setTimeout(r, 200));
+    return { at: p.currentTime, same: document.getElementById('play-pause-btn') === btn };
+  });
+  expect(res.at > 15 && res.at < 25, `J did not go back 10 s: ${res.at}`);
+  expect(res.same, 'the play button was drawn again');
+});
+
+// Scrubbing (asked by the user): hold the button on the wave and move — the time follows, the bubble over the
+// playhead shows it and grows while dragging; a click without moving seeks too
+await step('scrub the wave', async () => {
+  await page.evaluate(() => { const p = document.getElementById('media-player'); p.muted = true; p.pause(); });
+  const box = await page.locator('#player-waveform-wrapper').boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.1, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, y, { steps: 8 });
+  const during = await page.evaluate(() => ({
+    on: document.getElementById('player-waveform-wrapper').classList.contains('rp-scrubbing'),
+    bubble: document.getElementById('rp-head-bubble').textContent,
+  }));
+  await page.mouse.up();
+  await sleep(200);
+  const at = await page.evaluate(() => document.getElementById('media-player').currentTime);
+  expect(during.on, 'no dragging state while the button is held');
+  expect(/^00:(2[7-9]|3[0-3])\b/.test(during.bubble), `the bubble shows ${during.bubble} in the middle of a minute`);
+  expect(at > 27 && at < 33, `the drag left the time at ${at}`);
+  expect(!(await page.evaluate(() => document.getElementById('player-waveform-wrapper').classList.contains('rp-scrubbing'))), 'the dragging state stays');
+  await page.mouse.click(box.x + box.width * 0.25, y);
+  await sleep(200);
+  const click = await page.evaluate(() => document.getElementById('media-player').currentTime);
+  expect(click > 12 && click < 18, `a click left the time at ${click}`);
+  await page.evaluate(() => document.getElementById('media-player').pause());
+});
+
+// «Сведения»: four cards of «key — value» rows, the actions of each under a line (only the program's own)
+await step('recording details', async () => {
+  await page.evaluate(() => openRecordTab('info'));
+  await sleep(1200);
+  const cards = await page.$$eval('#info-content [data-info]', els => els.map(e => e.dataset.info));
+  expect(cards.join() === 'file,transcript,analysis,storage', `the cards: ${cards}`);
+  const acts = await page.$$eval('#info-content .kv-acts button', els => els.map(e => e.dataset.click));
+  for (const fn of ['recReconfigure', 'openResplitDialog', 'recRegenFromInfo', 'recMoveFromInfo']) expect(acts.includes(fn), `no ${fn} in «Сведения»`);
+  await page.evaluate(() => openRecordTab('transcript'));
+});
+
+// The player minimized to one line and back; the choice is kept; the thin track still seeks
+await step('minimized player', async () => {
+  await page.click('#rp-min-btn');
+  await sleep(300);
+  const h = await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height);
+  expect(h < 60, `the minimized player is ${h}px tall`);
+  expect(await page.evaluate(() => localStorage.getItem('verbaliox_player_mini')) === '1', 'the choice is not kept');
+  const box = await page.locator('#player-waveform-wrapper').boundingBox();
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+  await sleep(200);
+  const at = await page.evaluate(() => { const p = document.getElementById('media-player'); p.pause(); return p.currentTime; });
+  expect(at > 42 && at < 48, `a click on the thin track left the time at ${at}`);
+  await page.click('#rp-min-btn');
+  await sleep(300);
+  expect(await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height) > 100, 'the player did not expand');
+});
+
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
 await step('menu at the bottom', async () => {
   const box = await page.evaluate(() => {
@@ -660,6 +766,27 @@ await step('dashboard rises once', async () => {
 
 // Captions wait for the switch as a recording starts unless asked for, and never by themselves with «Не мешать
 // на встречах» (asked by the user: they loaded a model during a meeting)
+// Live captions in the look of the transcript's «Чат» (stage 5): a bubble for each line, the face and the name
+// once for a run of one speaker, the last line with text lit; the phrase not shown yet adds no bubble
+await step('live captions as a chat', async () => {
+  const rows = await page.evaluate(() => {
+    switchAppView('studio');
+    [[1, 'Начнём с плана.', 'Мария'], [2, 'Я посмотрю сроки.', 'Анна'], [3, 'И проверю оценку.', 'Анна']]
+      .forEach(([id, text, who]) => liveCap.lines.set(id, { id, text, who, lang: 'ru', translation: '' }));
+    liveCap.partial = 'ещё говорит';
+    syncStudioCaptions();
+    const out = [...document.querySelectorAll('#studio-cap-rows > .cap-row')].map(e => ({ cls: e.className, bub: !!e.querySelector('.cap-bub') }));
+    liveCap.lines.clear();
+    liveCap.partial = '';
+    capReset();
+    return out;
+  });
+  expect(rows.length === 4 && rows.every(r => r.bub), `the lines are not bubbles: ${JSON.stringify(rows)}`);
+  expect(!/cap-cont/.test(rows[1].cls) && /cap-cont/.test(rows[2].cls), 'the face and the name are not once per run');
+  expect(/cap-now/.test(rows[2].cls) && /cap-pending/.test(rows[3].cls) && !/cap-now/.test(rows[3].cls), `the last line is not lit: ${rows.map(r => r.cls).join(' | ')}`);
+  await page.evaluate(() => switchAppView('library'));
+});
+
 await step('captions do not start by themselves', async () => {
   const held = await page.evaluate(() => [
     captionsHeldAtStart({}),
