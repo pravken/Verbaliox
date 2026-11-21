@@ -3479,11 +3479,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .mcp-code { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: #C7C7CC; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; user-select: text; }
 
 
-/* the period's progress by its dates (asked by the user: how many days of the week are gone) */
-.db-progress { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
-.db-progress.hidden { display: none; }
-.db-progress-bar { position: relative; display: block; width: 120px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
-.db-progress-bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); }
 
 /* the widgets of the day's time (static/js/dashboard.js dbPrepHtml … dbDullHtml) */
 .db-now-next { font-weight: 500; color: #FFE3B8; }
@@ -3543,9 +3538,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 [data-fill="soft"] .lib-tile-on *, [data-fill="outline"] .lib-tile-on * { color: inherit; }
 [data-fill="soft"] .tb-active .tb-badge, [data-fill="outline"] .tb-active .tb-badge { background: rgb(var(--accent-rgb) / 0.35); color: var(--fill-fg); }
 
-.db-prog-cfg { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--hc-dim, #8E8E93); background: none; border: 0; cursor: pointer; }
-.db-prog-cfg:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.07); }
-.db-prog-cfg svg { width: 13px; height: 13px; }
 
 /* «⋯» on a meeting of the day, and a calendar event that is no meeting (dimmed, dashed) */
 .hm-mt-more { flex: none; align-self: center; width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: var(--hc-dim, #8E8E93); cursor: pointer; font-size: 13px; line-height: 1; }
@@ -4040,12 +4032,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-ft-c { font-size: var(--fs-caption); text-align: right; white-space: nowrap; }
 .db-w-features .db-ft-c .neg { color: #FF6961; }
 .db-spark-l { display: block; }
-/* «Обзор»: the toolbar keeps one row (the toolbar of «Задачи» and «Записи»); in a narrower window the progress
-   of the period keeps its bar, its words go to the tip */
-.db-bar { flex-wrap: nowrap; }
-.db-bar #db-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.db-bar .db-progress { flex: none; }
-@media (max-width: 1500px) { .db-bar .db-progress > span { display: none; } .db-bar .db-progress-bar { width: 80px; } }
 .db-wp button { padding: 0 5px; }
 /* «Сегодня»: the working time gone by — the line of «now» says how much; in a week or a month a past working day is a
    step dimmer, a day off hatched, today framed */
@@ -4062,7 +4048,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .td-tools { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; margin-left: auto; }
 /* a narrow window: the day over the width, the cards in a row under it */
 @media (max-width: 1250px) { .td-body { grid-template-columns: minmax(0, 1fr); } .td-body .td-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; } }
-@media (max-width: 1250px) { .db-bar .db-progress { display: none; } }
 /* ==================================================================   «Пульт встреч», stage 6 (docs/pult-plan.md): one card everywhere (static/js/pult_cards.js), the tasks
    ========================================================================= */
 /* the card: one frame, background and rounding; its head the icon of its kind in a square, the name, a number */
@@ -4991,3 +4976,80 @@ button.sc-at:hover { color: var(--accent-text); }
 .tx-empty-filtered { padding: 64px 16px; }
 .tx-empty-filtered .ui-btn { margin-top: 4px; height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
 .tx-empty-filtered .ui-btn:hover { background: #34373B; color: #FFFFFF; }
+/* The heads of the sections, one pattern (asked by the user: «Обзор» was laid out otherwise than «Сегодня»): a 52×54
+   tile 24px from the left edge and 16px from the top (the date of «Сегодня», the icon of every other section), the
+   20px name with a 12px line under it (its place kept while it is empty), the pills after them, the controls of the
+   section on the right of the same row, everything centred on the tile */
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead.vx-shead {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; min-height: 0; padding: 16px 24px 12px; box-sizing: border-box;
+  background: none; border-bottom: 0; }
+#home-view .td-wrap { padding: 0 24px 28px; }
+#home-view .vx-shead.vx-shead { padding: 16px 0 0; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stile.vx-stile { flex: none; width: 52px; height: 54px; border-radius: 12px; box-sizing: border-box; border: 1px solid var(--line); }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stile svg { width: 24px; height: 24px; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stext.vx-stext { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; flex: 0 1 auto; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stext h1 { margin: 0; font-size: var(--fs-title); line-height: 26px; font-weight: 700; letter-spacing: -0.02em; color: #F5F5F7;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-ssub.vx-ssub { display: block; min-height: 16px; margin: 0; font-size: var(--fs-caption); line-height: 16px; color: var(--hc-dim, #8E8E93);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .tk-grow, :is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .td-grow { flex: 1 1 0; min-width: 0; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .tk-head-actions, :is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .td-tools { margin-left: auto; }
+/* «Настройки»: the same tile and name at the same place, in the column of its sections */
+.settings-page .sx-nav > div:first-child { align-items: flex-start; gap: 16px; }
+.settings-page .sx-head-ic.sx-head-ic { width: 52px; height: 54px; border-radius: 12px; box-sizing: border-box; border: 1px solid var(--line); }
+.settings-page .sx-head-ic.sx-head-ic svg { width: 24px; height: 24px; }
+.settings-page .sx-nav > div:first-child h2 { margin-top: 5px; font-size: var(--fs-title); line-height: 26px; font-weight: 700; letter-spacing: -0.02em; }
+/* «Обзор»: «Дни периода» in «Настроить» (the gear beside the period's bar under the head before) */
+.db-days { padding: 2px 0 4px; }
+
+/* One height for the controls of a head row (asked by the user: the buttons of a row were of different heights): the
+   segmented controls, the buttons, the menu buttons and the search fields 32px (--ctl-h), with the corner of the
+   buttons; the filter chips stay one 28px size, centred on their row */
+:is(#tasks-view, #people-view, #libtable-view, #dict-view, #dashboard-view) .tk-search { height: var(--ctl-h); border-radius: var(--ctl-r); }
+/* one segmented control in every section (the period of «Обзор», the span of «Сегодня», the view of «Записи» and
+   «Задачи» were three looks): a 32px box without a frame, 3px inside, the corner of the buttons; 26px segments, the
+   chosen one raised grey; one weight for every segment, so a choice never moves the switch */
+.tk-seg, .lt-seg, #tasks-view .tk-bar .tk-seg { display: inline-flex; align-items: center; gap: 2px; height: var(--ctl-h); box-sizing: border-box;
+  padding: 3px; border: 0; border-radius: var(--ctl-r); background: rgba(255, 255, 255, 0.06); }
+.tk-seg-btn, .lt-seg-b, #tasks-view .tk-bar .tk-seg-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-ui); font-weight: 500; box-shadow: none; }
+.tk-seg-btn:hover, .lt-seg-b:hover, #tasks-view .tk-bar .tk-seg-btn:hover { color: #F5F5F7; }
+.tk-seg-btn.tk-on, .lt-seg-b.on, #tasks-view .tk-bar .tk-seg-btn.tk-on { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+.tk-seg.hidden, .lt-seg.hidden, #tasks-view .tk-bar .tk-seg.hidden { display: none; }
+#tasks-view .tk-bar .tk-btn { gap: 6px; }  /* «Колонки» of «Задачи» the width of that of «Записи» */
+#home-view .td-nav :is(.cal-nav, .cal-today-btn) { height: var(--ctl-h); min-width: var(--ctl-h); box-sizing: border-box; padding: 0 12px; border: 1px solid var(--line);
+  border-radius: var(--ctl-r); background: var(--elevated); color: #E6E7EA; font-size: var(--fs-ui); font-weight: 500; }
+#home-view .td-nav :is(.cal-nav, .cal-today-btn):hover { background: #34373B; }
+#home-view .td-nav .cal-nav { padding: 0; }
+
+/* The tabs of an open recording («Расшифровка | ✦ Анализ | Участники | Сведения»), the segmented control of every
+   other section (asked by the user: a round pill group with a blue tab looked like no other control): the box of
+   .tk-seg (32px, 3px inside, the 8px corner of the buttons, no frame), 26px segments with a 6px corner, the chosen one
+   raised grey; the counts and the ✦ of «Анализ» stay */
+#workspace-header .tb-rec-tabs { height: var(--ctl-h); box-sizing: border-box; padding: 3px; gap: 2px; border: 0; border-radius: var(--ctl-r); background: rgba(255, 255, 255, 0.06); }
+#workspace-header .tb-rec-tabs .tb-subtab { height: 26px; padding: 0 11px; gap: 6px; border-radius: 6px; font-size: var(--fs-ui); font-weight: 500; color: var(--hc-dim, #AEAEB2); background: transparent; }
+#workspace-header .tb-rec-tabs .tb-subtab:hover { color: #F5F5F7; background: transparent; }
+#workspace-header .tb-rec-tabs .tb-subtab.tb-active, #workspace-header .tb-rec-tabs .tb-subtab.tb-active:hover {
+  background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); outline: none; border-color: transparent; }
+#workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active, #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active:hover { background: transparent; box-shadow: none; }
+#workspace-header .tb-rec-tabs .tb-ind { border-radius: 6px; background: rgba(255, 255, 255, 0.14); outline: none; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+#workspace-header .tb-rec-tabs .tb-active .tb-ai { fill: url(#vs-ai-grad); }
+#workspace-header .tb-rec-tabs .tb-badge, #workspace-header .tb-rec-tabs .tb-active .tb-badge { background: rgba(255, 255, 255, 0.1); color: var(--hc-dim, #AEAEB2); font-weight: 500; }
+#workspace-header .tb-rec-tabs .tb-active .tb-badge { color: #FFFFFF; }
+
+/* «Обзор» → «Нагрузка системы и моделей» (dbSysloadHtml in static/js/dashboard.js): the bars of the «Нагрузка» window,
+   Verbaliox's share in the accent over the grey of the whole, its figure under each bar on the right (the line kept
+   when there is none); M and L: the models in memory, each with «Выгрузить» at the same place */
+.db-sl-legend { margin: 0 0 6px; }
+.db-w-sysload .ld-row { grid-template-columns: 36px minmax(40px, 1fr) 120px; gap: 10px; padding: 2px 0 0; }  /* the bars end at one x */
+.db-sl-own { display: flex; justify-content: flex-end; min-height: 16px; margin: 2px 0 6px 46px; }
+.db-sl-cap { margin-top: 6px; padding: 10px 0 2px; border-top: 1px solid var(--line); font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #AEAEB2); }
+.db-sl-model { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 7px 0; }
+.db-sl-model + .db-sl-model { border-top: 1px solid var(--line); }
+.db-sl-name, .db-sl-use { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.db-sl-use { align-items: flex-end; white-space: nowrap; }
+.db-sl-name b, .db-sl-use b { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-sl-use b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.db-sl-name small, .db-sl-use small { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-sl-empty { padding: 6px 0 2px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
