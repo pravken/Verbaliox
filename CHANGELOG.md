@@ -8,6 +8,27 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.8.26 — English
 
+- **A new look, «Meeting desk»**: a rail of sections on the left (Today, Overview, Recordings, Tasks, People,
+  Assistant; Ctrl+1…6), at the bottom «Queue», «Dictionary» and «Settings». The old sidebar is gone.
+- **The meeting strip on top** says what is going on — free until the end of the day, a meeting in N minutes,
+  going without recording, recording, waiting for transcription, results ready — with the button of that
+  moment (Join, Record, Mark the moment, Open the results) and «＋ Import».
+- **Load in the status bar**: CPU, RAM and the video memory with the program's own share; a click lists the
+  models in memory, each with «Unload». «Queue» on the rail shows what runs and what waits.
+- **Today and Overview**: Today is the calendar (day, week, month; the working time gone by shaded) with the
+  cards of the day; Overview is the analytics: «Statistics» tiles with a trend and the metrics of your choice,
+  charts as columns, bars, a ring or a line, every part in a colour of its own.
+- **My programs** (off by default): how the working time is split between programs — only the
+  program's name is kept, no window titles, keys or screenshots, and it never leaves the computer.
+- **Recordings**: table, cards and folders; «Columns» in every view, compact rows; search shows the places
+  found in the texts; a selection bar; import from a menu, Ctrl+O or by dropping files on any screen.
+- **A recording**: Transcript first, as a chat or as text; Analysis as cards with ▶ links to the moments;
+  Details with «Transcribe again» and «Recreate the analysis»; a lower player that also folds into one line.
+- **Tasks** as a table, cards or a calendar; **People** and **Dictionary** are sections of their own; the
+  assistant shows its sources as ▶ time marks; one window after an update instead of two.
+- Fixes: quitting or shutting Windows down during a transcription is no longer counted as a crash; a start
+  during an update no longer rolls the installation back; the MCP server follows «local only» at once;
+  backups keep the minutes worked on this computer.
 - **«Don't disturb in meetings» holds everything now**: while a meeting goes on and two minutes after it, the
   transcription, the mix of a stopped recording and the speaker models wait; Nemotron leaves memory with the
   other speech models. Models no longer load in the middle of a call and slow the computer down.
@@ -732,6 +753,27 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.8.26
 
+- **Новый вид — «Пульт встреч»**: слева полоса разделов (Сегодня, Обзор, Записи, Задачи, Люди, Ассистент;
+  Ctrl+1…6), внизу «Очередь», «Словарь» и «Настройки». Старой боковой панели больше нет.
+- **Полоса встречи сверху** показывает, что происходит: свободно до конца дня, встреча через N минут, идёт без
+  записи, идёт запись, ждёт расшифровки, итоги готовы — и кнопку этого момента (Подключиться, Записать,
+  Отметить момент, Открыть итоги), рядом «＋ Импорт».
+- **Нагрузка в строке состояния**: процессор, память и видеопамять с долей самой программы; по щелчку — модели
+  в памяти, у каждой своя «Выгрузить». «Очередь» на полосе слева — что выполняется и что ждёт.
+- **«Сегодня» и «Обзор»**: «Сегодня» — календарь (день, неделя, месяц; прошедшее рабочее время подсвечено) и
+  карточки дня; «Обзор» — аналитика: плитки «Статистики» с динамикой и выбором показателей, диаграммы
+  столбцами, полосами, кругом или линией, у каждой части свой цвет.
+- **«Мои программы»** (по умолчанию выключено): как рабочее время делится между программами. Хранится
+  только название программы — без заголовков окон, нажатий клавиш и снимков экрана, данные не покидают компьютер.
+- **«Записи»**: таблица, карточки и папки; «Колонки» во всех видах, компактные строки; поиск показывает найденные
+  места в тексте; панель выделения; импорт из меню, по Ctrl+O или перетаскиванием файлов на любом экране.
+- **Запись**: сначала «Расшифровка» — чатом или текстом; «Анализ» карточками со ссылками ▶ на моменты;
+  «Сведения» с «Расшифровать заново» и «Пересоздать анализ»; проигрыватель ниже, сворачивается в одну строку.
+- **«Задачи»** — таблицей, карточками или календарём; **«Люди»** и **«Словарь»** — отдельные разделы; ассистент
+  показывает источники метками ▶ времени; после обновления — одно окно вместо двух.
+- Исправления: выход из программы или выключение Windows во время расшифровки больше не считаются сбоем; запуск
+  во время обновления больше не откатывает установку; MCP-сервер сразу учитывает «только локально»; резервная
+  копия и восстановление сохраняют отработанное время этого компьютера.
 - **«Не мешать на встречах» держит всё**: пока идёт встреча и две минуты после неё, ждут расшифровка, сведение
   остановленной записи и модели участников; Nemotron выгружается вместе с остальными моделями речи. Модели
   больше не загружаются посреди звонка и не тормозят компьютер.
