@@ -41,7 +41,11 @@ RESTORED_FOLDER = "Восстановлено из копии"
 # Where data is sent and where files are written: taken from this computer, not from the copy
 LOCAL_SETTINGS = ("ollama_url", "llm_provider", "llm_cloud_provider", "llm_cloud_consent", "llm_base_url_openai_compat",
                   "calendar_ics", "recordings_dir", "export_dir", "obsidian_vault", "obsidian_subfolder",
-                  "watch_folder", "watch_folder_baseline", "watch_folder_recursive", "media_retention_days")
+                  "watch_folder", "watch_folder_baseline", "watch_folder_recursive", "media_retention_days",
+                  # «Мои программы» are turned on by a person on this computer, never by a copy
+                  "apps_track")
+# Kept only on this computer (the page says so): the minutes worked and the program in front of each one
+LOCAL_TABLES = ("app_minutes", "work_minutes")
 
 
 def _media_files() -> List[Dict[str, Any]]:
@@ -88,6 +92,8 @@ def _make(dest: Path, with_media: bool) -> Dict[str, Any]:
         try:
             src.backup(dst)
             dst.execute("DROP TABLE IF EXISTS secrets")  # cloud API keys stay on this computer
+            for table in LOCAL_TABLES:
+                dst.execute(f"DROP TABLE IF EXISTS {table}")
             # So do the settings that are not restored from a copy anyway: among them the calendar's
             # link, which at Outlook or Google is a secret address anyone holding it can read
             dst.execute(f"DELETE FROM settings WHERE key IN ({','.join('?' * len(LOCAL_SETTINGS))})", LOCAL_SETTINGS)
