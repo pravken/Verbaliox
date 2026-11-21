@@ -1,2 +1,5 @@
 # Batch files keep CRLF byte for byte (cmd finds labels unreliably in LF-only files): no conversion
 *.bat -text
+
+# Claude Code skills of the project: for development only, not in the release archive (git archive)
+.claude/ export-ignore
