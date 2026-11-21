@@ -342,7 +342,7 @@ def start_models_setup(
             )
             if select:
                 update_settings({"whisper_model": whisper_model_id})
-                _log(f"Модель {item['name']} успешно установлена и выбрана по умолчанию!")
+                _log(f"Модель {item['name']} установлена и выбрана по умолчанию.")
             else:
                 _log(f"Модель {item['name']} успешно установлена")
 
@@ -360,11 +360,11 @@ def start_models_setup(
                 )
                 _log("Модель разделения участников установлена")
 
-            _log("Все выбранные модели готовы к работе!")
+            _log("Все выбранные модели готовы к работе.")
             _setup_state.update(
                 {
                     "active": False,
-                    "status": "Установка успешно завершена!",
+                    "status": "Установка завершена",
                     "progress": 100,
                 }
             )

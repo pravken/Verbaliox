@@ -186,7 +186,7 @@ def migrate_legacy_data_dir(legacy: Optional[Path] = None, target: Optional[Path
     src_inv = [f for f in _file_inventory(legacy) if Path(f[0]).name not in (".session_token", MOVED_NOTE_NAME)]
     if _file_inventory(staging) != src_inv:
         shutil.rmtree(staging, ignore_errors=True)
-        raise RuntimeError("Не удалось перенести данные: копия не совпадает с оригиналом. Старая папка не тронута.")
+        raise RuntimeError("Не удалось перенести данные: копия не совпадает с оригиналом. Старая папка не изменена.")
 
     if target.exists():
         # The folder may already exist without a database (e.g. created by a previous run's logs)

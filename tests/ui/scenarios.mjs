@@ -302,6 +302,9 @@ await step('day off from the calendar', async () => {
 // Settings → Календарь: a vacation marked by hand is saved at once and listed (asked by the user)
 await step('own days off', async () => {
   await page.evaluate(() => { openModal('settings', 'general'); selectSettingsTab('calendar'); });
+  // another tab of Settings fades in, like the views (asked by the user: it changed abruptly)
+  expect(await page.evaluate(() => [...document.querySelectorAll('#modal-settings [data-stab]:not(.hidden)')].some(el => el.classList.contains('vx-in'))),
+    'the settings tab did not fade in');
   await sleep(400);
   await page.evaluate(() => {
     document.getElementById('dayoff-from').value = '2026-03-02';
@@ -362,6 +365,14 @@ await step('calendar view', async () => {
   await page.click('#cal-view button[data-cal="month"]');
   await sleep(500);
   expect(await page.isVisible('#cal-view .cal-month'), 'the month did not show');
+  // today stands out in the month too (its cell rule once hid the mark)
+  const marked = await page.evaluate(() => {
+    const today = document.querySelector('#cal-view .cal-cell.cal-today');
+    const other = [...document.querySelectorAll('#cal-view .cal-cell:not(.cal-today):not(.cal-out)')][0];
+    return !!today && !!other && getComputedStyle(today).borderTopColor !== getComputedStyle(other).borderTopColor;
+  });
+  expect(marked, 'today is not marked in the month');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/cal-month.png` });
   await page.click('#cal-view button[data-cal="week"]');
   await sleep(400);
   await page.keyboard.press('Escape');
@@ -401,6 +412,43 @@ await step('meeting question expires', async () => {
   await page.evaluate(() => { window.isRecording = window._realIsRecording; updateRecordButtonState(); });
 });
 
+// Главная opens with its widgets rising once: the fresh numbers drawn a moment later do not start the rise
+// over (reported by the user: every card jerked twice)
+await step('dashboard rises once', async () => {
+  await page.evaluate(() => switchAppView('home'));
+  await sleep(400);
+  const dips = await page.evaluate(() => new Promise(done => {
+    switchAppView('dashboard');
+    setTimeout(() => renderDashboard(), 150);  // as the fresh numbers do
+    const seen = [];
+    const t0 = performance.now();
+    (function look() {
+      const w = document.querySelector('#db-grid > .db-w');
+      if (w) seen.push(Number(getComputedStyle(w).opacity));
+      if (performance.now() - t0 < 900) requestAnimationFrame(look); else done(seen);
+    })();
+  }));
+  let top = 0, dip = 0;
+  for (const o of dips) { top = Math.max(top, o); dip = Math.max(dip, top - o); }
+  expect(dip < 0.2, `a widget faded out again while rising (by ${dip.toFixed(2)})`);
+});
+
+// Captions wait for the switch as a recording starts unless asked for, and never by themselves with «Не мешать
+// на встречах» (asked by the user: they loaded a model during a meeting)
+await step('captions do not start by themselves', async () => {
+  const held = await page.evaluate(() => [
+    captionsHeldAtStart({}),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'false' }),
+    captionsHeldAtStart({ live_captions_auto: 'false', analysis_after_meetings: 'false' }),
+  ]);
+  expect(JSON.stringify(held) === '[true,true,false,true]', `the captions rule: ${held}`);
+  await page.evaluate(() => openModal('settings', 'recording'));
+  await sleep(600);
+  expect(!(await page.isChecked('#set-live-captions-auto')), 'captions are on by default');
+  await page.evaluate(() => closeModal('settings'));
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => switchAppView('dashboard'));
@@ -415,7 +463,45 @@ await step('dashboard', async () => {
   expect(await page.locator('#db-grid .db-w').count() === before - 1, 'a widget was not removed');
   await page.click('#db-drawer .db-lib-add >> nth=0');
   expect(await page.locator('#db-grid .db-w').count() === before, 'a widget was not added');
-  await page.click('#db-drawer button:has-text("Вернуть как было")');
+  await page.click('#db-drawer button:has-text("Сбросить")');
+  // dragged, a widget lifts and a slot of its size shows where it lands, live; the drop keeps that order
+  const ids = () => page.evaluate(() => dbPrefs().layout.map(w => w.id));
+  const order0 = await ids();
+  const box = async k => page.locator('#db-grid > .db-w').nth(k).boundingBox();
+  const toTop = async () => {  // «Добавить» scrolled to the new widget, smoothly: wait until the grid is back at its top
+    for (let k = 0, still = 0; k < 40 && still < 3; k++) {
+      still = (await page.evaluate(() => { const g = document.getElementById('db-grid'); const was = g.scrollTop; g.scrollTop = 0; return was === 0; })) ? still + 1 : 0;
+      await sleep(100);
+    }
+  };
+  await toTop();
+  const a = await box(0), b = await box(2);
+  await page.mouse.move(a.x + 30, a.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 40, a.y + 30, { steps: 3 });
+  await page.mouse.move(b.x + b.width - 20, b.y + b.height / 2, { steps: 12 });
+  await sleep(300);
+  expect(await page.locator('#db-grid > .db-slot').count() === 1, 'no slot while dragging');
+  expect(await page.evaluate(() => [...document.querySelectorAll('#db-grid > .db-w:not(.db-lifted), #db-grid > .db-slot')]
+    .findIndex(x => x.classList.contains('db-slot'))) === 2, 'the slot did not move to the third place');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/db-drag.png` });
+  await page.mouse.up();
+  await sleep(400);
+  const order1 = await ids();
+  expect(order1[2] === order0[0] && order1[0] === order0[1] && order1[1] === order0[2], `the drop did not keep the slot's place: ${order1.slice(0, 3)}`);
+  expect(await page.locator('#db-grid > .db-slot, #db-grid > .db-lifted').count() === 0, 'the slot stayed after the drop');
+  // Esc while dragging puts it back
+  await toTop();
+  const c = await box(0);
+  await page.mouse.move(c.x + 30, c.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 300, c.y + 200, { steps: 10 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await sleep(300);
+  expect(JSON.stringify(await ids()) === JSON.stringify(order1), 'Esc did not cancel the drag');
+  expect(await page.isVisible('#dashboard-view'), 'Esc while dragging left the dashboard');
+  await page.click('#db-drawer button:has-text("Сбросить")');
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
   await sleep(600);

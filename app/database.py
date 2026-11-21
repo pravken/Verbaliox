@@ -174,7 +174,7 @@ def init_db() -> None:
             "economy_mode": "false",  # «Только запись»: no model works (app/economy.py; the tray menu)
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
-            "live_captions_auto": "true",  # captions start with a recording (the studio's switch as last set)
+            "live_captions_auto": "false",  # captions start with a recording; off by default (asked by the user: they load a model)
             "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
@@ -1381,6 +1381,43 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
             obsidian.follow(meeting_id)
         except Exception:
             pass
+
+
+def fill_durations(meetings: List[Dict[str, Any]]) -> int:
+    """The length of recordings that have none yet, read from their files and kept (reported by the user:
+    the meeting hours of «Главная» stood still). It was written only when a transcription began, so a
+    recording waiting in the queue, or whose transcription was cancelled, counted 0 hours. The dicts given
+    get it too. Returns how many got one."""
+    from app.audio_utils import get_media_duration
+
+    lacking = {int(m["id"]): m for m in meetings if m.get("id") and float(m.get("duration") or 0) <= 0}
+    if not lacking:
+        return 0
+    with _db_lock:  # the list given to the page has no file paths
+        conn = get_connection()
+        ids, rows = list(lacking), []
+        for k in range(0, len(ids), 500):  # SQLite takes up to 999 values in one query
+            part = ids[k:k + 500]
+            rows += conn.execute(f"SELECT id, media_path FROM meetings WHERE id IN ({','.join('?' * len(part))})", part).fetchall()
+        conn.close()
+    found = []
+    for mid, path in rows:
+        if not path or not Path(path).is_file():
+            continue
+        try:
+            d = float(get_media_duration(path) or 0)
+        except Exception:
+            d = 0.0
+        if d > 0:
+            lacking[int(mid)]["duration"] = d
+            found.append((d, int(mid)))
+    if found:
+        with _db_lock:
+            conn = get_connection()
+            conn.executemany("UPDATE meetings SET duration = ? WHERE id = ? AND (duration IS NULL OR duration <= 0)", found)
+            conn.commit()
+            conn.close()
+    return len(found)
 
 
 def relink_media(meeting_id: int, path: str) -> None:

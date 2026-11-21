@@ -111,7 +111,7 @@ class EconomyTest(unittest.TestCase):
         self.assertEqual(labels, ["Открыть Verbaliox", "● Начать запись\tCtrl+Alt+R", "Запись с настройкой",
                                   "Диктовка\tCtrl+Alt+D", "Не мешать на встречах", "Только запись", "Выход"])
         presets = next(cmd for label, cmd, _f in tc.menu_items() if label == "Запись с настройкой")
-        self.assertIn(("Созвон  ★", "record:call", 0), presets)  # a submenu
+        self.assertIn(("Звонок  ★", "record:call", 0), presets)  # a submenu
         tc._status = {"state": "busy", "text": "Распознавание 45%", "recording": False}
         self.assertIn("Распознавание 45%", [label for label, _c, _f in tc.menu_items()])  # what goes on, when it does
 

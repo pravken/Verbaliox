@@ -167,7 +167,7 @@ def check(now: Optional[datetime] = None, idle: Optional[float] = None) -> bool:
 
             h = int(hours) if hours == int(hours) else hours
             app_status.add_notice(f"Рабочий день: {h} ч",
-                                  f"С {today['start']} отработано {today['worked'] // 60} ч {today['worked'] % 60:02d} мин. Пора закругляться",
+                                  f"С {today['start']} отработано {today['worked'] // 60} ч {today['worked'] % 60:02d} мин. Норма рабочего дня выполнена",
                                   "dashboard")
     return True
 

@@ -376,7 +376,7 @@ def _asr_one(mid: str, clip: Path, audio: Any, dur: float, lang: Optional[str]) 
 
     if asr_onnx.is_onnx_model(mid):
         if lang and not asr_onnx.supports_language(mid, lang):
-            raise ValueError(f"Модель не знает язык записи ({lang})")
+            raise ValueError(f"Модель не поддерживает язык записи ({lang})")
         from app import onnx_gpu
 
         clean_slate()

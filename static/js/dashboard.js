@@ -148,9 +148,18 @@ async function dbLoadWeek() {
 }
 
 // --- Drawing ---
+// The widgets rise one after another as Главная opens. The fresh numbers come a moment later and draw the
+// widgets again: each new one goes on from where its former one was in the rise, it does not start it over
+// (reported by the user: every card jerked twice, a strobe)
+function dbWaveDelays(grid) {
+  const gone = performance.now() - (DB.waveAt || 0);
+  grid.querySelectorAll(':scope > .db-w').forEach((w, i) => { w.style.animationDelay = `${Math.round(Math.min(i, 12) * 40 - gone)}ms`; });
+}
+
 function renderDashboard() {
   const grid = document.getElementById('db-grid');
   if (!grid) return;
+  if (DB.drag && DB.drag.on) return;  // a widget is being dragged: the drop draws the grid (with what came meanwhile)
   const p = dbPrefs();
   dbRenderHead();
   dbParkHosts();  // the home page's blocks go back before the grid is redrawn, so they are not lost
@@ -160,7 +169,7 @@ function renderDashboard() {
     const sizes = DB.edit ? `<span class="db-sizes">${def.sizes.map(s => `<button data-click="setDashSize" data-click-args='[${i}, "${s}"]' class="${s === size ? 'on' : ''}" title="${escapeHtml(t(`dbSize_${s}`))}">${s}</button>`).join('')}</span>` : '';
     const tools = DB.edit ? `<span class="db-tools"><span class="db-grip" title="${escapeHtml(t('dbDragTip'))}">⋮⋮</span>`
       + `<button data-click="removeDashWidget" data-click-args='[${i}]' class="db-x" title="${escapeHtml(t('dbRemove'))}" aria-label="${escapeHtml(t('dbRemove'))}">✕</button></span>` : '';
-    return `<section class="db-w db-w-${w.id}${w.id === 'summary' ? ' db-summary' : ''}" style="grid-column:span ${DB_SIZES[size]}" data-i="${i}" ${DB.edit ? 'draggable="true"' : ''}>`
+    return `<section class="db-w db-w-${w.id}${w.id === 'summary' ? ' db-summary' : ''}" style="grid-column:span ${DB_SIZES[size]}" data-i="${i}">`
       + (def.host ? '' : `<h3 class="db-h">${escapeHtml(t(def.title))}${dbLink(w.id)}</h3>`)
       + `<div class="db-c">${def.host ? '' : dbWidgetHtml(w.id, size)}</div>${tools}${sizes}</section>`;
   }).join('') || `<div class="db-empty">${escapeHtml(t('dbEmpty'))}</div>`;
@@ -172,6 +181,7 @@ function renderDashboard() {
     const block = document.getElementById(def.host)?.closest('section');
     if (block) grid.querySelector(`.db-w[data-i="${i}"] .db-c`).appendChild(block);
   });
+  if (grid.classList.contains('db-wave')) dbWaveDelays(grid);
   renderDashDrawer();
 }
 
@@ -342,7 +352,7 @@ function dbPrepHtml(size) {
     + tasks + `<div class="db-prep-foot">${last}<span class="flex-1"></span>${brief}</div></div>`;
 }
 
-// «Горит сегодня»: the tasks due today or overdue, mine and those promised to me, overdue first
+// «Срочные задачи»: the tasks due today or overdue, mine and those promised to me, overdue first
 function dbDueHtml(d, size) {
   if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))} <button class="db-more" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button></div>`;
   const today = d.today;
@@ -467,7 +477,7 @@ function dbCycleNorm() {
   renderDashboard();
 }
 
-// «Серии без отдачи»: series whose last meetings, three or more in a row, gave no decision and no task
+// «Серии без результатов»: series whose last meetings, three or more in a row, gave no decision and no task
 // (app/dashboard._dull_series); a click opens the latest one
 function dbDullHtml(d) {
   const list = d.dull_series || [];
@@ -738,7 +748,7 @@ function dashOpenSummary(meetingId) {
   setTimeout(() => openRecordTab('summary'), 300);
 }
 
-// --- «Жду от других»: what others promised the user (asked by the user) ---
+// --- «Ожидаю от других»: what others promised the user (asked by the user) ---
 function dbWaitingHtml(d, size) {
   if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div><button class="tk-btn tk-btn-sm" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button>`;
   const list = d.waiting || [];
@@ -913,38 +923,146 @@ function renderDashDrawer() {
     + `<button class="tk-btn tk-btn-primary tk-btn-sm" data-click="toggleDashEdit">${escapeHtml(t('dbDone'))}</button></div>`;
 }
 
+// --- Arranging the widgets («Настроить»), asked by the user: the browser's own drag showed nothing until
+// the drop, and the grid packed itself another way once «Готово» was pressed. Now the widget lifts and
+// follows the pointer, a slot of its size stands where it will land and moves among the others as they
+// make room; the grid packs the same way while arranging, so the slot's place is the widget's place ---
+const DB_DRAG_PX = 5;      // a press that moves less is a click
+const DB_EDGE_PX = 48;     // the grid scrolls by itself this close to its top or bottom
+
+function dbTiles(grid) { return [...grid.querySelectorAll(':scope > .db-w:not(.db-lifted), :scope > .db-slot')]; }
+
+// The others glide to their new places (first, last, invert, play)
+function dbFlip(grid, change) {
+  const els = dbTiles(grid);
+  const before = new Map(els.map(el => [el, el.getBoundingClientRect()]));
+  change();
+  if (scrollMotion() === 'auto') return;
+  const moved = [];
+  dbTiles(grid).forEach(el => {
+    const a = before.get(el);
+    if (!a || el.classList.contains('db-slot')) return;
+    const b = el.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    moved.push(el);
+  });
+  if (!moved.length) return;
+  void grid.offsetWidth;
+  moved.forEach(el => { el.style.transition = 'transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1)'; el.style.transform = ''; });
+}
+
+// The widget under the pointer, by the grid's own layout (not the boxes moved by the animation)
+function dbHit(grid, x, y) {
+  const g = grid.getBoundingClientRect();
+  const px = x - g.left - grid.clientLeft + grid.scrollLeft, py = y - g.top - grid.clientTop + grid.scrollTop;
+  let last = null;
+  for (const el of dbTiles(grid)) {
+    const r = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+    if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) return { el };
+    if (!last || r.y + r.h > last) last = r.y + r.h;
+  }
+  return { el: null, below: last != null && py > last };
+}
+
+function dbDragMove(e) {
+  const d = DB.drag;
+  if (!d) return;
+  d.x = e.clientX; d.y = e.clientY;
+  if (!d.on) {
+    if (Math.hypot(d.x - d.x0, d.y - d.y0) < DB_DRAG_PX) return;
+    dbDragLift(d);
+  }
+  e.preventDefault();
+  d.el.style.transform = `translate(${d.x - d.x0}px, ${d.y - d.y0}px) scale(1.02)`;
+  if (!d.raf) d.raf = requestAnimationFrame(dbDragFrame);
+}
+
+function dbDragLift(d) {
+  const grid = d.grid, el = d.el, r = el.getBoundingClientRect();
+  d.on = true;
+  const slot = document.createElement('div');
+  slot.className = 'db-slot';
+  slot.style.gridColumn = el.style.gridColumn;
+  slot.style.height = `${r.height}px`;
+  el.after(slot);
+  d.slot = slot;
+  Object.assign(el.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  el.classList.add('db-lifted');
+  document.body.classList.add('db-dragging-now');
+  try { grid.setPointerCapture(d.pid); } catch (err) {}
+}
+
+// One step a frame: the slot follows the pointer, the grid scrolls at its edges
+function dbDragFrame() {
+  const d = DB.drag;
+  if (!d || !d.on) return;
+  d.raf = 0;
+  const grid = d.grid, g = grid.getBoundingClientRect();
+  const step = d.y < g.top + DB_EDGE_PX ? -12 : d.y > g.bottom - DB_EDGE_PX ? 12 : 0;
+  if (step && grid.scrollTop + step >= 0 && grid.scrollTop + step <= grid.scrollHeight - grid.clientHeight) {
+    grid.scrollTop += step;
+    d.raf = requestAnimationFrame(dbDragFrame);  // goes on while the pointer stays at the edge
+  }
+  const hit = dbHit(grid, d.x, d.y);
+  const tiles = dbTiles(grid);
+  if (hit.el && hit.el !== d.slot && hit.el !== d.over) {
+    // over another widget: the slot takes its place, the widget steps aside (forward: after it, back: before)
+    const forward = tiles.indexOf(hit.el) > tiles.indexOf(d.slot);
+    dbFlip(grid, () => (forward ? hit.el.after(d.slot) : hit.el.before(d.slot)));
+  } else if (!hit.el && hit.below && tiles[tiles.length - 1] !== d.slot) {
+    dbFlip(grid, () => tiles[tiles.length - 1].after(d.slot));
+  }
+  // the same widget is not taken twice in a row: it moved, and would hand the slot back and forth
+  d.over = hit.el === d.slot ? d.over : hit.el;
+}
+
+function dbDragEnd(e, cancel) {
+  const d = DB.drag;
+  if (!d) return;
+  DB.drag = null;
+  cancelAnimationFrame(d.raf);
+  document.removeEventListener('pointermove', dbDragMove, true);
+  document.removeEventListener('pointerup', dbDragUp, true);
+  document.removeEventListener('pointercancel', dbDragCancel, true);
+  document.removeEventListener('keydown', dbDragKey, true);
+  if (!d.on) return;
+  document.body.classList.remove('db-dragging-now');
+  const order = cancel ? null : dbTiles(d.grid).map(x => (x === d.slot ? d.from : Number(x.dataset.i)));
+  const done = () => {
+    if (order && order.some((v, k) => v !== k)) {
+      const layout = dbPrefs().layout;
+      dbSave({ layout: order.map(k => layout[k]) });
+    }
+    renderDashboard();
+  };
+  if (cancel || scrollMotion() === 'auto') { done(); return; }
+  // the widget settles into its slot, then the grid is drawn in the new order
+  const to = d.slot.getBoundingClientRect(), from = d.el.getBoundingClientRect();
+  d.el.style.transition = 'transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1)';
+  d.el.style.transform = `translate(${d.x - d.x0 + to.left - from.left}px, ${d.y - d.y0 + to.top - from.top}px)`;
+  setTimeout(done, 140);
+}
+function dbDragUp(e) { dbDragEnd(e, false); }
+function dbDragCancel(e) { dbDragEnd(e, true); }
+function dbDragKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dbDragEnd(e, true); } }
+
 (function wireDashboard() {
   const grid = document.getElementById('db-grid');
   if (!grid) return;
-  grid.addEventListener('dragstart', (e) => {
-    const w = DB.edit && e.target.closest && e.target.closest('.db-w');
-    if (!w) return;
-    DB.drag = Number(w.dataset.i);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', `db:${DB.drag}`);
-    requestAnimationFrame(() => w.classList.add('db-dragging'));
-  });
-  grid.addEventListener('dragover', (e) => {
-    if (DB.drag == null) return;
+  grid.addEventListener('pointerdown', (e) => {
+    if (!DB.edit || DB.drag || e.button !== 0) return;
     const w = e.target.closest && e.target.closest('.db-w');
-    e.preventDefault();
-    grid.querySelectorAll('.db-drop').forEach(x => x.classList.remove('db-drop'));
-    if (w && Number(w.dataset.i) !== DB.drag) w.classList.add('db-drop');
+    if (!w || w.parentElement !== grid || e.target.closest('button, a, input, select, textarea, label')) return;
+    e.preventDefault();  // no text selected on the way
+    DB.drag = { grid, el: w, from: Number(w.dataset.i), pid: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, on: false, raf: 0 };
+    document.addEventListener('pointermove', dbDragMove, true);
+    document.addEventListener('pointerup', dbDragUp, true);
+    document.addEventListener('pointercancel', dbDragCancel, true);
+    document.addEventListener('keydown', dbDragKey, true);
   });
-  grid.addEventListener('drop', (e) => {
-    if (DB.drag == null) return;
-    e.preventDefault();
-    const w = e.target.closest && e.target.closest('.db-w');
-    const from = DB.drag, to = w ? Number(w.dataset.i) : dbPrefs().layout.length - 1;
-    DB.drag = null;
-    if (from === to) { renderDashboard(); return; }
-    const layout = dbPrefs().layout.slice();
-    const [moved] = layout.splice(from, 1);
-    layout.splice(to, 0, moved);
-    dbSave({ layout });
-    renderDashboard();
-  });
-  grid.addEventListener('dragend', () => { DB.drag = null; grid.querySelectorAll('.db-dragging, .db-drop').forEach(x => x.classList.remove('db-dragging', 'db-drop')); });
 })();
 
 // The time on the dashboard follows by itself (reported by the user: the «now» of the week and of the
@@ -991,7 +1109,8 @@ registerView('dashboard', {
     // the widgets come in one after another as Главная opens (not on every redraw)
     const grid = document.getElementById('db-grid');
     if (grid) {
-      grid.querySelectorAll(':scope > .db-w').forEach((w, i) => { w.style.animationDelay = `${Math.min(i, 12) * 40}ms`; });
+      DB.waveAt = performance.now();
+      dbWaveDelays(grid);
       grid.classList.remove('db-wave'); void grid.offsetWidth; grid.classList.add('db-wave');
       clearTimeout(DB.waveTimer);
       DB.waveTimer = setTimeout(() => grid.classList.remove('db-wave'), 1000);

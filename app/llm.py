@@ -306,7 +306,7 @@ def _post(url: str, headers: Dict[str, str], payload: Dict[str, Any], provider: 
                 continue
             # The service took the whole time: asking again would wait as long and may be paid again
             raise LlmError(f"{PROVIDERS[provider]['name']}: сервис не ответил за {int(TIMEOUT_SEC // 60)} мин. "
-                           "Попробуйте модель побыстрее или запись покороче.")
+                           "Выберите более быструю модель или более короткую запись.")
         except httpx.HTTPError as e:
             last = LlmError(f"{PROVIDERS[provider]['name']}: нет соединения ({type(e).__name__}). Проверьте интернет и прокси.")
             if not isinstance(e, httpx.ConnectError):
@@ -354,7 +354,7 @@ def _cut(provider: str) -> LlmError:
     """The answer stopped at the length limit: a cut protocol or a broken list of tasks must not pass for
     a whole one."""
     return LlmError(f"{PROVIDERS[provider]['name']}: ответ модели обрезан по лимиту длины. "
-                    "Выберите модель с большим лимитом ответа или запись покороче.")
+                    "Выберите модель с большим лимитом ответа или более короткую запись.")
 
 
 def _filtered(provider: str, reason: str) -> LlmError:
