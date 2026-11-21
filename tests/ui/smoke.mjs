@@ -22,7 +22,7 @@ const step = async (name, fn) => {
 await page.goto(`${base}/?token=${token}`);
 await page.waitForTimeout(2000);
 await page.evaluate(() => document.getElementById('first-run-wizard')?.remove());
-for (const view of ['home', 'tasks', 'studio', 'ask', 'library']) {
+for (const view of ['home', 'dashboard', 'tasks', 'studio', 'ask', 'library']) {
   await step(`view ${view}`, () => page.evaluate(v => switchAppView(v), view));
   await page.waitForTimeout(400);
 }
