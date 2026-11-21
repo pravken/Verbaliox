@@ -4948,13 +4948,13 @@ button.sc-at:hover { color: var(--accent-text); }
 :is(#tasks-view, #people-view, #libtable-view, #dict-view, #dashboard-view) .tk-search { height: var(--ctl-h); border-radius: var(--ctl-r); }
 /* one segmented control in every section (the period of «Обзор», the span of «Сегодня», the view of «Записи» and
    «Задачи» were three looks): a 32px box without a frame, 3px inside, the corner of the buttons; 26px segments, the
-   chosen one raised grey */
+   chosen one raised grey; one weight for every segment, so a choice never moves the switch */
 .tk-seg, .lt-seg, #tasks-view .tk-bar .tk-seg { display: inline-flex; align-items: center; gap: 2px; height: var(--ctl-h); box-sizing: border-box;
   padding: 3px; border: 0; border-radius: var(--ctl-r); background: rgba(255, 255, 255, 0.06); }
 .tk-seg-btn, .lt-seg-b, #tasks-view .tk-bar .tk-seg-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
-  border: 0; border-radius: 6px; background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-ui); font-weight: 400; box-shadow: none; }
+  border: 0; border-radius: 6px; background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-ui); font-weight: 500; box-shadow: none; }
 .tk-seg-btn:hover, .lt-seg-b:hover, #tasks-view .tk-bar .tk-seg-btn:hover { color: #F5F5F7; }
-.tk-seg-btn.tk-on, .lt-seg-b.on, #tasks-view .tk-bar .tk-seg-btn.tk-on { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 600;
+.tk-seg-btn.tk-on, .lt-seg-b.on, #tasks-view .tk-bar .tk-seg-btn.tk-on { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
 .tk-seg.hidden, .lt-seg.hidden, #tasks-view .tk-bar .tk-seg.hidden { display: none; }
 #tasks-view .tk-bar .tk-btn { gap: 6px; }  /* «Колонки» of «Задачи» the width of that of «Записи» */
@@ -4968,10 +4968,10 @@ button.sc-at:hover { color: var(--accent-text); }
    .tk-seg (32px, 3px inside, the 8px corner of the buttons, no frame), 26px segments with a 6px corner, the chosen one
    raised grey; the counts and the ✦ of «Анализ» stay */
 #workspace-header .tb-rec-tabs { height: var(--ctl-h); box-sizing: border-box; padding: 3px; gap: 2px; border: 0; border-radius: var(--ctl-r); background: rgba(255, 255, 255, 0.06); }
-#workspace-header .tb-rec-tabs .tb-subtab { height: 26px; padding: 0 11px; gap: 6px; border-radius: 6px; font-size: var(--fs-ui); font-weight: 400; color: var(--hc-dim, #AEAEB2); background: transparent; }
+#workspace-header .tb-rec-tabs .tb-subtab { height: 26px; padding: 0 11px; gap: 6px; border-radius: 6px; font-size: var(--fs-ui); font-weight: 500; color: var(--hc-dim, #AEAEB2); background: transparent; }
 #workspace-header .tb-rec-tabs .tb-subtab:hover { color: #F5F5F7; background: transparent; }
 #workspace-header .tb-rec-tabs .tb-subtab.tb-active, #workspace-header .tb-rec-tabs .tb-subtab.tb-active:hover {
-  background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); outline: none; border-color: transparent; }
+  background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); outline: none; border-color: transparent; }
 #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active, #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active:hover { background: transparent; box-shadow: none; }
 #workspace-header .tb-rec-tabs .tb-ind { border-radius: 6px; background: rgba(255, 255, 255, 0.14); outline: none; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
 #workspace-header .tb-rec-tabs .tb-active .tb-ai { fill: url(#vs-ai-grad); }
