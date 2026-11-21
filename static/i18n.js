@@ -3043,6 +3043,8 @@ const I18N = {
     recTemplateTip: 'Обзор или свой шаблон: выбор открывает его раздел',
     recModel: 'Модель',
     recRegenAnalysis: 'Пересоздать анализ',
+    rpMinimize: 'Свернуть проигрыватель',
+    rpExpand: 'Развернуть проигрыватель',
 
   },
   en: {
@@ -6086,6 +6088,8 @@ const I18N = {
     recTemplateTip: 'The overview or an own template: the choice opens its section',
     recModel: 'Model',
     recRegenAnalysis: 'Make the analysis again',
+    rpMinimize: 'Minimize the player',
+    rpExpand: 'Expand the player',
 
   }
 };

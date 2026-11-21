@@ -168,6 +168,23 @@ await step('scrub the wave', async () => {
   await page.evaluate(() => document.getElementById('media-player').pause());
 });
 
+// The player minimized to one line and back; the choice is kept; the thin track still seeks
+await step('minimized player', async () => {
+  await page.click('#rp-min-btn');
+  await sleep(300);
+  const h = await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height);
+  expect(h < 60, `the minimized player is ${h}px tall`);
+  expect(await page.evaluate(() => localStorage.getItem('verbaliox_player_mini')) === '1', 'the choice is not kept');
+  const box = await page.locator('#player-waveform-wrapper').boundingBox();
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+  await sleep(200);
+  const at = await page.evaluate(() => { const p = document.getElementById('media-player'); p.pause(); return p.currentTime; });
+  expect(at > 42 && at < 48, `a click on the thin track left the time at ${at}`);
+  await page.click('#rp-min-btn');
+  await sleep(300);
+  expect(await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height) > 100, 'the player did not expand');
+});
+
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
 await step('menu at the bottom', async () => {
   const box = await page.evaluate(() => {
