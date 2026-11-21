@@ -34,13 +34,18 @@ function impDefaults() {
 }
 
 function impFresh() {
-  return { items: [], proc: impDefaults(), seq: 0 };
+  return { items: [], proc: impDefaults(), seq: 0, mode: 'all' };
 }
 
-// "Import": the window, or the file picker at once when it should not ask
+// Ctrl+O and «Файлы» of the ▾ menu: the window in its files mode, or the file picker at once when it should not ask
 function openImport() {
-  if (askImportParams()) openImportDialog();
+  if (askImportParams()) openImportDialog({ mode: 'files' });
   else impPickFiles();
+}
+
+// «＋ Импорт» itself (the main part of the split button): the window with every way to add and every option
+function openImportFull() {
+  openImportDialog({ mode: 'all' });
 }
 
 // «Файлы…»: the Windows file picker gives the files' places, and they are added where they are (no
@@ -58,9 +63,9 @@ async function impPickFiles() {
 }
 
 // Files by their place on disk (the Windows picker, or dropped on the window): added where they are
-async function importPaths(paths) {
+async function importPaths(paths, mode = 'files') {
   if (impIsOpen()) { impAddPaths(paths); return; }
-  if (askImportParams()) { openImportDialog(); impAddPaths(paths); return; }
+  if (askImportParams()) { openImportDialog({ mode }); impAddPaths(paths); return; }
   if (!requireRecognitionModel()) return;
   const created = [];
   for (const path of paths) {
@@ -81,10 +86,26 @@ async function importPaths(paths) {
 
 function impAddPaths(paths) {
   const imp = state.imp || (state.imp = impFresh());
-  for (const path of paths) {
-    if (!imp.items.some(x => x.kind === 'path' && x.path === path)) imp.items.push({ id: ++imp.seq, kind: 'path', path });
-  }
+  for (const path of paths) impPushPath(imp, path);
   renderImport();
+}
+
+// A path in the list; a folder's own audio and video files are listed under it once the server has looked
+function impPushPath(imp, path) {
+  if (imp.items.some(x => x.kind === 'path' && x.path === path)) return;
+  const item = { id: ++imp.seq, kind: 'path', path, folder: null };
+  imp.items.push(item);
+  impProbeFolder(item);
+}
+
+async function impProbeFolder(item) {
+  const res = await fetch('/api/import/folder-files', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: item.path }),
+  }).catch(() => null);
+  const data = res && res.ok ? await readJson(res) : null;
+  if (!data || !data.is_dir) return;
+  item.folder = data;
+  if (impIsOpen()) renderImport();
 }
 
 // «Папка…»: the Windows folder picker, then every audio and video file in it is added where it is;
@@ -101,17 +122,27 @@ async function impBrowsePath() {
 async function impPickFolder() {
   const res = await fetch('/api/import/pick-folder', { method: 'POST' }).catch(() => null);
   const data = res && res.ok ? await readJson(res) : null;
-  if (!data || !data.available) { openImportDialog({ row: 'path' }); return; }
-  if (data.path) await importPaths([data.path]);
+  if (!data || !data.available) { openImportDialog({ mode: 'folder' }); return; }
+  if (data.path) await importPaths([data.path], 'folder');
 }
 
-// «＋ Импорт ▾» in the title of «Записи»: a menu of the ways to add, with an icon each (the files, a folder,
-// a link) and the window with all the parameters; files can also be dropped on the window on any screen
+// The window's modes (asked by the user: each item of the ▾ menu opened the same window): its icon and title
+const IMP_ICONS = {
+  files: '<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M10 14.5l2-2 2 2M12 12.5v5"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>',
+  link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+  all: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
+};
+const IMP_TITLES = { files: 'impTitleFiles', folder: 'impTitleFolder', link: 'impTitleLink', all: 'impTitle' };
+
+// The ▾ of «＋ Импорт ▾» in the strip on top: what to import, with an icon each; each item opens the window in
+// its mode (the files and the folder go at once when the window should not ask); files can also be dropped on the
+// window on any screen
 const IMP_MENU = [
-  ['files', '<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M10 14.5l2-2 2 2M12 12.5v5"/>', 'impMenuFiles', 'impMenuFilesSub', 'Ctrl+O', () => openImport()],
-  ['folder', '<path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>', 'impMenuFolder', 'impMenuFolderSub', '', () => impPickFolder()],
-  ['link', '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>', 'impMenuLink', 'impMenuLinkSub', '', () => openImportDialog({ row: 'link' })],
-  ['params', '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>', 'impMenuParams', 'impMenuParamsSub', '', () => openImportDialog()],
+  ['files', IMP_ICONS.files, 'impMenuFiles', 'impMenuFilesSub', 'Ctrl+O', () => openImport()],
+  ['folder', IMP_ICONS.folder, 'impMenuFolder', 'impMenuFolderSub', '', () => (askImportParams() ? openImportDialog({ mode: 'folder' }) : impPickFolder())],
+  ['link', IMP_ICONS.link, 'impMenuLink', 'impMenuLinkSub', '', () => openImportDialog({ mode: 'link' })],
+  ['all', '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>', 'impMenuParams', 'impMenuParamsSub', '', () => openImportDialog({ mode: 'all' })],
 ];
 
 function openImportMenu(e) {
@@ -139,7 +170,7 @@ function openImportMenu(e) {
   });
   document.body.appendChild(menu);
   btn.setAttribute('aria-expanded', 'true');
-  const r = btn.getBoundingClientRect();
+  const r = (btn.closest('.imp-split') || btn).getBoundingClientRect();  // under the whole split button, its right edge
   menu.style.left = `${Math.max(4, Math.min(zpx(r.right) - menu.offsetWidth, viewW() - menu.offsetWidth - 4))}px`;
   menu.style.top = `${zpx(r.bottom) + 6}px`;
   nextFrame(() => menu.querySelector('button')?.focus());
@@ -164,13 +195,24 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Opens the window with these files (dropped, chosen) or with a link/path row open
+// Opens the window in a mode (files, folder, link, all), with these files (dropped, chosen) in its list
 function openImportDialog(opts = {}) {
   state.imp = impFresh();
+  state.imp.mode = IMP_TITLES[opts.mode] ? opts.mode : opts.files ? 'files' : 'all';
+  state.imp.moreOpen = state.imp.mode === 'all';  // «Все параметры»: the processing in sight too
   state.impPrepared = true;
   openModal('import');
   if (opts.files) impAddFiles(opts.files);
-  if (opts.row) impShowRow(opts.row);
+  if (state.imp.mode === 'link') impShowRow('link');
+}
+
+// The segmented control on top of the window: another mode, the list and the options kept
+function impSetMode(mode) {
+  if (!IMP_TITLES[mode] || !state.imp) return;
+  state.imp.mode = mode;
+  if (mode === 'all') state.imp.moreOpen = true;
+  renderImport();
+  if (mode === 'link') impShowRow('link');
 }
 
 // core.js openModal('import'): from any button that opens the window as it is
@@ -295,7 +337,7 @@ function impAddPath() {
   const path = input.value.trim().replace(/^["']|["']$/g, '');
   if (!path) return;
   const imp = state.imp;
-  if (!imp.items.some(x => x.kind === 'path' && x.path === path)) imp.items.push({ id: ++imp.seq, kind: 'path', path });
+  impPushPath(imp, path);
   input.value = '';
   renderImport();
 }
@@ -323,7 +365,8 @@ function impRowHtml(x) {
     name = x.path;
     ext = '▤';
     tone = 'imp-tile-path';
-    sub = t('impKindPath');
+    const f = x.folder;
+    sub = !f ? t('impKindPath') : f.count ? `${t('impKindFolder')} · ${plural(f.count, t('impItemsForms'))}` : `${t('impKindFolder')} · ${t('impFolderNone')}`;
   }
   const dur = x.kind === 'file' ? (x.dur != null ? formatTime(x.dur) : '…') : '';
   const size = x.kind === 'file' ? impFormatBytes(x.file.size) : '';
@@ -333,7 +376,18 @@ function impRowHtml(x) {
       <span class="imp-row-dur">${escapeHtml(dur)}</span>
       <span class="imp-row-size">${escapeHtml(size)}</span>
       <button ${pageCall('click', 'impRemove', [x.id])} class="imp-x" title="${escapeHtml(t('impRemove'))}">✕</button>
-    </div>`;
+    </div>${impFolderListHtml(x.folder)}`;
+}
+
+// The files of a folder under its row: the first few, then how many more
+const IMP_FOLDER_SHOWN = 6;
+function impFolderListHtml(f) {
+  if (!f || !f.files || !f.files.length) return '';
+  const rows = f.files.slice(0, IMP_FOLDER_SHOWN).map(file => `<div class="imp-sub-row">`
+    + `<span class="imp-sub-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+    + `<span class="imp-sub-size">${escapeHtml(impFormatBytes(file.size))}</span></div>`).join('');
+  const more = f.count > IMP_FOLDER_SHOWN ? `<div class="imp-sub-more">${escapeHtml(t('impFolderMore').replace('{n}', () => String(f.count - IMP_FOLDER_SHOWN)))}</div>` : '';
+  return `<div class="imp-sub-list">${rows}${more}</div>`;
 }
 
 function impFormatBytes(n) {
@@ -342,13 +396,18 @@ function impFormatBytes(n) {
   return `${Math.max(1, Math.round(n / (1 << 20)))} ${t('impMB')}`;
 }
 
+// How many recordings the list makes: a folder counts its audio and video files once the server has listed them
+function impCount(items) {
+  return items.reduce((a, x) => a + (x.folder ? x.folder.count : 1), 0);
+}
+
 // "3 файла · 2 ч 14 мин"
 function impSummaryText(items) {
   if (!items.length) return t('impNothing');
   const sec = items.reduce((a, x) => a + (x.dur || 0), 0);
   const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
   const len = !sec ? '' : !h && !m ? ` · ${t('impUnderMinute')}` : ` · ${h ? `${h} ${t('impHours')} ` : ''}${m} ${t('impMinutes')}`;
-  return plural(items.length, t('impItemsForms')) + len;
+  return plural(impCount(items), t('impItemsForms')) + len;
 }
 
 // --- How long it will take: by the length of the files and the speed of this computer ---
@@ -365,9 +424,21 @@ function impEta(items, whisper) {
   return { min, device };
 }
 
+// The mode in the window: its title and icon, the chosen segment, the fields that belong to it
+function impRenderMode(imp) {
+  const mode = IMP_TITLES[imp.mode] ? imp.mode : 'all';
+  document.querySelector('#modal-import .imp-card').dataset.mode = mode;
+  document.getElementById('imp-title').textContent = t(IMP_TITLES[mode]);
+  document.getElementById('imp-head-ic').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IMP_ICONS[mode]}</svg>`;
+  document.querySelectorAll('#imp-modes [data-imp-mode]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.impMode === mode)));
+  document.querySelectorAll('#modal-import [data-imp-modes]').forEach(el => el.toggleAttribute('data-imp-off', !el.dataset.impModes.split(' ').includes(mode)));
+  document.getElementById('imp-folder-empty').classList.toggle('hidden', imp.items.some(x => x.kind === 'path'));
+}
+
 function renderImport() {
   const imp = state.imp || (state.imp = impFresh());
   const items = imp.items;
+  impRenderMode(imp);
   document.getElementById('imp-list').innerHTML = items.map(impRowHtml).join('');
   document.getElementById('imp-empty').classList.toggle('hidden', items.length > 0);
   document.getElementById('imp-summary').textContent = impSummaryText(items);
@@ -406,7 +477,7 @@ function renderImport() {
 
   const go = document.getElementById('imp-go');
   const verb = t(imp.proc.transcribe ? 'impGo' : 'impAddOnlyGo');
-  go.textContent = items.length ? `${verb} ${plural(items.length, t('impItemsForms'))}` : verb;
+  go.textContent = impCount(items) ? `${verb} ${plural(impCount(items), t('impItemsForms'))}` : verb;
   go.disabled = !items.length;
 }
 
