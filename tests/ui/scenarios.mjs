@@ -182,6 +182,19 @@ await step('dictionary section', async () => {
   expect(await page.isVisible('#dict-view'), 'the settings entry does not lead to the section');
 });
 
+// «Люди» is a section of the rail: the people on the left, the card of the one chosen on the right in cards
+await step('people section', async () => {
+  await page.click('#rail-people');
+  await sleep(800);
+  const r = await page.evaluate(() => ({
+    view: !document.getElementById('people-view').classList.contains('hidden'),
+    rows: document.querySelectorAll('#pv-list .pv-row').length,
+    cards: document.querySelectorAll('#pv-card .pcard .pcd-ic').length,
+    on: document.getElementById('rail-people').classList.contains('rail-on'),
+  }));
+  expect(r.view && r.rows >= 3 && r.cards >= 2 && r.on, `people: ${JSON.stringify(r)}`);
+});
+
 // Ассистент: the field has a send button; an answer's sources are moments «▶ 00:24» in the text, and under it
 // each recording by its full name with its moments
 await step('assistant sources', async () => {
