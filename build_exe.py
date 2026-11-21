@@ -319,151 +319,54 @@ class VerbalioxLauncher
         }
     }
 
-    // A small "starting" window: the first start after an update can take a while (Python compiles
-    // its files, the speech libraries load), and without it nothing seems to happen.
-    // It closes when the app window appears or the app process ends (errors are shown by the app).
-    // Light-hearted lines shown while the app starts, a new one every 1.6 s
-    static readonly string[] PhrasesRu = {
-        "Завариваем чай для нейросетей\u2026",
-        "Будим Whisper, он любит поспать\u2026",
-        "Разминаем видеокарту\u2026",
-        "Расставляем запятые по местам\u2026",
-        "Ищем, кто сказал \u00ab\u044d-\u044d\u00bb\u2026",
-        "Протираем модели уши\u2026",
-        "Распушаем вербу\u2026",
-        "Учим нули и единицы слушать\u2026",
-        "Раскладываем слова по полочкам\u2026",
-        "Настраиваем чуткий слух\u2026",
-        "Считаем до десяти на 23 языках\u2026",
-        "Подметаем слова-паразиты\u2026",
-        "Прогреваем тензоры\u2026",
-        "Почти готово, честно\u2026",
-    };
-    static readonly string[] PhrasesEn = {
-        "Brewing tea for the neural nets\u2026",
-        "Waking Whisper up, it likes to sleep in\u2026",
-        "Stretching the GPU\u2026",
-        "Putting commas where they belong\u2026",
-        "Finding out who said \u201cumm\u201d\u2026",
-        "Cleaning the model's ears\u2026",
-        "Fluffing up the willow\u2026",
-        "Teaching ones and zeros to listen\u2026",
-        "Sorting words onto shelves\u2026",
-        "Tuning a keen ear\u2026",
-        "Counting to ten in 23 languages\u2026",
-        "Sweeping up filler words\u2026",
-        "Warming up the tensors\u2026",
-        "Almost there, honestly\u2026",
-    };
+    // The window shown while the app starts: the first start after an update can take a while (Python
+    // compiles its files, the speech libraries load), and without it nothing seems to happen. It closes
+    // when the app window appears or the app process ends (errors are shown by the app). It says the
+    // step in plain words, by the time gone: the app's own colours, round corners, a soft running bar.
+    static readonly string[] StepsRu = { "Запуск программы…", "Загрузка компонентов…", "Подготовка окна…" };
+    static readonly string[] StepsEn = { "Starting the app…", "Loading components…", "Preparing the window…" };
 
-    // The app's UI language, saved by the app in its data folder (default Russian)
-    // The app's data folder: VERBALIOX_DATA_DIR, else %LOCALAPPDATA%\Verbaliox (app/paths.py)
-    internal static string DataDir()
-    {
-        string data = Environment.GetEnvironmentVariable("VERBALIOX_DATA_DIR");
-        if (string.IsNullOrEmpty(data))
-            data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Verbaliox");
-        return data;
-    }
-
-    static string UiLanguage()
+    // __version__ from app\__init__.py, for the line under the name
+    static string AppVersion(string baseDir)
     {
         try
         {
-            string f = Path.Combine(DataDir(), "ui-lang.txt");
-            if (File.Exists(f)) return File.ReadAllText(f).Trim();
-        }
-        catch { }
-        // Before the first start of the app: the language of Windows
-        return System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ru" ? "ru" : "en";
-    }
-
-    // assets/icon.ico stores PNG images, which System.Drawing.Icon cannot read: take the biggest PNG
-    internal static System.Drawing.Image LoadLogo(string icoPath)
-    {
-        try
-        {
-            byte[] d = File.ReadAllBytes(icoPath);
-            int count = BitConverter.ToUInt16(d, 4);
-            int bestSize = 0, bestOff = 0, bestLen = 0;
-            for (int i = 0; i < count; i++)
+            foreach (string line in File.ReadAllLines(Path.Combine(baseDir, "app", "__init__.py")))
             {
-                int e = 6 + 16 * i;
-                int w = d[e] == 0 ? 256 : d[e];
-                int len = BitConverter.ToInt32(d, e + 8), off = BitConverter.ToInt32(d, e + 12);
-                if (w <= 128 && w > bestSize) { bestSize = w; bestOff = off; bestLen = len; }
+                string t = line.Trim();
+                if (!t.StartsWith("__version__")) continue;
+                int a = t.IndexOf('"'), b = t.LastIndexOf('"');
+                if (a >= 0 && b > a) return t.Substring(a + 1, b - a - 1);
             }
-            if (bestLen > 0)
-                return System.Drawing.Image.FromStream(new MemoryStream(d, bestOff, bestLen));
         }
         catch { }
-        return null;
+        return "";
     }
 
     static void ShowSplashUntilWindow(Process app)
     {
         Application.EnableVisualStyles();
         bool ru = UiLanguage() != "en";
-        string[] phrases = ru ? PhrasesRu : PhrasesEn;
-        Random rnd = new Random();
-
-        Form splash = new Form();
-        splash.FormBorderStyle = FormBorderStyle.None;
-        splash.StartPosition = FormStartPosition.CenterScreen;
-        splash.Size = new System.Drawing.Size(420, 132);
-        splash.BackColor = System.Drawing.Color.FromArgb(28, 28, 30);
-        splash.ShowInTaskbar = true;
-        splash.TopMost = true;  // a few seconds only: keep it visible over other windows
-        splash.Text = "Verbaliox \u2014 \u0437\u0430\u043f\u0443\u0441\u043a";  // not the app window title: FindWindow must not find the splash
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string version = AppVersion(baseDir);
+        SplashForm splash = new SplashForm(
+            LoadLogo(Path.Combine(baseDir, "assets", "icon.ico")),
+            version.Length > 0 ? (ru ? "версия " : "version ") + version : "",
+            ru ? StepsRu : StepsEn,
+            ru ? "из" : "of",
+            ru ? "Запись, расшифровка и анализ работают на этом компьютере." : "Recording, transcription and analysis run on this computer.",
+            ru ? "Первый запуск после установки занимает до нескольких минут: Windows проверяет файлы библиотек."
+               : "The first start after installation takes up to a few minutes: Windows checks the library files.");
+        splash.Text = "Verbaliox — запуск";  // not the app window title: FindWindow must not find the splash
         try { splash.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-        // The willow logo, gently bobbing
-        PictureBox logo = new PictureBox();
-        logo.SizeMode = PictureBoxSizeMode.Zoom;
-        logo.SetBounds(22, 32, 64, 64);
-        logo.Image = LoadLogo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "icon.ico"));
-
-        Label title = new Label();
-        title.Text = "Verbaliox";
-        title.ForeColor = System.Drawing.Color.White;
-        title.Font = new System.Drawing.Font("Segoe UI Semibold", 13f);
-        title.SetBounds(104, 26, 300, 28);
-        Label status = new Label();
-        status.Text = phrases[rnd.Next(phrases.Length)];
-        status.ForeColor = System.Drawing.Color.FromArgb(152, 152, 157);
-        status.Font = new System.Drawing.Font("Segoe UI", 9.5f);
-        status.SetBounds(104, 58, 300, 22);
-        // A thin track with a blue segment running along it (the system progress bar looks foreign here)
-        Panel track = new Panel();
-        track.BackColor = System.Drawing.Color.FromArgb(52, 52, 56);
-        track.SetBounds(104, 92, 290, 3);
-        Panel runner = new Panel();
-        runner.BackColor = System.Drawing.Color.FromArgb(10, 132, 255);
-        runner.SetBounds(0, 0, 80, 3);
-        track.Controls.Add(runner);
-        splash.Controls.Add(logo);
-        splash.Controls.Add(title);
-        splash.Controls.Add(status);
-        splash.Controls.Add(track);
-
         DateTime started = DateTime.Now;
-        DateTime lastPhrase = DateTime.Now;
-        int last = -1;
         Timer timer = new Timer();
-        timer.Interval = 40;
+        timer.Interval = 16;
         timer.Tick += delegate
         {
             double t = (DateTime.Now - started).TotalSeconds;
-            logo.Top = 32 + (int)Math.Round(Math.Sin(t * 2.4) * 3.0);
-            runner.Left = (int)(((t * 0.9) % 1.0) * (track.Width + runner.Width)) - runner.Width;
-            if ((DateTime.Now - lastPhrase).TotalSeconds >= 1.6)
-            {
-                int next = rnd.Next(phrases.Length);
-                if (next == last) next = (next + 1) % phrases.Length;
-                last = next;
-                status.Text = phrases[next];
-                lastPhrase = DateTime.Now;
-            }
+            splash.Tick(t);
             IntPtr hwnd = FindAppWindow();
             bool done = (hwnd != IntPtr.Zero && IsWindowVisible(hwnd)) || app.HasExited || t > 180;
             if (done)
@@ -1048,6 +951,133 @@ class SetupWindow
         }
         return p;
     }
+}
+
+// The splash, drawn by hand: a dark card with a faint blue light at the top, the logo floating gently,
+// the name and the version, the step and its number, a rounded track with a soft blue runner, a note
+// under it. Windows 11 rounds its corners (DWM); the class style gives it the system shadow.
+class SplashForm : Form
+{
+    [DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    readonly System.Drawing.Image logo;
+    readonly string version, quietNote, slowNote, ofWord;
+    readonly string[] steps;
+    double t;
+
+    static readonly System.Drawing.Color Bg = System.Drawing.Color.FromArgb(21, 23, 28);
+    static readonly System.Drawing.Color Accent = System.Drawing.Color.FromArgb(76, 127, 217);
+    static readonly System.Drawing.Color AccentHi = System.Drawing.Color.FromArgb(140, 173, 231);
+    static readonly System.Drawing.Color Fg = System.Drawing.Color.FromArgb(245, 245, 247);
+    static readonly System.Drawing.Color Fg1 = System.Drawing.Color.FromArgb(217, 218, 221);
+    static readonly System.Drawing.Color Faint = System.Drawing.Color.FromArgb(128, 132, 140);
+
+    public SplashForm(System.Drawing.Image logo, string version, string[] steps, string ofWord, string quietNote, string slowNote)
+    {
+        this.logo = logo; this.version = version; this.steps = steps; this.ofWord = ofWord; this.quietNote = quietNote; this.slowNote = slowNote;
+        FormBorderStyle = FormBorderStyle.None;
+        StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new System.Drawing.Size(460, 212);
+        BackColor = Bg;
+        ShowInTaskbar = true;
+        TopMost = true;  // a few seconds only: keep it visible over other windows
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get { CreateParams cp = base.CreateParams; cp.ClassStyle |= 0x20000; return cp; }  // CS_DROPSHADOW
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        try { int round = 2; DwmSetWindowAttribute(Handle, 33, ref round, 4); } catch { }  // DWMWA_WINDOW_CORNER_PREFERENCE: round
+    }
+
+    public void Tick(double seconds) { t = seconds; Invalidate(); }
+
+    static System.Drawing.Drawing2D.GraphicsPath Round(System.Drawing.RectangleF r, float rad)
+    {
+        System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
+        float d = rad * 2;
+        p.AddArc(r.X, r.Y, d, d, 180, 90);
+        p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        System.Drawing.Graphics g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        int w = ClientSize.Width, h = ClientSize.Height;
+
+        // a faint blue light at the top, and a hairline frame
+        using (System.Drawing.Drawing2D.LinearGradientBrush glow = new System.Drawing.Drawing2D.LinearGradientBrush(
+            new System.Drawing.Rectangle(0, 0, w, h / 2 + 1), System.Drawing.Color.FromArgb(26, Accent), System.Drawing.Color.FromArgb(0, Accent), 90f))
+            g.FillRectangle(glow, 0, 0, w, h / 2);
+        using (System.Drawing.Pen frame = new System.Drawing.Pen(System.Drawing.Color.FromArgb(20, 255, 255, 255)))
+            g.DrawRectangle(frame, 0, 0, w - 1, h - 1);
+
+        // the logo, floating by 3 px
+        float bob = (float)(Math.Sin(t * 2.0) * 3.0);
+        if (logo != null) g.DrawImage(logo, new System.Drawing.RectangleF(28, 26 + bob, 52, 52));
+
+        using (System.Drawing.Font name = new System.Drawing.Font("Segoe UI Semibold", 15.5f))
+        using (System.Drawing.Font small = new System.Drawing.Font("Segoe UI", 9f))
+        using (System.Drawing.Font step = new System.Drawing.Font("Segoe UI", 9.75f))
+        using (System.Drawing.SolidBrush fg = new System.Drawing.SolidBrush(Fg))
+        using (System.Drawing.SolidBrush fg1 = new System.Drawing.SolidBrush(Fg1))
+        using (System.Drawing.SolidBrush faint = new System.Drawing.SolidBrush(Faint))
+        {
+            g.DrawString("Verbaliox", name, fg, 94, 28);
+            if (version.Length > 0) g.DrawString(version, small, faint, 96, 58);
+
+            // the step by the time gone: 0-4 s, 4-12 s, then the last; and which of how many
+            int k = t < 4 ? 0 : t < 12 ? 1 : 2;
+            g.DrawString(steps[k], step, fg1, 26, 104);
+            string of = (k + 1) + " " + ofWord + " " + steps.Length;
+            System.Drawing.SizeF ofSize = g.MeasureString(of, step);
+            g.DrawString(of, step, faint, w - 26 - ofSize.Width + 4, 104);
+
+            // the track and a soft runner moving along it
+            System.Drawing.RectangleF track = new System.Drawing.RectangleF(28, 132, w - 56, 4);
+            using (System.Drawing.Drawing2D.GraphicsPath tp = Round(track, 2))
+            {
+                using (System.Drawing.SolidBrush tb = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(20, 255, 255, 255)))
+                    g.FillPath(tb, tp);
+                System.Drawing.Region clip = g.Clip;
+                g.SetClip(tp);
+                float runW = track.Width * 0.36f;
+                double phase = (t / 1.4) % 1.0;
+                double eased = phase < 0.5 ? 2 * phase * phase : 1 - Math.Pow(-2 * phase + 2, 2) / 2;
+                float x = track.X - runW + (float)eased * (track.Width + runW);
+                System.Drawing.RectangleF run = new System.Drawing.RectangleF(x, track.Y, runW, track.Height);
+                using (System.Drawing.Drawing2D.LinearGradientBrush rb = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    new System.Drawing.RectangleF(x - 1, track.Y, runW + 2, track.Height), System.Drawing.Color.Transparent, System.Drawing.Color.Transparent, 0f))
+                {
+                    System.Drawing.Drawing2D.ColorBlend cb = new System.Drawing.Drawing2D.ColorBlend();
+                    cb.Colors = new System.Drawing.Color[] { System.Drawing.Color.FromArgb(0, Accent), Accent, AccentHi, System.Drawing.Color.FromArgb(0, AccentHi) };
+                    cb.Positions = new float[] { 0f, 0.3f, 0.7f, 1f };
+                    rb.InterpolationColors = cb;
+                    g.FillRectangle(rb, run);
+                }
+                g.Clip = clip;
+            }
+
+            // a note under it; after 25 s it says why the first start is slow
+            string note = t > 25 ? slowNote : quietNote;
+            g.DrawString(note, small, faint, new System.Drawing.RectangleF(26, 150, w - 52, 44));
+        }
+    }
+
 }
 """
 
