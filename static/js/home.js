@@ -8,7 +8,7 @@
 const HM_PX = 44;  // pixels of an hour on the timeline
 const HM_PRESETS = [[9, 18, 'hmPreset918'], [8, 20, 'hmPreset820'], [20, 8, 'hmPresetNight'], [0, 0, 'hmPresetDay']];
 
-const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, calConfigured: true, tasks: [], tasksAt: 0, asked: new Set(), started: new Set(), warned: new Set() };
+const home = { recent: [], recentAt: 0, events: [], eventsAt: 0, days: {}, calConfigured: true, tasks: [], tasksAt: 0, asked: new Set(), started: new Set(), warned: new Set() };
 
 function hmSettings() { return (state.system && state.system.settings) || {}; }
 function hmNum(key, def) { const n = Number(hmSettings()[key]); return Number.isFinite(n) && hmSettings()[key] !== '' && hmSettings()[key] != null ? n : def; }
@@ -40,7 +40,9 @@ async function hmSave(values) {
 }
 
 // --- The working day: start and end hours; an end not after the start runs past midnight ---
-function hmDay() {
+// date: the working day of that date (the day view of «Сегодня» opened on another day); without it, or when it is
+// the date the working day going on began, the working day of now
+function hmDay(date) {
   const start = hmNum('work_day_start', 9), end = hmNum('work_day_end', 18);
   const len = end > start ? end - start : end + 24 - start;  // 0 → 24: the whole day
   const now = new Date();
@@ -51,8 +53,15 @@ function hmDay() {
     prev.setDate(prev.getDate() - 1);
     if (now.getTime() < prev.getTime() + len * 3600e3) from.setTime(prev.getTime());
   }
+  if (date && calKey(date) !== calKey(from)) from.setTime(new Date(date.getFullYear(), date.getMonth(), date.getDate(), start).getTime());
   const to = new Date(from.getTime() + len * 3600e3);
   return { start, end, len, from, to, fit: hmOn('work_day_fit', true) };
+}
+
+// The date the day view of «Сегодня» shows when it is not today (TD.cal.anchor, static/js/today.js), or null
+function hmViewDate() {
+  const a = typeof TD !== 'undefined' && typeof tdSpan === 'function' && tdSpan() === 'day' ? TD.cal.anchor : null;
+  return a && calKey(a) !== calKey(hmDay().from) ? a : null;
 }
 
 function hmIso(d) {
@@ -64,25 +73,43 @@ async function hmLoad(force) {
   // the latest recordings live in «Записи», the tasks in the cards of «Сегодня» (static/js/today.js)
   const jobs = [];
   jobs.push(hmLoadEvents(force));
+  const view = hmViewDate();  // another day shown: its meetings too (today's stay loaded: they are recorded by themselves)
+  if (view) jobs.push(hmLoadEvents(force, view));
   await Promise.all(jobs);
 }
 
-let hmEventsLoading = null;  // one request at a time; a failed one is tried again at the next tick
-async function hmLoadEvents(force) {
-  if (!force && Date.now() - home.eventsAt < 300000) return;
-  if (hmEventsLoading) return hmEventsLoading;
-  hmEventsLoading = (async () => {
-    const d = hmDay();
+// The meetings of a working day (date: that of another day; none: today's, kept in home.events for the recording by
+// themselves, the dashboard and the pills). Kept by the date of the working day (home.days) for five minutes; another
+// day also brings its recordings outside any meeting and its hours worked
+const hmEventsLoading = {};  // one request at a time for a day; a failed one is tried again at the next tick
+async function hmLoadEvents(force, date) {
+  const d = hmDay(date), key = calKey(d.from), today = key === calKey(hmDay().from);
+  const at = today ? home.eventsAt : (home.days[key] || {}).at || 0;
+  if (!force && Date.now() - at < 300000) return;
+  if (hmEventsLoading[key]) return hmEventsLoading[key];
+  hmEventsLoading[key] = (async () => {
     // three hours on each side: meetings a little past the edges stretch the day ("fit")
     const a = new Date(d.from.getTime() - 3 * 3600e3), b = new Date(d.to.getTime() + 3 * 3600e3);
-    const data = await fetch(`/api/calendar/day?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
-      .then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const next = calAddDays(calDayStart(d.from), 1);
+    const [data, work] = await Promise.all([
+      fetch(`/api/calendar/day?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}`)
+        .then(r => (r.ok ? r.json() : null)).catch(() => null),
+      today ? null : fetch(`/api/worktime?start=${key}&end=${calKey(next)}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+    ]);
     if (!data) return;
-    home.eventsAt = Date.now();
+    const events = (data.events || []).map(e => ({ ...e, s: new Date(e.start), e: new Date(e.end) }));
     home.calConfigured = !!data.configured;
-    home.events = (data.events || []).map(e => ({ ...e, s: new Date(e.start), e: new Date(e.end) }));
-  })().finally(() => { hmEventsLoading = null; });
-  return hmEventsLoading;
+    const worked = work && work.enabled && work.days[key] ? work.days[key].worked || 0 : 0;
+    home.days[key] = { at: Date.now(), events, recordings: data.recordings || [], worked };
+    for (const k of Object.keys(home.days).sort().slice(0, -30)) delete home.days[k];  // a few weeks of days at most
+    if (today) { home.eventsAt = Date.now(); home.events = events; }
+  })().finally(() => { delete hmEventsLoading[key]; });
+  return hmEventsLoading[key];
+}
+
+// A meeting by its key: of today, or of another day shown
+function hmEvent(key) {
+  return home.events.find(e => e.key === key) || Object.values(home.days).flatMap(x => x.events).find(e => e.key === key);
 }
 
 // The day of the home page is drawn on «Дэшборд» (its blocks are there: static/js/dashboard.js)
@@ -165,7 +192,13 @@ function hmMeetingState(ev) {
 }
 
 function renderHomeMeetings() {
-  const d = hmDay();
+  // another day opened from the calendar (hmViewDate): its working day, its meetings, its recordings
+  const view = hmViewDate();
+  const d = hmDay(view || undefined), other = view ? home.days[calKey(d.from)] : null;
+  const events = view ? (other ? other.events : []) : home.events;
+  const pastDay = !!view && d.to.getTime() <= Date.now();
+  const mtTitle = document.getElementById('hm-mt-title');
+  if (mtTitle) mtTitle.textContent = view ? t('hmMeetingsOn').replace('{date}', () => d.from.toLocaleDateString(hmLocale(), { day: 'numeric', month: 'long' })) : t('hmMeetings');
   document.getElementById('hm-day-range').textContent = d.len === 24 ? t('hmAllDay') : `${hmPad(d.start)}–${hmPad(d.end)}`;
   document.getElementById('hm-cal-off').classList.toggle('hidden', home.calConfigured);
   document.getElementById('hm-cal-on').classList.toggle('hidden', !home.calConfigured);
@@ -174,13 +207,18 @@ function renderHomeMeetings() {
   const now = new Date();
   // the shown hours: the day, stretched for meetings that run a little past its edges
   let a = d.from.getTime(), b = d.to.getTime();
-  const inDay = home.events.filter(e => e.e.getTime() > a - (d.fit ? 3 * 3600e3 : 0) && e.s.getTime() < b + (d.fit ? 3 * 3600e3 : 0));
+  const inDay = events.filter(e => e.e.getTime() > a - (d.fit ? 3 * 3600e3 : 0) && e.s.getTime() < b + (d.fit ? 3 * 3600e3 : 0));
   const shown = inDay.filter(e => d.fit || (e.e.getTime() > a && e.s.getTime() < b));
   // the working day chosen stays the view: a meeting a little past its edges stretches it by two hours at
   // most, and an all-day or long event (a reminder, a day off) does not (one from 00:00 showed the night)
   const reach = 2 * 3600e3;
+  // a day gone by: the recordings made outside its meetings stand on its timeline too, a click opens one
+  const recs = view && other ? (other.recordings || []).map(r => {
+    const s0 = new Date(r.at);
+    return { rec: r, key: `rec|${r.id}`, title: r.title, s: s0, e: new Date(s0.getTime() + Math.max(15 * 60, r.duration || 0) * 1000) };
+  }) : [];
   if (d.fit) {
-    for (const e of shown) {
+    for (const e of [...shown, ...recs]) {
       if (e.all_day || e.e.getTime() - e.s.getTime() >= 6 * 3600e3) continue;
       a = Math.max(d.from.getTime() - reach, Math.min(a, Math.floor(e.s.getTime() / 3600e3) * 3600e3));
       b = Math.min(d.to.getTime() + reach, Math.max(b, Math.ceil(e.e.getTime() / 3600e3) * 3600e3));
@@ -191,8 +229,10 @@ function renderHomeMeetings() {
   const count = document.getElementById('hm-mt-count');
   count.textContent = String(real.length);
   count.classList.toggle('hidden', !real.length || !home.calConfigured);
+  meetings.push(...recs.filter(e => e.e.getTime() > a && e.s.getTime() < b));
 
-  // the switch "record every meeting" and what it means today
+  // the switch "record every meeting" and what it means today (it is about the meetings ahead: not on a day gone by)
+  document.getElementById('hm-auto').classList.toggle('hidden', pastDay);
   const all = hmOn('meet_auto_all', false);
   const sw = document.getElementById('hm-auto-sw');
   sw.setAttribute('aria-checked', String(all));
@@ -244,6 +284,15 @@ function renderHomeMeetings() {
     const narrow = cols > 1;
     const place = narrow ? `left: calc(46px + (100% - 46px) * ${col} / ${cols}); right: auto; width: calc((100% - 46px) / ${cols} - 3px);` : '';
     const lines = Math.max(1, Math.floor((hpx - (narrow && hpx < 40 ? 6 : 23)) / 17));  // the title wraps as far as the height lets it
+    if (e.rec) {  // a recording of a day gone by, made outside any meeting: the whole card opens it
+      const r = e.rec, at = `${hmPad(e.s.getHours())}:${hmPad(e.s.getMinutes())}`;
+      const label = DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : t('hmProcessing').replace('{pct}', () => r.progress || 0);
+      html.push(`<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-mt hm-mt-k-recording${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}" title="${escapeHtml(`${at} · ${e.title || t('hmUntitled')}\n${t('hmRecOutside')}`)}">
+          <span class="flex-1 min-w-0 flex flex-col gap-px text-left"><span class="hm-mt-title">${escapeHtml(e.title || t('hmUntitled'))}</span>
+          ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(at)}</span> · ${escapeHtml(t('hmRecOutside'))}</span>` : ''}</span>
+          <span class="hm-mt-link">${escapeHtml(label)}</span>${narrow ? '' : '<span class="hm-mt-more hm-mt-slot" aria-hidden="true"></span>'}</button>`);
+      continue;
+    }
     // How much it overlaps the others (asked by the user: side by side, it was not clear): the time they
     // share is hatched in the card, and its tooltip says with which meeting and for how long
     const clock = ms => { const d = new Date(ms); return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}`; };
@@ -302,18 +351,18 @@ function renderHomeMeetings() {
         </span>${join}${narrow ? '' : brief}${action}${narrow ? '' : `<button ${pageCall('click', 'hmMeetingMenu', [e.key, { $: 'el' }])} class="hm-mt-more" title="${escapeHtml(t('hmMeetingMenuTip'))}" aria-label="${escapeHtml(t('hmMeetingMenuTip'))}">⋯</button>`}
       </div>`);
   }
-  if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t('hmNoMeetings'))}</div>`);
+  if (!meetings.length) html.push(`<div class="hm-mt-empty">${escapeHtml(t(view && !other ? 'dbLoading' : 'hmNoMeetings'))}</div>`);
   // how much of the working day is over: the shaded part says it, the figure is in the hint of the time (a caption
   // on the line itself crossed it — reported by the user)
   const gone = workGone && nowMs < d.to.getTime() ? ` title="${escapeHtml(t('hmDayGone').replace('{t}', () => dbHm(workGone / 1000)))}"` : '';
-  if (nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t"${gone}>${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
+  if (!view && nowMs >= a && nowMs <= b) html.push(`<div class="hm-now" style="top: ${top(nowMs)}px"><b class="hm-now-t"${gone}>${hmPad(now.getHours())}:${hmPad(now.getMinutes())}</b></div>`);
   box.innerHTML = html.join('');
   return real;  // the header counts the meetings, not the blocks and the events that are none
 }
 
 // «⋯» on a meeting of the day: no meeting (this one or its whole series), or a meeting again
 async function hmSetIgnored(key, scope) {
-  const ev = home.events.find(e => e.key === key);
+  const ev = hmEvent(key);
   if (!ev) return;
   const id = hmSeries(ev);
   const list = hmIgnoreList().filter(x => !(x.key === ev.key || (!x.key && x.id === id)));
@@ -325,7 +374,7 @@ async function hmSetIgnored(key, scope) {
 }
 
 function hmMeetingMenu(key, el) {
-  const ev = home.events.find(e => e.key === key);
+  const ev = hmEvent(key);
   if (!ev) return;
   const r = el.getBoundingClientRect();
   const items = hmIsIgnored(ev)
@@ -346,7 +395,7 @@ async function hmRecordNow(key) {
 }
 
 async function hmToggleMeeting(key) {
-  const ev = home.events.find(e => e.key === key);
+  const ev = hmEvent(key);
   if (!ev) return;
   const ov = hmOverrides();
   const st = hmMeetingState(ev);
@@ -410,7 +459,8 @@ async function hmPickPreset(start, end) { await hmApplyDay(start, end); }
 async function hmApplyDay(start, end) {
   if (!await hmSave({ work_day_start: String(start), work_day_end: String(end) })) return;
   home.eventsAt = 0;
-  await hmLoadEvents(true);
+  home.days = {};  // the other days have other hours now
+  await hmLoad(true);
   renderHomeDayPop();
   renderHomeNow();
 }
@@ -966,10 +1016,13 @@ function calBodyHtml(cv) {
   // a day off (a weekend, a holiday or one's own) is hatched; a working day gone by is a step dimmer
   const dayKind = d => ((d.getDay() + 6) % 7 >= 5 || hols[calKey(d)] ? ' cal-offday' : calKey(d) < today ? ' cal-pastday' : '');
   const holTag = d => hols[calKey(d)] ? `<span class="cal-hol" title="${escapeHtml(hols[calKey(d)])}">${escapeHtml(hols[calKey(d)])}</span>` : '';
+  // cv.dayTip («Сегодня»): a click on a day (not on what it holds) opens that day; the window opens its week
+  const dayTip = t(cv.dayTip || 'calOpenWeek');
+  const open = cv.dayTip ? ` cal-open" title="${escapeHtml(dayTip)}` : '';
   if (cv.mode === 'week') {
     body = `<div class="cal-week">${days.map(d => {
       const list = items[calKey(d)] || [];
-      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}${dayKind(d)}" data-daykey="${calKey(d)}">
+      return `<div class="cal-col${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}${dayKind(d)}${open}" data-daykey="${calKey(d)}">
         <div class="cal-col-head"><span>${escapeHtml(weekday(d))}</span><b>${d.getDate()}</b>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
         <div class="cal-col-list">${list.length ? list.map(it => calItemHtml(it, false)).join('') : `<span class="cal-none">—</span>`}</div></div>`;
     }).join('')}</div>`;
@@ -978,10 +1031,10 @@ function calBodyHtml(cv) {
     body = `<div class="cal-month">${heads}${days.map(d => {
       const list = items[calKey(d)] || [];
       const more = list.length - 3;
-      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}${dayKind(d)}" data-daykey="${calKey(d)}">
-        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(t('calOpenWeek'))}">${d.getDate()}</button>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
+      return `<div class="cal-cell${d.getMonth() !== month ? ' cal-out' : ''}${calKey(d) === today ? ' cal-today' : ''}${hols[calKey(d)] ? ' cal-holday' : ''}${dayKind(d)}${open}" data-daykey="${calKey(d)}">
+        <div class="cal-cell-head"><button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-num" title="${escapeHtml(dayTip)}">${d.getDate()}</button>${wkTag(d)}${dayBtn(d)}</div>${holTag(d)}
         ${list.slice(0, 3).map(it => calItemHtml(it, true)).join('')}
-        ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
+        ${more > 0 ? `<button data-cal="day" data-day="${calKey(d)}T12:00" class="cal-more" title="${escapeHtml(dayTip)}">${escapeHtml(t('calMore').replace('{n}', () => more))}</button>` : ''}</div>`;
     }).join('')}</div>`;
   }
   return body;

@@ -4835,3 +4835,12 @@ button.sc-at:hover { color: var(--accent-text); }
 .dc-offer-rec { grid-column: 1 / -1; grid-row: 2; }
 @media (max-width: 1180px) { .dc-row { grid-template-columns: minmax(100px, 1fr) minmax(0, 1.3fr) minmax(70px, 0.7fr) 96px 40px 64px; } }
 .dc-vars { flex-wrap: nowrap; overflow: hidden; } .dc-var { flex: none; white-space: nowrap; }
+/* --- «Сегодня»: a day of the week or the month opens in «День» (static/js/today.js tdOpenDay); a day gone by shows the
+   recordings made outside its meetings on its timeline (static/js/home.js renderHomeMeetings) --- */
+.hm-auto.hidden { display: none; }
+.td-cal .cal-open { cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.td-cal .cal-open:hover { border-color: rgb(var(--accent-rgb) / 0.55); box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.25); }
+.td-cal .cal-open div.cal-item { cursor: default; }
+.hm-mt.hm-mt-k-recording { --hm-tint: rgb(var(--accent-rgb) / 0.07); border-left: 3px dashed rgb(var(--accent-rgb) / 0.8); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.hm-mt.hm-mt-k-recording:hover { --hm-tint: rgb(var(--accent-rgb) / 0.15); }
+.hm-mt-slot { visibility: hidden; }  /* the place of «⋯»: the link of a recording stands where a meeting's does */

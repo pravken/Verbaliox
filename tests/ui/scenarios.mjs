@@ -603,6 +603,61 @@ await step('today calendar', async () => {
   expect(await page.evaluate(() => state.appView) === 'home', 'Ctrl+1 did not open «Сегодня»');
 });
 
+// «Сегодня»: a day of the week opens in «День» with its date and its meetings; ‹ steps back a day, «Сегодня» returns
+// (asked by the user). The calendar of tests/ui/seed.py has a meeting every day around today
+await step('today open a day', async () => {
+  await page.evaluate(async () => {
+    await hmSave({ calendar_ics: `${state.system.paths.data}/demo-calendar.ics`, work_day_start: '9', work_day_end: '18' });
+    home.eventsAt = 0; home.days = {};
+    TD.cal.anchor = null; dbSave({ span: 'day' }); switchAppView('home');
+  });
+  await sleep(600);
+  await page.click('#td-spans button >> nth=1');
+  await page.waitForSelector('#td-cal .cal-week .cal-col.cal-open');
+  // a day of this week other than today, by a click on an empty part of its column
+  const key = await page.evaluate(() => [...document.querySelectorAll('#td-cal .cal-col')].map(c => c.dataset.daykey).find(k => k !== calKey(new Date())));
+  const col = page.locator(`#td-cal .cal-col[data-daykey="${key}"]`);
+  expect(await col.getAttribute('title') === await page.evaluate(() => t('calOpenDay')), 'the day has no «Открыть день» hint');
+  expect(await col.evaluate(el => getComputedStyle(el).cursor) === 'pointer', 'no hand over the day');
+  const box = await col.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
+  await sleep(900);
+  expect(await page.isVisible('#td-day') && !(await page.isVisible('#td-cal')), 'the click on a day did not open «День»');
+  const shown = await page.evaluate(() => ({ title: document.getElementById('td-title').textContent, card: document.getElementById('hm-mt-title').textContent,
+    view: hmViewDate() && calKey(hmViewDate()), meetings: [...document.querySelectorAll('#hm-timeline .hm-mt')].map(x => x.textContent),
+    now: !!document.querySelector('#hm-timeline .hm-now'), nav: !document.getElementById('td-nav').classList.contains('hidden') }));
+  const date = await page.evaluate(k => new Date(`${k}T12:00`).toLocaleDateString(hmLocale(), { day: 'numeric', month: 'long' }), key);
+  expect(shown.view === key, `«День» shows ${shown.view}, not ${key}`);
+  expect(shown.title.includes(date) && shown.card.includes(date), `the head or the card does not name the day: ${shown.title} / ${shown.card}`);
+  expect(shown.meetings.some(x => x.includes('Ежедневная встреча')), `the meetings of the day are missing: ${shown.meetings}`);
+  expect(!shown.now && shown.nav, 'the line of now on another day, or no ‹ Сегодня ›');
+  // ‹: the day before
+  await page.click('#td-nav button >> nth=0');
+  await sleep(900);
+  const prev = await page.evaluate(k => { const d = new Date(`${k}T12:00`); d.setDate(d.getDate() - 1); return calKey(d); }, key);
+  const back = await page.evaluate(() => hmViewDate() ? calKey(hmViewDate()) : calKey(hmDay().from));
+  expect(back === prev, `‹ went to ${back}, not ${prev}`);
+  // Неделя keeps the day: the week of the day shown
+  await page.click('#td-spans button >> nth=1');
+  await sleep(700);
+  expect(await page.locator(`#td-cal .cal-col[data-daykey="${prev}"]`).count() === 1, 'the week is not the one of the day shown');
+  await page.click('#td-spans button >> nth=0');
+  await sleep(500);
+  // «Сегодня»: today again, its line of now (the working day of the whole day, whatever the time)
+  await page.evaluate(() => hmSave({ work_day_start: '0', work_day_end: '0' }));
+  await page.click('#td-nav button >> nth=1');
+  await sleep(900);
+  const today = await page.evaluate(() => ({ view: hmViewDate(), title: document.getElementById('td-title').textContent, card: document.getElementById('hm-mt-title').textContent,
+    now: !!document.querySelector('#hm-timeline .hm-now') }));
+  expect(!today.view && today.title === await page.evaluate(() => t('tdToday')) && today.card === await page.evaluate(() => t('hmMeetings')), `«Сегодня» did not return: ${JSON.stringify(today)}`);
+  expect(today.now, 'no line of now on today');
+  await page.evaluate(async () => {
+    await hmSave({ calendar_ics: '', work_day_start: '9', work_day_end: '18' });
+    home.eventsAt = 0; home.days = {}; home.events = [];
+    await hmLoad(true);
+  });
+});
+
 // The calendar window of a week or a month opens and closes with Esc
 await step('calendar view', async () => {
   await page.evaluate(() => switchAppView('home'));
