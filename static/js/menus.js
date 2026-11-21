@@ -602,6 +602,7 @@ async function ctxDeleteRecording() {
     state.activeMeeting = null;
     document.getElementById('workspace-content').classList.add('hidden');
     document.getElementById('workspace-empty').classList.remove('hidden');
+    leaveDeletedRecording();
   }
   await loadMeetingsList();
   showToast(t('uiRecordingDeleted'), null, 'success');
