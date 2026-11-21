@@ -2818,57 +2818,15 @@ document.addEventListener('change', (e) => {
 });
 
 // --- Dictionary ---
-// Audit 7.5: the dictionary has one place, its section of Settings. The sidebar button shows that very
-// section in a window of its own (asked by the user: the button opened the whole settings): it is moved
-// into the window while it is open and put back after, so there is one dictionary and one set of handlers
+// The dictionary is a section of its own at the bottom of the rail (static/js/dictionary.js); the settings
+// keep a card leading there. Its two switches are settings (dictionary_fuzzy, feature_suggest), loaded and
+// saved with the others, and saved at once when changed in the section
 const DICT_SWITCHES = { 'set-dict-fuzzy': 'dictionary_fuzzy', 'set-feature-suggest': 'feature_suggest' };
 
-async function openDictionary() {
-  if (document.getElementById('dict-dlg')) return;
-  mountSettingsPage();
-  const section = document.querySelector('#modal-settings [data-stab="dictionary"]');
-  if (!section) { openModal('settings', 'dictionary'); return; }
-  const home = { parent: section.parentElement, next: section.nextSibling, cls: section.className };
-  const wrap = document.createElement('div');
-  wrap.id = 'dict-dlg';
-  wrap.className = 'fixed inset-0 modal-backdrop z-[60] flex items-center justify-center p-4';
-  wrap.setAttribute('role', 'dialog');
-  wrap.setAttribute('aria-modal', 'true');
-  wrap.setAttribute('aria-label', t('dictionary'));
-  wrap.innerHTML = `<div class="an-dlg dict-dlg modal-card">
-      <div class="an-dlg-head"><h2>${escapeHtml(t('dictionary'))}</h2><button data-a="close" class="an-dlg-x" aria-label="${escapeHtml(t('close'))}">✕</button></div>
-      <div class="dict-dlg-body"></div></div>`;
-  section.classList.remove('hidden');
-  section.querySelector('.sx-section-head')?.classList.add('hidden');  // the window has its own title
-  wrap.querySelector('.dict-dlg-body').appendChild(section);
-  document.body.appendChild(wrap);
-  const close = () => {
-    section.querySelector('.sx-section-head')?.classList.remove('hidden');
-    section.className = home.cls;
-    home.parent.insertBefore(section, home.next);
-    wrap.remove();
-  };
-  wrap.addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (e.target === wrap || (b && b.dataset.a === 'close')) close();
-  });
-  wrap.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.target.closest('input, textarea')) { e.stopPropagation(); close(); } });
-  // its two switches are settings: saved here, as the settings page would (it saves only what is inside it)
-  wrap.addEventListener('change', async e => {
-    const key = DICT_SWITCHES[e.target.id];
-    if (!key) return;
-    const value = String(!!e.target.checked);
-    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => null);
-    if (!res || !res.ok) { showError(t('errorGeneric')); return; }
-    if (state.system && state.system.settings) state.system.settings[key] = value;
-    if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
-  });
-  await loadDictionary();
-  renderSettingsDictionary();
-  if (typeof renderDictFeatures === 'function') renderDictFeatures();
-  setTimeout(() => document.getElementById('settings-dict-term')?.focus(), 60);
+function openDictionary() {
+  switchAppView('dict');
 }
+
 async function loadDictionary() {
   const res = await fetch('/api/dictionary');
   const terms = await readJson(res);
@@ -2878,6 +2836,7 @@ async function loadDictionary() {
   if (dictN) dictN.textContent = state.dictionary.filter(d => d.active).length;
   document.getElementById('settings-dict-clear')?.classList.toggle('hidden', state.dictionary.length === 0);
   renderSettingsDictionary();
+  if (typeof renderDictPage === 'function') renderDictPage();
 }
 
 // Audit 6.1: cleared at once; «Отменить» adds the same words back, switched off ones stay off
@@ -3110,7 +3069,6 @@ const SETTINGS_RESET = {
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check'], ['set-dictation-translate-cloud', 'dictation_translate_cloud', 'check']],
-  dictionary: [['set-dict-fuzzy', 'dictionary_fuzzy', 'check'], ['set-feature-suggest', 'feature_suggest', 'check']],
   export: [['set-file-name-template', 'file_name_template', 'value'], ['set-date-folders', 'date_folders', 'value']],
   privacy: [['set-delete-media-after', 'delete_media_after', 'check'], ['set-media-retention', 'media_retention_days', 'value']],
   updates: [['set-update-check', 'update_check', 'check'], ['set-update-auto', 'update_auto', 'check'], ['set-update-beta', 'update_beta', 'check']],

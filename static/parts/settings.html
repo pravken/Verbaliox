@@ -819,54 +819,13 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavDictionary">Словарь</h3>
             <p class="sx-section-desc" data-i18n="rdSasDescDictionary">Как правильно пишутся слова и названия: распознанный текст исправляется по словарю.</p>
           </div>
-        <!-- The dictionary of names and terms (the same list as the window «Словарь») -->
-        <div class="settings-card">
+        <!-- The dictionary is a section of its own (the rail, static/js/dictionary.js): this card leads there -->
+        <div class="settings-card flex items-center justify-between gap-3">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="rdSasDictTitle">Слова и названия</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="rdSasDictDesc">Имена, термины и названия, которые нужно писать правильно. Whisper получает их как подсказку при распознавании; для всех моделей (и в субтитрах, и в диктовке) после распознавания слово заменяется по вариантам и по похожему звучанию. Модели анализа и перевода тоже получают этот список: пишут слова так же и не переводят их. Уже расшифрованные записи не меняются.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="dcMovedText">Слова, группы, исправление по звучанию и фичи — в разделе «Словарь» на полосе слева.</p>
           </div>
-          <div class="sx-fields-row flex items-center gap-2">
-            <input id="settings-dict-term" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]' data-input="checkSettingsDictTerm"
-              data-i18n-placeholder="rdSasDictTermPh" placeholder="Слово или фраза" data-i18n-title="rdSasDictTermPh" title="Слово или фраза"
-              class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-            <input id="settings-dict-variants" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
-              data-i18n-placeholder="dictVariantsPh" placeholder="Как может распознаться: клод, klot" data-i18n-title="dictVariantsTip" title="Через запятую — как модель может услышать это слово. Такие слова заменяются словом из словаря при любой модели"
-              class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-            <input id="settings-dict-cat" type="text" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
-              data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа" data-i18n-title="rdSasDictCatPh" title="Группа"
-              class="w-36 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-            <button id="settings-dict-add" data-click="addSettingsDictItem" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px]" data-i18n="rdSasDictAdd">Добавить</button>
-          </div>
-          <div id="settings-dict-dup" class="dict-dup hidden" role="status" data-i18n="rdSasDictDup">Это слово уже есть в словаре</div>
-          <div id="settings-dict-list" class="rounded-lg border apple-border divide-y divide-white/5 max-h-[420px] overflow-y-auto"></div>
-          <div class="flex items-center justify-between gap-2">
-            <div id="settings-dict-count" class="text-[11.5px] text-apple-tertiary"></div>
-            <button id="settings-dict-clear" data-click="clearDictionary" class="hidden ui-btn ui-btn-subtle h-7 px-3 text-[11.5px] hover:text-apple-red" data-i18n="cfDeleteWords">Удалить все слова</button>
-          </div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="dictFuzzyToggle">Исправлять похожие по звучанию слова</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="dictFuzzyHint">После распознавания слово, которое звучит как слово из словаря, заменяется им: «klot» и «клод» станут «Claude», «в кубернетисе» — «в Kubernetes». Короткие слова (до 4 звуков) исправляются только по вариантам.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-dict-fuzzy" checked />
-          </label>
-        </div>
-        <!-- What each feature is (static/js/features.js): every field has a use, none is required -->
-        <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="ftDictTitle">Фичи</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="ftDictDesc">Что это за фичи и как о них говорят.</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <input id="ft-dict-new" type="text" maxlength="60" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addDictFeature"]'
-              data-i18n-placeholder="ftNewPh" placeholder="Новая фича…" data-i18n-title="ftNewPh" title="Новая фича…"
-              class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-            <button data-click="addDictFeature" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px]" data-i18n="ftCreate">Создать</button>
-          </div>
-          <div id="ft-dict-list" class="space-y-2"></div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="ftSuggestToggle">Предлагать фичу новой записи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="ftSuggestHint">По названию встречи, а если в нём фичи нет — моделью анализа. Предложение появляется у названия записи с ✓ / ✕; без подтверждения фича не ставится.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-feature-suggest" checked />
-          </label>
+          <button data-click="openDictionary" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px] shrink-0" data-i18n="dcOpen">Открыть словарь</button>
         </div>
         </div>
         <div data-stab="analysis" class="sx-section space-y-3 hidden">

@@ -149,6 +149,31 @@ await step('task calendar', async () => {
   expect(cols.length && cols.every(Boolean), `the column names are off their columns: ${cols}`);
 });
 
+// «Словарь» is a section of the rail: a word added with its variants and group shows in its group with the
+// number of recordings that hold it; the old entry in the settings leads here
+await step('dictionary section', async () => {
+  await page.click('#rail-dict');
+  await sleep(600);
+  expect(await page.isVisible('#dict-view') && await page.evaluate(() => document.getElementById('rail-dict').classList.contains('rail-on')), 'the section did not open');
+  await page.fill('#settings-dict-term', 'Пиксель-Студио');
+  await page.fill('#settings-dict-variants', 'пиксель студия');
+  await page.fill('#settings-dict-cat', 'Компании');
+  await page.click('#settings-dict-add');
+  await sleep(600);
+  const r = await page.evaluate(() => ({
+    row: [...document.querySelectorAll('#dc-words .dc-row:not(.dc-thead)')].some(x => x.textContent.includes('Пиксель-Студио') && x.textContent.includes('пиксель студия')),
+    group: [...document.querySelectorAll('#dc-words .dc-filters button')].some(b => b.textContent.includes('Компании')),
+    used: document.querySelectorAll('#dc-words .dc-row:not(.dc-thead) .dc-used').length > 0,
+  }));
+  expect(r.row && r.group && r.used, `the word is not in its group: ${JSON.stringify(r)}`);
+  await page.evaluate(() => { const d = state.dictionary.find(x => x.term === 'Пиксель-Студио'); return deleteDictItem(d.id); });
+  await page.evaluate(() => { openModal('settings', 'dictionary'); });
+  await sleep(500);
+  await page.click('#modal-settings [data-stab="dictionary"] button[data-click="openDictionary"]');
+  await sleep(500);
+  expect(await page.isVisible('#dict-view'), 'the settings entry does not lead to the section');
+});
+
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
 await step('dialog keeps a selection', async () => {
   await page.evaluate(() => { askText('Название', 'текст'); });
