@@ -689,8 +689,18 @@ const TOAST_ICONS = {
 function showToast(msg, action, kind) {
   kind = TOAST_LIFE[kind] !== undefined ? kind : (action ? 'success' : 'status');
   const stack = document.getElementById('toast');
+  // a notice that is replaced leaves its place at once and fades where it was, so the new one takes the place
+  // (asked by the user: the new one showed under the old for a moment and then jumped up)
+  const leaveInPlace = (old) => {
+    const r = old.getBoundingClientRect();
+    Object.assign(old.style, { position: 'absolute', width: `${r.width}px`, pointerEvents: 'none', margin: '0' });
+    // the stack is centred on its own width, which changes when the notice leaves the flow: placed after that
+    const box = stack.getBoundingClientRect();
+    Object.assign(old.style, { top: `${r.top - box.top}px`, left: `${r.left - box.left}px` });
+    removeWithExit(old);
+  };
   if (kind === 'status' || kind === 'success') {
-    stack.querySelectorAll('.toast-status:not(.toast-progress), .toast-success').forEach(old => { if (!old.classList.contains('is-leaving')) removeWithExit(old); });
+    stack.querySelectorAll('.toast-status:not(.toast-progress), .toast-success').forEach(old => { if (!old.classList.contains('is-leaving')) leaveInPlace(old); });
   }
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
@@ -729,7 +739,7 @@ function showToast(msg, action, kind) {
   el.appendChild(line);
   stack.appendChild(el);
   const live = [...stack.children].filter(c => !c.classList.contains('is-leaving'));
-  live.slice(0, Math.max(0, live.length - 3)).forEach(c => removeWithExit(c));
+  live.slice(0, Math.max(0, live.length - 3)).forEach(leaveInPlace);
   arm(life);
   return dismiss;
 }
