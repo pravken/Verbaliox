@@ -112,6 +112,17 @@ class HomeApiTest(unittest.TestCase):
         self.addCleanup(c.__exit__, None, None, None)
         return c
 
+    def test_pick_folder_of_the_import_menu(self):
+        """«Папка…»: the Windows folder picker gives the folder's path; elsewhere the page is told to ask for it."""
+        c = self._client()
+        with mock.patch("sys.platform", "linux"):
+            self.assertEqual(c.post("/api/import/pick-folder").json(), {"available": False, "path": ""})
+        with mock.patch("sys.platform", "win32"), mock.patch("app.native_dialog.run", return_value="C:\\Calls\n") as run:
+            self.assertEqual(c.post("/api/import/pick-folder").json(), {"available": True, "path": "C:\\Calls"})
+        self.assertEqual(run.call_args.args[0][:2], ["--mode", "folder"])
+        with mock.patch("sys.platform", "win32"), mock.patch("app.native_dialog.run", return_value=None):
+            self.assertEqual(c.post("/api/import/pick-folder").json()["path"], "")
+
     def test_upload_keeps_the_processing_of_the_import_window(self):
         c = self._client()
         proc = {"denoise": False, "vad": True, "summary": False}

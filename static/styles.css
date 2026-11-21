@@ -391,13 +391,15 @@ select option, select optgroup {
   animation: drop-border-pulse 1.6s ease-in-out infinite;
 }
 .drop-overlay.unsupported::before { border-color: rgba(255, 69, 58, 0.85); background: rgba(255, 69, 58, 0.06); }
-.drop-overlay-card { position: relative; text-align: center; }
+/* the veil of «Пульт встреч»: a card in the middle with the icon of the import, what happens to the files */
+.drop-overlay-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: 28px 36px; border-radius: 14px; background: var(--card); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.1)); box-shadow: var(--shadow-dialog); }
 .drop-overlay-icon {
-  width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px;
+  width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  background: rgb(var(--accent-rgb) / 0.18); color: var(--accent);
+  background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text);
   animation: drop-icon-bob 1.2s ease-in-out infinite;
 }
+.drop-overlay-icon svg { width: 24px; height: 24px; }
 .drop-overlay.unsupported .drop-overlay-icon { background: rgba(255, 69, 58, 0.18); color: #FF453A; animation: none; }
 @keyframes drop-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drop-border-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -1479,10 +1481,17 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .imp-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-ui); color: #C7C7CC; white-space: nowrap; cursor: pointer; }
 .imp-check input { accent-color: var(--accent); }
 
-/* --- The sidebar import button and its ⌄ (static/parts/sidebar.html) --- */
-.side-split { display: flex; }
-.side-split-main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.side-split-more { padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--hc-line, rgba(255, 255, 255, 0.25)); }
+/* --- «＋ Импорт ▾» of «Записи»: the menu of the ways to add (static/js/importdlg.js openImportMenu) --- */
+.imp-menu { position: fixed; z-index: 60; width: 440px; max-width: calc(100vw - 16px); padding: 6px; border-radius: 12px; background: var(--card); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.1)); box-shadow: var(--shadow-menu); color: #F5F5F7; }
+.imp-menu-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: none; color: inherit; text-align: left; cursor: pointer; }
+.imp-menu-row:hover, .imp-menu-row:focus-visible { background: rgba(255, 255, 255, 0.06); }
+.imp-menu-ic { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.imp-menu-ic svg { width: 16px; height: 16px; }
+.imp-menu-tx { display: flex; flex-direction: column; min-width: 0; }
+.imp-menu-tx b { font-size: var(--fs-ui); font-weight: 600; }
+.imp-menu-tx small { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-kbd { font: var(--fs-label) var(--font-mono); padding: 0 5px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); border-bottom-width: 2px; border-radius: 5px; color: var(--hc-dim, #AEAEB2); background: var(--sidebar); }
+.imp-menu-note { margin: 6px 8px 4px; padding-top: 8px; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); }
 
 /* =========================================================================
    redesign: analysis-speakers (package C) — styles below this line

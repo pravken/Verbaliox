@@ -87,17 +87,73 @@ function impAddPaths(paths) {
   renderImport();
 }
 
-// The ⌄ of the import buttons: the file picker, the window with its parameters, a link, a path
-function openImportMenu(e) {
-  e.stopPropagation();
-  const r = e.currentTarget.getBoundingClientRect();
-  openTextMenuAt([
-    { label: t('impMenuFiles'), run: () => impPickFiles() },
-    { label: t('impMenuParams'), run: () => openImportDialog() },
-    { label: t('impMenuLink'), run: () => openImportDialog({ row: 'link' }) },
-    { label: t('impMenuPath'), run: () => openImportDialog({ row: 'path' }) },
-  ], r.left, r.bottom + 4);
+// «Папка…»: the Windows folder picker, then every audio and video file in it is added where it is;
+// without that picker, the window with its path field
+async function impPickFolder() {
+  const res = await fetch('/api/import/pick-folder', { method: 'POST' }).catch(() => null);
+  const data = res && res.ok ? await readJson(res) : null;
+  if (!data || !data.available) { openImportDialog({ row: 'path' }); return; }
+  if (data.path) await importPaths([data.path]);
 }
+
+// «＋ Импорт ▾» in the title of «Записи»: a menu of the ways to add, with an icon each (the files, a folder,
+// a link) and the window with all the parameters; files can also be dropped on the window on any screen
+const IMP_MENU = [
+  ['files', '<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M10 14.5l2-2 2 2M12 12.5v5"/>', 'impMenuFiles', 'impMenuFilesSub', 'Ctrl+O', () => openImport()],
+  ['folder', '<path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>', 'impMenuFolder', 'impMenuFolderSub', '', () => impPickFolder()],
+  ['link', '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>', 'impMenuLink', 'impMenuLinkSub', '', () => openImportDialog({ row: 'link' })],
+  ['params', '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>', 'impMenuParams', 'impMenuParamsSub', '', () => openImportDialog()],
+];
+
+function openImportMenu(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const had = document.getElementById('imp-menu');
+  closeImportMenu();
+  if (had) return;
+  const btn = e.currentTarget;
+  const menu = document.createElement('div');
+  menu.id = 'imp-menu';
+  menu.className = 'imp-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = IMP_MENU.map(([k, icon, title, sub, key]) => `<button type="button" class="imp-menu-row" role="menuitem" data-imp="${k}">`
+    + `<span class="imp-menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg></span>`
+    + `<span class="imp-menu-tx"><b>${escapeHtml(t(title))}</b><small>${escapeHtml(t(sub))}</small></span>`
+    + `<span>${key ? `<kbd class="imp-kbd">${key}</kbd>` : ''}</span></button>`).join('')
+    + `<div class="imp-menu-note">${escapeHtml(t('impMenuDrop'))}</div>`;
+  menu.addEventListener('click', ev => {
+    const row = ev.target.closest('[data-imp]');
+    ev.stopPropagation();
+    if (!row) return;
+    closeImportMenu();
+    IMP_MENU.find(x => x[0] === row.dataset.imp)[5]();
+  });
+  document.body.appendChild(menu);
+  btn.setAttribute('aria-expanded', 'true');
+  const r = btn.getBoundingClientRect();
+  menu.style.left = `${Math.max(4, Math.min(zpx(r.right) - menu.offsetWidth, viewW() - menu.offsetWidth - 4))}px`;
+  menu.style.top = `${zpx(r.bottom) + 6}px`;
+  nextFrame(() => menu.querySelector('button')?.focus());
+}
+
+function closeImportMenu() {
+  if (!document.getElementById('imp-menu')) return;
+  document.getElementById('imp-menu').remove();
+  document.querySelectorAll('[data-click="openImportMenu"][aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+
+document.addEventListener('click', closeImportMenu);
+document.addEventListener('keydown', e => {
+  const menu = document.getElementById('imp-menu');
+  if (!menu) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeImportMenu(); return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const rows = [...menu.querySelectorAll('button')];
+    const i = rows.indexOf(document.activeElement);
+    rows[(i + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length].focus();
+  }
+});
 
 // Opens the window with these files (dropped, chosen) or with a link/path row open
 function openImportDialog(opts = {}) {
