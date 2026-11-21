@@ -114,7 +114,7 @@ function scheduleSidebarRender(rowId) {
       if (all || !rows) renderMeetingsSidebar();
       else for (const id of rows) if (!renderSidebarRow(id)) { renderMeetingsSidebar(); break; }
     }
-    if (state.appView === 'libtable' && typeof renderLibTable === 'function') renderLibTable();
+    if (state.appView === 'libtable' && typeof renderLibTableLive === 'function') renderLibTableLive(all || !rows ? null : rows);
   });
 }
 
@@ -470,7 +470,16 @@ function openDigestMenu(e) {
 
 document.addEventListener('click', () => document.getElementById('digest-menu')?.remove());
 
+// A brief or a digest needs the analysis model: without one the bar «модель не установлена» says so, and no
+// request is sent (it was answered by «503» in the console)
+function askNeedsModel() {
+  if (typeof assistantModelOff !== 'function' || !assistantModelOff(currentChat()?.model || '')) return false;
+  flashNoAiBanner(state.appView === 'ask' ? 'as-noai' : '');
+  return true;
+}
+
 async function makeBrief() {
+  if (askNeedsModel()) return;
   const scope = { ...state.askScope };
   const item = { id: newAskItemId(), question: t('briefBtn'), scopeLabel: askScopeLabel(scope), status: 'pending', data: null, error: '' };
   askThread.unshift(item);
@@ -493,6 +502,7 @@ async function makeBrief() {
 }
 
 async function makeDigest(days) {
+  if (askNeedsModel()) return;
   const scope = state.askScope.type === 'folder' ? { ...state.askScope } : { type: 'all' };
   const period = days === 7 ? t('digestWeek') : days === 30 ? t('digestMonth') : t('digestEverything');
   const item = { id: newAskItemId(), question: `${t('digestBtn')} · ${period}`, scopeLabel: askScopeLabel(scope), status: 'pending', data: null, error: '' };
@@ -664,6 +674,7 @@ function openFolderMenu(e, id) {
   const menu = document.getElementById('folder-context-menu');
   document.getElementById('fctx-title').textContent = folderName(f);
   document.getElementById('fctx-delete').classList.toggle('hidden', !!f.system_key);
+  document.getElementById('fctx-move').classList.toggle('hidden', !!f.system_key);  // the program's own folders stay at the top
   const inherited = !f.local_only && folderLocalOnly(f.parent_id);
   document.getElementById('fctx-local-check').textContent = f.local_only || inherited ? '✓' : '';
   document.getElementById('fctx-local').disabled = inherited;
@@ -694,6 +705,23 @@ async function fctxToggleLocalOnly() {
     showToast(!f.local_only ? t('localOnlyFolderOn') : t('localOnlyOff'));
     renderAnalysisEstimate();
   }
+}
+
+// «Переместить в…»: the folders it may go into (not itself or a folder inside it), and the top level
+function fctxMove(e) {
+  const f = folderById(state.contextFolderId);
+  if (!f) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  hideFolderMenu();
+  const inside = folderSubtreeIds(f.id);
+  const items = [{ label: `${f.parent_id == null ? '✓' : ' '}  ${t('folderTopLevel')}`, run: () => patchFolder(f.id, { parent_id: null }).then(() => renderLibTable()) }];
+  const walk = (parentId, depth) => sortedFolders(parentId).forEach(x => {
+    if (inside.has(x.id)) return;
+    items.push({ label: `${f.parent_id === x.id ? '✓' : ' '}  ${'  '.repeat(depth)}${folderName(x)}`, run: () => patchFolder(f.id, { parent_id: x.id }).then(() => renderLibTable()) });
+    walk(x.id, depth + 1);
+  });
+  walk(null, 0);
+  openTextMenuAt(items, r.right + 4, r.top);
 }
 
 function fctxNewSubfolder() {
@@ -1332,8 +1360,15 @@ function libSelectionShown() {
   return state.multi.size > 0 || !state.appView || state.appView === 'library';
 }
 
+// The recordings in the order on screen: the rows of «Записи» (the list of the old sidebar is hidden)
 function libVisibleIds() {
+  if (state.appView === 'libtable' && typeof LT !== 'undefined') return [...LT.ids];
   return [...document.querySelectorAll('#meetings-list [data-mid]')].map(el => Number(el.dataset.mid));
+}
+
+// The open recording among the ones just renamed: its title is read again, the section on screen stays
+function libRefreshActiveIn(ids) {
+  if (state.activeMeeting && ids.has(state.activeMeeting.id)) selectMeeting(state.activeMeeting.id, false);
 }
 
 function libRowClick(e, id) {
@@ -1370,6 +1405,17 @@ function clearLibSelection() {
 function renderLibSelectionBar() {
   let bar = document.getElementById('lib-selection-bar');
   const n = state.multi.size;
+  // «Записи» on screen: its own bar takes the place of the filters (libtable.js)
+  if (state.appView === 'libtable' && typeof renderLibTableBar === 'function') {
+    bar?.remove();
+    renderLibTableBar();
+    for (const el of document.querySelectorAll('#lt-body [data-mid]')) {
+      const on = state.multi.has(Number(el.dataset.mid));
+      el.classList.toggle('lt-on', on);
+      el.querySelector('.lt-cbx')?.classList.toggle('on', on);
+    }
+    return;
+  }
   if (!n) { bar?.remove(); return; }
   if (!bar) {
     bar = document.createElement('div');
@@ -1385,6 +1431,12 @@ function renderLibSelectionBar() {
     <button data-click="bulkAutoTitles" class="ui-btn ui-btn-subtle h-6 !px-2 text-[11.5px]" title="${escapeHtml(t('tipBulkAutoTitle'))}">${escapeHtml(t('bulkAutoTitle'))}</button>
     <button data-click="bulkDelete" class="ui-btn h-6 !px-2 text-[11.5px] bg-apple-red/80 text-white hover:bg-apple-red">${escapeHtml(t('ctxDelete'))}</button>
     <button data-click="clearLibSelection" class="ui-btn ui-btn-subtle h-6 !px-1.5 text-[11.5px]" title="${escapeHtml(t('cancel'))} (Esc)">✕</button>`;
+}
+
+// The open recording was deleted: its screen goes to «Записи», so another recording opened in its place by
+// the list (loadMeetingsList) is not met there by a second «Удалить»
+function leaveDeletedRecording() {
+  if (state.appView === 'library') switchAppView('libtable');
 }
 
 function libSelectedInOrder() {
@@ -1406,6 +1458,7 @@ async function bulkDelete() {
       state.activeMeeting = null;
       document.getElementById('workspace-content').classList.add('hidden');
       document.getElementById('workspace-empty').classList.remove('hidden');
+      leaveDeletedRecording();
     }
   }
   state.multi.clear();
@@ -1432,7 +1485,7 @@ async function bulkRename() {
     if (!res.ok) failed++;
   }
   await loadMeetingsList();
-  if (state.activeMeeting && state.multi.has(state.activeMeeting.id)) openMeeting(state.activeMeeting.id);
+  libRefreshActiveIn(state.multi);
   if (failed) showError(t('bulkSomeFailed').replace('{n}', () => failed));
 }
 
@@ -1447,7 +1500,7 @@ async function bulkAutoTitles() {
     if (!res.ok) failed++;
     await loadMeetingsList();
   }
-  if (state.activeMeeting && state.multi.has(state.activeMeeting.id)) openMeeting(state.activeMeeting.id);
+  libRefreshActiveIn(state.multi);
   showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('bulkAutoTitleDone'));
 }
 
@@ -1482,7 +1535,8 @@ document.addEventListener('keydown', e => {
       document.querySelector(`#meetings-list [data-mid="${next}"]`)?.scrollIntoView({ block: 'nearest' });
     }
   }
-  if (e.key === 'Delete' && state.multi.size && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')
+  // only where the selection is seen: «Записи» (the old list of the sidebar is hidden)
+  if (e.key === 'Delete' && state.multi.size && state.appView === 'libtable' && !anyModalOpen() && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')
       && !document.activeElement?.isContentEditable) bulkDelete();
 });
 

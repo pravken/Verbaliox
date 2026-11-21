@@ -1,12 +1,13 @@
-<!-- «Дэшборд» (static/js/dashboard.js): widgets the user arranges; part of static/parts/workspace.html.
+<!-- «Обзор» (static/js/dashboard.js): the analytics of a period in widgets the user arranges; part of static/parts/workspace.html.
      The full list of tasks and its calendar stay on the Tasks page («Все задачи →»). -->
     <div id="dashboard-view" class="hidden flex-1 min-h-0 tk-view">
-      <header class="db-head">
-        <!-- the greeting and the date of the former home page (moved in by dashboard.js) -->
-        <div id="db-hello" class="db-hello"></div>
-        <div id="db-qa" class="db-qa"></div>
+      <header class="tk-head">
+        <div class="tk-head-text">
+        <h1 class="tk-title db-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="4" rx="1.5"/><rect x="13" y="10" width="7" height="10" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/></svg><span data-i18n="rlOverview">Обзор</span></h1>
+        <p class="tk-sub" data-i18n="dbOverviewSub">Аналитика периода</p>
+        </div>
       </header>
-      <div class="db-bar">
+      <div class="tk-bar db-bar">
         <span id="db-sub" class="tk-sub"></span>
         <span id="db-progress" class="db-progress hidden" role="img"></span>
         <span class="tk-grow"></span>
@@ -19,7 +20,6 @@
       </div>
       <div class="db-body">
         <div id="db-grid" class="db-grid"></div>
-        <div id="db-park" class="hidden"></div>
         <aside id="db-drawer" class="db-drawer hidden" aria-label="Виджеты" data-i18n-aria="dbWidgets"></aside>
         <!-- the details of a number or a widget (dbOpenDetail in static/js/dashboard.js) -->
         <aside id="db-detail" class="db-detail hidden" aria-label="Подробности" data-i18n-aria="dbDetails"></aside>

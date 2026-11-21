@@ -53,6 +53,73 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(moved.read_bytes(), b"sound")
         self.assertTrue(DB_PATH.exists())
 
+    def test_the_minutes_worked_and_the_programs_stay_on_this_computer(self):
+        """«Мои программы» and the working day are local (the page says so): not in a copy, and a copy never
+        turns the counting of programs on."""
+        from datetime import datetime
+
+        from app import worktime
+        from app.database import init_db, update_settings
+
+        init_db()
+        update_settings({"apps_track": "true"})
+        worktime.mark(datetime(2026, 11, 19, 10, 0), "outlook")
+        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        backup.make(out, with_media=False)
+        with zipfile.ZipFile(out) as z:
+            db = Path(z.extract("meetings.db", tempfile.mkdtemp()))
+        conn = sqlite3.connect(str(db))
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        track = conn.execute("SELECT value FROM settings WHERE key = 'apps_track'").fetchone()
+        conn.close()
+        self.assertNotIn("app_minutes", tables)
+        self.assertNotIn("work_minutes", tables)
+        self.assertIsNone(track)
+        self.assertIn("apps_track", backup.LOCAL_SETTINGS)
+        update_settings({"apps_track": "false"})
+
+    def test_a_restore_keeps_the_minutes_worked_of_this_computer(self):
+        """Found in the review: the copy has no minutes worked and no «Мои программы», and the restored
+        database replaced the one with them, so a restore wiped them. A copy of an older version that still
+        has them does not bring its own either."""
+        from datetime import date, datetime
+
+        from app import worktime
+        from app.database import _db_lock, init_db
+
+        init_db()
+        worktime.mark(datetime(2026, 11, 19, 10, 0), "outlook")
+        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        backup.make(out, with_media=False)
+        # an older copy: with the minutes of another computer
+        tmp = Path(tempfile.mkdtemp())
+        with zipfile.ZipFile(out) as z:
+            z.extractall(tmp)
+        conn = sqlite3.connect(str(tmp / "meetings.db"))
+        conn.execute(worktime._DDL_APPS)
+        conn.execute("INSERT INTO app_minutes (day, minute, app) VALUES ('2026-11-18', 600, 'foreign')")
+        conn.commit()
+        conn.close()
+        old = Path(tempfile.mkdtemp()) / "old.zip"
+        with zipfile.ZipFile(old, "w") as z:
+            for f in tmp.iterdir():
+                z.write(f, f.name)
+        backup.restore(old)
+        worktime.mark(datetime(2026, 11, 19, 10, 1), "excel")  # worked after the restore was asked
+        with _db_lock:
+            backup.apply_pending()
+        got = worktime.apps(date(2026, 11, 18), date(2026, 11, 20))
+        self.assertEqual(got.get("outlook"), 1)
+        self.assertEqual(got.get("excel"), 1)
+        self.assertNotIn("foreign", got)
+        from app.database import DB_PATH
+
+        conn = sqlite3.connect(str(DB_PATH))
+        keys = [worktime._day_minute(datetime(2026, 11, 19, 10, m)) for m in (0, 1)]
+        worked = sum(conn.execute("SELECT COUNT(*) FROM work_minutes WHERE day = ? AND minute = ?", k).fetchone()[0] for k in keys)
+        conn.close()
+        self.assertEqual(worked, 2)
+
     def test_caches_of_numbers_that_change_hands_are_dropped(self):
         from app.audio_utils import peaks_file
         from app.paths import THUMBS_DIR

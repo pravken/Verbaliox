@@ -1,4 +1,3 @@
-import math
 import os
 import struct
 import subprocess
@@ -11,151 +10,28 @@ ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 ICO_PATH = ASSETS_DIR / "icon.ico"
 
 
-def _dist_to_segment(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> float:
-    dx = x2 - x1
-    dy = y2 - y1
-    len_sq = dx * dx + dy * dy
-    if len_sq < 1e-9:
-        return math.hypot(px - x1, py - y1)
-    t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / len_sq))
-    proj_x = x1 + t * dx
-    proj_y = y1 + t * dy
-    return math.hypot(px - proj_x, py - proj_y)
-
-
-def _dist_to_rotated_ellipse(
-    px: float, py: float, cx: float, cy: float, rx: float, ry: float, angle_rad: float
-) -> float:
-    cos_a = math.cos(angle_rad)
-    sin_a = math.sin(angle_rad)
-    lx = (px - cx) * cos_a + (py - cy) * sin_a
-    ly = -(px - cx) * sin_a + (py - cy) * cos_a
-    norm_d = math.hypot(lx / rx, ly / ry)
-    return (norm_d - 1.0) * min(rx, ry)
+BRAND_DIR = ASSETS_DIR / "brand"
 
 
 def make_png(size: int) -> bytes:
-    """
-    Generates an RGBA PNG image of size x size with an Apple macOS squircle background
-    and a minimalist Willow (Verba) branch with three fluffy silver-white catkins.
-    Uses pure Python (zlib + struct) with zero external dependencies.
-    """
-    raw_rows = bytearray()
-    cx = (size - 1) / 2.0
-    cy = (size - 1) / 2.0
-    half = size * 0.44
-    corner_r = size * 0.22
-
-    # Willow branch polyline segments in normalized coordinates (-1..1)
-    stem_pts = [
-        (-0.48, 0.58),
-        (-0.22, 0.24),
-        (0.04, -0.08),
-        (0.32, -0.44),
-    ]
-    stem_radius = 0.036
-
-    # Fluffy willow catkins (buds): (cx, cy, rx, ry, angle_deg)
-    buds = [
-        (-0.30, 0.08, 0.125, 0.185, -28.0),
-        (0.16, 0.06, 0.125, 0.185, 32.0),
-        (-0.04, -0.34, 0.125, 0.190, -22.0),
-        (0.36, -0.48, 0.110, 0.165, 25.0),
-    ]
-
-    # Small warm wood cups at base of each willow bud: (cx, cy, r)
-    cups = [
-        (-0.24, 0.21, 0.065),
-        (0.06, 0.17, 0.065),
-        (0.02, -0.20, 0.065),
-        (0.30, -0.38, 0.060),
-    ]
-
-    for y in range(size):
-        raw_rows.append(0)  # PNG filter type 0 (None)
-        ny = (y - cy) / half
-        t_grad = y / max(1, size - 1)
-
-        # Deep botanical slate-teal gradient: top (#16334B) -> bottom (#0E1E2E)
-        bg_r = int(22 * (1 - t_grad) + 14 * t_grad)
-        bg_g = int(51 * (1 - t_grad) + 30 * t_grad)
-        bg_b = int(75 * (1 - t_grad) + 46 * t_grad)
-
-        for x in range(size):
-            nx = (x - cx) / half
-
-            # Rounded rectangle SDF
-            dx = max(abs(x - cx) - (half - corner_r), 0.0)
-            dy = max(abs(y - cy) - (half - corner_r), 0.0)
-            dist = math.hypot(dx, dy) - corner_r
-
-            if dist > 0.8:
-                raw_rows.extend((0, 0, 0, 0))
-                continue
-
-            bg_alpha = 1.0 if dist < -0.8 else max(0.0, min(1.0, 0.5 - dist / 1.6))
-
-            # Subtle inner border highlight
-            if dist > -size * 0.03 and y < cy:
-                r_px = min(255, bg_r + 24)
-                g_px = min(255, bg_g + 28)
-                b_px = min(255, bg_b + 32)
-            else:
-                r_px, g_px, b_px = bg_r, bg_g, bg_b
-
-            # 1. Draw willow branch stem (warm emerald-sage #4ADE80)
-            stem_d = 999.0
-            for (x1, y1), (x2, y2) in zip(stem_pts[:-1], stem_pts[1:]):
-                d_seg = (_dist_to_segment(nx, ny, x1, y1, x2, y2) - stem_radius) * half
-                if d_seg < stem_d:
-                    stem_d = d_seg
-
-            if stem_d < 0.8:
-                sa = 1.0 if stem_d < -0.8 else max(0.0, min(1.0, 0.5 - stem_d / 1.6))
-                r_px = int(r_px * (1 - sa) + 82 * sa)
-                g_px = int(g_px * (1 - sa) + 214 * sa)
-                b_px = int(b_px * (1 - sa) + 148 * sa)
-
-            # 2. Draw fluffy silver-white willow catkins (buds)
-            bud_d = 999.0
-            for bx, by, brx, bry, bang in buds:
-                d_b = _dist_to_rotated_ellipse(nx, ny, bx, by, brx, bry, math.radians(bang)) * half
-                if d_b < bud_d:
-                    bud_d = d_b
-
-            if bud_d < 0.8:
-                ba = 1.0 if bud_d < -0.8 else max(0.0, min(1.0, 0.5 - bud_d / 1.6))
-                r_px = int(r_px * (1 - ba) + 248 * ba)
-                g_px = int(g_px * (1 - ba) + 250 * ba)
-                b_px = int(b_px * (1 - ba) + 252 * ba)
-
-            # 3. Draw subtle golden-emerald bud base cups
-            cup_d = 999.0
-            for cx_cup, cy_cup, cr in cups:
-                d_c = (math.hypot(nx - cx_cup, ny - cy_cup) - cr) * half
-                if d_c < cup_d:
-                    cup_d = d_c
-
-            if cup_d < 0.8 and stem_d < 3.5:
-                ca = 1.0 if cup_d < -0.8 else max(0.0, min(1.0, 0.5 - cup_d / 1.6))
-                ca *= 0.85
-                r_px = int(r_px * (1 - ca) + 52 * ca)
-                g_px = int(g_px * (1 - ca) + 199 * ca)
-                b_px = int(b_px * (1 - ca) + 128 * ca)
-
-            a = int(bg_alpha * 255)
-            raw_rows.extend((r_px, g_px, b_px, a))
+    """The icon at one size: the dragon-V in the «Туман» colours, its pixels drawn by tools/make_icon.py
+    (assets/brand/icon-<size>.rgba.z, raw RGBA, zlib) and written here as an 8-bit RGBA PNG with unfiltered
+    rows, the form app/tray.py reads."""
+    raw = zlib.decompress((BRAND_DIR / f"icon-{size}.rgba.z").read_bytes())
+    if len(raw) != size * size * 4:
+        raise RuntimeError(f"assets/brand/icon-{size}.rgba.z: {len(raw)} bytes, not {size}x{size} RGBA")
+    stride = size * 4
+    rows = b"".join(b"\x00" + raw[y * stride:(y + 1) * stride] for y in range(size))
 
     def png_chunk(chunk_type: bytes, data: bytes) -> bytes:
         crc = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
         return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", crc)
 
     ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
-    idat = zlib.compress(bytes(raw_rows), 9)
     return (
         b"\x89PNG\r\n\x1a\n"
         + png_chunk(b"IHDR", ihdr)
-        + png_chunk(b"IDAT", idat)
+        + png_chunk(b"IDAT", zlib.compress(rows, 9))
         + png_chunk(b"IEND", b"")
     )
 
@@ -319,44 +195,6 @@ class VerbalioxLauncher
         }
     }
 
-    // A small "starting" window: the first start after an update can take a while (Python compiles
-    // its files, the speech libraries load), and without it nothing seems to happen.
-    // It closes when the app window appears or the app process ends (errors are shown by the app).
-    // Light-hearted lines shown while the app starts, a new one every 1.6 s
-    static readonly string[] PhrasesRu = {
-        "Завариваем чай для нейросетей\u2026",
-        "Будим Whisper, он любит поспать\u2026",
-        "Разминаем видеокарту\u2026",
-        "Расставляем запятые по местам\u2026",
-        "Ищем, кто сказал \u00ab\u044d-\u044d\u00bb\u2026",
-        "Протираем модели уши\u2026",
-        "Распушаем вербу\u2026",
-        "Учим нули и единицы слушать\u2026",
-        "Раскладываем слова по полочкам\u2026",
-        "Настраиваем чуткий слух\u2026",
-        "Считаем до десяти на 23 языках\u2026",
-        "Подметаем слова-паразиты\u2026",
-        "Прогреваем тензоры\u2026",
-        "Почти готово, честно\u2026",
-    };
-    static readonly string[] PhrasesEn = {
-        "Brewing tea for the neural nets\u2026",
-        "Waking Whisper up, it likes to sleep in\u2026",
-        "Stretching the GPU\u2026",
-        "Putting commas where they belong\u2026",
-        "Finding out who said \u201cumm\u201d\u2026",
-        "Cleaning the model's ears\u2026",
-        "Fluffing up the willow\u2026",
-        "Teaching ones and zeros to listen\u2026",
-        "Sorting words onto shelves\u2026",
-        "Tuning a keen ear\u2026",
-        "Counting to ten in 23 languages\u2026",
-        "Sweeping up filler words\u2026",
-        "Warming up the tensors\u2026",
-        "Almost there, honestly\u2026",
-    };
-
-    // The app's UI language, saved by the app in its data folder (default Russian)
     // The app's data folder: VERBALIOX_DATA_DIR, else %LOCALAPPDATA%\Verbaliox (app/paths.py)
     internal static string DataDir()
     {
@@ -400,70 +238,54 @@ class VerbalioxLauncher
         return null;
     }
 
+    // The window shown while the app starts: the first start after an update can take a while (Python
+    // compiles its files, the speech libraries load), and without it nothing seems to happen. It closes
+    // when the app window appears or the app process ends (errors are shown by the app). It says the
+    // step in plain words, by the time gone: the app's own colours, round corners, a soft running bar.
+    static readonly string[] StepsRu = { "Запуск программы…", "Загрузка компонентов…", "Подготовка окна…" };
+    static readonly string[] StepsEn = { "Starting the app…", "Loading components…", "Preparing the window…" };
+
+    // __version__ from app\__init__.py, for the line under the name
+    static string AppVersion(string baseDir)
+    {
+        try
+        {
+            foreach (string line in File.ReadAllLines(Path.Combine(baseDir, "app", "__init__.py")))
+            {
+                string t = line.Trim();
+                if (!t.StartsWith("__version__")) continue;
+                int a = t.IndexOf('"'), b = t.LastIndexOf('"');
+                if (a >= 0 && b > a) return t.Substring(a + 1, b - a - 1);
+            }
+        }
+        catch { }
+        return "";
+    }
+
     static void ShowSplashUntilWindow(Process app)
     {
         Application.EnableVisualStyles();
         bool ru = UiLanguage() != "en";
-        string[] phrases = ru ? PhrasesRu : PhrasesEn;
-        Random rnd = new Random();
-
-        Form splash = new Form();
-        splash.FormBorderStyle = FormBorderStyle.None;
-        splash.StartPosition = FormStartPosition.CenterScreen;
-        splash.Size = new System.Drawing.Size(420, 132);
-        splash.BackColor = System.Drawing.Color.FromArgb(28, 28, 30);
-        splash.ShowInTaskbar = true;
-        splash.TopMost = true;  // a few seconds only: keep it visible over other windows
-        splash.Text = "Verbaliox \u2014 \u0437\u0430\u043f\u0443\u0441\u043a";  // not the app window title: FindWindow must not find the splash
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string version = AppVersion(baseDir);
+        SplashForm splash = new SplashForm(
+            LoadLogo(Path.Combine(baseDir, "assets", "icon.ico")),
+            version.Length > 0 ? (ru ? "версия " : "version ") + version : "",
+            ru ? StepsRu : StepsEn,
+            ru ? "из" : "of",
+            ru ? "Запись, расшифровка и анализ работают на этом компьютере." : "Recording, transcription and analysis run on this computer.",
+            ru ? "Первый запуск после установки занимает до нескольких минут: Windows проверяет файлы библиотек."
+               : "The first start after installation takes up to a few minutes: Windows checks the library files.");
+        splash.Text = "Verbaliox — запуск";  // not the app window title: FindWindow must not find the splash
         try { splash.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-        // The willow logo, gently bobbing
-        PictureBox logo = new PictureBox();
-        logo.SizeMode = PictureBoxSizeMode.Zoom;
-        logo.SetBounds(22, 32, 64, 64);
-        logo.Image = LoadLogo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "icon.ico"));
-
-        Label title = new Label();
-        title.Text = "Verbaliox";
-        title.ForeColor = System.Drawing.Color.White;
-        title.Font = new System.Drawing.Font("Segoe UI Semibold", 13f);
-        title.SetBounds(104, 26, 300, 28);
-        Label status = new Label();
-        status.Text = phrases[rnd.Next(phrases.Length)];
-        status.ForeColor = System.Drawing.Color.FromArgb(152, 152, 157);
-        status.Font = new System.Drawing.Font("Segoe UI", 9.5f);
-        status.SetBounds(104, 58, 300, 22);
-        // A thin track with a blue segment running along it (the system progress bar looks foreign here)
-        Panel track = new Panel();
-        track.BackColor = System.Drawing.Color.FromArgb(52, 52, 56);
-        track.SetBounds(104, 92, 290, 3);
-        Panel runner = new Panel();
-        runner.BackColor = System.Drawing.Color.FromArgb(10, 132, 255);
-        runner.SetBounds(0, 0, 80, 3);
-        track.Controls.Add(runner);
-        splash.Controls.Add(logo);
-        splash.Controls.Add(title);
-        splash.Controls.Add(status);
-        splash.Controls.Add(track);
-
         DateTime started = DateTime.Now;
-        DateTime lastPhrase = DateTime.Now;
-        int last = -1;
         Timer timer = new Timer();
-        timer.Interval = 40;
+        timer.Interval = 16;
         timer.Tick += delegate
         {
             double t = (DateTime.Now - started).TotalSeconds;
-            logo.Top = 32 + (int)Math.Round(Math.Sin(t * 2.4) * 3.0);
-            runner.Left = (int)(((t * 0.9) % 1.0) * (track.Width + runner.Width)) - runner.Width;
-            if ((DateTime.Now - lastPhrase).TotalSeconds >= 1.6)
-            {
-                int next = rnd.Next(phrases.Length);
-                if (next == last) next = (next + 1) % phrases.Length;
-                last = next;
-                status.Text = phrases[next];
-                lastPhrase = DateTime.Now;
-            }
+            splash.Tick(t);
             IntPtr hwnd = FindAppWindow();
             bool done = (hwnd != IntPtr.Zero && IsWindowVisible(hwnd)) || app.HasExited || t > 180;
             if (done)
@@ -1049,12 +871,139 @@ class SetupWindow
         return p;
     }
 }
+
+// The splash, drawn by hand: a dark card with a faint blue light at the top, the logo floating gently,
+// the name and the version, the step and its number, a rounded track with a soft blue runner, a note
+// under it. Windows 11 rounds its corners (DWM); the class style gives it the system shadow.
+class SplashForm : Form
+{
+    [DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    readonly System.Drawing.Image logo;
+    readonly string version, quietNote, slowNote, ofWord;
+    readonly string[] steps;
+    double t;
+
+    static readonly System.Drawing.Color Bg = System.Drawing.Color.FromArgb(21, 23, 28);
+    static readonly System.Drawing.Color Accent = System.Drawing.Color.FromArgb(76, 127, 217);
+    static readonly System.Drawing.Color AccentHi = System.Drawing.Color.FromArgb(140, 173, 231);
+    static readonly System.Drawing.Color Fg = System.Drawing.Color.FromArgb(245, 245, 247);
+    static readonly System.Drawing.Color Fg1 = System.Drawing.Color.FromArgb(217, 218, 221);
+    static readonly System.Drawing.Color Faint = System.Drawing.Color.FromArgb(128, 132, 140);
+
+    public SplashForm(System.Drawing.Image logo, string version, string[] steps, string ofWord, string quietNote, string slowNote)
+    {
+        this.logo = logo; this.version = version; this.steps = steps; this.ofWord = ofWord; this.quietNote = quietNote; this.slowNote = slowNote;
+        FormBorderStyle = FormBorderStyle.None;
+        StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new System.Drawing.Size(460, 212);
+        BackColor = Bg;
+        ShowInTaskbar = true;
+        TopMost = true;  // a few seconds only: keep it visible over other windows
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get { CreateParams cp = base.CreateParams; cp.ClassStyle |= 0x20000; return cp; }  // CS_DROPSHADOW
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        try { int round = 2; DwmSetWindowAttribute(Handle, 33, ref round, 4); } catch { }  // DWMWA_WINDOW_CORNER_PREFERENCE: round
+    }
+
+    public void Tick(double seconds) { t = seconds; Invalidate(); }
+
+    static System.Drawing.Drawing2D.GraphicsPath Round(System.Drawing.RectangleF r, float rad)
+    {
+        System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
+        float d = rad * 2;
+        p.AddArc(r.X, r.Y, d, d, 180, 90);
+        p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        System.Drawing.Graphics g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        int w = ClientSize.Width, h = ClientSize.Height;
+
+        // a faint blue light at the top, and a hairline frame
+        using (System.Drawing.Drawing2D.LinearGradientBrush glow = new System.Drawing.Drawing2D.LinearGradientBrush(
+            new System.Drawing.Rectangle(0, 0, w, h / 2 + 1), System.Drawing.Color.FromArgb(26, Accent), System.Drawing.Color.FromArgb(0, Accent), 90f))
+            g.FillRectangle(glow, 0, 0, w, h / 2);
+        using (System.Drawing.Pen frame = new System.Drawing.Pen(System.Drawing.Color.FromArgb(20, 255, 255, 255)))
+            g.DrawRectangle(frame, 0, 0, w - 1, h - 1);
+
+        // the logo, floating by 3 px
+        float bob = (float)(Math.Sin(t * 2.0) * 3.0);
+        if (logo != null) g.DrawImage(logo, new System.Drawing.RectangleF(28, 26 + bob, 52, 52));
+
+        using (System.Drawing.Font name = new System.Drawing.Font("Segoe UI Semibold", 15.5f))
+        using (System.Drawing.Font small = new System.Drawing.Font("Segoe UI", 9f))
+        using (System.Drawing.Font step = new System.Drawing.Font("Segoe UI", 9.75f))
+        using (System.Drawing.SolidBrush fg = new System.Drawing.SolidBrush(Fg))
+        using (System.Drawing.SolidBrush fg1 = new System.Drawing.SolidBrush(Fg1))
+        using (System.Drawing.SolidBrush faint = new System.Drawing.SolidBrush(Faint))
+        {
+            g.DrawString("Verbaliox", name, fg, 94, 28);
+            if (version.Length > 0) g.DrawString(version, small, faint, 96, 58);
+
+            // the step by the time gone: 0-4 s, 4-12 s, then the last; and which of how many
+            int k = t < 4 ? 0 : t < 12 ? 1 : 2;
+            g.DrawString(steps[k], step, fg1, 26, 104);
+            string of = (k + 1) + " " + ofWord + " " + steps.Length;
+            System.Drawing.SizeF ofSize = g.MeasureString(of, step);
+            g.DrawString(of, step, faint, w - 26 - ofSize.Width + 4, 104);
+
+            // the track and a soft runner moving along it
+            System.Drawing.RectangleF track = new System.Drawing.RectangleF(28, 132, w - 56, 4);
+            using (System.Drawing.Drawing2D.GraphicsPath tp = Round(track, 2))
+            {
+                using (System.Drawing.SolidBrush tb = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(20, 255, 255, 255)))
+                    g.FillPath(tb, tp);
+                System.Drawing.Region clip = g.Clip;
+                g.SetClip(tp);
+                float runW = track.Width * 0.36f;
+                double phase = (t / 1.4) % 1.0;
+                double eased = phase < 0.5 ? 2 * phase * phase : 1 - Math.Pow(-2 * phase + 2, 2) / 2;
+                float x = track.X - runW + (float)eased * (track.Width + runW);
+                System.Drawing.RectangleF run = new System.Drawing.RectangleF(x, track.Y, runW, track.Height);
+                using (System.Drawing.Drawing2D.LinearGradientBrush rb = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    new System.Drawing.RectangleF(x - 1, track.Y, runW + 2, track.Height), System.Drawing.Color.Transparent, System.Drawing.Color.Transparent, 0f))
+                {
+                    System.Drawing.Drawing2D.ColorBlend cb = new System.Drawing.Drawing2D.ColorBlend();
+                    cb.Colors = new System.Drawing.Color[] { System.Drawing.Color.FromArgb(0, Accent), Accent, AccentHi, System.Drawing.Color.FromArgb(0, AccentHi) };
+                    cb.Positions = new float[] { 0f, 0.3f, 0.7f, 1f };
+                    rb.InterpolationColors = cb;
+                    g.FillRectangle(rb, run);
+                }
+                g.Clip = clip;
+            }
+
+            // a note under it; after 25 s it says why the first start is slow
+            string note = t > 25 ? slowNote : quietNote;
+            g.DrawString(note, small, faint, new System.Drawing.RectangleF(26, 150, w - 52, 44));
+        }
+    }
+
+}
 """
 
 
 def compile_exe() -> Path:
     build_ico(ICO_PATH)
-    print(f"[OK] Willow icon generated: {ICO_PATH} ({ICO_PATH.stat().st_size} bytes)")
+    print(f"[OK] Icon built: {ICO_PATH} ({ICO_PATH.stat().st_size} bytes)")
 
     cs_path = BASE_DIR / "launcher.cs"
     cs_path.write_text(CS_SOURCE.strip(), encoding="utf-8-sig")

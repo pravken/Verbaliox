@@ -90,6 +90,112 @@ await step('read a recording', async () => {
   await page.evaluate(() => txViewToggle('fillers'));
 });
 
+// The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the
+// name once for a run of one speaker; the phrase playing is lit; «Текст» brings the running text back, kept
+await step('transcript as a chat', async () => {
+  // the tabs in the order the user chose; another recording opens on «Расшифровка»
+  const order = await page.$$eval('#tb-record > button', els => els.map(e => e.id));
+  expect(order.join() === 'nav-transcript,nav-summary,nav-speakers,nav-info', `the tabs: ${order}`);
+  await page.evaluate(() => openRecordTab('summary'));
+  await page.evaluate(() => openMeeting(2));
+  await sleep(800);
+  expect(await page.evaluate(() => state.activeWorkspaceTab) === 'transcript', 'another recording did not open on «Расшифровка»');
+  await page.evaluate(() => openMeeting(1));
+  await sleep(800);
+  await page.evaluate(() => { openRecordTab('transcript'); setTxLayout('chat'); });
+  await sleep(300);
+  const bubbles = await page.locator('#transcript-inner .ch-bub.segment-row').count();
+  expect(bubbles > 0, 'no bubbles in «Чат»');
+  expect(await page.locator('#transcript-inner .ch-bub .ch-tm').count() === bubbles, 'a bubble without its time');
+  const runs = await page.locator('#transcript-inner .ch-group').count();
+  expect(await page.locator('#transcript-inner .ch-group > .ch-av').count() === runs, 'the face is not once per run');
+  await page.evaluate(() => updatePlaybackHighlight(1, true));
+  expect(await page.locator('#transcript-inner .ch-bub.segment-active').count() === 1, 'the phrase playing is not lit');
+  await page.click('#tx-layout-text');
+  await sleep(200);
+  expect(await page.locator('#transcript-inner .ch-bub').count() === 0 && await page.locator('#transcript-inner .segment-row').count() > 0, '«Текст» did not bring the text back');
+  expect(await page.evaluate(() => localStorage.getItem('verbaliox_tx_layout')) === 'text', 'the choice is not kept');
+  await page.click('#tx-layout-chat');
+});
+
+// The unloaded player (stage 5): three buttons in the middle, the phrase's repeat and loop in «⋯»; J goes back
+// 10 s; the play button is the same element while it plays (a hover on it is not restarted)
+await step('unloaded player', async () => {
+  expect(await page.locator('.rp-center button').count() === 3, 'more than three buttons in the middle of the player');
+  expect(await page.locator('#rp-chapters .rp-chapter').count() === 0, 'chapter titles over the wave');
+  const tall = await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height);
+  expect(tall <= 135, `the player is ${tall}px tall`);
+  const items = await page.evaluate(() => { rpTogglePop('more'); const x = [...document.querySelectorAll('#rp-pop-more .rp-item')].map(b => b.textContent.trim()); rpClosePop(); return x; });
+  expect(items.some(x => /Повторить реплику/.test(x)) && items.some(x => /по кругу/.test(x)), `«⋯» lacks the phrase's repeat: ${items.join(' | ')}`);
+  const res = await page.evaluate(async () => {
+    const p = document.getElementById('media-player');
+    p.muted = true;
+    const btn = document.getElementById('play-pause-btn');
+    p.currentTime = 30;
+    await new Promise(r => setTimeout(r, 200));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ', key: 'j', bubbles: true }));
+    await new Promise(r => setTimeout(r, 200));
+    return { at: p.currentTime, same: document.getElementById('play-pause-btn') === btn };
+  });
+  expect(res.at > 15 && res.at < 25, `J did not go back 10 s: ${res.at}`);
+  expect(res.same, 'the play button was drawn again');
+});
+
+// Scrubbing (asked by the user): hold the button on the wave and move — the time follows, the bubble over the
+// playhead shows it and grows while dragging; a click without moving seeks too
+await step('scrub the wave', async () => {
+  await page.evaluate(() => { const p = document.getElementById('media-player'); p.muted = true; p.pause(); });
+  const box = await page.locator('#player-waveform-wrapper').boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.1, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, y, { steps: 8 });
+  const during = await page.evaluate(() => ({
+    on: document.getElementById('player-waveform-wrapper').classList.contains('rp-scrubbing'),
+    bubble: document.getElementById('rp-head-bubble').textContent,
+  }));
+  await page.mouse.up();
+  await sleep(200);
+  const at = await page.evaluate(() => document.getElementById('media-player').currentTime);
+  expect(during.on, 'no dragging state while the button is held');
+  expect(/^00:(2[7-9]|3[0-3])\b/.test(during.bubble), `the bubble shows ${during.bubble} in the middle of a minute`);
+  expect(at > 27 && at < 33, `the drag left the time at ${at}`);
+  expect(!(await page.evaluate(() => document.getElementById('player-waveform-wrapper').classList.contains('rp-scrubbing'))), 'the dragging state stays');
+  await page.mouse.click(box.x + box.width * 0.25, y);
+  await sleep(200);
+  const click = await page.evaluate(() => document.getElementById('media-player').currentTime);
+  expect(click > 12 && click < 18, `a click left the time at ${click}`);
+  await page.evaluate(() => document.getElementById('media-player').pause());
+});
+
+// «Сведения»: four cards of «key — value» rows, the actions of each under a line (only the program's own)
+await step('recording details', async () => {
+  await page.evaluate(() => openRecordTab('info'));
+  await sleep(1200);
+  const cards = await page.$$eval('#info-content [data-info]', els => els.map(e => e.dataset.info));
+  expect(cards.join() === 'file,transcript,analysis,storage', `the cards: ${cards}`);
+  const acts = await page.$$eval('#info-content .kv-acts button', els => els.map(e => e.dataset.click));
+  for (const fn of ['recReconfigure', 'openResplitDialog', 'recRegenFromInfo', 'recMoveFromInfo']) expect(acts.includes(fn), `no ${fn} in «Сведения»`);
+  await page.evaluate(() => openRecordTab('transcript'));
+});
+
+// The player minimized to one line and back; the choice is kept; the thin track still seeks
+await step('minimized player', async () => {
+  await page.click('#rp-min-btn');
+  await sleep(300);
+  const h = await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height);
+  expect(h < 60, `the minimized player is ${h}px tall`);
+  expect(await page.evaluate(() => localStorage.getItem('verbaliox_player_mini')) === '1', 'the choice is not kept');
+  const box = await page.locator('#player-waveform-wrapper').boundingBox();
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+  await sleep(200);
+  const at = await page.evaluate(() => { const p = document.getElementById('media-player'); p.pause(); return p.currentTime; });
+  expect(at > 42 && at < 48, `a click on the thin track left the time at ${at}`);
+  await page.click('#rp-min-btn');
+  await sleep(300);
+  expect(await page.evaluate(() => document.getElementById('player-footer').getBoundingClientRect().height) > 100, 'the player did not expand');
+});
+
 // The menu of a recording at the bottom of the window stays inside it, «Удалить» reachable (1.2)
 await step('menu at the bottom', async () => {
   const box = await page.evaluate(() => {
@@ -114,6 +220,118 @@ await step('undo a removal', async () => {
   await page.click('#toast .toast-action');
   await sleep(300);
   expect(await page.evaluate(() => TK.data.tasks.length) === before, '«Отменить» did not bring it back');
+});
+
+// The tasks as a calendar of due dates: the grouping greys (its place kept), today framed, a task with its
+// whole text, «Без срока» with its empty slot; the week view has seven tall days
+await step('task calendar', async () => {
+  await page.evaluate(() => { switchAppView('tasks'); setTasksView('cal'); setTasksCalMode('month'); });
+  await sleep(500);
+  const r = await page.evaluate(() => ({
+    off: document.getElementById('tk-groups-box').classList.contains('tk-tbg-off'),
+    today: document.querySelectorAll('#tk-cal .tk-day.tk-today').length,
+    chips: [...document.querySelectorAll('#tk-cal .tk-grid .tk-cchip .tk-ctext')].map(e => e.scrollWidth <= e.clientWidth + 1),
+    weekdays: document.querySelectorAll('#tk-cal .tk-week span').length,
+    none: !!document.querySelector('#tk-cal .tk-nodue .pcd-h'),
+  }));
+  expect(r.off, 'the grouping is not greyed in the calendar');
+  expect(r.today === 1, 'today is not framed');
+  expect(r.chips.length > 0 && r.chips.every(Boolean), 'a task of the calendar is cut');
+  expect(r.weekdays === 7 && r.none, 'no weekdays or no «Без срока»');
+  await page.evaluate(() => setTasksCalMode('week'));
+  await sleep(300);
+  expect(await page.evaluate(() => document.querySelectorAll('#tk-cal .tk-day.tk-tall').length) === 7, 'the week has not seven days');
+  await page.evaluate(() => { setTasksCalMode('month'); setTasksView('list'); });
+  await sleep(300);
+  expect(await page.evaluate(() => !document.getElementById('tk-groups-box').classList.contains('tk-tbg-off')
+    && !!document.querySelector('#tk-list .tk-group.pcard .pcd-ic, #tk-list .tk-group.pcard .tk-ava')), 'the list has no group cards');
+  // the names of the columns: one bar above all the cards, each name over its column (the summary folded:
+  // room for the grid); «Колонки» adds a column to the bar and the rows alike; the cards have no bar
+  const cols = await page.evaluate(() => {
+    TK.rep = false; TK.cols = ['who', 'due', 'src']; renderTasks();
+    const bar = document.querySelectorAll('#tk-list > .tk-colbar > span');
+    const x = el => Math.round(el.getBoundingClientRect().left);
+    return [bar.length === 7, ...[...document.querySelectorAll('#tk-list .tk-group .tk-row')].map(row => {
+      const c = row.children;
+      return [x(bar[2]) === x(c[2]), x(bar[3]) === x(c[3]), x(bar[4]) === x(c[4]), x(bar[5]) === x(c[5])];
+    }).flat()];
+  });
+  expect(cols.length > 1 && cols.every(Boolean), `the column names are off their columns: ${cols}`);
+  await page.evaluate(() => setTasksView('cards'));
+  await sleep(300);
+  expect(await page.evaluate(() => !document.querySelector('#tk-list .tk-colbar') && document.querySelectorAll('#tk-list .tk-tcard').length > 0), 'the cards view is not cards');
+  await page.evaluate(() => { setTasksView('list'); TK.rep = true; resetTasksCols(); });
+});
+
+// «Словарь» is a section of the rail: a word added with its variants and group shows in its group with the
+// number of recordings that hold it; the old entry in the settings leads here
+await step('dictionary section', async () => {
+  await page.click('#rail-dict');
+  await sleep(600);
+  expect(await page.isVisible('#dict-view') && await page.evaluate(() => document.getElementById('rail-dict').classList.contains('rail-on')), 'the section did not open');
+  await page.fill('#settings-dict-term', 'Пиксель-Студио');
+  await page.fill('#settings-dict-variants', 'пиксель студия');
+  await page.fill('#settings-dict-cat', 'Компании');
+  await page.click('#settings-dict-add');
+  await sleep(600);
+  const r = await page.evaluate(() => ({
+    row: [...document.querySelectorAll('#dc-words .dc-row:not(.dc-thead)')].some(x => x.textContent.includes('Пиксель-Студио') && x.textContent.includes('пиксель студия')),
+    group: [...document.querySelectorAll('#dc-words .dc-filters button')].some(b => b.textContent.includes('Компании')),
+    used: document.querySelectorAll('#dc-words .dc-row:not(.dc-thead) .dc-used').length > 0,
+  }));
+  expect(r.row && r.group && r.used, `the word is not in its group: ${JSON.stringify(r)}`);
+  await page.evaluate(() => { const d = state.dictionary.find(x => x.term === 'Пиксель-Студио'); return deleteDictItem(d.id); });
+  await page.evaluate(() => { openModal('settings', 'dictionary'); });
+  await sleep(500);
+  await page.click('#modal-settings [data-stab="dictionary"] button[data-click="openDictionary"]');
+  await sleep(500);
+  expect(await page.isVisible('#dict-view'), 'the settings entry does not lead to the section');
+});
+
+// «Люди» is a section of the rail: the people on the left, the card of the one chosen on the right in cards
+await step('people section', async () => {
+  await page.click('#rail-people');
+  await sleep(800);
+  const r = await page.evaluate(() => ({
+    view: !document.getElementById('people-view').classList.contains('hidden'),
+    rows: document.querySelectorAll('#pv-list .pv-row').length,
+    cards: document.querySelectorAll('#pv-card .pcard .pcd-ic').length,
+    on: document.getElementById('rail-people').classList.contains('rail-on'),
+  }));
+  expect(r.view && r.rows >= 3 && r.cards >= 2 && r.on, `people: ${JSON.stringify(r)}`);
+});
+
+// Ассистент: the field has a send button; an answer's sources are moments «▶ 00:24» in the text, and under it
+// each recording by its full name with its moments
+await step('assistant sources', async () => {
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(500);
+  const r = await page.evaluate(async () => {
+    for (let i = 0; i < 30 && !ASSIST.loaded; i++) await new Promise(res => setTimeout(res, 100));
+    assistantNewChat();
+    currentChat().items.push({ id: 991, question: 'Что решили по срокам?', scope: state.askScope, scopeLabel: '', status: 'done', at: new Date().toISOString(),
+      data: { found: true, answer: 'Сроки уточнят до среды [1], список будет к пятнице [2].', sources: [
+        { n: 1, meeting_id: 1, title: 'Планёрка отдела', date: '21 ноября', start: 24, text: 'По срокам нужно уточнить.' },
+        { n: 2, meeting_id: 1, title: 'Планёрка отдела', date: '21 ноября', start: 12, text: 'Я подготовлю список к пятнице.' }] } });
+    renderAssistant();
+    return { refs: [...document.querySelectorAll('#ask-thread .markdown-body .as-ref')].map(b => b.textContent),
+      rows: document.querySelectorAll('#ask-thread .as-srcrow').length, send: !!document.querySelector('#library-ask-btn svg') };
+  });
+  expect(r.refs.join() === '▶ 00:24,▶ 00:12' && r.rows === 1 && r.send, `assistant: ${JSON.stringify(r)}`);
+});
+
+// Настройки: eight sections with their line icons, «Календарь» one of them; the cards with the icon of their section
+await step('settings sections', async () => {
+  await page.evaluate(() => openModal('settings', 'calendar'));
+  await sleep(500);
+  const r = await page.evaluate(() => ({
+    nav: document.querySelectorAll('#settings-nav .sx-nav-btn svg').length,
+    on: document.getElementById('stab-calendar').classList.contains('is-active'),
+    icons: [...document.querySelectorAll('#modal-settings [data-stab="calendar"] .settings-card')].every(c => !c.querySelector('h4') || c.querySelector('.sx-card-hd > .pcd-ic')),
+  }));
+  expect(r.nav === 8 && r.on && r.icons, `settings sections: ${JSON.stringify(r)}`);
+  await page.evaluate(() => closeModal('settings'));
+  await sleep(300);
 });
 
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
@@ -198,40 +416,36 @@ await step('first run wizard', async () => {
   expect(cal.calendar_ics === 'https://example.com/basic.ics' && cal.meet_auto_all === 'true', `the calendar not saved: ${JSON.stringify(sent)}`);
 });
 
-// After an update: a small wizard asks the settings a new version brings (asked by the user), once
-await step('setup steps after an update', async () => {
+// After an update: ONE window — the settings a new version asks answered in place (amber «Нужен ответ», then
+// green «Сохранено»), the new features as cards, all the changes folded as «Новое» and «Исправлено»; «Готово»
+// marks every step answered, and they are not asked again
+await step('window after an update', async () => {
   await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
   await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
-  await page.waitForSelector('#setup-steps select[data-hol-country] option[value="RS"]', { state: 'attached' });
-  await page.selectOption('#setup-steps select[data-hol-country]', 'RS');
-  expect(!(await page.$('#setup-steps select[data-hol-subdiv]')), 'a region offered for a country without them');
-  // each step saved before the next shows (its buttons wait meanwhile): wait for that, not for a time
-  const next = async () => {
-    const was = await page.getAttribute('#setup-steps-dialog', 'data-step');
-    await page.click('#setup-steps button[data-a="next"]');
-    // polled with evaluate: waitForFunction is refused by the page's CSP (no eval) in CI's Playwright
-    for (let i = 0; i < 80; i++) {
-      const moved = await page.evaluate(prev => {
-        const d = document.getElementById('setup-steps-dialog');
-        return !d || (d.dataset.step !== prev && !d.querySelector('button[data-a="next"]').disabled);
-      }, was);
-      if (moved) break;
-      await sleep(100);
-    }
-  };
-  await next();
-  // then the news of the version, one step each: the last one closes the wizard
-  for (let i = 0; i < 5 && await page.$('#setup-steps-dialog'); i++) {
-    expect(await page.$('#setup-steps .frw-points li'), 'a news step without its points');
-    await next();
-  }
-  expect(!(await page.$('#setup-steps')), 'the wizard stayed open');
+  await page.waitForSelector('#upd-after select[data-hol-country] option[value="RS"]', { state: 'attached' });
+  await page.selectOption('#upd-after select[data-hol-country]', 'RS');
+  expect(!(await page.$('#upd-after select[data-hol-subdiv]')), 'a region offered for a country without them');
+  expect(await page.$('#upd-after .upd-chip-warn'), 'the step does not say it needs an answer');
+  await page.click('#upd-after button[data-a="save"]');
+  for (let i = 0; i < 50 && !(await page.$('#upd-after .upd-chip-ok')); i++) await sleep(100);
+  expect(await page.$('#upd-after .upd-chip-ok'), 'the step is not marked saved');
+  expect(await page.evaluate(() => document.querySelectorAll('#upd-after .upd-card').length) >= 1, 'no new features');
+  // the notes of the version join the same window: «Новое» and «Исправлено» as lists
+  await page.evaluate(() => openAfterUpdateNotes('- **Подключение к звонку**: кнопка в карточке встречи.\n- Субтитры больше не пропадают после переключения окна.\n', '0.8.27', ''));
+  expect(await page.evaluate(() => document.querySelectorAll('#upd-after').length) === 1, 'two windows after an update');
+  await page.click('#upd-after button[data-a="all"]');
+  const notes = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#upd-after .upd-all-h')].map(h => h.textContent),
+    items: document.querySelectorAll('#upd-after .upd-all li').length, bold: !!document.querySelector('#upd-after .upd-all li strong') }));
+  expect(notes.heads.join() === 'Новое,Исправлено' && notes.items === 2 && notes.bold, `the changes are not lists: ${JSON.stringify(notes)}`);
+  await page.click('#upd-after button[data-a="done"]');
+  for (let i = 0; i < 50 && await page.$('#upd-after'); i++) await sleep(100);
+  expect(!(await page.$('#upd-after')), 'the window stayed open');
   const set = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
   expect(set.holiday_country === 'RS', `the country not saved: ${set.holiday_country}`);
   // answered: not asked again
   await page.evaluate(sv => openSetupSteps(sv), set);
   await sleep(400);
-  expect(!(await page.$('#setup-steps')), 'asked again after it was answered');
+  expect(!(await page.$('#upd-after')), 'asked again after it was answered');
   await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
 });
@@ -241,7 +455,7 @@ await step('join a meeting call', async () => {
   const sent = [];
   await page.route('**/api/meeting/join', r => { sent.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
   await page.evaluate(() => {
-    switchAppView('dashboard');
+    switchAppView('home');
     Object.assign(state.system.settings, { work_day_start: '0', work_day_end: '24' });  // the meeting is in the day shown, whatever the time
     const s = new Date(Date.now() + 5 * 60e3), e = new Date(s.getTime() + 30 * 60e3);
     home.calConfigured = true;
@@ -274,7 +488,7 @@ await step('feature card', async () => {
   await page.evaluate(() => { document.getElementById('feature-page')?.remove(); switchAppView('dashboard'); });
   await page.evaluate(() => { const l = dbPrefs().layout.filter(w => w.id !== 'features'); dbSave({ layout: [{ id: 'features', size: 'L' }, ...l] }); return loadDashboard(); });
   await sleep(800);
-  await page.click(`#db-grid .db-feat[data-click-args='[${fid}]']`);
+  await page.click(`#db-grid .db-ft-row[data-click-args='[${fid}]']`);
   await sleep(800);
   expect(await page.$('#feature-page'), 'the widget does not open the card');
   await page.evaluate(id => { document.getElementById('feature-page')?.remove(); return fetch('/api/features/' + id, { method: 'DELETE' }); }, fid);
@@ -355,11 +569,43 @@ await step('first run wizard, cloud', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
-// The calendar of a week or a month opens from the home page and closes with Esc
+// «Сегодня»: «Календарь» День · Неделя · Месяц — the week and the month over the width, the cards under them,
+// ‹ › move by a week, the day comes back with its meetings (docs/pult-plan.md, stage 3)
+await step('today calendar', async () => {
+  await page.evaluate(() => { dbSave({ span: 'day' }); switchAppView('home'); });
+  await sleep(500);
+  expect(await page.isVisible('#rail-home.rail-on'), '«Сегодня» is not marked on the rail');
+  expect(await page.isVisible('#td-day') && await page.locator('#td-cards .td-card').count() >= 3, 'the day or its cards are missing');
+  await page.click('#td-spans button >> nth=1');
+  await sleep(700);
+  expect(await page.isVisible('#td-cal .cal-week') && !(await page.isVisible('#td-day')), 'the week did not show');
+  expect(await page.evaluate(() => document.getElementById('td-body').classList.contains('td-row')), 'the cards are not under the week');
+  const label = await page.textContent('#td-sub');
+  await page.click('#td-nav button >> nth=2');
+  await sleep(500);
+  expect((await page.textContent('#td-sub')) !== label, '› did not move to the next week');
+  await page.click('#td-nav button >> nth=1');
+  await page.click('#td-spans button >> nth=2');
+  await sleep(700);
+  expect(await page.isVisible('#td-cal .cal-month .cal-cell.cal-today'), 'the month or its today did not show');
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/today-month.png` });
+  await page.click('#td-spans button >> nth=0');
+  await sleep(300);
+  expect(await page.isVisible('#td-day') && !(await page.isVisible('#td-cal')), 'the day did not come back');
+  // Ctrl+2 opens «Обзор», Ctrl+1 «Сегодня»
+  await page.keyboard.press('Control+2');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'dashboard', 'Ctrl+2 did not open «Обзор»');
+  await page.keyboard.press('Control+1');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'home', 'Ctrl+1 did not open «Сегодня»');
+});
+
+// The calendar window of a week or a month opens and closes with Esc
 await step('calendar view', async () => {
   await page.evaluate(() => switchAppView('home'));
   await sleep(500);
-  await page.click('button[data-click="openCalendarView"]');
+  await page.evaluate(() => openCalendarView());
   await sleep(600);
   expect(await page.isVisible('#cal-view .cal-week, #cal-view .cal-month'), 'the calendar did not open');
   await page.click('#cal-view button[data-cal="month"]');
@@ -380,25 +626,110 @@ await step('calendar view', async () => {
   expect(!(await page.$('#cal-view')), 'Esc did not close the calendar');
 });
 
-// The library as a table on the whole window: sorted by a header, a column added, a double click opens
-await step('library table', async () => {
-  await page.click('#lib-table-btn');
+// «Записи»: the table by day in cards, sorted by a header, a column added in «Колонки» (the view switch stays
+// where it was), the other views, the box selects and the bar of the selection takes the filters' place at
+// their height, the search shows the places found in the texts, a click opens the recording
+await step('records section', async () => {
+  await page.click('#rail-libtable');  // the rail's «Записи» (the old sidebar's button is gone)
   await sleep(500);
-  expect(await page.isVisible('#libtable-view'), 'the table did not open');
-  const rows = await page.$$eval('#lt-table tr[data-mid]', trs => trs.length);
+  expect(await page.isVisible('#libtable-view'), 'the section did not open');
+  const rows = await page.$$eval('#lt-body .lt-card [data-mid]', els => els.length);
   expect(rows > 0, 'the table has no rows');
-  await page.click('#lt-table th[data-col="name"]');
+  expect(await page.$eval('#lt-body .lt-card-h', h => !!h.querySelector('.lt-card-ic') && !!h.querySelector('.lt-card-n')), 'a day card has no icon or count');
+  expect(await page.$eval('#lt-body .lt-row', r => getComputedStyle(r).cursor) === 'pointer', 'a row has no hand cursor');
+  await page.click('#lt-body .lt-hc[data-col="name"]');
   await sleep(200);
-  expect(await page.isVisible('#lt-table th.lt-sorted[data-col="name"]'), 'the name header did not sort');
-  await page.click('button[data-click="openLibTableColumnsMenu"]');
-  await page.click('#lt-cols-menu button[data-col="size"]');
+  expect(await page.isVisible('#lt-body .lt-hc.lt-sorted[data-col="name"]'), 'the name header did not sort');
+  // the names of the columns: one bar above the cards, each name over its column
+  expect(await page.locator('#lt-body .lt-hrow').count() === 1, 'the column names are not one bar');
+  const offs = await page.$$eval('#lt-body .lt-hc[data-col]', hs => hs.map(h => {
+    const cell = document.querySelector(`#lt-body .lt-row .lt-c-${h.dataset.col}`);
+    return cell ? Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) : 99;
+  }));
+  expect(offs.every(d => d < 1), `a column name is off its column: ${offs.join(', ')}`);
+  const segAt = () => page.$eval('#lt-bar .lt-seg', el => Math.round(el.getBoundingClientRect().left));
+  const before = await segAt();
+  await page.click('[data-lt-cols]');
+  await page.click('#lt-cols-pop input[data-col="size"]');
   await sleep(200);
-  expect(await page.isVisible('#lt-table th[data-col="size"]'), 'the size column did not appear');
-  await page.click('#lt-cols-menu button[data-col="reset"]');
+  expect(await page.isVisible('#lt-body .lt-hc[data-col="size"]'), 'the size column did not appear');
+  expect(await segAt() === before, 'the view switch moved with the columns');
+  // «Строки: Компактные» in «Колонки» makes the rows lower
+  const rowH = () => page.$eval('#lt-body .lt-row', r => r.getBoundingClientRect().height);
+  const h1 = await rowH();
+  await page.click('#lt-cols-pop [data-dense="1"]');
+  await sleep(200);
+  expect(await rowH() < h1, 'compact rows are not lower');
+  await page.click('#lt-cols-pop [data-col-reset]');
   await page.keyboard.press('Escape');
-  await page.dblclick('#lt-table tr[data-mid] td.lt-c-name');
+  for (const v of ['cards', 'folders']) {
+    await page.click(`#lt-bar .lt-seg-b[data-click-args='["${v}"]']`);
+    await sleep(200);
+    expect(await page.locator('#lt-body [data-mid]').count() > 0, `no recordings in the view ${v}`);
+    expect(await segAt() === before, `the view switch moved in the view ${v}`);
+    expect(await page.isEnabled('[data-lt-cols]'), `«Колонки» is off in the view ${v}`);
+  }
+  // in «Карточки» «Колонки» chooses the details of the cards
+  await page.click(`#lt-bar .lt-seg-b[data-click-args='["cards"]']`);
+  await sleep(200);
+  await page.click('[data-lt-cols]');
+  await page.click('#lt-cols-pop input[data-col="status"]');
+  await sleep(200);
+  expect(await page.locator('#lt-body .lt-tile .lt-st').count() === 0, 'the state stays on the cards after it was unticked');
+  await page.click('#lt-cols-pop [data-col-reset]');
+  await page.keyboard.press('Escape');
+  await page.click(`#lt-bar .lt-seg-b[data-click-args='["table"]']`);
+  await sleep(200);
+  const barH = () => page.$eval('#lt-bar', el => Math.round(el.getBoundingClientRect().height + parseFloat(getComputedStyle(el).marginBottom)));
+  const h0 = await barH();
+  await page.click('#lt-body .lt-row .lt-cbx');
+  await sleep(200);
+  expect(await page.isVisible('#lt-bar.lt-selbar'), 'the selection bar did not show');
+  expect(/В папку/.test(await page.textContent('#lt-bar')) && /Расшифровать/.test(await page.textContent('#lt-bar')), 'the selection bar lacks its actions');
+  expect(await barH() === h0, 'the list moved when a recording was selected');
+  await page.click('#lt-bar button[data-click="clearLibSelection"]');
+  await page.fill('#lt-q', 'тема');
+  await sleep(900);
+  expect(await page.locator('#lt-body .lt-snip').count() > 0, 'the search shows no places in the text');
+  expect(/мест/.test(await page.textContent('#lt-count')), 'the count does not say how many places were found');
+  await page.fill('#lt-q', '');
+  await sleep(300);
+  await page.click('#lt-body .lt-row .lt-c-name');
   await sleep(600);
-  expect(await page.evaluate(() => state.appView) === 'library', 'a double click did not open the recording');
+  expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
+});
+
+// Import: «＋ Импорт ▾» in the title of «Записи» is a menu with an icon at each way to add; Ctrl+O and files
+// dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
+await step('import menu and drop veil', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await sleep(300);
+  await page.click('#lt-import-btn');
+  await sleep(200);
+  const rows = await page.$$eval('#imp-menu .imp-menu-row', els => els.map(e => [e.dataset.imp, !!e.querySelector('.imp-menu-ic svg')]));
+  expect(rows.map(r => r[0]).join() === 'files,folder,link,params' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
+  expect(/Ctrl\+O/.test(await page.textContent('#imp-menu')), 'the menu does not name Ctrl+O');
+  await page.click('#imp-menu [data-imp="link"]');
+  await sleep(400);
+  expect(await page.isVisible('#modal-import') && await page.evaluate(() => document.activeElement?.id) === 'url-import-input', '«Ссылка» did not open the window at the link');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  expect(!(await page.isVisible('#btn-new-recording')), 'the old import button of the sidebar is still there');
+  await page.evaluate(() => switchAppView('dashboard'));
+  await sleep(300);
+  await page.keyboard.press('Control+o');
+  await sleep(400);
+  expect(await page.isVisible('#modal-import'), 'Ctrl+O did not open the import from «Главная»');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['x'], 'call.mp3', { type: 'audio/mpeg' }));
+    document.body.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: dt }));
+  });
+  await sleep(200);
+  expect(await page.isVisible('#drop-overlay') && /Отпустите/.test(await page.textContent('#drop-overlay-title')), 'no veil while files are dragged over «Главная»');
+  await page.evaluate(() => hideDropOverlay());
 });
 
 // «Через минуту: …» goes by itself once a recording is going on (reported by the user: it stayed)
@@ -435,6 +766,27 @@ await step('dashboard rises once', async () => {
 
 // Captions wait for the switch as a recording starts unless asked for, and never by themselves with «Не мешать
 // на встречах» (asked by the user: they loaded a model during a meeting)
+// Live captions in the look of the transcript's «Чат» (stage 5): a bubble for each line, the face and the name
+// once for a run of one speaker, the last line with text lit; the phrase not shown yet adds no bubble
+await step('live captions as a chat', async () => {
+  const rows = await page.evaluate(() => {
+    switchAppView('studio');
+    [[1, 'Начнём с плана.', 'Мария'], [2, 'Я посмотрю сроки.', 'Анна'], [3, 'И проверю оценку.', 'Анна']]
+      .forEach(([id, text, who]) => liveCap.lines.set(id, { id, text, who, lang: 'ru', translation: '' }));
+    liveCap.partial = 'ещё говорит';
+    syncStudioCaptions();
+    const out = [...document.querySelectorAll('#studio-cap-rows > .cap-row')].map(e => ({ cls: e.className, bub: !!e.querySelector('.cap-bub') }));
+    liveCap.lines.clear();
+    liveCap.partial = '';
+    capReset();
+    return out;
+  });
+  expect(rows.length === 4 && rows.every(r => r.bub), `the lines are not bubbles: ${JSON.stringify(rows)}`);
+  expect(!/cap-cont/.test(rows[1].cls) && /cap-cont/.test(rows[2].cls), 'the face and the name are not once per run');
+  expect(/cap-now/.test(rows[2].cls) && /cap-pending/.test(rows[3].cls) && !/cap-now/.test(rows[3].cls), `the last line is not lit: ${rows.map(r => r.cls).join(' | ')}`);
+  await page.evaluate(() => switchAppView('library'));
+});
+
 await step('captions do not start by themselves', async () => {
   const held = await page.evaluate(() => [
     captionsHeldAtStart({}),
@@ -451,11 +803,37 @@ await step('captions do not start by themselves', async () => {
 
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
-  await page.evaluate(() => switchAppView('dashboard'));
+  await page.evaluate(() => { resetDashboard(); switchAppView('dashboard'); });  // the default layout, whatever was arranged before
   await sleep(1200);
   expect(await page.isVisible('#dashboard-view'), 'the dashboard did not open');
   expect(await page.locator('#db-grid .db-w').count() >= 8, 'the widgets are missing');
-  expect(await page.isVisible('#db-hello .hm-greeting'), 'the greeting did not move to the dashboard');
+  // «Статистика»: its tiles; «Показатели» turns one on, keeps the list where it was scrolled, says the limit at 8
+  expect(await page.locator('#db-grid .db-kts .db-kt').count() >= 2, 'no tiles in «Статистика»');
+  await page.click('#db-grid .db-kc-btn');
+  await sleep(200);
+  expect(await page.isVisible('#db-grid .db-kc'), '«Показатели» did not open');
+  const kpi0 = await page.evaluate(() => dbPrefs().kpis.length);
+  await page.evaluate(() => { const l = document.querySelector('#db-grid .kc-list'); l.scrollTop = 60; });
+  await page.click('#db-grid .kc-row:not(.on) .kc-cb >> nth=0');
+  await sleep(200);
+  expect(await page.evaluate(() => dbPrefs().kpis.length) === kpi0 + 1, 'a metric was not turned on');
+  expect(await page.locator('#db-grid .db-kts .db-kt').count() === kpi0 + 1, 'its tile did not come');
+  expect(await page.evaluate(() => document.querySelector('#db-grid .kc-list').scrollTop) > 0, 'the list jumped to its top');
+  await page.evaluate(() => dbSave({ kpis: Object.keys(DB_KPI).slice(0, 8) }));
+  await page.evaluate(() => dbKpiRedraw());
+  expect(await page.isVisible('#db-grid .kc-lim'), 'no note at 8 of 8');
+  await page.click('#db-grid .kc-row.full .kc-cb >> nth=0', { force: true });
+  expect(await page.evaluate(() => document.querySelector('#db-grid .kc-lim').classList.contains('hit')), 'the note did not flash');
+  expect(await page.evaluate(() => dbPrefs().kpis.length) === 8, 'a ninth metric was turned on');
+  await page.click('#db-grid .kc-f .tk-btn >> nth=0');  // «По умолчанию»
+  await page.click('#db-grid .kc-f .tk-btn-primary');
+  // the look of a chart, kept, and the page stays where it is
+  const scroll0 = await page.evaluate(() => { const g = document.getElementById('db-grid'); g.scrollTop = 120; return g.scrollTop; });
+  await page.click('#db-grid .db-w-time .db-chsw button >> nth=2');
+  await sleep(200);
+  expect(await page.evaluate(() => dbPrefs().charts.time) === 'ring', 'the look of «Время во встречах» was not kept');
+  expect(await page.evaluate(() => document.getElementById('db-grid').scrollTop) === scroll0, 'the switch moved the page');
+  await page.evaluate(() => dbSave({ charts: {} }));
   await page.click('#db-edit-btn');
   await sleep(200);
   const before = await page.locator('#db-grid .db-w').count();
@@ -505,7 +883,7 @@ await step('dashboard', async () => {
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
   await sleep(600);
-  expect((await page.textContent('#db-sub')).startsWith('Месяц'), 'the period did not change');
+  expect(await page.evaluate(() => DB.data && DB.data.period === 'month' && document.querySelector('#db-periods button[aria-checked="true"]').textContent === 'Месяц'), 'the period did not change');
   await page.click('#db-periods button >> nth=0');
   await sleep(300);
 });
@@ -588,6 +966,58 @@ await step('progress redraws one row', async () => {
   expect(r.shown, 'the row does not show the new progress');
   expect(r.afterRow === 0, 'a progress event drew the whole list');
   expect(r.afterStatus === 1, 'a status change did not draw the list');
+});
+
+// The strip of the meeting («Пульт встреч»): a meeting within 15 minutes, one going on without a recording
+// (its «Подключиться» joins the call), and the recording just made with its summary ready
+await step('meeting strip', async () => {
+  const sent = [];
+  await page.route('**/api/meeting/join', r => { sent.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  const setEvents = list => page.evaluate(list => {
+    strip.events = list.map(([title, a, b]) => ({ key: `s|${title}`, title, s: new Date(Date.now() + a * 60e3), e: new Date(Date.now() + b * 60e3),
+      attendees: [], online: true, join: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_s%40thread.v2/0' }));
+    strip.configured = true; strip.at = Date.now(); strip.html = ''; renderStrip();
+  }, list);
+  const pill = () => page.textContent('#strip-pill-t');
+  await setEvents([['Планёрка отдела', 4, 34]]);
+  expect((await pill()).startsWith('Через'), `soon: ${await pill()}`);
+  expect((await page.textContent('#strip-lead')) === 'Планёрка отдела', 'the meeting is not named');
+  await setEvents([['Планёрка отдела', -6, 24]]);
+  expect(await pill() === 'Идёт без записи', `going on: ${await pill()}`);
+  await page.click('#strip-acts button:has-text("Подключиться")');
+  await sleep(300);
+  expect(sent.length === 1, 'the call was not joined');
+  await page.click('#strip-acts button:has-text("Не записывать")');
+  expect(await pill() !== 'Идёт без записи', '«Не записывать» did not leave the meeting');
+  await page.unroute('**/api/meeting/join');
+  await setEvents([]);
+  await page.evaluate(() => {
+    const at = new Date().toISOString();
+    state.meetings.unshift({ id: 9901, title: 'Созвон с подрядчиком', source: 'recording', status: 'completed', has_summary: 1, duration: 600, created_at: at, completed_at: at });
+    strip.html = ''; renderStrip();
+  });
+  expect(await pill() === 'Итоги готовы', `ready: ${await pill()}`);
+  await page.click('#strip-acts button:has-text("Скрыть")');
+  expect(await pill() !== 'Итоги готовы', 'the summary was not hidden');
+  await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
+});
+
+// «Очередь» on the rail and the load of the status bar: each opens its window next to it, Escape and a click
+// outside close it
+await step('queue and load windows', async () => {
+  await page.click('#rail-jobs');
+  await sleep(300);
+  expect(await page.isVisible('#jobs-pop'), 'the queue window did not open');
+  const r = await page.evaluate(() => [document.getElementById('jobs-pop').getBoundingClientRect().left, document.getElementById('app-rail').getBoundingClientRect().right]);
+  expect(r[0] >= r[1] && r[0] - r[1] < 20, `the queue window is not next to the rail: ${r}`);
+  await page.keyboard.press('Escape');
+  expect(!(await page.isVisible('#jobs-pop')), 'Escape did not close the queue window');
+  await page.click('#sb-load');
+  await sleep(500);
+  expect(await page.isVisible('#load-pop'), 'the load window did not open');
+  expect((await page.textContent('#load-pop')).includes('CPU'), 'the load window has no processor');
+  await page.mouse.click(700, 26);
+  expect(!(await page.isVisible('#load-pop')), 'a click outside did not close the load window');
 });
 
 // The language and the dashboard follow the server, not only this origin's localStorage: when 8765 is

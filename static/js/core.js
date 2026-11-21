@@ -319,6 +319,13 @@ function enhanceDateInput(input) {
   btn.type = 'button';
   btn.className = `${input.className} vs-date-btn`;
   btn.title = input.title;
+  // the button is what the keyboard and a screen reader reach: it takes the field's name, and its keys for a
+  // change of the language
+  const label = input.getAttribute('aria-label') || input.title;
+  if (label) btn.setAttribute('aria-label', label);
+  const tKey = input.getAttribute('data-i18n-title'), aKey = input.getAttribute('data-i18n-aria') || tKey;
+  if (tKey) btn.setAttribute('data-i18n-title', tKey);
+  if (aKey) btn.setAttribute('data-i18n-aria', aKey);
   btn.addEventListener('click', () => { try { input.showPicker(); } catch (e) { input.focus(); } });
   input.tabIndex = -1;
   input.setAttribute('aria-hidden', 'true');
@@ -402,6 +409,7 @@ function setUILanguage(lang) {
   if (typeof renderMeetingFeatures === 'function') renderMeetingFeatures();
   if (typeof refreshTasksCount === 'function') refreshTasksCount(true);
   if (typeof scheduleFitTopbar === 'function') scheduleFitTopbar();
+  if (typeof rpApplyMini === 'function') rpApplyMini();  // the minimize button's title and label
   if (state.system) {
     const p = state.system.paths;
     const dirEl = document.getElementById('settings-data-dir');
@@ -425,6 +433,8 @@ function setUILanguage(lang) {
   if (typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);  // the memory badges
   if (typeof renderUpdateStatus === 'function') renderUpdateStatus();
   renderQueuePanel();
+  if (typeof renderDictPage === 'function') renderDictPage();  // «Словарь», drawn by its script
+  if (typeof renderLoadIndicator === 'function') renderLoadIndicator();  // «Модели не в памяти» of the status bar
   if (state.activeMeeting) { renderTranslationControls(); updateProcessingBanner(state.activeMeeting); }
   if (typeof renderRecordSaveHint === 'function') renderRecordSaveHint();
   applyVideoLayout();
@@ -729,10 +739,10 @@ function formatTime(sec) {
 // ([data-stab]): the sections of the former tabs are listed in SETTINGS_SECTION_TAB, and their old
 // names (openModal('settings', 'hotkeys'), "settings:hotkeys" of a notification, #settings/models)
 // open the tab and scroll to the section
-const SETTINGS_TABS = ['general', 'record', 'recognition', 'analysis', 'export', 'privacy', 'advanced'];
+const SETTINGS_TABS = ['general', 'record', 'recognition', 'analysis', 'calendar', 'export', 'privacy', 'advanced'];
 const SETTINGS_SECTION_TAB = {
   updates: 'general', about: 'general',
-  hotkeys: 'record', calendar: 'record',
+  hotkeys: 'record',
   models: 'recognition', dictionary: 'recognition',
   bench: 'advanced', dub: 'advanced',
 };
@@ -803,6 +813,9 @@ document.addEventListener('keydown', e => {
 
 function openModal(name, tab) {
   if (name === 'settings') mountSettingsPage();  // the settings are a page of the main area (shell.js)
+  // «Очередь» and «Нагрузка» stand above the windows (z 60): they close when a window opens
+  if (typeof closeJobsPop === 'function') closeJobsPop();
+  if (typeof closeLoadPop === 'function') closeLoadPop();
   const modal = document.getElementById(`modal-${name}`);
   _modalReturnFocus[name] = document.activeElement;
   if (name !== 'settings') {

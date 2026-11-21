@@ -345,11 +345,17 @@ function anyModalOpen() {
   return [...document.querySelectorAll('[id^="modal-"]')].some(m => !m.classList.contains('hidden') && !m.closest('#settings-view'));
 }
 
+// Ctrl+F and «/»: the search in the text of the open recording; in «Записи», or without a recording, the search
+// of «Записи»
 function focusTranscriptSearch() {
-  if (!state.activeMeeting) {
-    document.getElementById('global-search-input')?.focus();
+  if (!state.activeMeeting || state.appView === 'libtable') {
+    const q = document.getElementById('lt-q');
+    const go = () => { q?.focus(); q?.select(); };
+    // the section, when it opens, puts the focus on its list a frame later: the search takes it after that
+    if (state.appView !== 'libtable') { switchAppView('libtable'); nextFrame(go); } else go();
     return;
   }
+  if (state.appView !== 'library') switchAppView('library');  // the recording may be open behind another section
   if (state.activeWorkspaceTab !== 'transcript' && !state.theatre) switchWorkspaceTab('transcript');
   const input = document.getElementById('transcript-search');
   input.focus();
@@ -362,7 +368,10 @@ document.addEventListener('keydown', (e) => {
     // Closes the dialog on top; the recording window stays open while it records
     const open = [...document.querySelectorAll('[id^="modal-"]')].filter(m => !m.classList.contains('hidden'));
     const top = open[open.length - 1];
-    if (top && !isTypingTarget(e.target)) {
+    // a one-line field of the dialog itself (the link of «Импорт», focused on opening) does not keep it open;
+    // a text area and the fields of the page under it do
+    const ownLine = top && e.target.tagName === 'INPUT' && top.contains(e.target);
+    if (top && (ownLine || !isTypingTarget(e.target))) {
       e.preventDefault();
       closeModal(top.id.slice('modal-'.length));
     } else if (!top && studio.focus) {
@@ -374,17 +383,18 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey) {
     if (e.code === 'KeyO' && !e.shiftKey) {
       e.preventDefault();
-      openModal('import');
+      if (!impIsOpen()) openImport();  // «Файлы с компьютера» of the import menu, from any screen
     } else if (e.code === 'KeyF' && !e.shiftKey) {
       e.preventDefault();
       focusTranscriptSearch();
     } else if (e.code === 'KeyI' && !e.shiftKey && state.activeMeeting && !anyModalOpen()) {
       e.preventDefault();  // the details of the open recording (its ⋯ in the top bar)
       rpOpenInfo();
-    } else if (/^(Digit|Numpad)[1-5]$/.test(e.code) && !e.shiftKey && !anyModalOpen()) {
-      // Ctrl+1…5: the dashboard (1 and 2: the former Home and Tasks), the open recording, the Studio, the Assistant
+    } else if (/^(Digit|Numpad)[1-6]$/.test(e.code) && !e.shiftKey && !anyModalOpen()) {
+      // Ctrl+1…6: the rail's sections in their order (Сегодня, Обзор, Записи, Задачи, Люди, Ассистент)
       e.preventDefault();
-      switchAppView(['dashboard', 'dashboard', 'library', 'studio', 'ask'][Number(e.code.slice(-1)) - 1]);
+      const n = Number(e.code.slice(-1));
+      if (n === 5) openContacts(); else switchAppView(['home', 'dashboard', 'libtable', 'tasks', '', 'ask'][n - 1]);
     }
     return;
   }
@@ -416,16 +426,12 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// Alt+Space: play and pause from anywhere. Alt+← / Alt+→ are «Назад» / «Вперёд» of the app (shell.js), not a
+// seek: both ran at once (← → alone seek in the player)
 document.addEventListener('keydown', (e) => {
   if (e.altKey && e.code === 'Space') {
     e.preventDefault();
     togglePlayPause();
-  } else if (e.altKey && e.code === 'ArrowLeft') {
-    e.preventDefault();
-    skipPlayer(-5);
-  } else if (e.altKey && e.code === 'ArrowRight') {
-    e.preventDefault();
-    skipPlayer(5);
   }
 });
 

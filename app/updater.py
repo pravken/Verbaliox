@@ -639,12 +639,72 @@ def _restore(backup: Path, app_dir: Path, added: List[str], log_dir: Path) -> Li
     return failed
 
 
+def _process_running(pid: int, since: Optional[float] = None) -> bool:
+    """True while the process `pid` runs. With `since` (when it wrote its mark), a process started after
+    that moment is another program that got the same number, not the installer."""
+    if not pid or pid < 0:
+        return False
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.OpenProcess.restype = wintypes.HANDLE
+            k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            k32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+            k32.CloseHandle.argtypes = [wintypes.HANDLE]
+            h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not h:
+                return ctypes.get_last_error() == 5  # access denied: it exists
+            try:
+                code = wintypes.DWORD()
+                if not k32.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:  # STILL_ACTIVE
+                    return False
+                if since is not None:
+                    times = [wintypes.FILETIME() for _ in range(4)]
+                    if k32.GetProcessTimes(h, *[ctypes.byref(t) for t in times]):
+                        ft = (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime
+                        if ft / 1e7 - 11644473600 > since + 2:
+                            return False
+                return True
+            finally:
+                k32.CloseHandle(h)
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def installer_running(data_dir: Path) -> bool:
+    """An update is being installed now: its mark names a process that still runs. Its files must not be
+    put back under it (found in the review: a start during the installation rolled the files back)."""
+    try:
+        info = json.loads((data_dir / IN_PROGRESS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(info, dict):
+        return False
+    try:
+        return _process_running(int(info.get("pid") or 0), float(info["started"]) if info.get("started") else None)
+    except (TypeError, ValueError):
+        return False
+
+
 def recover_interrupted(app_dir: Path, data_dir: Path) -> bool:
     """At start: an update cut off while it replaced files (the computer switched off, the process
     killed) left two versions mixed (found in the audit). The previous version is put back from the
     backup; libraries half installed are installed again by the launcher (setup.bat). True when done."""
     marker = data_dir / IN_PROGRESS
-    if not marker.is_file():
+    if not marker.is_file() or installer_running(data_dir):  # the installer at work: not cut off
         return False
     log_dir = data_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -694,7 +754,11 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
         marker = data_dir / IN_PROGRESS
 
         def mark(packages: bool = False) -> None:  # read at the next start if this process is cut off
-            marker.write_text(json.dumps({"backup": str(backup), "added": added, "packages": packages}), encoding="utf-8")
+            # the installer's process: a start of the program while it works does not take it for cut off
+            marker.write_text(json.dumps({"backup": str(backup), "added": added, "packages": packages,
+                                          "pid": os.getpid(), "started": started}), encoding="utf-8")
+
+        started = time.time()
 
         mark()
         try:

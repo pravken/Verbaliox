@@ -20,13 +20,14 @@
         <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
       </div>
       <div id="drop-overlay-title" class="text-[17px] font-semibold text-white" data-i18n="dropOverlayTitle">Отпустите, чтобы добавить файлы</div>
-      <div id="drop-overlay-sub" class="text-xs text-apple-secondary mt-1.5" data-i18n="dropOverlaySub">Каждый файл станет отдельной записью в медиатеке</div>
+      <div id="drop-overlay-sub" class="text-xs text-apple-secondary mt-1.5" data-i18n="dropOverlaySub">Каждый файл станет отдельной записью и будет расшифрован</div>
     </div>
   </div>
 
 
-  <!-- The library on the left, the top bar and the views on the right; the status bar under both -->
+  <!-- The rail of the sections, the library, the top bar and the views; the status bar under them all -->
   <div id="app-row" class="flex-1 min-h-0 flex">
+  <!-- @include parts/rail.html -->
   <!-- @include parts/sidebar.html -->
 
   <!-- @include parts/workspace.html -->
@@ -52,6 +53,7 @@
   <script src="/static/server_text.js"></script>
   <!-- The page script in parts (static/js), in this order: they share one global scope -->
   <script src="/static/js/core.js"></script>
+  <script src="/static/js/pult_cards.js"></script>
   <script src="/static/js/shell.js"></script>
   <script src="/static/js/menus.js"></script>
   <script src="/static/js/settings.js"></script>
@@ -66,10 +68,13 @@
   <script src="/static/js/importdlg.js"></script>
   <script src="/static/js/people.js"></script>
   <script src="/static/js/tasks.js"></script>
+  <script src="/static/js/dictionary.js"></script>
   <script src="/static/js/features.js"></script>
   <script src="/static/js/libtable.js"></script>
   <script src="/static/js/dashboard.js"></script>
+  <script src="/static/js/today.js"></script>
   <script src="/static/js/assistant.js"></script>
+  <script src="/static/js/pult.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

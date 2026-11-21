@@ -8,13 +8,15 @@
 const TK = {
   data: { tasks: [], people: [], meetings: {}, today: '' },
   loaded: false,
-  view: 'list',            // list | cal
-  by: 'person',            // person | due | record
+  view: 'list',            // list (the table) | cards | cal
+  by: 'due',               // due | person | feature | record
   filter: 'open',          // open | mine | over | done | all
   people: [],              // casefolded names the list is limited to
   q: '',
   keep: new Set(),         // ticked here: they stay on screen until the filter or the view changes
   month: null,             // the first day of the month on the calendar (a Date)
+  calMode: 'month',        // month | week
+  week: '',                // the Monday of the week shown in the week view (ISO)
   sel: null,               // the task whose card is open on the calendar
   day: null,               // the day chosen on the calendar (ISO)
   rep: (window.innerWidth || 1300) >= 1240,  // the Summary panel is open; folded on a narrow window, the list needs the room
@@ -28,7 +30,9 @@ const TK = {
 };
 
 const TK_KIND_ORDER = ['part', 'ext', 'team', 'org', 'none'];
-const TK_COLORS = ['#64D2FF', '#FFB340', '#C9A2FF', '#7EE787', '#FF8A80', '#8CC4FF', '#FFD60A', '#5DE4C7'];
+// a person's colour (avatars, the dots of the calendar): distinct hues, never a colour of a state (amber, red,
+// green: those say «attention», «overdue», «done» — CLAUDE.md)
+const TK_COLORS = ['#4C7FD9', '#2EB6A6', '#9B6BDF', '#D46FC4', '#A0785A', '#6B7FA8'];
 const TK_ME_KEY = 'vs-tasks-me';  // where «Это я» of the tasks was kept before the setting my_name
 
 // Who the user is: the setting my_name (names separated by commas), shared with the home page and
@@ -140,6 +144,7 @@ async function loadTasks() {
 }
 
 async function renderTasksPage() {
+  TK.rise = true;  // entering the section: the cards rise
   await loadTasks();
   renderTasks();
 }
@@ -152,6 +157,11 @@ function renderTasks() {
   document.getElementById('tk-list').classList.toggle('hidden', TK.view === 'cal');
   document.getElementById('tk-cal').classList.toggle('hidden', TK.view !== 'cal');
   renderTasksReport();
+  if (TK.rise) {  // on entering the section or switching its view, never on an update in place
+    TK.rise = false;
+    if (TK.view === 'cal') pultRise(document.getElementById('tk-cal'), '.tk-cal-grid-wrap, .tk-cal-side > *');
+    else pultRise(document.getElementById('tk-list'), ':scope > .tk-colbar, :scope > .tk-group');
+  }
 }
 
 // --- What is on screen: the filter, the people and the search (the counts of the filters use the same) ---
@@ -180,7 +190,7 @@ function renderTasksHeader() {
   const all = TK.data.tasks;
   const open = all.filter(x => !tkIsDone(x)).length, over = all.filter(tkIsOver).length;
   document.getElementById('tk-sub').innerHTML = escapeHtml(t('tkFromAll')) + ' · '
-    + `<b>${escapeHtml(t('tkOpenN').replace('{n}', () => open))}</b> · `
+    + `<b>${escapeHtml(plural(open, t('tkOpenForms')))}</b> · `
     + `<span class="tk-red">${escapeHtml(t('tkOverN').replace('{n}', () => over))}</span> · `
     + escapeHtml(t('tkDoneN').replace('{n}', () => all.length - open));
 }
@@ -192,14 +202,22 @@ function tkSeg(id, items, current, fn) {
   }).join('');
 }
 
-const TK_ICON_LIST = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17.5" r="1"/></svg>';
-const TK_ICON_CAL = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
+const TK_GROUPS = [['due', 'tkByDue'], ['person', 'tkByPerson'], ['feature', 'tkByFeature'], ['record', 'tkByRecord']];
+const TK_CHEVRON = '<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 
 function renderTasksBar() {
-  tkSeg('tk-views', [['list', t('tkViewList'), TK_ICON_LIST], ['cal', t('tkViewCal'), TK_ICON_CAL]], TK.view, 'setTasksView');
-  const groups = document.getElementById('tk-groups');
-  groups.classList.toggle('hidden', TK.view === 'cal');
-  tkSeg('tk-groups', [['person', t('tkByPerson')], ['due', t('tkByDue')], ['feature', t('tkByFeature')], ['record', t('tkByRecord')]], TK.by, 'setTasksGroup');
+  tkSeg('tk-views', [['list', t('tkViewTable')], ['cards', t('tkViewCards')], ['cal', t('tkViewCal')]], TK.view, 'setTasksView');
+  const cols = document.getElementById('tk-cols-btn');
+  cols.disabled = TK.view === 'cal';
+  cols.title = TK.view === 'cal' ? t('tkColsInCal') : t('tkColsTip');
+  // the grouping belongs to the list: in the calendar it is greyed and keeps its place
+  const inCal = TK.view === 'cal';
+  document.getElementById('tk-groups-box').classList.toggle('tk-tbg-off', inCal);
+  const gb = document.getElementById('tk-group-btn');
+  gb.disabled = inCal;
+  gb.title = inCal ? t('tkGroupInList') : t('tkGroupLabel');
+  const by = TK_GROUPS.find(([k]) => k === TK.by) || TK_GROUPS[0];
+  gb.innerHTML = `<span>${escapeHtml(t(by[1]))}</span>${TK_CHEVRON}`;
   const base = TK.data.tasks.filter(tkMatchesPeopleAndSearch);
   const filters = [['open', t('tkFOpen')], ['mine', t('tkFMine')], ['over', t('tkFOver')], ['done', t('tkFDone')], ['all', t('tkFAll')]];
   document.getElementById('tk-filters').innerHTML = filters.map(([key, label]) => {
@@ -232,7 +250,14 @@ function setTasksView(view) {
   }
   TK.view = view;
   TK.sel = null;
+  TK.rise = true;
   renderTasks();
+}
+
+function openTasksGroupMenu(e) {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  openTextMenuAt(TK_GROUPS.map(([k, label]) => ({ label: `${TK.by === k ? '✓' : ' '}  ${t(label)}`, run: () => setTasksGroup(k) })), r.left, r.bottom + 4);
 }
 
 function setTasksGroup(by) { TK.by = by; TK.open = new Set(); renderTasks(); }  // a group opened in full belongs to its grouping
@@ -315,20 +340,30 @@ function renderTasksList() {
     const c = totals.get(g.key) || { all: g.items.length, done: g.items.filter(tkIsDone).length };
     const all = { length: c.all };
     const done = c.done;
-    const head = g.person ? tkAvatar(g.name, g.kind, 24) : TK.by === 'due' || TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
     const kind = g.person && tkKindLabel(g.kind) ? `<span class="tk-kind" title="${escapeHtml(tkKindTitle(g.kind))}">${escapeHtml(tkKindLabel(g.kind))}</span>` : '';
     const me = g.person && g.key && tkIsMe(g.key) ? `<span class="tk-kind tk-kind-me">${escapeHtml(t('tkItsMe'))}</span>` : '';
-    const sub = g.sub || t('tkGroupSub').replace('{open}', () => all.length - done).replace('{done}', () => done);
+    const sub = g.sub || t('tkGroupSub').replace('{open}', () => plural(all.length - done, t('tkOpenForms'))).replace('{done}', () => done);
     const pct = all.length ? Math.round((done / all.length) * 100) : 0;
-    return `<section class="tk-group">
-      <div class="tk-group-head">${head}${g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>`
-        : g.person && g.key ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openPersonCard', [g.name])} title="${escapeHtml(t('pcOpenTip'))}">${escapeHtml(g.title)}</button>`
-        : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`}${kind}${me}
+    // a card of its kind: the icon of the grouping in its square (a person's face, a feature's colour),
+    // «Просрочено» in red
+    const over = TK.by === 'due' && g.key === 'over';
+    const icon = g.person ? tkAvatar(g.name, g.kind, 24)
+      : `<span class="pcd-ic">${pultIcon(over ? 'over' : TK.by === 'due' ? 'meet' : TK.by === 'feature' ? 'tag' : 'rec')}</span>`;
+    const dot = TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
+    const title = g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>`
+      : g.person && g.key ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openPersonCard', [g.name])} title="${escapeHtml(t('pcOpenTip'))}">${escapeHtml(g.title)}</button>`
+      : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`;
+    return `<section class="pcard tk-group${over ? ' pcard-over' : ''}">
+      <div class="tk-group-head">${icon}${dot}${title}<b class="pcd-n">${g.items.length}</b>${kind}${me}
         <span class="tk-group-sub">${escapeHtml(sub)}</span><span class="tk-grow"></span>
         <span class="tk-progress" title="${escapeHtml(t('tkDonePct').replace('{n}', () => pct))}"><span style="width:${pct}%"></span></span></div>
       ${tkGroupRowsHtml(g)}
     </section>`;
   }).join('');
+  // the names of the columns: one bar above the cards, framed like them and kept in sight (as in «Записи»);
+  // the cards view has none
+  if (TK.view === 'list') box.insertAdjacentHTML('afterbegin', tkColBar());
+  box.classList.toggle('tk-dense', TK.view === 'list' && !!TK.dense);
   linkPeople(box, '.tk-row-text');  // a person the task names opens their card (people.js)
 }
 
@@ -339,7 +374,8 @@ function tkGroupRowsHtml(g) {
   TK.open = TK.open || new Set();
   const all = TK.open.has(g.key) || g.items.length <= _tkGroupRows + 5;
   const shown = all ? g.items : g.items.slice(0, _tkGroupRows);
-  return shown.map(tkRowHtml).join('') + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
+  const body = TK.view === 'cards' ? `<div class="tk-tcards">${shown.map(tkCardHtml).join('')}</div>` : shown.map(tkRowHtml).join('');
+  return body + (all ? '' : `<button class="tk-more-rows" ${pageCall('click', 'showAllInTaskGroup', [g.key])}>${escapeHtml(t('tkMoreRows').replace('{n}', () => g.items.length - shown.length))}</button>`);
 }
 
 function showAllInTaskGroup(key) {
@@ -348,22 +384,118 @@ function showAllInTaskGroup(key) {
   renderTasksList();
 }
 
-function tkRowHtml(x) {
-  const done = tkIsDone(x);
-  const rec = x.meeting_id
+// --- The columns of the table (and the fields of the cards), chosen in «Колонки»: the task's words always stay ---
+const TK_COLS_KEY = 'vx-tasks-cols';
+const TK_COLS_DEFAULT = ['who', 'due'];
+const TK_COLS = {
+  who: { label: 'tkColWho', width: '11rem' },
+  due: { label: 'tkColDue', width: '8.5rem' },
+  src: { label: 'tkColMeeting', width: '11rem' },
+  feature: { label: 'tkColFeature', width: '9rem' },
+  made: { label: 'tkColMade', width: '7rem' },
+};
+function tkLoadCols() {
+  try {
+    const v = JSON.parse(localStorage.getItem(TK_COLS_KEY) || 'null');
+    if (v && Array.isArray(v.cols)) { TK.cols = Object.keys(TK_COLS).filter(k => v.cols.includes(k)); TK.dense = !!v.dense; }
+  } catch { /* the defaults */ }
+  if (!TK.cols) TK.cols = [...TK_COLS_DEFAULT];
+}
+tkLoadCols();
+function tkSaveCols() {
+  try { localStorage.setItem(TK_COLS_KEY, JSON.stringify({ cols: TK.cols, dense: !!TK.dense })); } catch { /* kept for this session */ }
+}
+function tkGridTemplate() {
+  return `22px 18px minmax(180px, 1.6fr) ${TK.cols.map(k => TK_COLS[k].width).join(' ')} 26px`;
+}
+
+function tkColBar() {
+  return `<div class="tk-row tk-colbar" aria-hidden="true" style="grid-template-columns:${tkGridTemplate()}"><span></span><span></span><span>${escapeHtml(t('tkColTask'))}</span>`
+    + TK.cols.map(k => `<span>${escapeHtml(t(TK_COLS[k].label))}</span>`).join('') + '<span></span></div>';
+}
+
+function tkRecHtml(x) {
+  return x.meeting_id
     ? `<button class="tk-src" ${pageCall('click', 'openTaskSource', [x.id])} title="${escapeHtml(t('tkOpenAt'))}">${escapeHtml(x.meeting_title || t('tkUntitled'))}${x.at != null ? ` · <span class="tk-mono">${tkClock(x.at)}</span>` : ''}</button>`
     : `<span class="tk-src tk-src-none">${escapeHtml(t('tkNoRecord'))}</span>`;
-  const kind = x.who && tkKindLabel(x.who_kind) ? `<span class="tk-kind">${escapeHtml(tkKindLabel(x.who_kind))}</span>` : '';
-  return `<div class="tk-row${done ? ' tk-done' : ''}" data-tid="${x.id}">
+}
+
+// The lead icon of a row (as the kind of a recording in «Записи»): the meeting the task came from, which it opens
+const TK_SRC_IC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>';
+function tkSrcIcon(x) {
+  return x.meeting_id
+    ? `<button class="tk-kindic" ${pageCall('click', 'openTaskSource', [x.id])} title="${escapeHtml(t('tkOpenMeeting').replace('{title}', () => x.meeting_title || t('tkUntitled')))}" aria-label="${escapeHtml(t('tkOpenAt'))}">${TK_SRC_IC}</button>`
+    : '<span class="tk-kindic tk-kindic-none" aria-hidden="true"></span>';
+}
+
+// What a column holds for a task
+function tkCell(k, x) {
+  if (k === 'who') {
+    const kind = x.who && tkKindLabel(x.who_kind) ? `<span class="tk-kind">${escapeHtml(tkKindLabel(x.who_kind))}</span>` : '';
+    return `<button class="tk-who" ${pageCall('click', 'openTaskAssign', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">
+      ${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-who-name${x.who ? '' : ' tk-dim'}">${escapeHtml(tkWhoName(x))}</span>${kind}</button>`;
+  }
+  if (k === 'due') return `<button class="tk-due ${tkDueTone(x)}" ${pageCall('click', 'openTaskDue', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(tkDueText(x))}</button>`;
+  if (k === 'src') return `<span class="tk-cell">${tkRecHtml(x)}</span>`;
+  if (k === 'feature') return `<span class="tk-cell">${taskFeatureChipsHtml(x.meeting_id, x.features) || '<span class="tk-dim">—</span>'}</span>`;
+  const made = String(x.created_at || '').slice(0, 10);
+  return `<span class="tk-cell tk-dim">${/^\d{4}-\d\d-\d\d$/.test(made) ? escapeHtml(tkShortDate(made)) : '—'}</span>`;
+}
+
+// The second line under the task: its meeting (when not a column of its own) and its features
+function tkSubLine(x) {
+  const rec = TK.cols.includes('src') ? '' : tkRecHtml(x);
+  const ft = TK.by === 'feature' || TK.cols.includes('feature') ? '' : taskFeatureChipsHtml(x.meeting_id, x.features);
+  return rec || ft ? `<span class="tk-row-src">${rec}${ft}</span>` : '';
+}
+
+function tkRowHtml(x) {
+  const done = tkIsDone(x);
+  return `<div class="tk-row${done ? ' tk-done' : ''}" data-tid="${x.id}" style="grid-template-columns:${tkGridTemplate()}">
     <input type="checkbox" ${done ? 'checked' : ''} class="tk-check" ${pageCall('change', 'toggleTaskDone', [x.id, { $: 'checked' }])} aria-label="${escapeHtml(t('tkDone'))}">
-    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span><span class="tk-row-src">${rec}${TK.by === 'feature' ? '' : taskFeatureChipsHtml(x.meeting_id, x.features)}</span></span>
-    <button class="tk-who" ${pageCall('click', 'openTaskAssign', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkAssignTitle'))}" aria-haspopup="true">
-      ${tkAvatar(x.who, x.who_kind, 20)}<span class="tk-who-name${x.who ? '' : ' tk-dim'}">${escapeHtml(tkWhoName(x))}</span>${kind}</button>
-    <button class="tk-due ${tkDueTone(x)}" ${pageCall('click', 'openTaskDue', [x.id, { $: 'event' }])} title="${escapeHtml(t('tkDueTitle'))}">${escapeHtml(tkDueText(x))}</button>
-    <span class="tk-from" title="${escapeHtml(t('tkFromTitle'))}">${escapeHtml(tkSourceText(x))}</span>
+    ${tkSrcIcon(x)}
+    <span class="tk-row-main"><span class="tk-row-text" title="${escapeHtml(x.what)}">${escapeHtml(x.what)}</span>${tkSubLine(x)}</span>
+    ${TK.cols.map(k => tkCell(k, x)).join('')}
     <button class="tk-more" ${pageCall('click', 'openTaskMenu', [x.id, { $: 'event' }])} aria-label="${escapeHtml(t('tkMore'))}" title="${escapeHtml(t('tkMore'))}">⋯</button>
   </div>`;
 }
+
+// «Карточки»: each task a small card in its group, the chosen fields as lines of a name and a value;
+// an overdue one framed in red
+function tkCardHtml(x) {
+  const done = tkIsDone(x);
+  return `<div class="tk-tcard${done ? ' tk-done' : ''}${tkIsOver(x) ? ' tk-tcard-over' : ''}" data-tid="${x.id}">
+    <div class="tk-tcard-t"><input type="checkbox" ${done ? 'checked' : ''} class="tk-check" ${pageCall('change', 'toggleTaskDone', [x.id, { $: 'checked' }])} aria-label="${escapeHtml(t('tkDone'))}">
+      <span class="tk-row-text">${escapeHtml(x.what)}</span>
+      <button class="tk-more" ${pageCall('click', 'openTaskMenu', [x.id, { $: 'event' }])} aria-label="${escapeHtml(t('tkMore'))}" title="${escapeHtml(t('tkMore'))}">⋯</button></div>
+    ${TK.cols.map(k => `<div class="tk-tcard-f"><span class="tk-dim">${escapeHtml(t(TK_COLS[k].label))}</span>${tkCell(k, x)}</div>`).join('')}
+    ${tkSubLine(x)}
+  </div>`;
+}
+
+// «Колонки»: the rows (the table only) and the columns, saved
+function openTasksCols(e) {
+  e.stopPropagation();
+  if (TK.view === 'cal') return;
+  const check = k => `<label class="tk-colrow"><input type="checkbox" ${TK.cols.includes(k) ? 'checked' : ''} ${pageCall('change', 'toggleTasksCol', [k, { $: 'checked' }])}>
+    <span>${escapeHtml(t(TK_COLS[k].label))}</span>${k === 'src' ? `<span class="tk-dim tk-small">${escapeHtml(t('tkColMeetingHint'))}</span>` : ''}</label>`;
+  const dense = TK.view === 'list'
+    ? `<div class="tk-colpop-dn"><span>${escapeHtml(t('tkRows'))}</span><span class="tk-seg">${[[false, 'tkRowsNormal'], [true, 'tkRowsCompact']].map(([v, k]) =>
+      `<button class="tk-seg-btn${!!TK.dense === v ? ' tk-on' : ''}" ${pageCall('click', 'setTasksDense', [v])}>${escapeHtml(t(k))}</button>`).join('')}</span></div>`
+    : `<div class="tk-hint">${escapeHtml(t('tkColsCardsHint'))}</div>`;
+  tkOpenPop(`<div class="tk-colpop"><b>${escapeHtml(t('tkCols'))}</b>${dense}${Object.keys(TK_COLS).map(check).join('')}
+    <div class="tk-row2"><button class="tk-btn tk-btn-sm" data-click="resetTasksCols">${escapeHtml(t('tkColsReset'))}</button><span class="tk-grow"></span>
+      <button class="tk-btn tk-btn-sm tk-btn-primary" data-click="tkClosePop">${escapeHtml(t('tkColsDone'))}</button></div></div>`, e.currentTarget, 260);
+}
+function tkColsChanged() {
+  tkSaveCols();
+  renderTasksList();
+  const b = document.getElementById('tk-cols-btn');
+  if (b && document.getElementById('tk-pop')) openTasksCols({ stopPropagation() {}, currentTarget: b });
+}
+function toggleTasksCol(k, on) { TK.cols = Object.keys(TK_COLS).filter(x => (x === k ? on : TK.cols.includes(x))); tkColsChanged(); }
+function setTasksDense(v) { TK.dense = !!v; tkColsChanged(); }
+function resetTasksCols() { TK.cols = [...TK_COLS_DEFAULT]; TK.dense = false; tkColsChanged(); }
 
 function tkTask(id) { return TK.data.tasks.find(x => x.id === id); }
 
@@ -696,49 +828,88 @@ function tkNote(text) {
   TK.noteTimer = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-// --- The month calendar: drag a task to another day, or to "no due date" ---
+// --- The calendar of due dates: a month or a week; drag a task to another day, or to «Без срока» ---
+// The head: ‹ the month (or the week) › and «Сегодня», the switch Неделя / Месяц on the right; the weekdays,
+// the days with their numbers, today framed, the days off hatched; a task is a chip with the dot of its
+// person, an overdue one red, its whole text (the day grows); the tasks without a due date in a card of their own
+function tkCalChip(x) {
+  const color = x.who && x.who_kind === 'part' ? tkColorOf(x.who) : 'rgba(255,255,255,0.35)';
+  const cls = ['tk-cchip', tkIsDone(x) ? 'tk-done' : '', tkIsOver(x) ? 'tk-over' : '', TK.sel === x.id ? 'tk-sel' : ''].filter(Boolean).join(' ');
+  return `<div class="${cls}" draggable="true" data-tid="${x.id}"
+      ${pageCall('dragstart', 'onTaskDragStart', [x.id, { $: 'event' }])} ${pageCall('click', 'selectCalTask', [x.id, { $: 'event' }])} title="${escapeHtml(x.what + ' · ' + tkWhoName(x))}">
+      <i class="tk-cdot" style="background:${escapeHtml(color)}"></i><span class="tk-ctext">${escapeHtml(x.what)}</span></div>`;
+}
+
+function tkCalDay(iso, items, opts) {
+  const list = items.filter(x => x.due_date === iso);
+  const d = tkDate(iso);
+  const today = iso === tkToday();
+  const cls = ['tk-day', opts.out ? 'tk-out' : '', today ? 'tk-today' : '', iso === TK.day ? 'tk-chosen' : '',
+    [0, 6].includes(d.getDay()) ? 'tk-weekend' : '', opts.tall ? 'tk-tall' : ''].filter(Boolean).join(' ');
+  const cap = opts.tall ? d.toLocaleDateString(tkLocale(), { day: 'numeric', month: 'short' }).replace(/\.$/, '') : String(d.getDate());
+  const shown = opts.tall ? list : list.slice(0, 3);
+  const more = list.length > shown.length ? `<button class="tk-more-n" ${pageCall('click', 'openCalDay', [iso])}>${escapeHtml(t('tkMoreN').replace('{n}', () => list.length - shown.length))}</button>` : '';
+  return `<div class="${cls}" data-day="${iso}" ${pageCall('click', 'openCalDay', [iso])} ${pageCall('dragover', 'onCalDragOver', [{ $: 'event' }])}
+      ${pageCall('dragleave', 'onCalDragLeave', [{ $: 'event' }])} ${pageCall('drop', 'onCalDrop', [iso, { $: 'event' }])} title="${escapeHtml(t('tkDayTitle'))}">
+    <span class="tk-day-n">${escapeHtml(cap)}${today ? `<span class="tk-day-today"> · ${escapeHtml(t('tkTodayLow'))}</span>` : ''}</span>
+    ${shown.map(tkCalChip).join('')}${more}</div>`;
+}
+
+function tkCalTitle() {
+  if (TK.calMode === 'week') {
+    const a = tkDate(TK.week), b = tkDate(tkAddDays(TK.week, 6));
+    const long = (d, opt) => d.toLocaleDateString(tkLocale(), opt);
+    return (a.getMonth() === b.getMonth()
+      ? `${a.getDate()}–${long(b, { day: 'numeric', month: 'long', year: 'numeric' })}`
+      : `${long(a, { day: 'numeric', month: 'long' })} – ${long(b, { day: 'numeric', month: 'long', year: 'numeric' })}`).replace(/\s*г\.$/, '');
+  }
+  const name = TK.month.toLocaleDateString(tkLocale(), { month: 'long', year: 'numeric' }).replace(/\s*г\.$/, '');
+  return name[0].toLocaleUpperCase() + name.slice(1);
+}
+
 function renderTasksCalendar() {
   const box = document.getElementById('tk-cal');
   const items = tkShown();
+  const week = TK.calMode === 'week';
+  if (!TK.week) TK.week = tkMonday(tkToday());
   const first = TK.month;
-  const start = tkMonday(tkIso(first));
+  const start = week ? TK.week : tkMonday(tkIso(first));
   const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-  const weeks = Math.ceil((tkDays(tkIso(lastDay)) - tkDays(start) + 1) / 7);
-  const today = tkToday();
-  const monthName = first.toLocaleDateString(tkLocale(), { month: 'long', year: 'numeric' });
+  const weeks = week ? 1 : Math.ceil((tkDays(tkIso(lastDay)) - tkDays(start) + 1) / 7);
   const days = [];
   for (let i = 0; i < weeks * 7; i++) days.push(tkAddDays(start, i));
   const dayNames = [...Array(7)].map((_, i) => tkDate(tkAddDays(start, i)).toLocaleDateString(tkLocale(), { weekday: 'short' }).replace(/\.$/, ''));
-  const chip = (x) => `<div class="tk-cchip${tkIsDone(x) ? ' tk-done' : ''}${TK.sel === x.id ? ' tk-sel' : ''}" draggable="true"
-      ${pageCall('dragstart', 'onTaskDragStart', [x.id, { $: 'event' }])} ${pageCall('click', 'selectCalTask', [x.id, { $: 'event' }])} title="${escapeHtml(x.what + ' — ' + tkWhoName(x))}"
-      style="border-left-color:${x.who && x.who_kind === 'part' ? tkColorOf(x.who) : 'rgba(255,255,255,0.25)'}">
-      <button class="tk-cbox${tkIsDone(x) ? ' tk-on' : ''}" ${pageCall('click', 'toggleCalTask', [x.id, { $: 'event' }])} aria-label="${escapeHtml(t('tkDone'))}">${tkIsDone(x) ? '✓' : ''}</button>
-      ${tkAvatar(x.who, x.who_kind, 15)}<span class="tk-ctext">${escapeHtml(x.what)}</span></div>`;
-  const cells = days.map(iso => {
-    const list = items.filter(x => x.due_date === iso);
-    const d = tkDate(iso);
-    const out = d.getMonth() !== first.getMonth();
-    const cls = ['tk-day', out ? 'tk-out' : '', iso === today ? 'tk-today' : '', iso === TK.day ? 'tk-chosen' : '', [0, 6].includes(d.getDay()) ? 'tk-weekend' : ''].filter(Boolean).join(' ');
-    const more = list.length > 3 ? `<button class="tk-more-n" ${pageCall('click', 'openCalDay', [iso])}>+${list.length - 3}</button>` : '';
-    return `<div class="${cls}" data-day="${iso}" ${pageCall('click', 'openCalDay', [iso])} ${pageCall('dragover', 'onCalDragOver', [{ $: 'event' }])}
-        ${pageCall('dragleave', 'onCalDragLeave', [{ $: 'event' }])} ${pageCall('drop', 'onCalDrop', [iso, { $: 'event' }])} title="${escapeHtml(t('tkDayTitle'))}">
-      <div class="tk-day-head"><span class="tk-day-n">${d.getDate()}</span>${more}</div>
-      ${list.slice(0, 3).map(chip).join('')}</div>`;
+  const prev = t(week ? 'tkPrevWeek' : 'tkPrevMonth'), next = t(week ? 'tkNextWeek' : 'tkNextMonth');
+  const modes = [['week', t('tkCalWeek')], ['month', t('tkCalMonth')]].map(([k, label]) => {
+    const on = (TK.calMode || 'month') === k;
+    return `<button role="radio" aria-checked="${on}" class="tk-seg-btn${on ? ' tk-on' : ''}" ${pageCall('click', 'setTasksCalMode', [k])}>${escapeHtml(label)}</button>`;
   }).join('');
+  const cells = days.map(iso => tkCalDay(iso, items, { out: !week && tkDate(iso).getMonth() !== first.getMonth(), tall: week })).join('');
+  const none = items.filter(x => !x.due_date);
   box.innerHTML = `<div class="tk-cal-main">
       <div class="tk-cal-head">
-        <button class="tk-x" ${pageCall('click', 'shiftTasksMonth', [-1])} title="${escapeHtml(t('tkPrevMonth'))}" aria-label="${escapeHtml(t('tkPrevMonth'))}">‹</button>
-        <button class="tk-x" ${pageCall('click', 'shiftTasksMonth', [1])} title="${escapeHtml(t('tkNextMonth'))}" aria-label="${escapeHtml(t('tkNextMonth'))}">›</button>
-        <h2 class="tk-month">${escapeHtml(monthName[0].toLocaleUpperCase() + monthName.slice(1))}</h2>
-        <button class="tk-btn tk-btn-sm" data-click="tasksToToday">${escapeHtml(t('tkTodayBtn'))}</button>
-        <span class="tk-grow"></span><span class="tk-hint">${escapeHtml(t('tkCalHint'))}</span>
+        <button class="tk-btn tk-btn-sq" ${pageCall('click', 'shiftTasksMonth', [-1])} title="${escapeHtml(prev)}" aria-label="${escapeHtml(prev)}">‹</button>
+        <h2 class="tk-month">${escapeHtml(tkCalTitle())}</h2>
+        <button class="tk-btn tk-btn-sq" ${pageCall('click', 'shiftTasksMonth', [1])} title="${escapeHtml(next)}" aria-label="${escapeHtml(next)}">›</button>
+        <button class="tk-btn" data-click="tasksToToday">${escapeHtml(t('tkTodayBtn'))}</button>
+        <span class="tk-grow"></span>
+        <span class="tk-seg" role="radiogroup" aria-label="${escapeHtml(t('tkCalRange'))}">${modes}</span>
       </div>
-      <div class="tk-week">${dayNames.map((n, i) => `<span class="${i > 4 ? 'tk-dim2' : ''}">${escapeHtml(n.toLocaleUpperCase())}</span>`).join('')}</div>
-      <div class="tk-grid" style="grid-template-rows:repeat(${weeks}, minmax(0, 1fr))">${cells}</div>
-    </div>
-    <aside class="tk-cal-side" ${pageCall('dragover', 'onCalDragOver', [{ $: 'event' }])} ${pageCall('dragleave', 'onCalDragLeave', [{ $: 'event' }])} ${pageCall('drop', 'onCalDrop', ['', { $: 'event' }])}>
-      ${tkSelCard()}${tkDayList(items)}${tkNoDueList(items)}
-    </aside>`;
+      <div class="tk-cal-body">
+        <div class="tk-cal-grid-wrap">
+          <div class="tk-week">${dayNames.map((n, i) => `<span class="${i > 4 ? 'tk-dim2' : ''}">${escapeHtml(n)}</span>`).join('')}</div>
+          <div class="tk-grid${week ? ' tk-grid-week' : ''}">${cells}</div>
+          <div class="tk-hint tk-cal-hint">${escapeHtml(t('tkCalHint'))}</div>
+        </div>
+        <aside class="tk-cal-side">
+          ${tkSelCard()}${tkDayList(items)}
+          <section class="pcard tk-nodue" ${pageCall('dragover', 'onCalDragOver', [{ $: 'event' }])} ${pageCall('dragleave', 'onCalDragLeave', [{ $: 'event' }])} ${pageCall('drop', 'onCalDrop', ['', { $: 'event' }])} title="${escapeHtml(t('tkNoDueHint'))}">
+            ${pultCardHead(t('tkNoDueCap'), none.length, 'task')}
+            ${none.map(tkCalChip).join('') || `<div class="tk-nodue-empty">${escapeHtml(t('tkNoDueEmpty'))}</div>`}
+          </section>
+        </aside>
+      </div>
+    </div>`;
 }
 
 function tkSelCard() {
@@ -778,17 +949,29 @@ function tkDayList(items) {
   </section>`;
 }
 
-function tkNoDueList(items) {
-  const list = items.filter(x => !x.due_date);
-  return `<div class="tk-nodue-head"><span class="tk-cap">${escapeHtml(t('tkNoDueCap'))}</span><span class="tk-dim">${list.length}</span></div>
-    ${list.map(x => `<div class="tk-dchip${tkIsDone(x) ? ' tk-done' : ''}" draggable="true" ${pageCall('dragstart', 'onTaskDragStart', [x.id, { $: 'event' }])}
-        ${pageCall('click', 'selectCalTask', [x.id, { $: 'event' }])}>
-        <span class="tk-grow"><span class="tk-dtext">${escapeHtml(x.what)}</span><span class="tk-dim tk-small">${tkAvatar(x.who, x.who_kind, 14)} ${escapeHtml(tkWhoName(x))}</span></span></div>`).join('')}
-    <span class="tk-hint">${escapeHtml(t('tkNoDueHint'))}</span>`;
+// ‹ and ›: a month, or a week in the week view; «Сегодня» brings both back to today
+function shiftTasksMonth(n) {
+  if (TK.calMode === 'week') {
+    TK.week = tkAddDays(TK.week || tkMonday(tkToday()), 7 * n);
+    const d = tkDate(TK.week);
+    TK.month = new Date(d.getFullYear(), d.getMonth(), 1);
+  } else {
+    TK.month = new Date(TK.month.getFullYear(), TK.month.getMonth() + n, 1);
+  }
+  renderTasks();
 }
+function tasksToToday() { const d = tkDate(tkToday()); TK.month = new Date(d.getFullYear(), d.getMonth(), 1); TK.week = tkMonday(tkToday()); TK.day = tkToday(); renderTasks(); }
 
-function shiftTasksMonth(n) { TK.month = new Date(TK.month.getFullYear(), TK.month.getMonth() + n, 1); renderTasks(); }
-function tasksToToday() { const d = tkDate(tkToday()); TK.month = new Date(d.getFullYear(), d.getMonth(), 1); TK.day = tkToday(); renderTasks(); }
+// Неделя / Месяц: the week shown is the one of the day chosen (or today, or the first of the month shown)
+function setTasksCalMode(mode) {
+  if (mode === (TK.calMode || 'month')) return;
+  TK.calMode = mode;
+  if (mode === 'week') {
+    const inMonth = iso => iso && tkDate(iso).getMonth() === TK.month.getMonth() && tkDate(iso).getFullYear() === TK.month.getFullYear();
+    TK.week = tkMonday(inMonth(TK.day) ? TK.day : inMonth(tkToday()) ? tkToday() : tkIso(TK.month));
+  }
+  renderTasks();
+}
 
 // A click on a day: its tasks on the right, the day marked on the calendar
 function openCalDay(iso) { TK.day = iso; TK.sel = null; renderTasks(); }

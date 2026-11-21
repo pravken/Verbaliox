@@ -33,8 +33,11 @@ MAX_TEXT = 200_000  # an answer this long at most (a long transcript is cut, the
 
 
 def _settings() -> Dict[str, str]:
-    from app.database import get_all_settings
+    """Read anew at every call: this process lives long beside the app, which changes the settings in its own
+    process (its cache here would keep serving «only local» recordings after the user took the permission back)."""
+    from app.database import forget_settings, get_all_settings
 
+    forget_settings()
     return get_all_settings()
 
 
