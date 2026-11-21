@@ -22,8 +22,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 CACHE_SEC = 15 * 60
 # Outlook that failed (not set up, waiting for a password) is not started again every 15 minutes,
-# even by a forced read: each start may put its window in front of the user.
+# even by a forced read: each start may put its window in front of the user. A read the user asked for
+# (events(user=True): «Проверить» in Settings) starts it at once; a forced read alone, after an error other
+# than the timeout (OUTLOOK_TIMEOUT), too.
 OUTLOOK_RETRY_SEC = 6 * 60 * 60
+OUTLOOK_TIMEOUT = "Outlook не ответил за"
 _cache: Dict[str, Any] = {"source": "", "at": 0.0, "events": [], "error": ""}
 _lock = threading.Lock()
 _fetch_lock = threading.Lock()
@@ -526,9 +529,12 @@ def _load_text(source: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace")
 
 
-def events(force: bool = False, cached: bool = False) -> List[Dict[str, Any]]:
-    """cached: only what was read already, never a read now (Outlook through PowerShell takes up to 90 s, a
-    link up to 60 s): for callers holding a lock others wait on."""
+def events(force: bool = False, cached: bool = False, user: bool = False) -> List[Dict[str, Any]]:
+    """force: read again now (a page refreshing its calendar). user: the user asked for it by an action of
+    their own, so a failed Outlook is tried again at once (OUTLOOK_RETRY_SEC). cached: only what was read
+    already, never a read now (Outlook through PowerShell takes up to 90 s, a link up to 60 s): for callers
+    holding a lock others wait on."""
+    force = force or user
     source = _source()
     if not source:
         return []
@@ -540,6 +546,7 @@ def events(force: bool = False, cached: bool = False) -> List[Dict[str, Any]]:
             return list(_cache["events"])
         if (source.lower() == "outlook" and _cache["source"] == source and _cache["error"]
                 and not _cache["error"].startswith("Классический Outlook не настроен")  # checked without starting it
+                and not user and not (force and not _cache["error"].startswith(OUTLOOK_TIMEOUT))
                 and time.time() - _cache["at"] < OUTLOOK_RETRY_SEC):
             return list(_cache["events"])
     try:
