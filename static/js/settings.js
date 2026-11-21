@@ -235,7 +235,6 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     fillSettingsVersion();
     loadHotkeyStatus();
     renderLiveModelSelect();
-    refreshSettingsChanged();
     _settingsBaseline = settingsFormValues();
 
     const srcMode = s.record_source_mode || 'both';
@@ -1802,7 +1801,7 @@ function captureHotkey(e) {
   e.preventDefault();
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
   if (e.key === 'Escape') { e.target.blur(); return; }
-  if (e.key === 'Backspace' || e.key === 'Delete') { e.target.value = ''; scheduleSettingsSave(); refreshSettingsChanged(); return; }
+  if (e.key === 'Backspace' || e.key === 'Delete') { e.target.value = ''; scheduleSettingsSave(); return; }
   const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Win'].filter(Boolean);
   if (!mods.some(m => m !== 'Shift')) {
     document.getElementById('hotkey-status').textContent = t('hotkeyNeedsMod');
@@ -1824,7 +1823,6 @@ function captureHotkey(e) {
   e.target.value = combo;
   document.getElementById('hotkey-status').textContent = t('rdSasHotkeySaved');
   scheduleSettingsSave();
-  refreshSettingsChanged();
 }
 
 // «Отключить» of a hotkey: the empty value is saved like a new combination
@@ -1835,7 +1833,6 @@ function clearHotkey(inputId = 'set-record-hotkey') {
   const box = status && document.getElementById(status);
   if (box) { box.textContent = t('rdSasHotkeySaved'); box.className = 'text-[11.5px] text-apple-tertiary'; }
   scheduleSettingsSave();
-  refreshSettingsChanged();
 }
 
 async function loadHotkeyStatus() {
@@ -2259,7 +2256,7 @@ function syncDeviceAuto(save = true) {
   dev.disabled = prec.disabled = auto;
   const name = (sel) => sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
   document.getElementById('device-auto-hint').textContent = auto ? t('deviceAutoNow').replace('{dev}', () => name(dev)).replace('{prec}', () => name(prec).split(' — ')[0].toLowerCase()) : t('deviceManualHint');
-  if (save) { scheduleSettingsSave(); refreshSettingsChanged(); }
+  if (save) { scheduleSettingsSave(); }
 }
 
 let _settingsBaseline = null;
@@ -2353,7 +2350,6 @@ function syncSettingsFormFromState() {
   fillWorkdaySettings(s);
   const now = settingsFormValues();
   SETTINGS_SET_ELSEWHERE.forEach(k => { if (k in now) _settingsBaseline[k] = now[k]; });
-  refreshSettingsChanged();
 }
 
 async function saveAllSettings() {
@@ -2361,7 +2357,7 @@ async function saveAllSettings() {
   const changed = _settingsBaseline
     ? Object.fromEntries(Object.entries(values).filter(([k, v]) => _settingsBaseline[k] !== v))
     : values;
-  if (!Object.keys(changed).length) { setSettingsSaveState('saved'); refreshSettingsChanged(); return; }
+  if (!Object.keys(changed).length) { setSettingsSaveState('saved'); return; }
   const payload = { settings: changed };
   // "Saved" only once the server has the settings: on an error the window stays open with them
   let res;
@@ -2387,7 +2383,6 @@ async function saveAllSettings() {
   _settingsBaseline = { ...(_settingsBaseline || values), ...changed };
   const saved = await readJson(res);
   if (saved?.settings && state.system) state.system.settings = { ...(state.system.settings || {}), ...saved.settings };
-  refreshSettingsChanged();
 }
 
 function pullCustomOllamaModel() {
@@ -2796,56 +2791,12 @@ function setSettingsControl([id, , kind], value) {
   else el.value = value;
 }
 
-// The controls of a tab: those of its own section and of the sections moved into it (core.js SETTINGS_SECTION_TAB)
-function settingsTabControls(tab) {
-  return Object.keys(SETTINGS_RESET).filter(sec => settingsTabOf(sec) === tab).flatMap(sec => SETTINGS_RESET[sec]);
-}
-
-function settingsSectionChanges(tab) {
-  return settingsTabControls(tab).filter(c => {
-    const v = settingsControlValue(c);
-    return v !== null && v !== SETTINGS_DEFAULTS[c[1]];
-  }).length;
-}
-
-// The reset button of the section shown, when it differs from the defaults (no dot on the sections:
-// a blue dot read as a notification)
-function refreshSettingsChanged() {
-  const sec = document.getElementById('modal-settings')?.dataset.tab;
-  const btn = document.getElementById('settings-reset-btn');
-  if (!btn) return;
-  const n = settingsSectionChanges(sec);
-  btn.classList.toggle('hidden', !n || !!state.settingsQuery);
-  btn.textContent = t('rdSasResetSection').replace('{n}', () => n);
-}
-
 function onSettingsTabShown(name) {
   if (state.settingsQuery) clearSettingsSearch(true);
   if (name === settingsTabOf('dictionary')) renderDictFeatures();  // the dictionary is a section of its tab
   const main = document.getElementById('settings-main');
   if (main) main.scrollTop = 0;
   pultRise(main, '.sx-section:not(.hidden) .settings-card');  // a section shown: its cards rise
-  refreshSettingsChanged();
-}
-
-async function resetSettingsSection() {
-  const controls = settingsTabControls(document.getElementById('modal-settings').dataset.tab);
-  const before = controls.map(c => [c, settingsControlValue(c)]);
-  controls.forEach(c => setSettingsControl(c, SETTINGS_DEFAULTS[c[1]]));
-  syncVoiceProfilesToggle();
-  syncWorkdayHint();
-  await saveAllSettings();
-  refreshSettingsChanged();
-  showToast(t('rdSasResetDone'), {
-    label: t('rdSasUndo'),
-    onClick: async () => {
-      before.forEach(([c, v]) => { if (v !== null) setSettingsControl(c, v); });
-      syncVoiceProfilesToggle();
-      syncWorkdayHint();
-      await saveAllSettings();
-      refreshSettingsChanged();
-    },
-  });
 }
 
 // --- Saved at once: a change of a control of the page is sent a moment later (several at a time) ---
@@ -2873,7 +2824,6 @@ document.addEventListener('change', (e) => {
   if (!el.id.startsWith('set-') && !SETTINGS_AUTOSAVE_EXTRA.has(el.id)) return;
   if (el.id === 'set-workday-start' || el.id === 'set-workday-end' || el.id === 'set-meetings-autorecord') syncWorkdayHint();
   scheduleSettingsSave();
-  refreshSettingsChanged();
 });
 
 // --- The working day (the home page shows these hours) and the recording of every meeting ---
@@ -3320,7 +3270,6 @@ function settingsSearch(value) {
   });
   SETTINGS_TABS.forEach(tab => document.getElementById(`stab-${tab}`)?.classList.toggle('sx-dim', !tabHits[tab]));
   document.getElementById('settings-search-empty').classList.toggle('hidden', any > 0);
-  document.getElementById('settings-reset-btn')?.classList.add('hidden');
   main.scrollTop = 0;
 }
 
