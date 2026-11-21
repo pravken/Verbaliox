@@ -643,11 +643,12 @@ function renderAnalysisHead() {
     name.textContent = opt ? opt.textContent : '—';
     name.closest('button')?.classList.toggle('an-model-off', !!opt && opt.dataset.off === '1');
   }
-  document.getElementById('an-model-btn')?.parentElement.classList.toggle('hidden', !it.make);
-  document.getElementById('an-cfg-btn')?.classList.toggle('hidden', !overview);
+  // the overview has its bar above the cards (renderAnalysisOverview): the model, «Настроить», «Пересоздать анализ»
+  document.getElementById('an-model-btn')?.parentElement.classList.toggle('hidden', !it.make || overview);
+  document.getElementById('an-cfg-btn')?.classList.toggle('hidden', true);
   const gen = document.getElementById('generate-summary-btn');
   if (gen) {
-    gen.classList.toggle('hidden', !it.make);
+    gen.classList.toggle('hidden', !it.make || overview);
     gen.disabled = busy;
     gen.setAttribute('aria-disabled', String(!ai));
     gen.title = ai ? t('tipGenerateSummary') : t('anNeedModel');
@@ -745,7 +746,7 @@ function renderAnalysisOverview(box) {
     cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { icon: 'note', open: 'mfu' }));
   }
   const ask = `<button class="sum-ask" data-click="runCustomQuestion" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`}>${recCardIcon('ask')}<span>${escapeHtml(t('recAskPh'))}</span></button>`;
-  box.innerHTML = `<div class="sum-grid">
+  box.innerHTML = `${recAnalysisBar()}<div class="sum-grid">
       <div class="sum-main">${lead}${decisions}${tasks}${mine}${cards.join('')}</div>
       <div class="sum-side">${topics}${ask}</div>
     </div>`
@@ -797,7 +798,7 @@ function openAnalysisMenu(kind, el) {
     // what the head showed as buttons (asked by the user: eight of them over a section): «Настроить»,
     // the export, the doubtful words; the buttons still say when each applies (renderAnalysisHead)
     const applies = id => { const b = document.getElementById(id); return !!b && !b.classList.contains('hidden'); };
-    if (applies('an-cfg-btn')) items.push({ label: `${t('anCfgTitle')}…`, run: () => openOverviewConfig(el) });
+    if (tab === 'protocol') items.push({ label: `${t('anCfgTitle')}…`, run: () => openOverviewConfig(el) });
     items.push({ label: `${t('anAskMenu')}…`, disabled: !aiAvailable(), run: () => runCustomQuestion() });
     if (applies('an-exp-btn')) {
       items.push({ sep: true });

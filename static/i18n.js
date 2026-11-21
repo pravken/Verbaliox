@@ -3039,6 +3039,10 @@ const I18N = {
     scAbRepeat: 'Повтор отрезка: начало и конец',
     recRedo: 'Расшифровать заново…',
     recRedoTip: 'Расшифровать заново с выбором модели, языка и числа говорящих',
+    recTemplate: 'Шаблон',
+    recTemplateTip: 'Обзор или свой шаблон: выбор открывает его раздел',
+    recModel: 'Модель',
+    recRegenAnalysis: 'Пересоздать анализ',
 
   },
   en: {
@@ -6078,6 +6082,10 @@ const I18N = {
     scAbRepeat: 'Repeat a stretch: its start and end',
     recRedo: 'Transcribe again…',
     recRedoTip: 'Transcribe again, choosing the model, the language and the number of speakers',
+    recTemplate: 'Template',
+    recTemplateTip: 'The overview or an own template: the choice opens its section',
+    recModel: 'Model',
+    recRegenAnalysis: 'Make the analysis again',
 
   }
 };
