@@ -2441,3 +2441,32 @@ function recReconfigure() {
   state.contextMeetingId = m.id;
   ctxOpenReconfigureModal();
 }
+
+// --- «Анализ»: the bar above the cards — the template, the model, «Настроить», «Пересоздать анализ» ---
+// (the program keeps no time of an analysis, so the bar does not say when it was made)
+function recAnalysisBar() {
+  const ai = aiAvailable();
+  const sel = document.getElementById('summary-llm-select');
+  const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+  const busy = anIsBusy('protocol');
+  return `<div class="an-sumbar">
+      <span class="an-sumbar-k">${escapeHtml(t('recTemplate'))}</span>
+      <button class="an-chip" data-click="recTemplateMenu" data-click-args='[{"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('recTemplateTip'))}">${escapeHtml(t('sumProtocol'))}<span aria-hidden="true">▾</span></button>
+      <span class="an-sumbar-k">${escapeHtml(t('recModel'))}</span>
+      <button class="an-chip${opt && opt.dataset.off === '1' ? ' an-model-off' : ''}" data-click="openAnalysisMenu" data-click-args='["model", {"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('anModelTip'))}">${escapeHtml(opt ? opt.textContent : '—')}<span aria-hidden="true">▾</span></button>
+      <span class="flex-1"></span>
+      <button class="an-btn" data-click="openAnalysisMenu" data-click-args='["cfg", {"$": "el"}]' title="${escapeHtml(t('anCfgTip'))}">${escapeHtml(t('anCfg'))}</button>
+      <button class="an-btn" data-click="generateSummaryForActiveTab" ${busy ? 'disabled' : ''} ${ai ? '' : 'aria-disabled="true"'} title="${escapeHtml(ai ? t('tipGenerateSummary') : t('anNeedModel'))}">↻ ${escapeHtml(busy ? t('anMaking') : t('recRegenAnalysis'))}</button>
+    </div>`;
+}
+
+// «Шаблон ▾»: the overview and the user's own templates (each opens its section), the editor of the templates
+function recTemplateMenu(el) {
+  const r = el.getBoundingClientRect();
+  const tpls = state.summaryTemplates || [];
+  const items = [{ label: `✓ ${t('sumProtocol')}`, run: () => selectSummaryTab('protocol') },
+    ...tpls.map(x => ({ label: `   ${x.name}`, run: () => selectSummaryTab(`tpl:${x.id}`) })),
+    { sep: true }, { label: `+ ${t('anNewTemplate')}`, run: () => openTemplateDialog(null) },
+    { label: t('anAllTemplates'), run: () => openTemplatesEditor() }];
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6), 0);
+}
