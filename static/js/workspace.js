@@ -4,6 +4,15 @@
 // --- Active Meeting Workspace ---
 let _selectSeq = 0;
 
+// While another recording loads, the title already names it, so the text, the tabs and the player of the
+// previous one are hidden and take no input (an edit or a play would have gone to the previous recording)
+function setRecPending(on) {
+  const box = document.getElementById('workspace-content');
+  if (!box) return;
+  box.classList.toggle('rec-pending', on);
+  box.inert = on;
+}
+
 async function selectMeeting(id, reloadPlayer = true) {
   // A refresh of the recording open (new lines, a status change) while another one is being opened by
   // a click: skipped — it took the place of the click, whose answer was then dropped as older, and the
@@ -24,11 +33,13 @@ async function selectMeeting(id, reloadPlayer = true) {
     state.pendingMeetingId = id;
     renderMeetingsSidebar();
     document.getElementById('meeting-title-input').value = known.title || '';
+    setRecPending(true);
   }
   const res = await fetch(`/api/meetings/${id}`).catch(() => null);
   if (seq !== _selectSeq) return;
   if (state.pendingMeetingId === id) {
     state.pendingMeetingId = null;
+    setRecPending(false);
     if (!res || !res.ok) {
       renderMeetingsSidebar();
       if (state.activeMeeting) document.getElementById('meeting-title-input').value = state.activeMeeting.title || '';
