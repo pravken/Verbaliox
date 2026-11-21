@@ -59,6 +59,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   background stays one.
 - Settings fill a wide window in two columns; «Reset this tab» is gone. Today's date tile has a green frame.
   Model buttons are of one size; the agent's lines are copied with an icon in the code.
+- **«Quit»** at the bottom of the rail (and Ctrl+Q) closes the whole program, the tray icon too; while a
+  recording or a task runs it asks first.
 
 ## 0.8.25 — English
 
@@ -819,6 +821,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Акцент на выбор** в «Настройки → Общие»: восемь цветов для выделенных кнопок и отметок; фон остаётся один.
 - Настройки на широком окне — в две колонки; «Сбросить вкладку» убрана. Сегодняшний день в «Сегодня» — в зелёной
   рамке. Кнопки у моделей одного размера; строки для агента копируются значком в самом коде.
+- **«Выйти»** внизу полосы разделов (и Ctrl+Q) закрывает программу полностью, вместе со значком в трее; если
+  идёт запись или задача, программа сначала спросит.
 
 ## 0.8.25
 

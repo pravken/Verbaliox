@@ -340,6 +340,10 @@ def open_app_when_ready(window, host: str, port: int, log_path: str) -> None:
     window.evaluate_js(f"showError({json.dumps(err)}, {json.dumps(log_path)}, {json.dumps(sac)})")
 
 
+# «Выйти» on the page (WindowApi.quit_app): the window closes for good, not into the tray
+QUIT_REQUESTED = threading.Event()
+
+
 class WindowApi:
     """Exposed to the page as window.pywebview.api: things the embedded browser cannot do itself."""
 
@@ -377,6 +381,31 @@ class WindowApi:
             webview.windows[0].toggle_fullscreen()
             self._fullscreen = not self._fullscreen
         return self._fullscreen
+
+    def app_state(self) -> str:
+        """«idle», «busy» or «recording»: the page asks before quitting while something runs."""
+        from app.app_status import snapshot
+
+        try:
+            return str(snapshot().get("state") or "idle")
+        except Exception:
+            return "idle"
+
+    def quit_app(self) -> bool:
+        """«Выйти» (asked by the user: the whole program closes from its own window, not only from the tray icon):
+        the window closes past the tray, then the process ends as after «Выход» in the tray menu (the window's
+        closed event: the recordings are finished, an update waiting is installed). Only the app's own page."""
+        import webview
+
+        try:
+            url = webview.windows[0].get_current_url() if webview.windows else None
+        except Exception:
+            url = None
+        if not self._is_own(url):
+            return False
+        QUIT_REQUESTED.set()
+        threading.Timer(0.05, lambda: webview.windows and webview.windows[0].destroy()).start()
+        return True
 
     def show_window(self) -> None:
         """Brings the window back from the tray or the taskbar, for a question the page must ask (the home
@@ -933,7 +962,7 @@ class TrayController:
     def on_closing(self) -> bool:
         from app.database import get_all_settings
 
-        if self.quitting or session_ending():  # Windows shuts down: never vetoed (found in the audit)
+        if self.quitting or QUIT_REQUESTED.is_set() or session_ending():  # «Выйти», or Windows shuts down: never vetoed
             self.quitting = True
             return True
         to_tray = (get_all_settings().get("close_to_tray") or "false").lower() == "true"

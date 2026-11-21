@@ -561,3 +561,30 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshTasksCount(true);
   renderStatusbar();
 });
+
+
+// «Выйти» (asked by the user): the whole program closes from its own window, not only from the tray icon. While a
+// recording or a task runs it asks first. Only in the app's window (window.pywebview): a browser has no such button.
+async function quitApp() {
+  const api = window.pywebview && window.pywebview.api;
+  if (!api || !api.quit_app) return;
+  let st = 'idle';
+  try { st = await api.app_state(); } catch (e) {}
+  if (st !== 'idle') {
+    const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : 'quitBusyWork'), t('quitOk'), true);
+    if (!ok) return;
+  }
+  try { await api.quit_app(); } catch (e) {}
+}
+function showQuitButton() {
+  const api = window.pywebview && window.pywebview.api;
+  document.getElementById('rail-quit')?.classList.toggle('hidden', !(api && api.quit_app));
+}
+window.addEventListener('pywebviewready', showQuitButton);
+showQuitButton();
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === 'KeyQ') && window.pywebview && window.pywebview.api) {
+    e.preventDefault();
+    quitApp();
+  }
+});
