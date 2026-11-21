@@ -77,7 +77,7 @@ function renderAccentChoices() {
 }
 
 async function setAccent(key) {
-  applyTheme(key, 'slate', 'solid');
+  applyTheme(key, 'slate', 'soft');
   if (state.system) state.system.settings = { ...(state.system.settings || {}), ui_accent: key };
   renderAccentChoices();
   const res = await fetch('/api/settings', {
@@ -148,7 +148,7 @@ async function fillSystemInfo() {
       setUiScale(near);
     } else applyUiScale(ownScale);
     renderUiScaleButtons();
-    applyTheme((data.settings || {}).ui_accent, 'slate', 'solid');
+    applyTheme((data.settings || {}).ui_accent, 'slate', 'soft');
     renderAccentChoices();
 
     const hw = data.hardware;
