@@ -68,6 +68,66 @@ class QuitFromPageTest(unittest.TestCase):
             timer.return_value.start.assert_called_once()
 
 
+class NoTrayIconTest(unittest.TestCase):
+    """Found in the review: TRAY_READY was set when the icon did not show (no icon file, Shell_NotifyIcon failed),
+    so «Свернуть в трей» and closing during a recording hid the window with nothing to bring it back."""
+
+    def setUp(self):
+        import run
+
+        self.run = run
+        run.TRAY_READY.clear()
+
+    def tearDown(self):
+        self.run.TRAY_READY.clear()
+
+    def _app(self, shows):
+        app = self.run.TrayController.__new__(self.run.TrayController)
+        app.quitting, app._status, app._told_tray = False, {"state": "recording"}, False
+        app.tray = mock.Mock(hwnd=None)
+        app.tray.start.return_value = shows
+        app.window = mock.Mock()
+        app._apply_hotkey = lambda: None
+        return app
+
+    def test_start_tells_whether_the_icon_shows(self):
+        with mock.patch.object(self.run, "ICO_PATH", mock.Mock(exists=lambda: True)):
+            self.assertFalse(self._app(False).start())
+            with mock.patch.object(self.run.threading, "Thread"):
+                self.assertTrue(self._app(True).start())
+        with mock.patch.object(self.run, "ICO_PATH", mock.Mock(exists=lambda: False)):
+            self.assertFalse(self._app(True).start())
+
+    def test_the_icon_coming_later_lets_the_window_hide(self):
+        app = self._app(False)
+        with mock.patch.object(self.run, "ICO_PATH", mock.Mock(exists=lambda: True)):
+            app.start()
+        self.assertFalse(self.run.TRAY_READY.is_set())
+        app.tray.on_shown()  # Explorer started after the app and took the icon
+        self.assertTrue(self.run.TRAY_READY.is_set())
+
+    def test_without_the_icon_a_recording_window_is_minimized_not_hidden(self):
+        app = self._app(False)
+        with mock.patch.object(self.run, "session_ending", return_value=False), \
+             mock.patch.object(self.run.threading, "Timer") as timer, \
+             mock.patch("app.database.get_all_settings", return_value={"close_to_tray": "true"}):
+            self.assertFalse(app.on_closing())
+            self.assertIs(timer.call_args[0][1], app.window.minimize)
+            app._status = {"state": "idle"}
+            self.assertTrue(app.on_closing())  # idle: closes, not hidden away
+
+    def test_hide_to_tray_minimizes_without_the_icon(self):
+        import types
+
+        api = self.run.WindowApi("127.0.0.1", 8765)
+        win = mock.Mock()
+        win.get_current_url.return_value = "http://127.0.0.1:8765/"
+        with mock.patch.dict(sys.modules, {"webview": types.SimpleNamespace(windows=[win])}), \
+             mock.patch.object(self.run.threading, "Timer") as timer:
+            self.assertTrue(api.hide_to_tray())
+            self.assertIs(timer.call_args[0][1], win.minimize)
+
+
 class WebView2Test(unittest.TestCase):
     """Found in the audit: without the WebView2 Runtime the window stayed on «Запуск…» (the old IE engine)."""
 
