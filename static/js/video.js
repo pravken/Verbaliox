@@ -345,11 +345,17 @@ function anyModalOpen() {
   return [...document.querySelectorAll('[id^="modal-"]')].some(m => !m.classList.contains('hidden') && !m.closest('#settings-view'));
 }
 
+// Ctrl+F and «/»: the search in the text of the open recording; in «Записи», or without a recording, the search
+// of «Записи»
 function focusTranscriptSearch() {
-  if (!state.activeMeeting) {
-    document.getElementById('global-search-input')?.focus();
+  if (!state.activeMeeting || state.appView === 'libtable') {
+    const q = document.getElementById('lt-q');
+    const go = () => { q?.focus(); q?.select(); };
+    // the section, when it opens, puts the focus on its list a frame later: the search takes it after that
+    if (state.appView !== 'libtable') { switchAppView('libtable'); nextFrame(go); } else go();
     return;
   }
+  if (state.appView !== 'library') switchAppView('library');  // the recording may be open behind another section
   if (state.activeWorkspaceTab !== 'transcript' && !state.theatre) switchWorkspaceTab('transcript');
   const input = document.getElementById('transcript-search');
   input.focus();

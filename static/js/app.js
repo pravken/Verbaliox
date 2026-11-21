@@ -2125,12 +2125,13 @@ function findInTranscript(text) {
   renderTranscript();
 }
 
+// «Найти во всех записях»: the search of «Записи» (the search of the old sidebar is hidden)
 function findEverywhere(text) {
-  switchAppView('library');
-  const input = document.getElementById('global-search-input');
+  switchAppView('libtable');
+  const input = document.getElementById('lt-q');
   input.value = text;
-  input.focus();
-  handleGlobalSidebarSearch(text);
+  onLibTableSearch(text);
+  nextFrame(() => input.focus());  // after the section's own focus on its list
 }
 
 function askAbout(text) {
