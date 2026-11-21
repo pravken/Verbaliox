@@ -438,6 +438,17 @@ function renderLibTable(opts = {}) {
     html = `<div class="lt-fview">${ltFolderTree()}<div class="lt-fmain" style="min-width:${table.minW}px">${table.html}</div></div>`;
     tpl = table.tpl;
   }
+  // the selection is of the rows on screen: a search or a filter that hides a selected one takes it out, so
+  // «Выбрано» and the actions of the selection never count or touch a recording that is not seen
+  if (state.multi.size) {
+    const seen = new Set(LT.ids);
+    const kept = [...state.multi].filter(id => seen.has(id));
+    if (kept.length !== state.multi.size) {
+      state.multi = new Set(kept);
+      if (!(opts.live && LT.colsOpen)) renderLibTableBar();
+      renderMeetingsSidebar();
+    }
+  }
   box.className = `lt-body lt-v-${p.view}${p.dense ? ' lt-dense' : ''}`;
   box.style.setProperty('--lt-tpl', tpl || 'none');
   box.style.minWidth = minW ? `${minW}px` : '';
