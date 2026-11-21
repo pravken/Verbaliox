@@ -29,7 +29,7 @@ for (const view of ['home', 'dashboard', 'tasks', 'studio', 'ask', 'library']) {
 // Handlers that use their element (event.currentTarget): the view menu is placed under its button,
 // a click on a window's backdrop closes it
 await step('import menu under its button', async () => {
-  await page.click('#strip-import');
+  await page.click('#strip-import-more');
   await page.waitForTimeout(200);
   if (!(await page.isVisible('#imp-menu'))) throw new Error('not opened');
   await page.mouse.click(5, 5);

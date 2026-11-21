@@ -4536,9 +4536,6 @@ button.sc-at:hover { color: var(--accent-text); }
 .kv-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 @container (max-width: 860px) { .info-grid { grid-template-columns: minmax(0, 1fr); } }
 
-/* «Импорт» in the strip of the meeting, before the recording button */
-.strip-imp { margin-right: 8px; flex: none; }
-
 /* A window opens with motion (asked by the user, as on the try-on page): it fades in and grows a little from where
    it was opened. A panel shown again after «hidden» plays it again; one redrawn while open does not */
 @keyframes vx-pop { from { opacity: 0; transform: translateY(4px) scale(.97); } }
@@ -5099,3 +5096,32 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .pv-who h2, .pc-who h2 { display: flex; align-items: center; }
 .pv-row-t b, .sp-dname b { display: inline-flex; align-items: center; }
 :is(.pv-row-t b, .pv-who h2, .pc-who h2, .sp-dname b) em { vertical-align: 0; line-height: 1; }
+
+/* «＋ Импорт ▾» in the strip on top: a split button as «● Запись ▾» (asked by the user), at its height, radius,
+   hairline before the ▾ and caret; «＋ Импорт» opens the window with everything, the ▾ the menu of what to import */
+.imp-split { display: inline-flex; align-items: center; flex: none; height: 32px; box-sizing: border-box; margin-right: 8px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--elevated); }
+.imp-split-main { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border: 0; border-radius: 7px 0 0 7px;
+  background: none; color: #E6E7EA; font-size: var(--fs-ui); line-height: 1; white-space: nowrap; transition: background-color var(--dur-fast) ease; }
+.imp-split-more { display: inline-flex; align-items: center; justify-content: center; height: 30px; width: 26px; padding: 0; border: 0;
+  border-left: 1px solid var(--line); border-radius: 0 7px 7px 0; background: none; color: #E6E7EA; transition: background-color var(--dur-fast) ease; }
+.imp-split-main:hover, .imp-split-more:hover, .imp-split-more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.07); }
+.imp-split-main:focus-visible, .imp-split-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.imp-split .vx-plus { width: 14px; height: 14px; flex: none; }
+.imp-split-more .vx-caret { opacity: 0.85; }
+
+/* The import window's modes: the segmented control under its head (files, folder, link, all options), the fields
+   of the other modes put away, the files of a chosen folder listed under its row; the speakers always in sight */
+.imp-seg { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; margin-top: -4px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
+.imp-seg button { height: 28px; padding: 0 14px; border-radius: 7px; font-size: var(--fs-ui); color: var(--hc-dim, #AEAEB2); white-space: nowrap; }
+.imp-seg button:hover { color: #F5F5F7; }
+.imp-seg button[aria-checked="true"] { background: rgb(var(--accent-rgb) / 0.3); color: #FFFFFF; box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.45); }
+.imp-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#modal-import [data-imp-off] { display: none !important; }
+.imp-link-lead { margin: 0; }
+.imp-sub-list { display: flex; flex-direction: column; gap: 2px; margin: -2px 0 4px 56px; padding-left: 10px; border-left: 1px solid var(--line); }
+.imp-sub-row { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 12px; align-items: center; padding: 1px 46px 1px 0; }
+.imp-sub-name { font-size: var(--fs-ui); color: #C7C7CC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-sub-size { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); text-align: right; }
+.imp-sub-more { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); padding: 1px 0; }
+.imp-card:not(.imp-more-open) .imp-grid3 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
