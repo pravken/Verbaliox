@@ -1200,7 +1200,7 @@ function dbDetailMeetings(d) {
 }
 
 function dbDetailTasks(list, today, mine) {
-  if (!list.length) return vxEmpty(mine ? 'task' : 'clock', t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'));
+  if (!list.length) return vxEmpty(mine ? 'task' : 'wait', t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'));
   return list.map(x => `<div class="db-dt-task${x.status === 'done' ? ' done' : ''}">`
     + (mine && x.status !== 'done' ? `<button class="db-ck" data-click="dbDetailDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
     + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><span class="db-dt-text">${escapeHtml(x.what)}</span>`
@@ -1252,7 +1252,7 @@ function dbRenderDetail() {
         || vxEmpty('meet', t('dbNoMeetingsYet')))
       + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${jsArg(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
   }
-  const ic = { meetings: 'meet', useless: 'over', decisions: 'dec', tasks: 'task', waiting: 'clock' }[kind] || 'people';
+  const ic = { meetings: 'meet', useless: 'over', decisions: 'dec', tasks: 'task', waiting: 'wait' }[kind] || 'people';
   box.innerHTML = vxHead(ic, title, { sub: period, close: 'data-click="dbCloseDetail"' }) + `<div class="db-dt-body">${body}</div>`;
 }
 
@@ -1294,7 +1294,7 @@ function resetDashboard() {
 }
 
 // the line icons of the widgets in the panel «Виджеты» (the icon language of the rail and the cards)
-const DB_LIB_IC = { kpis: 'grid', mytasks: 'task', waiting: 'clock', features: 'tag', time: 'chart', people: 'people', decisions: 'dec',
+const DB_LIB_IC = { kpis: 'grid', mytasks: 'task', waiting: 'wait', features: 'tag', time: 'chart', people: 'people', decisions: 'dec',
   summary: 'spark', load: 'chart', dull: 'redo', worked: 'clock', apps: 'grid', sysload: 'chart' };
 
 function renderDashDrawer() {
