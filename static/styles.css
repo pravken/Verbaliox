@@ -5151,3 +5151,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 /* The strip's «Очередь» island with the ring alone: the strip tells about the only job, the island stays to open the
    queue's window */
 .st-island.st-island-ring { padding: 0 6px; gap: 0; }
+
+/* Rows of «Люди» and the strip's meeting: reached by the keyboard, the focus shown */
+.pv-row:focus-visible, .strip-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
