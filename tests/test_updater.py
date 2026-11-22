@@ -432,9 +432,12 @@ class StartupFailureTest(unittest.TestCase):
 class PortChoiceTest(unittest.TestCase):
     """A port taken by another program is skipped; our own running server is reused."""
 
-    def _serve(self, status: int, cookie: str = ""):
+    def _serve(self, status: int, cookie: str = "", proof=None):
+        """proof(nonce, port): the answer to the launcher's probe (our server: app.paths.session_proof)."""
         import http.server
+        import json
         import threading
+        from urllib.parse import parse_qs, urlsplit
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
@@ -442,6 +445,9 @@ class PortChoiceTest(unittest.TestCase):
                 if cookie:
                     self.send_header("Set-Cookie", cookie)
                 self.end_headers()
+                if proof:
+                    nonce = (parse_qs(urlsplit(self.path).query).get("n") or [""])[0]
+                    self.wfile.write(json.dumps({"proof": proof(nonce, self.server.server_port)}).encode())
 
             def log_message(self, *a):
                 pass
@@ -454,11 +460,15 @@ class PortChoiceTest(unittest.TestCase):
 
     def test_foreign_program_is_skipped_and_our_server_reused(self):
         import run
+        from app.paths import session_proof
 
         foreign = self._serve(200)
-        ours = self._serve(303, "vs_session_1=abc; HttpOnly")
+        # what the server answered before: anything can say it, so it is not taken for ours any more
+        lookalike = self._serve(303, "vs_session_1=abc; HttpOnly")
+        ours = self._serve(200, proof=lambda n, port: session_proof("tok", n, port))
         with mock.patch.object(run, "read_session_token", return_value="tok"):
             self.assertFalse(run.probe_server("127.0.0.1", foreign))
+            self.assertFalse(run.probe_server("127.0.0.1", lookalike))
             self.assertTrue(run.probe_server("127.0.0.1", ours))
             port, running = run.choose_port("127.0.0.1", foreign, tries=1)
             self.assertFalse(running)

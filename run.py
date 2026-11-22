@@ -161,23 +161,33 @@ def is_port_in_use(host: str, port: int) -> bool:
 
 
 def probe_server(host: str, port: int) -> bool:
-    """True when the program on the port is this user's Verbaliox: it accepts the session token
+    """True when the program on the port is this user's Verbaliox: it knows the session token
     from our data folder. Another program on the port (a dev server, another app) or Verbaliox
-    of another Windows user does not, and the window must not open their page."""
+    of another Windows user does not, and the window must not open their page.
+    The token is never sent: whatever listens there answers a nonce with the proof only our server can
+    make (app.paths.session_proof)."""
+    import hmac
     import http.client
+    import secrets
+
+    from app.paths import session_proof
 
     token = read_session_token(timeout=0)
     if not token:
         return False
+    nonce = secrets.token_urlsafe(24)
     try:
         conn = http.client.HTTPConnection(host, port, timeout=3)
         try:
-            conn.request("GET", f"/?token={token}")
+            conn.request("GET", f"/api/session/probe?n={nonce}")
             resp = conn.getresponse()
-            return resp.status == 303 and "vs_session" in (resp.getheader("set-cookie") or "")
+            if resp.status != 200:
+                return False
+            proof = json.loads(resp.read(4096).decode("utf-8", "replace")).get("proof")
+            return isinstance(proof, str) and hmac.compare_digest(proof, session_proof(token, nonce, port))
         finally:
             conn.close()
-    except (OSError, http.client.HTTPException):
+    except (OSError, http.client.HTTPException, ValueError, AttributeError):
         return False
 
 

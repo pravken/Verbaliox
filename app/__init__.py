@@ -6,3 +6,8 @@ __version__ = "0.9.0"
 from app import onnx_gpu as _onnx_gpu  # noqa: E402
 
 _onnx_gpu.activate()
+
+# Requests to 127.0.0.1 (Ollama) never go to the proxy of the Windows settings (app/net_proxy.py)
+from app import net_proxy as _net_proxy  # noqa: E402
+
+_net_proxy.install()
