@@ -1250,7 +1250,7 @@ function dbRenderDetail() {
       + ((d.meetings || []).map(m => `<button class="db-dt-row db-dt-row2" data-click="dashOpenSummary" data-click-args='[${m.id}]'>`
         + `<span class="db-dt-main"><b class="db-dt-one">${escapeHtml(m.title || t('hmUntitled'))}</b><small><span>${escapeHtml(dbAgo(m.date, today))}</span></small></span><span class="db-dt-dur">${escapeHtml(dbHm(m.duration))}</span></button>`).join('')
         || vxEmpty('meet', t('dbNoMeetingsYet')))
-      + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${JSON.stringify(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
+      + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${jsArg(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
   }
   const ic = { meetings: 'meet', useless: 'over', decisions: 'dec', tasks: 'task', waiting: 'clock' }[kind] || 'people';
   box.innerHTML = vxHead(ic, title, { sub: period, close: 'data-click="dbCloseDetail"' }) + `<div class="db-dt-body">${body}</div>`;
