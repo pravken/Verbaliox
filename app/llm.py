@@ -1,8 +1,9 @@
 """
 The language model for analysis: overviews, tasks, chapters, questions, titles, Obsidian notes.
 
-It is always the local Ollama: the text of a recording does not leave the computer. The cloud models
-of earlier versions were removed; their stored settings and API keys are deleted at start
+It is always Ollama, at the address of the settings (ollama_url): this computer by default, where the
+text of a recording does not leave it; another computer of the network when the user sets its address. The
+cloud models of earlier versions were removed; their stored settings and API keys are deleted at start
 (app.database.drop_cloud_leftovers).
 
 `target()` returns the configured model; `Target.chat(system, user)` is all the callers use.
