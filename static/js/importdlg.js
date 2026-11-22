@@ -186,12 +186,20 @@ document.addEventListener('click', closeImportMenu);
 document.addEventListener('keydown', e => {
   const menu = document.getElementById('imp-menu');
   if (!menu) return;
-  if (e.key === 'Escape') { e.preventDefault(); closeImportMenu(); return; }
+  if (e.key === 'Escape') {
+    // the focus goes back to the ▾ that opened the menu, not to the page's body
+    e.preventDefault();
+    const owner = document.querySelector('[data-click="openImportMenu"][aria-expanded="true"]');
+    closeImportMenu();
+    owner?.focus();
+    return;
+  }
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault();
     const rows = [...menu.querySelectorAll('button')];
-    const i = rows.indexOf(document.activeElement);
-    rows[(i + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length].focus();
+    const i = rows.indexOf(document.activeElement), down = e.key === 'ArrowDown';
+    // no row focused yet: ↓ the first, ↑ the last
+    rows[i < 0 ? (down ? 0 : rows.length - 1) : (i + (down ? 1 : rows.length - 1)) % rows.length].focus();
   }
 });
 
