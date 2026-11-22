@@ -167,7 +167,7 @@ function taskFeatureChipsHtml(meetingId, ids) {
 // What each feature is; every field has a use: keywords find it in a meeting's title, the description tells the
 // models what it is, the terms are written right by recognition and by the models; none is required ---
 const FT_COLORS = ['#64B5FF', '#BF5AF2', '#30D158', '#FF9F0A', '#FF6482', '#5AC8FA', '#FFD60A', '#AC8E68'];
-const FTD = { sel: 0 };  // the feature chosen in the drawer
+const FTD = { sel: 0, opener: null };  // the feature chosen in the drawer
 
 function featureDrawerOpen() {
   const el = document.getElementById('ft-drawer');
@@ -192,16 +192,25 @@ async function openFeatureDrawer(id = 0) {
   const el = document.getElementById('ft-drawer');
   const s = (state.system && state.system.settings) || {};
   document.getElementById('ft-dr-suggest').checked = s.feature_suggest !== 'false';
+  // the focus goes into the drawer and comes back to the button that opened it (keyboard use)
+  const from = document.activeElement;
+  if (from && from !== document.body && !el.contains(from)) FTD.opener = from;
   placeFeatureDrawer();
   drawerShow(el);
   await renderFeatureDrawer();
+  const first = el.querySelector('.ft-dr-on') || document.getElementById('ft-dr-new');
+  if (first && featureDrawerOpen()) first.focus({ preventScroll: true });
 }
 
 function closeFeatureDrawer() {
   const el = document.getElementById('ft-drawer');
   // a field being typed in is saved before the drawer goes (its change comes on leaving it)
-  if (el && el.contains(document.activeElement)) document.activeElement.blur();
+  const inside = el && el.contains(document.activeElement);
+  if (inside) document.activeElement.blur();
   drawerHide(el);
+  const back = FTD.opener;
+  FTD.opener = null;
+  if (inside && back && back.isConnected) back.focus({ preventScroll: true });
 }
 
 // «В отдельном окне» of the card «Фичи» in «Словарь»: a second click closes the drawer
