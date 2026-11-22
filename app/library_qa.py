@@ -226,7 +226,9 @@ def is_small_talk(question: str) -> bool:
 _ABOUT_RECORDINGS = re.compile(
     r"запис|встреч|созвон|звонк|совещан|митинг|планерк|обсужд|обсуди|говорил|сказал|упомина|решил|договорил"
     r"|задач|поручен|участник|спикер|расшифров|видео|ролик|лекци|интервью|медиатек"
-    r"|meeting|record|call\b|calls\b|discuss|said|mention|decid|agreed|task|speaker|transcript|video|lecture|interview",
+    r"|резюм|пересказ|перескаж|выжимк|итог"
+    r"|meeting|record|call\b|calls\b|discuss|said|mention|decid|agreed|task|speaker|transcript|video|lecture|interview"
+    r"|summar|recap|takeaway",
     re.IGNORECASE,
 )
 
@@ -243,6 +245,7 @@ def about_recordings(question: str, llm: Any, chosen: bool, talk: str = "") -> b
         "Определи, нужно ли для ответа содержание этих записей (что обсуждали, кто что сказал, решения, задачи, "
         "о чём запись, что там про какую-то тему). Если это общий вопрос, на который отвечают из общих знаний "
         "(объяснить понятие, дать совет, написать или перевести текст, посчитать), ответь «нет». "
+        "Просьба пересказать, кратко изложить, перевести или разобрать сами записи — это про записи, «да». "
         "Если не уверен — «да». Ответь одним словом: да или нет."
     )
     try:
@@ -250,7 +253,8 @@ def about_recordings(question: str, llm: Any, chosen: bool, talk: str = "") -> b
                             (talk.strip() + "\n\nВопрос: " + question) if talk else question, short=True) or "").strip().casefold()
     except Exception:
         return True
-    return not verdict.startswith(("нет", "no"))
+    # «**Нет**», «"Нет."»: the word after any mark-up around it
+    return not verdict.lstrip(" \t\n*_«»\"'`.-").startswith(("нет", "no"))
 
 
 def _general(question: str, answer_lang: str, llm: Any, small: bool, talk: str = "") -> Dict[str, Any]:

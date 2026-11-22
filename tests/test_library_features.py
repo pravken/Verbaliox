@@ -505,6 +505,13 @@ class LibraryScopeTest(unittest.TestCase):
         llm.chat.assert_not_called()
         llm.chat.return_value = "Нет."
         self.assertFalse(about_recordings("сколько будет 2+2", llm, False))
+        llm.chat.return_value = "**Нет**"
+        self.assertFalse(about_recordings("сколько будет 2+2", llm, False))
+        llm.chat.reset_mock()
+        # a retelling of the chosen recordings is about them, whatever the model says
+        for q in ("Перескажи кратко", "Сделай резюме", "Подведи итоги", "Give me a recap"):
+            self.assertTrue(about_recordings(q, llm, True), q)
+        llm.chat.assert_not_called()
         llm.chat.side_effect = RuntimeError("down")
         self.assertTrue(about_recordings("сколько будет 2+2", llm, False))
 
