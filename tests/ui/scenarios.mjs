@@ -1200,6 +1200,11 @@ await step('recording time opens the studio', async () => {
   await sleep(300);
   const r = await page.evaluate(() => [state.appView, window.__stops]);
   expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
+  // in the studio the time is a part of the red button: its click stops as the rest of the button does
+  await page.evaluate(() => updateRecordButtonState());
+  await page.click('#tb-rec-clock');
+  await sleep(200);
+  expect(await page.evaluate(() => window.__stops) === 1, 'the time in the studio was a dead spot of the red button');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 
