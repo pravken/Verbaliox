@@ -482,8 +482,11 @@ function openRecMenu(e) {
 
 // The studio of the running recording (asked by the user): the time on the red button leads there
 function openRecordStudio(e) {
+  // in the studio the time is a plain part of the red button (no capsule, no pointer): its click stops the recording
+  // as the rest of the button does, instead of doing nothing
+  if (state.appView === 'studio') return;
   if (e) e.stopPropagation();  // the time is inside the red button, which stops the recording
-  if (state.appView !== 'studio') switchAppView('studio');
+  switchAppView('studio');
 }
 
 // A preset of the menu: recorded at once, where the user is (as the red button)

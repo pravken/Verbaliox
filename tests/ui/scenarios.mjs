@@ -254,6 +254,22 @@ await step('menu at the bottom', async () => {
   expect(await page.isVisible('#recording-context-menu button[data-click="ctxExport"]'), 'no export in the menu');
   await page.evaluate(() => hideContextMenu());
   await sleep(250);
+  // the same menu in a low window scrolls inside it; opened again in a tall one it has its whole height back
+  const ctxAt = () => page.evaluate(() => {
+    openRecordingContextMenu({ clientX: 300, clientY: 40, preventDefault() {}, stopPropagation() {} }, 1);
+    return new Promise(ok => setTimeout(() => { const e = document.getElementById('recording-context-menu'), r = e.getBoundingClientRect();
+      ok({ bottom: r.bottom, vh: innerHeight, max: e.style.maxHeight }); }, 250));
+  });
+  await page.setViewportSize({ width: 1300, height: 360 });
+  const low = await ctxAt();
+  expect(low.bottom <= low.vh && !!low.max, `the menu in a low window: ${JSON.stringify(low)}`);
+  await page.evaluate(() => hideContextMenu());
+  await sleep(250);
+  await page.setViewportSize({ width: 1300, height: 860 });
+  const tall = await ctxAt();
+  expect(!tall.max, `the menu kept the limit of the low window: ${JSON.stringify(tall)}`);
+  await page.evaluate(() => hideContextMenu());
+  await sleep(250);
 });
 
 // Undo instead of a question: a task goes at once and comes back with «Отменить» (6.1)
@@ -1200,6 +1216,11 @@ await step('recording time opens the studio', async () => {
   await sleep(300);
   const r = await page.evaluate(() => [state.appView, window.__stops]);
   expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
+  // in the studio the time is a part of the red button: its click stops as the rest of the button does
+  await page.evaluate(() => updateRecordButtonState());
+  await page.click('#tb-rec-clock');
+  await sleep(200);
+  expect(await page.evaluate(() => window.__stops) === 1, 'the time in the studio was a dead spot of the red button');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 
@@ -1410,7 +1431,32 @@ await step('features drawer', async () => {
   await page.keyboard.press('Escape');
   await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer over a recording');
   expect(!(await open()), 'the drawer is still open');
+  // the captions on the whole window go over everything: the drawer does not stay above them
+  await page.evaluate(() => { switchAppView('studio'); openFeatureDrawer(); });
+  await poll(() => featureDrawerOpen(), 'the drawer did not open over the studio');
+  await page.evaluate(() => toggleStudioFocus(true));
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'the drawer stayed over the captions on the whole window');
+  await page.evaluate(() => { toggleStudioFocus(false); switchAppView('home'); });
+  await sleep(300);
   await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }).then(() => loadFeatures()), fid);
+});
+
+// The citations of an answer as the server reads them (app/library_qa.cited_numbers): the ranges [1-3] / [5–6] /
+// [2, 4-5] give a link for each source, count in the list of the sources and leave the history sent with a follow-up
+await step('citation ranges', async () => {
+  const r = await page.evaluate(() => {
+    const src = k => ({ n: k, meeting_id: 1, title: `Встреча ${k}`, start: 10 * k, text: `фрагмент ${k}` });
+    const byN = Object.fromEntries([1, 2, 3, 4, 5, 6].map(k => [k, src(k)]));
+    const box = document.createElement('div');
+    box.textContent = 'Итог [1-3], сроки [5–6] и [2, 4-5]; ещё [9].';
+    linkifyCitations(box, byN, 0);
+    const chat = { items: [{ question: 'q', status: 'done', data: { found: true, answer: 'Итог [1-3] и [2, 4-5].' } }, {}] };
+    return { links: [...box.querySelectorAll('.lib-cite')].map(b => b.textContent).join(','), rest: box.textContent.includes('[9]'),
+      cited: [...citedNumbers('Итог [1-3], сроки [5–6] и [2, 4-5].')].sort().join(','), history: assistantHistory(chat, chat.items[1])[0].answer };
+  });
+  expect(r.links === '1,2,3,5,6,2,4,5' && r.rest, `the ranges are not links: ${JSON.stringify(r)}`);
+  expect(r.cited === '1,2,3,4,5,6', `the ranges are not counted: ${r.cited}`);
+  expect(r.history === 'Итог и.', `the history keeps the citations: ${r.history}`);
 });
 
 await browser.close();
