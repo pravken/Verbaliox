@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
-from app.paths import DATA_DIR, UPLOADS_DIR
+from app.paths import UPLOADS_DIR
 from app import speech_route
 from app.settings_schema import as_int
 from app.database import create_meeting, get_all_settings, get_meeting
@@ -718,13 +718,11 @@ class UiLangPayload(BaseModel):
 
 @router.post("/api/ui/lang")
 def api_ui_lang(payload: UiLangPayload) -> Dict[str, Any]:
-    """Remembers the UI language for the launcher's splash screen (read by Verbaliox.exe)."""
-    lang = "en" if payload.lang == "en" else "ru"
-    try:
-        (DATA_DIR / "ui-lang.txt").write_text(lang, encoding="utf-8")
-    except OSError:
-        pass
-    return {"lang": lang}
+    """Remembers the UI language for the launcher's splash screen (read by Verbaliox.exe) and for what
+    Windows shows from the tray side (app/ui_lang.py)."""
+    from app import ui_lang
+
+    return {"lang": ui_lang.save(payload.lang)}
 
 # --- What the page is doing, for the tray icon (see app/app_status.py) ---
 class UiStatePayload(BaseModel):

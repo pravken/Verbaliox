@@ -346,10 +346,13 @@ def check(now: Optional[datetime] = None, idle: Optional[float] = None) -> bool:
         if today and today["worked"] >= hours * 60:
             update_settings({"work_reminded_day": d})
             from app import app_status
+            from app.ui_lang import tr
 
             h = int(hours) if hours == int(hours) else hours
-            app_status.add_notice(f"Рабочий день: {h} ч",
-                                  f"С {today['start']} отработано {today['worked'] // 60} ч {today['worked'] % 60:02d} мин. Норма рабочего дня выполнена",
+            start, wh, wm = today["start"], today["worked"] // 60, f"{today['worked'] % 60:02d}"
+            app_status.add_notice(tr(f"Рабочий день: {h} ч", f"Workday: {h} h"),
+                                  tr(f"С {start} отработано {wh} ч {wm} мин. Норма рабочего дня выполнена",
+                                     f"Worked {wh} h {wm} min since {start}. The workday target is met"),
                                   "dashboard")
     return True
 
