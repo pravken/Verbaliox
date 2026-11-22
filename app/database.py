@@ -1365,11 +1365,13 @@ def _carry_refs(conn: sqlite3.Connection, meeting_id: int, old_segments: Any, ol
     raw = row[0] if row else ""
     if not raw or "⟦spk:" not in raw:
         return None
-    from app.speaker_refs import carry
+    from app.speaker_refs import carry, refresh_names
 
     sums = _loads_dict(raw)
     changed = carry(sums, old_segments() if callable(old_segments) else old_segments, old_speakers,
                     new_segments or [], new_speakers or {}, every)
+    # and the name each keeps is the current one (a rename): shown when the speaker is gone later
+    changed.update(refresh_names({**sums, **changed}, new_speakers or {}))
     if changed:
         sums.update(changed)
         conn.execute("UPDATE meetings SET summaries_json = ? WHERE id = ?", (json.dumps(sums, ensure_ascii=False), meeting_id))

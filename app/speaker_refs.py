@@ -236,6 +236,25 @@ def remap_summaries(summaries: Dict[str, Any], mapping: Dict[str, Optional[str]]
     return out
 
 
+def refresh_names(summaries: Dict[str, Any], speakers: Dict[str, Any]) -> Dict[str, Any]:
+    """The sections whose markers keep an older name of a speaker the recording has (renamed since), with
+    its current name in them: the name a marker keeps is the one shown when the speaker is gone (the last
+    transcript deleted, a new one whose voices did not take it). Returns the sections changed."""
+    out = {}
+    for k, v in (summaries or {}).items():
+        if not has_marks(v):
+            continue
+
+        def one(m: "re.Match") -> str:
+            name = speaker_name(speakers, m.group(1))
+            return mark(m.group(1), name) if name and mark(m.group(1), name) != m.group(0) else m.group(0)
+
+        new = MARK_RE.sub(one, v)
+        if new != v:
+            out[k] = new
+    return out
+
+
 def carry(summaries: Dict[str, Any], old_segments: List[Dict[str, Any]], old_speakers: Dict[str, Any],
           new_segments: List[Dict[str, Any]], new_speakers: Dict[str, Any], every: bool) -> Dict[str, Any]:
     """The sections of an analysis with their markers carried over to the speakers after a change of them:
