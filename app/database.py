@@ -1398,6 +1398,13 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
             pass
 
 
+# Files whose length could not be read, by recording: (its id, the file's mtime). Asked on every load of
+# «Главная»: not read again until the file changes (found in the review: ffprobe ran on them each time)
+_duration_failed: set = set()
+# A recording still being made or mixed: its file is not whole yet, a length read now is not its own
+_DURATION_UNSETTLED = ("recording", "mixing")
+
+
 def fill_durations(meetings: List[Dict[str, Any]]) -> int:
     """The length of recordings that have none yet, read from their files and kept (reported by the user:
     the meeting hours of «Главная» stood still). It was written only when a transcription began, so a
@@ -1405,7 +1412,8 @@ def fill_durations(meetings: List[Dict[str, Any]]) -> int:
     get it too. Returns how many got one."""
     from app.audio_utils import get_media_duration
 
-    lacking = {int(m["id"]): m for m in meetings if m.get("id") and float(m.get("duration") or 0) <= 0}
+    lacking = {int(m["id"]): m for m in meetings if m.get("id") and float(m.get("duration") or 0) <= 0
+               and m.get("status") not in _DURATION_UNSETTLED}
     if not lacking:
         return 0
     with _db_lock:  # the list given to the page has no file paths
@@ -1413,11 +1421,18 @@ def fill_durations(meetings: List[Dict[str, Any]]) -> int:
         ids, rows = list(lacking), []
         for k in range(0, len(ids), 500):  # SQLite takes up to 999 values in one query
             part = ids[k:k + 500]
-            rows += conn.execute(f"SELECT id, media_path FROM meetings WHERE id IN ({','.join('?' * len(part))})", part).fetchall()
+            rows += conn.execute(f"SELECT id, media_path, status FROM meetings WHERE id IN ({','.join('?' * len(part))})",
+                                 part).fetchall()
         conn.close()
     found = []
-    for mid, path in rows:
-        if not path or not Path(path).is_file():
+    for mid, path, status in rows:
+        if not path or status in _DURATION_UNSETTLED:
+            continue
+        try:
+            key = (int(mid), Path(path).stat().st_mtime)
+        except OSError:  # no such file
+            continue
+        if key in _duration_failed:
             continue
         try:
             d = float(get_media_duration(path) or 0)
@@ -1426,10 +1441,14 @@ def fill_durations(meetings: List[Dict[str, Any]]) -> int:
         if d > 0:
             lacking[int(mid)]["duration"] = d
             found.append((d, int(mid)))
+        else:
+            _duration_failed.add(key)
     if found:
         with _db_lock:
             conn = get_connection()
-            conn.executemany("UPDATE meetings SET duration = ? WHERE id = ? AND (duration IS NULL OR duration <= 0)", found)
+            conn.executemany("UPDATE meetings SET duration = ? WHERE id = ? AND (duration IS NULL OR duration <= 0) "
+                             f"AND COALESCE(status, '') NOT IN ({','.join('?' * len(_DURATION_UNSETTLED))})",
+                             [(d, mid, *_DURATION_UNSETTLED) for d, mid in found])
             conn.commit()
             conn.close()
     return len(found)
