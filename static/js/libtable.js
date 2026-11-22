@@ -518,15 +518,21 @@ function renderLibTableBar() {
   const n = state.multi.size;
   bar.classList.toggle('lt-selbar', n > 0);
   if (n) {
-    bar.innerHTML = `<span class="lt-sel-n">${escapeHtml(t('libSelected').replace('{n}', () => n))}</span><span class="tk-grow"></span>`
-      + `<button type="button" class="lt-btn" data-click="ltBulkFolder" data-click-args='[{"$": "event"}]'>${escapeHtml(t('ltToFolder'))}</button>`
-      + `<button type="button" class="lt-btn" data-click="ltBulkFeature" data-click-args='[{"$": "event"}]'>${escapeHtml(t('ltToFeature'))}</button>`
-      + `<button type="button" class="lt-btn" data-click="ltBulkExport" data-click-args='[{"$": "event"}]'>${escapeHtml(t('export'))}</button>`
-      + `<button type="button" class="lt-btn" data-click="ltBulkTranscribe" title="${escapeHtml(t('ltTranscribeTip'))}">${escapeHtml(t('ltTranscribe'))}</button>`
+    // quiet actions with their icons on the tint of the selection (asked by the user: a row of framed buttons
+    // looked crude); ✕ with the count clears it, «Удалить» stands apart at the end
+    const act = (fn, ic, label, { args = '', tip = '', cls = '' } = {}) => `<button type="button" class="lt-sa${cls}" data-click="${fn}"`
+      + (args ? ` data-click-args='${args}'` : '') + (tip ? ` title="${escapeHtml(tip)}"` : '') + `>${pultIcon(ic)}<span>${escapeHtml(label)}</span></button>`;
+    const ev = '[{"$": "event"}]';
+    bar.innerHTML = `<button type="button" class="lt-sa-x" data-click="clearLibSelection" title="${escapeHtml(t('ltClearSel'))} (Esc)" aria-label="${escapeHtml(t('ltClearSel'))}">✕</button>`
+      + `<span class="lt-sel-n">${escapeHtml(t('libSelected').replace('{n}', () => n))}</span><span class="tk-grow"></span>`
+      + act('ltBulkFolder', 'folder', t('ltToFolder'), { args: ev })
+      + act('ltBulkFeature', 'tag', t('ltToFeature'), { args: ev })
+      + act('ltBulkExport', 'down', t('export'), { args: ev })
+      + act('ltBulkTranscribe', 'wave', t('ltTranscribe'), { tip: t('ltTranscribeTip') })
+      + `<button type="button" class="lt-sa lt-sa-more" data-click="ltBulkMore" data-click-args='${ev}' title="${escapeHtml(t('ltMoreTip'))}" aria-label="${escapeHtml(t('ltMoreTip'))}" aria-haspopup="menu">⋯</button>`
+      + '<span class="lt-sa-sep" aria-hidden="true"></span>'
       // «Удалить» in sight (asked by the user: it was only in «⋯»); bulkDelete asks before anything goes
-      + `<button type="button" class="lt-btn lt-danger" data-click="bulkDelete" title="Delete">${escapeHtml(t('ltDelete'))}</button>`
-      + `<button type="button" class="lt-btn" data-click="ltBulkMore" data-click-args='[{"$": "event"}]' title="${escapeHtml(t('ltMoreTip'))}" aria-haspopup="menu">⋯</button>`
-      + `<button type="button" class="lt-btn lt-ghost" data-click="clearLibSelection" title="Esc">${escapeHtml(t('ltClearSel'))}</button>`;
+      + act('bulkDelete', 'trash', t('ltDelete'), { tip: 'Delete', cls: ' lt-sa-danger' });
     return;
   }
   const chip = c => `<button type="button" class="lt-chip${LT.chip === c ? ' on' : ''}" data-click="ltSetChip" data-click-args='["${c}"]'>${escapeHtml(t(`ltChip_${c}`))}`
