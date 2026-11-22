@@ -57,6 +57,49 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(moved.read_bytes(), b"sound")
         self.assertTrue(DB_PATH.exists())
 
+    def test_a_restore_cut_off_midway_leaves_nothing_half_written(self):
+        """Found in review: the staged database and the media files were written at their places, so a restore
+        cut off midway left a truncated database that replaced the library at the next start, and a truncated
+        media file that every later restore skipped as already there."""
+        from unittest import mock
+
+        from app.database import create_meeting, init_db
+
+        init_db()
+        media = Path(tempfile.mkdtemp()) / "cut.m4a"
+        media.write_bytes(b"sound" * 1000)
+        create_meeting("Прерванное восстановление", "cut.m4a", str(media))
+        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        backup.make(out, with_media=True)
+        media.unlink()
+        backup.PENDING.unlink(missing_ok=True)
+
+        def cut_media(fin, fout, *a, **k):
+            fout.write(fin.read(10))
+            raise OSError("power loss")
+
+        with mock.patch.object(backup.shutil, "copyfileobj", cut_media):
+            with self.assertRaises(OSError):
+                backup.restore(out)
+        self.assertFalse(backup.PENDING.exists())
+
+        def cut_db(src, dst, *a, **k):
+            Path(dst).write_bytes(Path(src).read_bytes()[:100])
+            raise OSError("power loss")
+
+        with mock.patch.object(backup.shutil, "copyfile", cut_db):
+            with self.assertRaises(OSError):
+                backup.restore(out)
+        self.assertFalse(backup.PENDING.exists())  # the next start keeps the library it has
+        backup.restore(out)
+        from app.database import get_all_settings
+        from app.paths import recordings_dir
+
+        put = list((recordings_dir(get_all_settings().get("recordings_dir") or "") / backup.RESTORED_FOLDER).glob("*_cut.m4a*"))
+        self.assertEqual([p.read_bytes() for p in put], [b"sound" * 1000])  # whole, and no truncated one beside
+        self.assertTrue(backup.PENDING.exists())
+        backup.PENDING.unlink()
+
     def test_the_minutes_worked_and_the_programs_stay_on_this_computer(self):
         """«Мои программы» and the working day are local (the page says so): not in a copy, and a copy never
         turns the counting of programs on."""
