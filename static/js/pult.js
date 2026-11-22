@@ -200,6 +200,8 @@ function renderStrip() {
   const main = document.getElementById('strip-main');
   main.classList.toggle('strip-link', !!s.click);
   main.title = s.click ? s.tip || '' : '';
+  // reached by the keyboard too while it opens something (Enter and Space: core.js)
+  if (s.click) { main.setAttribute('role', 'button'); main.tabIndex = 0; } else { main.removeAttribute('role'); main.removeAttribute('tabindex'); }
   document.getElementById('strip-acts').innerHTML = acts;
 }
 
