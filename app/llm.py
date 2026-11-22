@@ -37,9 +37,12 @@ class Target:
     def label(self) -> str:
         return self.model
 
-    def chat(self, system: str, user: str, short: bool = False, plain: bool = False) -> str:
+    def chat(self, system: str, user: str, short: bool = False, plain: bool = False, think: bool = False) -> str:
         """short: a short answer (a title, a check): the model does not reason first.
-        plain: a long answer that needs no reasoning (a retelling): the model does not reason either."""
+        plain: a long answer that needs no reasoning (a retelling): the model does not reason either.
+        think: a general question to the assistant: a model that can reason does so first."""
+        if think:
+            return self.chat_fn(system, user, think=True)
         if short:
             return self.chat_fn(system, user, short=True)
         return self.chat_fn(system, user, plain=True) if plain else self.chat_fn(system, user)
@@ -103,4 +106,5 @@ def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) 
     from app.ollama_client import single_pass_max_chars
 
     return Target("ollama", wanted, single_pass_max_chars(),
-                  lambda system, user, short=False, plain=False: _ollama_chat(base_url, wanted, system, user, short=short, plain=plain))
+                  lambda system, user, short=False, plain=False, think=False:
+                  _ollama_chat(base_url, wanted, system, user, short=short, plain=plain, think=think))

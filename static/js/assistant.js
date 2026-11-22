@@ -710,6 +710,7 @@ function renderAssistantItem(item, isLast) {
       const model = data.model ? escapeHtml(formatModelName(data.model)) : '';
       body = `<div class="as-a">
         <div class="markdown-body text-[13.5px]" data-as-answer="${Number(item.id) || 0}"></div>
+        ${data.mode === 'general' ? `<div class="as-srclist"><div class="as-srclist-h">${escapeHtml(t('rdSasGeneralNote'))}</div></div>` : ''}
         ${sources ? `<div class="as-srclist"><div class="as-srclist-h">${escapeHtml(t('rdSasSourcesCount').replace('{r}', () => recs).replace('{n}', () => shown.length))}</div>${sources}</div>` : ''}
         <div class="as-actions">
           <button data-click="assistantCopy" data-click-args='[${Number(item.id) || 0}, {"$": "el"}]' class="as-act">${escapeHtml(t('rdSasCopy'))}</button>
@@ -721,7 +722,7 @@ function renderAssistantItem(item, isLast) {
       </div>`;
     }
   }
-  const follow = isLast && item.status === 'done' && item.data?.found
+  const follow = isLast && item.status === 'done' && item.data?.found && (item.data.sources || []).length
     ? `<div class="as-follow"><span>${escapeHtml(t('rdSasAskNext'))}</span>${ASSIST_FOLLOW.map((k, i) => `<button data-click="assistantFollow" data-click-args='[${i}]' class="as-chip-q">${escapeHtml(t(k))}</button>`).join('')}</div>` : '';
   return q + body + follow;
 }

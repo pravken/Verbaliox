@@ -451,6 +451,64 @@ class LibraryScopeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             library_qa.ask_library("вопрос", meeting_ids=[])
 
+    def _ask(self, question, reply):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", return_value=reply) as chat:
+            return library_qa.ask_library(question, meeting_ids=meeting_ids_in_folder(folder["id"])), chat
+
+    def test_a_greeting_gets_a_reply_without_a_search(self):
+        res, chat = self._ask("Привет!", "Здравствуйте! Задайте вопрос по записям.")
+        self.assertEqual(res["mode"], "chat")
+        self.assertTrue(res["found"])
+        self.assertEqual(res["sources"], [])
+        self.assertNotIn("Тестирование до пятницы.", chat.call_args[0][3])
+
+    def test_only_cited_fragments_are_sources(self):
+        res, _ = self._ask("о чём это?", "Во фрагментах нет ответа.")
+        self.assertEqual(res["sources"], [])
+        res, _ = self._ask("о чём это?", "О релизе [1].")
+        self.assertEqual([s["n"] for s in res["sources"]], [1])
+
+    def test_a_general_question_is_answered_with_reasoning_and_without_sources(self):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", side_effect=["нет", "Это метод оценки проектов."]) as chat:
+            res = library_qa.ask_library("Объясни, что такое RICE", meeting_ids=meeting_ids_in_folder(folder["id"]))
+        self.assertEqual(res["mode"], "general")
+        self.assertEqual(res["sources"], [])
+        self.assertTrue(chat.call_args.kwargs.get("think"))
+        self.assertNotIn("Тестирование до пятницы.", chat.call_args[0][3])
+
+    def test_a_question_about_meetings_skips_the_check(self):
+        from app.library_qa import about_recordings
+
+        llm = mock.Mock()
+        self.assertTrue(about_recordings("что решили на встрече?", llm, False))
+        llm.chat.assert_not_called()
+        llm.chat.return_value = "Нет."
+        self.assertFalse(about_recordings("сколько будет 2+2", llm, False))
+        llm.chat.side_effect = RuntimeError("down")
+        self.assertTrue(about_recordings("сколько будет 2+2", llm, False))
+
+    def test_small_talk_is_told_from_questions(self):
+        from app.library_qa import is_small_talk
+
+        for q in ("привет", "Спасибо большое!", "кто ты?", "hello", "thanks"):
+            self.assertTrue(is_small_talk(q), q)
+        for q in ("о чём была встреча?", "привет, что решили по релизу?", "задачи на неделю"):
+            self.assertFalse(is_small_talk(q), q)
+
 
 class SystemTest(unittest.TestCase):
     def test_memory_and_cpu(self):
