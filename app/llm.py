@@ -79,7 +79,7 @@ def available(settings: Optional[Dict[str, str]] = None) -> bool:
 
 
 def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) -> Target:
-    from app.ollama_client import _ollama_chat, ensure_ollama_running, get_ollama_status
+    from app.ollama_client import _ollama_chat, ensure_ollama_running, get_ollama_status, started_recently
 
     base_url = (settings.get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
     wanted = model or settings.get("ollama_model") or "gemma4:e2b"
@@ -89,7 +89,9 @@ def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) 
     # waited for, so a question asked right after the app's start is not told «Ollama не запущена»
     # (reported by the user: the assistant failed right after the start)
     deadline = time.monotonic() + OLLAMA_WARMUP_SEC
-    while started and not status["running"] and time.monotonic() < deadline:
+    # only an Ollama this app has just started: one that is up for long but does not answer (hung, or another
+    # program on its port) is reported at once, not after half a minute
+    while started and started_recently() and not status["running"] and time.monotonic() < deadline:
         time.sleep(0.5)
         status = get_ollama_status(base_url)
     if not status["running"]:
