@@ -1139,6 +1139,8 @@ function vxSyncLayers() {
       l.ownerEl = recent ? vxPress.el : null;
       if (l.kind === 'menu') closeAllMenus(l, vxPress.el);
     }
+    // the button that opened a menu says whether it is open (screen readers), whichever menu it is
+    if (open !== l.open && l.ownerEl && l.ownerEl.hasAttribute('aria-haspopup')) l.ownerEl.setAttribute('aria-expanded', String(open));
     l.open = open;
   }
 }
@@ -1151,7 +1153,6 @@ function closeAllMenus(keep, from) {
     const el = vxLayerEl(l);
     if (from && el && el.contains(from)) continue;
     l.close();
-    l.open = false;
   }
 }
 
@@ -1166,7 +1167,6 @@ function vxPressOwner(e, el) {
   const l = VX_LAYERS.find(x => x.kind === 'menu' && x.owner === key && x.isOpen() && !vxLayerEl(x)?.contains(el));
   if (!l) return false;
   l.close();
-  l.open = false;
   vxSwallow = { key, until: performance.now() + 1000 };
   return true;
 }
@@ -1198,7 +1198,6 @@ window.addEventListener('keydown', (e) => {
   e.stopImmediatePropagation();
   const back = top.ownerEl && top.ownerEl.isConnected ? top.ownerEl : null;
   top.close();
-  top.open = false;
   const f = document.activeElement;
   if (back && (!f || f === document.body || !f.isConnected || vxLayerEl(top)?.contains(f))) back.focus();
 }, true);
