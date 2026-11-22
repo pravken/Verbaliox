@@ -185,12 +185,14 @@ def status() -> Dict[str, Any]:
 
 # ------------------------------------------------------------------ background indexer
 def _gpu_busy() -> bool:
+    """Something else needs the computer now: a job, live captions, or a meeting (app/meeting_guard: the
+    embedding model in Ollama is not loaded during a call, as the speech models are not), or «Только запись»."""
     try:
-        from app import live, transcriber
+        from app import economy, live, meeting_guard, transcriber
 
         with transcriber._jobs_lock:
             jobs = bool(transcriber._active_jobs)
-        return jobs or bool(live.active_session_count())
+        return jobs or bool(live.active_session_count()) or meeting_guard.holds_queue() or economy.on()
     except Exception:
         return False
 
@@ -210,7 +212,7 @@ def _run() -> None:
         _wake.clear()
         try:
             settings = get_all_settings()
-            if not enabled(settings) or not _ollama_up(settings):
+            if not enabled(settings) or not _ollama_up(settings) or _gpu_busy():
                 continue
             for mid in [m for m in pending_ids(settings) if m not in _skip]:
                 if not enabled() or _gpu_busy():
