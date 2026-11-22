@@ -329,6 +329,9 @@ def init_db() -> None:
         # The transcript: one row per line (see _write_segments), not one JSON in the recording's row
         cur.execute(_SEGMENTS_DDL)
         cur.execute(_VERSIONS_DDL)
+        cur.execute(_TALK_DDL)
+        for ddl in _TALK_TRIGGERS:
+            cur.execute(ddl)
         cur.execute("DROP TRIGGER IF EXISTS meetings_flags_segments")  # has_transcript is set by _write_segments
         for ddl in _FLAG_TRIGGERS:
             cur.execute(ddl)
@@ -493,6 +496,21 @@ _SEGMENTS_DDL = """CREATE TABLE IF NOT EXISTS segments (
     PRIMARY KEY (meeting_id, pos)
 ) WITHOUT ROWID"""
 
+
+# How long each speaker talks in a recording (speaker_seconds), kept between starts: worked out from every
+# line of the library, it took seconds after each start (3.3 s for 2000 recordings) before «Задачи», «Люди»
+# or the name suggestions of an opened recording could answer. Any change of a recording's lines drops its
+# row, by triggers inside the database: also a change made by another version of the app, which knows
+# nothing of this table, never leaves a stale row behind.
+_TALK_DDL = "CREATE TABLE IF NOT EXISTS speaker_talk (meeting_id INTEGER PRIMARY KEY, data TEXT NOT NULL)"
+_TALK_TRIGGERS = [
+    """CREATE TRIGGER IF NOT EXISTS speaker_talk_insert AFTER INSERT ON segments BEGIN
+        DELETE FROM speaker_talk WHERE meeting_id = NEW.meeting_id; END""",
+    """CREATE TRIGGER IF NOT EXISTS speaker_talk_update AFTER UPDATE ON segments BEGIN
+        DELETE FROM speaker_talk WHERE meeting_id IN (OLD.meeting_id, NEW.meeting_id); END""",
+    """CREATE TRIGGER IF NOT EXISTS speaker_talk_delete AFTER DELETE ON segments BEGIN
+        DELETE FROM speaker_talk WHERE meeting_id = OLD.meeting_id; END""",
+]
 
 # The transcripts of a recording made with other models, one per model, to compare them and switch to
 # one (switch_transcript_version). The one shown is in `segments` (meetings.transcript_model): search,
@@ -1624,6 +1642,28 @@ _speaker_seconds_cache: Dict[int, Dict[str, float]] = {}
 SPEAKER_SECONDS_STEP = 40  # recordings read under one hold of the lock
 
 
+def _talk_from_lines(conn: sqlite3.Connection, ids: List[int], out: Dict[int, Dict[str, float]]) -> None:
+    """speaker_seconds of these recordings worked out from their lines, and kept (speaker_talk). Call with
+    _db_lock held: the reading and the keeping in one hold, so no change of the lines comes between."""
+    q = (f"SELECT meeting_id, json_extract(data, '$.speaker') AS spk, "
+         f"SUM(MAX(0.0, COALESCE(json_extract(data, '$.end'), 0) - COALESCE(json_extract(data, '$.start'), 0))) AS sec "
+         f"FROM segments WHERE meeting_id IN ({','.join('?' * len(ids))}) GROUP BY meeting_id, spk")
+    try:
+        for r in conn.execute(q, ids):
+            out[r["meeting_id"]][r["spk"]] = float(r["sec"] or 0.0)
+    except sqlite3.OperationalError:  # SQLite without JSON functions
+        for mid in ids:
+            for seg in _read_segments(conn, mid):
+                spk = seg.get("speaker")
+                out[mid][spk] = out[mid].get(spk, 0.0) + max(0.0, float(seg.get("end") or 0) - float(seg.get("start") or 0))
+    try:
+        conn.executemany("INSERT OR REPLACE INTO speaker_talk (meeting_id, data) VALUES (?, ?)",
+                         [(mid, json.dumps({str(k): v for k, v in out[mid].items() if k is not None})) for mid in ids])
+        conn.commit()
+    except sqlite3.Error:  # read-only, busy, or a database not opened by init_db: worked out again next time
+        pass
+
+
 def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
     """How long each speaker talks in each recording: {meeting_id: {speaker_id: seconds}}, read from
     the lines without loading whole transcripts."""
@@ -1641,20 +1681,22 @@ def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
         with _db_lock:
             conn = get_connection()
             try:
-                q = (f"SELECT meeting_id, json_extract(data, '$.speaker') AS spk, "
-                     f"SUM(MAX(0.0, COALESCE(json_extract(data, '$.end'), 0) - COALESCE(json_extract(data, '$.start'), 0))) AS sec "
-                     f"FROM segments WHERE meeting_id IN ({','.join('?' * len(part))}) GROUP BY meeting_id, spk")
-                for r in conn.execute(q, part):
-                    out[r["meeting_id"]][r["spk"]] = float(r["sec"] or 0.0)
-            except sqlite3.OperationalError:  # SQLite without JSON functions
-                for mid in part:
-                    for seg in _read_segments(conn, mid):
-                        spk = seg.get("speaker")
-                        out[mid][spk] = out[mid].get(spk, 0.0) + max(0.0, float(seg.get("end") or 0) - float(seg.get("start") or 0))
+                marks = ','.join('?' * len(part))
+                kept = {}
+                try:
+                    for r in conn.execute(f"SELECT meeting_id, data FROM speaker_talk WHERE meeting_id IN ({marks})", part):
+                        kept[r["meeting_id"]] = _loads_dict(r["data"])
+                except sqlite3.OperationalError:  # a database not opened by init_db yet
+                    pass
+                for mid, talk in kept.items():
+                    out[mid] = {k: float(v or 0.0) for k, v in talk.items()}
+                part_new = [mid for mid in part if mid not in kept]
+                if part_new:
+                    _talk_from_lines(conn, part_new, out)
             finally:
                 conn.close()
-            for mid in part:  # under the lock: an edit (_write_segments) drops it after, never before
-                _speaker_seconds_cache[mid] = dict(out[mid])
+                for mid in part:  # under the lock: an edit (_write_segments) drops it after, never before
+                    _speaker_seconds_cache[mid] = dict(out[mid])
         time.sleep(0.002)  # the lock is not handed over by itself: a thread waiting for it gets it now
     return {**out, **cached}
 
