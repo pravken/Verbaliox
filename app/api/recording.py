@@ -485,7 +485,7 @@ def recover_sessions() -> List[Path]:
             payload.title = payload.title or "Восстановленная запись"
             finish_recording(payload, recovered=paths)  # its file goes when the mix is over
             used += parts
-            print(f"[record] recovered recording «{payload.title}» with its notes ({len(parts)} part(s))", flush=True)
+            print(f"[record] recovered a recording with its notes ({len(parts)} part(s))", flush=True)
         except Exception:
             traceback.print_exc()
             sc.unlink(missing_ok=True)

@@ -76,7 +76,7 @@ def _aliases(row: Any) -> List[str]:
     except ValueError:
         got = None
     if not isinstance(got, list):
-        print(f"[people] the variants of «{row['name']}» are damaged: ignored", flush=True)
+        print(f"[people] the variants of person {row['id'] if 'id' in row.keys() else '?'} are damaged: ignored", flush=True)
         return []
     return [a for a in got if isinstance(a, str)]
 

@@ -412,7 +412,7 @@ class Reader:
         self._described = True
         try:
             c = panel.Current
-            print(f"[teams] captions panel: {c.ControlType.ProgrammaticName} name={c.Name!r} id={c.AutomationId!r} "
+            print(f"[teams] captions panel: {c.ControlType.ProgrammaticName} name={len(c.Name or '')} chars id={c.AutomationId!r} "
                   f"class={c.ClassName!r}; {text_shape(items)}", flush=True)
         except Exception:
             pass

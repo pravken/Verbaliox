@@ -8,6 +8,7 @@ Python write a stack dump there if the process crashes hard.
 """
 
 import faulthandler
+import re
 import sys
 import threading
 import time
@@ -41,6 +42,24 @@ def _rotate() -> None:
     _file = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
 
 
+# What never goes into the log, whoever prints it (the log is sent with a problem report): the Windows
+# user's name in paths, e-mail addresses, the session token and the links of calls
+_SCRUB = [
+    (re.compile(r"(?i)([a-z]:[\\/]+(?:users|documents and settings)[\\/]+)[^\\/:*?\"<>|\r\n]+"), r"\1<user>"),
+    (re.compile(r"(/(?:home|Users)/)[^/\s'\"]+"), r"\1<user>"),
+    (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "<email>"),
+    (re.compile(r"(?i)\b(token|access_token|key|password|pwd|sig|signature)=[^&\s'\"]+"), r"\1=<hidden>"),
+    (re.compile(r"(?i)https?://(?:teams\.microsoft\.com|teams\.live\.com|[\w-]+\.zoom\.us|meet\.google\.com|[\w.-]*webex\.com|telemost\.yandex\.ru)/\S*"),
+     "<call link>"),
+]
+
+
+def scrub(text: str) -> str:
+    for rx, to in _SCRUB:
+        text = rx.sub(to, text)
+    return text
+
+
 class _Tee:
     """Writes to the log file and, when there is one, to the original stream."""
 
@@ -64,7 +83,7 @@ class _Tee:
             for part in text.splitlines(keepends=True):
                 if self._at_line_start:
                     out.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {self._label} ")
-                out.append(part)
+                out.append(scrub(part))
                 self._at_line_start = part.endswith("\n")
             try:
                 _file.write("".join(out))

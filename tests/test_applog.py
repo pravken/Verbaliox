@@ -26,3 +26,18 @@ class SideLogsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScrubTest(unittest.TestCase):
+    """The log is sent with a problem report: no user name, e-mail, token or call link in it."""
+
+    def test_personal_data_is_cut(self):
+        from app.applog import scrub
+
+        line = (r'File "C:\Users\Test User\AppData\Local\Verbaliox\app.py" '
+                "mail someone@example.com /?token=abc123&x=1 https://teams.microsoft.com/l/meetup-join/19abc")
+        out = scrub(line)
+        for gone in ("Test User", "someone@example.com", "abc123", "meetup-join"):
+            self.assertNotIn(gone, out)
+        self.assertIn(r"C:\Users\<user>\AppData", out)
+        self.assertEqual(scrub("3/4 done, 12 s"), "3/4 done, 12 s")

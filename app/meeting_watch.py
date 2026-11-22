@@ -151,7 +151,8 @@ def current() -> Dict[str, Any]:
         break
     if title != _LAST[0]:
         _LAST[0] = title
-        print(f"[meeting] Teams meeting: {title or 'none'}; windows: {titles[:6]!r}", flush=True)
+        # no titles in the log: they hold the names of the people in the call (the log is sent with a report)
+        print(f"[meeting] Teams meeting: {'yes' if title else 'none'}; windows: {len(titles)}", flush=True)
     # "verified": the window holds the «Leave» button. Without it the page does nothing by itself: a chat
     # titled «Анна | Microsoft Teams» would have cut the recording in two
     return {"title": title, "verified": verified, "windows": titles[:12]}
