@@ -73,6 +73,35 @@ class StopOnceTest(unittest.TestCase):
                 t.join()
         self.assertEqual(overlap, [1, 1])
 
+    def test_the_update_is_installed_once_on_exit(self):
+        import run
+
+        started = []
+
+        def install_on_exit():
+            time.sleep(0.05)
+            started.append(1)
+            return True
+
+        run._update_launched = False
+        try:
+            with mock.patch("app.updater.install_on_exit", install_on_exit), \
+                    mock.patch.object(run, "session_ending", side_effect=lambda: time.sleep(0.05) or False):
+                barrier = threading.Barrier(4)
+
+                def call():
+                    barrier.wait()
+                    run._install_update_on_exit()
+
+                threads = [threading.Thread(target=call) for _ in range(4)]
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+        finally:
+            run._update_launched = False
+        self.assertEqual(started, [1])
+
 
 if __name__ == "__main__":
     unittest.main()
