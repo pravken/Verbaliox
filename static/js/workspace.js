@@ -326,7 +326,7 @@ function openTxVersionMenu(el) {
     const fits = i.id === 'merged' || txModelFits(i, m) || done.has(i.id);
     const key = i.id === shown ? (m.transcript_at ? txShortDate(m.transcript_at) : '') : done.has(i.id) ? at(i.id) || t('txVersionReady')
       : !i.installed ? `${t('txVersionDownload')} ${i.size || ''}`.trim() : t('txVersionMake');
-    items.push({ label: `${i.id === shown ? '✓ ' : '   '}${formatModelName(i.id)}`, key, disabled: busy || !fits || (!done.has(i.id) && !!m.media_removed),
+    items.push({ label: formatModelName(i.id), on: i.id === shown, key, disabled: busy || !fits || (!done.has(i.id) && !!m.media_removed),
       run: () => { if (i.id === shown) return; pickTxChip(i.id); if (!done.has(i.id)) toggleTxModelBar(true); } });
   }
   if (list.filter(i => i.id !== 'merged' && i.id !== 'teams' && i.installed && txModelFits(i, m)).length >= 2 && !m.media_removed) {
@@ -464,7 +464,8 @@ function openWordAlts(e, segId, wi) {
   if (!w || !w.alts) return;
   const shown = seg.words.slice(wi, wi + Number(w.span || 1)).map(x => String(x.word).trim()).join(' ');
   const items = w.alts.map(a => ({
-    label: `${a.text ? '«' + a.text + '»' : t('altNothing')}${a.text === shown ? '  ✓' : ''}`,
+    label: a.text ? '«' + a.text + '»' : t('altNothing'),
+    on: a.text === shown,
     key: a.models.map(formatModelName).join(', '),
     run: () => chooseWordAlt(segId, wi, a.text),
   }));
@@ -2593,9 +2594,9 @@ function recAnalysisBar() {
   const busy = anIsBusy('protocol');
   return `<div class="an-sumbar">
       <span class="an-sumbar-k">${escapeHtml(t('recTemplate'))}</span>
-      <button class="an-chip" data-click="recTemplateMenu" data-click-args='[{"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('recTemplateTip'))}">${escapeHtml(t('sumProtocol'))}<span aria-hidden="true">▾</span></button>
+      <button class="an-chip" data-click="recTemplateMenu" data-click-args='[{"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('recTemplateTip'))}">${escapeHtml(t('sumProtocol'))}${VX_CARET}</button>
       <span class="an-sumbar-k">${escapeHtml(t('recModel'))}</span>
-      <button class="an-chip${opt && opt.dataset.off === '1' ? ' an-model-off' : ''}" data-click="openAnalysisMenu" data-click-args='["model", {"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('anModelTip'))}">${escapeHtml(opt ? opt.textContent : '—')}<span aria-hidden="true">▾</span></button>
+      <button class="an-chip${opt && opt.dataset.off === '1' ? ' an-model-off' : ''}" data-click="openAnalysisMenu" data-click-args='["model", {"$": "el"}]' aria-haspopup="menu" title="${escapeHtml(t('anModelTip'))}">${escapeHtml(opt ? opt.textContent : '—')}${VX_CARET}</button>
       <span class="flex-1"></span>
       <button class="an-btn" data-click="openAnalysisMenu" data-click-args='["cfg", {"$": "el"}]' title="${escapeHtml(t('anCfgTip'))}">${escapeHtml(t('anCfg'))}</button>
       <button class="an-btn" data-click="generateSummaryForActiveTab" ${busy ? 'disabled' : ''} ${ai ? '' : 'aria-disabled="true"'} title="${escapeHtml(ai ? t('tipGenerateSummary') : t('anNeedModel'))}">${AI_MARK} ${escapeHtml(busy ? t('anMaking') : t('recRegenAnalysis'))}</button>
@@ -2606,9 +2607,9 @@ function recAnalysisBar() {
 function recTemplateMenu(el) {
   const r = el.getBoundingClientRect();
   const tpls = state.summaryTemplates || [];
-  const items = [{ label: `✓ ${t('sumProtocol')}`, run: () => selectSummaryTab('protocol') },
-    ...tpls.map(x => ({ label: `   ${x.name}`, run: () => selectSummaryTab(`tpl:${x.id}`) })),
-    { sep: true }, { label: `+ ${t('anNewTemplate')}`, run: () => openTemplateDialog(null) },
+  const items = [{ label: t('sumProtocol'), on: true, run: () => selectSummaryTab('protocol') },
+    ...tpls.map(x => ({ label: x.name, run: () => selectSummaryTab(`tpl:${x.id}`) })),
+    { sep: true }, { label: t('anNewTemplate'), run: () => openTemplateDialog(null) },
     { label: t('anAllTemplates'), run: () => openTemplatesEditor() }];
   setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 6), 0);
 }

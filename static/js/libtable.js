@@ -879,7 +879,7 @@ function ltBulkFolder(e) {
     renderLibTable();
   };
   ltMenuUnder(e, [
-    ...ltFolderList().map(([f, d]) => ({ label: `${'   '.repeat(d)}${folderName(f)}`, key: list.every(m => m.folder_id === f.id) ? '✓' : '', run: move(f.id) })),
+    ...ltFolderList().map(([f, d]) => ({ label: `${'   '.repeat(d)}${folderName(f)}`, on: list.every(m => m.folder_id === f.id), run: move(f.id) })),
     { sep: true },
     { label: t('ltNoFolder'), run: move(null) },
     { label: `${t('ltNewFolder')}…`, run: async () => {
@@ -919,7 +919,7 @@ function ltBulkFeature(e) {
   ltMenuUnder(e, [
     ...feats.map(f => {
       const all = list.every(m => (m.features || []).includes(f.id));
-      return { label: f.name, key: all ? '✓' : '', run: () => ltSetFeatures(list, all ? 'remove' : 'add', f.id) };
+      return { label: f.name, on: all, run: () => ltSetFeatures(list, all ? 'remove' : 'add', f.id) };
     }),
     ...(feats.length ? [{ sep: true }] : []),
     { label: `${t('ltNewFeature')}…`, run: async () => {

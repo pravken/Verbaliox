@@ -780,7 +780,7 @@ function openAnalysisMenu(kind, el) {
   if (kind === 'model') {
     const sel = document.getElementById('summary-llm-select');
     const opts = sel ? [...sel.options].filter(o => o.value) : [];
-    at([...opts.map(o => ({ label: `${o.value === sel.value ? '✓ ' : '   '}${o.textContent}`, run: () => {
+    at([...opts.map(o => ({ label: o.textContent, on: o.value === sel.value, run: () => {
         sel.value = o.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
         // the overview's bar above the cards has the model's chip too (it kept the model before)
@@ -851,7 +851,7 @@ function openOverviewConfig(el) {
   pop.innerHTML = `<div class="an-pop-title">${escapeHtml(t('anCfgTitle'))}</div>`
     + keys.map(([k, label]) => `<label class="an-pop-row"><input type="checkbox" data-k="${escapeHtml(k)}" ${off.includes(k) ? '' : 'checked'}>
         <span class="flex-1">${escapeHtml(label)}</span><span class="an-pop-tag">${escapeHtml(anHasContent(k) ? '' : t('anNotMadeShort'))}</span></label>`).join('')
-    + `<div class="an-pop-foot"><button class="an-pop-link" data-a="new">+ ${escapeHtml(t('anNewTemplate'))}</button></div>`;
+    + `<div class="an-pop-foot"><button class="an-pop-link" data-a="new">${VX_PLUS}${escapeHtml(t('anNewTemplate'))}</button></div>`;
   pop.addEventListener('change', e => {
     const k = e.target.dataset && e.target.dataset.k;
     if (k) toggleOverviewCard(k);

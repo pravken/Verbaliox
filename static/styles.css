@@ -5154,3 +5154,8 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 
 /* Rows of «Люди» and the strip's meeting: reached by the keyboard, the focus shown */
 .pv-row:focus-visible, .strip-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The chips of the analysis bar and «+ Новый шаблон» with the line icons (VX_CARET, VX_PLUS) instead of «▾» and «+» */
+.an-sumbar .an-chip .vx-caret { margin-left: 2px; }
+.an-pop-link { display: flex; align-items: center; gap: 6px; }
+.an-pop-link .vx-plus { width: 14px; height: 14px; flex: none; }

@@ -874,7 +874,7 @@ function drawPeopleCard() {
       <span class="sp-mav pv-ava">${spFaceHtml(p.name, spInitial(p.name))}</span>
       <div class="pv-who"><h2>${escapeHtml(p.name)}${p.is_me ? ` <em>${escapeHtml(t('spMe'))}</em>` : ''}</h2><span>${escapeHtml(sub || t('pvSpokeIn').replace('{n}', () => String(data.spoke.length)))}</span></div>
       <span class="tk-grow"></span>
-      <button class="tk-btn tk-btn-primary" data-click="peopleCardTask">+ ${escapeHtml(t('pcTask'))}</button>
+      <button class="tk-btn tk-btn-primary" data-click="peopleCardTask">${VX_PLUS}${escapeHtml(t('pcTask'))}</button>
       <button class="tk-btn" data-click="peopleCardEdit">${escapeHtml(t('pcEdit'))}</button>
       <button class="tk-btn" data-click="peopleCardPhoto">${escapeHtml(t(personPhotoUrl(p.name) ? 'spPhotoChange' : 'spPhoto'))}</button>
       ${p.kind === 'dept' ? '' : `<button class="tk-btn" data-click="peopleCardMe" title="${escapeHtml(t('spMeTip'))}">${escapeHtml(t(p.is_me ? 'spNotMe' : 'spMe'))}</button>`}
