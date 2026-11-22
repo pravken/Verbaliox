@@ -1234,20 +1234,26 @@ await step('back and forward buttons', async () => {
   expect(await page.evaluate(() => state.appView) === 'tasks', '«Вперёд» did not come back to «Задачи»');
 });
 
-// While recording, the time on the red button opens the studio and does not stop the recording (asked by the user)
+// While recording, only «Стоп» of the red button stops; the time and the sources open the studio (asked by the user:
+// a click on the microphone stopped the recording)
 await step('recording time opens the studio', async () => {
   await page.evaluate(() => { window.__recOrig = [window.isRecording, window.shellQuickRecord]; window.__stops = 0;
     window.isRecording = () => true; window.shellQuickRecord = () => { window.__stops++; };
     document.getElementById('studio-timer').textContent = '01:23'; updateRecordButtonState(); switchAppView('home'); });
   await page.click('#tb-rec-clock');
   await sleep(300);
-  const r = await page.evaluate(() => [state.appView, window.__stops]);
+  let r = await page.evaluate(() => [state.appView, window.__stops]);
   expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
-  // in the studio the time is a part of the red button: its click stops as the rest of the button does
-  await page.evaluate(() => updateRecordButtonState());
+  await page.evaluate(() => { switchAppView('home'); updateRecordButtonState(); });
+  await page.click('#tb-rec-dot', { force: true });
+  await sleep(300);
+  r = await page.evaluate(() => [state.appView, window.__stops]);
+  expect(r[0] === 'studio' && r[1] === 0, `the dot stopped the recording: ${r}`);
+  // in the studio the time does nothing more; «Стоп» stops
   await page.click('#tb-rec-clock');
+  await page.click('#tb-rec-label');
   await sleep(200);
-  expect(await page.evaluate(() => window.__stops) === 1, 'the time in the studio was a dead spot of the red button');
+  expect(await page.evaluate(() => window.__stops) === 1, 'only «Стоп» must stop the recording');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 

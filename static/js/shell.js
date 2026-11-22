@@ -434,8 +434,11 @@ function updateRecordButtonState() {
   clock.classList.toggle('tb-rec-here', state.appView === 'studio');  // in the studio already: no way to it
   syncLibLiveRow();
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
-  btn.title = recording ? t('tipTbRecordStop') : t('tipTbRecord');
+  // while recording the button opens the studio and its «Стоп» stops (recButtonClick)
+  btn.title = recording ? t('tbRecOpenStudio') : t('tipTbRecord');
   btn.setAttribute('aria-label', btn.title);  // in its idle state the button is a dot without words
+  const stopLbl = document.getElementById('tb-rec-label');
+  if (recording) stopLbl.title = t('tipTbRecordStop'); else stopLbl.removeAttribute('title');
   // The recording's screen opens from the strip of the meeting while it records (pult.js), its settings from ▾
   document.getElementById('tb-rec-more').classList.toggle('hidden', recording || starting);
   // While it records, its screen is the text, the notes and the people: the presets and the sources fold away
@@ -482,11 +485,18 @@ function openRecMenu(e) {
 
 // The studio of the running recording (asked by the user): the time on the red button leads there
 function openRecordStudio(e) {
-  // in the studio the time is a plain part of the red button (no capsule, no pointer): its click stops the recording
-  // as the rest of the button does, instead of doing nothing
-  if (state.appView === 'studio') return;
-  if (e) e.stopPropagation();  // the time is inside the red button, which stops the recording
-  switchAppView('studio');
+  if (e) e.stopPropagation();
+  if (state.appView !== 'studio') switchAppView('studio');
+}
+
+// The red button: while recording only its «Стоп» stops; the dot, the time and the sources open the studio
+// (asked by the user: a click on the microphone stopped the recording). Not recording: the whole button starts.
+function recButtonClick(e) {
+  if (isRecording() && !(e && e.target && e.target.closest && e.target.closest('#tb-rec-label'))) {
+    openRecordStudio();
+    return;
+  }
+  return shellQuickRecord();
 }
 
 // A preset of the menu: recorded at once, where the user is (as the red button)
