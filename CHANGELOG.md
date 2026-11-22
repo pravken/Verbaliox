@@ -59,8 +59,24 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   background stays one.
 - Settings fill a wide window in two columns; «Reset this tab» is gone. Today's date tile has a green frame.
   Model buttons are of one size; the agent's lines are copied with an icon in the code.
-- **«Quit»** at the bottom of the rail (and Ctrl+Q) closes the whole program, the tray icon too; while a
-  recording or a task runs it asks first.
+- **«Quit»** at the bottom of the rail, like the power button of Windows: «Minimize to the tray» or «Quit
+  completely» (Ctrl+Q), which always asks first.
+- **The queue is an island in the top strip**: nothing while nothing runs; the job with its progress ring and
+  «+N queued»; a click opens the queue. The rail's «Queue» button is gone.
+- **One, paler accent** for buttons, switches and the chosen segment of every switch; menus mark the current item
+  in the accent instead of a tick. A second click on a menu's button closes it; Escape closes only the top layer;
+  one menu at a time.
+- **«＋ Import ▾»** like «● Record ▾»: the button opens everything, the menu opens the window for files, a folder or
+  a link.
+- **Transcript**: a recording without a text shows one card with the model choice and the progress of the mixing
+  or the recognition; the model, the speakers and the tools of the text in one row.
+- **My programs** counts only the minutes with input (a game controller too); the time of meetings comes from the
+  recordings.
+- Fixes: the calendar from Outlook never closes an Outlook in use; «Minimize to the tray» only with a tray icon;
+  an update interrupted by a power loss no longer blocks the start; the strip no longer asks the calendar in a loop
+  after an error; a recording opened and left quickly no longer stays hidden; widgets drag right at any interface
+  scale; recordings once closed to the agent stay closed when their folder goes; the shortcuts window lists
+  Ctrl+1…6.
 
 ## 0.8.25 — English
 
@@ -821,8 +837,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Акцент на выбор** в «Настройки → Общие»: восемь цветов для выделенных кнопок и отметок; фон остаётся один.
 - Настройки на широком окне — в две колонки; «Сбросить вкладку» убрана. Сегодняшний день в «Сегодня» — в зелёной
   рамке. Кнопки у моделей одного размера; строки для агента копируются значком в самом коде.
-- **«Выйти»** внизу полосы разделов (и Ctrl+Q) закрывает программу полностью, вместе со значком в трее; если
-  идёт запись или задача, программа сначала спросит.
+- **«Выйти»** внизу полосы разделов — как кнопка питания Windows: «Свернуть в трей» или «Выйти полностью»
+  (Ctrl+Q), полный выход всегда с подтверждением.
+- **Очередь — островок в полосе сверху**: пока ничего не выполняется, его нет; идёт задача — её кольцо прогресса и
+  «+N в очереди»; щелчок открывает очередь. Кнопки «Очередь» на полосе разделов больше нет.
+- **Один, приглушённый акцент** у кнопок, переключателей и выбранного пункта во всех переключателях; в меню текущий
+  пункт выделен акцентом вместо галочки. Повторный щелчок по кнопке меню закрывает его; Esc закрывает только верхнее
+  окно; открыто одно меню за раз.
+- **«＋ Импорт ▾»** как «● Запись ▾»: кнопка открывает всё сразу, меню — окно для файлов, папки или ссылки.
+- **Расшифровка**: у записи без текста — одна карточка с выбором модели и ходом сведения или распознавания; модель,
+  участники и инструменты текста — в одну строку.
+- **«Мои программы»** считают только минуты с действиями (геймпад тоже); время встреч — по записям.
+- Исправления: календарь из Outlook больше не закрывает Outlook, с которым работают; «Свернуть в трей» — только когда
+  есть значок в трее; обновление, прерванное отключением питания, больше не мешает запуску; полоса сверху не
+  запрашивает календарь по кругу после ошибки; запись, открытая и тут же покинутая, больше не остаётся скрытой;
+  виджеты перетаскиваются верно при любом масштабе; записи, закрытые раньше от агента, остаются закрытыми и после
+  удаления их папки; окно горячих клавиш показывает Ctrl+1…6.
 
 ## 0.8.25
 
