@@ -278,6 +278,22 @@ def _general(question: str, answer_lang: str, llm: Any, small: bool, talk: str =
     return {"answer": answer, "sources": [], "found": True, "model": llm.label, "mode": "chat" if small else "general"}
 
 
+_CITATION = re.compile(r"\[(\d{1,3}(?:\s*(?:[,;]|[-–—])\s*\d{1,3})*)\]")
+
+
+def cited_numbers(answer: str) -> set:
+    """The fragments an answer cites: [2], [1][3], [1, 3] and the ranges [1-3] / [1–3] models also write."""
+    out: set = set()
+    for group in _CITATION.findall(answer or ""):
+        for part in re.split(r"\s*[,;]\s*", group):
+            ends = [int(x) for x in re.split(r"\s*[-–—]\s*", part) if x]
+            if len(ends) == 2 and 0 < ends[1] - ends[0] <= MAX_FRAGMENTS * 3:
+                out.update(range(ends[0], ends[1] + 1))
+            else:
+                out.update(ends)
+    return out
+
+
 HISTORY_TURNS = 3
 HISTORY_CHARS = 1200
 
@@ -387,9 +403,7 @@ def ask_library(
     answer = llm.chat(system, user)
     # Only the fragments the answer cites: an answer without citations («the fragments say nothing»,
     # a greeting) has no sources, not every fragment the search brought
-    cited = {int(x) for x in re.findall(r"\[(\d{1,3})\]", answer or "")}
-    for group in re.findall(r"\[(\d{1,3}(?:\s*[,;]\s*\d{1,3})+)\]", answer or ""):
-        cited |= {int(x) for x in re.findall(r"\d+", group)}
+    cited = cited_numbers(answer)
     sources = [
         {k: f[k] for k in ("meeting_id", "title", "date", "start", "speaker", "text")} | {"n": n}
         for n, f in enumerate(fragments, start=1) if n in cited

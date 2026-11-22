@@ -475,6 +475,13 @@ class LibraryScopeTest(unittest.TestCase):
         res, _ = self._ask("о чём это?", "О релизе [1].")
         self.assertEqual([s["n"] for s in res["sources"]], [1])
 
+    def test_every_citation_form_counts(self):
+        from app.library_qa import cited_numbers
+
+        self.assertEqual(cited_numbers("А [1][3], Б [2, 4]; В [5; 6]"), {1, 2, 3, 4, 5, 6})
+        self.assertEqual(cited_numbers("Решили [7-9] и [11–12], ещё [2, 4-5]"), {2, 4, 5, 7, 8, 9, 11, 12})
+        self.assertEqual(cited_numbers("Нет ответа. Версия [v2], ссылка [x]"), set())
+
     def test_a_general_question_is_answered_with_reasoning_and_without_sources(self):
         from app import library_qa
 
