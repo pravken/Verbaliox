@@ -249,12 +249,14 @@ def cancel_waiting(meeting_id: int) -> bool:
         update_meeting_progress(meeting_id, status="cancelled", progress=0, stage_text="Обработка отменена", error_message="")
     else:
         # a job on a finished transcript (an analysis, a translation, a dub) waiting, e.g. in the economy mode:
-        # the recording goes back as it was
+        # the recording goes back as it was — a failed or cancelled one does not become «completed», whose
+        # sound the retention setting deletes (found in review)
         if entry["kind"] == "analysis":
             from app import meeting_guard
 
             meeting_guard.done(meeting_id)  # cancelled by the user: not started again by itself
-        update_meeting_progress(meeting_id, status="completed", progress=100, stage_text="Обработка отменена", error_message="")
+        update_meeting_progress(meeting_id, status=entry.get("back") or "completed", progress=100,
+                                stage_text="Обработка отменена", error_message="")
     _publish_queue_changed()
     # exports that waited for its end are settled now, as at the end of a job
     threading.Thread(target=_run_pending_exports, args=(meeting_id,), daemon=True).start()
@@ -281,11 +283,12 @@ def _publish_queue_changed() -> None:
     events.publish({"type": "queue"})
 
 
-def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None) -> int:
-    """Call with _jobs_lock held. Returns the entry's token, which its run carries (see _skip_dropped)."""
+def _queue_add(meeting_id: int, kind: str, lang: Optional[str] = None, back: str = "completed") -> int:
+    """Call with _jobs_lock held. Returns the entry's token, which its run carries (see _skip_dropped).
+    back: the status a job on a finished transcript gives the recording back (see FINISHED_STATUSES)."""
     n = next(_queue_seq)
     _queue.append({"id": meeting_id, "kind": kind, "lang": lang, "queued_at": time.time(), "started_at": None,
-                   "prio": KIND_PRIORITY.get(kind, 2), "n": n})
+                   "prio": KIND_PRIORITY.get(kind, 2), "n": n, "back": back})
     return n
 
 
@@ -490,13 +493,13 @@ def _status_to_return(meeting_id: int) -> str:
 
 def enqueue_dub_job(meeting_id: int, target_lang: str) -> bool:
     """Queues a translate-and-dub job in the same single worker, so it never shares VRAM with a transcription."""
+    back = _status_to_return(meeting_id)
     with _jobs_lock:
         if meeting_id in _active_jobs:
             return False
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
-        token = _queue_add(meeting_id, "dub", target_lang)
-    back = _status_to_return(meeting_id)
+        token = _queue_add(meeting_id, "dub", target_lang, back)
     update_meeting_progress(
         meeting_id, status="dubbing", progress=0, stage_text="Дубляж в очереди...", error_message=""
     )
@@ -556,13 +559,13 @@ def _run_dub_job(meeting_id: int, target_lang: str, back: str = "completed", tok
 
 def _enqueue_side_job(meeting_id: int, kind: str, lang: str, status: str, queued_text: str, runner, *args) -> bool:
     """Queues a job that works on a finished transcript (translation, subtitle rendering)."""
+    back = _status_to_return(meeting_id)
     with _jobs_lock:
         if meeting_id in _active_jobs:
             return False
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
-        token = _queue_add(meeting_id, kind, lang)
-    back = _status_to_return(meeting_id)
+        token = _queue_add(meeting_id, kind, lang, back)
     update_meeting_progress(meeting_id, status=status, progress=0, stage_text=queued_text, error_message="")
     _submit_job(token, _run_side_job, meeting_id, back, runner, *args)
     _publish_queue_changed()

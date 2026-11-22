@@ -1106,14 +1106,18 @@ class TrayController:
         hwnd = find_app_window(os.getpid())
         if hwnd and _user32().IsWindowVisible(hwnd):
             return  # someone works in the window: on its closing, as before
+        global _update_launched
+        with _update_lock:  # the installer is started once: a quit meanwhile must not start a second one
+            if _update_launched:
+                return
+            _update_launched = True
         print("[update] installing the downloaded update in the background")
         try:
             updater.launch_installer(restart=True, minimized=True)
         except Exception as e:
             print(f"[update] not started: {e}", file=sys.stderr)
+            _update_launched = False
             return
-        global _update_launched
-        _update_launched = True
         self.quitting = True
         self.window.destroy()
 
@@ -1186,6 +1190,9 @@ def _attach_native_drop(window) -> None:
 
 
 _update_launched = False
+# Two installers at once would replace the program's files together: the window's closing (main thread), the
+# thread that ends a hanging window and the update in the background each may start one (found in review)
+_update_lock = threading.Lock()
 
 
 WEBVIEW2_CLIENT = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -1245,8 +1252,19 @@ def session_ending() -> bool:
         return False
 
 
+_stop_lock = threading.Lock()
+
+
 def _stop_work() -> None:
-    """Before the process ends: recordings finished, work processes ended (app/shutdown.py)."""
+    """Before the process ends: recordings finished, work processes ended (app/shutdown.py). One call at a
+    time: the window closed, the main thread finishes the recordings while the thread that ends a hanging
+    window (_exit_soon) calls this too two seconds later; it waits here for the first to be done instead of
+    ending the process with os._exit while FFmpeg still writes the end of a screen recording (found in review)."""
+    with _stop_lock:
+        _stop_work_now()
+
+
+def _stop_work_now() -> None:
     remove_pid_file()
     try:
         from app import shutdown
@@ -1267,9 +1285,10 @@ def _install_update_on_exit() -> None:
     """A downloaded update (automatic updates on) is installed when the app closes; not while Windows
     shuts down (it would be cut off half-way)."""
     global _update_launched
-    if _update_launched or session_ending():
-        return
-    _update_launched = True
+    with _update_lock:
+        if _update_launched or session_ending():
+            return
+        _update_launched = True
     try:
         from app import updater
 

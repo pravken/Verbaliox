@@ -89,6 +89,25 @@ class SemanticIndexTest(unittest.TestCase):
         with mock.patch.object(semantic, "EDIT_QUIET_SEC", -1):
             self.assertIn(self.b, semantic.pending_ids())  # still to do: the index has the text before the edit
 
+    def test_a_recording_deleted_while_indexing_leaves_no_text_behind(self):
+        """Found in review: the chunks (the transcript's text) of a recording deleted while it was embedded were
+        written after the delete and stayed in the database for good."""
+        c = db.create_meeting("Удаляемая", "c.wav", "/tmp/c.wav")["id"]
+        db.save_meeting_results(c, segments=[_seg(1, 0, "Конфиденциальная фраза.")])
+
+        def delete_meanwhile(texts, settings=None):
+            db.delete_meeting(c)
+            return _fake_embed(texts, settings)
+
+        with mock.patch.object(semantic, "embed", side_effect=delete_meanwhile):
+            self.assertEqual(semantic.index_meeting(c), 0)
+        with db._db_lock:
+            conn = db.get_connection()
+            left = conn.execute("SELECT COUNT(*) FROM semantic_chunks WHERE meeting_id = ?", (c,)).fetchone()[0]
+            meta = conn.execute("SELECT COUNT(*) FROM semantic_meta WHERE meeting_id = ?", (c,)).fetchone()[0]
+            conn.close()
+        self.assertEqual((left, meta), (0, 0))
+
     def test_assistant_gets_fragments_without_shared_words(self):
         for mid in semantic.pending_ids():
             semantic.index_meeting(mid)
