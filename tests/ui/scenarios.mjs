@@ -1247,6 +1247,35 @@ await step('pending race', async () => {
   expect(st.pending == null && !st.cls && !st.inert && st.id === 1, `the screen stayed pending: ${JSON.stringify(st)}`);
 });
 
+// The queue's island: the ring alone when the strip tells about the only job (the queue's window is opened from
+// here alone); «Готово» only after an island in sight and not after a cancel; its window closes with it
+await step('queue island', async () => {
+  // the only job is the recording the strip tells about: the ring alone, still opening the queue
+  const r = await page.evaluate(() => {
+    const m = state.meetings[0];
+    state.queue = [{ id: m.id, state: 'running', kind: 'transcribe', title: m.title, progress: 30, position: 1 }];
+    strip.kind = 'after'; strip.click = m.id;
+    renderJobsIsland();
+    const el = document.getElementById('strip-island');
+    return { hidden: el.classList.contains('hidden'), cls: el.className, text: el.textContent.trim(), w: el.getBoundingClientRect().width };
+  });
+  expect(!r.hidden && /st-island-ring/.test(r.cls) && !r.text, 'no compact island');
+  await page.evaluate(() => document.getElementById('strip-island').click());
+  await sleep(300);
+  expect(await page.isVisible('#jobs-pop'), 'the compact island does not open the queue');
+  // the job ends: «Готово», and the window opened from the island closes with it
+  await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
+  expect(/st-island-done/.test(await page.getAttribute('#strip-island', 'class')), 'no «Готово»');
+  await sleep(2900);
+  expect(!(await page.isVisible('#strip-island')) && !(await page.isVisible('#jobs-pop')), 'the island or its window stayed');
+  // cancelled: no «Готово»
+  await page.evaluate(() => { const m = state.meetings[0]; state.queue = [{ id: m.id, state: 'running', kind: 'analysis', title: m.title, progress: 3, position: 1 }]; strip.kind = 'free'; renderJobsIsland(); islandCancelled(); renderJobsIsland(); state.queue = []; renderJobsIsland(); });
+  expect(!(await page.isVisible('#strip-island')), '«Готово» after a cancel');
+  // never visible: no «Готово»
+  await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
+  expect(!(await page.isVisible('#strip-island')), '«Готово» with nothing before');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

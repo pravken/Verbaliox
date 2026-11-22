@@ -200,6 +200,7 @@ async function cancelWholeQueue() {
   if (!await confirmDialog(t('queueCancelAllTitle'), t('queueCancelAllText').replace('{n}', () => n), t('queueCancelAllOk'))) return;
   const res = await fetch('/api/queue/cancel-all', { method: 'POST' }).catch(() => null);
   if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  if (typeof islandCancelled === 'function') islandCancelled();  // the queue ends without «Готово»
   showToast(t('uiCancelling'));
   await loadMeetingsList().catch(() => {});
   loadQueue();
