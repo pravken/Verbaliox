@@ -10,6 +10,7 @@ cloud models of earlier versions were removed; their stored settings and API key
 """
 
 from dataclasses import dataclass
+import time
 from typing import Callable, Dict, Optional
 
 
@@ -44,6 +45,9 @@ class Target:
         return self.chat_fn(system, user, plain=True) if plain else self.chat_fn(system, user)
 
 
+OLLAMA_WARMUP_SEC = 30.0  # how long a just started Ollama may take to answer
+
+
 def target(model: Optional[str] = None, start_ollama: bool = True) -> Target:
     """The Ollama model to use: `model` (an Ollama tag) or the one of the settings.
     Raises LlmError when it cannot be used."""
@@ -76,9 +80,15 @@ def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) 
 
     base_url = (settings.get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
     wanted = model or settings.get("ollama_model") or "gemma4:e2b"
-    if start:
-        ensure_ollama_running(base_url)  # analysis is an explicit user action (or one they turned on)
+    started = ensure_ollama_running(base_url) if start else False  # an explicit user action (or one they turned on)
     status = get_ollama_status(base_url)
+    # just started, its port open: the first answers can take seconds (the models' list read from the disk) —
+    # waited for, so a question asked right after the app's start is not told «Ollama не запущена»
+    # (reported by the user: the assistant failed right after the start)
+    deadline = time.monotonic() + OLLAMA_WARMUP_SEC
+    while started and not status["running"] and time.monotonic() < deadline:
+        time.sleep(0.5)
+        status = get_ollama_status(base_url)
     if not status["running"]:
         raise LlmError(
             "Локальный сервер Ollama не установлен или не запущен. Откройте «Настройки», выберите модель LLM и нажмите "

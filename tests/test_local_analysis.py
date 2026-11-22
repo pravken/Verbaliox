@@ -112,3 +112,33 @@ class OllamaOnlyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OllamaWarmupTest(unittest.TestCase):
+    """Reported by the user: a question to the assistant right after the app's start was told «Ollama не
+    запущена»; the Ollama just started had its port open but did not answer the list of models yet."""
+
+    def test_a_just_started_ollama_is_waited_for(self):
+        from unittest import mock
+
+        from app import llm, ollama_client
+
+        answers = [{"running": False, "models": []}] * 2 + [{"running": True, "models": ["gemma4:e2b"], "chat_models": ["gemma4:e2b"]}]
+        calls = iter(answers)
+        with mock.patch.object(ollama_client, "ensure_ollama_running", return_value=True), \
+                mock.patch.object(ollama_client, "get_ollama_status", side_effect=lambda *_a, **_k: next(calls)), \
+                mock.patch.object(llm.time, "sleep"):
+            t = llm.target(None)
+        self.assertEqual(t.model, "gemma4:e2b")
+
+    def test_not_started_is_said_at_once(self):
+        from unittest import mock
+
+        from app import llm, ollama_client
+
+        with mock.patch.object(ollama_client, "ensure_ollama_running", return_value=False), \
+                mock.patch.object(ollama_client, "get_ollama_status", return_value={"running": False, "models": []}), \
+                mock.patch.object(llm.time, "sleep") as sleep:
+            with self.assertRaises(llm.LlmError):
+                llm.target(None)
+        sleep.assert_not_called()

@@ -225,7 +225,7 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
             track(proc)
             global _started_serve
             _started_serve = proc
-            for _ in range(80):  # a cold start (first run, slow disk) can take many seconds
+            for _ in range(160):  # a cold start (first run, slow disk) can take many seconds: 40 s at most
                 time.sleep(0.25)
                 if _is_ollama_port_open(host, port):
                     return True
