@@ -35,7 +35,8 @@ def _outcomes(ids: List[int], me: set) -> Dict[int, Dict[str, Any]]:
     with «Это я» set the talk of each speaker (start, end and text of its lines, without their words).
     get_meeting for each meeting of a quarter read whole transcripts with every word, its versions and
     translations: seconds for a large library."""
-    from app.database import _db_lock, _list_speakers, _loads_dict, _num, get_connection
+    from app.database import _db_lock, _list_speakers, _num, get_connection
+    from app.speaker_refs import resolve_raw
 
     out: Dict[int, Dict[str, Any]] = {}
     with _db_lock:
@@ -45,7 +46,7 @@ def _outcomes(ids: List[int], me: set) -> Dict[int, Dict[str, Any]]:
                 part = ids[i:i + 500]
                 marks = ",".join("?" * len(part))
                 for r in conn.execute(f"SELECT id, series_id, speakers_json, summaries_json FROM meetings WHERE id IN ({marks})", part):
-                    out[r["id"]] = {"series_id": r["series_id"], "protocol": _loads_dict(r["summaries_json"]).get("protocol") or "",
+                    out[r["id"]] = {"series_id": r["series_id"], "protocol": resolve_raw(r["summaries_json"], r["speakers_json"]).get("protocol") or "",
                                     "speakers": _list_speakers(r["id"], r["speakers_json"] or "{}") if me else {}, "lines": []}
                 if not me:
                     continue
@@ -172,8 +173,10 @@ def _work_days(a: date, b: date, today: date, off: Dict[str, str]) -> int:
 
 
 def _protocols(ids: List[int]) -> Dict[int, str]:
-    """The protocol of each recording's analysis, without reading anything else of it."""
-    from app.database import _db_lock, get_connection
+    """The protocol of each recording's analysis, without reading anything else of it (the speakers named
+    in it by their current names, app/speaker_refs)."""
+    from app.database import _db_lock, _loads_dict, get_connection
+    from app.speaker_refs import has_marks, resolve_text
 
     out: Dict[int, str] = {}
     if not ids:
@@ -183,9 +186,10 @@ def _protocols(ids: List[int]) -> Dict[int, str]:
         try:
             for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
                 part = ids[i:i + 500]
-                for r in conn.execute("SELECT id, CASE WHEN json_valid(summaries_json) THEN json_extract(summaries_json, '$.protocol') END "
-                                      f"FROM meetings WHERE id IN ({','.join('?' * len(part))})", part):
-                    out[r[0]] = r[1] if isinstance(r[1], str) else ""
+                for r in conn.execute("SELECT id, CASE WHEN json_valid(summaries_json) THEN json_extract(summaries_json, '$.protocol') END, "
+                                      f"speakers_json FROM meetings WHERE id IN ({','.join('?' * len(part))})", part):
+                    text = r[1] if isinstance(r[1], str) else ""
+                    out[r[0]] = resolve_text(text, _loads_dict(r[2])) if has_marks(text) else text
         finally:
             conn.close()
     return out

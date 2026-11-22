@@ -962,9 +962,10 @@ def save_meeting_results(
     if speakers is not None:
         fields.append("speakers_json = ?")
         values.append(json.dumps(speakers, ensure_ascii=False))
+    summaries_at = len(values) if summaries is not None else -1
     if summaries is not None:
         fields.append("summaries_json = ?")
-        values.append(json.dumps(summaries, ensure_ascii=False))
+        values.append("")  # with the speakers' names as markers, below
     if language is not None:
         fields.append("language = ?")
         values.append(language)
@@ -975,6 +976,17 @@ def save_meeting_results(
     values.append(meeting_id)
     with _db_lock:
         conn = get_connection()
+        if summaries is not None or (speakers is not None and segments is not None and reindex):
+            row = conn.execute("SELECT speakers_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+            stored = _loads_dict(row[0]) if row else {}
+            if summaries is not None:
+                from app.speaker_refs import mark_summaries
+
+                values[summaries_at] = json.dumps(mark_summaries(summaries, speakers if speakers is not None else stored),
+                                                  ensure_ascii=False)
+            elif row is not None:
+                # a new transcript (another model, the merged one): the analysis follows its speakers
+                _carry_refs(conn, meeting_id, lambda: _read_segments(conn, meeting_id), stored, segments, speakers, every=True)
         if fields:
             conn.execute(f"UPDATE meetings SET {', '.join(fields)} WHERE id = ?", tuple(values))
         if segments is not None:
@@ -1157,6 +1169,10 @@ def _show_version(conn: sqlite3.Connection, meeting_id: int, model: str, data: D
     # A model's name stays the one the next Transcribe uses; the merged text and the Teams captions are
     # not made by one (Transcribe and the precise mode then failed on the model «teams»)
     next_model = ", model_name = ?" if model not in ("merged", "teams") else ""
+    # the speakers named in the analysis: those of the version shown now (another model splits otherwise)
+    row = conn.execute("SELECT speakers_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+    _carry_refs(conn, meeting_id, lambda: _read_segments(conn, meeting_id), _loads_dict(row[0]) if row else {},
+                segments, data.get("speakers") or {}, every=True)
     conn.execute(
         "UPDATE meetings SET transcript_model = ?, transcript_at = ?, speakers_json = ?, segments_backup_json = ?, "
         f"translations_json = ?, language = ?, transcript_verified = ?, transcript_made_with = ''{next_model} WHERE id = ?",
@@ -1205,7 +1221,8 @@ def delete_transcript_version(meeting_id: int, model: str) -> bool:
             conn.close()
 
 
-def edit_meeting(meeting_id: int, mutate: Callable[[Dict[str, Any]], Iterable[str]]) -> Optional[Dict[str, Any]]:
+def edit_meeting(meeting_id: int, mutate: Callable[[Dict[str, Any]], Iterable[str]],
+                 resplit: bool = False) -> Optional[Dict[str, Any]]:
     """
     Changes the transcript and/or the participants of a recording in one step under the lock, so two
     edits at once (two segments, a rename while "apply voice profiles" runs) never undo each other.
@@ -1213,6 +1230,9 @@ def edit_meeting(meeting_id: int, mutate: Callable[[Dict[str, Any]], Iterable[st
     meeting["segments_backup"]) and returns what it changed: "segments", "speakers", "segments_backup".
     An exception leaves the recording as it was.
     Returns the recording after the change, or None when there is none.
+    The speakers named in the analysis follow (app/speaker_refs.carry): a speaker that is gone (merged into
+    another) goes over to the one that has its lines now; resplit=True (split anew, an id may now be someone
+    else's): every speaker named is found again by its name, or by its time for a «Участник N».
     """
     with _db_lock:
         conn = get_connection()
@@ -1225,6 +1245,10 @@ def edit_meeting(meeting_id: int, mutate: Callable[[Dict[str, Any]], Iterable[st
             # can be updated one by one (a transcript read from older JSON is written whole)
             stored = conn.execute("SELECT 1 FROM segments WHERE meeting_id = ? LIMIT 1", (meeting_id,)).fetchone()
             before = _segment_rows(m["segments"]) if stored else None
+            # who said what before the change: the speakers named in the analysis follow a merge or a new split
+            old_spans = [{"start": s.get("start"), "end": s.get("end"), "speaker": s.get("speaker")}
+                         for s in m["segments"] if isinstance(s, dict)]
+            old_speakers = json.loads(json.dumps(m.get("speakers") or {}))
             changed = set(mutate(m) or ())
             if "segments" in changed:
                 _write_segments(conn, meeting_id, m["segments"], before)
@@ -1238,6 +1262,13 @@ def edit_meeting(meeting_id: int, mutate: Callable[[Dict[str, Any]], Iterable[st
                              (json.dumps(backup, ensure_ascii=False) if backup else "", meeting_id))
             if not changed:
                 return m
+            if changed & {"segments", "speakers"}:
+                sums = _carry_refs(conn, meeting_id, old_spans, old_speakers, m.get("segments") or [],
+                                   m.get("speakers") or {}, every=resplit)
+                if sums is not None:  # the names of the analysis as they are after the change (a rename)
+                    from app.speaker_refs import resolve
+
+                    m["summaries"] = resolve(sums, m.get("speakers") or {})
             conn.commit()
             if changed <= {"speakers"}:  # a rename or a colour: the recording read above, as it is now
                 return m
@@ -1271,44 +1302,74 @@ def save_summary_templates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def merge_summaries(meeting_id: int, updates: Dict[str, Any], remove: tuple = ()) -> Dict[str, Any]:
     """Sets some summaries of a recording, keeping the others: two analyses running at once (each
-    takes minutes) must not overwrite each other's result. Returns all summaries."""
+    takes minutes) must not overwrite each other's result. The names of the speakers in the new texts are
+    kept as references to them (app/speaker_refs). Returns all summaries, with the speakers' names."""
+    from app.speaker_refs import mark_summaries, resolve
+
     with _db_lock:
         conn = get_connection()
-        row = conn.execute("SELECT summaries_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+        row = conn.execute("SELECT summaries_json, speakers_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
         if row is None:
             conn.close()
             return {}
         current = _loads_dict(row[0])
-        current.update(updates)
+        speakers = _loads_dict(row[1])
+        current.update(mark_summaries(updates, speakers))
         for k in remove:
             current.pop(k, None)
         conn.execute("UPDATE meetings SET summaries_json = ? WHERE id = ?",
                      (json.dumps(current, ensure_ascii=False), meeting_id))
         conn.commit()
         conn.close()
-    return current
+    return resolve(current, speakers)
 
 
-def change_summaries(meeting_id: int, change) -> Dict[str, Any]:
+def change_summaries(meeting_id: int, change, raw: bool = False) -> Dict[str, Any]:
     """Like merge_summaries, with the updates worked out from the summaries as they are at that moment
     (change: summaries → {key: new text}), under the lock: a section another job saved meanwhile is not
-    overwritten by a change made from an older read. Returns all summaries."""
+    overwritten by a change made from an older read. change sees the speakers' names (raw=True: the stored
+    texts with their markers, app/speaker_refs; change(summaries, speakers) then). Returns all summaries,
+    with the speakers' names."""
+    from app.speaker_refs import mark_summaries, resolve
+
     with _db_lock:
         conn = get_connection()
         try:
-            row = conn.execute("SELECT summaries_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+            row = conn.execute("SELECT summaries_json, speakers_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
             if row is None:
                 return {}
             current = _loads_dict(row[0])
-            updates = change(dict(current)) or {}
+            speakers = _loads_dict(row[1])
+            updates = (change(dict(current), speakers) if raw else change(resolve(current, speakers))) or {}
             if updates:
-                current.update(updates)
+                current.update(mark_summaries(updates, speakers))
                 conn.execute("UPDATE meetings SET summaries_json = ? WHERE id = ?",
                              (json.dumps(current, ensure_ascii=False), meeting_id))
                 conn.commit()
-            return current
+            return resolve(current, speakers)
         finally:
             conn.close()
+
+
+def _carry_refs(conn: sqlite3.Connection, meeting_id: int, old_segments: Any, old_speakers: Dict[str, Any],
+                new_segments: List[Dict[str, Any]], new_speakers: Dict[str, Any], every: bool) -> Optional[Dict[str, Any]]:
+    """The speakers named in a recording's analysis carried over to its speakers after they changed (merged,
+    split anew, another transcript shown: app/speaker_refs.carry), in the caller's transaction. old_segments
+    may be a function giving them (read only when the analysis names a speaker). Returns the stored
+    summaries when they name one, else None."""
+    row = conn.execute("SELECT summaries_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+    raw = row[0] if row else ""
+    if not raw or "⟦spk:" not in raw:
+        return None
+    from app.speaker_refs import carry
+
+    sums = _loads_dict(raw)
+    changed = carry(sums, old_segments() if callable(old_segments) else old_segments, old_speakers,
+                    new_segments or [], new_speakers or {}, every)
+    if changed:
+        sums.update(changed)
+        conn.execute("UPDATE meetings SET summaries_json = ? WHERE id = ?", (json.dumps(sums, ensure_ascii=False), meeting_id))
+    return sums
 
 
 def save_segments_backup(meeting_id: int, segments: List[Dict[str, Any]]) -> None:
@@ -2127,6 +2188,9 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
                 d[target] = default_val
         else:
             d[target] = default_val
+    from app.speaker_refs import resolve
+
+    d["summaries"] = resolve(d["summaries"], d["speakers"])  # the speakers named in it, by their current names
     d["dubs"] = [_dub_paths_from_storage(x) for x in d.get("dubs") or [] if isinstance(x, dict)]
     _sanitize_display(d)
     # Translations are matched to the current segments here, so every response carries their state

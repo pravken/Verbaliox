@@ -965,6 +965,30 @@ def rename_person(meeting_id: int, old: str, new: str) -> int:
     return n
 
 
+def rename_people(meeting_id: int, changes: Dict[str, str]) -> int:
+    """Several speakers of a recording renamed at once (split anew: «Участник 2» is «Участник 3» now and
+    «Участник 3» is «Участник 2»): each task takes the new name of its person, read before any is changed."""
+    keyed = {(o or "").strip().casefold(): (n or "").strip() for o, n in (changes or {}).items()
+             if (o or "").strip() and (n or "").strip() and (o or "").strip() != (n or "").strip()}
+    if not keyed:
+        return 0
+    _init()
+    with _db_lock:
+        conn = get_connection()
+        try:
+            n = 0
+            for r in conn.execute("SELECT id, who, to_whom FROM commitments WHERE meeting_id = ?", (meeting_id,)).fetchall():
+                who = keyed.get((r["who"] or "").strip().casefold(), r["who"])
+                to = keyed.get((r["to_whom"] or "").strip().casefold(), r["to_whom"])
+                if (who, to) != (r["who"], r["to_whom"]):
+                    conn.execute("UPDATE commitments SET who = ?, to_whom = ? WHERE id = ?", (who, to, r["id"]))
+                    n += 1
+            conn.commit()
+        finally:
+            conn.close()
+    return n
+
+
 def set_status(commitment_id: int, status: str) -> None:
     if status not in ("open", "done"):
         raise ValueError("Неизвестное состояние")

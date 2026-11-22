@@ -1658,6 +1658,14 @@ async function updateSpeaker(speakerId, newName, newColor) {
   renderSpeakerPillsBar();
   renderSpeakersPanel();
   renderTranscript();
+  renderAnalysisNames();
+}
+
+// The analysis names the speakers by reference (app/speaker_refs): the server sends their current names,
+// so the open analysis is drawn again after a rename or a merge
+function renderAnalysisNames() {
+  if (typeof renderSummaryPanel === 'function') renderSummaryPanel();
+  if (typeof renderChaptersBar === 'function' && document.getElementById('chapters-bar')) renderChaptersBar();
 }
 
 // --- Transcript rendering with lazy blocks ---
