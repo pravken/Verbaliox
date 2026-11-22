@@ -82,13 +82,13 @@
     <div id="side-studio" class="studio-settings st-side">
       <section class="st-card">
         <h3 class="st-card-title" data-i18n="rdSasSources">Источники</h3>
-        <div id="st-source-seg" class="apple-segmented w-full settings-tabs" role="radiogroup" data-i18n-title="tipRecordSourceSelect" title="Выберите источник записи">
+        <div id="st-source-seg" class="apple-segmented w-full settings-tabs" role="radiogroup" data-i18n-title="tipRecordSourceSelect" title="Источник записи">
           <button data-click="studioSetSource" data-click-args='["both"]' id="st-src-both" class="apple-segment-btn text-[11.5px]" role="radio" data-i18n="rdSasSrcBoth">Микрофон и ПК</button>
           <button data-click="studioSetSource" data-click-args='["mic"]' id="st-src-mic" class="apple-segment-btn text-[11.5px]" role="radio" data-i18n="rdSasSrcMic">Микрофон</button>
           <button data-click="studioSetSource" data-click-args='["system"]' id="st-src-system" class="apple-segment-btn text-[11.5px]" role="radio" data-i18n="rdSasSrcSystem">Звук ПК</button>
         </div>
         <select id="record-source-select" data-change="syncRecordModalToSettings"
-          data-i18n-title="tipRecordSourceSelect" title="Выберите источник записи: микрофон, системный звук (динамики) или оба канала"
+          data-i18n-title="tipRecordSourceSelect" title="Источник записи: микрофон, системный звук (динамики) или оба канала"
           class="hidden w-full h-8 bg-apple-card border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
           <option value="mic" data-i18n="sourceMic">Только микрофон</option>
           <option value="system" data-i18n="sourceSystem">Системный звук</option>
@@ -102,7 +102,7 @@
               <span id="st-mic-test-label" data-i18n="rdSasMicTest">Проверить</span></button>
           </div>
         <select id="record-mic-select" data-change="syncRecordModalToSettings"
-          data-i18n-title="tipRecordMicSelect" title="Выберите микрофон для записи"
+          data-i18n-title="tipRecordMicSelect" title="Устройство микрофона"
           class="w-full h-8 bg-apple-card border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none"></select>
       <div class="st-meter">
         <div class="flex items-center justify-between">
@@ -141,7 +141,7 @@
         <h3 class="st-card-title" data-i18n="rdSasMeeting">Встреча</h3>
         <label for="record-title-input" class="st-sub-title" data-i18n="recTitleLabel">Название записи</label>
         <input id="record-title-input" type="text"
-          data-i18n-title="tipRecordTitleInput" title="Введите название для новой записи"
+          data-i18n-title="tipRecordTitleInput" title="Название новой записи"
           placeholder="Встреча / Голосовая заметка" data-i18n-placeholder="phRecordTitle"
           class="w-full h-8 bg-apple-card border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
         <div id="studio-upcoming" class="hidden"></div>
