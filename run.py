@@ -543,19 +543,23 @@ def recover_stuck_instance() -> bool:
     The other instance holds the single-instance lock but shows no window (its window crashed and
     the process hangs). Offers to end it; True if it was ended and this launch may continue.
     """
+    from app.ui_lang import tr
+
     pid = stuck_instance_pid()
     MB_YESNO, MB_ICONWARNING, IDYES = 0x4, 0x30, 6
+    stuck = tr("Verbaliox уже запущен, но его окно не отвечает.\n\n",
+               "Verbaliox is already running, but its window is not responding.\n\n")
     if not pid:  # which process it is is not known for sure: ending a guess could hit another program
         _user32().MessageBoxW(
             None,
-            "Verbaliox уже запущен, но его окно не отвечает.\n\n"
-            "Завершите процесс python.exe программы Verbaliox в Диспетчере задач или перезагрузите компьютер.",
+            stuck + tr("Завершите процесс python.exe программы Verbaliox в Диспетчере задач или перезагрузите компьютер.",
+                       "End the python.exe process of Verbaliox in Task Manager or restart the computer."),
             "Verbaliox", MB_ICONWARNING | MB_ON_TOP)
         return False
     answer = _user32().MessageBoxW(
         None,
-        "Verbaliox уже запущен, но его окно не отвечает.\n\n"
-        "Завершить зависший процесс и открыть программу заново? Незавершённая обработка будет прервана.",
+        stuck + tr("Завершить зависший процесс и открыть программу заново? Незавершённая обработка будет прервана.",
+                   "End the stuck process and open the app again? Unfinished processing will be interrupted."),
         "Verbaliox", MB_YESNO | MB_ICONWARNING | MB_ON_TOP)
     if answer != IDYES:
         return False
@@ -587,6 +591,25 @@ def activate_existing_window(timeout: float = 30.0) -> bool:
             return True
         time.sleep(0.25)
     return False
+
+
+def hotkey_error_text(error: str) -> str:
+    """The reason a hotkey failed (app/tray.py; Russian, as the settings page gets it and translates it in
+    static/server_text.js) in the UI language, for the tray's notice."""
+    from app.ui_lang import is_en
+
+    if not is_en():
+        return error
+    fixed = {"Неверное сочетание клавиш": "Not a valid key combination",
+             "Сочетание уже занято другой программой": "Another program already uses this combination"}
+    if error in fixed:
+        return fixed[error]
+    import re
+
+    m = re.fullmatch(r"На раскладке клавиатуры это сочетание \(AltGr\) печатает «(.*)» — выберите другое", error)
+    if m:
+        return f"On a keyboard layout this combination (AltGr) types “{m.group(1)}”: choose another one"
+    return error
 
 
 class TrayController:
@@ -632,8 +655,11 @@ class TrayController:
         (app/toast.py); where a toast cannot be shown, the tray's notification, whose click joins."""
         from app import meeting_join, toast
 
+        from app.ui_lang import tr
+
         link = meeting_join.launch_target(n["target"][5:])
-        if link and toast.show(n["title"], n["text"], [("Подключиться", link)], launch=link, stay=True, icon=ICO_PATH):
+        if link and toast.show(n["title"], n["text"], [(tr("Подключиться", "Join"), link)], launch=link, stay=True,
+                               icon=ICO_PATH):
             return
         self.tray.notify(n["title"], n["text"], target=n["target"])
 
@@ -660,29 +686,39 @@ class TrayController:
 
     def _economy_items(self):
         from app import economy
+        from app.ui_lang import tr
 
+        name = tr("Только запись", "Recording only")
         if economy.on():
             end = economy.until()
-            when = f" — до {time.strftime('%H:%M', time.localtime(end))}" if end else ""
-            return [("Только запись" + when, "economy:off", 0x8)]  # MF_CHECKED: a click turns it off
-        return [("Только запись", [
-            ("До выключения", "economy:0", 0),
-            ("На 30 минут", "economy:30", 0),
-            ("На 1 час", "economy:60", 0),
-            ("На 2 часа", "economy:120", 0),
-            ("На 4 часа", "economy:240", 0),
-            ("До конца дня", "economy:day", 0),
+            hm = time.strftime('%H:%M', time.localtime(end)) if end else ""
+            when = tr(f" — до {hm}", f" until {hm}") if end else ""
+            return [(name + when, "economy:off", 0x8)]  # MF_CHECKED: a click turns it off
+        return [(name, [
+            (tr("До выключения", "Until turned off"), "economy:0", 0),
+            (tr("На 30 минут", "For 30 minutes"), "economy:30", 0),
+            (tr("На 1 час", "For 1 hour"), "economy:60", 0),
+            (tr("На 2 часа", "For 2 hours"), "economy:120", 0),
+            (tr("На 4 часа", "For 4 hours"), "economy:240", 0),
+            (tr("До конца дня", "For the rest of the day"), "economy:day", 0),
         ], 0)]
 
     def _set_economy(self, choice: str) -> None:
         from app import economy
 
+        from app.ui_lang import tr
+
         now = economy.set_mode(choice != "off", choice if choice != "off" else "0")
         end = economy.until() if now else 0
-        self.tray.notify("Только запись" if now else "«Только запись» выключено",
-                         ("Расшифровка, анализ и субтитры отложены"
-                          + (f" до {time.strftime('%H:%M', time.localtime(end))}" if end else " до выключения режима"))
-                         if now else "Расшифровка и анализ продолжаются", target="")
+        hm = time.strftime('%H:%M', time.localtime(end)) if end else ""
+        if now:
+            title = tr("Только запись", "Recording only")
+            text = (tr("Расшифровка, анализ и субтитры отложены", "Transcription, analysis and subtitles are on hold")
+                    + (tr(f" до {hm}", f" until {hm}") if end else tr(" до выключения режима", " until the mode is turned off")))
+        else:
+            title = tr("«Только запись» выключено", "“Recording only” is off")
+            text = tr("Расшифровка и анализ продолжаются", "Transcription and analysis resume")
+        self.tray.notify(title, text, target="")
 
     def _meetings_quiet(self) -> bool:
         from app import meeting_guard
@@ -732,33 +768,44 @@ class TrayController:
         if not wait:
             return
         was, since = wait
+        from app.ui_lang import tr
+
         now = bool(st.get("recording"))
         key = self._hotkey_spec
         if now != was:
             self._hotkey_wait = None
             if now:
-                self._notify("Запись начата", f"Чтобы остановить, нажмите {key}" if key else "", target="studio")
+                self._notify(tr("Запись начата", "Recording started"),
+                             tr(f"Чтобы остановить, нажмите {key}", f"Press {key} to stop") if key else "", target="studio")
             else:
-                self._notify("Запись остановлена", "Запись сохранена и отправлена на расшифровку", target="last")
+                self._notify(tr("Запись остановлена", "Recording stopped"),
+                             tr("Запись сохранена и отправлена на расшифровку", "The recording is saved and sent for transcription"),
+                             target="last")
         elif time.time() - since > 10:
             self._hotkey_wait = None
-            self._notify("Запись не остановилась" if was else "Запись не началась",
-                         "Откройте окно Verbaliox, чтобы увидеть причину", warning=True, target="studio")
+            self._notify(tr("Запись не остановилась", "Recording did not stop") if was
+                         else tr("Запись не началась", "Recording did not start"),
+                         tr("Откройте окно Verbaliox, чтобы увидеть причину", "Open the Verbaliox window to see the reason"),
+                         warning=True, target="studio")
 
     def _warn_hotkey_failures(self) -> None:
         """A hotkey that could not be registered is said once, not only on the settings page."""
         from app.hotkey import dictation_hotkey_state, hotkey_state, translate_hotkey_state
+        from app.ui_lang import tr
 
         warned = getattr(self, "_hotkey_warned", set())
         self._hotkey_warned = warned
-        for name, state in (("записи", hotkey_state), ("диктовки", dictation_hotkey_state),
-                            ("диктовки с переводом", translate_hotkey_state)):
+        for slot, ru, en, state in (("record", "записи", "recording", hotkey_state),
+                                    ("dictation", "диктовки", "dictation", dictation_hotkey_state),
+                                    ("translate", "диктовки с переводом", "translated dictation", translate_hotkey_state)):
             if state.get("ok") is False:
-                key = (name, state.get("spec"), state.get("error"))
+                key = (slot, state.get("spec"), state.get("error"))
                 if key not in warned:
                     warned.add(key)
-                    self._notify(f"Горячая клавиша {name} не работает",
-                                 f"{state.get('spec')}: {state.get('error')}. Её можно сменить в Настройках → Запись",
+                    spec, error = state.get("spec"), hotkey_error_text(state.get("error") or "")
+                    self._notify(tr(f"Горячая клавиша {ru} не работает", f"The {en} hotkey does not work"),
+                                 tr(f"{spec}: {error}. Её можно сменить в Настройках → Запись",
+                                    f"{spec}: {error}. It can be changed in Settings → Recording"),
                                  warning=True, target="settings:hotkeys")
 
     # ---- status
@@ -804,18 +851,19 @@ class TrayController:
     def _job_finished(self, q: dict, m) -> None:
         if not m or self._window_in_front():
             return
-        from app.app_status import KIND_LABELS
+        from app.app_status import kind_label
+        from app.ui_lang import tr
 
-        label = KIND_LABELS.get(q.get("kind"), "Задача")
+        label = kind_label(q.get("kind"))
         title = m.get("title") or ""
         status = m.get("status")
         where = f"meeting:{m.get('id')}:{q.get('kind') or ''}"  # a click opens the recording
         if status == "failed":
-            self._notify(f"{label}: ошибка", title, warning=True, target=where)
+            self._notify(tr(f"{label}: ошибка", f"{label}: failed"), title, warning=True, target=where)
         elif status == "cancelled":
             return
         else:
-            self._notify(f"{label} завершено", title, target=where)
+            self._notify(tr(f"{label} завершено", f"{label} complete"), title, target=where)
 
     def _window_in_front(self) -> bool:
         user32 = _user32()
@@ -826,57 +874,66 @@ class TrayController:
     def menu_items(self):
         """Only what is used from the tray (asked by the user: the menu had too much): the window, recording,
         dictation, the two modes, exit. Importing, the last recording, settings and the rest are in the window;
-        the quiet mode in Settings → Общие."""
+        the quiet mode in Settings → Общие. Built at each opening, in the UI language of that moment."""
+        from app.ui_lang import tr
+
         st = self._status
         status = [(st["text"], None, self._mf_grayed)] if st.get("text") and st.get("state") != "idle" else []
         return [
-            ("Открыть Verbaliox", "open", self._mf_default),
+            (tr("Открыть Verbaliox", "Open Verbaliox"), "open", self._mf_default),
             *status,
             (None, None, 0),
             *self._quick_record_item(st),
             *self._record_items(st),
             *self._dictation_item(st),
             (None, None, 0),
-            ("Не мешать на встречах", "meetings_quiet", 0x8 if self._meetings_quiet() else 0),  # MF_CHECKED
+            (tr("Не мешать на встречах", "Do not disturb in meetings"), "meetings_quiet",
+             0x8 if self._meetings_quiet() else 0),  # MF_CHECKED
             *self._economy_items(),
             (None, None, 0),
-            ("Выход", "quit", 0),
+            (tr("Выход", "Exit"), "quit", 0),
         ]
 
     def _quick_record_item(self, st):
         """One click: records with the default preset without bringing the window up."""
         if st.get("recording"):
             return []
+        from app.ui_lang import tr
+
         key = getattr(self, "_hotkey_spec", "")
-        return [("● Начать запись" + (f"\t{key}" if key else ""), "hotkey_record", 0)]
+        return [(tr("● Начать запись", "● Start recording") + (f"\t{key}" if key else ""), "hotkey_record", 0)]
 
     def _dictation_item(self, st):
         """Dictation into the program with the focus, as by its hotkey (app/dictation.py)."""
         from app import dictation
+        from app.ui_lang import tr
 
         key = getattr(self, "_dictation_spec", "")
         if dictation.status().get("active"):
-            return [("■ Закончить диктовку" + (f"\t{key}" if key else ""), "hotkey_dictation", 0)]
-        return [("Диктовка" + (f"\t{key}" if key else ""), "hotkey_dictation", 0)]
+            return [(tr("■ Закончить диктовку", "■ Finish dictation") + (f"\t{key}" if key else ""), "hotkey_dictation", 0)]
+        return [(tr("Диктовка", "Dictation") + (f"\t{key}" if key else ""), "hotkey_dictation", 0)]
 
     def _record_items(self, st):
         """The recording presets (app.js BUILTIN_PRESETS + the user's own) in one submenu."""
+        from app.ui_lang import tr
+
         if st.get("recording"):
             key = getattr(self, "_hotkey_spec", "")
-            return [("■ Остановить запись" + (f"\t{key}" if key else ""), "record", 0)]
+            return [(tr("■ Остановить запись", "■ Stop recording") + (f"\t{key}" if key else ""), "record", 0)]
         import json
 
         from app.database import get_all_settings
 
         settings = get_all_settings()
-        presets = [("call", "Звонок"), ("note", "Голосовая заметка"), ("system", "Звук компьютера")]
+        presets = [("call", tr("Звонок", "Call")), ("note", tr("Голосовая заметка", "Voice note")),
+                   ("system", tr("Звук компьютера", "Computer audio"))]
         try:
             presets += [(p["id"], p["name"]) for p in json.loads(settings.get("record_presets") or "[]")
                         if isinstance(p, dict) and p.get("id") and p.get("name")]
         except ValueError:
             pass
         default = settings.get("record_default_preset") or "call"
-        return [("Запись с настройкой", [(name + ("  ★" if pid == default else ""), f"record:{pid}", 0)
+        return [(tr("Запись с настройкой", "Record with preset"), [(name + ("  ★" if pid == default else ""), f"record:{pid}", 0)
                                           for pid, name in presets[:12]], 0)]
 
     def on_command(self, cmd: str) -> None:
@@ -896,18 +953,26 @@ class TrayController:
             from app import dictation
 
             # The text is typed where the cursor is; the notice is shown only when it starts
+            from app.ui_lang import tr
+
             if dictation.toggle(notify=self._notify) == "started":
-                self._notify("Диктовка", f"Говорите. Чтобы вставить текст, нажмите {self._dictation_spec} ещё раз")
+                key = self._dictation_spec
+                self._notify(tr("Диктовка", "Dictation"),
+                             tr(f"Говорите. Чтобы вставить текст, нажмите {key} ещё раз",
+                                f"Speak now. Press {key} again to insert the text"))
             return
         if cmd == "hotkey_dictation_translate":
             from app import dictation
             from app.translation import TEXT_LANGUAGES
 
+            from app.ui_lang import tr
+
             if dictation.toggle(notify=self._notify, translate=True) == "started":
                 lang = dictation.translate_target()
-                self._notify("Диктовка с переводом",
-                             f"Говорите. Текст будет переведён ({TEXT_LANGUAGES.get(lang, lang)}). "
-                             f"Чтобы вставить его, нажмите {self._translate_spec} ещё раз")
+                name, key = TEXT_LANGUAGES.get(lang, lang), self._translate_spec
+                self._notify(tr("Диктовка с переводом", "Dictation with translation"),
+                             tr(f"Говорите. Текст будет переведён ({name}). Чтобы вставить его, нажмите {key} ещё раз",
+                                f"Speak now. The text will be translated into {name}. Press {key} again to insert it"))
             return
         if cmd.startswith("record:"):
             self.show_window()
@@ -942,10 +1007,14 @@ class TrayController:
     def quit(self) -> None:
         st = self._status
         if st.get("state") != "idle":
+            from app.ui_lang import tr
+
             MB_YESNO, MB_ICONWARNING, IDYES = 0x4, 0x30, 6
-            what = "Идёт запись" if st.get("recording") else "Идёт обработка"
+            what = (tr("Идёт запись", "Recording is in progress") if st.get("recording")
+                    else tr("Идёт обработка", "Processing is in progress"))
             answer = _user32().MessageBoxW(
-                None, f"{what}. Выйти из Verbaliox? Незавершённая работа будет прервана.", "Verbaliox",
+                None, what + tr(". Выйти из Verbaliox? Незавершённая работа будет прервана.",
+                                ". Exit Verbaliox? Unfinished work will be interrupted."), "Verbaliox",
                 MB_YESNO | MB_ICONWARNING | MB_ON_TOP)
             if answer != IDYES:
                 return
@@ -980,11 +1049,16 @@ class TrayController:
                 update_settings({"tray_told": "1"})
             except Exception:
                 pass
+            from app.ui_lang import tr
+
             if self._status.get("state") != "idle":
-                self._notify("Verbaliox работает в фоне",
-                             "Запись или обработка продолжается. Значок в трее — открыть окно или выйти.")
+                self._notify(tr("Verbaliox работает в фоне", "Verbaliox is running in the background"),
+                             tr("Запись или обработка продолжается. Значок в трее — открыть окно или выйти.",
+                                "Recording or processing continues. The tray icon opens the window or exits the app."))
             else:
-                self._notify("Verbaliox в трее", "Программа продолжает работать. Значок в трее — открыть окно или выйти.")
+                self._notify(tr("Verbaliox в трее", "Verbaliox is in the tray"),
+                             tr("Программа продолжает работать. Значок в трее — открыть окно или выйти.",
+                                "The app keeps running. The tray icon opens the window or exits the app."))
         return False
 
     def _update_in_background(self) -> None:
@@ -1112,10 +1186,15 @@ def _tell_no_webview2() -> None:
     """Said once, without stopping the start: the browser opens meanwhile."""
     def show() -> None:
         try:
+            from app.ui_lang import tr
+
             _user32().MessageBoxW(
-                None, "Для окна Verbaliox нужен компонент Microsoft Edge WebView2 Runtime, его нет на этом компьютере.\n\n"
-                      "Программа откроется в браузере. Чтобы работать в своём окне, установите WebView2 Runtime "
-                      "с сайта Microsoft (поиск: «WebView2 Runtime») и запустите Verbaliox снова.",
+                None, tr("Для окна Verbaliox нужен компонент Microsoft Edge WebView2 Runtime, его нет на этом компьютере.\n\n"
+                         "Программа откроется в браузере. Чтобы работать в своём окне, установите WebView2 Runtime "
+                         "с сайта Microsoft (поиск: «WebView2 Runtime») и запустите Verbaliox снова.",
+                         "The Verbaliox window needs Microsoft Edge WebView2 Runtime, which is not installed on this computer.\n\n"
+                         "The app opens in the browser instead. To use the app window, install WebView2 Runtime "
+                         "from the Microsoft website (search for “WebView2 Runtime”) and start Verbaliox again."),
                 "Verbaliox", 0x40 | 0x40000)  # information, on top
         except Exception:
             pass
@@ -1242,8 +1321,12 @@ def main() -> None:
 
             if _upd.installer_running(_DATA):
                 # files are being replaced now: this start waits for the installer instead of rolling them back
-                show_info_box("Идёт установка обновления Verbaliox.\n\n"
-                              "Когда она закончится, программа откроется сама или её можно будет открыть снова.")
+                from app.ui_lang import tr
+
+                show_info_box(tr("Идёт установка обновления Verbaliox.\n\n"
+                                 "Когда она закончится, программа откроется сама или её можно будет открыть снова.",
+                                 "A Verbaliox update is being installed.\n\n"
+                                 "When it finishes, the app opens by itself, or it can be opened again."))
                 return
             if _upd.recover_interrupted(_APP, _DATA):
                 print("[update] an update cut off half-way: the previous version was put back")

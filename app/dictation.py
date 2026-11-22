@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from app.ui_lang import tr
+
 SR = 16000
 MAX_SEC = 300  # a forgotten dictation stops by itself
 
@@ -128,19 +130,21 @@ def _finish(notify=None, type_out: bool = True) -> None:
             # After the typing, so the text is not held up; the translation is kept only when it is one
             threading.Thread(target=save_to_library, args=(audio, original, model, translate_to if text != original else "", text),
                              daemon=True, name="dictation_save").start()
-        if notify:
+        if notify:  # in the UI language, as all that the tray shows (app/ui_lang.py)
             if not text:
-                notify("Диктовка", "Речь не распознана")
+                notify(tr("Диктовка", "Dictation"), tr("Речь не распознана", "No speech recognized"))
             elif note:
-                notify("Диктовка: вставлено без перевода", f"{note}. {text[:100]}", warning=True)
+                notify(tr("Диктовка: вставлено без перевода", "Dictation: inserted without translation"),
+                       f"{note}. {text[:100]}", warning=True)
             else:
-                notify("Диктовка с переводом" if translate_to else "Диктовка", text[:120])
+                notify(tr("Диктовка с переводом", "Dictation with translation") if translate_to
+                       else tr("Диктовка", "Dictation"), text[:120])
     except Exception as e:
         traceback.print_exc()
         with _lock:
             _state.update(error=str(e)[:200], busy=False)
         if notify:
-            notify("Диктовка", f"Не получилось: {str(e)[:120]}")
+            notify(tr("Диктовка", "Dictation"), tr("Не получилось: ", "Failed: ") + str(e)[:120])
 
 
 _DICTATION_PROMPT = (
@@ -153,7 +157,7 @@ _DICTATION_PROMPT = (
 
 def translate(text: str, target: str) -> "tuple[str, str]":
     """(text to type, note). The note is empty when the text was translated or already in `target`;
-    otherwise it says why the original is typed."""
+    otherwise it says why the original is typed (in the UI language: it goes to the tray's notice)."""
     from app import llm
     from app.live_translate import phrase_language
     from app.translation import TEXT_LANGUAGES
@@ -164,23 +168,24 @@ def translate(text: str, target: str) -> "tuple[str, str]":
     try:
         tgt = llm.target(None)
     except Exception as e:
-        return text, f"Перевод недоступен: {str(e)[:100]}"
+        return text, tr("Перевод недоступен: ", "Translation unavailable: ") + str(e)[:100]
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
     pool = ThreadPoolExecutor(1)
     try:
         answer = pool.submit(tgt.chat, _DICTATION_PROMPT.format(tgt=name), text).result(TRANSLATE_TIMEOUT_SEC)
     except FutureTimeout:
-        return text, f"модель не ответила за {int(TRANSLATE_TIMEOUT_SEC)} с"
+        sec = int(TRANSLATE_TIMEOUT_SEC)
+        return text, tr(f"модель не ответила за {sec} с", f"the model did not answer within {sec} s")
     except Exception as e:
-        return text, f"Перевод не удался: {str(e)[:100]}"
+        return text, tr("Перевод не удался: ", "Translation failed: ") + str(e)[:100]
     finally:
         pool.shutdown(wait=False)  # a late answer is dropped
     from app.llm_text import strip_think
 
     out = strip_think(answer or "").strip().strip('"«»`').strip()
     if not out:
-        return text, "модель вернула пустой ответ"
+        return text, tr("модель вернула пустой ответ", "the model returned an empty answer")
     return out, ""
 
 

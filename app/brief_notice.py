@@ -17,6 +17,8 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Dict
 
+from app.ui_lang import count, tr
+
 CHECK_SEC = 5.0        # the notices come within seconds of their time
 LATE_SEC = 120         # a notice more than this late (the app was closed, the computer asleep) is not sent
 _told: Dict[str, datetime] = {}  # notices sent already ("before|key", "start|key") and the meeting's start
@@ -29,17 +31,13 @@ def _lead_sec(settings) -> int:
         return 300
 
 
-def _plural(n: int, one: str, few: str, many: str) -> str:
-    return one if n % 10 == 1 and n % 100 != 11 else few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
-
-
 def _ahead_text(sec: float) -> str:
-    """«Через 30 секунд», «Через 2 минуты»: the time left, as the reminder is shown."""
+    """«Через 30 секунд», «Через 2 минуты» ("In 2 minutes"): the time left, as the reminder is shown."""
     if sec < 60:
-        n = max(1, int(round(sec)))
-        return f"Через {n} {_plural(n, 'секунду', 'секунды', 'секунд')}"
-    n = int(round(sec / 60))
-    return f"Через {n} {_plural(n, 'минуту', 'минуты', 'минут')}"
+        left = count(max(1, int(round(sec))), "секунду", "секунды", "секунд", "second", "seconds")
+    else:
+        left = count(int(round(sec / 60)), "минуту", "минуты", "минут", "minute", "minutes")
+    return tr(f"Через {left}", f"In {left}")
 
 
 def due(now: datetime, lead: int):
@@ -76,7 +74,10 @@ def check(now: datetime = None) -> int:
         title = e["title"][:60]
         join = e.get("join") or ""
         if kind == "start":
-            app_status.add_notice(f"Начинается — «{title}»", f"Нажмите — подключиться в {service(join)}", f"join:{join}")
+            svc = service(join)
+            app_status.add_notice(tr(f"Начинается — «{title}»", f"Starting now: “{title}”"),
+                                  tr(f"Нажмите — подключиться в {svc}", f"Click to join in {svc}" if svc else "Click to join"),
+                                  f"join:{join}")
             n += 1
             continue
         index = index or series.EventIndex()  # the library read once for the meetings starting together
@@ -84,15 +85,20 @@ def check(now: datetime = None) -> int:
         parts = [f"{_ahead_text((e['start'] - now).total_seconds())}."]
         if info:
             tasks = info["open_tasks"]
-            parts.append((f"Открытых задач с прошлых встреч: {tasks}. " if tasks else "") +
-                         f"Прошлая встреча: «{info['last']['title']}», {info['last']['date']}. Нажмите — бриф перед встречей")
+            last, date = info["last"]["title"], info["last"]["date"]
+            parts.append(tr((f"Открытых задач с прошлых встреч: {tasks}. " if tasks else "") +
+                            f"Прошлая встреча: «{last}», {date}. Нажмите — бриф перед встречей",
+                            (f"Open tasks from previous meetings: {tasks}. " if tasks else "") +
+                            f"Previous meeting: “{last}”, {date}. Click to open the brief before the meeting"))
             target = f"brief:series:{info['series_id']}" if info["series_id"] else f"brief:person:{info['person']}"
         else:
-            parts.append("Нажмите — открыть «Главную»")
+            parts.append(tr("Нажмите — открыть «Главную»", "Click to open Home"))
             target = "dashboard"
         if join:
-            parts.append(f"Ссылка на {service(join)} придёт в начале встречи")
-        app_status.add_notice(f"В {when} — «{title}»", " ".join(parts), target)
+            parts.append(tr(f"Ссылка на {service(join)} придёт в начале встречи",
+                            f"The {service(join)} link will come when the meeting starts" if service(join)
+                            else "The call link will come when the meeting starts"))
+        app_status.add_notice(tr(f"В {when} — «{title}»", f"At {when}: “{title}”"), " ".join(parts), target)
         n += 1
     # meetings started more than a day ago are not asked about again: their notices are forgotten
     for k in [k for k, at in _told.items() if at < now - timedelta(days=1)]:

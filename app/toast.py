@@ -21,10 +21,12 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 def toast_xml(title: str, text: str, buttons: List[Tuple[str, str]], launch: str = "", stay: bool = False) -> str:
     """The toast: its click opens `launch`, each button (label, link) opens its link, the last one is
-    «Закрыть». stay: it stays on the screen until answered (a meeting starting now)."""
+    «Закрыть» (in the UI language). stay: it stays on the screen until answered (a meeting starting now)."""
     acts = "".join(f"<action content={quoteattr(label)} activationType=\"protocol\" arguments={quoteattr(link)}/>"
                    for label, link in buttons)
-    acts += "<action content=\"Закрыть\" activationType=\"system\" arguments=\"dismiss\"/>"
+    from app.ui_lang import tr
+
+    acts += f"<action content={quoteattr(tr('Закрыть', 'Close'))} activationType=\"system\" arguments=\"dismiss\"/>"
     head = "<toast" + (f" activationType=\"protocol\" launch={quoteattr(launch)}" if launch else "") + \
         (" scenario=\"reminder\"" if stay and buttons else "") + ">"
     return (f"{head}<visual><binding template=\"ToastGeneric\"><text>{escape(title)}</text><text>{escape(text)}</text>"
