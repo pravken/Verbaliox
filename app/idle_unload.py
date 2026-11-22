@@ -71,13 +71,15 @@ def release_speech_models() -> List[str]:
     """The models of transcription out of memory: Whisper, GigaAM / Parakeet, the speaker models (ECAPA and
     Nemotron, which no unload reached before: it stayed until the app ended). Returns what was released."""
     from app import asr_onnx, nemotron_diar, transcriber
-    from app.diarizer import ecapa_loaded_on, unload_diarizer
+    from app.vram import ecapa_loaded_on
 
     released = []
     if transcriber.whisper_cache_key():
         transcriber.release_whisper_model()
         released.append("whisper")
     if ecapa_loaded_on():
+        from app.diarizer import unload_diarizer
+
         unload_diarizer()
         released.append("speakers")
     if nemotron_diar.loaded():

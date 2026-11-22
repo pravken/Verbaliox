@@ -95,6 +95,30 @@ class _Tee:
         return "utf-8"
 
 
+SIDE_LOG_MAX = 1024 * 1024
+SIDE_LOG_KEEP = 256 * 1024
+
+
+def trim_side_logs() -> None:
+    """crash.log (a stack of every thread at each hard crash) and update.log (the installer's output at
+    every update of the libraries) are only ever added to: past SIDE_LOG_MAX only their newest part is kept,
+    from the start of a line."""
+    for name in ("crash.log", "update.log"):
+        path = LOG_DIR / name
+        try:
+            if path.stat().st_size <= SIDE_LOG_MAX:
+                continue
+            with open(path, "rb") as f:
+                f.seek(-SIDE_LOG_KEEP, 2)
+                tail = f.read()
+            tail = tail[tail.find(b"\n") + 1:]
+            tmp = path.with_name(name + ".tmp")
+            tmp.write_bytes(tail)
+            tmp.replace(path)
+        except OSError:
+            pass
+
+
 def start_file_log() -> Path:
     """Starts copying stdout/stderr into the log file. Safe to call once per process."""
     global _file
@@ -102,6 +126,7 @@ def start_file_log() -> Path:
         if _file is not None:
             return LOG_FILE
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+        trim_side_logs()
         if LOG_FILE.exists() and LOG_FILE.stat().st_size > MAX_BYTES:
             _rotate()
         else:

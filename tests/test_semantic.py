@@ -132,6 +132,24 @@ class SemanticIndexTest(unittest.TestCase):
 
 
 @needs_deps
+class MeetingWaitTest(unittest.TestCase):
+    """The embedding model is not loaded into Ollama during a meeting, as the speech models are not."""
+
+    def test_indexing_waits_for_a_meeting(self):
+        from app import economy, meeting_guard
+
+        with mock.patch.object(meeting_guard, "holds_queue", return_value=True), \
+                mock.patch.object(economy, "on", return_value=False):
+            self.assertTrue(semantic._gpu_busy())
+        with mock.patch.object(meeting_guard, "holds_queue", return_value=False), \
+                mock.patch.object(economy, "on", return_value=True):
+            self.assertTrue(semantic._gpu_busy())
+        with mock.patch.object(meeting_guard, "holds_queue", return_value=False), \
+                mock.patch.object(economy, "on", return_value=False):
+            self.assertFalse(semantic._gpu_busy())
+
+
+@needs_deps
 class EmbedRequestTest(unittest.TestCase):
     def test_batches_and_normalizes(self):
         import httpx

@@ -121,7 +121,7 @@
         </div>
         <canvas id="record-waveform-canvas" class="w-full h-12 block"></canvas>
         <div class="st-meter-track">
-          <div id="record-level-bar" class="h-full bg-apple-green transition-all duration-75" style="width: 2%"></div>
+          <div id="record-level-bar" data-vx-live class="h-full bg-apple-green transition-all duration-75" style="width: 2%"></div>
         </div>
         <p id="record-status-hint" class="st-hint" data-i18n="recordWaveHint">Индикатор показывает уровень сигнала выбранного источника в реальном времени</p>
       </div>
@@ -217,7 +217,7 @@
         <div id="studio-timer" class="text-xl xl:text-2xl font-mono font-semibold text-white tracking-wider shrink-0 whitespace-nowrap">00:00</div>
         <div class="st-level hidden lg:flex flex-1 items-center gap-2 min-w-[70px] max-w-[220px]">
           <div class="st-meter-track flex-1">
-            <div id="studio-level" class="h-full bg-apple-green transition-all duration-75" style="width: 2%"></div>
+            <div id="studio-level" data-vx-live class="h-full bg-apple-green transition-all duration-75" style="width: 2%"></div>
           </div>
           <span id="studio-db" class="text-[11.5px] font-mono text-apple-secondary w-14 text-right whitespace-nowrap">-60 dB</span>
         </div>

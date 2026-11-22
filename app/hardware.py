@@ -230,9 +230,10 @@ def clear_vram() -> None:
     Diarization or Ollama LLM summary) so even 4-6 GB GPUs never run out of memory.
     """
     gc.collect()
+    torch = sys.modules.get("torch")  # never imported: it holds no memory to give back (an import costs seconds)
+    if torch is None:
+        return
     try:
-        import torch
-
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()

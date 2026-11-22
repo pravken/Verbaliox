@@ -164,7 +164,7 @@ function recSourcesStart(mic, sys) {
   recSrc.sys.heard = false;
   document.querySelectorAll('[data-rec-src]').forEach(box => {
     box.innerHTML = ['mic', 'sys'].filter(k => recSrc[k].used).map(k =>
-      `<span class="rec-src-item" data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
+      `<span class="rec-src-item" data-vx-live data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
     box.classList.toggle('hidden', !mic && !sys);
   });
   recSourcesRender();
@@ -211,8 +211,10 @@ function recSilenceWatch(now) {
   }
 }
 
+// the items as the page keeps them (20 times a second for a whole meeting: a selector went over every element)
+const recSrcItems = document.getElementsByClassName('rec-src-item');
 function recSourcesRender() {
-  document.querySelectorAll('[data-rec-src] .rec-src-item').forEach(el => {
+  [...recSrcItems].forEach(el => {
     const s = recSrc[el.dataset.src];
     el.style.setProperty('--lv', s.lv.toFixed(3));
     if (el.classList.contains('rec-src-on') !== s.on || !el.title) {
