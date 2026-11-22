@@ -14,13 +14,19 @@ if (shots) mkdirSync(shots, { recursive: true });
 const browser = await pw.chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 1300, height: 860 } });
 page.setDefaultTimeout(8000);
+// CPU_SLOW=6: the page runs as on a slow computer (CI), to bring out what only fails there
+if (process.env.CPU_SLOW) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_SLOW) });
 const errors = [];
 page.on('pageerror', e => errors.push(`page: ${e.message}`));
 page.on('response', r => { if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url().replace(/\?.*/, '')}`); });
 
 let n = 0;
 const step = async (name, fn) => {
-  try { await fn(); } catch (e) { errors.push(`${name}: ${e.message.split('\n')[0]}`); }
+  try { await fn(); } catch (e) {
+    // the first line, and for a click that timed out what stood in its way (CI shows nothing else)
+    const why = e.message.split('\n').filter(l => /intercepts pointer|not visible|not stable|not enabled|outside of the viewport|waiting for/.test(l)).slice(-3).map(l => l.trim());
+    errors.push(`${name}: ${e.message.split('\n')[0]}${why.length ? ` [${why.join(' | ')}]` : ''}`);
+  }
   if (shots) await page.screenshot({ path: `${shots}/${String(++n).padStart(2, '0')}-${name.replace(/\W+/g, '-')}.png` });
 };
 const expect = (ok, what) => { if (!ok) throw new Error(what); };
