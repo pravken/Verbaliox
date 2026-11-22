@@ -4,6 +4,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import traceback
 import uuid
 from datetime import datetime
@@ -1620,6 +1621,7 @@ def meeting_files(meeting_id: int) -> Optional[Dict[str, Any]]:
 # speaker_seconds of a recording until its lines change (_write_segments): «Все люди» and the speakers
 # across the library read it for every recording, and a scan of all lines held the database for long
 _speaker_seconds_cache: Dict[int, Dict[str, float]] = {}
+SPEAKER_SECONDS_STEP = 40  # recordings read under one hold of the lock
 
 
 def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
@@ -1631,25 +1633,29 @@ def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
     out: Dict[int, Dict[str, float]] = {i: {} for i in ids}
     if not ids:
         return cached
-    with _db_lock:
-        conn = get_connection()
-        try:
-            for i in range(0, len(ids), 500):
-                part = ids[i:i + 500]
+    # A few recordings at a time, the lock let go between them: the first reading after a start goes
+    # through every line of the library (seconds for thousands of recordings), and held in one piece it
+    # stopped every other request and the worker's progress meanwhile
+    for i in range(0, len(ids), SPEAKER_SECONDS_STEP):
+        part = ids[i:i + SPEAKER_SECONDS_STEP]
+        with _db_lock:
+            conn = get_connection()
+            try:
                 q = (f"SELECT meeting_id, json_extract(data, '$.speaker') AS spk, "
                      f"SUM(MAX(0.0, COALESCE(json_extract(data, '$.end'), 0) - COALESCE(json_extract(data, '$.start'), 0))) AS sec "
                      f"FROM segments WHERE meeting_id IN ({','.join('?' * len(part))}) GROUP BY meeting_id, spk")
                 for r in conn.execute(q, part):
                     out[r["meeting_id"]][r["spk"]] = float(r["sec"] or 0.0)
-        except sqlite3.OperationalError:  # SQLite without JSON functions
-            for mid in ids:
-                for seg in _read_segments(conn, mid):
-                    spk = seg.get("speaker")
-                    out[mid][spk] = out[mid].get(spk, 0.0) + max(0.0, float(seg.get("end") or 0) - float(seg.get("start") or 0))
-        finally:
-            conn.close()
-        for mid, talk in out.items():
-            _speaker_seconds_cache[mid] = dict(talk)
+            except sqlite3.OperationalError:  # SQLite without JSON functions
+                for mid in part:
+                    for seg in _read_segments(conn, mid):
+                        spk = seg.get("speaker")
+                        out[mid][spk] = out[mid].get(spk, 0.0) + max(0.0, float(seg.get("end") or 0) - float(seg.get("start") or 0))
+            finally:
+                conn.close()
+            for mid in part:  # under the lock: an edit (_write_segments) drops it after, never before
+                _speaker_seconds_cache[mid] = dict(out[mid])
+        time.sleep(0.002)  # the lock is not handed over by itself: a thread waiting for it gets it now
     return {**out, **cached}
 
 

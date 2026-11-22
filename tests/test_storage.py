@@ -599,6 +599,31 @@ class SegmentsTableTest(unittest.TestCase):
         self.assertEqual(self._raw("SELECT COUNT(*) FROM segments WHERE meeting_id = ?", m["id"])[0][0], 0)
 
 
+    def test_talk_time_of_a_large_library_lets_the_database_go_between_steps(self):
+        """The first reading after a start goes through every line of the library: seconds for thousands of
+        recordings, and every other request (and the worker's progress) waited for all of it."""
+        database.init_db()
+        ids = []
+        for n in range(3):
+            m = database.create_meeting(title=f"Шаг {n}", filename="a.wav", media_path="a.wav")
+            self.addCleanup(database.delete_meeting, m["id"])
+            database.save_meeting_results(m["id"], segments=[{"id": 1, "start": 0, "end": n + 1, "speaker": "SPEAKER_00", "text": "а"}])
+            ids.append(m["id"])
+        holds = []
+        real = database.get_connection
+
+        def counting():
+            holds.append(database._db_lock._is_owned())
+            return real()
+
+        with mock.patch.object(database, "SPEAKER_SECONDS_STEP", 1), \
+                mock.patch.object(database, "get_connection", side_effect=counting):
+            talk = database.speaker_seconds(ids)
+        self.assertEqual([talk[i] for i in ids], [{"SPEAKER_00": 1.0}, {"SPEAKER_00": 2.0}, {"SPEAKER_00": 3.0}])
+        self.assertEqual(holds, [True, True, True])  # one hold of the lock per step, not one for all
+        self.assertEqual(database.speaker_seconds(ids), talk)  # kept: read once
+
+
 class TranscriptVersionsTest(unittest.TestCase):
     """Each model's transcript of a recording is kept; the dropdown above the text switches to one."""
 
