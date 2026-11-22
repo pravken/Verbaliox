@@ -692,7 +692,7 @@
                 <span id="whisper-pull-pct" class="font-mono text-apple-blue font-semibold">0%</span>
                 <button data-click="closeModal" data-click-args='["settings"]'
                   data-i18n-title="tipMinimizeBg"
-                  title="Закрыть настройки и продолжить работу — загрузка продолжится в боковой панели"
+                  title="Закрыть окно настроек и продолжить работу — загрузка видна в строке состояния"
                   class="px-2 py-0.5 rounded bg-apple-blue/15 hover:bg-apple-blue/25 text-apple-blue text-[11.5px] font-medium transition"
                   data-i18n="minimizeBgBtn">Продолжить в фоне</button>
               </div>
@@ -764,7 +764,7 @@
                 <span id="ollama-pull-pct" class="font-mono text-apple-blue font-semibold">0%</span>
                 <button data-click="closeModal" data-click-args='["settings"]'
                   data-i18n-title="tipMinimizeBg"
-                  title="Закрыть настройки и продолжить работу — загрузка продолжится в боковой панели"
+                  title="Закрыть окно настроек и продолжить работу — загрузка видна в строке состояния"
                   class="px-2 py-0.5 rounded bg-apple-blue/15 hover:bg-apple-blue/25 text-apple-blue text-[11.5px] font-medium transition"
                   data-i18n="minimizeBgBtn">Продолжить в фоне</button>
               </div>
@@ -854,7 +854,7 @@
         <div class="settings-card">
           <div class="min-w-0">
             <h4 class="text-[13px] font-semibold text-white" data-i18n="holTitle">Праздники</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="holDesc">Государственные праздники выбранной страны — выходные дни: «Главная» не считает их рабочими, неделя и календарь их отмечают. Работает без интернета.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="holDesc">Государственные праздники выбранной страны — выходные дни: «Сегодня» и «Обзор» не считают их рабочими, неделя и календарь их отмечают. Работает без интернета.</p>
           </div>
           <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
             <label for="set-holiday-country" data-i18n="holCountry">Страна</label>
@@ -927,7 +927,7 @@
           <!-- How long the working day lasted (app/worktime.py) and the reminder of the norm -->
           <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
             <span><span data-i18n="rdSasWorktime">Считать отработанное время</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasWorktimeHint">Учитываются минуты, когда используются клавиатура и мышь, идёт запись или звонок, — как статус в Teams. Видно на «Главной» и в календаре. Только на этом компьютере.</span></span>
+              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasWorktimeHint">Учитываются минуты, когда используются клавиатура и мышь, идёт запись или звонок, — как статус в Teams. Видно в «Обзоре» и в календаре. Только на этом компьютере.</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-worktime-track" checked />
           </label>
           <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
@@ -1169,13 +1169,13 @@
         <div data-stab="bench" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavBench">Сравнение моделей</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescBench">Какая модель лучше работает на ваших записях.</p>
+            <p class="sx-section-desc" data-i18n="rdSasDescBench">Какая модель лучше работает на записях этого компьютера.</p>
           </div>
         <!-- Model comparison on the user's recordings (app/bench.py) -->
         <div class="settings-card">
           <div>
             <h4 class="text-[13px] font-semibold text-white" data-i18n="benchTitle">Сравнение моделей на ваших записях</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="benchDesc">Возьмите запись, текст которой вы считаете верным, — он будет эталоном. Каждая выбранная модель распознает тот же фрагмент, и вы увидите долю ошибок (WER), скорость и нужную память. Для анализа модели пишут протокол, и считается доля пунктов, которых нет в расшифровке. Всё на этом компьютере.</p>
+            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="benchDesc">Эталон — запись с проверенным текстом. Каждая выбранная модель распознаёт тот же фрагмент: видны доля ошибок (WER), скорость и нужная память. Для анализа модели пишут обзор, и считается доля пунктов, которых нет в расшифровке. Всё на этом компьютере.</p>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <div class="apple-segmented" style="height: 30px;">
