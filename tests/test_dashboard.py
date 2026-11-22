@@ -102,6 +102,33 @@ class DashboardTest(unittest.TestCase):
             self.assertEqual(probe.call_count, 2)  # kept: the files are read once
         self.assertEqual(database.get_meeting(ids[0])["duration"], 2700.0)
 
+    def test_lengths_not_read_again_and_not_while_mixing(self):
+        """Found in the review: every load of «Главная» ran ffprobe again on files it cannot read, and wrote
+        the length of a recording still being mixed (its file not whole yet)."""
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        folder = Path(tempfile.mkdtemp())
+        rows = []
+        for status in ("queued", "mixing"):
+            media = folder / f"{status}.wav"
+            media.write_bytes(b"x")
+            m = database.create_meeting(status, media.name, str(media))
+            database.update_meeting_progress(m["id"], status=status, progress=0)
+            rows.append(database.get_meeting(m["id"]))
+        broken, mixing = rows
+        with mock.patch("app.audio_utils.get_media_duration", return_value=0.0) as probe:
+            self.assertEqual(database.fill_durations([dict(broken, duration=0), dict(mixing, duration=0)]), 0)
+            database.fill_durations([dict(broken, duration=0)])
+            self.assertEqual(probe.call_count, 1)  # the file it could not read: once, the mixing one never
+        os.utime(broken["media_path"], (1_000_000_000, 1_000_000_000))  # the file changed: read again
+        with mock.patch("app.audio_utils.get_media_duration", return_value=60.0) as probe:
+            self.assertEqual(database.fill_durations([dict(broken, duration=0), dict(mixing, duration=0)]), 1)
+            self.assertEqual(probe.call_count, 1)
+        self.assertEqual(database.get_meeting(mixing["id"])["duration"], 0)
+
     def test_months_quarters_and_no_name_set(self):
         self.assertEqual(dashboard._bounds("month", self.TODAY)[:2], (date(2026, 11, 1), date(2026, 12, 1)))
         self.assertEqual(dashboard._bounds("quarter", self.TODAY), (date(2026, 10, 1), date(2027, 1, 1), date(2026, 7, 1)))
