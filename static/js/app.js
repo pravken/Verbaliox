@@ -1971,7 +1971,11 @@ const TEXT_AREAS = '#studio-captions, #transcript-container, #summary-content, #
 // again). The click that reaches the button closes the menu first (document click), so the button's own
 // handler then sees the menu just closed by this same press and opens nothing.
 let _menuOwner = null, _pressOwner = null, _closedOwner = null, _closedAt = 0;
-document.addEventListener('keydown', () => { _pressOwner = null; }, true);
+// the keyboard's Enter or Space on a button opens its menu as a click does: that button is the owner too
+document.addEventListener('keydown', (e) => {
+  const f = document.activeElement;
+  _pressOwner = (e.key === 'Enter' || e.key === ' ') && f instanceof Element && !f.closest('#text-menu') ? f.closest('button, [role="button"], [data-click]') : null;
+}, true);
 document.addEventListener('pointerdown', e => {
   _pressOwner = e.button === 0 && (e.target instanceof Element && !e.target.closest('#text-menu') && e.target.closest('button, [role="button"], [data-click]')) || null;
 }, true);
@@ -2905,10 +2909,13 @@ document.addEventListener('contextmenu', (e) => {
 // A small menu of items ({label, key, run, disabled} or {sep}) at a point of the window
 function openTextMenuAt(items, x, y, opts) {
   const owner = (opts && opts.owner) || _pressOwner;
-  const wasOpen = !!document.getElementById('text-menu') && _menuOwner === owner;
+  // the same button by its key: a bar redrawn between the clicks (the filters of «Записи», the overview's head) has a
+  // new element for it
+  const same = (a, b) => !!a && !!b && (a === b || (!!vxOwnerKey(a) && vxOwnerKey(a) === vxOwnerKey(b)));
+  const wasOpen = !!document.getElementById('text-menu') && same(_menuOwner, owner);
   closeTextMenu();
   // the same button pressed again while its menu was open: the menu stays closed
-  if (owner && (wasOpen || (_closedOwner === owner && performance.now() - _closedAt < 600))) { _closedOwner = null; return; }
+  if (owner && (wasOpen || (same(_closedOwner, owner) && performance.now() - _closedAt < 600))) { _closedOwner = null; return; }
   closeQuickLangMenu();
   const menu = document.createElement('div');
   menu.id = 'text-menu';

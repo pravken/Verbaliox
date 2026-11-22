@@ -30,12 +30,12 @@ function renderMeetingFeatures() {
   // two at most next to the title, «+N» for the rest (the header has no room for more)
   const shown = own.slice(0, 2), more = own.length - shown.length;
   // «Фича:» says what the chips are (a coloured chip alone read as any tag)
-  box.innerHTML = `<span class="ft-label">${escapeHtml(t('ftLabel'))}</span>` + shown.map(f => `<button class="ft-chip-btn" data-ft="${f.id}" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
-    + (more > 0 ? `<button class="ft-chip-btn ft-more" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(own.map(f => f.name).join(', '))}">+${more}</button>` : '')
+  box.innerHTML = `<span class="ft-label">${escapeHtml(t('ftLabel'))}</span>` + shown.map(f => `<button class="ft-chip-btn" data-ft="${f.id}" data-menu-key="ft-${f.id}" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftChangeTip'))}">${featureChipHtml(f)}</button>`).join('')
+    + (more > 0 ? `<button class="ft-chip-btn ft-more" data-menu-key="ft-more" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(own.map(f => f.name).join(', '))}">+${more}</button>` : '')
     + guesses.map(f => `<span class="ft-suggest">${featureChipHtml(f, { suggested: true, title: t('ftSuggestedTip') })}
         <button class="ft-yes" ${pageCall('click', 'acceptFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftAccept'))}" aria-label="${escapeHtml(t('ftAccept'))}">✓</button>
         <button class="ft-no" ${pageCall('click', 'declineFeatureSuggestion', [f.id])} title="${escapeHtml(t('ftDecline'))}" aria-label="${escapeHtml(t('ftDecline'))}">✕</button></span>`).join('')
-    + (own.length ? '' : `<button class="ft-add" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftAddTip'))}">+ ${escapeHtml(t('ftAddShort'))}</button>`);
+    + (own.length ? '' : `<button class="ft-add" data-menu-key="ft-add" ${pageCall('click', 'openFeaturePicker', [{ $: 'event' }])} title="${escapeHtml(t('ftAddTip'))}">+ ${escapeHtml(t('ftAddShort'))}</button>`);
 }
 
 function applyMeetingFeatures(m, data) {
