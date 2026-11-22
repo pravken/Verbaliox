@@ -972,23 +972,26 @@ class SplashForm : Form
             {
                 using (System.Drawing.SolidBrush tb = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(20, 255, 255, 255)))
                     g.FillPath(tb, tp);
-                System.Drawing.Region clip = g.Clip;
-                g.SetClip(tp);
-                float runW = track.Width * 0.36f;
-                double phase = (t / 1.4) % 1.0;
-                double eased = phase < 0.5 ? 2 * phase * phase : 1 - Math.Pow(-2 * phase + 2, 2) / 2;
-                float x = track.X - runW + (float)eased * (track.Width + runW);
-                System.Drawing.RectangleF run = new System.Drawing.RectangleF(x, track.Y, runW, track.Height);
-                using (System.Drawing.Drawing2D.LinearGradientBrush rb = new System.Drawing.Drawing2D.LinearGradientBrush(
-                    new System.Drawing.RectangleF(x - 1, track.Y, runW + 2, track.Height), System.Drawing.Color.Transparent, System.Drawing.Color.Transparent, 0f))
+                // g.Clip hands out a copy each time: disposed, not left behind every frame
+                using (System.Drawing.Region clip = g.Clip)
                 {
-                    System.Drawing.Drawing2D.ColorBlend cb = new System.Drawing.Drawing2D.ColorBlend();
-                    cb.Colors = new System.Drawing.Color[] { System.Drawing.Color.FromArgb(0, Accent), Accent, AccentHi, System.Drawing.Color.FromArgb(0, AccentHi) };
-                    cb.Positions = new float[] { 0f, 0.3f, 0.7f, 1f };
-                    rb.InterpolationColors = cb;
-                    g.FillRectangle(rb, run);
+                    g.SetClip(tp);
+                    float runW = track.Width * 0.36f;
+                    double phase = (t / 1.4) % 1.0;
+                    double eased = phase < 0.5 ? 2 * phase * phase : 1 - Math.Pow(-2 * phase + 2, 2) / 2;
+                    float x = track.X - runW + (float)eased * (track.Width + runW);
+                    System.Drawing.RectangleF run = new System.Drawing.RectangleF(x, track.Y, runW, track.Height);
+                    using (System.Drawing.Drawing2D.LinearGradientBrush rb = new System.Drawing.Drawing2D.LinearGradientBrush(
+                        new System.Drawing.RectangleF(x - 1, track.Y, runW + 2, track.Height), System.Drawing.Color.Transparent, System.Drawing.Color.Transparent, 0f))
+                    {
+                        System.Drawing.Drawing2D.ColorBlend cb = new System.Drawing.Drawing2D.ColorBlend();
+                        cb.Colors = new System.Drawing.Color[] { System.Drawing.Color.FromArgb(0, Accent), Accent, AccentHi, System.Drawing.Color.FromArgb(0, AccentHi) };
+                        cb.Positions = new float[] { 0f, 0.3f, 0.7f, 1f };
+                        rb.InterpolationColors = cb;
+                        g.FillRectangle(rb, run);
+                    }
+                    g.Clip = clip;
                 }
-                g.Clip = clip;
             }
 
             // a note under it; after 25 s it says why the first start is slow

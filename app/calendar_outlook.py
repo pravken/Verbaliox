@@ -14,7 +14,7 @@ import json
 import subprocess
 import sys
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Set
 
 SOURCE = "outlook"
 NO_PROFILE = ("Классический Outlook не настроен: в нём нет почтового профиля. Для нового Outlook и Outlook в браузере "
@@ -98,22 +98,64 @@ def has_profile() -> bool:
     return False
 
 
-def _outlook_running() -> bool:
+def _outlook_pids() -> Optional[Set[int]]:
+    """The process ids of the Outlook running now; None when not known."""
     try:
-        res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OUTLOOK.EXE", "/NH"], capture_output=True, text=True,
-                             errors="replace", timeout=15, creationflags=_NO_WINDOW)
-        return "outlook.exe" in (res.stdout or "").lower()
+        res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OUTLOOK.EXE", "/FO", "CSV", "/NH"], capture_output=True,
+                             text=True, errors="replace", timeout=15, creationflags=_NO_WINDOW)
     except (OSError, subprocess.SubprocessError):
-        return True  # not known: the Outlook there is not closed
+        return None
+    pids = set()
+    for line in (res.stdout or "").splitlines():
+        cells = [c.strip().strip('"') for c in line.split('","')]
+        if len(cells) >= 2 and cells[0].strip('"').lower() == "outlook.exe" and cells[1].isdigit():
+            pids.add(int(cells[1]))
+    return pids
 
 
-def _close_started_outlook() -> None:
-    """The Outlook this read started and left waiting (a password, a profile choice) is closed again:
-    not a window left behind for the user to close."""
+def _has_visible_window(pid: int) -> bool:
+    """The process shows a window (the main window, a password or profile prompt): someone may be using it.
+    Not known counts as shown."""
+    if sys.platform != "win32":
+        return True
     try:
-        subprocess.run(["taskkill", "/IM", "OUTLOOK.EXE", "/F"], capture_output=True, timeout=15, creationflags=_NO_WINDOW)
-    except (OSError, subprocess.SubprocessError):
-        pass
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        found = []
+        proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def look(hwnd, _):
+            owner = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value == pid and user32.IsWindowVisible(hwnd):
+                found.append(hwnd)
+                return False
+            return True
+
+        user32.EnumWindows(proc(look), 0)
+        return bool(found)
+    except Exception:  # noqa: BLE001 - not known: treated as in use
+        return True
+
+
+def _close_started_outlook(before: Optional[Set[int]]) -> None:
+    """The Outlook this read started, left hanging with no window, is asked to close. Outlook runs as one
+    instance, so the one the user opened (or opened meanwhile, or is typing a password in) must stay: only
+    a process that was not there before the read and shows no window, and never forced (no /F)."""
+    if before is None:
+        return
+    now = _outlook_pids()
+    if not now:
+        return
+    for pid in sorted(now - before):
+        if _has_visible_window(pid):
+            continue
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid)], capture_output=True, timeout=15, creationflags=_NO_WINDOW)
+        except (OSError, subprocess.SubprocessError):
+            pass
 
 
 def fetch() -> List[Dict[str, Any]]:
@@ -123,15 +165,14 @@ def fetch() -> List[Dict[str, Any]]:
                            "добавьте опубликованную ссылку .ics")
     if not has_profile():
         raise RuntimeError(NO_PROFILE)
-    was_running = _outlook_running()
+    before = _outlook_pids()
     script = _SCRIPT.replace("__BACK__", str(DAYS_BACK)).replace("__AHEAD__", str(DAYS_AHEAD))
     try:
         res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
                              creationflags=_NO_WINDOW)
     except subprocess.TimeoutExpired:
-        if not was_running:
-            _close_started_outlook()
+        _close_started_outlook(before)
         raise RuntimeError("Outlook не ответил за 90 секунд (возможно, ждёт выбора профиля или пароля)")
     if res.returncode != 0:
         raise RuntimeError("Outlook: " + ((res.stderr or res.stdout or "").strip().splitlines() or ["ошибка"])[-1][:200])

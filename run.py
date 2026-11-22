@@ -629,12 +629,16 @@ class TrayController:
                          on_session_end=self.on_session_end)
         window.events.closing += self.on_closing
 
-    def start(self) -> None:
+    def start(self) -> bool:
+        """Whether the tray icon really shows (an icon file, its window, Shell_NotifyIcon took it): only then may
+        the window hide into the tray (TRAY_READY); hidden without an icon, nothing would bring it back."""
         self._apply_hotkey()
-        started = ICO_PATH.exists() and self.tray.start()
-        print(f"[tray] icon {'shown' if started and self.tray.hwnd else 'not shown'}")
-        if started:
+        self.tray.on_shown = TRAY_READY.set  # Explorer came up after the app (a start at sign-in): the icon is added then
+        started = ICO_PATH.exists() and bool(self.tray.start())
+        print(f"[tray] icon {'shown' if started else 'not shown'}")
+        if started or (ICO_PATH.exists() and self.tray.hwnd):
             threading.Thread(target=self._poll, daemon=True, name="tray_status").start()
+        return started
 
     # ---- quiet mode: no notifications from the tray (switched in its menu or in Settings)
     def _quiet(self) -> bool:
@@ -988,8 +992,20 @@ class TrayController:
         if self._status.get("state") == "idle" and not to_tray:
             self.quitting = True
             return True
+        if not TRAY_READY.is_set():
+            # No tray icon to bring a hidden window back: the work goes on in a minimized window, an idle app closes
+            if self._status.get("state") == "idle":
+                self.quitting = True
+                return True
+            threading.Timer(0.05, self.window.minimize).start()
+            return False
         # Something runs, or the app stays in the tray by choice (Settings → General): the window hides
         threading.Timer(0.05, self.window.hide).start()
+        if self._status.get("recording") or self._status.get("state") == "recording":
+            # told at every close while a recording runs: the user may think closing the window stopped it
+            self._notify("Verbaliox работает в фоне",
+                         "Запись продолжается. Значок в трее — открыть окно или остановить запись.")
+            return False
         # told once, for good (asked by the user: the note came at every close); kept in the settings
         if get_all_settings().get("tray_told") != "1" and not self._told_tray:
             self._told_tray = True
@@ -1344,8 +1360,8 @@ def main() -> None:
             tray = None
             try:
                 tray = TrayController(window)
-                tray.start()
-                TRAY_READY.set()
+                if tray.start():
+                    TRAY_READY.set()
                 from app import updater
 
                 updater.exit_hooks.append(tray.stop)

@@ -55,7 +55,7 @@ def api_worktime(start: str, end: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Неверный промежуток времени")
     if not a < b or (b - a).days > 120:
         raise HTTPException(status_code=400, detail="Неверный промежуток времени")
-    return {"enabled": worktime.enabled(), "supported": worktime.idle_seconds() is not None, "norm": worktime.remind_hours(),
+    return {"enabled": worktime.enabled(), "supported": worktime.supported(), "norm": worktime.remind_hours(),
             "today": worktime.work_day(datetime.now()).isoformat(), "days": worktime.days(a, b)}
 
 
@@ -76,7 +76,7 @@ def api_worktime_apps(start: str, end: str) -> Dict[str, Any]:
     now, before = worktime.apps(a, b), worktime.apps(a - (b - a), a)
     items = [{"app": k, "name": worktime.app_name(k), "minutes": v, "before": before.get(k, 0)}
              for k, v in sorted(now.items(), key=lambda x: -x[1])]
-    return {"enabled": worktime.apps_enabled(), "supported": worktime.idle_seconds() is not None, "apps": items,
+    return {"enabled": worktime.apps_enabled(), "supported": worktime.supported(), "apps": items,
             "since": worktime.apps_since()}
 
 

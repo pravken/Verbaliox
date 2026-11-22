@@ -99,8 +99,10 @@ def app_name(app: str) -> str:
     return APP_NAMES.get(app) or (app[:1].upper() + app[1:])
 
 
-def idle_seconds() -> Optional[float]:
-    """Seconds since the last keyboard, mouse or game controller input (Windows), None where it cannot be known."""
+def idle_seconds(pad: bool = True) -> Optional[float]:
+    """Seconds since the last keyboard, mouse or game controller input (Windows), None where it cannot be known.
+    pad=False: without the game controller, whose changes are seen by one caller only (the minute loop): the
+    page's look at it would take them away."""
     if sys.platform != "win32":
         return None
     try:
@@ -116,15 +118,41 @@ def idle_seconds() -> Optional[float]:
         idle = ((ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000.0
     except Exception:
         return None
-    return 0.0 if gamepad_used() else idle
+    return 0.0 if pad and gamepad_used() else idle
 
 
-_pad_packets: Dict[int, int] = {}
+def supported() -> bool:
+    """The time at the computer can be counted here (Windows tells the last input)."""
+    return idle_seconds(pad=False) is not None
+
+
+# XInput: a resting stick is never exactly at 0 and drifts (its packet number changes with no one touching it);
+# a move counts beyond these, as XInput's own dead zones; a trigger beyond its threshold
+LEFT_THUMB_DEADZONE = 7849
+RIGHT_THUMB_DEADZONE = 8689
+TRIGGER_THRESHOLD = 30
+
+_pad_lock = threading.Lock()
+_pad_states: Dict[int, tuple] = {}  # controller → (buttons, lt, rt, lx, ly, rx, ry) seen last
+
+
+def _pad_changed(before: Optional[tuple], now: tuple) -> bool:
+    """Whether someone used the controller between two looks: a button, a trigger, or a stick moved beyond its
+    dead zone. A drifting stick alone is no use."""
+    if before is None:
+        return False
+    if before[0] != now[0]:
+        return True
+    if abs(before[1] - now[1]) > TRIGGER_THRESHOLD or abs(before[2] - now[2]) > TRIGGER_THRESHOLD:
+        return True
+    left = max(abs(before[3] - now[3]), abs(before[4] - now[4]))
+    right = max(abs(before[5] - now[5]), abs(before[6] - now[6]))
+    return left > LEFT_THUMB_DEADZONE or right > RIGHT_THUMB_DEADZONE
 
 
 def gamepad_used() -> bool:
-    """A game controller (XInput) changed since the last check: Windows does not count it as input, so a game
-    played with one looked like time away. Only whether its state changed is read, never what was pressed."""
+    """A game controller (XInput) used since the last check: Windows does not count it as input, so a game
+    played with one looked like time away. Only whether it was used is kept, never what was pressed."""
     if sys.platform != "win32":
         return False
     try:
@@ -145,14 +173,15 @@ def gamepad_used() -> bool:
         if dll is None:
             return False
         used = False
-        for pad in range(4):
-            st = XINPUT_STATE()
-            if dll.XInputGetState(pad, ctypes.byref(st)) != 0:  # not connected
-                _pad_packets.pop(pad, None)
-                continue
-            before = _pad_packets.get(pad)
-            _pad_packets[pad] = st.dwPacketNumber
-            used = used or (before is not None and before != st.dwPacketNumber)
+        with _pad_lock:
+            for pad in range(4):
+                st = XINPUT_STATE()
+                if dll.XInputGetState(pad, ctypes.byref(st)) != 0:  # not connected
+                    _pad_states.pop(pad, None)
+                    continue
+                now = (st.buttons, st.lt, st.rt, st.lx, st.ly, st.rx, st.ry)
+                used = _pad_changed(_pad_states.get(pad), now) or used
+                _pad_states[pad] = now
         return used
     except Exception:
         return False
