@@ -1551,14 +1551,16 @@ function updateOllamaUI(ollama) {
   if (dlPanel && ps && (ps.active || (ps.logs && ps.logs.length > 0))) {
     dlPanel.classList.remove('hidden');
     const oPullStatusEl = document.getElementById('ollama-pull-status');
-    oPullStatusEl.textContent = ps.status || '';
-    oPullStatusEl.title = ps.status || '';
+    // the server's Russian status and log lines get their English in server_text.js
+    const pullStatus = serverText(ps.status || '');
+    oPullStatusEl.textContent = pullStatus;
+    oPullStatusEl.title = pullStatus;
     document.getElementById('ollama-pull-pct').textContent = `${ps.progress || 0}%`;
     document.getElementById('ollama-pull-bar').style.width = `${ps.progress || 0}%`;
 
     const logsBox = document.getElementById('ollama-pull-logs');
     if (logsBox && ps.logs) {
-      logsBox.innerHTML = ps.logs.map(l => `<div>${escapeHtml(l)}</div>`).join('');
+      logsBox.innerHTML = ps.logs.map(l => `<div>${escapeHtml(serverText(l))}</div>`).join('');
       logsBox.scrollTop = logsBox.scrollHeight;
     }
   }
