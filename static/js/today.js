@@ -123,22 +123,19 @@ function tdPillsHtml(span) {
   const pills = [];
   let worked = 0;
   const view = span === 'day' ? hmViewDate() : null;
+  // the day: what its view shows (hmDayShown, static/js/home.js), so the head and the day agree
+  const dayPills = () => {
+    const shown = hmDayShown(view);
+    if (home.calConfigured) pills.push(...meetPills(shown.real));
+    else pills.push(tdPill(shown.recs.length ? plural(shown.recs.length, t('tdRecForms')) : t('tdNoRecordings')));
+  };
   if (view) {  // another day: its meetings and its hours worked (home.days, static/js/home.js)
-    const d = hmDay(view), key = calKey(d.from), other = home.days[key];
+    const other = home.days[calKey(hmDay(view).from)];
     if (!other) return '';
-    if (home.calConfigured) pills.push(...meetPills(tdMeetings(other.events, []).filter(m => m.s < d.to && m.e > d.from)));
-    else {
-      const recs = (state.meetings || []).filter(m => String(m.recorded_at || m.created_at || '').slice(0, 10) === key).length;
-      pills.push(tdPill(recs ? plural(recs, t('tdRecForms')) : t('tdNoRecordings')));
-    }
+    dayPills();
     worked = other.worked || 0;
   } else if (span === 'day') {
-    const today = calKey(new Date());
-    if (home.calConfigured) pills.push(...meetPills(tdMeetings(home.events, []).filter(m => calKey(m.s) === today)));
-    else {
-      const recs = (state.meetings || []).filter(m => String(m.recorded_at || m.created_at || '').slice(0, 10) === today).length;
-      pills.push(tdPill(recs ? plural(recs, t('tdRecForms')) : t('tdNoRecordings')));
-    }
+    dayPills();
     const w = DB.work;
     worked = w && w.enabled && w.days[w.today] ? w.days[w.today].worked : 0;
   } else {
