@@ -1154,9 +1154,13 @@ function vxSyncLayers() {
 function vxFitInView(el, owner) {
   if (!el || !el.isConnected || getComputedStyle(el).position !== 'fixed') return;
   const H = window.innerHeight, W = window.innerWidth, m = 8;
+  // a menu kept in the page (the recording's context menu) opens again in a taller window: the limit set for the
+  // low one goes first, or it would scroll with room to spare
+  if (el._vxFitMax && el.style.maxHeight === el._vxFitMax) { el.style.maxHeight = ''; el.style.overflowY = ''; }
+  el._vxFitMax = '';
   let r = el.getBoundingClientRect();
   if (r.height > H - 2 * m) {
-    el.style.maxHeight = `${zpx(H - 2 * m)}px`;
+    el.style.maxHeight = el._vxFitMax = `${zpx(H - 2 * m)}px`;
     el.style.overflowY = 'auto';
     r = el.getBoundingClientRect();
   }

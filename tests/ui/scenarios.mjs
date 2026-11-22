@@ -254,6 +254,22 @@ await step('menu at the bottom', async () => {
   expect(await page.isVisible('#recording-context-menu button[data-click="ctxExport"]'), 'no export in the menu');
   await page.evaluate(() => hideContextMenu());
   await sleep(250);
+  // the same menu in a low window scrolls inside it; opened again in a tall one it has its whole height back
+  const ctxAt = () => page.evaluate(() => {
+    openRecordingContextMenu({ clientX: 300, clientY: 40, preventDefault() {}, stopPropagation() {} }, 1);
+    return new Promise(ok => setTimeout(() => { const e = document.getElementById('recording-context-menu'), r = e.getBoundingClientRect();
+      ok({ bottom: r.bottom, vh: innerHeight, max: e.style.maxHeight }); }, 250));
+  });
+  await page.setViewportSize({ width: 1300, height: 360 });
+  const low = await ctxAt();
+  expect(low.bottom <= low.vh && !!low.max, `the menu in a low window: ${JSON.stringify(low)}`);
+  await page.evaluate(() => hideContextMenu());
+  await sleep(250);
+  await page.setViewportSize({ width: 1300, height: 860 });
+  const tall = await ctxAt();
+  expect(!tall.max, `the menu kept the limit of the low window: ${JSON.stringify(tall)}`);
+  await page.evaluate(() => hideContextMenu());
+  await sleep(250);
 });
 
 // Undo instead of a question: a task goes at once and comes back with «Отменить» (6.1)
