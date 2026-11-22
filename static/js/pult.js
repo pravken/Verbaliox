@@ -254,6 +254,15 @@ const PANEL_ICON = {
 const panelHead = (id, icon, title) => `<div class="vx-panel-h"><span class="vx-panel-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${PANEL_ICON[icon]}</svg></span><h4 id="${id}">${escapeHtml(title)}</h4></div>`;
 
 // Why the queue waits, or nothing
+// The same reasons in a few words, for the island (the sentence of jobsHold took the whole strip: reported by the
+// user, its text slid under the buttons); the sentence stays in the island's tooltip and the queue window
+function jobsHoldShort() {
+  if (typeof economyOn === 'function' && economyOn()) return t('islandHoldEconomy');
+  if (state.queuePaused) return t('islandHoldPaused');
+  if (state.queueMeeting) return t('islandHoldMeeting');
+  return '';
+}
+
 function jobsHold() {
   if (typeof economyOn === 'function' && economyOn()) return t('jobsHoldEconomy');
   if (state.queuePaused) return t('jobsHoldPaused');
@@ -314,8 +323,9 @@ function renderJobsIsland() {
       html = `${islandRing(pct)}<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
     } else if (!q) {
       label = jobsHold() || t('islandWaiting');
+      const short = jobsHoldShort() || t('islandWaiting');
       html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity=".45"/><path d="M10 9v6M14 9v6"/></svg>`
-        + `<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
+        + `<span class="st-island-t">${escapeHtml(short)}</span>${more}`;
       cls = 'st-island-wait';
     } else if (others) {
       label = moreText;
