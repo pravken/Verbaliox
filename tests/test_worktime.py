@@ -169,12 +169,23 @@ class ApiTest(unittest.TestCase):
         init_db()
         c = TestClient(main.app, base_url="http://127.0.0.1:8790")
         c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        import threading
+
+        # the calls of the requests only: the app's minute loop (a thread of an app started by another test)
+        # may tick meanwhile and asks with the controller, as it should (seen on Windows CI)
+        calls, loops = [], {t.ident for t in threading.enumerate() if t is not threading.current_thread()}
+
+        def idle(**kw):
+            if threading.get_ident() not in loops:
+                calls.append(kw)
+            return 3.0
+
         with mock.patch.object(worktime, "gamepad_used", side_effect=AssertionError("read by the page")), \
-             mock.patch.object(worktime, "idle_seconds", return_value=3.0) as idle:
+             mock.patch.object(worktime, "idle_seconds", side_effect=idle):
             self.assertEqual(c.get("/api/worktime", params={"start": "2026-11-16", "end": "2026-11-23"}).status_code, 200)
             self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-11-16", "end": "2026-11-23"}).status_code, 200)
-        self.assertTrue(idle.call_args_list)
-        self.assertTrue(all(call.kwargs.get("pad") is False for call in idle.call_args_list), idle.call_args_list)
+        self.assertTrue(calls)
+        self.assertTrue(all(kw.get("pad") is False for kw in calls), calls)
 
 
 @unittest.skipIf(worktime is None, "app dependencies not installed")
