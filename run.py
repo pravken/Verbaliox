@@ -1166,8 +1166,19 @@ def session_ending() -> bool:
         return False
 
 
+_stop_lock = threading.Lock()
+
+
 def _stop_work() -> None:
-    """Before the process ends: recordings finished, work processes ended (app/shutdown.py)."""
+    """Before the process ends: recordings finished, work processes ended (app/shutdown.py). One call at a
+    time: the window closed, the main thread finishes the recordings while the thread that ends a hanging
+    window (_exit_soon) calls this too two seconds later; it waits here for the first to be done instead of
+    ending the process with os._exit while FFmpeg still writes the end of a screen recording (found in review)."""
+    with _stop_lock:
+        _stop_work_now()
+
+
+def _stop_work_now() -> None:
     remove_pid_file()
     try:
         from app import shutdown
