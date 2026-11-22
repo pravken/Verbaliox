@@ -1389,7 +1389,9 @@ try {
   const saved = JSON.parse(localStorage.getItem('verbaliox_studio') || '{}');
   Object.assign(studio, {
     view: ['under', 'side', 'tr'].includes(saved.view) ? saved.view : 'under',
-    speed: saved.speed || 'quality', font: (saved.font && saved.font !== 26) ? saved.font : STUDIO_FONT, speech: saved.speech || 'auto',
+    // a size saved by an earlier version (16–56 px) is kept within the range of A−/A+ (12–40 px): the chat of a
+    // transcript reads it too
+    speed: saved.speed || 'quality', font: (Number(saved.font) && saved.font !== 26) ? Math.max(12, Math.min(40, Number(saved.font))) : STUDIO_FONT, speech: saved.speech || 'auto',
   });
 } catch (e) {}
 document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);  // the transcript reads it too, from the start
