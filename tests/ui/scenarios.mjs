@@ -1183,7 +1183,7 @@ await step('meeting strip', async () => {
 // and a click outside close it
 await step('queue and load windows', async () => {
   expect(await page.locator('#rail-jobs').count() === 0, 'the rail still has its «Очередь»');
-  await page.evaluate(() => { state.queue = [{ id: 9902, state: 'running', kind: 'transcribe', title: 'Тест', progress: 40, position: 0 }]; renderJobsRail(); });
+  await page.evaluate(() => { state.queue = [{ id: 9902, state: 'running', kind: 'transcribe', title: 'Тест', progress: 40, position: 0 }]; renderJobsIsland(); });
   expect(await page.isVisible('#strip-island'), 'no island while a job runs');
   await page.click('#strip-island');
   await sleep(300);
@@ -1192,7 +1192,7 @@ await step('queue and load windows', async () => {
   expect(r[0][0] >= r[1][2] && Math.abs(r[0][1] - r[1][1]) < 2, `the queue window is not under the island: ${JSON.stringify(r)}`);
   await page.keyboard.press('Escape');
   expect(!(await page.isVisible('#jobs-pop')), 'Escape did not close the queue window');
-  await page.evaluate(() => { state.queue = []; renderJobsRail(); island.had = false; clearTimeout(island.doneTimer); island.doneTimer = null; island.html = ''; document.getElementById('strip-island').classList.add('hidden'); });
+  await page.evaluate(() => { state.queue = []; renderJobsIsland(); clearTimeout(island.doneTimer); island.doneTimer = null; island.html = ''; document.getElementById('strip-island').classList.add('hidden'); });
   await page.click('#sb-load');
   await sleep(500);
   expect(await page.isVisible('#load-pop'), 'the load window did not open');
