@@ -1156,7 +1156,15 @@ function closeAllMenus(keep, from) {
   }
 }
 
-new MutationObserver(vxSyncLayers).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
+// A change of text alone (the level meter and the timer of a recording, 20 times a second for hours), or of the
+// colour of an element marked data-vx-live (the level bars), opens or closes no menu: it is not looked at. Each
+// look goes over the whole page for its windows, and a recording of a meeting spent a tenth of the page's time
+// on it with a large library
+const vxElementNodes = (nodes) => { for (const n of nodes) if (n.nodeType === 1) return true; return false; };
+const vxMattersFor = (records) => records.some(r => (r.type === 'attributes' ? !r.target.hasAttribute('data-vx-live')
+  : vxElementNodes(r.addedNodes) || vxElementNodes(r.removedNodes)));
+new MutationObserver((records) => { if (vxMattersFor(records)) vxSyncLayers(); })
+  .observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
 
 // A press of a menu's own button while it is open: the menu closes, and the click that follows does not open it again
 function vxPressOwner(e, el) {

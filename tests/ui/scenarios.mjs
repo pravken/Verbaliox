@@ -256,6 +256,33 @@ await step('menu at the bottom', async () => {
   await sleep(250);
 });
 
+// The menus are looked for after a change that can open one, not after the level meter and the timer of a recording
+// (20 times a second for a whole meeting, each look going over the whole page)
+await step('menus not looked for on a meter tick', async () => {
+  const r = await page.evaluate(async () => {
+    const real = window.vxSyncLayers;
+    let looks = 0;
+    window.vxSyncLayers = () => { looks++; real(); };
+    const wait = () => new Promise(res => setTimeout(res, 50));
+    try {
+      document.getElementById('studio-db').textContent = '-12 dB';
+      document.getElementById('studio-level').className = 'h-full bg-apple-red transition-all duration-75';
+      await wait();
+      const tick = looks;
+      openRecordingContextMenu({ clientX: 300, clientY: 300, preventDefault() {}, stopPropagation() {} }, 1);
+      await wait();
+      const menu = looks;
+      hideContextMenu();
+      return { tick, menu };
+    } finally {
+      window.vxSyncLayers = real;
+    }
+  });
+  expect(r.tick === 0, `a meter tick made ${r.tick} looks`);
+  expect(r.menu > 0, 'an opened menu was not seen');
+  await sleep(250);
+});
+
 // Undo instead of a question: a task goes at once and comes back with «Отменить» (6.1)
 await step('undo a removal', async () => {
   await page.evaluate(() => switchAppView('tasks'));
