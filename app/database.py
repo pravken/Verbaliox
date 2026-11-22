@@ -963,7 +963,18 @@ def update_meeting_progress(
     asr_now = app_status.asr_model(meeting_id)
     if asr_now:
         event["asr_now"] = asr_now  # the model recognizing it now
+    if meeting_id in app_status.mixing:
+        event.update(_mix_fields(meeting_id))
     events.publish(event)
+
+
+def _mix_fields(meeting_id: int) -> Dict[str, Any]:
+    """A recording whose tracks are being mixed: when its mix begins (mix_wait: a time, 0 after the meeting,
+    None not waiting) and whether it is deleted once mixed — both keys always, so the page drops an old value."""
+    from app import app_status
+
+    st = app_status.mix_state(meeting_id)
+    return {"mix_wait": st.get("mix_wait"), "mix_deleting": bool(st.get("mix_deleting"))}
 
 
 def save_meeting_results(
@@ -1883,6 +1894,8 @@ def list_meetings() -> List[Dict[str, Any]]:
                 unmeasured.append((d["media_size"], d["id"]))
         d["size_bytes"] = d.pop("media_size") or 0
         d.pop("media_path", None)
+        if d.get("status") == "mixing":
+            d.update(_mix_fields(d["id"]))
         result.append(d)
     try:  # the features each recording is about, and the model's suggestions (app/features.py)
         from app.features import feature_map, suggestion_map
@@ -2292,6 +2305,8 @@ def _deserialize_meeting(d: Dict[str, Any], conn: sqlite3.Connection) -> Dict[st
     from app import app_status
 
     d["asr_now"] = app_status.asr_model(d["id"])  # the model recognizing it right now, if any
+    if d.get("status") == "mixing":
+        d.update(_mix_fields(d["id"]))
     return d
 
 

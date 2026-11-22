@@ -39,6 +39,22 @@ def kind_label(kind: str, ru: str = "Задача", en: str = "Task") -> str:
 
 # Stopped recordings whose tracks are being mixed (app/api/recording.py): no job may take them meanwhile
 mixing: set = set()
+# Of them, the ones whose mix waits for the end of a meeting («Не мешать на встречах»): the time it may begin
+# (0: after the meeting going on), shown on the card as a countdown; and the ones marked for deletion, deleted
+# as soon as the mix is over
+mix_wait: Dict[int, float] = {}
+mix_deleting: set = set()
+
+
+def mix_state(meeting_id: int) -> Dict[str, Any]:
+    """What the page shows of a recording being mixed: {"mix_wait": time or 0} while it waits, and
+    {"mix_deleting": True} once deleted; {} otherwise."""
+    out: Dict[str, Any] = {}
+    if meeting_id in mix_wait:
+        out["mix_wait"] = mix_wait.get(meeting_id, 0.0)
+    if meeting_id in mix_deleting:
+        out["mix_deleting"] = True
+    return out
 
 # The speech model recognizing each recording right now (the routed model, each model of the precise
 # mode in turn): shown as «Идёт расшифровка: <model>», the recording's own choice may be «Авто»

@@ -96,6 +96,7 @@ function ltFolder(m) {
 function ltStatus(m) {
   if (m.status === 'failed') return [t('statusFailed'), '#FF453A', 0];
   if (m.status === 'queued') return [t('ltQueued'), '#FF9F0A', 1];
+  if (mixWaiting(m)) return [mixWaitChip(m), '#FF9F0A', 2];  // its mix waits for the end of a meeting: the time left
   if (!DONE_STATUSES.includes(m.status)) return [`${t('ltBusy')} ${Number(m.progress) || 0}%`, '#FF9F0A', 2];
   if (m.status === 'cancelled') return [t('statusCancelled'), '#8E8E93', 3];
   if (m.status === 'cleared') return [t('statusClearedShort'), '#8E8E93', 4];
@@ -163,7 +164,8 @@ function ltFaces(m, max = 3) {
 function ltStatusChip(m) {
   const [label, color] = ltStatus(m);
   const tip = m.status === 'failed' && m.error_message ? humanError(m.error_message).short : label;
-  return `<span class="lt-st" style="--st:${color}" title="${escapeHtml(tip)}"><i></i><span class="lt-ell">${escapeHtml(label)}</span></span>`;
+  const tick = mixWaiting(m) ? mixTickAttrs(m, 'chip') : '';
+  return `<span class="lt-st" style="--st:${color}" title="${escapeHtml(mixWaiting(m) ? mixWaitTip(m) : tip)}"><i></i><span class="lt-ell"${tick}>${escapeHtml(label)}</span></span>`;
 }
 
 // The name, with the places the search found in the text under it

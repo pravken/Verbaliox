@@ -231,9 +231,9 @@ class TranscriptionWaitsForTheMeetingTest(unittest.TestCase):
         from app import main  # noqa: F401 - app/api/recording.py is loaded by it
         from app.api import recording
 
-        answers = iter([True, True, False])
-        with mock.patch("app.meeting_guard.holds_queue", side_effect=lambda: next(answers)), \
+        answers = iter([0.0, 0.0, None])
+        with mock.patch("app.meeting_guard.hold_until", side_effect=lambda: next(answers)), \
                 mock.patch("time.sleep") as slept, mock.patch("app.database.update_meeting_progress") as progress:
-            recording._wait_for_meeting_end(7)
+            self.assertTrue(recording._wait_for_meeting_end(7))
         self.assertEqual(slept.call_count, 2)
-        self.assertEqual(progress.call_args_list[0].kwargs["stage_text"], "Сведение дорожек — после встречи")
+        self.assertEqual(progress.call_args_list[0].kwargs["stage_text"], "Сведение дорожек: начнётся после встречи")
