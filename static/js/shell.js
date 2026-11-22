@@ -422,15 +422,17 @@ function openRecMenu(e) {
   const def = defaultRecordPresetId();
   const key = state.system?.settings?.record_hotkey ?? 'Ctrl+Alt+R';  // empty: the hotkey is off
   const dkey = state.system?.settings?.dictation_hotkey ?? 'Ctrl+Alt+D';
-  const item = (fn, args, label, mark = '', hint = '') => `<button class="macos-menu-item rec-mi" role="menuitem" data-fn="${fn}" data-args='${escapeHtml(JSON.stringify(args))}'>`
-    + `<span class="rec-mi-mark" aria-hidden="true">${mark}</span><span class="flex-1 min-w-0 truncate">${escapeHtml(label)}</span>${hint ? `<kbd class="rec-mi-key">${escapeHtml(hint)}</kbd>` : ''}</button>`;
+  // no marks before the items (they were a tick, ◉, an emoji and ⚙, one of each kind): the default preset is told by
+  // the accent, as in the other menus
+  const item = (fn, args, label, on = false, hint = '') => `<button class="macos-menu-item rec-mi${on ? ' tm-on' : ''}" role="menuitem" data-fn="${fn}" data-args='${escapeHtml(JSON.stringify(args))}'${on ? ' aria-current="true"' : ''}>`
+    + `<span class="flex-1 min-w-0 truncate">${escapeHtml(label)}</span>${hint ? `<kbd class="rec-mi-key">${escapeHtml(hint)}</kbd>` : ''}</button>`;
   menu.innerHTML = `<div class="rec-mh">${escapeHtml(t('recMenuHead'))}</div>`
-    + recordPresets().map(p => item('recMenuPreset', [p.id], presetLabel(p), p.id === def ? '✓' : '', p.id === def ? key : '')).join('')
+    + recordPresets().map(p => item('recMenuPreset', [p.id], presetLabel(p), p.id === def, p.id === def ? key : '')).join('')
     + '<div class="my-1 h-px bg-white/10"></div>'
-    + item('recMenuLive', [], t('recMenuLive'), '◉')
-    + item('recMenuDictate', [], t('hmDict'), '🎙', dkey)
+    + item('recMenuLive', [], t('recMenuLive'))
+    + item('recMenuDictate', [], t('hmDict'), false, dkey)
     + '<div class="my-1 h-px bg-white/10"></div>'
-    + item('recMenuSettings', [], t('tbRecSettings') + '…', '⚙');
+    + item('recMenuSettings', [], t('tbRecSettings') + '…');
   menu.addEventListener('click', ev => {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
