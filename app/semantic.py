@@ -132,6 +132,10 @@ def index_meeting(meeting_id: int, settings: Optional[Dict[str, str]] = None) ->
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with _db_lock:
         conn = get_connection()
+        if not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            # deleted while it was embedded: its text must not stay in the index for good (found in review)
+            conn.close()
+            return 0
         # The text was edited while it was embedded (seconds): the index stays «stale», so the edit is
         # indexed next time — it was marked fresh and the edit never reached the search
         stale = 1 if text_edits.get(meeting_id, 0) != edits_before else 0
