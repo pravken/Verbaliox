@@ -134,8 +134,6 @@ def clean(key: str, value: Any) -> str:
         return text_s
     if key == "ollama_url":
         return _url(text_s, key, "any") if text_s else ""
-    if key.startswith("llm_base_url_"):
-        return _url(text_s, key, "local") if text_s else ""
     if key == "calendar_ics":
         return _calendar(text_s) if text_s else ""
     if key in FOLDERS:

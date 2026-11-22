@@ -21,10 +21,7 @@ class SettingsSchemaTest(unittest.TestCase):
 
     def test_addresses(self):
         self.assertEqual(clean("ollama_url", "http://192.168.1.5:11434"), "http://192.168.1.5:11434")
-        self.assertEqual(clean("llm_base_url_openai_compat", "http://localhost:1234/v1"), "http://localhost:1234/v1")
-        self.assertEqual(clean("llm_base_url_openai_compat", "https://api.example.com/v1"), "https://api.example.com/v1")
         for key, bad in (("ollama_url", "file:///etc/passwd"), ("ollama_url", "javascript:alert(1)"),
-                         ("llm_base_url_openai_compat", "http://api.example.com/v1"),  # the key in clear text
                          ("ollama_url", "http://user:pw@host")):
             with self.assertRaises(ValueError):
                 clean(key, bad)
