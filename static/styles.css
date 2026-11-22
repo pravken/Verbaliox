@@ -2840,8 +2840,10 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-sa svg { width: 16px; height: 16px; flex: none; opacity: 0.85; }
 .lt-sa:hover { background: rgba(255, 255, 255, 0.09); color: #FFFFFF; }
 .lt-sa-more { width: 28px; padding: 0; justify-content: center; font-size: 16px; letter-spacing: 1px; }
-.lt-sa-danger { color: #FF8A80; }
-.lt-sa-danger:hover { background: rgba(255, 69, 58, 0.16); color: #FFB4AB; }
+/* «Удалить» stands out (asked by the user): a red fill of its own, the rest stay quiet */
+.lt-sa-danger { margin-left: 2px; padding: 0 12px; background: rgba(255, 69, 58, 0.18); box-shadow: inset 0 0 0 1px rgba(255, 69, 58, 0.45); color: #FF9F97; font-weight: 600; }
+.lt-sa-danger svg { opacity: 1; }
+.lt-sa-danger:hover { background: rgba(255, 69, 58, 0.3); color: #FFD2CD; }
 .lt-sa-sep { width: 1px; height: 18px; margin: 0 4px; background: rgb(var(--accent-rgb) / 0.35); flex: none; }
 .lt-sa-x { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: 0 6px 0 -4px; border: 0; border-radius: 6px;
   background: none; color: var(--hc-dim, #AEAEB2); font-size: 12px; cursor: pointer; }
