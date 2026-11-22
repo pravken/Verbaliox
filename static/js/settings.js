@@ -3061,7 +3061,7 @@ function setupDoneList(s) {
 // the steps are asked again at the next start; the release notes are shown once per version (app.js
 // maybeShowWhatsNew); «Готово» saves the choices shown and marks every step as answered (setup_done).
 const NEWS_IC = { 'days-off': 'meet', worktime: 'clock', 'join-call': 'link' };
-const AU = { s: null, steps: [], notes: '', version: '', url: '', st: null, answered: {}, all: false, busy: false };
+const AU = { s: null, steps: [], notes: '', version: '', url: '', st: null, answered: {}, all: null, busy: false };  // all: null — by default
 
 async function openSetupSteps(s) {
   if (document.getElementById('first-run-wizard')) return;
@@ -3134,12 +3134,16 @@ function openAfterUpdate() {
 function drawAfterUpdate() {
   const wrap = document.getElementById('upd-after');
   if (!wrap) return;
+  // the focus is kept across the redraw on the same button, or put into the window (it stayed on the page under it)
+  const had = document.activeElement && wrap.contains(document.activeElement) ? document.activeElement.closest('button[data-a]') : null;
+  const again = had ? `button[data-a="${had.dataset.a}"]${had.dataset.id ? `[data-id="${CSS.escape(had.dataset.id)}"]` : ''}` : '';
   const version = AU.version || (typeof updateState !== 'undefined' && updateState.info && updateState.info.current) || '';
   const setups = AU.steps.filter(x => x.kind === 'setup');
   const news = AU.steps.filter(x => x.kind === 'news');
   const groups = auNotesGroups(AU.notes);
   const total = groups.reduce((n, g) => n + g.items.length, 0);
-  const allOpen = AU.all || (!setups.length && !news.length);
+  // open by default when there is nothing else to show; the button folds it either way (it could not without steps)
+  const allOpen = AU.all ?? (!setups.length && !news.length);
   const ask = step => {
     const a = AU.answered[step.id];
     const chip = a === 'saved' ? `<span class="upd-chip upd-chip-ok">${escapeHtml(t('auSaved'))}</span>`
@@ -3170,7 +3174,10 @@ function drawAfterUpdate() {
       <button class="tk-btn" data-a="later" title="${escapeHtml(t('setupLaterTip'))}">${escapeHtml(t('setupLater'))}</button>
       <button class="tk-btn tk-btn-primary" data-a="done">${escapeHtml(t('setupDone'))}</button></div>
   </div>`;
-  wrap.querySelector('#upd-after-win').style.maxHeight = `${Math.round(viewH() - 32)}px`;
+  const win = wrap.querySelector('#upd-after-win');
+  win.style.maxHeight = `${Math.round(viewH() - 32)}px`;
+  win.tabIndex = -1;
+  ((again && wrap.querySelector(again)) || win).focus({ preventScroll: true });
 }
 
 async function auSave(ids, extra = {}) {
@@ -3187,11 +3194,22 @@ async function auSave(ids, extra = {}) {
 function closeAfterUpdate() {
   document.getElementById('upd-after')?.remove();
   document.removeEventListener('keydown', auKey, true);
-  AU.steps = []; AU.notes = ''; AU.answered = {}; AU.all = false;
+  AU.steps = []; AU.notes = ''; AU.answered = {}; AU.all = null;
 }
 
 function auKey(e) {
-  if (e.key === 'Escape' && document.getElementById('upd-after')) { e.stopPropagation(); closeAfterUpdate(); }
+  const wrap = document.getElementById('upd-after');
+  if (!wrap) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAfterUpdate(); return; }
+  if (e.key !== 'Tab') return;
+  // Tab goes round inside the window, never to the page under it
+  const list = [...wrap.querySelectorAll('button:not([disabled]), select, input, a[href], [tabindex="0"]')].filter(x => x.offsetParent);
+  if (!list.length) return;
+  const i = list.indexOf(document.activeElement);
+  if (e.shiftKey ? i <= 0 : i === list.length - 1 || i < 0) {
+    e.preventDefault();
+    (e.shiftKey ? list[list.length - 1] : list[0]).focus();
+  }
 }
 
 async function auClick(e) {
