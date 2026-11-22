@@ -240,6 +240,7 @@ function enterTheatre() {
   pane.classList.remove('hidden');
   moveIntoTheatre('footer', document.getElementById('player-footer'), document.getElementById('theatre-footer-slot'));
   document.getElementById('theatre').classList.remove('hidden');
+  if (featureDrawerOpen()) closeFeatureDrawer();  // the window «Фичи» (z 45) stayed over the theatre (z 40)
   applyVideoLayout();
   applyTheatreLayout();
 }

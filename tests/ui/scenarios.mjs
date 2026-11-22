@@ -1431,6 +1431,13 @@ await step('features drawer', async () => {
   await page.keyboard.press('Escape');
   await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer over a recording');
   expect(!(await open()), 'the drawer is still open');
+  // the captions on the whole window go over everything: the drawer does not stay above them
+  await page.evaluate(() => { switchAppView('studio'); openFeatureDrawer(); });
+  await poll(() => featureDrawerOpen(), 'the drawer did not open over the studio');
+  await page.evaluate(() => toggleStudioFocus(true));
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'the drawer stayed over the captions on the whole window');
+  await page.evaluate(() => { toggleStudioFocus(false); switchAppView('home'); });
+  await sleep(300);
   await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }).then(() => loadFeatures()), fid);
 });
 

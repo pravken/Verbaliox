@@ -1436,6 +1436,8 @@ function toggleStudioFocus(on) {
   document.getElementById('studio-view').classList.toggle('studio-focus', studio.focus);
   document.getElementById('studio-focus-label').textContent = t(studio.focus ? 'studioFocusExit' : 'studioFocus');
   if (studio.focus) {
+    // the window «Фичи» (z 45) stayed over the captions covering the whole window (z 40)
+    if (featureDrawerOpen()) closeFeatureDrawer();
     document.getElementById('studio-vram-chips').innerHTML = vram.html || '';
     scheduleVramRefresh(300);
   }
