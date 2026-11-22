@@ -159,6 +159,39 @@ class ApiTest(unittest.TestCase):
         self.assertIn("countries", r.json())
         self.assertEqual(c.post("/api/meeting/join", json={"url": "https://example.com/x"}).status_code, 400)
 
+    def test_the_page_does_not_take_the_controller_changes(self):
+        """Found in the review: the page's routes read the controller and took the changes the minute loop
+        should see."""
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        init_db()
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        with mock.patch.object(worktime, "gamepad_used", side_effect=AssertionError("read by the page")), \
+             mock.patch.object(worktime, "idle_seconds", return_value=3.0) as idle:
+            self.assertEqual(c.get("/api/worktime", params={"start": "2026-11-16", "end": "2026-11-23"}).status_code, 200)
+            self.assertEqual(c.get("/api/worktime/apps", params={"start": "2026-11-16", "end": "2026-11-23"}).status_code, 200)
+        self.assertTrue(idle.call_args_list)
+        self.assertTrue(all(call.kwargs.get("pad") is False for call in idle.call_args_list), idle.call_args_list)
+
+
+@unittest.skipIf(worktime is None, "app dependencies not installed")
+class GamepadTest(unittest.TestCase):
+    """Found in the review: a resting stick drifts and changes the packet number, so an idle controller made
+    every minute count as work."""
+
+    def test_a_drifting_stick_is_no_use_a_press_or_a_move_is(self):
+        rest = (0, 0, 0, 1200, -900, 300, 4000)
+        self.assertFalse(worktime._pad_changed(None, rest))  # the first look: nothing to compare with
+        self.assertFalse(worktime._pad_changed(rest, (0, 0, 0, 1500, -700, 800, 3500)))  # drift
+        self.assertTrue(worktime._pad_changed(rest, (0x1000, 0, 0, 1200, -900, 300, 4000)))  # a button
+        self.assertTrue(worktime._pad_changed(rest, (0, 200, 0, 1200, -900, 300, 4000)))  # a trigger
+        self.assertFalse(worktime._pad_changed(rest, (0, 10, 0, 1200, -900, 300, 4000)))  # a trigger's noise
+        self.assertTrue(worktime._pad_changed(rest, (0, 0, 0, 20000, -900, 300, 4000)))  # the left stick moved
+        self.assertTrue(worktime._pad_changed(rest, (0, 0, 0, 1200, -900, 300, -9000)))  # the right stick moved
+
 
 if __name__ == "__main__":
     unittest.main()

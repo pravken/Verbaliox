@@ -46,9 +46,9 @@ def enabled(settings: Optional[Dict[str, str]] = None) -> bool:
     return (settings.get("analysis_after_meetings") or "true").lower() == "true"
 
 
-def busy(settings: Optional[Dict[str, str]] = None) -> str:
+def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = False) -> str:
     """Why the analysis waits: "economy" (recording only, app/economy.py), "recording", "calendar", or ""
-    (no meeting, or the setting is off)."""
+    (no meeting, or the setting is off). cached_calendar: the calendar as read already, never read now."""
     from app import economy
 
     if economy.on(settings):
@@ -62,7 +62,7 @@ def busy(settings: Optional[Dict[str, str]] = None) -> str:
     try:
         from app import calendar_ics
 
-        if calendar_ics.current_meeting():
+        if calendar_ics.current_meeting(cached=True) if cached_calendar else calendar_ics.current_meeting():
             return "calendar"
     except Exception:
         pass
@@ -178,8 +178,10 @@ def holds_queue(now: Optional[float] = None) -> bool:
     with _lock:
         looked = _state["looked"]
     if not looked:  # just started (a recording recovered, jobs resumed): asked now, not after the first poll
+        # The calendar only as read already: the queue asks under its lock, and a read now (Outlook up to 90 s,
+        # a link up to 60 s) held every new job meanwhile (found in the review)
         try:
-            return busy() not in ("", "economy")
+            return busy(cached_calendar=True) not in ("", "economy")
         except Exception:
             return False
     with _lock:

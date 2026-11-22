@@ -110,7 +110,7 @@ def get_meeting(id: int, sections: Optional[List[str]] = None) -> Dict[str, Any]
     from app.database import get_meeting as load
 
     if int(id) in _hidden():
-        raise ValueError("This recording is a dictation: it is not given to an agent")
+        raise ValueError("This recording is hidden from the agent")
     m = load(int(id))
     if not m:
         raise ValueError("No meeting with this id")

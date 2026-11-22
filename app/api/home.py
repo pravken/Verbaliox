@@ -82,7 +82,7 @@ EARLY = timedelta(minutes=10)
 
 
 @router.get("/api/calendar/range")
-def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = "ru") -> Dict[str, Any]:
+def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = "ru", user: bool = False) -> Dict[str, Any]:
     """The calendar's meetings and the recordings of a week or a month (start…end, local time): a
     meeting carries the recording made during it, the other recordings come on their own."""
     from app import calendar_ics
@@ -91,8 +91,8 @@ def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = 
     a, b = _parse_local(start), _parse_local(end)
     if not a < b or (b - a).days > 45:
         raise HTTPException(status_code=400, detail="Неверный промежуток времени")
-    if refresh:
-        calendar_ics.events(force=True)
+    if refresh or user:  # user: a refresh the user asked for (calendar_ics.events), not a page reload
+        calendar_ics.events(force=True, user=user)
     items = calendar_ics.day(a, b)
     made = sorted(((t, m) for m in list_meetings() if (t := _recorded_local(m)) and a <= t < b), key=lambda x: x[0])
     used = set()
@@ -130,7 +130,7 @@ def api_meeting_join(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/api/calendar/day")
-def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, Any]:
+def api_calendar_day(start: str, end: str, refresh: bool = False, user: bool = False) -> Dict[str, Any]:
     """The meetings of the working day (start…end, local time; past midnight for a night shift), each
     with the recording made during it, if any, and the recordings made outside any meeting (a day gone by
     shows them on its timeline)."""
@@ -140,8 +140,8 @@ def api_calendar_day(start: str, end: str, refresh: bool = False) -> Dict[str, A
     a, b = _parse_local(start), _parse_local(end)
     if not a < b or (b - a).days > 2:
         raise HTTPException(status_code=400, detail="Неверный промежуток времени")
-    if refresh:
-        calendar_ics.events(force=True)
+    if refresh or user:  # user: a refresh the user asked for (calendar_ics.events), not a page reload
+        calendar_ics.events(force=True, user=user)
     items = calendar_ics.day(a, b)
     made = []
     library = list_meetings()

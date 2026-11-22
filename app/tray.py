@@ -123,6 +123,7 @@ def _setup_prototypes() -> None:
     user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
     shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
+    shell32.Shell_NotifyIconW.restype = wintypes.BOOL
     gdi32.CreateDIBSection.argtypes = [wintypes.HDC, ctypes.c_void_p, wintypes.UINT,
                                        ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.DWORD]
     gdi32.CreateDIBSection.restype = wintypes.HBITMAP
@@ -228,15 +229,18 @@ class Tray:
         self.tip = "Verbaliox"
         self._pending: Optional[Tuple[str, str, int, str]] = None
         self._ready = threading.Event()
+        self.shown = False  # the icon is in the notification area (Shell_NotifyIcon took it)
+        self.on_shown: Optional[Callable[[], None]] = None  # the icon came later (Explorer started after the app)
         self._lock = threading.Lock()
         self._wndproc = WNDPROC(self._proc)  # kept alive for the lifetime of the window
 
     # ---- public, any thread
     def start(self) -> bool:
+        """Whether the icon really shows: only then may the window hide into it."""
         if sys.platform != "win32":
             return False
         threading.Thread(target=self._run, daemon=True, name="tray").start()
-        return self._ready.wait(5)
+        return self._ready.wait(5) and bool(self.hwnd) and self.shown
 
     def set_status(self, state: str, tip: str) -> None:
         with self._lock:
@@ -305,8 +309,18 @@ class Tray:
         nid.szTip = ("Verbaliox — " + self.tip)[:127]
         return nid
 
-    def _add_icon(self) -> None:
-        shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(self._nid(NIF_MESSAGE | NIF_ICON | NIF_TIP)))
+    def _add_icon(self) -> bool:
+        ok = bool(self.hwnd) and bool(shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(self._nid(NIF_MESSAGE | NIF_ICON | NIF_TIP))))
+        if not ok:
+            print("[tray] the icon was not added to the notification area", file=sys.stderr)
+        came = ok and not self.shown
+        self.shown = self.shown or ok
+        if came and self._ready.is_set() and self.on_shown:
+            try:
+                self.on_shown()
+            except Exception as e:  # noqa: BLE001
+                print(f"[tray] {e}", file=sys.stderr)
+        return ok
 
     def _run(self) -> None:
         _setup_prototypes()

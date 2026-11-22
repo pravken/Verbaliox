@@ -256,6 +256,20 @@ class ApplyUpdateTest(unittest.TestCase):
         self.assertFalse(updater._process_running(_dead_pid()))
         self.assertFalse(updater._process_running(0))
 
+    def test_a_protected_process_with_the_number_does_not_block_every_start(self):
+        """Found in the review: after a power cut the installer's number may belong to a protected process
+        (access denied), and every start waited on «Идёт установка обновления»."""
+        now = time.time()
+        with mock.patch.object(updater.os, "kill", side_effect=PermissionError), \
+             mock.patch.object(updater.sys, "platform", "linux"):
+            with mock.patch.object(updater, "_boot_time", return_value=now - 600):
+                self.assertTrue(updater._process_running(4242, now - 60))  # written after the start: at work
+                self.assertFalse(updater._process_running(4242, now - 3600))  # written before Windows started
+                self.assertTrue(updater._process_running(4242))  # no time in the mark: as before
+            with mock.patch.object(updater, "_boot_time", return_value=None):
+                self.assertTrue(updater._process_running(4242, now - 60))
+                self.assertFalse(updater._process_running(4242, now - updater.INSTALL_MAX_SECONDS - 60))  # long ago
+
     def test_an_update_cut_off_half_way_is_put_back_at_the_next_start(self):
         """Found in the audit: a switched-off computer during an update left two versions mixed."""
         _release_zip(self.zip, {"app/main.py": "new main", "app/new.py": "added"})
