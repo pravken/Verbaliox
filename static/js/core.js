@@ -1115,6 +1115,7 @@ const VX_LAYERS = [
   ['kpi-cfg', vxTry(() => DB.kpiCfg && state.appView === 'dashboard'), () => { DB.kpiCfg = false; dbKpiRedraw(); }, '.db-kc'],
   ['db-detail', vxTry(() => !!DB_DETAIL.kind && state.appView === 'dashboard'), vxCall('dbCloseDetail'), '#db-detail', 'mode'],
   ['db-edit', vxTry(() => DB.edit && state.appView === 'dashboard'), vxCall('toggleDashEdit'), '#db-grid', 'mode'],
+  ['ft-drawer', vxTry(() => featureDrawerOpen()), vxCall('closeFeatureDrawer'), '#ft-drawer', 'mode'],
   ['modal', () => !!document.querySelector('.modal-backdrop:not(.hidden), #upd-after')
     || [...document.querySelectorAll('[id^="modal-"]:not(.hidden)')].some(m => !m.closest('#settings-view')), () => {}, '', 'modal'],
 ].map(([name, isOpen, close, sel, kind]) => ({ name, isOpen, close, sel, kind: kind || 'menu', open: false, at: 0, owner: null, ownerEl: null }));

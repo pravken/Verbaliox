@@ -1351,6 +1351,68 @@ await step('esc closes the top layer only', async () => {
   expect(!(await page.evaluate(() => DB.edit)), 'Esc did not leave «Настроить»');
 });
 
+// The window «Фичи» (asked by the user): a drawer at the right edge over any section, opened from «Все фичи ▾» of
+// «Обзор», «Фича ▾» of «Записи», the chip «Фича:» of a recording and the card «Фичи» of «Словарь»; a feature is
+// made and renamed in it, Esc and a second click on its opener close it
+await step('features drawer', async () => {
+  const poll = async (f, what, ms = 4000) => {
+    for (let t = 0; t < ms; t += 100) { if (await page.evaluate(f)) return; await sleep(100); }
+    throw new Error(what);
+  };
+  const open = () => page.evaluate(() => featureDrawerOpen());
+  await page.evaluate(() => switchAppView('dashboard')); await sleep(1200);
+  await page.click('#db-feature-btn'); await sleep(250);
+  await page.click('#text-menu button:has-text("Управлять фичами")');
+  await poll(() => featureDrawerOpen(), '«Управлять фичами…» of «Обзор» did not open the drawer');
+  await poll(() => document.getElementById('ft-drawer').getAnimations().every(a => a.playState === 'finished'), 'the drawer did not settle');
+  const box = await page.evaluate(() => {
+    const r = document.getElementById('ft-drawer').getBoundingClientRect(), s = document.getElementById('app-strip').getBoundingClientRect();
+    return { w: Math.round(r.width), right: Math.round(window.innerWidth - r.right), top: Math.round(r.top - s.bottom), z: +getComputedStyle(document.getElementById('ft-drawer')).zIndex };
+  });
+  expect(box.w >= 370 && box.w <= 390 && box.right === 0 && box.top === 0 && box.z > 30 && box.z < 50, `the drawer's place: ${JSON.stringify(box)}`);
+  await page.fill('#ft-dr-new', 'Окно фич');
+  await page.click('#ft-dr-add');
+  await poll(() => document.querySelector('#ft-dr-list .ft-dr-on')?.textContent.includes('Окно фич'), 'the new feature is not chosen in the list');
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#ft-dr-list .ft-dr-row')].map(r => Math.round(r.getBoundingClientRect().height)));
+  expect(rows.every(h => h === 36), `rows not 36 px: ${rows}`);
+  const fields = await page.evaluate(() => [...document.querySelectorAll('#ft-dr-form input.ft-dr-in')].map(i => Math.round(i.getBoundingClientRect().height)));
+  expect(fields.length === 3 && fields.every(h => h === 32), `fields not 32 px: ${fields}`);
+  await page.fill('#ft-dr-form [data-key="name"]', 'Окно фич 2');
+  await page.keyboard.press('Tab');
+  await poll(() => (state.features || []).some(f => f.name === 'Окно фич 2') && document.querySelector('#ft-dr-list .ft-dr-on')?.textContent.includes('Окно фич 2'), 'the rename did not reach the list');
+  await page.keyboard.press('Escape');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer');
+  // «Записи»: «Фича ▾»
+  await page.evaluate(() => switchAppView('libtable')); await sleep(600);
+  await page.click('#lt-feature-btn'); await sleep(250);
+  await page.click('#text-menu button:has-text("Управлять фичами")');
+  await poll(() => featureDrawerOpen(), '«Управлять фичами…» of «Записи» did not open the drawer');
+  expect(await page.evaluate(() => document.querySelector('#ft-dr-list .ft-dr-on')?.textContent.includes('Окно фич 2')), 'the chosen feature was lost');
+  // «Словарь»: the card stays, «В отдельном окне» opens and a second press closes (the drawer covers the button:
+  // pressed from the keyboard)
+  await page.evaluate(() => switchAppView('dict')); await sleep(700);
+  expect(await page.isVisible('#ft-dict-list') && await page.evaluate(() => document.querySelector('#ft-dict-list').textContent.includes('Окно фич 2')), 'the card «Фичи» of «Словарь» lacks the feature');
+  await page.focus('#dc-ft-open');
+  await page.keyboard.press('Enter');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'a second click on the opener did not close the drawer');
+  await page.click('#dc-ft-open');
+  await poll(() => featureDrawerOpen(), '«В отдельном окне» did not open the drawer');
+  await page.keyboard.press('Escape');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer in «Словарь»');
+  // the chip «Фича:» of a recording: «Изменить фичу…» chooses its feature
+  const fid = await page.evaluate(() => state.features.find(f => f.name === 'Окно фич 2').id);
+  await page.evaluate(id => fetch('/api/meetings/2/features', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) }), fid);
+  await page.evaluate(() => { switchAppView('library'); return openMeeting(2); }); await sleep(1500);
+  await page.click(`#meeting-features [data-ft="${fid}"]`); await sleep(400);
+  await page.click('#tk-pop button:has-text("Изменить фичу")');
+  await poll(() => featureDrawerOpen(), '«Изменить фичу…» did not open the drawer');
+  expect(await page.evaluate(id => document.querySelector('#ft-dr-list .ft-dr-on')?.dataset.fid === String(id), fid), 'the feature of the recording is not chosen');
+  await page.keyboard.press('Escape');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer over a recording');
+  expect(!(await open()), 'the drawer is still open');
+  await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }).then(() => loadFeatures()), fid);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

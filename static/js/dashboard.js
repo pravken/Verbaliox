@@ -1103,7 +1103,8 @@ function openDashFeatureMenu(e) {
   const cur = p.feature ? featureById(p.feature) : null;
   openTextMenuAt([...(cur ? [{ label: `↗  ${t('dbFeatureCard').replace('{name}', () => cur.name)}`, run: () => openFeaturePage(cur.id) }, { sep: true }] : []),
     { label: tick(!p.feature, t('dbAllFeatures')), run: () => setDashFeature(0) }, { sep: true },
-    ...feats.map(f => ({ label: tick(p.feature === f.id, f.name), run: () => setDashFeature(f.id) }))], r.left, r.bottom + 4);
+    ...feats.map(f => ({ label: tick(p.feature === f.id, f.name), run: () => setDashFeature(f.id) })),
+    { sep: true }, { label: t('ftManage'), run: () => openFeatureDrawer(p.feature) }], r.left, r.bottom + 4);
 }
 
 async function dashTaskDone(id) {

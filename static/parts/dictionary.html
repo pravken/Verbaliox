@@ -28,9 +28,9 @@
             <input id="settings-dict-term" type="text" class="tk-input" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]' data-input="checkSettingsDictTerm"
               data-i18n-placeholder="rdSasDictTermPh" placeholder="Слово или фраза" data-i18n-title="rdSasDictTermPh" title="Слово или фраза">
             <input id="settings-dict-variants" type="text" class="tk-input" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
-              data-i18n-placeholder="dictVariantsPh" placeholder="Как может распознаться: клод, klot" data-i18n-title="dictVariantsTip" title="Через запятую — как модель может услышать это слово">
+              data-i18n-placeholder="dictVariantsPh" placeholder="Варианты распознавания" data-i18n-title="dictVariantsTip" title="Через запятую — как модель может услышать это слово">
             <input id="settings-dict-cat" type="text" class="tk-input" list="dc-groups" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
-              data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа" data-i18n-title="rdSasDictCatPh" title="Группа">
+              data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа терминов (необязательно)" data-i18n-title="dcGroupTip" title="Группа объединяет слова в списке словаря: по группам работают фильтры над списком. Поле необязательное.">
             <datalist id="dc-groups"></datalist>
             <button id="settings-dict-add" data-click="addSettingsDictItem" class="tk-btn tk-btn-primary"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="rdSasDictAdd">Добавить</span></button>
           </div>
@@ -51,7 +51,7 @@
         </section>
         <!-- What each feature is (static/js/features.js): every field has a use, none is required -->
         <section class="pcard">
-          <h3 class="pcd-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12V5a1 1 0 011-1h7l8 8-8 8z"/><circle cx="8.5" cy="8.5" r="1.3"/></svg></span><span class="pcd-t" data-i18n="ftDictTitle">Фичи</span></h3>
+          <h3 class="pcd-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12V5a1 1 0 011-1h7l8 8-8 8z"/><circle cx="8.5" cy="8.5" r="1.3"/></svg></span><span class="pcd-t" data-i18n="ftDictTitle">Фичи</span><span class="pcd-side"><button type="button" id="dc-ft-open" class="dc-ft-link" data-click="toggleFeatureDrawer" aria-haspopup="dialog" data-i18n="dcFtOpen">В отдельном окне</button></span></h3>
           <p class="dc-note" data-i18n="ftDictDesc">Что это за фичи и как о них говорят.</p>
           <div class="flex items-center gap-2">
             <input id="ft-dict-new" type="text" maxlength="60" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addDictFeature"]'

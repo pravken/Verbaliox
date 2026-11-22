@@ -1228,6 +1228,7 @@ function libFilterMenuHtml(which = 'rest') {
     }
   }
   if (which === 'feature' && !features.length) html = `<div class="px-2.5 py-2 text-[11.5px] text-apple-tertiary leading-snug">${escapeHtml(t('libFeatureNone'))}</div>`;
+  if (which === 'feature') html += `<div class="my-1 h-px bg-white/10"></div><button class="macos-menu-item" data-manage="1"><span>${escapeHtml(t('ftManage'))}</span><span></span></button>`;
   if (libFilterCount()) {
     html += `<div class="my-1 h-px bg-white/10"></div><button class="macos-menu-item" data-reset="1"><span>${escapeHtml(t('libFilterResetAll'))}</span><span></span></button>`;
   }
@@ -1252,6 +1253,7 @@ function openLibFilterMenu(e, which = 'rest') {
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.dataset.reset) { resetLibFilters(); return; }
+    if (b.dataset.manage) { closeLibFilterMenu(); openFeatureDrawer(); return; }
     if (!b.dataset.g || b.getAttribute('aria-disabled') === 'true') return;
     const ids = libFilters()[b.dataset.g];
     if (ids.has(b.dataset.v)) ids.delete(b.dataset.v); else ids.add(b.dataset.v);

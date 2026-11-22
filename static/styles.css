@@ -2982,7 +2982,7 @@ html #lt-scroll:focus-visible { outline: none; }  /* the row under the keyboard 
 .an-task-src-llm, .an-task-src-manual { min-width: 38px; text-align: center; }
 .an-task-tag-on { min-width: 38px; text-align: center; }
 .an-task-src-manual { font-size: 13px; font-family: inherit; }
-/* Словарь → Фичи */
+/* Словарь → Фичи (the card; the window «Фичи» shares its fields and swatches) */
 .ft-card { border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
 .ft-card-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; list-style: none; }
 .ft-card-head::-webkit-details-marker { display: none; }
@@ -5309,3 +5309,47 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .strip-nav-b svg { width: 18px; height: 18px; }
 .strip-nav-b:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #FFFFFF; }
 .strip-nav-b:disabled { color: rgba(255, 255, 255, 0.22); cursor: default; }
+/* ==========================================================================
+   «Фичи»: the drawer of the features (static/parts/features.html, openFeatureDrawer in static/js/features.js).
+   Fixed at the right edge under the strip, over any section and below the windows (modals z 50); it slides in
+   and out as the drawers of «Обзор» (drawerShow / drawerHide). top / bottom are set by placeFeatureDrawer.
+   ========================================================================== */
+.ft-drawer { position: fixed; right: 0; top: 52px; bottom: 0; z-index: 45; width: 380px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; padding: 16px 18px 14px;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35); }
+.ft-drawer.hidden { display: none; }
+.ft-drawer .vx-head { margin-bottom: 2px; }
+.ft-dr-in { width: 100%; height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); }
+textarea.ft-dr-in { height: auto; min-height: var(--ctl-h, 32px); padding: 6px 10px; line-height: 1.4; resize: vertical; font-family: inherit; }
+.ft-dr-new { display: flex; gap: 8px; }
+.ft-dr-new .ft-dr-in { flex: 1; min-width: 0; }
+.ft-dr-new .tk-btn { flex: none; }
+.ft-dr-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin: 0 -6px; padding: 0 6px; }
+.ft-dr-list { display: flex; flex-direction: column; gap: 2px; }
+/* a row: the dot, the name, «записей: N» at the same place in every row; the chosen one in the accent tint */
+.ft-dr-row { display: flex; align-items: center; gap: 10px; height: 36px; flex: none; padding: 0 10px; box-sizing: border-box; width: 100%;
+  border: 1px solid transparent; border-radius: var(--ctl-r, 8px); background: transparent; color: #F5F5F7; font-size: var(--fs-ui); text-align: left; cursor: pointer; }
+.ft-dr-row:hover { background: rgba(255, 255, 255, 0.05); }
+.ft-dr-row.ft-dr-on { background: rgb(var(--accent-rgb) / 0.14); border-color: rgb(var(--accent-rgb) / 0.45); }
+.ft-dr-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--ft); }
+.ft-dr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-dr-n { flex: none; width: 88px; text-align: right; font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); font-variant-numeric: tabular-nums; }
+.ft-dr-form { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ft-dr-form:empty { display: none; }
+.ft-dr-form .ft-swatches { align-items: center; flex-wrap: wrap; }
+.ft-dr-acts { display: flex; justify-content: space-between; gap: 8px; padding-top: 2px; }
+.ft-dr-del:hover { color: #FF6961; }
+.ft-dr-foot { flex: none; padding-top: 12px; border-top: 1px solid var(--line); }
+/* the window «Фичи» from the picker of a recording: one quiet line under the field of a new feature */
+.ft-pick-manage { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
+.ft-pick-manage .tk-pop-item { color: var(--accent-text); }
+/* «Словарь»: «В отдельном окне» in the head of the card «Фичи» */
+.dc-ft-link { margin-left: 4px; padding: 0; border: 0; background: none; color: var(--accent-text); font-size: var(--fs-caption); font-weight: 400; letter-spacing: 0; text-transform: none; cursor: pointer; }
+.dc-ft-link:hover { text-decoration: underline; }
+
+/* «Словарь»: the add row keeps every placeholder whole («Группа терминов (необязательно)»): the fields share a
+   wide card in one row; in a narrow one the group and «Добавить» go to a second row */
+.dc-add { display: flex; flex-wrap: wrap; }
+.dc-add > .tk-input { flex: 1 1 220px; min-width: 0; }
+.dc-add > #settings-dict-cat { flex-basis: 250px; }
+.dc-add > .tk-btn { flex: none; }
