@@ -1139,10 +1139,43 @@ function vxSyncLayers() {
       l.ownerEl = recent ? vxPress.el : null;
       if (l.kind === 'menu') closeAllMenus(l, vxPress.el);
     }
+    if (open && l.kind === 'menu') vxFitSoon(l);
     // the button that opened a menu says whether it is open (screen readers), whichever menu it is
     if (open !== l.open && l.ownerEl && l.ownerEl.hasAttribute('aria-haspopup')) l.ownerEl.setAttribute('aria-expanded', String(open));
     l.open = open;
   }
+}
+
+// A menu or a popover never leaves the window (asked by the user: a menu opened low in the window was cut by its
+// edge; a page cannot draw past its window): what does not fit below its button opens above it, what fits neither
+// way keeps to the window's edge and scrolls; one too wide moves left. Checked as it opens and while its content grows.
+function vxFitInView(el, owner) {
+  if (!el || !el.isConnected || getComputedStyle(el).position !== 'fixed') return;
+  const H = window.innerHeight, W = window.innerWidth, m = 8;
+  let r = el.getBoundingClientRect();
+  if (r.height > H - 2 * m) {
+    el.style.maxHeight = `${zpx(H - 2 * m)}px`;
+    el.style.overflowY = 'auto';
+    r = el.getBoundingClientRect();
+  }
+  if (r.bottom > H - m) {
+    const o = owner && owner.isConnected ? owner.getBoundingClientRect() : null;
+    const top = o && o.top - 4 - r.height >= m ? o.top - 4 - r.height : Math.max(m, H - m - r.height);
+    el.style.bottom = '';
+    el.style.top = `${zpx(top)}px`;
+    el.style.transformOrigin = el.style.transformOrigin.replace('top', 'bottom') || 'bottom';
+  }
+  if (r.right > W - m) {
+    el.style.right = '';
+    el.style.left = `${zpx(Math.max(m, W - m - r.width))}px`;
+  }
+}
+function vxFitSoon(l) {
+  const el = vxLayerEl(l);
+  if (!el) return;
+  // after the opener placed it, and again once its content (a list that loads) settled
+  requestAnimationFrame(() => vxFitInView(el, l.ownerEl));
+  setTimeout(() => vxFitInView(el, l.ownerEl), 120);
 }
 
 // Closes every open menu but one (the one just opened); a menu holding the button that opened it stays (a menu
@@ -1157,6 +1190,26 @@ function closeAllMenus(keep, from) {
 }
 
 new MutationObserver(vxSyncLayers).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
+
+// The same rule for every menu and popover the registry does not list: any fixed menu, popover or panel that appears
+// or is shown keeps inside the window (one rule for all of them, asked by the user)
+const VX_FLOATING = '.macos-menu, [role="menu"], .tb-pop, .vx-panel, .tk-pop, .hm-pop, .rp-pop';
+new MutationObserver((records) => {
+  const owner = performance.now() - vxPress.at < 800 ? vxPress.el : null;
+  const seen = new Set();
+  for (const rec of records) {
+    const nodes = rec.type === 'childList' ? [...rec.addedNodes] : [rec.target];
+    for (const n of nodes) {
+      if (!(n instanceof Element)) continue;
+      // a shown one is itself the target; an added subtree may hold one (cheap: no search on every class change)
+      const el = n.matches(VX_FLOATING) ? n : rec.type === 'childList' ? n.querySelector(VX_FLOATING) : null;
+      if (!el || seen.has(el) || el.classList.contains('hidden')) continue;
+      seen.add(el);
+      requestAnimationFrame(() => vxFitInView(el, owner));
+      setTimeout(() => vxFitInView(el, owner), 120);
+    }
+  }
+}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
 
 // A press of a menu's own button while it is open: the menu closes, and the click that follows does not open it again
 function vxPressOwner(e, el) {
