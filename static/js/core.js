@@ -1073,3 +1073,131 @@ document.addEventListener('keydown', e => {
   e.stopPropagation();
   if (x) x.click(); else top.remove();
 }, true);
+
+// --- Menus and popovers: one at a time, Esc closes the one on top, a second press of its button closes it ---
+// (reviews: «● Запись ▾» and «Импорт ▾» stayed open together; one Esc closed «Нагрузка» and left the settings, or
+// closed «Показатели» and the drawer under it; several menus did not close on Esc or on a second click.) Each
+// menu is listed here with how to tell it is open and how to close it; the order of opening is seen in the page
+// itself (a MutationObserver), so the menus need not report it. kind 'menu': one at a time; 'mode' (the drawer of
+// «Обзор», its «Настроить»): closed by Esc in its turn, but opening a menu leaves it; 'modal': a window above,
+// whose Esc is its own
+const vxShown = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden') && !el.classList.contains('is-leaving'); };
+const vxThere = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('is-leaving'); };
+const vxHide = (id) => () => document.getElementById(id)?.classList.add('hidden');
+const vxRemove = (id) => () => document.getElementById(id)?.remove();
+const vxCall = (fn) => () => { if (typeof window[fn] === 'function') window[fn](); };
+const vxTry = (f) => () => { try { return f(); } catch (e) { return false; } };
+const VX_LAYERS = [
+  ['text-menu', () => vxThere('text-menu'), vxCall('closeTextMenu'), '#text-menu'],
+  ['rec-menu', () => vxThere('rec-menu'), vxRemove('rec-menu'), '#rec-menu'],
+  ['imp-menu', () => vxThere('imp-menu'), vxCall('closeImportMenu'), '#imp-menu'],
+  ['translate-menu', () => vxShown('translate-menu'), vxCall('hideTranslateMenu'), '#translate-menu'],
+  ['export-menu', () => vxShown('export-menu'), vxCall('hideExportMenu'), '#export-menu'],
+  ['recording-context-menu', () => vxShown('recording-context-menu'), vxCall('hideContextMenu'), '#recording-context-menu'],
+  ['folder-context-menu', () => vxShown('folder-context-menu'), vxCall('hideFolderMenu'), '#folder-context-menu'],
+  ['tx-view-menu', () => vxShown('tx-view-menu'), vxHide('tx-view-menu'), '#tx-view-menu'],
+  ['tx-proc-menu', () => vxShown('tx-proc-menu'), vxHide('tx-proc-menu'), '#tx-proc-menu'],
+  ['record-preset-menu', () => vxShown('record-preset-menu'), vxHide('record-preset-menu'), '#record-preset-menu'],
+  ...['bulk-menu', 'series-menu', 'digest-menu', 'lib-view-menu', 'lib-filter-menu', 'as-menu', 'an-cfg-pop']
+    .map(id => [id, () => vxThere(id), vxRemove(id), `#${id}`]),
+  ['quick-lang-menu', () => vxThere('quick-lang-menu'), vxCall('closeQuickLangMenu'), '#quick-lang-menu'],
+  ['tk-pop', () => vxThere('tk-pop'), vxCall('tkClosePop'), '#tk-pop'],
+  ['hm-day-pop', () => vxShown('hm-day-pop'), () => {
+    document.getElementById('hm-day-pop')?.classList.add('hidden');
+    document.getElementById('hm-day-btn')?.setAttribute('aria-expanded', 'false');
+  }, '#hm-day-pop'],
+  ['lt-cols', vxTry(() => LT.colsOpen), vxCall('closeLibTableColumnsMenu'), '#lt-cols-pop'],
+  ['jobs-pop', vxTry(() => jobs.open), vxCall('closeJobsPop'), '#jobs-pop'],
+  ['load-pop', vxTry(() => load.open), vxCall('closeLoadPop'), '#load-pop'],
+  ['models-pop', vxTry(() => modelsPop.open), vxCall('closeModelsPop'), '#models-pop'],
+  ['rp-pop', vxTry(() => !!rp.open), vxCall('rpClosePop'), '.rp-pop:not(.hidden)'],
+  ['kpi-cfg', vxTry(() => DB.kpiCfg && state.appView === 'dashboard'), () => { DB.kpiCfg = false; dbKpiRedraw(); }, '.db-kc'],
+  ['db-detail', vxTry(() => !!DB_DETAIL.kind && state.appView === 'dashboard'), vxCall('dbCloseDetail'), '#db-detail', 'mode'],
+  ['db-edit', vxTry(() => DB.edit && state.appView === 'dashboard'), vxCall('toggleDashEdit'), '#db-grid', 'mode'],
+  ['modal', () => !!document.querySelector('.modal-backdrop:not(.hidden), #upd-after')
+    || [...document.querySelectorAll('[id^="modal-"]:not(.hidden)')].some(m => !m.closest('#settings-view')), () => {}, '', 'modal'],
+].map(([name, isOpen, close, sel, kind]) => ({ name, isOpen, close, sel, kind: kind || 'menu', open: false, at: 0, owner: null, ownerEl: null }));
+
+// The button a menu belongs to, by a key that survives a redraw of the bar it is in (the filter bar of «Записи»,
+// the overview's head): its id, a data-menu-key, or what it calls
+function vxOwnerKey(el) {
+  if (!el) return '';
+  return el.id || el.dataset.menuKey || (el.dataset.click ? `${el.dataset.click}|${el.dataset.clickArgs || ''}` : '');
+}
+const vxOwnerOf = (t) => (t instanceof Element ? t.closest('button, [role="button"], [aria-haspopup], [data-click]') : null);
+let vxPress = { key: '', el: null, at: 0 }, vxSwallow = { key: '', until: 0 }, vxSeq = 0;
+
+function vxLayerEl(l) { return l.sel ? document.querySelector(l.sel) : null; }
+
+function vxSyncLayers() {
+  for (const l of VX_LAYERS) {
+    const open = !!l.isOpen();
+    if (open && !l.open) {
+      l.at = ++vxSeq;
+      const recent = performance.now() - vxPress.at < 800;
+      l.owner = recent ? vxPress.key : null;
+      l.ownerEl = recent ? vxPress.el : null;
+      if (l.kind === 'menu') closeAllMenus(l, vxPress.el);
+    }
+    l.open = open;
+  }
+}
+
+// Closes every open menu but one (the one just opened); a menu holding the button that opened it stays (a menu
+// opened from another one)
+function closeAllMenus(keep, from) {
+  for (const l of VX_LAYERS) {
+    if (l === keep || l.kind !== 'menu' || !l.isOpen()) continue;
+    const el = vxLayerEl(l);
+    if (from && el && el.contains(from)) continue;
+    l.close();
+    l.open = false;
+  }
+}
+
+new MutationObserver(vxSyncLayers).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
+
+// A press of a menu's own button while it is open: the menu closes, and the click that follows does not open it again
+function vxPressOwner(e, el) {
+  const key = vxOwnerKey(el);
+  vxPress = { key, el, at: performance.now() };
+  if (!key) return false;
+  const l = VX_LAYERS.find(x => x.kind === 'menu' && x.owner === key && x.isOpen());
+  if (!l) return false;
+  l.close();
+  l.open = false;
+  vxSwallow = { key, until: performance.now() + 1000 };
+  return true;
+}
+window.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) { vxPress = { key: '', el: null, at: 0 }; return; }
+  vxPressOwner(e, vxOwnerOf(e.target));
+}, true);
+window.addEventListener('click', (e) => {
+  if (!vxSwallow.key || performance.now() > vxSwallow.until) return;
+  const key = vxOwnerKey(vxOwnerOf(e.target)), want = vxSwallow.key;
+  vxSwallow = { key: '', until: 0 };
+  if (key && key === want) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
+
+window.addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+    // the keyboard's press of a button: the same as a click for the owner of a menu
+    const el = vxOwnerOf(document.activeElement);
+    if (el && !(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && vxPressOwner(e, el)) { e.preventDefault(); e.stopImmediatePropagation(); }
+    return;
+  }
+  if (e.key !== 'Escape' || e.isComposing) return;
+  if (typeof DB !== 'undefined' && DB.drag) return;  // a widget being dragged: its own Esc puts it back
+  const open = VX_LAYERS.filter(l => l.isOpen());
+  if (!open.length) return;
+  const top = open.reduce((a, b) => (b.at > a.at ? b : a));
+  if (top.kind === 'modal') return;  // a window above the menus answers its own Esc
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const back = top.ownerEl && top.ownerEl.isConnected ? top.ownerEl : null;
+  top.close();
+  top.open = false;
+  const f = document.activeElement;
+  if (back && (!f || f === document.body || !f.isConnected || vxLayerEl(top)?.contains(f))) back.focus();
+}, true);

@@ -1276,6 +1276,57 @@ await step('queue island', async () => {
   expect(!(await page.isVisible('#strip-island')), '«Готово» with nothing before');
 });
 
+// Menus: one open at a time, a second press of the button closes its menu, Esc closes the menu on top only (one
+// Esc closed «Нагрузка» and left the settings; «Показатели» and the drawer at once)
+await step('one menu at a time', async () => {
+  await page.evaluate(() => switchAppView('libtable')); await sleep(500);
+  await page.click('#tb-rec-more'); await sleep(200);
+  expect(await page.isVisible('#rec-menu'), 'rec menu did not open');
+  await page.click('#strip-import-more'); await sleep(250);
+  expect(await page.isVisible('#imp-menu'), 'import menu did not open');
+  expect(!(await page.isVisible('#rec-menu')), '«● Запись ▾» stayed open with «Импорт ▾»');
+  await page.click('#strip-import-more'); await sleep(250);
+  expect(!(await page.isVisible('#imp-menu')), 'a second click did not close «Импорт ▾»');
+  await page.click('#tb-rec-more'); await sleep(200);
+  await page.click('#tb-rec-more'); await sleep(250);
+  expect(!(await page.isVisible('#rec-menu')), 'a second click did not close «● Запись ▾»');
+  await page.click('#tb-rec-more'); await sleep(200);
+  await page.keyboard.press('Escape'); await sleep(200);
+  expect(!(await page.isVisible('#rec-menu')), 'Esc did not close «● Запись ▾»');
+});
+await step('esc closes the top layer only', async () => {
+  await page.evaluate(() => switchAppView('settings')); await sleep(600);
+  const view = await page.evaluate(() => state.appView);
+  await page.click('#sb-load'); await sleep(300);
+  expect(await page.isVisible('#load-pop'), 'no load window');
+  await page.keyboard.press('Escape'); await sleep(300);
+  const after = await page.evaluate(() => state.appView);
+  expect(!(await page.isVisible('#load-pop')) && after === view, `Esc: load ${await page.isVisible('#load-pop')}, view ${view} → ${after}`);
+  // the recording's menus: Esc and a second click
+  await page.evaluate(() => openMeeting(1)); await sleep(1200);
+  await page.click('[data-click="openActiveRecordingMenu"]'); await sleep(250);
+  expect(await page.isVisible('#recording-context-menu'), 'no ⋯ menu');
+  await page.click('[data-click="openActiveRecordingMenu"]'); await sleep(350);
+  expect(!(await page.isVisible('#recording-context-menu')), 'a second click did not close ⋯');
+  await page.click('[data-click="openActiveRecordingMenu"]'); await sleep(250);
+  await page.keyboard.press('Escape'); await sleep(350);
+  expect(!(await page.isVisible('#recording-context-menu')), 'Esc did not close ⋯');
+  // «Обзор»: «Показатели» over the drawer, one Esc each
+  await page.evaluate(() => switchAppView('dashboard')); await sleep(1200);
+  await page.evaluate(() => dbOpenDetail('meetings')); await sleep(600);
+  await page.evaluate(() => dbKpiPanel()); await sleep(300);
+  const st = () => page.evaluate(() => [DB.kpiCfg, !!DB_DETAIL.kind]);
+  const s0 = await st();
+  await page.keyboard.press('Escape'); await sleep(300);
+  const s1 = await st();
+  expect(s0[0] && s0[1] && !s1[0] && s1[1], `one Esc: ${JSON.stringify([s0, s1])}`);
+  await page.keyboard.press('Escape'); await sleep(300);
+  expect(!(await st())[1], 'the second Esc did not close the drawer');
+  await page.evaluate(() => toggleDashEdit()); await sleep(300);
+  await page.keyboard.press('Escape'); await sleep(300);
+  expect(!(await page.evaluate(() => DB.edit)), 'Esc did not leave «Настроить»');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
