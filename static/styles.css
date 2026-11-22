@@ -920,7 +920,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-tab-live, .tb-tab-live:hover { color: #FF8A80; }
 .rec-mh { padding: 4px 10px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8E8E93); }
 .rec-mi { display: flex; align-items: center; gap: 8px; }
-.rec-mi-mark { width: 16px; flex: none; text-align: center; color: var(--accent-hi); }
 .rec-mi-key { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
 .tb-rec-clock { font-family: var(--font-mono); font-weight: 500; font-size: var(--fs-ui); color: #FFFFFF; }
 @keyframes tb-blink { 50% { opacity: 0.35; } }
@@ -5159,3 +5158,8 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .an-sumbar .an-chip .vx-caret { margin-left: 2px; }
 .an-pop-link { display: flex; align-items: center; gap: 6px; }
 .an-pop-link .vx-plus { width: 14px; height: 14px; flex: none; }
+
+/* The recording's «⋯»: wide enough for its longest items on one line; «● Запись ▾»: the default preset by the accent */
+#recording-context-menu { width: 288px; }
+#rec-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
+#rec-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
