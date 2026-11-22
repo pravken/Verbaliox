@@ -816,8 +816,11 @@ function ltOpen(id) {
     clearLibraryDrag();
     body.querySelectorAll('.drop-target').forEach(x => x.classList.remove('drop-target'));
   });
+  // the cursor's frame on a row only once the keyboard is used in the table, not on opening it or after a click
+  scroll.addEventListener('pointerdown', () => scroll.classList.remove('lt-kbd'));
   scroll.addEventListener('keydown', (e) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+    if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Home', 'End'].includes(e.key)) scroll.classList.add('lt-kbd');
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ltMove(e.key === 'ArrowDown' ? 1 : -1); }
     else if (e.key === 'Enter' && LT.cur != null) { e.preventDefault(); ltOpen(LT.cur); }
     else if (e.key === ' ' && LT.cur != null) { e.preventDefault(); ltToggle(LT.cur); ltPaintPick(); }
@@ -1008,6 +1011,7 @@ registerView('libtable', {
     syncLibTableButton();
     renderLibTable();
     renderLibSelectionBar();
+    document.getElementById('lt-scroll')?.classList.remove('lt-kbd');
     nextFrame(() => document.getElementById('lt-scroll')?.focus({ preventScroll: true }));
   },
   // the selection belongs to the table on screen: it does not stay behind, unseen, for Delete in another section

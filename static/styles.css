@@ -2906,7 +2906,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-row:not(.lt-tile):hover { background: rgba(255, 255, 255, 0.035); }
 .lt-row.lt-on:not(.lt-tile) { background: rgb(var(--accent-rgb) / 0.12); }
 .lt-row.lt-open:not(.lt-tile) { box-shadow: inset 2px 0 0 rgb(var(--accent-rgb) / 0.6); }
-.lt-scroll:focus-visible .lt-row.lt-cur { outline: 1px solid rgb(var(--accent-rgb) / 0.7); outline-offset: -1px; }
+.lt-scroll.lt-kbd:focus-visible .lt-row.lt-cur { outline: 1px solid rgb(var(--accent-rgb) / 0.7); outline-offset: -1px; }
 .lt-c { min-width: 0; overflow: hidden; white-space: nowrap; }
 .lt-kind { display: inline-flex; color: var(--hc-dim, #8E8E93); }
 .lt-row:hover .lt-kind { color: #C7C7CC; }
