@@ -193,8 +193,17 @@ function renderStrip() {
   pill.className = `st-pill ${s.cls.split(' ').map(c => `stp-${c}`).join(' ')}`;
   document.getElementById('strip-pill-t').textContent = s.pill;
   const put = (id, v) => { const el = document.getElementById(id); el.textContent = v || ''; el.classList.toggle('hidden', !v); };
-  put('strip-lead', s.lead);
-  document.getElementById('strip-lead').title = s.lead || '';  // the whole title when it is cut
+  // the title: when it is cut, a hover scrolls it to its end and back (asked by the user, instead of a running line)
+  const lead = document.getElementById('strip-lead');
+  lead.innerHTML = s.lead ? `<span class="strip-lead-t">${escapeHtml(s.lead)}</span>` : '';
+  lead.classList.toggle('hidden', !s.lead);
+  lead.title = s.lead || '';
+  requestAnimationFrame(() => {
+    const over = lead.scrollWidth - lead.clientWidth;
+    lead.classList.toggle('strip-lead-over', over > 4);
+    lead.style.setProperty('--lead-shift', `${-over}px`);
+    lead.style.setProperty('--lead-time', `${Math.min(6, Math.max(1.2, over / 40))}s`);
+  });
   put('strip-meta', s.meta);
   document.getElementById('strip-grow').textContent = s.grow || '';
   document.getElementById('strip-grow').className = `strip-grow${s.growCls ? ` strip-grow-${s.growCls}` : ''}`;
