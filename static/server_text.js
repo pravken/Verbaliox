@@ -47,6 +47,7 @@ const SERVER_TEXT_EN = {
   "Ollama вернула не все векторы": "Ollama did not return all vectors",
   "Ollama не запущена или в ней нет моделей — перевод невозможен": "Ollama is not running or has no models — translation is not possible",
   "Не удалось запустить Ollama: модель не удалена": "Ollama could not be started: the model was not deleted",
+  "В Ollama несколько вариантов этой модели: удалите нужный по его полному имени": "Ollama has several variants of this model: delete the one you need by its full name",
   "Ollama не запущена: установите её в «Настройки → Анализ»": "Ollama is not running: install it in Settings → Analysis",
   "Ollama не отвечает или в ней нет моделей": "Ollama does not answer or has no models",
   "Ollama не установлена. Подтвердите установку в окне настроек или установите её вручную: https://ollama.com/download": "Ollama is not installed. Confirm the installation in Settings or install it by hand: https://ollama.com/download",

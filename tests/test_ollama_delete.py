@@ -74,6 +74,23 @@ class DeleteOllamaModelTest(unittest.TestCase):
         self._delete("gemma4:e4b", client)
         self.assertEqual(client.deleted, ["gemma4:e4b-it-q4_K_M"])
 
+    def test_with_several_variants_only_the_one_named_is_deleted(self):
+        """Found in the review: the first variant listed was deleted, whichever the page named."""
+        client = _Client(["gemma4:e4b-it-q4_K_M", "gemma4:e4b-it-q8_0"])
+        self._delete("gemma4:e4b-it-q8_0", client)
+        self.assertEqual(client.deleted, ["gemma4:e4b-it-q8_0"])
+        client = _Client(["gemma4:e4b-it-q4_K_M", "gemma4:e4b-it-q8_0"])
+        with self.assertRaises(RuntimeError):
+            self._delete("gemma4:e4b", client)  # which one is not known: none
+        self.assertEqual(client.deleted, [])
+
+    def test_a_name_without_a_tag_is_only_its_latest(self):
+        self.assertEqual(ollama_client.installed_name("qwen3", ["qwen3:8b"]), None)
+        self.assertEqual(ollama_client.installed_name("qwen3", ["qwen3:8b", "qwen3:latest"]), "qwen3:latest")
+        client = _Client(["qwen3:8b"])
+        self._delete("qwen3", client)
+        self.assertEqual(client.deleted, [])
+
     def test_a_model_ollama_does_not_have_is_deleted_already(self):
         client = _Client(["qwen3:8b"])
         self._delete("gemma4:e4b", client)  # no error
