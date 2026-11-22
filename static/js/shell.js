@@ -203,16 +203,25 @@ function renderRail() {
     b.classList.toggle('rail-on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
-  const ind = rail.querySelector('.rail-ind'), on = id && document.getElementById(id);
-  if (!ind) return;
-  if (!on) { ind.style.opacity = '0'; return; }
-  const top = `${on.offsetTop + 8}px`, height = `${on.offsetHeight - 16}px`;
-  ind.classList.toggle('rail-ind-still', !was);  // the first one is placed, not moved
-  Object.assign(ind.style, { top, height, opacity: '1' });
+  const on = id && document.getElementById(id);
+  if (!placeRailIndicator(!was)) return;
   if (was && was !== id) {  // the icon of the section chosen gives a small press
     on.classList.remove('rail-pick'); void on.offsetWidth; on.classList.add('rail-pick');
   }
 }
+
+// The bar at the rail's edge on the section's button; still: placed at once, not moved (the first one, a resize: the
+// buttons change height at 1180 px, and the bar stayed where the button had been)
+function placeRailIndicator(still) {
+  const rail = document.getElementById('app-rail');
+  const ind = rail && rail.querySelector('.rail-ind'), on = _railOn && document.getElementById(_railOn);
+  if (!ind) return false;
+  if (!on) { ind.style.opacity = '0'; return false; }
+  ind.classList.toggle('rail-ind-still', !!still);
+  Object.assign(ind.style, { top: `${on.offsetTop + 8}px`, height: `${on.offsetHeight - 16}px`, opacity: '1' });
+  return true;
+}
+window.addEventListener('resize', () => placeRailIndicator(true));
 
 // The highlight of the chosen tab in a group moves to it (chosen with the user): one element under the
 // tabs, placed on the chosen one; none chosen in the group (a recording open, under the app's views), it fades
