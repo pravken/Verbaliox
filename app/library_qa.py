@@ -226,7 +226,9 @@ def is_small_talk(question: str) -> bool:
 _ABOUT_RECORDINGS = re.compile(
     r"запис|встреч|созвон|звонк|совещан|митинг|планерк|обсужд|обсуди|говорил|сказал|упомина|решил|договорил"
     r"|задач|поручен|участник|спикер|расшифров|видео|ролик|лекци|интервью|медиатек"
-    r"|meeting|record|call\b|calls\b|discuss|said|mention|decid|agreed|task|speaker|transcript|video|lecture|interview",
+    r"|резюм|пересказ|перескаж|выжимк|итог"
+    r"|meeting|record|call\b|calls\b|discuss|said|mention|decid|agreed|task|speaker|transcript|video|lecture|interview"
+    r"|summar|recap|takeaway",
     re.IGNORECASE,
 )
 
@@ -243,6 +245,7 @@ def about_recordings(question: str, llm: Any, chosen: bool, talk: str = "") -> b
         "Определи, нужно ли для ответа содержание этих записей (что обсуждали, кто что сказал, решения, задачи, "
         "о чём запись, что там про какую-то тему). Если это общий вопрос, на который отвечают из общих знаний "
         "(объяснить понятие, дать совет, написать или перевести текст, посчитать), ответь «нет». "
+        "Просьба пересказать, кратко изложить, перевести или разобрать сами записи — это про записи, «да». "
         "Если не уверен — «да». Ответь одним словом: да или нет."
     )
     try:
@@ -250,7 +253,8 @@ def about_recordings(question: str, llm: Any, chosen: bool, talk: str = "") -> b
                             (talk.strip() + "\n\nВопрос: " + question) if talk else question, short=True) or "").strip().casefold()
     except Exception:
         return True
-    return not verdict.startswith(("нет", "no"))
+    # «**Нет**», «"Нет."»: the word after any mark-up around it
+    return not verdict.lstrip(" \t\n*_«»\"'`.-").startswith(("нет", "no"))
 
 
 def _general(question: str, answer_lang: str, llm: Any, small: bool, talk: str = "") -> Dict[str, Any]:
@@ -276,6 +280,22 @@ def _general(question: str, answer_lang: str, llm: Any, small: bool, talk: str =
         )
         answer = llm.chat(system, (talk.strip() + "\n\nВопрос: " + question) if talk else question, think=True)
     return {"answer": answer, "sources": [], "found": True, "model": llm.label, "mode": "chat" if small else "general"}
+
+
+_CITATION = re.compile(r"\[(\d{1,3}(?:\s*(?:[,;]|[-–—])\s*\d{1,3})*)\]")
+
+
+def cited_numbers(answer: str) -> set:
+    """The fragments an answer cites: [2], [1][3], [1, 3] and the ranges [1-3] / [1–3] models also write."""
+    out: set = set()
+    for group in _CITATION.findall(answer or ""):
+        for part in re.split(r"\s*[,;]\s*", group):
+            ends = [int(x) for x in re.split(r"\s*[-–—]\s*", part) if x]
+            if len(ends) == 2 and 0 < ends[1] - ends[0] <= MAX_FRAGMENTS * 3:
+                out.update(range(ends[0], ends[1] + 1))
+            else:
+                out.update(ends)
+    return out
 
 
 HISTORY_TURNS = 3
@@ -345,11 +365,14 @@ def ask_library(
             return {"answer": "", "sources": [], "found": False, "mode": mode}
         if sum(_transcript_chars(m) for m in scope_meetings) <= FULL_MODE_MAX_CHARS:
             mode = "full"
-            max_chars = FULL_MODE_MAX_CHARS + 4000
+            # the conversation takes its room from the fragments: with both, the prompt ran over the model's
+            # context and Ollama dropped its start (the instructions)
+            max_chars = FULL_MODE_MAX_CHARS + 4000 - len(talk)
             fragments = full_fragments(scope_meetings)
     if mode == "search":
         # a follow-up («а кто это предложил?») has few words of its own: the previous question is searched too
-        query = f"{past[-1]['question']} {question}" if past else question
+        # (after the question's own words: only the first keywords of a query are searched)
+        query = f"{question} {past[-1]['question']}" if past else question
         fragments = retrieve(query, meeting_ids, limit=MAX_FRAGMENTS)
         if chosen and len(fragments) < 3:
             # Few keyword hits in a folder: its overviews still say what the recordings are about
@@ -384,9 +407,7 @@ def ask_library(
     answer = llm.chat(system, user)
     # Only the fragments the answer cites: an answer without citations («the fragments say nothing»,
     # a greeting) has no sources, not every fragment the search brought
-    cited = {int(x) for x in re.findall(r"\[(\d{1,3})\]", answer or "")}
-    for group in re.findall(r"\[(\d{1,3}(?:\s*[,;]\s*\d{1,3})+)\]", answer or ""):
-        cited |= {int(x) for x in re.findall(r"\d+", group)}
+    cited = cited_numbers(answer)
     sources = [
         {k: f[k] for k in ("meeting_id", "title", "date", "start", "speaker", "text")} | {"n": n}
         for n, f in enumerate(fragments, start=1) if n in cited

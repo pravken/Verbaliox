@@ -197,6 +197,13 @@ class StoredAnalysisTest(unittest.TestCase):
         self.assertEqual(m["summaries"]["protocol"], "Решение Бориса: Борис Лапин")  # its name went to no voice
         self.assertNotIn("⟦", json.dumps(self._raw(), ensure_ascii=False))
 
+    def test_the_names_stay_the_renamed_ones_when_the_transcript_is_deleted(self):
+        database.merge_summaries(self.mid, {"protocol": "Смету готовит Участник 2"})
+        self._rename("SPEAKER_01", "Ирина Белова")
+        self.assertTrue(database.delete_transcript_version(self.mid, "large-v3"))  # the only one: no speakers left
+        self.assertEqual(database.get_meeting(self.mid)["speakers"], {})
+        self.assertEqual(database.get_meeting(self.mid)["summaries"]["protocol"], "Смету готовит Ирина Белова")
+
     def test_an_older_analysis_keeps_working_by_its_text(self):
         old = {"protocol": "Участник 2 предложил; Анна Котова согласилась"}
         self._put_raw(old)
