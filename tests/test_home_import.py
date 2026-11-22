@@ -139,6 +139,26 @@ class HomeApiTest(unittest.TestCase):
             self.assertFalse(c.post("/api/import/folder-files", json={"path": str(Path(d, "b.mp3"))}).json()["is_dir"])
         self.assertEqual(c.post("/api/import/folder-files", json={"path": ""}).json(), {"is_dir": False, "count": 0, "files": []})
 
+    def test_folder_files_skip_network_paths_and_stop_at_the_limit(self):
+        """Found in the review: a network path was looked into as it was typed, and a huge folder walked whole."""
+        import tempfile
+        from pathlib import Path
+
+        from app.api import library
+
+        c = self._client()
+        with mock.patch.object(library.Path, "is_dir", side_effect=AssertionError("looked into")):
+            for path in ("\\\\host\\share\\calls", "//host/share"):
+                out = c.post("/api/import/folder-files", json={"path": path}).json()
+                self.assertFalse(out["is_dir"])
+                self.assertTrue(out["error"])
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(library, "FOLDER_SCAN_LIMIT", 5):
+            for i in range(9):
+                Path(d, f"{i}.mp3").write_bytes(b"x")
+            out = c.post("/api/import/folder-files", json={"path": d}).json()
+            self.assertEqual(out["count"], 5)
+            self.assertTrue(out["truncated"])
+
     def test_upload_keeps_the_processing_of_the_import_window(self):
         c = self._client()
         proc = {"denoise": False, "vad": True, "summary": False}
