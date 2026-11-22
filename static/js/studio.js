@@ -1380,14 +1380,19 @@ window.trayCommand = function (cmd, arg) {
 };
 
 // --- Recording studio: large captions and their translation ---
-const studio = { view: 'under', speed: 'quality', font: 26, speech: 'auto', focus: false };
+// One size of the captions' text in every window (asked by the user): the studio, «На всё окно» and the chat of a
+// recording's transcript; A−/A+ of the studio change it everywhere. The text of a transcript by default (26 px of the
+// former full-screen captions looked huge in the chat)
+const STUDIO_FONT = 14;
+const studio = { view: 'under', speed: 'quality', font: STUDIO_FONT, speech: 'auto', focus: false };
 try {
   const saved = JSON.parse(localStorage.getItem('verbaliox_studio') || '{}');
   Object.assign(studio, {
     view: ['under', 'side', 'tr'].includes(saved.view) ? saved.view : 'under',
-    speed: saved.speed || 'quality', font: saved.font || 26, speech: saved.speech || 'auto',
+    speed: saved.speed || 'quality', font: (saved.font && saved.font !== 26) ? saved.font : STUDIO_FONT, speech: saved.speech || 'auto',
   });
 } catch (e) {}
+document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);  // the transcript reads it too, from the start
 
 function saveStudioPrefs() {
   try {
@@ -1449,11 +1454,11 @@ function renderStudioControls() {
   ['under', 'side', 'tr'].forEach(k => {
     document.getElementById(`studio-view-${k}`).className = `tk-seg-btn${studio.view === k ? ' tk-on' : ''}`;
   });
-  document.getElementById('studio-captions-inner').style.setProperty('--cap-size', `${studio.font}px`);
+  document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);
 }
 
 function studioSetView(v) { studio.view = v; saveStudioPrefs(); renderStudioControls(); syncStudioCaptions(); }
-function studioFont(d) { studio.font = Math.max(16, Math.min(56, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
+function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
 function studioSetSpeed(s) { studio.speed = s; saveStudioPrefs(); renderStudioControls(); studioConfigure(); }
 
 // Language or model changed while recording: the session translates the last lines again
