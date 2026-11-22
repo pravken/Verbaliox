@@ -673,6 +673,9 @@
           <div id="whisper-catalog-list" class="space-y-2">
             <!-- Populated dynamically -->
           </div>
+          <!-- where models are downloaded: they go on in the background when the window is closed (the note stood under
+               every section, in the middle of the page with two columns: reported by the user) -->
+          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="bgDownloadNote">Скачивание моделей продолжается в фоне при закрытии окна</p>
           <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="mmNote">Оценки — по замерам на начитанной речи (тест FLEURS, RTX 3090); на живых встречах ошибок больше у всех моделей, соотношение между ними то же.</p>
 
           <!-- Russian speech: a model of its own, the main one for the rest (app/speech_route.py) -->
@@ -755,6 +758,9 @@
               <span data-i18n="downloadBtn">Скачать</span>
             </button>
           </div>
+          <!-- where models are downloaded: they go on in the background when the window is closed (the note stood under
+               every section, in the middle of the page with two columns: reported by the user) -->
+          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="bgDownloadNote">Скачивание моделей продолжается в фоне при закрытии окна</p>
 
           <!-- Live Download & Installation Status Window -->
           <div id="ollama-download-panel" class="hidden rounded-xl bg-apple-bg border border-apple-blue/40 p-3.5 space-y-2.5">
@@ -1308,7 +1314,6 @@
         </div>
         </div>
           <!-- The end of the settings sections -->
-          <p class="text-[11.5px] text-apple-tertiary pt-4 pb-2" data-i18n="bgDownloadNote">Скачивание моделей продолжается в фоне при закрытии окна</p>
         </div>
       </div>
     </div>
