@@ -19,6 +19,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   tracks are mixed»). No tracks are left behind, a restart meanwhile included.
 - **Deleting several recordings** says why the ones left were not deleted, in the program's words, instead of «they
   may be processing».
+- **The red button while recording**: only «Stop» stops; the dot, the time and the sources open the recording studio.
+- **The selection bar of Recordings**: quiet actions with icons, ✕ with the count, «Delete» apart in red.
 
 ## 0.9.0 — English
 
@@ -828,6 +830,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   не остаются на диске, в том числе после перезапуска в это время.
 - **Удаление нескольких записей** называет причину, по которой часть из них не удалилась, а не «возможно, они
   сейчас обрабатываются».
+- **Красная кнопка во время записи**: останавливает только «Стоп»; точка, время и источники открывают студию записи.
+- **Панель выделения в «Записях»**: спокойные действия со значками, ✕ с числом выбранных, «Удалить» отдельно и красным.
 
 ## 0.9.0
 

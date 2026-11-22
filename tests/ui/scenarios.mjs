@@ -281,10 +281,17 @@ await step('menus not looked for on a meter tick', async () => {
     window.vxSyncLayers = () => { looks++; real(); };
     const wait = () => new Promise(res => setTimeout(res, 50));
     try {
+      // the records of the tick alone, judged by the page's own rule: other changes of the page meanwhile (a poll
+      // redrawing a list) made the count of looks flaky
+      const seen = [];
+      const mo = new MutationObserver(rs => seen.push(...rs));
+      mo.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'id'] });
       document.getElementById('studio-db').textContent = '-12 dB';
       document.getElementById('studio-level').className = 'h-full bg-apple-red transition-all duration-75';
       await wait();
-      const tick = looks;
+      mo.disconnect();
+      const mine = seen.filter(r => ['studio-db', 'studio-level'].includes((r.target.nodeType === 1 ? r.target : r.target.parentElement)?.id));
+      const tick = mine.length && vxMattersFor(mine) ? 1 : 0;
       openRecordingContextMenu({ clientX: 300, clientY: 300, preventDefault() {}, stopPropagation() {} }, 1);
       await wait();
       const menu = looks;
