@@ -84,6 +84,13 @@ def looks_like_name(text: str, known: Optional[set] = None) -> bool:
     return all(w[:1].isupper() for w in t.split())
 
 
+def text_shape(items: List[str]) -> str:
+    """The panel's first text elements for the log, by their form only (N: looks like a name, T: a line, with
+    its length): what was said and who said it stay out of verbaliox.log, which users send with a report."""
+    shape = " ".join(f"{'N' if looks_like_name(x) else 'T'}{len(x)}" for x in items[:8])
+    return f"text elements: {len(items)} [{shape}]"
+
+
 def pairs(texts: List[str], known: Optional[set] = None) -> List[Tuple[str, str]]:
     """The text elements of the caption panel, in order, as (name, line): a name, then the lines under
     it until the next name (Teams repeats the name above each line, or groups lines under one)."""
@@ -406,7 +413,7 @@ class Reader:
         try:
             c = panel.Current
             print(f"[teams] captions panel: {c.ControlType.ProgrammaticName} name={c.Name!r} id={c.AutomationId!r} "
-                  f"class={c.ClassName!r}; first text elements: {items[:8]!r}", flush=True)
+                  f"class={c.ClassName!r}; {text_shape(items)}", flush=True)
         except Exception:
             pass
 
