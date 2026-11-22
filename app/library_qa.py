@@ -11,6 +11,10 @@ When the transcripts of such a scope fit the model's context together, the model
 full, cut into numbered fragments, instead of only the lines the search found: questions like
 "what were these meetings about?" have no keywords to search for. A larger scope is searched as
 usual, and the overviews of its recordings are added when the search finds little.
+
+Not every message is about the recordings: a greeting gets a short reply, and a general question
+(explain a term, give advice, write a text) is answered by the model from what it knows, with its
+reasoning on and without sources. Only an answer about the recordings lists sources: the fragments it cites.
 """
 
 import re
@@ -199,6 +203,123 @@ def summary_fragments(meetings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+# A message that is not a question about the recordings: a greeting, thanks, a question to the
+# assistant itself. It gets a short reply without a search, so «привет» is not answered with
+# «the fragments say nothing» and fourteen random sources.
+_SMALL_TALK = re.compile(
+    r"^\W*(?:"
+    r"привет\w*|здравствуй\w*|добр\w+\s+(?:утро|день|вечер|ночи)|доброе утро|хай|хеллоу|салют|ку"
+    r"|спасибо\w*|благодарю|спс|пока|до свидания|ок|окей|понятно|ясно|отлично|супер|класс"
+    r"|как дела|как ты|кто ты|ты кто|что ты умеешь|что умеешь|чем (?:ты )?можешь помочь|помощь|help"
+    r"|hi|hello|hey|good (?:morning|afternoon|evening)|thanks?(?: you)?|thx|bye|ok(?:ay)?|got it|great"
+    r"|how are you|who are you|what can you do|how can you help"
+    r")(?:[\s,]+(?:ещё|еще|тебе|большое|again|a lot|so much|там))*\W*$",
+    re.IGNORECASE,
+)
+
+
+def is_small_talk(question: str) -> bool:
+    return bool(_SMALL_TALK.match((question or "").strip()))
+
+
+# Words that make a question one about the recordings without asking the model
+_ABOUT_RECORDINGS = re.compile(
+    r"запис|встреч|созвон|звонк|совещан|митинг|планерк|обсужд|обсуди|говорил|сказал|упомина|решил|договорил"
+    r"|задач|поручен|участник|спикер|расшифров|видео|ролик|лекци|интервью|медиатек"
+    r"|резюм|пересказ|перескаж|выжимк|итог"
+    r"|meeting|record|call\b|calls\b|discuss|said|mention|decid|agreed|task|speaker|transcript|video|lecture|interview"
+    r"|summar|recap|takeaway",
+    re.IGNORECASE,
+)
+
+
+def about_recordings(question: str, llm: Any, chosen: bool, talk: str = "") -> bool:
+    """Whether the question is about the user's recordings (answered from their fragments, with
+    citations) or a general one (answered by the model from what it knows). A question with no telling
+    words is put to the model in one short check; when unsure, it is about the recordings."""
+    if _ABOUT_RECORDINGS.search(question):
+        return True
+    scope = "выбранных пользователем записях" if chosen else "медиатеке записей пользователя"
+    system = (
+        f"Пользователь задаёт вопрос ассистенту, который знает о {scope}: встречах, звонках, видео и их расшифровках. "
+        "Определи, нужно ли для ответа содержание этих записей (что обсуждали, кто что сказал, решения, задачи, "
+        "о чём запись, что там про какую-то тему). Если это общий вопрос, на который отвечают из общих знаний "
+        "(объяснить понятие, дать совет, написать или перевести текст, посчитать), ответь «нет». "
+        "Просьба пересказать, кратко изложить, перевести или разобрать сами записи — это про записи, «да». "
+        "Если не уверен — «да». Ответь одним словом: да или нет."
+    )
+    try:
+        verdict = (llm.chat(system + (" Учитывай предыдущий разговор: уточнение к ответу по записям тоже про записи." if talk else ""),
+                            (talk.strip() + "\n\nВопрос: " + question) if talk else question, short=True) or "").strip().casefold()
+    except Exception:
+        return True
+    # «**Нет**», «"Нет."»: the word after any mark-up around it
+    return not verdict.lstrip(" \t\n*_«»\"'`.-").startswith(("нет", "no"))
+
+
+def _general(question: str, answer_lang: str, llm: Any, small: bool, talk: str = "") -> Dict[str, Any]:
+    """An answer without the recordings: a greeting gets a short reply, a general question a considered one
+    (a model that can reason does so first)."""
+    from app.ollama_client import _lang_phrase
+
+    lang = _lang_phrase(answer_lang)
+    if small:
+        system = (
+            "Ты — ассистент программы Verbaliox. Ты отвечаешь на вопросы по записям встреч и видео пользователя: "
+            "находишь, что обсуждали, какие решения и задачи прозвучали, кто что говорил, и даёшь ссылки "
+            "на моменты записей. Сейчас сообщение не про записи: ответь коротко и дружелюбно, одной-двумя фразами. "
+            f"Ничего не выдумывай о содержании записей. Отвечай {lang}, без эмодзи."
+        )
+        answer = llm.chat(system, (talk.strip() + "\n\nСообщение: " + question) if talk else question, short=True)
+    else:
+        system = (
+            "Ты — ассистент программы Verbaliox. Вопрос не о записях пользователя: ответь из своих знаний, "
+            "точно и по делу, настолько подробно, насколько нужно. Не выдумывай факты; если не знаешь, так и скажи. "
+            "Не упоминай записи и фрагменты. "
+            f"Отвечай {lang}, в формате Markdown без эмодзи."
+        )
+        answer = llm.chat(system, (talk.strip() + "\n\nВопрос: " + question) if talk else question, think=True)
+    return {"answer": answer, "sources": [], "found": True, "model": llm.label, "mode": "chat" if small else "general"}
+
+
+_CITATION = re.compile(r"\[(\d{1,3}(?:\s*(?:[,;]|[-–—])\s*\d{1,3})*)\]")
+
+
+def cited_numbers(answer: str) -> set:
+    """The fragments an answer cites: [2], [1][3], [1, 3] and the ranges [1-3] / [1–3] models also write."""
+    out: set = set()
+    for group in _CITATION.findall(answer or ""):
+        for part in re.split(r"\s*[,;]\s*", group):
+            ends = [int(x) for x in re.split(r"\s*[-–—]\s*", part) if x]
+            if len(ends) == 2 and 0 < ends[1] - ends[0] <= MAX_FRAGMENTS * 3:
+                out.update(range(ends[0], ends[1] + 1))
+            else:
+                out.update(ends)
+    return out
+
+
+HISTORY_TURNS = 3
+HISTORY_CHARS = 1200
+
+
+def _history(history: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
+    """The last few turns of the conversation, each cut to a size that leaves the fragments their room."""
+    out = []
+    for h in (history or [])[-HISTORY_TURNS:]:
+        q = str((h or {}).get("question") or "").strip()[:1000]
+        a = str((h or {}).get("answer") or "").strip()[:HISTORY_CHARS]
+        if q and a:
+            out.append({"question": q, "answer": a})
+    return out
+
+
+def _history_text(past: List[Dict[str, str]]) -> str:
+    if not past:
+        return ""
+    turns = "\n\n".join(f"Вопрос: {h['question']}\nОтвет: {h['answer']}" for h in past)
+    return "\n\nПредыдущий разговор:\n\n" + turns
+
+
 def _meeting_date(m: Dict[str, Any]) -> str:
     return (m.get("recorded_at") or m.get("created_at") or "")[:10]
 
@@ -212,6 +333,7 @@ def ask_library(
     answer_lang: str = "ru",
     model_name: Optional[str] = None,
     meeting_ids: Optional[List[int]] = None,
+    history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     from app.llm import LlmError, target
     from app.ollama_client import _lang_phrase
@@ -227,6 +349,12 @@ def ask_library(
         llm = target(model_name)  # an explicit user action: Ollama may be started
     except LlmError as e:
         raise RuntimeError(str(e)) from e
+    past = _history(history)
+    talk = _history_text(past)
+    if is_small_talk(question):
+        return _general(question, answer_lang, llm, small=True, talk=talk)
+    if not about_recordings(question, llm, chosen, talk=talk):
+        return _general(question, answer_lang, llm, small=False, talk=talk)
     mode = "search"
     max_chars = MAX_CONTEXT_CHARS
     fragments: List[Dict[str, Any]] = []
@@ -237,10 +365,15 @@ def ask_library(
             return {"answer": "", "sources": [], "found": False, "mode": mode}
         if sum(_transcript_chars(m) for m in scope_meetings) <= FULL_MODE_MAX_CHARS:
             mode = "full"
-            max_chars = FULL_MODE_MAX_CHARS + 4000
+            # the conversation takes its room from the fragments: with both, the prompt ran over the model's
+            # context and Ollama dropped its start (the instructions)
+            max_chars = FULL_MODE_MAX_CHARS + 4000 - len(talk)
             fragments = full_fragments(scope_meetings)
     if mode == "search":
-        fragments = retrieve(question, meeting_ids, limit=MAX_FRAGMENTS)
+        # a follow-up («а кто это предложил?») has few words of its own: the previous question is searched too
+        # (after the question's own words: only the first keywords of a query are searched)
+        query = f"{question} {past[-1]['question']}" if past else question
+        fragments = retrieve(query, meeting_ids, limit=MAX_FRAGMENTS)
         if chosen and len(fragments) < 3:
             # Few keyword hits in a folder: its overviews still say what the recordings are about
             fragments = summary_fragments(scope_meetings)[:MAX_FRAGMENTS] + fragments
@@ -265,13 +398,18 @@ def ask_library(
         "Ты отвечаешь на вопросы по медиатеке расшифровок записей в программе Verbaliox. "
         f"{scope_note}Используй ТОЛЬКО приведённые фрагменты. Ничего не додумывай. "
         "После каждого утверждения ставь ссылку на фрагмент в квадратных скобках, например [2] или [1][3]. "
-        "Если во фрагментах нет ответа, прямо так и скажи. Не оформляй ответ блоками кода. "
+        "Если во фрагментах нет ответа, прямо так и скажи одной фразой, без ссылок. "
+        "Предыдущий разговор, если он есть, дан только для понимания уточнений: ссылки ставь на фрагменты. "
+        "Не оформляй ответ блоками кода. "
         f"Отвечай {lang}, кратко и по делу, в формате Markdown без эмодзи."
     )
-    user = "Фрагменты расшифровок:\n\n" + "\n\n".join(blocks) + f"\n\nВопрос: {question}"
+    user = "Фрагменты расшифровок:\n\n" + "\n\n".join(blocks) + talk + f"\n\nВопрос: {question}"
     answer = llm.chat(system, user)
+    # Only the fragments the answer cites: an answer without citations («the fragments say nothing»,
+    # a greeting) has no sources, not every fragment the search brought
+    cited = cited_numbers(answer)
     sources = [
         {k: f[k] for k in ("meeting_id", "title", "date", "start", "speaker", "text")} | {"n": n}
-        for n, f in enumerate(fragments, start=1)
+        for n, f in enumerate(fragments, start=1) if n in cited
     ]
     return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "mode": mode}

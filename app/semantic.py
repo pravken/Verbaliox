@@ -132,6 +132,10 @@ def index_meeting(meeting_id: int, settings: Optional[Dict[str, str]] = None) ->
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with _db_lock:
         conn = get_connection()
+        if not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            # deleted while it was embedded: its text must not stay in the index for good (found in review)
+            conn.close()
+            return 0
         # The text was edited while it was embedded (seconds): the index stays «stale», so the edit is
         # indexed next time — it was marked fresh and the edit never reached the search
         stale = 1 if text_edits.get(meeting_id, 0) != edits_before else 0
@@ -185,12 +189,14 @@ def status() -> Dict[str, Any]:
 
 # ------------------------------------------------------------------ background indexer
 def _gpu_busy() -> bool:
+    """Something else needs the computer now: a job, live captions, or a meeting (app/meeting_guard: the
+    embedding model in Ollama is not loaded during a call, as the speech models are not), or «Только запись»."""
     try:
-        from app import live, transcriber
+        from app import economy, live, meeting_guard, transcriber
 
         with transcriber._jobs_lock:
             jobs = bool(transcriber._active_jobs)
-        return jobs or bool(live.active_session_count())
+        return jobs or bool(live.active_session_count()) or meeting_guard.holds_queue() or economy.on()
     except Exception:
         return False
 
@@ -210,7 +216,7 @@ def _run() -> None:
         _wake.clear()
         try:
             settings = get_all_settings()
-            if not enabled(settings) or not _ollama_up(settings):
+            if not enabled(settings) or not _ollama_up(settings) or _gpu_busy():
                 continue
             for mid in [m for m in pending_ids(settings) if m not in _skip]:
                 if not enabled() or _gpu_busy():

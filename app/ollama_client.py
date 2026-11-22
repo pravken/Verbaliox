@@ -186,6 +186,14 @@ def release_on_exit(timeout: float = 1.5) -> List[str]:
         return []
 
 
+_started_serve_at = 0.0
+
+
+def started_recently(window: float = 90.0) -> bool:
+    """Whether this app started Ollama in the last `window` seconds: only then is a slow answer waited for."""
+    return bool(_started_serve_at) and time.monotonic() - _started_serve_at < window
+
+
 def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: bool = True) -> bool:
     host, port = _ollama_address(base_url)
     if _is_ollama_port_open(host, port):
@@ -223,9 +231,10 @@ def ensure_ollama_running(base_url: str = "http://127.0.0.1:11434", auto_start: 
             from app.shutdown import track
 
             track(proc)
-            global _started_serve
+            global _started_serve, _started_serve_at
             _started_serve = proc
-            for _ in range(80):  # a cold start (first run, slow disk) can take many seconds
+            _started_serve_at = time.monotonic()
+            for _ in range(160):  # a cold start (first run, slow disk) can take many seconds: 40 s at most
                 time.sleep(0.25)
                 if _is_ollama_port_open(host, port):
                     return True
@@ -1021,10 +1030,12 @@ def _goes_round(text: str) -> bool:
     return len(tail) >= 6 and len(tail) - len(set(tail)) >= len(tail) // 2
 
 
-def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False, plain: bool = False) -> str:
+def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool = False, plain: bool = False,
+                 think: bool = False) -> str:
     """short: a short answer (a title, «да / нет» checks, a feature's name): the model does not reason
     first, which is most of the time of such an answer. plain: a long answer without reasoning (the notes
-    of a part of a long recording): no thinking either, but a cut answer is still asked again."""
+    of a part of a long recording): no thinking either, but a cut answer is still asked again.
+    think: a general question to the assistant: a model that can reason does so before answering."""
     from app import idle_unload
 
     idle_unload.touch(model)
@@ -1048,7 +1059,7 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
     keep_alive = idle_unload.ollama_keep_alive()
     if keep_alive:
         payload["keep_alive"] = keep_alive  # Ollama frees the model after the same idle time
-    from app.llm_text import strip_think, thinking_off
+    from app.llm_text import strip_think, thinking_off, thinking_on
     from app import cancel_scope
 
     try:  # one model in memory at a time: the idle speech models and another analysis model go first
@@ -1063,7 +1074,10 @@ def _ollama_chat(base_url: str, model: str, system: str, user: str, short: bool 
 
     def request() -> str:
         # asked here, once the answer counts as being written: Ollama is asked what the model can do
-        payload.update(thinking_off(model, analysis=not (short or plain), base_url=base_url))
+        if think:
+            payload.update(thinking_on(model, base_url=base_url))
+        else:
+            payload.update(thinking_off(model, analysis=not (short or plain), base_url=base_url))
         with httpx.Client(timeout=600.0) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
             raise_for_ollama(resp)

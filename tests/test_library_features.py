@@ -451,6 +451,126 @@ class LibraryScopeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             library_qa.ask_library("вопрос", meeting_ids=[])
 
+    def _ask(self, question, reply):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", return_value=reply) as chat:
+            return library_qa.ask_library(question, meeting_ids=meeting_ids_in_folder(folder["id"])), chat
+
+    def test_a_greeting_gets_a_reply_without_a_search(self):
+        res, chat = self._ask("Привет!", "Здравствуйте! Задайте вопрос по записям.")
+        self.assertEqual(res["mode"], "chat")
+        self.assertTrue(res["found"])
+        self.assertEqual(res["sources"], [])
+        self.assertNotIn("Тестирование до пятницы.", chat.call_args[0][3])
+
+    def test_only_cited_fragments_are_sources(self):
+        res, _ = self._ask("о чём это?", "Во фрагментах нет ответа.")
+        self.assertEqual(res["sources"], [])
+        res, _ = self._ask("о чём это?", "О релизе [1].")
+        self.assertEqual([s["n"] for s in res["sources"]], [1])
+
+    def test_every_citation_form_counts(self):
+        from app.library_qa import cited_numbers
+
+        self.assertEqual(cited_numbers("А [1][3], Б [2, 4]; В [5; 6]"), {1, 2, 3, 4, 5, 6})
+        self.assertEqual(cited_numbers("Решили [7-9] и [11–12], ещё [2, 4-5]"), {2, 4, 5, 7, 8, 9, 11, 12})
+        self.assertEqual(cited_numbers("Нет ответа. Версия [v2], ссылка [x]"), set())
+
+    def test_a_general_question_is_answered_with_reasoning_and_without_sources(self):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", side_effect=["нет", "Это метод оценки проектов."]) as chat:
+            res = library_qa.ask_library("Объясни, что такое RICE", meeting_ids=meeting_ids_in_folder(folder["id"]))
+        self.assertEqual(res["mode"], "general")
+        self.assertEqual(res["sources"], [])
+        self.assertTrue(chat.call_args.kwargs.get("think"))
+        self.assertNotIn("Тестирование до пятницы.", chat.call_args[0][3])
+
+    def test_a_question_about_meetings_skips_the_check(self):
+        from app.library_qa import about_recordings
+
+        llm = mock.Mock()
+        self.assertTrue(about_recordings("что решили на встрече?", llm, False))
+        llm.chat.assert_not_called()
+        llm.chat.return_value = "Нет."
+        self.assertFalse(about_recordings("сколько будет 2+2", llm, False))
+        llm.chat.return_value = "**Нет**"
+        self.assertFalse(about_recordings("сколько будет 2+2", llm, False))
+        llm.chat.reset_mock()
+        # a retelling of the chosen recordings is about them, whatever the model says
+        for q in ("Перескажи кратко", "Сделай резюме", "Подведи итоги", "Give me a recap"):
+            self.assertTrue(about_recordings(q, llm, True), q)
+        llm.chat.assert_not_called()
+        llm.chat.side_effect = RuntimeError("down")
+        self.assertTrue(about_recordings("сколько будет 2+2", llm, False))
+
+    def test_a_follow_up_searches_its_own_words_first(self):
+        from app import library_qa
+
+        long_q = ("Какие сроки релиза мобильного приложения назвали аналитики маркетинга разработчики "
+                  "дизайнеры тестировщики менеджеры")
+        history = [{"question": long_q, "answer": "Пятница."}]
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", return_value="да"), \
+                mock.patch.object(library_qa, "retrieve", return_value=[]) as found:
+            library_qa.ask_library("а бюджет?", history=history)
+        self.assertIn("бюдж", library_qa._terms(found.call_args[0][0]))
+
+    def test_the_conversation_takes_its_room_from_the_fragments(self):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        many = [{"meeting_id": m["id"], "title": "Т", "date": "2026-01-01", "start": float(i), "speaker": "А",
+                 "text": "x", "context": "слово " * 180} for i in range(40)]
+        history = [{"question": "вопрос " * 150, "answer": "ответ " * 300}] * 3
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch.object(library_qa, "full_fragments", return_value=many), \
+                mock.patch("app.ollama_client._ollama_chat", side_effect=["да", "Ответ [1]."]) as chat:
+            res = library_qa.ask_library("а подробнее?", meeting_ids=meeting_ids_in_folder(folder["id"]), history=history)
+        self.assertEqual(res["mode"], "full")
+        self.assertLessEqual(len(chat.call_args[0][3]), library_qa.FULL_MODE_MAX_CHARS + 4000 + 200)
+
+    def test_a_follow_up_gets_the_conversation(self):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        history = [{"question": "Что решили по релизу?", "answer": "Тестирование до пятницы."}] * 5
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", side_effect=["да", "Подробности в обсуждении [1]."]) as chat:
+            res = library_qa.ask_library("а подробнее?", meeting_ids=meeting_ids_in_folder(folder["id"]), history=history)
+        self.assertEqual(res["mode"], "full")
+        self.assertIn("Предыдущий разговор", chat.call_args_list[0][0][3])  # the check sees the conversation
+        user = chat.call_args[0][3]
+        self.assertIn("Что решили по релизу?", user)
+        self.assertEqual(user.count("Что решили по релизу?"), library_qa.HISTORY_TURNS)
+        self.assertTrue(user.rstrip().endswith("Вопрос: а подробнее?"))
+
+    def test_small_talk_is_told_from_questions(self):
+        from app.library_qa import is_small_talk
+
+        for q in ("привет", "Спасибо большое!", "кто ты?", "hello", "thanks"):
+            self.assertTrue(is_small_talk(q), q)
+        for q in ("о чём была встреча?", "привет, что решили по релизу?", "задачи на неделю"):
+            self.assertFalse(is_small_talk(q), q)
+
 
 class SystemTest(unittest.TestCase):
     def test_memory_and_cpu(self):

@@ -159,8 +159,7 @@ def recheck(meeting_id: int, speakers: Dict[str, Any]) -> str:
         if _CAL_HEAD_RE.search(notes):
             fields["user_notes"] = _CAL_HEAD_RE.sub("", notes, count=1).strip()
         update_meeting_fields(meeting_id, **fields)
-        print(f"[calendar] meeting {meeting_id}: the voices are not the invitees of «{cal.get('title')}», "
-              f"named {fields.get('title', m.get('title'))!r}", flush=True)
+        print(f"[calendar] meeting {meeting_id}: the voices are not the invitees of the event, renamed", flush=True)
     elif v == "yes":
         update_meeting_fields(meeting_id, calendar_json=json.dumps({**cal, "sure": True, "match": True}, ensure_ascii=False))
     return v

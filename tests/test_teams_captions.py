@@ -18,6 +18,13 @@ class TeamsCaptionsTest(unittest.TestCase):
         self.assertEqual([n for n, _ in got], ["Marina Sokolova"] * 2 + ["Pavel Orlov"] * 2)
         self.assertEqual(got[2][1], "А так окей.")
 
+    def test_the_log_gets_the_form_of_the_panel_not_its_words(self):
+        # verbaliox.log goes to the author with a report: who spoke and what was said stay out of it
+        line = tc.text_shape(self.PANEL)
+        self.assertEqual(line, "text elements: 8 [N15 T35 N15 T43 N11 T11 N11 T64]")
+        for text in self.PANEL:
+            self.assertNotIn(text, line)
+
     def test_a_short_line_is_not_taken_for_a_name(self):
         self.assertFalse(tc.looks_like_name("А так окей."))
         self.assertFalse(tc.looks_like_name("Да, конечно"))

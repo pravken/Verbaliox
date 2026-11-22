@@ -92,9 +92,15 @@ def notice_tick(now: float = 0.0) -> bool:
         return False
     _state["noticed"] = now
     from app import app_status
+    from app.ui_lang import tr
 
     n = len(found)
-    title = "Есть нерасшифрованные записи" if n > 1 else "Есть нерасшифрованная запись"
-    text = f"«{found[0]['title'][:60]}»" + (f" и ещё {n - 1}" if n > 1 else "") + " — расшифровка была отменена. Нажмите, чтобы расшифровать"
+    first = found[0]["title"][:60]
+    if n > 1:
+        title = tr("Есть нерасшифрованные записи", "Untranscribed recordings")
+    else:
+        title = tr("Есть нерасшифрованная запись", "An untranscribed recording")
+    text = tr(f"«{first}»" + (f" и ещё {n - 1}" if n > 1 else "") + " — расшифровка была отменена. Нажмите, чтобы расшифровать",
+              f"“{first}”" + (f" and {n - 1} more" if n > 1 else "") + ": transcription was cancelled. Click to transcribe")
     app_status.add_notice(title, text, "dashboard")
     return True

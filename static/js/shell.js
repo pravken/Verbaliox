@@ -96,6 +96,14 @@ function navRecord() {
     NAV.fwd = [];
   }
   NAV.last = p;
+  navButtons();
+}
+
+// The strip's ‹ › follow the steps there are
+function navButtons() {
+  const b = document.getElementById('nav-back'), f = document.getElementById('nav-fwd');
+  if (b) b.disabled = !NAV.back.length;
+  if (f) f.disabled = !NAV.fwd.length;
 }
 
 async function navGo(dir) {
@@ -118,6 +126,7 @@ async function navGo(dir) {
   } finally {
     NAV.moving = false;
     NAV.last = Object.assign(navPlace(), { t: 0 });
+    navButtons();
   }
 }
 
@@ -204,10 +213,33 @@ function renderRail() {
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   const on = id && document.getElementById(id);
+  if (id) requestAnimationFrame(() => animateHeadIcon(state.appView));
   if (!placeRailIndicator(!was)) return;
   if (was && was !== id) {  // the icon of the section chosen gives a small press
     on.classList.remove('rail-pick'); void on.offsetWidth; on.classList.add('rail-pick');
   }
+}
+
+// The icon in the section's head is the rail button's own, with its motion (asked by the user): under the pointer, and
+// once as the section opens
+const HEAD_TILE_OF_VIEW = { dashboard: '#dashboard-view .vx-stile', libtable: '#libtable-view .vx-stile', library: '#libtable-view .vx-stile',
+  tasks: '#tasks-view .vx-stile', people: '#people-view .vx-stile', dict: '#dict-view .vx-stile', settings: '.settings-page .sx-head-ic' };
+function animateHeadIcon(view) {
+  const sel = HEAD_TILE_OF_VIEW[view];
+  if (!sel) return;  // «Сегодня» has its date tile, «Ассистент» no head tile
+  const tile = document.querySelector(sel);
+  const src = document.getElementById(RAIL_OF_VIEW[view] || '')?.querySelector('svg');
+  if (!tile || !src) return;
+  if (!tile.classList.contains('ri-host')) {  // the rail's drawing, its parts named for their motion
+    const svg = src.cloneNode(true);
+    svg.removeAttribute('id');
+    svg.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    tile.replaceChildren(svg);
+    tile.classList.add('ri-host');
+  }
+  tile.classList.remove('ri-play'); void tile.offsetWidth; tile.classList.add('ri-play');
+  clearTimeout(tile._riTimer);
+  tile._riTimer = setTimeout(() => tile.classList.remove('ri-play'), 900);
 }
 
 // The bar at the rail's edge on the section's button; still: placed at once, not moved (the first one, a resize: the
@@ -395,8 +427,11 @@ function updateRecordButtonState() {
   btn.setAttribute('aria-busy', String(starting));
   document.getElementById('tb-rec-label').textContent = recording ? t('tbRecStop') : starting ? t('tbRecStarting') : t('tbRecord');
   const clock = document.getElementById('tb-rec-clock');
-  clock.textContent = recording ? timer : '';
+  // the time is the way to the studio: its own click target inside the button (the button itself stops)
+  const clockText = document.getElementById('tb-rec-clock-t');
+  if (clockText) clockText.textContent = recording ? timer : ''; else clock.textContent = recording ? timer : '';
   clock.classList.toggle('hidden', !recording);
+  clock.classList.toggle('tb-rec-here', state.appView === 'studio');  // in the studio already: no way to it
   syncLibLiveRow();
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
   btn.title = recording ? t('tipTbRecordStop') : t('tipTbRecord');
@@ -443,6 +478,15 @@ function openRecMenu(e) {
   const r = e.currentTarget.getBoundingClientRect();
   placeMenuAt(menu, { clientX: r.right, clientY: r.bottom + 6 });
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+}
+
+// The studio of the running recording (asked by the user): the time on the red button leads there
+function openRecordStudio(e) {
+  // in the studio the time is a plain part of the red button (no capsule, no pointer): its click stops the recording
+  // as the rest of the button does, instead of doing nothing
+  if (state.appView === 'studio') return;
+  if (e) e.stopPropagation();  // the time is inside the red button, which stops the recording
+  switchAppView('studio');
 }
 
 // A preset of the menu: recorded at once, where the user is (as the red button)

@@ -2547,8 +2547,8 @@ document.addEventListener('change', (e) => {
 // --- Dictionary ---
 // The dictionary is a section of its own at the bottom of the rail (static/js/dictionary.js); the settings
 // keep a card leading there. Its two switches are settings (dictionary_fuzzy, feature_suggest), loaded and
-// saved with the others, and saved at once when changed in the section
-const DICT_SWITCHES = { 'set-dict-fuzzy': 'dictionary_fuzzy', 'set-feature-suggest': 'feature_suggest' };
+// saved with the others, and saved at once when changed in the section or in the window «Фичи»
+const DICT_SWITCHES = { 'set-dict-fuzzy': 'dictionary_fuzzy', 'set-feature-suggest': 'feature_suggest', 'ft-dr-suggest': 'feature_suggest' };
 
 function openDictionary() {
   switchAppView('dict');

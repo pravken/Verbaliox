@@ -15,6 +15,14 @@ import httpx
 from app.database import get_all_settings
 
 
+def ecapa_loaded_on() -> Optional[str]:
+    """Device of the speaker model, or None, without importing app/diarizer.py when nothing did: it imports
+    torch and scikit-learn (seconds and hundreds of MB), and the page's first look at the models
+    (/api/vram) or an idle unload imported them only to learn that nothing was loaded."""
+    mod = sys.modules.get("app.diarizer")
+    return mod.ecapa_loaded_on() if mod is not None else None
+
+
 def _ollama_base() -> str:
     url = get_all_settings().get("ollama_url") or "http://127.0.0.1:11434"
     return url.replace("localhost", "127.0.0.1").rstrip("/")
@@ -426,7 +434,6 @@ def vram_snapshot() -> Dict[str, Any]:
     workers. A click on a chip unloads or loads that model.
     """
     from app import transcriber
-    from app.diarizer import ecapa_loaded_on
     from app.dubbing import live_workers
     from app.model_manager import WHISPER_CATALOG, format_whisper_model_name, is_whisper_model_installed
     from app.ollama_client import format_llm_model_name
@@ -598,7 +605,6 @@ def release_idle_speech_models(model: Optional[str] = None) -> List[str]:
     Whisper loaded after a recording). Not while a job recognizes or captions run, nor when `model`
     fits next to them (room_for_analysis). Returns what went."""
     from app import asr_onnx, live, transcriber
-    from app.diarizer import ecapa_loaded_on, unload_diarizer
 
     if job_stage() in _ASR_STAGES or job_stage() == "diarizing" or live.has_sessions():
         return []
@@ -612,6 +618,8 @@ def release_idle_speech_models(model: Optional[str] = None) -> List[str]:
         asr_onnx.release()
         gone.append("onnx")
     if ecapa_loaded_on():
+        from app.diarizer import unload_diarizer
+
         unload_diarizer()
         gone.append("speakers")
     worker = live._worker

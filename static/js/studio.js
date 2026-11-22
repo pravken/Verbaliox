@@ -164,7 +164,7 @@ function recSourcesStart(mic, sys) {
   recSrc.sys.heard = false;
   document.querySelectorAll('[data-rec-src]').forEach(box => {
     box.innerHTML = ['mic', 'sys'].filter(k => recSrc[k].used).map(k =>
-      `<span class="rec-src-item" data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
+      `<span class="rec-src-item" data-vx-live data-src="${k}">${REC_SRC_ICONS[k]}<span class="rec-src-bars"><i></i><i></i><i></i></span></span>`).join('');
     box.classList.toggle('hidden', !mic && !sys);
   });
   recSourcesRender();
@@ -211,8 +211,10 @@ function recSilenceWatch(now) {
   }
 }
 
+// the items as the page keeps them (20 times a second for a whole meeting: a selector went over every element)
+const recSrcItems = document.getElementsByClassName('rec-src-item');
 function recSourcesRender() {
-  document.querySelectorAll('[data-rec-src] .rec-src-item').forEach(el => {
+  [...recSrcItems].forEach(el => {
     const s = recSrc[el.dataset.src];
     el.style.setProperty('--lv', s.lv.toFixed(3));
     if (el.classList.contains('rec-src-on') !== s.on || !el.title) {
@@ -431,7 +433,7 @@ function renderRecordPresetSelect(selectedId) {
   const p = recordPresets().find(x => x.id === sel.value);
   document.getElementById('rec-preset-update-btn').classList.toggle('hidden', !p || !!p.builtin);
   document.getElementById('rec-preset-delete-btn').classList.toggle('hidden', !p || !!p.builtin);
-  document.getElementById('rec-preset-default-btn').classList.toggle('ui-btn-active', !!p && p.id === def);
+  document.getElementById('rec-preset-default-btn').classList.toggle('is-on', !!p && p.id === def);
 }
 
 function applyRecordPreset(id) {
@@ -896,11 +898,11 @@ function renderStudioPeople() {
     ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
   const html = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
       <label class="st-people-count">${escapeHtml(t('stPeopleCount'))}
-        <select data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
-    <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="st-person${counts[n] ? ' is-marked' : ''}"
+        <select class="st-field" data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
+    <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="lt-chip st-person${counts[n] ? ' is-marked' : ''}"
         ${rec ? '' : 'disabled'} data-click="stPeopleMark" data-click-args='[${i}]'
         title="${escapeHtml(rec ? t('tipStPersonMark') : t('tipStPersonIdle'))}">${escapeHtml(n)}${counts[n] ? `<span class="st-person-n">${counts[n]}</span>` : ''}</button>`).join('')}
-      <button type="button" class="st-person st-person-add" data-click="stPeopleAdd">+ ${escapeHtml(t('stPeopleAdd'))}</button></div>
+      <button type="button" class="lt-chip st-person-add" data-click="stPeopleAdd">${VX_PLUS}${escapeHtml(t('stPeopleAdd'))}</button></div>
     <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>
     ${stTeamsOn() ? `<p class="st-people-teams">${escapeHtml(stTeamsLine())}
       <button type="button" class="st-link" data-click="showTeamsHelp">${escapeHtml(t('teamsHelpLink'))}</button></p>` : ''}`;
@@ -1380,14 +1382,21 @@ window.trayCommand = function (cmd, arg) {
 };
 
 // --- Recording studio: large captions and their translation ---
-const studio = { view: 'under', speed: 'quality', font: 26, speech: 'auto', focus: false };
+// One size of the captions' text in every window (asked by the user): the studio, «На всё окно» and the chat of a
+// recording's transcript; A−/A+ of the studio change it everywhere. The text of a transcript by default (26 px of the
+// former full-screen captions looked huge in the chat)
+const STUDIO_FONT = 14;
+const studio = { view: 'under', speed: 'quality', font: STUDIO_FONT, speech: 'auto', focus: false };
 try {
   const saved = JSON.parse(localStorage.getItem('verbaliox_studio') || '{}');
   Object.assign(studio, {
     view: ['under', 'side', 'tr'].includes(saved.view) ? saved.view : 'under',
-    speed: saved.speed || 'quality', font: saved.font || 26, speech: saved.speech || 'auto',
+    // a size saved by an earlier version (16–56 px) is kept within the range of A−/A+ (12–40 px): the chat of a
+    // transcript reads it too
+    speed: saved.speed || 'quality', font: (Number(saved.font) && saved.font !== 26) ? Math.max(12, Math.min(40, Number(saved.font))) : STUDIO_FONT, speech: saved.speech || 'auto',
   });
 } catch (e) {}
+document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);  // the transcript reads it too, from the start
 
 function saveStudioPrefs() {
   try {
@@ -1429,6 +1438,8 @@ function toggleStudioFocus(on) {
   document.getElementById('studio-view').classList.toggle('studio-focus', studio.focus);
   document.getElementById('studio-focus-label').textContent = t(studio.focus ? 'studioFocusExit' : 'studioFocus');
   if (studio.focus) {
+    // the window «Фичи» (z 45) stayed over the captions covering the whole window (z 40)
+    if (featureDrawerOpen()) closeFeatureDrawer();
     document.getElementById('studio-vram-chips').innerHTML = vram.html || '';
     scheduleVramRefresh(300);
   }
@@ -1439,7 +1450,7 @@ function toggleStudioFocus(on) {
 
 function renderStudioControls() {
   ['quality', 'fast'].forEach(k => {
-    document.getElementById(`studio-speed-${k}`).className = `apple-segment-btn text-[11.5px] ${studio.speed === k ? 'apple-segment-active' : 'text-apple-secondary hover:text-white'}`;
+    document.getElementById(`studio-speed-${k}`).className = `tk-seg-btn${studio.speed === k ? ' tk-on' : ''}`;
   });
   document.getElementById('studio-tr-options').classList.toggle('hidden', !document.getElementById('live-translate-select').value);
   renderQuickLangs();
@@ -1447,13 +1458,13 @@ function renderStudioControls() {
   const autoOpt = document.querySelector('#studio-speech option[value="auto"]');
   if (autoOpt) autoOpt.textContent = t('studioSpeechAuto') + (liveCap.lang && studio.speech === 'auto' ? ` · ${langCode(liveCap.lang)}` : '');
   ['under', 'side', 'tr'].forEach(k => {
-    document.getElementById(`studio-view-${k}`).className = `apple-segment-btn text-[11.5px] ${studio.view === k ? 'apple-segment-active' : 'text-apple-secondary hover:text-white'}`;
+    document.getElementById(`studio-view-${k}`).className = `tk-seg-btn${studio.view === k ? ' tk-on' : ''}`;
   });
-  document.getElementById('studio-captions-inner').style.setProperty('--cap-size', `${studio.font}px`);
+  document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);
 }
 
 function studioSetView(v) { studio.view = v; saveStudioPrefs(); renderStudioControls(); syncStudioCaptions(); }
-function studioFont(d) { studio.font = Math.max(16, Math.min(56, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
+function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
 function studioSetSpeed(s) { studio.speed = s; saveStudioPrefs(); renderStudioControls(); studioConfigure(); }
 
 // Language or model changed while recording: the session translates the last lines again
@@ -2310,7 +2321,7 @@ function renderStudioPresetChips() {
   const def = defaultRecordPresetId();
   const rec = isRecording();
   box.innerHTML = recordPresets().map(p => `<button data-click="applyRecordPreset" data-click-args='[${jsArg(p.id)}]' ${rec ? 'disabled' : ''}
-      class="st-chip ${p.id === cur ? 'is-on' : ''}" title="${escapeHtml(p.id === def ? t('rdSasPresetDefault') : '')}">${p.id === def ? '★ ' : ''}${escapeHtml(presetLabel(p))}</button>`).join('');
+      class="lt-chip ${p.id === cur ? 'on' : ''}" title="${escapeHtml(p.id === def ? t('rdSasPresetDefault') : '')}">${p.id === def ? '★ ' : ''}${escapeHtml(presetLabel(p))}</button>`).join('');
 }
 
 function studioSetSource(value) {
@@ -2327,7 +2338,7 @@ function renderStudioSourceSeg() {
   ['both', 'mic', 'system'].forEach(k => {
     const b = document.getElementById(`st-src-${k}`);
     if (!b) return;
-    b.className = `apple-segment-btn text-[11.5px] ${k === v ? 'apple-segment-active' : 'text-apple-secondary hover:text-white'}`;
+    b.className = `tk-seg-btn${k === v ? ' tk-on' : ''}`;
     b.setAttribute('aria-checked', String(k === v));
     b.disabled = rec;
   });
@@ -2344,7 +2355,7 @@ function renderStudioVideoChips() {
   const rec = isRecording();
   box.innerHTML = [...sel.options].filter(o => !o.classList.contains('hidden')).map(o =>
     `<button data-click="studioSetVideo" data-click-args='[${jsArg(o.value)}]' ${rec ? 'disabled' : ''} title="${escapeHtml(o.textContent.trim())}"
-      class="st-chip ${o.value === sel.value ? 'is-on' : ''}">${escapeHtml(short[o.value] ? t(short[o.value]) : o.textContent.trim())}</button>`).join('');
+      class="lt-chip ${o.value === sel.value ? 'on' : ''}">${escapeHtml(short[o.value] ? t(short[o.value]) : o.textContent.trim())}</button>`).join('');
 }
 
 function studioSetVideo(value) {
@@ -2386,7 +2397,7 @@ function renderStudioTab() {
   ['text', 'notes', 'ask'].forEach(k => {
     document.getElementById(`st-pane-${k}`)?.classList.toggle('hidden', k !== studio.tab);
     const b = document.getElementById(`st-tab-${k}`);
-    if (b) { b.classList.toggle('is-on', k === studio.tab); b.setAttribute('aria-selected', String(k === studio.tab)); }
+    if (b) { b.classList.toggle('tk-on', k === studio.tab); b.setAttribute('aria-selected', String(k === studio.tab)); }
   });
 }
 

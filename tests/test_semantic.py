@@ -89,6 +89,25 @@ class SemanticIndexTest(unittest.TestCase):
         with mock.patch.object(semantic, "EDIT_QUIET_SEC", -1):
             self.assertIn(self.b, semantic.pending_ids())  # still to do: the index has the text before the edit
 
+    def test_a_recording_deleted_while_indexing_leaves_no_text_behind(self):
+        """Found in review: the chunks (the transcript's text) of a recording deleted while it was embedded were
+        written after the delete and stayed in the database for good."""
+        c = db.create_meeting("Удаляемая", "c.wav", "/tmp/c.wav")["id"]
+        db.save_meeting_results(c, segments=[_seg(1, 0, "Конфиденциальная фраза.")])
+
+        def delete_meanwhile(texts, settings=None):
+            db.delete_meeting(c)
+            return _fake_embed(texts, settings)
+
+        with mock.patch.object(semantic, "embed", side_effect=delete_meanwhile):
+            self.assertEqual(semantic.index_meeting(c), 0)
+        with db._db_lock:
+            conn = db.get_connection()
+            left = conn.execute("SELECT COUNT(*) FROM semantic_chunks WHERE meeting_id = ?", (c,)).fetchone()[0]
+            meta = conn.execute("SELECT COUNT(*) FROM semantic_meta WHERE meeting_id = ?", (c,)).fetchone()[0]
+            conn.close()
+        self.assertEqual((left, meta), (0, 0))
+
     def test_assistant_gets_fragments_without_shared_words(self):
         for mid in semantic.pending_ids():
             semantic.index_meeting(mid)
@@ -110,6 +129,24 @@ class SemanticIndexTest(unittest.TestCase):
         starts = [c[0] for c in chunks]
         self.assertEqual(starts, sorted(starts))
         self.assertTrue(all(st in {s["start"] for s in segs} for st in starts))  # each starts at a phrase
+
+
+@needs_deps
+class MeetingWaitTest(unittest.TestCase):
+    """The embedding model is not loaded into Ollama during a meeting, as the speech models are not."""
+
+    def test_indexing_waits_for_a_meeting(self):
+        from app import economy, meeting_guard
+
+        with mock.patch.object(meeting_guard, "holds_queue", return_value=True), \
+                mock.patch.object(economy, "on", return_value=False):
+            self.assertTrue(semantic._gpu_busy())
+        with mock.patch.object(meeting_guard, "holds_queue", return_value=False), \
+                mock.patch.object(economy, "on", return_value=True):
+            self.assertTrue(semantic._gpu_busy())
+        with mock.patch.object(meeting_guard, "holds_queue", return_value=False), \
+                mock.patch.object(economy, "on", return_value=False):
+            self.assertFalse(semantic._gpu_busy())
 
 
 @needs_deps

@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import sys
+import threading
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -574,7 +575,9 @@ class SegmentsTableTest(unittest.TestCase):
 
         with mock.patch.object(database, "get_connection", side_effect=counting):
             database.edit_meeting(m["id"], change)
-        # the line, and its search entry deleted and added (each with its place in segments_fts_rows)
+        # the line, and its search entry deleted and added (each with its place in segments_fts_rows); the
+        # trigger that drops the kept talk time (speaker_talk) is reported again with the text of its statement
+        writes = list(dict.fromkeys(writes))
         self.assertEqual(len(writes), 5, writes)
         self.assertTrue(any(w.startswith("DELETE FROM segments_fts WHERE rowid") for w in writes), writes)
         got = database.get_meeting(m["id"])["segments"]
@@ -597,6 +600,68 @@ class SegmentsTableTest(unittest.TestCase):
         database.save_meeting_results(m["id"], segments=[{"id": 1, "start": 0, "end": 1, "text": "снова"}])
         database.delete_meeting(m["id"])
         self.assertEqual(self._raw("SELECT COUNT(*) FROM segments WHERE meeting_id = ?", m["id"])[0][0], 0)
+
+
+    def test_talk_time_of_a_large_library_lets_the_database_go_between_steps(self):
+        """The first reading after a start goes through every line of the library: seconds for thousands of
+        recordings, and every other request (and the worker's progress) waited for all of it."""
+        database.init_db()
+        ids = []
+        for n in range(3):
+            m = database.create_meeting(title=f"Шаг {n}", filename="a.wav", media_path="a.wav")
+            self.addCleanup(database.delete_meeting, m["id"])
+            database.save_meeting_results(m["id"], segments=[{"id": 1, "start": 0, "end": n + 1, "speaker": "SPEAKER_00", "text": "а"}])
+            ids.append(m["id"])
+        holds = []
+        real = database.get_connection
+        me = threading.get_ident()
+
+        def counting():
+            if threading.get_ident() == me:  # a background thread of the app may open a connection meanwhile
+                holds.append(database._db_lock._is_owned())
+            return real()
+
+        with mock.patch.object(database, "SPEAKER_SECONDS_STEP", 1), \
+                mock.patch.object(database, "get_connection", side_effect=counting):
+            talk = database.speaker_seconds(ids)
+        self.assertEqual([talk[i] for i in ids], [{"SPEAKER_00": 1.0}, {"SPEAKER_00": 2.0}, {"SPEAKER_00": 3.0}])
+        self.assertEqual(holds, [True, True, True])  # one hold of the lock per step, not one for all
+        self.assertEqual(database.speaker_seconds(ids), talk)  # kept: read once
+
+
+    def test_talk_time_is_kept_between_starts_and_any_change_of_the_lines_drops_it(self):
+        """Worked out from every line of the library, the talk time took seconds after each start: it is kept in
+        the database, and a change of the lines (also by another version of the app, written straight to the
+        table) drops what was kept."""
+        database.init_db()
+        m = database.create_meeting(title="Хранение", filename="a.wav", media_path="a.wav")
+        self.addCleanup(database.delete_meeting, m["id"])
+        mid = m["id"]
+        database.save_meeting_results(mid, segments=[{"id": 1, "start": 0, "end": 4, "speaker": "SPEAKER_00", "text": "а"}])
+        self.assertEqual(database.speaker_seconds([mid])[mid], {"SPEAKER_00": 4.0})
+        database._speaker_seconds_cache.clear()  # a new start
+        reads = []
+        real = database.get_connection
+
+        def watching():
+            conn = real()
+            conn.set_trace_callback(reads.append)
+            return conn
+
+        with mock.patch.object(database, "get_connection", side_effect=watching):
+            self.assertEqual(database.speaker_seconds([mid])[mid], {"SPEAKER_00": 4.0})
+        self.assertFalse([q for q in reads if "FROM segments" in q], reads)  # read from what was kept
+        line = json.dumps({"start": 6, "end": 7, "speaker": "SPEAKER_01"})
+        for sql, args, want in (
+                ("UPDATE segments SET data = json_set(data, '$.end', 6) WHERE meeting_id = ?", (mid,), {"SPEAKER_00": 6.0}),
+                ("INSERT INTO segments (meeting_id, pos, data) VALUES (?, 1, ?)", (mid, line), {"SPEAKER_00": 6.0, "SPEAKER_01": 1.0}),
+                ("DELETE FROM segments WHERE meeting_id = ? AND pos = 0", (mid,), {"SPEAKER_01": 1.0})):
+            conn = real()
+            conn.execute(sql, args)
+            conn.commit()
+            conn.close()
+            database._speaker_seconds_cache.clear()
+            self.assertEqual(database.speaker_seconds([mid])[mid], want, sql)
 
 
 class TranscriptVersionsTest(unittest.TestCase):

@@ -8,6 +8,7 @@ Python write a stack dump there if the process crashes hard.
 """
 
 import faulthandler
+import re
 import sys
 import threading
 import time
@@ -41,6 +42,24 @@ def _rotate() -> None:
     _file = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
 
 
+# What never goes into the log, whoever prints it (the log is sent with a problem report): the Windows
+# user's name in paths, e-mail addresses, the session token and the links of calls
+_SCRUB = [
+    (re.compile(r"(?i)([a-z]:[\\/]+(?:users|documents and settings)[\\/]+)[^\\/:*?\"<>|\r\n]+"), r"\1<user>"),
+    (re.compile(r"(/(?:home|Users)/)[^/\s'\"]+"), r"\1<user>"),
+    (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "<email>"),
+    (re.compile(r"(?i)\b(token|access_token|key|password|pwd|sig|signature)=[^&\s'\"]+"), r"\1=<hidden>"),
+    (re.compile(r"(?i)https?://(?:teams\.microsoft\.com|teams\.live\.com|[\w-]+\.zoom\.us|meet\.google\.com|[\w.-]*webex\.com|telemost\.yandex\.ru)/\S*"),
+     "<call link>"),
+]
+
+
+def scrub(text: str) -> str:
+    for rx, to in _SCRUB:
+        text = rx.sub(to, text)
+    return text
+
+
 class _Tee:
     """Writes to the log file and, when there is one, to the original stream."""
 
@@ -64,7 +83,7 @@ class _Tee:
             for part in text.splitlines(keepends=True):
                 if self._at_line_start:
                     out.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {self._label} ")
-                out.append(part)
+                out.append(scrub(part))
                 self._at_line_start = part.endswith("\n")
             try:
                 _file.write("".join(out))
@@ -95,6 +114,30 @@ class _Tee:
         return "utf-8"
 
 
+SIDE_LOG_MAX = 1024 * 1024
+SIDE_LOG_KEEP = 256 * 1024
+
+
+def trim_side_logs() -> None:
+    """crash.log (a stack of every thread at each hard crash) and update.log (the installer's output at
+    every update of the libraries) are only ever added to: past SIDE_LOG_MAX only their newest part is kept,
+    from the start of a line."""
+    for name in ("crash.log", "update.log"):
+        path = LOG_DIR / name
+        try:
+            if path.stat().st_size <= SIDE_LOG_MAX:
+                continue
+            with open(path, "rb") as f:
+                f.seek(-SIDE_LOG_KEEP, 2)
+                tail = f.read()
+            tail = tail[tail.find(b"\n") + 1:]
+            tmp = path.with_name(name + ".tmp")
+            tmp.write_bytes(tail)
+            tmp.replace(path)
+        except OSError:
+            pass
+
+
 def start_file_log() -> Path:
     """Starts copying stdout/stderr into the log file. Safe to call once per process."""
     global _file
@@ -102,6 +145,7 @@ def start_file_log() -> Path:
         if _file is not None:
             return LOG_FILE
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+        trim_side_logs()
         if LOG_FILE.exists() and LOG_FILE.stat().st_size > MAX_BYTES:
             _rotate()
         else:

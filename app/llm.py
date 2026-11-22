@@ -10,6 +10,7 @@ cloud models of earlier versions were removed; their stored settings and API key
 """
 
 from dataclasses import dataclass
+import time
 from typing import Callable, Dict, Optional
 
 
@@ -36,12 +37,18 @@ class Target:
     def label(self) -> str:
         return self.model
 
-    def chat(self, system: str, user: str, short: bool = False, plain: bool = False) -> str:
+    def chat(self, system: str, user: str, short: bool = False, plain: bool = False, think: bool = False) -> str:
         """short: a short answer (a title, a check): the model does not reason first.
-        plain: a long answer that needs no reasoning (a retelling): the model does not reason either."""
+        plain: a long answer that needs no reasoning (a retelling): the model does not reason either.
+        think: a general question to the assistant: a model that can reason does so first."""
+        if think:
+            return self.chat_fn(system, user, think=True)
         if short:
             return self.chat_fn(system, user, short=True)
         return self.chat_fn(system, user, plain=True) if plain else self.chat_fn(system, user)
+
+
+OLLAMA_WARMUP_SEC = 30.0  # how long a just started Ollama may take to answer
 
 
 def target(model: Optional[str] = None, start_ollama: bool = True) -> Target:
@@ -72,13 +79,21 @@ def available(settings: Optional[Dict[str, str]] = None) -> bool:
 
 
 def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) -> Target:
-    from app.ollama_client import _ollama_chat, ensure_ollama_running, get_ollama_status
+    from app.ollama_client import _ollama_chat, ensure_ollama_running, get_ollama_status, started_recently
 
     base_url = (settings.get("ollama_url") or "http://127.0.0.1:11434").replace("localhost", "127.0.0.1").rstrip("/")
     wanted = model or settings.get("ollama_model") or "gemma4:e2b"
-    if start:
-        ensure_ollama_running(base_url)  # analysis is an explicit user action (or one they turned on)
+    started = ensure_ollama_running(base_url) if start else False  # an explicit user action (or one they turned on)
     status = get_ollama_status(base_url)
+    # just started, its port open: the first answers can take seconds (the models' list read from the disk) —
+    # waited for, so a question asked right after the app's start is not told «Ollama не запущена»
+    # (reported by the user: the assistant failed right after the start)
+    deadline = time.monotonic() + OLLAMA_WARMUP_SEC
+    # only an Ollama this app has just started: one that is up for long but does not answer (hung, or another
+    # program on its port) is reported at once, not after half a minute
+    while started and started_recently() and not status["running"] and time.monotonic() < deadline:
+        time.sleep(0.5)
+        status = get_ollama_status(base_url)
     if not status["running"]:
         raise LlmError(
             "Локальный сервер Ollama не установлен или не запущен. Откройте «Настройки», выберите модель LLM и нажмите "
@@ -93,4 +108,5 @@ def _ollama_target(model: Optional[str], settings: Dict[str, str], start: bool) 
     from app.ollama_client import single_pass_max_chars
 
     return Target("ollama", wanted, single_pass_max_chars(),
-                  lambda system, user, short=False, plain=False: _ollama_chat(base_url, wanted, system, user, short=short, plain=plain))
+                  lambda system, user, short=False, plain=False, think=False:
+                  _ollama_chat(base_url, wanted, system, user, short=short, plain=plain, think=think))

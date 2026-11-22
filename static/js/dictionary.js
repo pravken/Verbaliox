@@ -127,16 +127,18 @@ async function hideDictOffer(i) {
   renderDictPage();
 }
 
-// The two switches of the section are settings: saved at once
+// The switches of the section and of the window «Фичи» are settings: saved at once
 document.addEventListener('change', async e => {
   const key = DICT_SWITCHES[e.target?.id];
-  if (!key || !e.target.closest('#dict-view')) return;
+  if (!key || !e.target.closest('#dict-view, #ft-drawer')) return;
   const box = e.target, value = String(!!box.checked);
   const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => null);
   // not saved: the switch goes back to what is in effect
   if (!res || !res.ok) { box.checked = !box.checked; showError(t('errorGeneric')); return; }
   if (state.system && state.system.settings) state.system.settings[key] = value;
+  // the same setting shown twice (the card «Фичи» and the window «Фичи»): both switches tell it
+  for (const [id, k] of Object.entries(DICT_SWITCHES)) if (k === key && id !== box.id && document.getElementById(id)) document.getElementById(id).checked = box.checked;
   if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
 });
 

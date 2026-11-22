@@ -77,6 +77,10 @@ function pultCard(title, n, ic, inner, cls = '', side = '') {
 // update in place): at most 14, 35 ms apart; nothing moves with «reduce motion» (styles.css)
 function pultRise(root, selector) {
   if (!root) return;
+  // one motion at a time: a section fading in brings its cards with it; their own rise right after made them jump
+  // twice (reported by the user on «Люди»). They rise on a switch of the view inside a section.
+  const fading = root.closest('.vx-in');
+  if (fading && performance.now() - (fading._vxInAt || 0) < 450) return;
   [...root.querySelectorAll(selector)].slice(0, 14).forEach((el, i) => {
     el.classList.remove('pult-rise');
     void el.offsetWidth;

@@ -224,6 +224,20 @@ def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
         if m.get("status") not in RESUME_STATES:
             continue
         mid = int(m["id"])
+        if m.get("status") == "summarizing" and m.get("has_transcript"):
+            # The analysis runs once the transcript is saved (or as a job of its own on a finished recording):
+            # queued again as a transcription, it recognized the whole recording anew and replaced the corrections
+            # made in it, or failed for good when its sound was deleted (found in review). The transcript stays;
+            # an analysis without results is done again by app/meeting_guard.py, as one that waited for a meeting
+            update_meeting_progress(mid, status="completed", progress=100, stage_text="Задача прервана перезапуском")
+            if not m.get("has_summary"):
+                try:
+                    from app import meeting_guard
+
+                    meeting_guard.defer(mid)
+                except Exception:
+                    traceback.print_exc()
+            continue
         n = counts.get(str(mid))
         n = n if isinstance(n, int) else 0
         if m.get("status") != "queued" and not clean:  # it was running when the program crashed
@@ -397,6 +411,18 @@ async def local_session_guard(request: Request, call_next):
     path = request.url.path
     if not path.startswith(_PUBLIC_PREFIXES) and _foreign_page(request):
         return Response('{"detail":"Forbidden origin"}', status_code=403, media_type="application/json")
+    if path == "/api/session/probe" and request.method == "GET":
+        # The launcher asks whether this server is its own (run.py probe_server) without sending the token
+        from app.paths import session_proof
+
+        nonce = request.query_params.get("n") or ""
+        if not 16 <= len(nonce) <= 128:
+            return Response('{"detail":"Bad request"}', status_code=400, media_type="application/json")
+        port = (request.scope.get("server") or ("", 0))[1] or 0
+        import json as _json
+
+        return Response(_json.dumps({"proof": session_proof(SESSION_TOKEN, nonce, port)}), media_type="application/json",
+                        headers={"Cache-Control": "no-store"})
     if path in ("/api/session", "/api/session/boot") and request.method == "POST":
         # The app window signs in without the token in an address (see _LOCKED_PAGE); the launcher
         # trades it for a one-time browser address (issue_boot_nonce)

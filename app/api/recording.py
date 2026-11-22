@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
-from app.paths import DATA_DIR, UPLOADS_DIR
+from app.paths import UPLOADS_DIR
 from app import speech_route
 from app.settings_schema import as_int
 from app.database import create_meeting, get_all_settings, get_meeting
@@ -485,7 +485,7 @@ def recover_sessions() -> List[Path]:
             payload.title = payload.title or "Восстановленная запись"
             finish_recording(payload, recovered=paths)  # its file goes when the mix is over
             used += parts
-            print(f"[record] recovered recording «{payload.title}» with its notes ({len(parts)} part(s))", flush=True)
+            print(f"[record] recovered a recording with its notes ({len(parts)} part(s))", flush=True)
         except Exception:
             traceback.print_exc()
             sc.unlink(missing_ok=True)
@@ -718,13 +718,11 @@ class UiLangPayload(BaseModel):
 
 @router.post("/api/ui/lang")
 def api_ui_lang(payload: UiLangPayload) -> Dict[str, Any]:
-    """Remembers the UI language for the launcher's splash screen (read by Verbaliox.exe)."""
-    lang = "en" if payload.lang == "en" else "ru"
-    try:
-        (DATA_DIR / "ui-lang.txt").write_text(lang, encoding="utf-8")
-    except OSError:
-        pass
-    return {"lang": lang}
+    """Remembers the UI language for the launcher's splash screen (read by Verbaliox.exe) and for what
+    Windows shows from the tray side (app/ui_lang.py)."""
+    from app import ui_lang
+
+    return {"lang": ui_lang.save(payload.lang)}
 
 # --- What the page is doing, for the tray icon (see app/app_status.py) ---
 class UiStatePayload(BaseModel):
@@ -884,6 +882,7 @@ class LibraryAskPayload(BaseModel):
     model: Optional[str] = None
     folder_id: Optional[int] = None  # only recordings in this folder and the folders inside it
     meeting_ids: Optional[List[int]] = None  # only these recordings
+    history: List[Dict[str, str]] = []  # the conversation so far: {question, answer}, the last few
 
 @router.post("/api/library/ask")
 def api_library_ask(payload: LibraryAskPayload) -> Dict[str, Any]:
@@ -900,7 +899,8 @@ def api_library_ask(payload: LibraryAskPayload) -> Dict[str, Any]:
         ids = [int(i) for i in payload.meeting_ids][:500]
         scope = ids if scope is None else [i for i in scope if i in ids]
     try:
-        return ask_library(payload.question, answer_lang=payload.lang, model_name=payload.model, meeting_ids=scope)
+        return ask_library(payload.question, answer_lang=payload.lang, model_name=payload.model, meeting_ids=scope,
+                           history=payload.history)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

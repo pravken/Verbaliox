@@ -1,0 +1,21 @@
+<!-- «Фичи»: a window of its own at the right edge, over any section (static/js/features.js openFeatureDrawer):
+     a field for a new feature, the list, the chosen feature's fields and the switch of the suggestions. Opened from
+     «Все фичи ▾» of «Обзор», «Фича ▾» of «Записи», the chip «Фича:» of a recording and «В отдельном окне» of the card «Фичи» in «Словарь» (the card stays there too).
+     Part of static/index.html. -->
+  <aside id="ft-drawer" class="ft-drawer hidden" role="dialog" aria-modal="false" data-i18n-aria="ftDictTitle" aria-label="Фичи">
+    <div id="ft-dr-head"></div>
+    <div class="ft-dr-new">
+      <input id="ft-dr-new" type="text" maxlength="60" class="tk-input ft-dr-in" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addDrawerFeature"]'
+        data-i18n-placeholder="ftNewPh" placeholder="Новая фича…" data-i18n-title="ftNewPh" title="Новая фича…">
+      <button id="ft-dr-add" type="button" data-click="addDrawerFeature" class="tk-btn tk-btn-primary"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="ftCreate">Создать</span></button>
+    </div>
+    <div class="ft-dr-scroll">
+      <div id="ft-dr-list" class="ft-dr-list" role="listbox" data-i18n-aria="ftDictTitle" aria-label="Фичи"></div>
+      <div id="ft-dr-form" class="ft-dr-form"></div>
+    </div>
+    <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label ft-dr-foot">
+      <span><span data-i18n="ftSuggestToggle">Предлагать фичу новой записи</span>
+        <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="ftSuggestHint">По названию встречи, а если в нём фичи нет — моделью анализа.</span></span>
+      <input type="checkbox" role="switch" class="vs-switch" id="ft-dr-suggest" checked />
+    </label>
+  </aside>

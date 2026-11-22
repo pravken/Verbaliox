@@ -37,6 +37,21 @@ class SessionAndSearchApiTest(unittest.TestCase):
             self.assertIn("vs_session_8790=", r.headers["set-cookie"])
             self.assertEqual(c.get("/api/meetings").status_code, 200)
 
+    def test_probe_proves_the_token_without_giving_it(self):
+        """The launcher asks a port whether it is our server (run.py probe_server): the answer is bound to the
+        nonce and to the port the server listens on, and holds no token."""
+        from app.paths import session_proof
+
+        with self._client(8790) as c:
+            self.assertEqual(c.get("/api/session/probe?n=short").status_code, 400)
+            r = c.get("/api/session/probe?n=" + "a" * 32)
+            self.assertEqual(r.status_code, 200)
+            self.assertNotIn(main.SESSION_TOKEN, r.text)
+            self.assertNotIn("set-cookie", r.headers)
+            self.assertEqual(r.json()["proof"], session_proof(main.SESSION_TOKEN, "a" * 32, 8790))
+            self.assertNotEqual(r.json()["proof"], session_proof(main.SESSION_TOKEN, "a" * 32, 8791))
+            self.assertEqual(c.get("/api/meetings").status_code, 401)
+
     def test_browser_signs_in_with_a_one_time_address(self):
         """Found in the audit: the browser mode opened /?token=..., which stays in the browser's history.
         The launcher trades the token for a nonce that works once and for a minute only."""

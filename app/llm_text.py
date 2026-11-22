@@ -96,6 +96,14 @@ def thinking_off(model: Optional[str], analysis: bool = False, base_url: Optiona
     return {"think": False}
 
 
+def thinking_on(model: Optional[str], base_url: Optional[str] = None) -> Dict[str, Any]:
+    """What to add to an Ollama chat request so a model that can reason does so (a general question to
+    the assistant); nothing for a model that cannot."""
+    if not model or not can_think(model, base_url):
+        return {}
+    return {"think": "medium"} if _bare(model.lower()).startswith(_THINK_LOW) else {"think": True}
+
+
 def strip_think(text: str) -> str:
     text = _THINK_RE.sub("", text or "")
     if "</think>" in text.lower():  # the reasoning came without its opening tag: the answer is after the last close

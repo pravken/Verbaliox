@@ -48,6 +48,10 @@ class ScreenCapture:
         self.started_at = 0.0
         self.error = ""
         self.proc: Optional[subprocess.Popen] = None
+        # one stop at a time: the app's end stops every capture (app/shutdown.py) while the window's closing or
+        # the recording's own stop may be finishing it, and a second stop found stdin closed and killed FFmpeg
+        # while it wrote the end of the file (found in review)
+        self._stopping = threading.Lock()
 
     def start(self, ffmpeg: str) -> None:
         from app.shutdown import track
@@ -75,15 +79,16 @@ class ScreenCapture:
 
     def stop(self) -> None:
         """Asks FFmpeg to finish the file ("q" on its input), then ends it if it does not."""
-        if not self.proc or self.proc.poll() is not None:
-            return
-        try:
-            self.proc.stdin.write(b"q")
-            self.proc.stdin.close()
-            self.proc.wait(timeout=10)
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            self.proc.kill()
-            self.proc.wait(timeout=5)
+        with self._stopping:
+            if not self.proc or self.proc.poll() is not None:
+                return
+            try:
+                self.proc.stdin.write(b"q")
+                self.proc.stdin.close()
+                self.proc.wait(timeout=10)
+            except (subprocess.TimeoutExpired, OSError, ValueError):
+                self.proc.kill()
+                self.proc.wait(timeout=5)
 
 
 def start_capture(ffmpeg: str, path: Path, target: str) -> ScreenCapture:

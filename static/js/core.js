@@ -108,7 +108,7 @@ function applyUiScale(pct) {
 // chosen in Settings → Общие from the presets approved then (ui_accent); the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
 const THEME_ACCENTS = {
   steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
-  emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#A8324A',
+  emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#B0417E',  // cherry: moved from #A8324A to raspberry, away from the red of the recording (asked by the user)
 };
 const THEME_BGS = {
   slate: '#121418', deepblue: '#10141C', petrol: '#0E1617', moss: '#121411',
@@ -1025,6 +1025,7 @@ function animateIn(el) {
   el.classList.remove('vx-in');
   void el.offsetWidth;  // restarts the animation
   el.classList.add('vx-in');
+  el._vxInAt = performance.now();  // pultRise leaves a section alone while it fades in
 }
 
 function switchWorkspaceTab(tab) {
@@ -1114,6 +1115,7 @@ const VX_LAYERS = [
   ['kpi-cfg', vxTry(() => DB.kpiCfg && state.appView === 'dashboard'), () => { DB.kpiCfg = false; dbKpiRedraw(); }, '.db-kc'],
   ['db-detail', vxTry(() => !!DB_DETAIL.kind && state.appView === 'dashboard'), vxCall('dbCloseDetail'), '#db-detail', 'mode'],
   ['db-edit', vxTry(() => DB.edit && state.appView === 'dashboard'), vxCall('toggleDashEdit'), '#db-grid', 'mode'],
+  ['ft-drawer', vxTry(() => featureDrawerOpen()), vxCall('closeFeatureDrawer'), '#ft-drawer', 'mode'],
   ['modal', () => !!document.querySelector('.modal-backdrop:not(.hidden), #upd-after')
     || [...document.querySelectorAll('[id^="modal-"]:not(.hidden)')].some(m => !m.closest('#settings-view')), () => {}, '', 'modal'],
 ].map(([name, isOpen, close, sel, kind]) => ({ name, isOpen, close, sel, kind: kind || 'menu', open: false, at: 0, owner: null, ownerEl: null }));
@@ -1139,10 +1141,47 @@ function vxSyncLayers() {
       l.ownerEl = recent ? vxPress.el : null;
       if (l.kind === 'menu') closeAllMenus(l, vxPress.el);
     }
+    if (open && l.kind === 'menu') vxFitSoon(l);
     // the button that opened a menu says whether it is open (screen readers), whichever menu it is
     if (open !== l.open && l.ownerEl && l.ownerEl.hasAttribute('aria-haspopup')) l.ownerEl.setAttribute('aria-expanded', String(open));
     l.open = open;
   }
+}
+
+// A menu or a popover never leaves the window (asked by the user: a menu opened low in the window was cut by its
+// edge; a page cannot draw past its window): what does not fit below its button opens above it, what fits neither
+// way keeps to the window's edge and scrolls; one too wide moves left. Checked as it opens and while its content grows.
+function vxFitInView(el, owner) {
+  if (!el || !el.isConnected || getComputedStyle(el).position !== 'fixed') return;
+  const H = window.innerHeight, W = window.innerWidth, m = 8;
+  // a menu kept in the page (the recording's context menu) opens again in a taller window: the limit set for the
+  // low one goes first, or it would scroll with room to spare
+  if (el._vxFitMax && el.style.maxHeight === el._vxFitMax) { el.style.maxHeight = ''; el.style.overflowY = ''; }
+  el._vxFitMax = '';
+  let r = el.getBoundingClientRect();
+  if (r.height > H - 2 * m) {
+    el.style.maxHeight = el._vxFitMax = `${zpx(H - 2 * m)}px`;
+    el.style.overflowY = 'auto';
+    r = el.getBoundingClientRect();
+  }
+  if (r.bottom > H - m) {
+    const o = owner && owner.isConnected ? owner.getBoundingClientRect() : null;
+    const top = o && o.top - 4 - r.height >= m ? o.top - 4 - r.height : Math.max(m, H - m - r.height);
+    el.style.bottom = '';
+    el.style.top = `${zpx(top)}px`;
+    el.style.transformOrigin = el.style.transformOrigin.replace('top', 'bottom') || 'bottom';
+  }
+  if (r.right > W - m) {
+    el.style.right = '';
+    el.style.left = `${zpx(Math.max(m, W - m - r.width))}px`;
+  }
+}
+function vxFitSoon(l) {
+  const el = vxLayerEl(l);
+  if (!el) return;
+  // after the opener placed it, and again once its content (a list that loads) settled
+  requestAnimationFrame(() => vxFitInView(el, l.ownerEl));
+  setTimeout(() => vxFitInView(el, l.ownerEl), 120);
 }
 
 // Closes every open menu but one (the one just opened); a menu holding the button that opened it stays (a menu
@@ -1156,7 +1195,35 @@ function closeAllMenus(keep, from) {
   }
 }
 
-new MutationObserver(vxSyncLayers).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
+// A change of text alone (the level meter and the timer of a recording, 20 times a second for hours), or of the
+// colour of an element marked data-vx-live (the level bars), opens or closes no menu: it is not looked at. Each
+// look goes over the whole page for its windows, and a recording of a meeting spent a tenth of the page's time
+// on it with a large library
+const vxElementNodes = (nodes) => { for (const n of nodes) if (n.nodeType === 1) return true; return false; };
+const vxMattersFor = (records) => records.some(r => (r.type === 'attributes' ? !r.target.hasAttribute('data-vx-live')
+  : vxElementNodes(r.addedNodes) || vxElementNodes(r.removedNodes)));
+new MutationObserver((records) => { if (vxMattersFor(records)) vxSyncLayers(); })
+  .observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
+
+// The same rule for every menu and popover the registry does not list: any fixed menu, popover or panel that appears
+// or is shown keeps inside the window (one rule for all of them, asked by the user)
+const VX_FLOATING = '.macos-menu, [role="menu"], .tb-pop, .vx-panel, .tk-pop, .hm-pop, .rp-pop';
+new MutationObserver((records) => {
+  const owner = performance.now() - vxPress.at < 800 ? vxPress.el : null;
+  const seen = new Set();
+  for (const rec of records) {
+    const nodes = rec.type === 'childList' ? [...rec.addedNodes] : [rec.target];
+    for (const n of nodes) {
+      if (!(n instanceof Element)) continue;
+      // a shown one is itself the target; an added subtree may hold one (cheap: no search on every class change)
+      const el = n.matches(VX_FLOATING) ? n : rec.type === 'childList' ? n.querySelector(VX_FLOATING) : null;
+      if (!el || seen.has(el) || el.classList.contains('hidden')) continue;
+      seen.add(el);
+      requestAnimationFrame(() => vxFitInView(el, owner));
+      setTimeout(() => vxFitInView(el, owner), 120);
+    }
+  }
+}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
 
 // A press of a menu's own button while it is open: the menu closes, and the click that follows does not open it again
 function vxPressOwner(e, el) {

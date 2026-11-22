@@ -254,6 +254,49 @@ await step('menu at the bottom', async () => {
   expect(await page.isVisible('#recording-context-menu button[data-click="ctxExport"]'), 'no export in the menu');
   await page.evaluate(() => hideContextMenu());
   await sleep(250);
+  // the same menu in a low window scrolls inside it; opened again in a tall one it has its whole height back
+  const ctxAt = () => page.evaluate(() => {
+    openRecordingContextMenu({ clientX: 300, clientY: 40, preventDefault() {}, stopPropagation() {} }, 1);
+    return new Promise(ok => setTimeout(() => { const e = document.getElementById('recording-context-menu'), r = e.getBoundingClientRect();
+      ok({ bottom: r.bottom, vh: innerHeight, max: e.style.maxHeight }); }, 250));
+  });
+  await page.setViewportSize({ width: 1300, height: 360 });
+  const low = await ctxAt();
+  expect(low.bottom <= low.vh && !!low.max, `the menu in a low window: ${JSON.stringify(low)}`);
+  await page.evaluate(() => hideContextMenu());
+  await sleep(250);
+  await page.setViewportSize({ width: 1300, height: 860 });
+  const tall = await ctxAt();
+  expect(!tall.max, `the menu kept the limit of the low window: ${JSON.stringify(tall)}`);
+  await page.evaluate(() => hideContextMenu());
+  await sleep(250);
+});
+
+// The menus are looked for after a change that can open one, not after the level meter and the timer of a recording
+// (20 times a second for a whole meeting, each look going over the whole page)
+await step('menus not looked for on a meter tick', async () => {
+  const r = await page.evaluate(async () => {
+    const real = window.vxSyncLayers;
+    let looks = 0;
+    window.vxSyncLayers = () => { looks++; real(); };
+    const wait = () => new Promise(res => setTimeout(res, 50));
+    try {
+      document.getElementById('studio-db').textContent = '-12 dB';
+      document.getElementById('studio-level').className = 'h-full bg-apple-red transition-all duration-75';
+      await wait();
+      const tick = looks;
+      openRecordingContextMenu({ clientX: 300, clientY: 300, preventDefault() {}, stopPropagation() {} }, 1);
+      await wait();
+      const menu = looks;
+      hideContextMenu();
+      return { tick, menu };
+    } finally {
+      window.vxSyncLayers = real;
+    }
+  });
+  expect(r.tick === 0, `a meter tick made ${r.tick} looks`);
+  expect(r.menu > 0, 'an opened menu was not seen');
+  await sleep(250);
 });
 
 // Undo instead of a question: a task goes at once and comes back with «Отменить» (6.1)
@@ -1179,6 +1222,35 @@ await step('meeting strip', async () => {
   await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
 });
 
+// «Назад» / «Вперёд» of the strip walk the sections visited, and are off where there is no step (asked by the user)
+await step('back and forward buttons', async () => {
+  await page.click('#rail-libtable'); await sleep(700);
+  await page.click('#rail-tasks'); await sleep(700);
+  expect(!(await page.isDisabled('#nav-back')), '«Назад» is off after two steps');
+  await page.click('#nav-back'); await sleep(600);
+  expect(await page.evaluate(() => state.appView) === 'libtable', '«Назад» did not go to «Записи»');
+  expect(!(await page.isDisabled('#nav-fwd')), '«Вперёд» is off after a step back');
+  await page.click('#nav-fwd'); await sleep(600);
+  expect(await page.evaluate(() => state.appView) === 'tasks', '«Вперёд» did not come back to «Задачи»');
+});
+
+// While recording, the time on the red button opens the studio and does not stop the recording (asked by the user)
+await step('recording time opens the studio', async () => {
+  await page.evaluate(() => { window.__recOrig = [window.isRecording, window.shellQuickRecord]; window.__stops = 0;
+    window.isRecording = () => true; window.shellQuickRecord = () => { window.__stops++; };
+    document.getElementById('studio-timer').textContent = '01:23'; updateRecordButtonState(); switchAppView('home'); });
+  await page.click('#tb-rec-clock');
+  await sleep(300);
+  const r = await page.evaluate(() => [state.appView, window.__stops]);
+  expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
+  // in the studio the time is a part of the red button: its click stops as the rest of the button does
+  await page.evaluate(() => updateRecordButtonState());
+  await page.click('#tb-rec-clock');
+  await sleep(200);
+  expect(await page.evaluate(() => window.__stops) === 1, 'the time in the studio was a dead spot of the red button');
+  await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
+});
+
 // «Очередь» as the island of the top strip and the load of the status bar: each opens its window next to it, Escape
 // and a click outside close it
 await step('queue and load windows', async () => {
@@ -1325,6 +1397,93 @@ await step('esc closes the top layer only', async () => {
   await page.evaluate(() => toggleDashEdit()); await sleep(300);
   await page.keyboard.press('Escape'); await sleep(300);
   expect(!(await page.evaluate(() => DB.edit)), 'Esc did not leave «Настроить»');
+});
+
+// The window «Фичи» (asked by the user): a drawer at the right edge over any section, opened from «Все фичи ▾» of
+// «Обзор», «Фича ▾» of «Записи», the chip «Фича:» of a recording and the card «Фичи» of «Словарь»; a feature is
+// made and renamed in it, Esc and a second click on its opener close it
+await step('features drawer', async () => {
+  const poll = async (f, what, ms = 4000) => {
+    for (let t = 0; t < ms; t += 100) { if (await page.evaluate(f)) return; await sleep(100); }
+    throw new Error(what);
+  };
+  const open = () => page.evaluate(() => featureDrawerOpen());
+  await page.evaluate(() => switchAppView('dashboard')); await sleep(1200);
+  await page.click('#db-feature-btn'); await sleep(250);
+  await page.click('#text-menu button:has-text("Управлять фичами")');
+  await poll(() => featureDrawerOpen(), '«Управлять фичами…» of «Обзор» did not open the drawer');
+  await poll(() => document.getElementById('ft-drawer').getAnimations().every(a => a.playState === 'finished'), 'the drawer did not settle');
+  const box = await page.evaluate(() => {
+    const r = document.getElementById('ft-drawer').getBoundingClientRect(), s = document.getElementById('app-strip').getBoundingClientRect();
+    return { w: Math.round(r.width), right: Math.round(window.innerWidth - r.right), top: Math.round(r.top - s.bottom), z: +getComputedStyle(document.getElementById('ft-drawer')).zIndex };
+  });
+  expect(box.w >= 370 && box.w <= 390 && box.right === 0 && box.top === 0 && box.z > 30 && box.z < 50, `the drawer's place: ${JSON.stringify(box)}`);
+  await page.fill('#ft-dr-new', 'Окно фич');
+  await page.click('#ft-dr-add');
+  await poll(() => document.querySelector('#ft-dr-list .ft-dr-on')?.textContent.includes('Окно фич'), 'the new feature is not chosen in the list');
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#ft-dr-list .ft-dr-row')].map(r => Math.round(r.getBoundingClientRect().height)));
+  expect(rows.every(h => h === 36), `rows not 36 px: ${rows}`);
+  const fields = await page.evaluate(() => [...document.querySelectorAll('#ft-dr-form input.ft-dr-in')].map(i => Math.round(i.getBoundingClientRect().height)));
+  expect(fields.length === 3 && fields.every(h => h === 32), `fields not 32 px: ${fields}`);
+  await page.fill('#ft-dr-form [data-key="name"]', 'Окно фич 2');
+  await page.keyboard.press('Tab');
+  await poll(() => (state.features || []).some(f => f.name === 'Окно фич 2') && document.querySelector('#ft-dr-list .ft-dr-on')?.textContent.includes('Окно фич 2'), 'the rename did not reach the list');
+  await page.keyboard.press('Escape');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer');
+  // «Записи»: «Фича ▾»
+  await page.evaluate(() => switchAppView('libtable')); await sleep(600);
+  await page.click('#lt-feature-btn'); await sleep(250);
+  await page.click('#text-menu button:has-text("Управлять фичами")');
+  await poll(() => featureDrawerOpen(), '«Управлять фичами…» of «Записи» did not open the drawer');
+  expect(await page.evaluate(() => document.querySelector('#ft-dr-list .ft-dr-on')?.textContent.includes('Окно фич 2')), 'the chosen feature was lost');
+  // «Словарь»: the card stays, «В отдельном окне» opens and a second press closes (the drawer covers the button:
+  // pressed from the keyboard)
+  await page.evaluate(() => switchAppView('dict')); await sleep(700);
+  expect(await page.isVisible('#ft-dict-list') && await page.evaluate(() => document.querySelector('#ft-dict-list').textContent.includes('Окно фич 2')), 'the card «Фичи» of «Словарь» lacks the feature');
+  await page.focus('#dc-ft-open');
+  await page.keyboard.press('Enter');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'a second click on the opener did not close the drawer');
+  await page.click('#dc-ft-open');
+  await poll(() => featureDrawerOpen(), '«В отдельном окне» did not open the drawer');
+  await page.keyboard.press('Escape');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer in «Словарь»');
+  // the chip «Фича:» of a recording: «Изменить фичу…» chooses its feature
+  const fid = await page.evaluate(() => state.features.find(f => f.name === 'Окно фич 2').id);
+  await page.evaluate(id => fetch('/api/meetings/2/features', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) }), fid);
+  await page.evaluate(() => { switchAppView('library'); return openMeeting(2); }); await sleep(1500);
+  await page.click(`#meeting-features [data-ft="${fid}"]`); await sleep(400);
+  await page.click('#tk-pop button:has-text("Изменить фичу")');
+  await poll(() => featureDrawerOpen(), '«Изменить фичу…» did not open the drawer');
+  expect(await page.evaluate(id => document.querySelector('#ft-dr-list .ft-dr-on')?.dataset.fid === String(id), fid), 'the feature of the recording is not chosen');
+  await page.keyboard.press('Escape');
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'Esc did not close the drawer over a recording');
+  expect(!(await open()), 'the drawer is still open');
+  // the captions on the whole window go over everything: the drawer does not stay above them
+  await page.evaluate(() => { switchAppView('studio'); openFeatureDrawer(); });
+  await poll(() => featureDrawerOpen(), 'the drawer did not open over the studio');
+  await page.evaluate(() => toggleStudioFocus(true));
+  await poll(() => document.getElementById('ft-drawer').classList.contains('hidden'), 'the drawer stayed over the captions on the whole window');
+  await page.evaluate(() => { toggleStudioFocus(false); switchAppView('home'); });
+  await sleep(300);
+  await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }).then(() => loadFeatures()), fid);
+});
+
+// The citations of an answer as the server reads them (app/library_qa.cited_numbers): the ranges [1-3] / [5–6] /
+// [2, 4-5] give a link for each source, count in the list of the sources and leave the history sent with a follow-up
+await step('citation ranges', async () => {
+  const r = await page.evaluate(() => {
+    const src = k => ({ n: k, meeting_id: 1, title: `Встреча ${k}`, start: 10 * k, text: `фрагмент ${k}` });
+    const byN = Object.fromEntries([1, 2, 3, 4, 5, 6].map(k => [k, src(k)]));
+    const box = document.createElement('div');
+    box.textContent = 'Итог [1-3], сроки [5–6] и [2, 4-5]; ещё [9].';
+    linkifyCitations(box, byN, 0);
+    const chat = { items: [{ question: 'q', status: 'done', data: { found: true, answer: 'Итог [1-3] и [2, 4-5].' } }, {}] };
+    return { links: [...box.querySelectorAll('.lib-cite')].map(b => b.textContent).join(','), rest: box.textContent.includes('[9]'),
+      cited: [...citedNumbers('Итог [1-3], сроки [5–6] и [2, 4-5].')].sort().join(','), history: assistantHistory(chat, chat.items[1])[0].answer };
+  });
+  expect(r.links === '1,2,3,5,6,2,4,5' && r.rest, `the ranges are not links: ${JSON.stringify(r)}`);
+  expect(r.cited === '1,2,3,4,5,6', `the ranges are not counted: ${r.cited}`);
+  expect(r.history === 'Итог и.', `the history keeps the citations: ${r.history}`);
 });
 
 await browser.close();

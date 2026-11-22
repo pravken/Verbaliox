@@ -12,6 +12,35 @@ except ImportError:  # app dependencies are not installed
 
 
 @unittest.skipIf(vram is None, "app dependencies not installed")
+class NoTorchToLookTest(unittest.TestCase):
+    """The page's first look at the models (/api/vram), an idle unload and the start of a meeting imported
+    app/diarizer.py (torch, scikit-learn: seconds and hundreds of MB) only to learn that the speaker model was
+    not loaded; clearing the video memory imported torch when nothing had used it."""
+
+    def test_looking_at_the_models_does_not_import_the_speaker_model(self):
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        code = ("import tests, sys\n"
+                "from app import database, idle_unload, vram\n"
+                "database.init_db()\n"
+                "vram.vram_snapshot()\n"
+                "idle_unload.release_speech_models()\n"
+                "vram.release_idle_speech_models()\n"
+                "sys.modules.pop('torch', None)\n"
+                "from app import hardware\n"
+                "hardware.clear_vram()\n"
+                "print('app.diarizer' in sys.modules or 'torch' in sys.modules, vram.ecapa_loaded_on())\n"
+                "from app import diarizer\n"
+                "diarizer._ecapa_model, diarizer._ecapa_device = object(), 'cuda'\n"
+                "print(vram.ecapa_loaded_on())\n")
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120,
+                             cwd=str(Path(__file__).resolve().parents[1]))
+        self.assertEqual(out.stdout.split(), ["False", "None", "cuda"], out.stderr[-2000:])
+
+
+@unittest.skipIf(vram is None, "app dependencies not installed")
 class UnloadSwitchTest(unittest.TestCase):
     def _stage(self, stage):
         return mock.patch.object(vram, "job_stage", return_value=stage)

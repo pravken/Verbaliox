@@ -488,6 +488,15 @@ function askLibrary() {
   return assistantSend();
 }
 
+// The conversation so far, for a follow-up («а подробнее?», «кто это предложил?»): the last answered
+// questions before this one, their answers without the citations [n], [1, 3], [1-3] (asked by the user)
+const CITE_STRIP = new RegExp(`\\s?${CITE_GROUP.source}`, 'g');
+function assistantHistory(chat, item) {
+  const before = chat.items.slice(0, Math.max(0, chat.items.indexOf(item)));
+  return before.filter(x => x.status === 'done' && x.data && x.data.found && x.data.answer).slice(-3)
+    .map(x => ({ question: String(x.question).slice(0, 1000), answer: String(x.data.answer).replace(CITE_STRIP, '').slice(0, 2000) }));
+}
+
 async function assistantSend(text, scopeArg) {
   const input = document.getElementById('library-question');
   const question = String(text ?? input.value).trim();
@@ -510,7 +519,7 @@ async function assistantSend(text, scopeArg) {
   try {
     const res = await fetch('/api/library/ask', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ question, lang: state.uiLang === 'en' ? 'en' : 'ru', model: chat.model || null, ...assistantScopePayload(scope) }),
+      body: JSON.stringify({ question, lang: state.uiLang === 'en' ? 'en' : 'ru', model: chat.model || null, history: assistantHistory(chat, item), ...assistantScopePayload(scope) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(errorText(data, res));
@@ -703,13 +712,14 @@ function renderAssistantItem(item, isLast) {
     if (!data.found) {
       body = `<div class="as-a"><div class="text-xs text-apple-secondary">${escapeHtml(t('libraryAskNothing'))}</div></div>`;
     } else {
-      const cited = new Set([...(data.answer || '').matchAll(/\[(\d{1,3})\]/g)].map(x => Number(x[1])));
+      const cited = citedNumbers(data.answer);  // [2], [1, 3] and the ranges [1-3] (library.js)
       const shown = (data.sources || []).filter(s => !cited.size || cited.has(s.n)).slice(0, 20);
       const recs = new Set(shown.map(s => s.meeting_id)).size;
       const sources = assistantSourcesHtml(item, shown);
       const model = data.model ? escapeHtml(formatModelName(data.model)) : '';
       body = `<div class="as-a">
         <div class="markdown-body text-[13.5px]" data-as-answer="${Number(item.id) || 0}"></div>
+        ${data.mode === 'general' ? `<div class="as-srclist"><div class="as-srclist-h">${escapeHtml(t('rdSasGeneralNote'))}</div></div>` : ''}
         ${sources ? `<div class="as-srclist"><div class="as-srclist-h">${escapeHtml(t('rdSasSourcesCount').replace('{r}', () => recs).replace('{n}', () => shown.length))}</div>${sources}</div>` : ''}
         <div class="as-actions">
           <button data-click="assistantCopy" data-click-args='[${Number(item.id) || 0}, {"$": "el"}]' class="as-act">${escapeHtml(t('rdSasCopy'))}</button>
@@ -721,7 +731,7 @@ function renderAssistantItem(item, isLast) {
       </div>`;
     }
   }
-  const follow = isLast && item.status === 'done' && item.data?.found
+  const follow = isLast && item.status === 'done' && item.data?.found && (item.data.sources || []).length
     ? `<div class="as-follow"><span>${escapeHtml(t('rdSasAskNext'))}</span>${ASSIST_FOLLOW.map((k, i) => `<button data-click="assistantFollow" data-click-args='[${i}]' class="as-chip-q">${escapeHtml(t(k))}</button>`).join('')}</div>` : '';
   return q + body + follow;
 }

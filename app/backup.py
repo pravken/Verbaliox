@@ -22,6 +22,7 @@ user may have been sent, so nothing in it decides where files go or where data i
 """
 
 import json
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -281,8 +282,12 @@ def _restore(src: Path) -> Dict[str, Any]:
                         skipped += 1
                         continue
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    with z.open(name) as fin, open(target, "wb") as fout:
+                    # written aside and renamed: a restore cut off midway left a truncated file at the
+                    # place, which the next restore skipped as already there (found in review)
+                    part = target.with_name(target.name + ".partial")
+                    with z.open(name) as fin, open(part, "wb") as fout:
                         shutil.copyfileobj(fin, fout)
+                    part.replace(target)
                     if str(target) != original:  # moved into the recordings folder: the app owns this copy
                         conn.execute("UPDATE meetings SET media_path = ?, owns_media = 1 WHERE id = ?", (str(target), mid))
                     put_back[mid] = str(target)
@@ -298,7 +303,12 @@ def _restore(src: Path) -> Dict[str, Any]:
                 raise ValueError("База в копии повреждена")
             finally:
                 conn.close()
-            shutil.copyfile(db, PENDING)
+            # aside first: a copy cut off midway (power loss) took the place of the database at the next start
+            staged = PENDING.with_name(PENDING.name + ".partial")
+            shutil.copyfile(db, staged)
+            with open(staged, "rb+") as f:
+                os.fsync(f.fileno())
+            staged.replace(PENDING)
         if "bench.json" in names and not (DATA_DIR / "bench.json").exists():
             (DATA_DIR / "bench.json").write_bytes(z.read("bench.json"))
     return {"recordings": n, "media_restored": restored, "media_kept": skipped, "created": manifest.get("created", ""),

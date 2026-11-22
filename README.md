@@ -1,6 +1,8 @@
-<p align="center"><img src="docs/cover-en.png" alt="Verbaliox records, transcribes and analyzes meetings on your computer" width="100%"></p>
+<p align="center"><img src="static/brand/logo-256.png" alt="Verbaliox logo" width="128" height="128"></p>
 
-# Verbaliox
+<h1 align="center">Verbaliox</h1>
+
+<p align="center">Records, transcribes and analyzes meetings on your computer<br>Записывает, расшифровывает и анализирует встречи на вашем компьютере</p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6.svg)](#requirements)
@@ -17,6 +19,23 @@
 
 Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA, or CPU). The app needs no account or API key, and the text of recordings is analysed on your computer too. Network access is described [below](#network-access).
 
+<p align="center"><img src="docs/images/analysis.webp" alt="A recording: the analysis with decisions, tasks and topics linked to moments of the meeting" width="100%"></p>
+
+<details>
+<summary><b>More screenshots</b> (the interface is shown in Russian; English is chosen in Settings → General)</summary>
+
+| | |
+| :---: | :---: |
+| <img src="docs/images/today.webp" alt="Today: the week's meetings from the calendar" width="100%"><br>Today | <img src="docs/images/overview.webp" alt="Overview: statistics and widgets" width="100%"><br>Overview |
+| <img src="docs/images/recordings.webp" alt="Recordings as a table" width="100%"><br>Recordings | <img src="docs/images/transcript.webp" alt="A transcript as a chat with speakers" width="100%"><br>Transcript |
+| <img src="docs/images/tasks.webp" alt="Tasks from all recordings" width="100%"><br>Tasks | <img src="docs/images/people.webp" alt="People: participants, roles and their recordings" width="100%"><br>People |
+| <img src="docs/images/dictionary.webp" alt="Dictionary with the features panel" width="100%"><br>Dictionary and features | <img src="docs/images/assistant.webp" alt="Assistant: an answer with links to moments of recordings" width="100%"><br>Assistant |
+| <img src="docs/images/studio.webp" alt="Recording studio" width="100%"><br>Recording studio | <img src="docs/images/settings.webp" alt="Settings: local analysis models" width="100%"><br>Settings |
+
+The screenshots show demo data with fictional people and meetings.
+
+</details>
+
 ### Features
 
 - **Speech recognition** with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and Silero VAD. Models: `large-v3-turbo`, `large-v3`; GigaAM v3 and Parakeet TDT v3 on ONNX Runtime; recordings that mix languages are recognized phrase by phrase. Compute precision (`float16`, `int8_float16`, `int8`) is chosen from available VRAM, with fallback to CPU.
@@ -28,19 +47,26 @@ Recordings and transcripts are processed and stored locally (NVIDIA GPU via CUDA
 - **Local summaries and Q&A** via Ollama (by default Gemma 4 E4B on GPUs with 8 GB and more, Gemma 4 E2B on smaller GPUs and without one). Language models can make mistakes; treat summaries as a draft, not a source of truth. Long recordings are summarized in parts.
 - **Transcript editor and player**: click a word to jump to it, edit segments, merge them, rename speakers, waveform, playback speed.
 - **Recording** from a microphone, system audio, or both, with saved presets for one-click starts. System audio is captured directly (WASAPI loopback), without a screen-share prompt.
-- **Three parts of the app**: the **Library** (recordings, transcripts, analysis), the **Studio** (recording with live captions and real-time translation that is typed in without flicker; can fill the whole window) and **Ask** (questions about one recording, a folder or the whole library).
+- **Sections on a rail** on the left: **Today** (the calendar by day, week or month with the cards of the day), **Overview** (statistics tiles with trends and charts of the period), **Recordings** (table, cards or folders, with «Columns», search in the texts and a selection bar), **Tasks** (table, cards or calendar), **People**, **Dictionary** and **Assistant** (Ctrl+1…6); «Settings» and «Quit» at the bottom. Back and forward work like in a browser (Alt+← / Alt+→).
+- **Meeting strip on top**: what is going on now (free time, a meeting in N minutes, recording, waiting for transcription, results ready) with the button for that moment, «＋ Import ▾» and «● Record ▾»; the processing queue shows there as one item with its progress.
+- **A recording**: Transcript as a chat or as text; Analysis as cards (summary, decisions, tasks, topics) with ▶ links to the moments; Participants; Details with «Transcribe again» and «Recreate the analysis»; a player at the bottom that folds into one line.
+- **Recording studio**: microphone, system audio or both, live captions with real-time translation (off by default), my notes and marks during the meeting, the next meetings from the calendar; can fill the whole window. The recording time on the red button opens it.
+- **Assistant**: questions about one recording, a folder or the whole library, answered with ▶ links to the moments it used; general questions are answered from the model's own knowledge and marked so. It remembers the last three questions of a conversation; conversations are kept on this computer.
+- **Features**: themes and projects (with keywords and terms) that group recordings, tasks and Overview; managed in a panel opened from Overview, Recordings, a recording's feature chip or the Dictionary.
 - **Live captions** during recording, optionally translated as you speak.
 - **Chapters** with titles generated for long recordings, and **Q&A across a folder or the whole library**: a small folder is read in full, a large one is searched; answers cite moments of the recordings.
 - **Folders in the library**: recordings made in the app go to *Recordings*, imported files to *Imported*; create nested folders and sort by dragging. Videos show a thumbnail; the **Details** tab shows where the file is, its format, dates and processing state.
 - **Names from the content**: a recording with a generic title ("Recording 14-05", "zoom_0") gets one from its transcript after processing.
 - **Voice profiles**: once you name a speaker, their voice is recognised in new recordings (stored only in the local database).
-- **Tray icon** that shows what the app is doing and starts or stops a recording from its menu.
+- **Tray icon** that shows what the app is doing and starts or stops a recording from its menu. «Quit» at the bottom of the rail minimizes to the tray or quits completely (Ctrl+Q). Notifications, the tray menu and meeting reminders follow the interface language.
 - **Automatic updates** from GitHub Releases: a new version downloads in the background and installs when you close the app (or by hand, if you turn that off); the download is verified against the release checksums, and your data, models and settings stay untouched.
 - **Search** across all recordings.
-- **Memory and load**: CPU, RAM and VRAM meters in the sidebar; models are unloaded after a configurable time without use (Settings → General).
+- **Memory and load**: CPU, RAM and video memory in the status bar; a click lists the models in memory, each with «Unload». Models are unloaded after a configurable time without use (Settings → General). «Don't disturb in meetings» holds transcription and model loading while a meeting goes on.
 - **Recordings folder** of your choice (Settings → Recording); imported copies and files added by their path are kept apart.
 - **Convenience**: drag files onto the window to import them, keyboard shortcuts (press `?` for the list), and a "Subtitles" player layout with the current phrase under the video.
-- **Custom vocabulary** (names, terms) passed to Whisper as hotwords.
+- **Dictionary** of names, projects and terms, with their recognition variants and groups, passed to speech recognition and used to correct the text.
+- **My programs** (off by default): how the working time is split between programs. Only the program's name is kept (no window titles, keystrokes or screenshots), and it never leaves the computer.
+- **Appearance**: one dark look for every window and menu, with an accent colour of your choice (Settings → General).
 - **Export** to Word (`.docx`), Markdown, plain text, SRT subtitles, JSON and video with subtitles, all from one menu. A translated or dubbed export that does not exist yet is made first and then saved to the export folder by itself.
 - **Obsidian**: a note per meeting (properties, summary, overview, tasks as a checklist, transcript) named `{date} {title}`, saved by hand or automatically after processing (Settings → Export).
 - **Translate & dub (optional)**: translates a finished recording with Ollama and re-voices it in each speaker's cloned voice over the original background. See [Translate & dub](#translate-dub).
@@ -234,11 +260,26 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 <a name="русский"></a>
 ## Русский
 
-<p align="center"><img src="docs/cover-ru.png" alt="Verbaliox записывает, расшифровывает и анализирует встречи на вашем компьютере" width="100%"></p>
-
 **Verbaliox** — настольное приложение для Windows, которое расшифровывает аудио и видео на вашем компьютере. Оно распознаёт речь, разделяет её по спикерам и, если нужно, составляет краткое содержание или отвечает на вопросы по тексту с помощью локальной языковой модели через [Ollama](https://ollama.com).
 
 Записи и расшифровки обрабатываются и хранятся локально (видеокарта NVIDIA через CUDA или процессор). Аккаунт и API-ключи не нужны, текст записей анализируется тоже на компьютере. Какие сетевые подключения бывают, описано [ниже](#сеть).
+
+<p align="center"><img src="docs/images/analysis.webp" alt="Запись: анализ с решениями, задачами и темами со ссылками на моменты встречи" width="100%"></p>
+
+<details>
+<summary><b>Другие снимки экрана</b></summary>
+
+| | |
+| :---: | :---: |
+| <img src="docs/images/today.webp" alt="Сегодня: встречи недели из календаря" width="100%"><br>Сегодня | <img src="docs/images/overview.webp" alt="Обзор: статистика и виджеты" width="100%"><br>Обзор |
+| <img src="docs/images/recordings.webp" alt="Записи в виде таблицы" width="100%"><br>Записи | <img src="docs/images/transcript.webp" alt="Расшифровка в виде чата по участникам" width="100%"><br>Расшифровка |
+| <img src="docs/images/tasks.webp" alt="Задачи из всех записей" width="100%"><br>Задачи | <img src="docs/images/people.webp" alt="Люди: участники, роли и их записи" width="100%"><br>Люди |
+| <img src="docs/images/dictionary.webp" alt="Словарь с панелью фич" width="100%"><br>Словарь и фичи | <img src="docs/images/assistant.webp" alt="Ассистент: ответ со ссылками на моменты записей" width="100%"><br>Ассистент |
+| <img src="docs/images/studio.webp" alt="Студия записи" width="100%"><br>Студия записи | <img src="docs/images/settings.webp" alt="Настройки: локальные модели анализа" width="100%"><br>Настройки |
+
+На снимках — демонстрационные данные с вымышленными участниками и встречами.
+
+</details>
 
 ### Возможности
 
@@ -251,19 +292,26 @@ To update Python dependencies, edit `requirements.in` and regenerate the lock (c
 - **Локальные саммари и ответы на вопросы** через Ollama (по умолчанию Gemma 4 E4B на видеокартах от 8 ГБ, Gemma 4 E2B на меньших и без видеокарты). Языковые модели могут ошибаться, поэтому считайте саммари черновиком, а не источником истины. Длинные записи обрабатываются по частям.
 - **Редактор расшифровки и плеер**: клик по слову перематывает к нему, реплики можно править и склеивать, спикеров — переименовывать; есть звуковая дорожка и выбор скорости.
 - **Запись** с микрофона, системного звука или обоих источников, с пресетами для запуска в один клик. Системный звук захватывается напрямую (WASAPI loopback), без запроса на показ экрана.
-- **Три раздела программы**: **Медиатека** (записи, расшифровки, анализ), **Студия** (запись с живыми субтитрами и переводом в реальном времени, текст печатается без мерцания; можно развернуть на всё окно) и **Вопросы** (к одной записи, к папке или ко всей медиатеке).
+- **Разделы на панели слева**: **Сегодня** (календарь по дням, неделям или месяцам с карточками дня), **Обзор** (плитки статистики с динамикой и диаграммы за период), **Записи** (таблица, карточки или папки, с «Колонками», поиском по текстам и панелью выделения), **Задачи** (таблица, карточки или календарь), **Люди**, **Словарь** и **Ассистент** (Ctrl+1…6); внизу «Настройки» и «Выход». Кнопки «Назад» и «Вперёд» работают как в браузере (Alt+← / Alt+→).
+- **Полоса встречи сверху**: что происходит сейчас (свободное время, встреча через N минут, идёт запись, ожидает расшифровки, итоги готовы) с кнопкой для этого момента, «＋ Импорт ▾» и «● Запись ▾»; очередь обработки показывается там же одним элементом с прогрессом.
+- **Запись**: расшифровка в виде чата или текста; анализ карточками (кратко, решения, задачи, темы) со ссылками ▶ на моменты; участники; сведения с «Расшифровать заново» и «Пересоздать анализ»; плеер внизу, который сворачивается в одну строку.
+- **Студия записи**: микрофон, системный звук или оба источника, живые субтитры с переводом в реальном времени (по умолчанию выключены), мои заметки и отметки во время встречи, ближайшие встречи из календаря; можно развернуть на всё окно. Время записи на красной кнопке открывает студию.
+- **Ассистент**: вопросы к одной записи, к папке или ко всей медиатеке; в ответе — ссылки ▶ на использованные моменты. Общие вопросы модель отвечает из своих знаний и помечает это. Ассистент помнит три последних вопроса разговора; разговоры хранятся на этом компьютере.
+- **Фичи**: темы и проекты (с ключевыми словами и терминами), по которым группируются записи, задачи и «Обзор»; управляются в панели, которая открывается из «Обзора», «Записей», чипа фичи у записи или «Словаря».
 - **Живые субтитры** во время записи, по желанию — сразу с переводом.
 - **Главы** с заголовками для длинных записей и **вопросы к папке или ко всей медиатеке**: небольшая папка читается целиком, большая — через поиск; в ответе есть ссылки на моменты записей.
 - **Папки в медиатеке**: записи из программы попадают в «Из студии», импортированные файлы — в «Импортированные»; можно создавать вложенные папки и раскладывать записи перетаскиванием. У видео есть превью, а на вкладке **«Сведения»** видно, где лежит файл, его формат, даты и состояние обработки.
 - **Названия по содержанию**: запись с безликим названием («Запись 14-05», «zoom_0») после обработки получает название по тексту.
 - **Профили голосов**: стоит один раз назвать участника по имени, и в новых записях его голос узнаётся автоматически (хранится только в локальной базе).
-- **Значок в трее** показывает, чем занято приложение, и запускает или останавливает запись из меню.
+- **Значок в трее** показывает, чем занято приложение, и запускает или останавливает запись из меню. «Выход» внизу панели разделов сворачивает программу в трей или закрывает её полностью (Ctrl+Q). Уведомления, меню значка и напоминания о встречах следуют языку интерфейса.
 - **Автообновление** из GitHub Releases: новая версия скачивается в фоне и ставится при закрытии программы (или вручную, если это отключить); архив сверяется с контрольными суммами релиза, ваши данные, модели и настройки не затрагиваются.
 - **Поиск** по всем записям.
-- **Память и нагрузка**: индикаторы CPU, RAM и VRAM в боковой панели; модели выгружаются из памяти через заданное время простоя (Настройки → Общие).
+- **Память и нагрузка**: CPU, RAM и видеопамять в строке состояния; щелчок показывает модели в памяти, у каждой — «Выгрузить». Модели выгружаются через заданное время простоя (Настройки → Общие). «Не мешать на встречах» откладывает расшифровку и загрузку моделей, пока идёт встреча.
 - **Папка для записей** на ваш выбор (Настройки → Запись); импортированные копии и файлы, добавленные по пути, хранятся отдельно.
 - **Удобство**: файлы можно перетащить в окно, есть горячие клавиши (список — по клавише `?`) и вид плеера «Субтитры» с текущей фразой под видео.
-- **Словарь** имён и терминов, который передаётся в Whisper как hotwords.
+- **Словарь** имён, проектов и терминов с вариантами распознавания и группами: передаётся распознаванию речи и используется для исправления текста.
+- **Мои программы** (по умолчанию выключено): как рабочее время распределяется между программами. Сохраняется только название программы (без заголовков окон, нажатий клавиш и снимков экрана), данные не покидают компьютер.
+- **Оформление**: единый тёмный вид всех окон и меню, цвет акцента на выбор (Настройки → Общие).
 - **Экспорт** в Word (`.docx`), Markdown, текст, субтитры SRT, JSON и видео с субтитрами — всё в одном меню. Если нужного перевода или дубляжа ещё нет, он сначала выполняется, а файл затем сам сохраняется в папку экспорта.
 - **Obsidian**: заметка на каждую встречу (свойства, резюме, обзор, задачи чек-листом, расшифровка) с именем `{дата} {название}` — вручную или автоматически после обработки (Настройки → Экспорт).
 - **Перевод и дубляж (по желанию)**: готовая запись переводится через Ollama и озвучивается клонами голосов участников поверх исходного фона. Подробнее — в разделе [Перевод и дубляж](#дубляж).

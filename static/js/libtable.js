@@ -620,6 +620,8 @@ function openLibTableFeatureMenu(e) {
     ...feats.map(f => ({ label: ltTick(p.feature === String(f.id), f.name), run: pick(String(f.id)) })),
     ...(feats.length ? [{ sep: true }] : []),
     { label: ltTick(p.feature === 'none', t('ftNoFeature')), run: pick('none') },
+    { sep: true },
+    { label: t('ftManage'), run: () => openFeatureDrawer(Number(p.feature) || 0) },
   ]);
 }
 

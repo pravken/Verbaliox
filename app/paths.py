@@ -351,6 +351,18 @@ THUMBS_DIR = DATA_DIR / "thumbs"
 DB_PATH = DATA_DIR / "meetings.db"
 SESSION_TOKEN_FILE = DATA_DIR / ".session_token"
 
+
+def session_proof(token: str, nonce: str, port: int) -> str:
+    """What the server answers the launcher's probe with (run.py probe_server, GET /api/session/probe): it
+    knows the token without the token being sent. The token itself went to whatever listened on the port
+    asked: a program of another Windows user on 127.0.0.1 took it and used it on this user's server (found in
+    the security review). The port the server listens on is part of it, so a program that relays the probe
+    to the real server cannot pass that server's answer off as its own."""
+    import hashlib
+    import hmac
+
+    return hmac.new(token.encode("utf-8"), f"{nonce}:{int(port)}".encode("utf-8"), hashlib.sha256).hexdigest()
+
 for _d in (DATA_DIR, UPLOADS_DIR, AUDIO_DIR, EXPORTS_DIR, MODELS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 

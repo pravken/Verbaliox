@@ -657,7 +657,7 @@ def apply_to_recording(meeting_id: int, started_at: Optional[datetime] = None, t
         return False
     names = names or []
     verdict = calendar_match.verdict(ev, title, names, call_app)
-    print(f"[calendar] meeting {meeting_id} during «{ev['title']}»: {verdict}", flush=True)
+    print(f"[calendar] meeting {meeting_id} during a calendar event: {verdict}", flush=True)
     fields: Dict[str, Any] = {"calendar_json": json.dumps({
         "title": ev["title"], "attendees": ev["attendees"][:30], "online": bool(ev.get("online")), "call_app": call_app,
         "recorded_title": m.get("title") or "", "sure": verdict != "unknown", "match": verdict != "no"}, ensure_ascii=False)}

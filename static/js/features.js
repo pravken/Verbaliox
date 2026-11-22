@@ -96,12 +96,16 @@ function drawFeaturePicker() {
   const list = (state.features || []).map(f => `<div class="ft-pick-row${on.has(f.id) ? ' ft-pick-on' : ''}"><button class="tk-pop-item" role="menuitemcheckbox" aria-checked="${on.has(f.id)}" ${pageCall('click', 'toggleMeetingFeature', [f.id])}>
       <span class="ft-pick-box" aria-hidden="true">${on.has(f.id) ? '✓' : ''}</span>${featureChipHtml(f)}<span class="tk-grow"></span><span class="tk-dim">${f.count || 0}</span></button>
       <button class="ft-open" ${pageCall('click', 'openFeaturePageFromPick', [f.id, { $: 'event' }])} title="${escapeHtml(t('fpOpenTip'))}" aria-label="${escapeHtml(t('fpOpenTip'))}">↗</button></div>`).join('');
+  // the window «Фичи»: the feature of the chip pressed chosen in it; a recording without a feature opens it as it is
+  const fid = Number(_ftAnchor.dataset.ft) || (m.features || [])[0] || 0;
+  const manage = `<button class="tk-pop-item" ${pageCall('click', 'openFeatureDrawer', [fid])}>${escapeHtml(t(fid ? 'ftEditOne' : 'ftManage'))}</button>`;
   const series = m.series_id ? `<label class="ft-series"><input type="checkbox" id="ft-for-series" ${pageCall('change', 'saveFeaturesForSeries')}>
       <span>${escapeHtml(t('ftForSeries'))}</span></label>` : '';
   tkOpenPop(`<div class="tk-pop-cap">${escapeHtml(t('ftPickTitle'))}</div>${list || `<div class="tk-pop-quote">${escapeHtml(t('ftNone'))}</div>`}
     <div class="tk-pop-add"><div class="tk-row2">
       <input id="ft-new-name" class="tk-input" type="text" maxlength="60" placeholder="${escapeHtml(t('ftNewPh'))}" title="${escapeHtml(t('ftNewPh'))}" ${pageCall('keydown', 'onNewFeatureKey', [{ $: 'event' }])}>
-      <button class="tk-btn tk-btn-primary tk-btn-sm" ${pageCall('click', 'createFeatureFromPicker')}>${escapeHtml(t('ftCreate'))}</button></div>${series}</div>`, _ftAnchor, 300);
+      <button class="tk-btn tk-btn-primary tk-btn-sm" ${pageCall('click', 'createFeatureFromPicker')}>${escapeHtml(t('ftCreate'))}</button></div>${series}</div>
+    <div class="ft-pick-manage">${manage}</div>`, _ftAnchor, 300);
 }
 
 // A click chooses and closes the list (asked by the user: after a click it was not clear the feature was
@@ -159,11 +163,107 @@ function taskFeatureChipsHtml(meetingId, ids) {
   return `<button type="button" class="ft-compact" ${pageCall('click', 'openFeaturePage', [list[0].id])}>${featureChipHtml(list[0], { title: all })}${list.length > 1 ? `<span class="ft-more" title="${escapeHtml(all)}">+${list.length - 1}</span>` : ''}</button>`;
 }
 
-// --- Словарь → Фичи: what each feature is. Every field has a use: keywords find it in a meeting's
-// title, the description tells the models what it is, the terms are written right by recognition
-// and by the models; none is required ---
+// --- The window «Фичи» (static/parts/features.html): a drawer at the right edge over any section, under the strip.
+// What each feature is; every field has a use: keywords find it in a meeting's title, the description tells the
+// models what it is, the terms are written right by recognition and by the models; none is required ---
 const FT_COLORS = ['#64B5FF', '#BF5AF2', '#30D158', '#FF9F0A', '#FF6482', '#5AC8FA', '#FFD60A', '#AC8E68'];
+const FTD = { sel: 0, opener: null };  // the feature chosen in the drawer
 
+function featureDrawerOpen() {
+  const el = document.getElementById('ft-drawer');
+  return !!el && !el.classList.contains('hidden') && !el.classList.contains('vx-drawer-out');
+}
+
+// Under the strip, over the status bar: the drawer fills the height between them
+function placeFeatureDrawer() {
+  const el = document.getElementById('ft-drawer');
+  if (!el) return;
+  const strip = document.getElementById('app-strip')?.getBoundingClientRect();
+  const bar = document.getElementById('app-statusbar')?.getBoundingClientRect();
+  el.style.top = `${zpx(strip ? strip.bottom : 0)}px`;
+  el.style.bottom = `${zpx(bar && bar.height ? window.innerHeight - bar.top : 0)}px`;
+}
+window.addEventListener('resize', () => { if (featureDrawerOpen()) placeFeatureDrawer(); });
+
+// id: the feature to choose (the chip of a recording); without one the last chosen, or the first
+async function openFeatureDrawer(id = 0) {
+  if (typeof tkClosePop === 'function') tkClosePop();
+  if (Number(id)) FTD.sel = Number(id);
+  const el = document.getElementById('ft-drawer');
+  const s = (state.system && state.system.settings) || {};
+  document.getElementById('ft-dr-suggest').checked = s.feature_suggest !== 'false';
+  // the focus goes into the drawer and comes back to the button that opened it (keyboard use)
+  const from = document.activeElement;
+  if (from && from !== document.body && !el.contains(from)) FTD.opener = from;
+  placeFeatureDrawer();
+  drawerShow(el);
+  await renderFeatureDrawer();
+  const first = el.querySelector('.ft-dr-on') || document.getElementById('ft-dr-new');
+  if (first && featureDrawerOpen()) first.focus({ preventScroll: true });
+}
+
+function closeFeatureDrawer() {
+  const el = document.getElementById('ft-drawer');
+  // a field being typed in is saved before the drawer goes (its change comes on leaving it)
+  const inside = el && el.contains(document.activeElement);
+  if (inside) document.activeElement.blur();
+  drawerHide(el);
+  const back = FTD.opener;
+  FTD.opener = null;
+  if (inside && back && back.isConnected) back.focus({ preventScroll: true });
+}
+
+// «В отдельном окне» of the card «Фичи» in «Словарь»: a second click closes the drawer
+function toggleFeatureDrawer() {
+  if (featureDrawerOpen()) closeFeatureDrawer(); else openFeatureDrawer();
+}
+
+async function renderFeatureDrawer() {
+  if (!document.getElementById('ft-drawer')) return;
+  await loadFeatures();
+  drawFeatureDrawer();
+}
+
+function drawFeatureDrawer() {
+  const list = state.features || [];
+  if (!list.some(f => f.id === FTD.sel)) FTD.sel = list.length ? list[0].id : 0;
+  document.getElementById('ft-dr-head').innerHTML = vxHead('tag', t('ftDictTitle'), { sub: t('ftDrawerSub'), close: 'data-click="closeFeatureDrawer"' });
+  const color = f => (/^#[0-9A-Fa-f]{6}$/.test(f.color || '') ? f.color : '#8E8E93');
+  // one row for every feature: the dot, the name, «записей: N» at the same place
+  document.getElementById('ft-dr-list').innerHTML = list.length ? list.map(f => `<button type="button" role="option" aria-selected="${f.id === FTD.sel}"
+      class="ft-dr-row${f.id === FTD.sel ? ' ft-dr-on' : ''}" data-fid="${f.id}" ${pageCall('click', 'selectDrawerFeature', [f.id])}>
+      <span class="ft-dr-dot" style="--ft:${color(f)}"></span><span class="ft-dr-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+      <span class="ft-dr-n">${escapeHtml(t('ftRecordings').replace('{n}', () => f.count || 0))}</span></button>`).join('')
+    : vxEmpty('tag', t('ftNone'));
+  const f = featureById(FTD.sel);
+  const form = document.getElementById('ft-dr-form');
+  if (!f) { form.innerHTML = ''; return; }
+  const sw = FT_COLORS.map(c => `<button type="button" class="ft-swatch${(f.color || '').toUpperCase() === c ? ' ft-swatch-on' : ''}" style="--ft:${c}"
+      ${pageCall('click', 'saveDrawerFeature', [f.id, 'color', c])} aria-label="${escapeHtml(c)}" title="${escapeHtml(t('ftColor'))}"></button>`).join('');
+  const field = (key, label, hint, rows) => `<label class="ft-field"><span class="ft-field-label">${escapeHtml(t(label))}</span>
+      ${rows ? `<textarea rows="${rows}" maxlength="400"` : `<input type="text" maxlength="${key === 'terms' ? 1200 : 400}"`} class="tk-input ft-dr-in" data-key="${key}" placeholder="${escapeHtml(t(hint))}" title="${escapeHtml(t(hint))}"
+        ${pageCall('change', 'saveDrawerFeature', [f.id, key, { $: 'value' }])}${rows ? `>${escapeHtml(f[key] || '')}</textarea>` : ` value="${escapeHtml(f[key] || '')}">`}</label>`;
+  form.innerHTML = `<label class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftName'))}</span>
+        <input type="text" maxlength="60" class="tk-input ft-dr-in" data-key="name" value="${escapeHtml(f.name)}" title="${escapeHtml(t('ftName'))}" ${pageCall('change', 'saveDrawerFeature', [f.id, 'name', { $: 'value' }])}></label>
+      <div class="ft-field"><span class="ft-field-label">${escapeHtml(t('ftColor'))}</span><span class="ft-swatches">${sw}
+        <input type="color" class="ft-color-any" value="${escapeHtml(color(f) === '#8E8E93' ? '#64B5FF' : color(f))}" title="${escapeHtml(t('ftColorAny'))}" aria-label="${escapeHtml(t('ftColorAny'))}"
+          ${pageCall('change', 'saveDrawerFeature', [f.id, 'color', { $: 'value' }])}></span></div>
+      ${field('keywords', 'ftKeywords', 'ftKeywordsHint', 0)}
+      ${field('description', 'ftDescription', 'ftDescriptionHint', 2)}
+      ${field('terms', 'ftTerms', 'ftTermsHint', 0)}
+      <div class="ft-dr-acts"><button type="button" class="tk-btn tk-btn-sm" ${pageCall('click', 'openFeaturePage', [f.id])}>${escapeHtml(t('fpOpen'))} ↗</button>
+        <button type="button" class="tk-btn tk-btn-sm ft-dr-del" ${pageCall('click', 'deleteDictFeature', [f.id])}>${escapeHtml(t('ftDelete'))}</button></div>`;
+}
+
+function selectDrawerFeature(id) {
+  const box = document.getElementById('ft-drawer');
+  if (box && box.contains(document.activeElement)) document.activeElement.blur();  // the field left is saved first
+  FTD.sel = Number(id);
+  drawFeatureDrawer();
+}
+
+// --- Словарь → Фичи: the same features as a card of the section (kept there beside the window «Фичи»).
+// One set of functions for both: a change in one is drawn in the other ---
 async function renderDictFeatures() {
   const box = document.getElementById('ft-dict-list');
   if (!box) return;
@@ -192,33 +292,68 @@ async function renderDictFeatures() {
     : `<div class="text-[11.5px] text-apple-tertiary">${escapeHtml(t('ftNone'))}</div>`;
 }
 
-async function saveDictFeature(id, key, value) {
+// The cards of «Словарь → Фичи» drawn anew with the open ones left open
+async function redrawDictFeatures() {
+  if (!document.getElementById('ft-dict-list')) return;
+  const open = [...document.querySelectorAll('#ft-dict-list details[open]')].map(d => [...d.parentNode.children].indexOf(d));
+  await renderDictFeatures();
+  const cards = document.querySelectorAll('#ft-dict-list details');
+  open.forEach(i => cards[i]?.setAttribute('open', ''));
+}
+
+// The drawer drawn anew with the field being typed in keeping its focus
+function redrawFeatureDrawer() {
+  if (!featureDrawerOpen()) return;
+  const focus = document.activeElement?.closest?.('#ft-dr-form') ? document.activeElement.dataset.key : '';
+  drawFeatureDrawer();
+  if (focus) document.querySelector(`#ft-dr-form [data-key="${focus}"]`)?.focus();
+}
+
+// from: where the field was changed ('dict' — the card of «Словарь», 'drawer' — the window «Фичи»); the other
+// one is drawn anew, the one typed in only for the name and the colour (its next field keeps the focus)
+async function saveDictFeature(id, key, value, from = 'dict') {
   const res = await fetch(`/api/features/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
   const data = await readJson(res);
-  if (!res.ok) { showError(data.detail); renderDictFeatures(); return; }
+  if (!res.ok) { showError(data.detail); renderDictFeatures(); renderFeatureDrawer(); return; }
   state.features = data;
-  if (key === 'name' || key === 'color') {
-    const open = [...document.querySelectorAll('#ft-dict-list details[open]')].map(d => [...d.parentNode.children].indexOf(d));
-    await renderDictFeatures();
-    const cards = document.querySelectorAll('#ft-dict-list details');
-    open.forEach(i => cards[i]?.setAttribute('open', ''));
+  const both = key === 'name' || key === 'color';
+  if (both || from === 'drawer') await redrawDictFeatures();
+  if (both || from === 'dict') redrawFeatureDrawer();
+  if (both) {
     renderMeetingFeatures();
     scheduleSidebarRender();
   }
 }
+function saveDrawerFeature(id, key, value) { return saveDictFeature(id, key, value, 'drawer'); }
 
-async function addDictFeature() {
-  const input = document.getElementById('ft-dict-new');
+// A feature made from the field given (the card's or the drawer's): the feature, or null
+async function createFeatureFrom(input) {
   const name = (input?.value || '').trim();
-  if (!name) { input?.focus(); return; }
+  if (!name) { input?.focus(); return null; }
   const res = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
   const data = await readJson(res);
-  if (!res.ok) { showError(data.detail); return; }
+  if (!res.ok) { showError(data.detail); return null; }
   input.value = '';
+  return data;
+}
+
+async function addDictFeature() {
+  const data = await createFeatureFrom(document.getElementById('ft-dict-new'));
+  if (!data) return;
   await renderDictFeatures();
   const cards = [...document.querySelectorAll('#ft-dict-list details')];
   const i = (state.features || []).findIndex(f => f.id === data.id);
   if (cards[i]) cards[i].open = true;
+  redrawFeatureDrawer();
+}
+
+async function addDrawerFeature() {
+  const data = await createFeatureFrom(document.getElementById('ft-dr-new'));
+  if (!data) return;
+  FTD.sel = data.id;  // the new feature is chosen: its fields are under the list
+  await renderFeatureDrawer();
+  document.querySelector(`#ft-dr-list [data-fid="${data.id}"]`)?.scrollIntoView({ block: 'nearest' });
+  redrawDictFeatures();
 }
 
 async function deleteDictFeature(id) {
@@ -232,7 +367,9 @@ async function deleteDictFeature(id) {
     m.features = (m.features || []).filter(x => x !== id);
     m.feature_suggestions = (m.feature_suggestions || []).filter(x => x !== id);
   }
+  if (FTD.sel === id) FTD.sel = 0;
   renderDictFeatures();
+  redrawFeatureDrawer();
   renderMeetingFeatures();
   scheduleSidebarRender();
 }
@@ -457,8 +594,9 @@ function askAboutFeature(id) {
 }
 
 function editFeatureFromPage() {
+  const id = Number(document.getElementById('feature-page')?.dataset.fid) || 0;
   document.getElementById('feature-page')?.remove();
-  openDictionary();
+  openFeatureDrawer(id);
 }
 
 function openFeaturePageFromPick(id, e) {
