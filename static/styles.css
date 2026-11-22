@@ -2832,7 +2832,22 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-search { width: 280px; border-radius: 8px; }
 .lt-bar { display: flex; align-items: center; gap: 6px; height: 36px; flex: none; margin: 0 24px 8px; padding: 0; font-size: var(--fs-ui); }
 .lt-bar.lt-selbar { padding: 0 6px 0 12px; border-radius: 10px; background: rgb(var(--accent-rgb) / 0.14); box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.4); }
-.lt-sel-n { white-space: nowrap; color: #F5F5F7; }
+.lt-sel-n { white-space: nowrap; color: #F5F5F7; font-weight: 600; }
+/* the actions of a selection: no frames on the tint, an icon and a word; hover gives a soft fill */
+.lt-selbar { gap: 2px; }
+.lt-sa { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: none;
+  color: #E6E7EA; font-size: var(--fs-ui); font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease; }
+.lt-sa svg { width: 16px; height: 16px; flex: none; opacity: 0.85; }
+.lt-sa:hover { background: rgba(255, 255, 255, 0.09); color: #FFFFFF; }
+.lt-sa-more { width: 28px; padding: 0; justify-content: center; font-size: 16px; letter-spacing: 1px; }
+/* «Удалить» stands out (asked by the user): a red fill of its own, the rest stay quiet */
+.lt-sa-danger { margin-left: 2px; padding: 0 12px; background: rgba(255, 69, 58, 0.18); box-shadow: inset 0 0 0 1px rgba(255, 69, 58, 0.45); color: #FF9F97; font-weight: 600; }
+.lt-sa-danger svg { opacity: 1; }
+.lt-sa-danger:hover { background: rgba(255, 69, 58, 0.3); color: #FFD2CD; }
+.lt-sa-sep { width: 1px; height: 18px; margin: 0 4px; background: rgb(var(--accent-rgb) / 0.35); flex: none; }
+.lt-sa-x { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: 0 6px 0 -4px; border: 0; border-radius: 6px;
+  background: none; color: var(--hc-dim, #AEAEB2); font-size: 12px; cursor: pointer; }
+.lt-sa-x:hover { background: rgba(255, 255, 255, 0.1); color: #FFFFFF; }
 .lt-fl { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
 .lt-fr { flex: none; display: flex; align-items: center; gap: 6px; }
 .lt-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 220px; height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.12)); background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-caption); white-space: nowrap; cursor: pointer; }

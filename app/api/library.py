@@ -954,15 +954,20 @@ def api_reveal_meeting_file(meeting_id: int) -> Dict[str, Any]:
 @router.delete("/api/meetings/{meeting_id}")
 def api_delete_meeting(meeting_id: int, with_source: bool = False, with_exports: bool = False,
                        with_note: bool = False) -> Dict[str, Any]:
+    from app.api.recording import MIX_DELETE_LATER, delete_when_mixed
     from app.transcriber import cancel_waiting
 
+    # A stopped recording whose tracks are being mixed: deleted now when its mix only waits for the end of a
+    # meeting, as soon as the mix is over when it runs (reported by the user: «ещё сводятся» for two minutes
+    # of waiting). Asked before the queue: the mix queues the recording as it ends.
+    mixed = delete_when_mixed(meeting_id, {"with_source": with_source, "with_exports": with_exports, "with_note": with_note})
+    if mixed == "deleted":
+        return {"ok": True}
+    if mixed == "later":
+        return {"ok": True, "later": True, "detail": MIX_DELETE_LATER}
     if is_job_active(meeting_id) and not cancel_waiting(meeting_id):  # a waiting one goes at once
         request_cancel(meeting_id)
         raise HTTPException(status_code=409, detail="Запись обрабатывается: обработка отменяется, удалите её через несколько секунд.")
-    from app import app_status
-
-    if meeting_id in app_status.mixing:  # its tracks are being mixed: deleted once it has its file
-        raise HTTPException(status_code=409, detail="Дорожки записи ещё сводятся. Удалить её можно будет через минуту.")
     from app import url_import
 
     url_import.drop(meeting_id)  # a download of it stops and its file is removed

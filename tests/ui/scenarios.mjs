@@ -281,10 +281,17 @@ await step('menus not looked for on a meter tick', async () => {
     window.vxSyncLayers = () => { looks++; real(); };
     const wait = () => new Promise(res => setTimeout(res, 50));
     try {
+      // the records of the tick alone, judged by the page's own rule: other changes of the page meanwhile (a poll
+      // redrawing a list) made the count of looks flaky
+      const seen = [];
+      const mo = new MutationObserver(rs => seen.push(...rs));
+      mo.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'id'] });
       document.getElementById('studio-db').textContent = '-12 dB';
       document.getElementById('studio-level').className = 'h-full bg-apple-red transition-all duration-75';
       await wait();
-      const tick = looks;
+      mo.disconnect();
+      const mine = seen.filter(r => ['studio-db', 'studio-level'].includes((r.target.nodeType === 1 ? r.target : r.target.parentElement)?.id));
+      const tick = mine.length && vxMattersFor(mine) ? 1 : 0;
       openRecordingContextMenu({ clientX: 300, clientY: 300, preventDefault() {}, stopPropagation() {} }, 1);
       await wait();
       const menu = looks;
@@ -1234,20 +1241,26 @@ await step('back and forward buttons', async () => {
   expect(await page.evaluate(() => state.appView) === 'tasks', '«Вперёд» did not come back to «Задачи»');
 });
 
-// While recording, the time on the red button opens the studio and does not stop the recording (asked by the user)
+// While recording, only «Стоп» of the red button stops; the time and the sources open the studio (asked by the user:
+// a click on the microphone stopped the recording)
 await step('recording time opens the studio', async () => {
   await page.evaluate(() => { window.__recOrig = [window.isRecording, window.shellQuickRecord]; window.__stops = 0;
     window.isRecording = () => true; window.shellQuickRecord = () => { window.__stops++; };
     document.getElementById('studio-timer').textContent = '01:23'; updateRecordButtonState(); switchAppView('home'); });
   await page.click('#tb-rec-clock');
   await sleep(300);
-  const r = await page.evaluate(() => [state.appView, window.__stops]);
+  let r = await page.evaluate(() => [state.appView, window.__stops]);
   expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
-  // in the studio the time is a part of the red button: its click stops as the rest of the button does
-  await page.evaluate(() => updateRecordButtonState());
+  await page.evaluate(() => { switchAppView('home'); updateRecordButtonState(); });
+  await page.click('#tb-rec-dot', { force: true });
+  await sleep(300);
+  r = await page.evaluate(() => [state.appView, window.__stops]);
+  expect(r[0] === 'studio' && r[1] === 0, `the dot stopped the recording: ${r}`);
+  // in the studio the time does nothing more; «Стоп» stops
   await page.click('#tb-rec-clock');
+  await page.click('#tb-rec-label');
   await sleep(200);
-  expect(await page.evaluate(() => window.__stops) === 1, 'the time in the studio was a dead spot of the red button');
+  expect(await page.evaluate(() => window.__stops) === 1, 'only «Стоп» must stop the recording');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 
@@ -1466,6 +1479,75 @@ await step('features drawer', async () => {
   await page.evaluate(() => { toggleStudioFocus(false); switchAppView('home'); });
   await sleep(300);
   await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }).then(() => loadFeatures()), fid);
+});
+
+// A stopped recording whose mix waits for the end of a meeting: the card says why and counts down, not 1 %
+// «после встречи» for two minutes (reported by the user); the row shows the time left in place of the percent
+await step('mix wait countdown', async () => {
+  const meeting = await page.evaluate(() => fetch('/api/meetings/3').then(r => r.json()));
+  const until = Date.now() / 1000 + 100;
+  Object.assign(meeting, { id: 9902, title: 'Запись 14-05', status: 'mixing', progress: 1, mix_wait: until, mix_deleting: false,
+    stage_text: 'Сведение дорожек: пауза на случай следующей встречи', segments: [], summaries: {}, transcript_versions: [], duration: 0 });
+  await page.route(/\/api\/meetings\/9902(\/|\?|$)/, r => /\/api\/meetings\/9902(\?|$)/.test(r.request().url())
+    ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meeting) }) : r.fulfill({ status: 404, body: '{}' }));
+  await page.evaluate(m => {
+    const row = { ...m };
+    delete row.segments;
+    state.meetings.unshift(row);
+    renderMeetingsSidebar();
+    return openMeeting(9902);
+  }, meeting);
+  await sleep(1200);
+  const sub = () => page.textContent('#tx-rc-sub');
+  const first = await sub();
+  expect(/^Начнётся через 1:[34]\d — пауза/.test(first), `the card does not count down: «${first}»`);
+  expect((await page.textContent('#tx-rc-title')) === 'Сведение дорожек', 'the card is not the mix');
+  expect(!(await page.textContent('#tx-rc-pct')), 'the card still shows a percent');
+  await sleep(1300);
+  expect((await sub()) !== first, 'the countdown does not move');
+  const slot = await page.evaluate(() => document.querySelector('#meetings-list [data-mid="9902"] [data-mix-until]')?.textContent || '');
+  expect(/^1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
+  // a meeting going on: no countdown, the reason
+  await page.evaluate(() => {
+    for (const m of [state.activeMeeting, state.meetings.find(x => x.id === 9902)]) m.mix_wait = 0;
+    renderMeetingsSidebar();
+    renderTxModelBar();
+  });
+  expect((await sub()) === 'Начнётся после встречи', `during a meeting: «${await sub()}»`);
+  await page.evaluate(() => {
+    state.activeMeeting.mix_wait = Date.now() / 1000 + 100;
+    renderTxModelBar();
+  });
+});
+
+await step('mix wait cleanup', async () => {
+  await page.evaluate(() => {
+    state.meetings = state.meetings.filter(m => m.id !== 9902);
+    state.activeMeeting = null;
+    renderMeetingsSidebar();
+    return openMeeting(1);
+  });
+  await page.unroute(/\/api\/meetings\/9902(\/|\?|$)/);
+  await sleep(800);
+});
+
+// A bulk delete that fails says why, in the server's words (reported by the user: only «возможно, они сейчас
+// обрабатываются» was shown, for recordings whose mix waited)
+await step('bulk delete reason', async () => {
+  const why = 'Запись обрабатывается: обработка отменяется, удалите её через несколько секунд.';
+  await page.route(/\/api\/meetings\/[12](\?|$)/, r => r.request().method() === 'DELETE'
+    ? r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: why }) }) : r.continue());
+  const toast = await page.evaluate(async () => {
+    const ask = window.confirmDeleteDialog;
+    window.confirmDeleteDialog = async () => ({});
+    state.multi = new Set([1, 2]);
+    try { await bulkDelete(); } finally { window.confirmDeleteDialog = ask; }
+    return document.getElementById('toast').textContent;
+  });
+  await page.unroute(/\/api\/meetings\/[12](\?|$)/);
+  expect(toast.includes(`Не удалось удалить записей: 2. ${why}`), `the reason is not shown: «${toast}»`);
+  expect(!toast.includes('возможно'), 'the guess is still shown');
+  expect(await page.evaluate(() => [1, 2].every(id => state.meetings.some(m => m.id === id))), 'a recording went');
 });
 
 // The citations of an answer as the server reads them (app/library_qa.cited_numbers): the ranges [1-3] / [5–6] /

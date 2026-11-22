@@ -566,5 +566,8 @@ async function ctxDeleteRecording() {
     leaveDeletedRecording();
   }
   await loadMeetingsList();
-  showToast(t('uiRecordingDeleted'), null, 'success');
+  // its tracks are being mixed: it goes as soon as the mix is over (the server says so)
+  const done = await delRes.json().catch(() => ({}));
+  if (done.later) showToast(serverText(done.detail) || t('mixDeleting'));
+  else showToast(t('uiRecordingDeleted'), null, 'success');
 }

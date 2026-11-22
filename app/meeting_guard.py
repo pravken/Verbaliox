@@ -190,6 +190,25 @@ def holds_queue(now: Optional[float] = None) -> bool:
         return bool(_state["ended"]) and now - _state["ended"] < QUIET_SEC
 
 
+def hold_until(now: Optional[float] = None) -> Optional[float]:
+    """What holds_queue() says, with when it ends: None — nothing is held; 0.0 — a meeting goes on (its end
+    is not known); a time — QUIET_SEC after the end of the last meeting. The page counts down to it."""
+    now = time.time() if now is None else now
+    with _lock:
+        looked = _state["looked"]
+    if not looked:
+        try:
+            return 0.0 if busy(cached_calendar=True) not in ("", "economy") else None
+        except Exception:
+            return None
+    with _lock:
+        if _state["busy"] and _state["busy"] != "economy":
+            return 0.0
+        if _state["ended"] and now - _state["ended"] < QUIET_SEC:
+            return float(_state["ended"]) + QUIET_SEC
+    return None
+
+
 def _release_speech() -> List[str]:
     """The speech models out of memory as a meeting begins, when no job uses them (one running finishes)."""
     try:

@@ -334,7 +334,10 @@ def finish_recording(payload: RecordFinishPayload, recovered: Optional[Dict[str,
     from app import app_status
     from app.database import update_meeting_progress
 
-    app_status.mixing.add(m["id"])
+    with _mix_lock:
+        app_status.mixing.add(m["id"])
+        _mixes[m["id"]] = {"session": session, "parts": {"page": page, "system": system, "screen": screen},
+                           "seconds": _recorded_seconds(payload, recovered), "wake": threading.Event(), "delete": None}
     update_meeting_progress(m["id"], status="mixing", progress=1, stage_text="Сведение дорожек записи...")
     _attach_recording_info(m["id"], payload)
     threading.Thread(target=_mix_in_background, args=(m["id"], payload, page, system, screen, system_skip, safe_stem, session),
@@ -476,9 +479,14 @@ def recover_sessions() -> List[Path]:
     for sc in sidecars:
         try:
             data = json.loads(sc.read_text(encoding="utf-8"))
-            payload = RecordFinishPayload(**data["payload"])
             paths = data.get("paths") or {}
             parts = [Path(paths[k]) for k in ("page", "system", "screen") if paths.get(k)]
+            if data.get("delete"):  # deleted during its mix (delete_when_mixed): its tracks and placeholder go
+                _forget_deleted(parts, data.get("meeting_id"))
+                used += parts
+                sc.unlink(missing_ok=True)
+                continue
+            payload = RecordFinishPayload(**data["payload"])
             if not any(p.is_file() and p.stat().st_size > 4096 for p in parts):
                 sc.unlink(missing_ok=True)
                 continue
@@ -490,6 +498,22 @@ def recover_sessions() -> List[Path]:
             traceback.print_exc()
             sc.unlink(missing_ok=True)
     return used
+
+
+def _forget_deleted(parts: List[Path], meeting_id: Any) -> None:
+    """A recording deleted while its tracks were mixed, the app closed before it was done: its tracks and
+    the recording go now (its mixed file too, when the mix had registered it)."""
+    from app.database import delete_file, delete_meeting
+
+    for p in parts:
+        delete_file(str(p))
+    try:
+        m = get_meeting(int(meeting_id)) if meeting_id else None
+    except (TypeError, ValueError):
+        m = None
+    if m and m.get("status") == "mixing" and m.get("source") == "recording":
+        delete_meeting(int(m["id"]))
+    print(f"[record] a recording deleted during its mix: {len(parts)} track(s) removed", flush=True)
 
 
 def _mix_stage(meeting_id: Optional[int], progress: int, text: str) -> None:
@@ -605,45 +629,175 @@ def _mix_parts(payload: RecordFinishPayload, page: Optional[Path], system: Optio
     return {"dest": dest, "has_video": has_video, "cleanup": cleanup}
 
 
-def _wait_for_meeting_end(meeting_id: int) -> None:
+# --- The mix of a stopped recording ---
+# A short recording is mixed at once: «Не мешать на встречах» held even a recording of a few seconds for
+# QUIET_SEC after it (the app's own recording counts as a meeting), and the card stood at 1 % «после встречи»
+# for two minutes (reported by the user). Measured (the echo removal and FFmpeg on one processor; DeepFilterNet
+# adds a few seconds a minute): 30 s of tracks take 2 s, 2 min 6 s, 3 min 8 s, 10 min 28 s. Up to 3 min the
+# mix takes seconds and does not load the computer; a longer one still waits for the end of the meeting.
+MIX_AT_ONCE_SEC = 180.0
+MIX_DELETE_LATER = "Запись удалится, как только сведутся дорожки"
+
+_mix_lock = threading.Lock()
+# meeting → {"session": its notes' file, "parts": the tracks, "seconds": how long it recorded (None: not known),
+# "wake": an Event set by a deletion, "delete": the options of a deletion asked for meanwhile (None: none)}
+_mixes: Dict[int, Dict[str, Any]] = {}
+
+
+def _recorded_seconds(payload: RecordFinishPayload, recovered: Optional[Dict[str, Any]]) -> Optional[float]:
+    """How long the recording went on, by the page's clock: None when it is not known (a recording recovered
+    after a crash, a page that did not say when it began): such a recording is taken for a long one."""
+    if recovered is not None:
+        return None
+    began = payload.started_at or payload.page_started_at
+    if began <= 0:
+        return None
+    took = time.time() - began
+    return took if 0 <= took < 3 * 86400 else None
+
+
+def _delete_asked(meeting_id: int) -> bool:
+    with _mix_lock:
+        return (_mixes.get(meeting_id) or {}).get("delete") is not None
+
+
+def _mark_session_deleted(job: Dict[str, Any], meeting_id: int) -> None:
+    """The notes' file of a recording deleted during its mix says so: a restart meanwhile deletes its tracks
+    (recover_sessions) instead of bringing the recording back."""
+    import json
+
+    key = job.get("session")
+    if not key:
+        return
+    target = _sidecar(key)
+    try:
+        data = json.loads(target.read_text(encoding="utf-8")) if target.is_file() else {}
+    except (OSError, ValueError):
+        data = {}
+    paths = data.get("paths") or {k: str(v) for k, v in (job.get("parts") or {}).items() if v}
+    data.update(delete=True, paths=paths, meeting_id=meeting_id)
+    part = target.with_suffix(".tmp")
+    try:
+        part.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        part.replace(target)
+    except OSError as e:
+        print(f"[record] the deletion of recording {meeting_id} not kept: {e}", flush=True)
+
+
+def delete_when_mixed(meeting_id: int, options: Dict[str, Any]) -> Optional[str]:
+    """DELETE of a recording whose tracks are being mixed (app/api/library.py). None: it is not being mixed,
+    deleted the usual way. "deleted": its mix was waiting for the end of a meeting, the recording and its
+    tracks are gone now. "later": the mix runs (FFmpeg, DeepFilterNet), the recording is deleted as soon as
+    it is over — nothing of it is left either way."""
+    from app import app_status
+    from app.database import update_meeting_progress
+
+    with _mix_lock:
+        if meeting_id not in app_status.mixing:
+            return None
+        job = _mixes.setdefault(meeting_id, {"delete": None})
+        job["delete"] = dict(options)
+        waiting = meeting_id in app_status.mix_wait
+        app_status.mix_deleting.add(meeting_id)
+        wake = job.get("wake")
+        # under the lock: the mix thread removes the notes' file once it is over, not before this is written
+        _mark_session_deleted(job, meeting_id)
+    if wake is not None:
+        wake.set()
+    if waiting and wake is not None:  # its thread deletes it and ends within a moment
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            if meeting_id not in app_status.mixing:
+                return "deleted"
+            time.sleep(0.05)
+    update_meeting_progress(meeting_id, stage_text="Сведение дорожек: запись удалится по окончании сведения")
+    print(f"[record] meeting {meeting_id}: deleted once its mix is over", flush=True)
+    return "later"
+
+
+def _wait_for_meeting_end(meeting_id: int, seconds: Optional[float] = None) -> bool:
     """The mix (the voice cleaned by DeepFilterNet, the echo, ffmpeg: minutes of a whole processor) waits for
     the end of the meeting going on, as the transcription does («Не мешать на встречах», app/meeting_guard).
     Reported by the user: a recording ended as the next meeting began, and the computer froze during the call.
-    The tracks wait on disk, a restart meanwhile recovers them (recover_sessions)."""
-    import time
-
-    from app import meeting_guard
+    The tracks wait on disk, a restart meanwhile recovers them (recover_sessions). A short recording
+    (MIX_AT_ONCE_SEC) is mixed at once. While it waits the card counts down to the start (app_status.mix_wait).
+    Returns False when the recording was deleted meanwhile: there is nothing to mix."""
+    from app import app_status, meeting_guard
     from app.database import update_meeting_progress
 
-    said = False
-    while meeting_guard.holds_queue():
-        if not said:
-            update_meeting_progress(meeting_id, stage_text="Сведение дорожек — после встречи")
-            print(f"[record] meeting {meeting_id}: the mix waits for the end of the meeting", flush=True)
-            said = True
-        time.sleep(5.0)
-    if said:
-        update_meeting_progress(meeting_id, stage_text="Сведение дорожек записи...")
+    if seconds is not None and seconds <= MIX_AT_ONCE_SEC:
+        return not _delete_asked(meeting_id)
+    with _mix_lock:
+        wake = (_mixes.get(meeting_id) or {}).get("wake")
+    shown: Optional[float] = None
+    try:
+        while True:
+            until = meeting_guard.hold_until()
+            with _mix_lock:
+                if (_mixes.get(meeting_id) or {}).get("delete") is not None:
+                    return False
+                if until is None:
+                    app_status.mix_wait.pop(meeting_id, None)  # from now on a deletion waits for the mix
+                    return True
+                app_status.mix_wait[meeting_id] = until
+            if until != shown:
+                if shown is None:
+                    print(f"[record] meeting {meeting_id}: the mix waits for the end of the meeting", flush=True)
+                update_meeting_progress(meeting_id, stage_text="Сведение дорожек: начнётся после встречи" if not until
+                                        else "Сведение дорожек: пауза на случай следующей встречи")
+                shown = until
+            if wake is not None:
+                wake.wait(2.0)
+            else:
+                time.sleep(2.0)
+    finally:
+        with _mix_lock:
+            app_status.mix_wait.pop(meeting_id, None)
+        if shown is not None and not _delete_asked(meeting_id):
+            update_meeting_progress(meeting_id, stage_text="Сведение дорожек записи...")
+
+
+def _drop_now(meeting_id: int, options: Optional[Dict[str, Any]] = None) -> None:
+    """A recording deleted while its tracks were mixed: deleted now, a transcription queued for it dropped."""
+    from app.database import delete_meeting
+    from app.transcriber import cancel_waiting, is_job_active
+
+    if is_job_active(meeting_id):
+        cancel_waiting(meeting_id)
+    delete_meeting(meeting_id, **(options or {}))
 
 
 def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Optional[Path], system: Optional[Path],
                        screen: Optional[Path], system_skip: float, safe_stem: str, session: Optional[str] = None) -> None:
-    """The mix of a stopped recording, then its transcription queued; the recording waits as «mixing»."""
+    """The mix of a stopped recording, then its transcription queued; the recording waits as «mixing».
+    Deleted meanwhile (delete_when_mixed): no file, track or recording of it is left."""
     import traceback
 
     from app import app_status, events
-    from app.database import delete_meeting, set_recording_media, update_meeting_progress
+    from app.database import delete_file, delete_meeting, set_recording_media, update_meeting_progress
     from app.naming import rename_recording_file
 
+    with _mix_lock:
+        seconds = (_mixes.get(meeting_id) or {}).get("seconds")
     done: Optional[Dict[str, Any]] = None
     try:
-        _wait_for_meeting_end(meeting_id)
+        if not _wait_for_meeting_end(meeting_id, seconds):
+            for p in (page, system, screen):  # deleted while it waited: its tracks go with it
+                if p:
+                    delete_file(str(p))
+            return
         done = _mix_parts(payload, page, system, screen, system_skip, safe_stem, meeting_id)
         if done is None or done.get("salvaged") is not None:  # kept part by part: they are the recordings now
+            if _delete_asked(meeting_id):  # unless it was deleted meanwhile
+                for made in ((done or {}).get("salvaged") or {}).get("created") or []:
+                    _drop_now(int(made["id"]))
             delete_meeting(meeting_id)
             return
+        if _delete_asked(meeting_id):  # deleted during the mix: neither its file nor its tracks stay
+            for p in [done["dest"], *(done.get("cleanup") or [])]:
+                delete_file(str(p))
+            return
         set_recording_media(meeting_id, str(done["dest"]), bool(done["has_video"]))
-        from app.database import delete_file
 
         # The recording has its file now: a part still held open (an antivirus, the capture thread) is
         # deleted at the next start, and a failed rename leaves the file under its first name. Neither
@@ -654,11 +808,19 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
             rename_recording_file(meeting_id)  # "2026-10-20 Запись 14-05.m4a"; renamed again once titled
         except Exception:
             traceback.print_exc()
-        update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
-        enqueue_meeting_job(meeting_id)
+        with _mix_lock:  # a deletion asked until now is done below; from now on it is an ordinary one
+            if (_mixes.get(meeting_id) or {}).get("delete") is None:
+                app_status.mixing.discard(meeting_id)
+                update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
+                enqueue_meeting_job(meeting_id)
     except Exception as e:
         traceback.print_exc()
         if not (done and done.get("dest") and (get_meeting(meeting_id) or {}).get("media_path")):
+            if _delete_asked(meeting_id):  # deleted meanwhile: what was recorded goes, it is not kept
+                for p in [(done or {}).get("dest"), screen, page, system]:
+                    if p:
+                        delete_file(str(p))
+                return
             # failed before the recording had its file: what was recorded is kept part by part, now
             try:
                 if done and done.get("dest"):
@@ -675,8 +837,19 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
         update_meeting_progress(meeting_id, status="failed", progress=0, stage_text="",
                                 error_message=f"Не удалось свести дорожки записи: {e}"[:500])
     finally:
+        with _mix_lock:
+            asked = (_mixes.get(meeting_id) or {}).get("delete")
+        if asked is not None:  # deleted meanwhile: gone before «mixing» ends (the deletion waits for that)
+            try:
+                _drop_now(meeting_id, asked)
+            except Exception:
+                traceback.print_exc()
+        with _mix_lock:
+            app_status.mixing.discard(meeting_id)
+            app_status.mix_wait.pop(meeting_id, None)
+            app_status.mix_deleting.discard(meeting_id)
+            _mixes.pop(meeting_id, None)
         _end_session(session)  # the mix is over, one way or the other: the parts are the library's now
-        app_status.mixing.discard(meeting_id)
         events.publish({"type": "list"})
 
 
