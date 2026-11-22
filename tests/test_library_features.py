@@ -501,6 +501,24 @@ class LibraryScopeTest(unittest.TestCase):
         llm.chat.side_effect = RuntimeError("down")
         self.assertTrue(about_recordings("сколько будет 2+2", llm, False))
 
+    def test_a_follow_up_gets_the_conversation(self):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        history = [{"question": "Что решили по релизу?", "answer": "Тестирование до пятницы."}] * 5
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", side_effect=["да", "Подробности в обсуждении [1]."]) as chat:
+            res = library_qa.ask_library("а подробнее?", meeting_ids=meeting_ids_in_folder(folder["id"]), history=history)
+        self.assertEqual(res["mode"], "full")
+        self.assertIn("Предыдущий разговор", chat.call_args_list[0][0][3])  # the check sees the conversation
+        user = chat.call_args[0][3]
+        self.assertIn("Что решили по релизу?", user)
+        self.assertEqual(user.count("Что решили по релизу?"), library_qa.HISTORY_TURNS)
+        self.assertTrue(user.rstrip().endswith("Вопрос: а подробнее?"))
+
     def test_small_talk_is_told_from_questions(self):
         from app.library_qa import is_small_talk
 

@@ -884,6 +884,7 @@ class LibraryAskPayload(BaseModel):
     model: Optional[str] = None
     folder_id: Optional[int] = None  # only recordings in this folder and the folders inside it
     meeting_ids: Optional[List[int]] = None  # only these recordings
+    history: List[Dict[str, str]] = []  # the conversation so far: {question, answer}, the last few
 
 @router.post("/api/library/ask")
 def api_library_ask(payload: LibraryAskPayload) -> Dict[str, Any]:
@@ -900,7 +901,8 @@ def api_library_ask(payload: LibraryAskPayload) -> Dict[str, Any]:
         ids = [int(i) for i in payload.meeting_ids][:500]
         scope = ids if scope is None else [i for i in scope if i in ids]
     try:
-        return ask_library(payload.question, answer_lang=payload.lang, model_name=payload.model, meeting_ids=scope)
+        return ask_library(payload.question, answer_lang=payload.lang, model_name=payload.model, meeting_ids=scope,
+                           history=payload.history)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

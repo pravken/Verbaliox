@@ -488,6 +488,14 @@ function askLibrary() {
   return assistantSend();
 }
 
+// The conversation so far, for a follow-up («а подробнее?», «кто это предложил?»): the last answered
+// questions before this one, their answers without the [n] citations (asked by the user)
+function assistantHistory(chat, item) {
+  const before = chat.items.slice(0, Math.max(0, chat.items.indexOf(item)));
+  return before.filter(x => x.status === 'done' && x.data && x.data.found && x.data.answer).slice(-3)
+    .map(x => ({ question: String(x.question).slice(0, 1000), answer: String(x.data.answer).replace(/\s?\[\d{1,3}(?:\s*[,;]\s*\d{1,3})*\]/g, '').slice(0, 2000) }));
+}
+
 async function assistantSend(text, scopeArg) {
   const input = document.getElementById('library-question');
   const question = String(text ?? input.value).trim();
@@ -510,7 +518,7 @@ async function assistantSend(text, scopeArg) {
   try {
     const res = await fetch('/api/library/ask', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ question, lang: state.uiLang === 'en' ? 'en' : 'ru', model: chat.model || null, ...assistantScopePayload(scope) }),
+      body: JSON.stringify({ question, lang: state.uiLang === 'en' ? 'en' : 'ru', model: chat.model || null, history: assistantHistory(chat, item), ...assistantScopePayload(scope) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(errorText(data, res));
