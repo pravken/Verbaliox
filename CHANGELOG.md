@@ -9,12 +9,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 ## 0.8.26 — English
 
 - **A new look, «Meeting desk»**: a rail of sections on the left (Today, Overview, Recordings, Tasks, People,
-  Assistant; Ctrl+1…6), at the bottom «Queue», «Dictionary» and «Settings». The old sidebar is gone.
+  Dictionary, Assistant; Ctrl+1…6), at the bottom «Settings» and «Quit». The old sidebar is gone.
 - **The meeting strip on top** says what is going on — free until the end of the day, a meeting in N minutes,
   going without recording, recording, waiting for transcription, results ready — with the button of that
   moment (Join, Record, Mark the moment, Open the results) and «＋ Import».
 - **Load in the status bar**: CPU, RAM and the video memory with the program's own share; a click lists the
-  models in memory, each with «Unload». «Queue» on the rail shows what runs and what waits.
+  models in memory, each with «Unload».
 - **Today and Overview**: Today is the calendar (day, week, month; the working time gone by shaded) with the
   cards of the day; Overview is the analytics: «Statistics» tiles with a trend and the metrics of your choice,
   charts as columns, bars, a ring or a line, every part in a colour of its own.
@@ -72,7 +72,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   or the recognition; the model, the speakers and the tools of the text in one row.
 - **My programs** counts only the minutes with input (a game controller too); the time of meetings comes from the
   recordings.
-- Fixes: the calendar from Outlook never closes an Outlook in use; «Minimize to the tray» only with a tray icon;
+- Fixes: a question to the assistant right after the start waits for Ollama to come up; the calendar from Outlook
+  never closes an Outlook in use; «Minimize to the tray» only with a tray icon;
   an update interrupted by a power loss no longer blocks the start; the strip no longer asks the calendar in a loop
   after an error; a recording opened and left quickly no longer stays hidden; widgets drag right at any interface
   scale; recordings once closed to the agent stay closed when their folder goes; the shortcuts window lists
@@ -788,13 +789,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.8.26
 
-- **Новый вид — «Пульт встреч»**: слева полоса разделов (Сегодня, Обзор, Записи, Задачи, Люди, Ассистент;
-  Ctrl+1…6), внизу «Очередь», «Словарь» и «Настройки». Старой боковой панели больше нет.
+- **Новый вид — «Пульт встреч»**: слева полоса разделов (Сегодня, Обзор, Записи, Задачи, Люди, Словарь, Ассистент;
+  Ctrl+1…6), внизу «Настройки» и «Выйти». Старой боковой панели больше нет.
 - **Полоса встречи сверху** показывает, что происходит: свободно до конца дня, встреча через N минут, идёт без
   записи, идёт запись, ждёт расшифровки, итоги готовы — и кнопку этого момента (Подключиться, Записать,
   Отметить момент, Открыть итоги), рядом «＋ Импорт».
 - **Нагрузка в строке состояния**: процессор, память и видеопамять с долей самой программы; по щелчку — модели
-  в памяти, у каждой своя «Выгрузить». «Очередь» на полосе слева — что выполняется и что ждёт.
+  в памяти, у каждой своя «Выгрузить».
 - **«Сегодня» и «Обзор»**: «Сегодня» — календарь (день, неделя, месяц; прошедшее рабочее время подсвечено) и
   карточки дня; «Обзор» — аналитика: плитки «Статистики» с динамикой и выбором показателей, диаграммы
   столбцами, полосами, кругом или линией, у каждой части свой цвет.
@@ -848,7 +849,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Расшифровка**: у записи без текста — одна карточка с выбором модели и ходом сведения или распознавания; модель,
   участники и инструменты текста — в одну строку.
 - **«Мои программы»** считают только минуты с действиями (геймпад тоже); время встреч — по записям.
-- Исправления: календарь из Outlook больше не закрывает Outlook, с которым работают; «Свернуть в трей» — только когда
+- Исправления: вопрос ассистенту сразу после запуска дожидается, пока Ollama запустится; календарь из Outlook больше
+  не закрывает Outlook, с которым работают; «Свернуть в трей» — только когда
   есть значок в трее; обновление, прерванное отключением питания, больше не мешает запуску; полоса сверху не
   запрашивает календарь по кругу после ошибки; запись, открытая и тут же покинутая, больше не остаётся скрытой;
   виджеты перетаскиваются верно при любом масштабе; записи, закрытые раньше от агента, остаются закрытыми и после
