@@ -204,10 +204,33 @@ function renderRail() {
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   const on = id && document.getElementById(id);
+  if (id) requestAnimationFrame(() => animateHeadIcon(state.appView));
   if (!placeRailIndicator(!was)) return;
   if (was && was !== id) {  // the icon of the section chosen gives a small press
     on.classList.remove('rail-pick'); void on.offsetWidth; on.classList.add('rail-pick');
   }
+}
+
+// The icon in the section's head is the rail button's own, with its motion (asked by the user): under the pointer, and
+// once as the section opens
+const HEAD_TILE_OF_VIEW = { dashboard: '#dashboard-view .vx-stile', libtable: '#libtable-view .vx-stile', library: '#libtable-view .vx-stile',
+  tasks: '#tasks-view .vx-stile', people: '#people-view .vx-stile', dict: '#dict-view .vx-stile', settings: '.settings-page .sx-head-ic' };
+function animateHeadIcon(view) {
+  const sel = HEAD_TILE_OF_VIEW[view];
+  if (!sel) return;  // «Сегодня» has its date tile, «Ассистент» no head tile
+  const tile = document.querySelector(sel);
+  const src = document.getElementById(RAIL_OF_VIEW[view] || '')?.querySelector('svg');
+  if (!tile || !src) return;
+  if (!tile.classList.contains('ri-host')) {  // the rail's drawing, its parts named for their motion
+    const svg = src.cloneNode(true);
+    svg.removeAttribute('id');
+    svg.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    tile.replaceChildren(svg);
+    tile.classList.add('ri-host');
+  }
+  tile.classList.remove('ri-play'); void tile.offsetWidth; tile.classList.add('ri-play');
+  clearTimeout(tile._riTimer);
+  tile._riTimer = setTimeout(() => tile.classList.remove('ri-play'), 900);
 }
 
 // The bar at the rail's edge on the section's button; still: placed at once, not moved (the first one, a resize: the

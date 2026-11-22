@@ -5277,3 +5277,26 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .rail-btn:hover .ri-t3 { animation: ri-tile 380ms 140ms var(--ease-out) both; }
 .rail-btn:hover .ri-t4 { animation: ri-tile 380ms 210ms var(--ease-out) both; }
 @keyframes ri-tile { 45% { transform: scale(0.72); } }
+
+/* The section's head tile carries the rail button's icon (animateHeadIcon in static/js/shell.js) and its motion:
+   under the pointer and once as the section opens (asked by the user) */
+.ri-host svg * { transform-box: fill-box; transform-origin: center; }
+.ri-host svg { width: 22px; height: 22px; }
+.ri-host:is(:hover, .ri-play) .ri-house { animation: ri-hop 380ms var(--ease-out); }
+.ri-host:is(:hover, .ri-play) .ri-l1 { stroke-dasharray: 1; animation: ri-write 360ms ease-out; }
+.ri-host:is(:hover, .ri-play) .ri-l2 { stroke-dasharray: 1; animation: ri-write 360ms 90ms ease-out both; }
+.ri-host:is(:hover, .ri-play) .ri-c1 { stroke-dasharray: 1; animation: ri-write 300ms ease-out; }
+.ri-host:is(:hover, .ri-play) .ri-c2 { stroke-dasharray: 1; animation: ri-write 300ms 120ms ease-out both; }
+.ri-host:is(:hover, .ri-play) .ri-p2 { animation: ri-near 400ms var(--ease-out); }
+.ri-host:is(:hover, .ri-play) .ri-star { animation: ri-twinkle 420ms ease-in-out; }
+.ri-host:is(:hover, .ri-play) .ri-spark { animation: ri-twinkle 420ms 120ms ease-in-out; }
+.ri-host .ri-pg, .ri-host .ri-pg2 { transform-origin: left; }
+.ri-host:is(:hover, .ri-play) .ri-pg { animation: ri-line 360ms ease-out; }
+.ri-host:is(:hover, .ri-play) .ri-pg2 { animation: ri-line 360ms 110ms ease-out both; }
+.ri-host .ri-gear { transition: transform 420ms var(--ease-out); }
+.ri-host:is(:hover, .ri-play) .ri-gear { transform: rotate(60deg); }
+.ri-host:is(:hover, .ri-play) .ri-t1 { animation: ri-tile 380ms var(--ease-out); }
+.ri-host:is(:hover, .ri-play) .ri-t2 { animation: ri-tile 380ms 70ms var(--ease-out) both; }
+.ri-host:is(:hover, .ri-play) .ri-t3 { animation: ri-tile 380ms 140ms var(--ease-out) both; }
+.ri-host:is(:hover, .ri-play) .ri-t4 { animation: ri-tile 380ms 210ms var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .ri-host * { animation: none !important; transition: none !important; } }
