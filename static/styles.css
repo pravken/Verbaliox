@@ -5163,3 +5163,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 #recording-context-menu { width: 288px; }
 #rec-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
 #rec-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
+
+/* The search of a section's head: one width in «Записи», «Задачи», «Словарь» and the list of «Люди» */
+.tk-search, .lt-search, .pv-search { width: 280px; max-width: 100%; }
