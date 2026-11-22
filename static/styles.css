@@ -3705,7 +3705,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .strip-main { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 12px; height: 100%; font-size: var(--fs-ui); }
 .strip-main.strip-link { cursor: pointer; }
 .strip-lead { font-weight: 600; color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; min-width: 72px; flex: 0 1 auto; }
-.strip-meta { color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 3 auto; }
+/* short, and whole or not at all: «записано 12 мин» cut to «записа…» said nothing (reported by the user); the title gives way */
+.strip-meta { color: var(--hc-dim, #AEAEB2); white-space: nowrap; flex: none; }
 .strip-grow { flex: 1; min-width: 0; color: #8E9198; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip-grow-live { color: #FFD4D1; }
 .strip-lead.hidden, .strip-meta.hidden { display: none; }

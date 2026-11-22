@@ -194,6 +194,7 @@ function renderStrip() {
   document.getElementById('strip-pill-t').textContent = s.pill;
   const put = (id, v) => { const el = document.getElementById(id); el.textContent = v || ''; el.classList.toggle('hidden', !v); };
   put('strip-lead', s.lead);
+  document.getElementById('strip-lead').title = s.lead || '';  // the whole title when it is cut
   put('strip-meta', s.meta);
   document.getElementById('strip-grow').textContent = s.grow || '';
   document.getElementById('strip-grow').className = `strip-grow${s.growCls ? ` strip-grow-${s.growCls}` : ''}`;
