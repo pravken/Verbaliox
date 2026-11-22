@@ -1162,7 +1162,8 @@ function vxPressOwner(e, el) {
   const key = vxOwnerKey(el);
   vxPress = { key, el, at: performance.now() };
   if (!key) return false;
-  const l = VX_LAYERS.find(x => x.kind === 'menu' && x.owner === key && x.isOpen());
+  // a button inside the menu calling the same (its «Готово») is the menu's own, not its owner
+  const l = VX_LAYERS.find(x => x.kind === 'menu' && x.owner === key && x.isOpen() && !vxLayerEl(x)?.contains(el));
   if (!l) return false;
   l.close();
   l.open = false;
