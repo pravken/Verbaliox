@@ -1,5 +1,5 @@
 // Verbaliox page script: «Пульт встреч» (docs/pult-plan.md, stages 1–2). The strip of the meeting at the top,
-// the «Очередь» window of the rail and of the status bar, the load indicator of the status bar and its window.
+// the «Очередь» island of the strip and its window, the load indicator of the status bar and its window.
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 // --- The strip of the meeting ---
@@ -238,14 +238,8 @@ function stripOpenCalendarSettings() {
   selectSettingsTab('calendar');
 }
 
-// --- «Очередь»: the window of the rail button and of the status bar ---
-const jobs = { open: false, at: 'rail', html: '' };
-
-const JOBS_ICON = {
-  run: '<circle cx="12" cy="12" r="8" opacity=".3"/><path class="ri-arc" d="M12 4a8 8 0 018 8"/>',
-  wait: '<circle cx="12" cy="12" r="8"/><path class="ri-pz1" d="M10 9v6"/><path class="ri-pz2" d="M14 9v6"/>',
-  ok: '<circle class="ri-ring" cx="12" cy="12" r="8"/><path class="ri-ok" pathLength="1" d="M8.5 12.5l2.3 2.2 4.7-5"/>',
-};
+// --- «Очередь»: the window of the strip's island (and of the status bar) ---
+const jobs = { open: false, at: 'island', html: '' };
 const PANEL_ICON = {
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   chart: '<path d="M4 19h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
@@ -263,12 +257,22 @@ function jobsHold() {
 // «Очередь» as an island in the top strip (asked by the user: the rail's button said «Очередь пуста» most of the
 // time): nothing while nothing runs; a capsule before «＋ Импорт» with a progress ring and the job, «+N в очереди»;
 // «Готово» for a moment when the last job ends. The strip itself already tells about its recording: then the capsule
-// keeps only the count of the others, or hides. A click opens the queue's window under it.
-const island = { had: false, doneTimer: null, html: '' };
+// keeps only the count of the others, or only its ring (the queue window, with «Пауза» and «Отменить всё», is opened
+// from here alone). A click opens the queue's window under it.
+const island = { doneTimer: null, html: '', cancelAt: 0 };
 function islandRing(pct) {
   const c = 56.5, d = Math.max(2, Math.min(100, pct || 0)) / 100 * c;
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="3"/>`
     + `<circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="${d.toFixed(1)} ${c}" transform="rotate(-90 12 12)"/></svg>`;
+}
+// The queue cancelled (all of it, or its last job): it ends without «Готово» (the jobs may still be listed a moment
+// while they stop, so a time, not a flag the next drawing would clear)
+function islandCancelled() { island.cancelAt = Date.now(); }
+function islandHide(el) {
+  island.html = '';
+  el.classList.add('hidden');
+  el.innerHTML = '';
+  if (jobs.open && jobs.at === 'island') closeJobsPop();
 }
 function renderJobsIsland() {
   let el = document.getElementById('strip-island');
@@ -280,71 +284,59 @@ function renderJobsIsland() {
     el.type = 'button';
     el.className = 'st-island hidden';
     el.setAttribute('aria-haspopup', 'dialog');
+    el.setAttribute('aria-expanded', 'false');
     el.dataset.click = 'toggleJobsPop';
     el.dataset.clickArgs = '["island"]';
     acts.after(el);
   }
   const items = state.queue || [];
   const q = items.find(x => x.state === 'running');
-  let html = '', cls = '';
+  let html = '', cls = '', label = '';
   if (items.length) {
-    island.had = true;
     clearTimeout(island.doneTimer);
     island.doneTimer = null;
     const others = items.filter(x => x !== q).length;
-    const more = others ? `<span class="st-island-n">${escapeHtml(t('islandMore').replace('{n}', () => others))}</span>` : '';
-    // the strip already says how its own recording goes: only the others then
+    const moreText = others ? t('islandMore').replace('{n}', () => others) : '';
+    const more = others ? `<span class="st-island-n">${escapeHtml(moreText)}</span>` : '';
+    // the strip already says how its own recording goes: only the others then, or the ring alone
     const told = q && strip.kind === 'after' && strip.click === q.id;
+    const m = q ? (state.meetings || []).find(x => x.id === q.id) || {} : {};
+    const pct = q ? m.progress ?? q.progress ?? 0 : 0;
     if (q && !told) {
-      const m = (state.meetings || []).find(x => x.id === q.id) || {};
-      const pct = m.progress ?? q.progress ?? 0;
-      html = `${islandRing(pct)}<span class="st-island-t">${escapeHtml(`${queueKindLabel(q)} · ${pct}%`)}</span>${more}`;
+      label = `${queueKindLabel(q)} · ${pct}%`;
+      html = `${islandRing(pct)}<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
     } else if (!q) {
+      label = jobsHold() || t('islandWaiting');
       html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity=".45"/><path d="M10 9v6M14 9v6"/></svg>`
-        + `<span class="st-island-t">${escapeHtml(jobsHold() || t('islandWaiting'))}</span>${more}`;
+        + `<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
       cls = 'st-island-wait';
     } else if (others) {
-      html = `<span class="st-island-n st-island-solo">${escapeHtml(t('islandMore').replace('{n}', () => others))}</span>`;
+      label = moreText;
+      html = `<span class="st-island-n st-island-solo">${escapeHtml(moreText)}</span>`;
+    } else {
+      label = `${queueKindLabel(q)} · ${pct}%`;
+      html = islandRing(pct);
+      cls = 'st-island-ring';
     }
-  } else if (island.had) {
-    // the last job ended: «Готово» for a moment
-    island.had = false;
-    html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.8"/></svg><span class="st-island-t">${escapeHtml(t('islandDone'))}</span>`;
+  } else if (island.html && !island.doneTimer && Date.now() - island.cancelAt > 20000) {
+    // the last job ended while the island was in sight: «Готово» for a moment
+    label = t('islandDone');
+    html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.8"/></svg><span class="st-island-t">${escapeHtml(label)}</span>`;
     cls = 'st-island-done';
-    island.doneTimer = setTimeout(() => { island.doneTimer = null; island.html = ''; el.classList.add('hidden'); el.innerHTML = ''; }, 2600);
+    island.doneTimer = setTimeout(() => { island.doneTimer = null; islandHide(el); }, 2600);
   } else if (island.doneTimer) {
     return;  // «Готово» is shown
   }
   const sig = cls + html;
   if (sig === island.html) return;
-  const appear = el.classList.contains('hidden') && !!html;
+  if (!html) { islandHide(el); return; }
+  const appear = el.classList.contains('hidden');
   island.html = sig;
   el.innerHTML = html;
-  el.className = `st-island ${cls}${html ? '' : ' hidden'}`;
-  el.title = t('rlTipQueue');
+  el.className = `st-island ${cls}`;
+  el.title = label ? `${t('rlTipQueue')} · ${label}` : t('rlTipQueue');
+  el.setAttribute('aria-label', el.title);
   if (appear) animateIn(el);
-  if (!html && jobs.open && jobs.at === 'island') closeJobsPop();
-}
-
-// The rail button: a turning arc while a job runs, a pause while all wait, a check when nothing is left; the count
-function renderJobsRail() {
-  renderJobsIsland();
-  const btn = document.getElementById('rail-jobs');
-  if (!btn) return;
-  const items = state.queue || [];
-  const run = items.some(q => q.state === 'running'), wait = !run && items.length > 0;
-  const mode = run ? 'run' : wait ? 'wait' : 'ok';
-  if (btn.dataset.mode !== mode) {
-    btn.dataset.mode = mode;
-    btn.classList.toggle('rail-jobs-run', run);
-    btn.classList.toggle('rail-jobs-wait', wait);
-    document.getElementById('rail-jobs-ic').innerHTML = JOBS_ICON[mode];
-  }
-  const n = document.getElementById('rail-jobs-n');
-  n.textContent = items.length ? String(items.length) : '';
-  n.classList.toggle('hidden', !items.length);
-  n.classList.toggle('rail-badge-wait', wait);
-  btn.title = items.length ? `${t('rlTipQueue')} · ${run ? t('jobsRunning') : jobsHold() || t('jobsWaitingShort')}` : t('rlTipQueue');
 }
 
 function renderJobsPop() {
@@ -377,7 +369,7 @@ function renderJobsPop() {
 }
 
 function toggleJobsPop(at) {
-  const where = at === 'status' ? 'status' : at === 'island' ? 'island' : 'rail';
+  const where = at === 'status' ? 'status' : 'island';
   if (jobs.open && jobs.at === where) { closeJobsPop(); return; }
   closeLoadPop();
   jobs.open = true;
@@ -385,7 +377,7 @@ function toggleJobsPop(at) {
   jobs.html = '';
   const pop = document.getElementById('jobs-pop');
   pop.classList.remove('hidden');
-  document.getElementById('rail-jobs')?.setAttribute('aria-expanded', String(where === 'rail'));
+  document.getElementById('strip-island')?.setAttribute('aria-expanded', String(where === 'island'));
   renderJobsPop();
   placePanel(pop, jobsAnchor(where), where);
   animateIn(pop);
@@ -393,14 +385,14 @@ function toggleJobsPop(at) {
 }
 
 function jobsAnchor(where) {
-  return document.getElementById(where === 'island' ? 'strip-island' : where === 'rail' ? 'rail-jobs' : 'sb-queue');
+  return document.getElementById(where === 'island' ? 'strip-island' : 'sb-queue');
 }
 
 function closeJobsPop() {
   if (!jobs.open) return;
   jobs.open = false;
   document.getElementById('jobs-pop')?.classList.add('hidden');
-  document.getElementById('rail-jobs')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('strip-island')?.setAttribute('aria-expanded', 'false');
 }
 
 function jobsOpen(id) {
@@ -408,8 +400,7 @@ function jobsOpen(id) {
   openMeeting(id);
 }
 
-// A window opens next to what opened it: right of the rail, its bottom level with the button; above the status
-// bar at its left or right end
+// A window opens next to what opened it: under the strip's island; above the status bar at its left or right end
 function placePanel(pop, anchor, where) {
   if (!pop || !anchor) return;
   const r = anchor.getBoundingClientRect();
@@ -418,9 +409,6 @@ function placePanel(pop, anchor, where) {
   if (where === 'island') {  // under the strip's island, its right edge with the island's
     pop.style.top = `${zpx(r.bottom) + 8}px`;
     pop.style.right = `${Math.max(8, viewW() - zpx(r.right))}px`;
-  } else if (where === 'rail') {
-    pop.style.left = `${zpx(r.right) + 8}px`;
-    pop.style.top = `${Math.max(8, Math.min(zpx(r.bottom) - pop.offsetHeight, viewH() - pop.offsetHeight - 38))}px`;
   } else {
     pop.style.bottom = '36px';
     if (where === 'status-left') pop.style.left = `${Math.max(8, zpx(r.left))}px`;
@@ -608,9 +596,9 @@ function onVramData() {
   renderLoadPop();
 }
 
-// Outside click and Escape close the windows; the status bar and the rail follow the queue
+// Outside click and Escape close the windows; the strip's island follows the queue
 document.addEventListener('pointerdown', e => {
-  if (jobs.open && !e.target.closest('#jobs-pop, #rail-jobs, #sb-queue, #strip-island, .macos-menu')) closeJobsPop();
+  if (jobs.open && !e.target.closest('#jobs-pop, #sb-queue, #strip-island, .macos-menu')) closeJobsPop();
   if (load.open && !e.target.closest('#load-pop, #sb-load')) closeLoadPop();
 });
 document.addEventListener('keydown', e => {

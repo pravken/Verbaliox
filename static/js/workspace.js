@@ -1588,6 +1588,9 @@ async function cancelProcessing(id) {
     showError(data.detail);
     return;
   }
+  // its last job cancelled: the queue ends without «Готово»
+  const left = (state.queue || []).filter(q => q.id !== id);
+  if (!left.length && typeof islandCancelled === 'function') islandCancelled();
   showToast(t('uiCancelling'));
   await loadMeetingsList();
 }

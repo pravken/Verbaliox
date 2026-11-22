@@ -526,7 +526,7 @@ function renderStatusbar() {
   const text = (id) => (document.getElementById(id)?.textContent || '').trim();
   const put = (id, v) => { const el = document.getElementById(id); if (el && el.textContent !== v) el.textContent = v || '—'; };
   const items = state.queue || [];
-  if (typeof renderJobsRail === 'function') { renderJobsRail(); renderJobsPop(); }  // the rail's «Очередь» and its window
+  if (typeof renderJobsIsland === 'function') { renderJobsIsland(); renderJobsPop(); }  // the strip's «Очередь» and its window
   const q = document.getElementById('sb-queue');
   if (!q) return;
   const run = items.find(x => x.state === 'running');
@@ -549,7 +549,7 @@ function openStatusbarDownloads(e) {
   if (typeof toggleModelsPop === 'function') toggleModelsPop(e);
 }
 
-// The queue of the status bar opens the same window as «Очередь» on the rail (pult.js)
+// The queue of the status bar opens the same window as the strip's «Очередь» (pult.js)
 function openStatusbarQueue() {
   toggleJobsPop('status');
 }
