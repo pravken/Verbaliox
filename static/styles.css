@@ -517,29 +517,7 @@ label.settings-toggle { display: flex; }
 .settings-tabs { display: flex; }
 .settings-tabs .apple-segment-btn { flex: 1 1 0; justify-content: center; text-align: center; }
 
-/* The willow of «О программе» (its easter egg): it sways, its catkins puff up and fluff drifts away */
-@keyframes willow-sway {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-7deg); }
-  60% { transform: rotate(5deg); }
-}
-@keyframes catkin-puff {
-  0%, 100% { transform: scale(1); }
-  40% { transform: scale(1.18); }
-}
-.willow-fluff {
-  position: fixed; z-index: 80; pointer-events: none;
-  width: 5px; height: 5px; border-radius: 50%;
-  background: radial-gradient(circle, #ffffff 0%, rgba(248, 250, 252, 0.85) 45%, rgba(248, 250, 252, 0) 72%);
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.55);
-  animation: fluff-drift var(--t, 2.6s) cubic-bezier(.25, .6, .4, 1) forwards;
-}
-@keyframes fluff-drift {
-  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
-  12% { opacity: 1; }
-  100% { transform: translate(var(--x), var(--y)) scale(1.1) rotate(var(--r)); opacity: 0; }
-}
-/* About: the willow sways by itself; a click shakes it, five quick clicks start the big easter egg */
+/* About: the logo; a click shakes it, five quick clicks start the big easter egg (static/js/app.js aboutLogoClick) */
 .about-logo {
   width: 104px; height: 104px; border-radius: 26px; display: flex; align-items: center; justify-content: center;
   background: radial-gradient(circle at 50% 30%, #1d4a68 0%, #0E2233 70%); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.1));
@@ -547,15 +525,6 @@ label.settings-toggle { display: flex; }
   transition: transform var(--dur) ease;
 }
 .about-logo:active { transform: scale(0.96); }
-.about-willow { width: 64px; height: 64px; transform-origin: 20% 85%; animation: willow-sway 2.4s ease-in-out 2;  /* audit 3.21: two sways on opening, then still */ }
-.about-willow .catkin { transform-box: fill-box; transform-origin: center; animation: catkin-puff 3.2s ease-in-out 2; animation-delay: var(--d); }
-.about-logo.about-shake .about-willow { animation: willow-shake .5s ease-in-out; }
-@keyframes willow-shake {
-  0%, 100% { transform: rotate(0deg); }
-  20% { transform: rotate(-14deg); }
-  45% { transform: rotate(11deg); }
-  70% { transform: rotate(-6deg); }
-}
 .about-caption { min-height: 26px; font-size: var(--fs-body); color: #fff; }
 .about-caption:not(:empty) { padding-bottom: 8px; }
 .about-caption .caret { display: inline-block; width: 7px; height: 1em; vertical-align: -0.12em; margin-left: 2px; background: var(--accent); animation: caret-blink 1s steps(1) infinite; }
@@ -587,9 +556,7 @@ label.settings-toggle { display: flex; }
   100% { text-shadow: none; transform: none; filter: none; clip-path: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .willow-fluff { display: none; }
-  .about-willow, .about-willow .catkin, .about-logo.about-shake .about-willow, .about-egg .glitch,
-  .about-egg.egg-glitch { animation: none; }
+  .about-egg .glitch, .about-egg.egg-glitch { animation: none; }
 }
 
 /* Studio captions: small language label in front of a line */
@@ -953,7 +920,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-tab-live, .tb-tab-live:hover { color: #FF8A80; }
 .rec-mh { padding: 4px 10px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8E8E93); }
 .rec-mi { display: flex; align-items: center; gap: 8px; }
-.rec-mi-mark { width: 16px; flex: none; text-align: center; color: var(--accent-hi); }
 .rec-mi-key { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
 .tb-rec-clock { font-family: var(--font-mono); font-weight: 500; font-size: var(--fs-ui); color: #FFFFFF; }
 @keyframes tb-blink { 50% { opacity: 0.35; } }
@@ -976,7 +942,7 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 @media (prefers-reduced-motion: reduce) { .rec-src-bars i { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .tb-rec-on .tb-rec-dot { animation: none; } }
 .tb-sep { width: 1px; height: 22px; margin: 0 8px 0 6px; background: rgba(255, 255, 255, 0.12); flex-shrink: 0; }
-/* The toast sits below the top bar (56px), above the dialogs and popovers of every view */
+/* The toast sits above the dialogs and popovers of every view (its place: the block «Notices at the bottom right» at the end) */
 /* Audit 6.3, 3.11. Notices: one stack under the top bar; each one slides in softly and leaves the same way */
 .toast-stack { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; max-width: min(560px, 90vw); }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 12px;
@@ -2940,7 +2906,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-row:not(.lt-tile):hover { background: rgba(255, 255, 255, 0.035); }
 .lt-row.lt-on:not(.lt-tile) { background: rgb(var(--accent-rgb) / 0.12); }
 .lt-row.lt-open:not(.lt-tile) { box-shadow: inset 2px 0 0 rgb(var(--accent-rgb) / 0.6); }
-.lt-scroll:focus-visible .lt-row.lt-cur { outline: 1px solid rgb(var(--accent-rgb) / 0.7); outline-offset: -1px; }
+.lt-scroll.lt-kbd:focus-visible .lt-row.lt-cur { outline: 1px solid rgb(var(--accent-rgb) / 0.7); outline-offset: -1px; }
 .lt-c { min-width: 0; overflow: hidden; white-space: nowrap; }
 .lt-kind { display: inline-flex; color: var(--hc-dim, #8E8E93); }
 .lt-row:hover .lt-kind { color: #C7C7CC; }
@@ -3479,11 +3445,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .mcp-code { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: #C7C7CC; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; user-select: text; }
 
 
-/* the period's progress by its dates (asked by the user: how many days of the week are gone) */
-.db-progress { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
-.db-progress.hidden { display: none; }
-.db-progress-bar { position: relative; display: block; width: 120px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
-.db-progress-bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); }
 
 /* the widgets of the day's time (static/js/dashboard.js dbPrepHtml … dbDullHtml) */
 .db-now-next { font-weight: 500; color: #FFE3B8; }
@@ -3543,9 +3504,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 [data-fill="soft"] .lib-tile-on *, [data-fill="outline"] .lib-tile-on * { color: inherit; }
 [data-fill="soft"] .tb-active .tb-badge, [data-fill="outline"] .tb-active .tb-badge { background: rgb(var(--accent-rgb) / 0.35); color: var(--fill-fg); }
 
-.db-prog-cfg { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--hc-dim, #8E8E93); background: none; border: 0; cursor: pointer; }
-.db-prog-cfg:hover { color: #F5F5F7; background: rgba(255, 255, 255, 0.07); }
-.db-prog-cfg svg { width: 13px; height: 13px; }
 
 /* «⋯» on a meeting of the day, and a calendar event that is no meeting (dimmed, dashed) */
 .hm-mt-more { flex: none; align-self: center; width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: var(--hc-dim, #8E8E93); cursor: pointer; font-size: 13px; line-height: 1; }
@@ -3776,17 +3734,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .st-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .st-pill.stp-live i { animation: none; } }
 
-/* «Очередь» on the rail: a turning arc while a job runs, a pause in amber while all wait (attention), a check when done */
-.rail-jobs svg .ri-arc { transform-box: view-box; transform-origin: 12px 12px; animation: rj-spin 1.2s linear infinite; }
-.rail-jobs-run svg { color: var(--accent-text); }
-.rail-jobs-wait { color: #FFC56B; }
-.rail-badge.rail-badge-wait { background: #FF9F0A; color: #1C1C1E; }
-.rail-btn.rail-jobs:hover .ri-ok { stroke-dasharray: 1; animation: ri-write 360ms ease-out; }
-.rail-btn.rail-jobs:hover .ri-pz1, .rail-btn.rail-jobs:hover .ri-pz2 { animation: ri-twinkle 380ms ease-out; }
-.rail-btn.rail-jobs-run:hover svg .ri-arc { animation-duration: 0.5s; }
-@keyframes rj-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .rail-jobs svg .ri-arc { animation: none; } }
-
 /* The windows «Очередь» and «Нагрузка»: one frame, one title with the icon of its kind, rows and a footer */
 .vx-panel { position: fixed; z-index: 60; width: 460px; max-width: calc(100vw - 24px); overflow: auto; padding: 14px 16px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-dialog);
@@ -3848,7 +3795,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .ld-empty { font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); padding: 6px 0; }
 @media (prefers-reduced-motion: reduce) { .sb-dot.sb-dot-busy { animation: none; } .ld-bar b, .ld-bar i, .vx-pbar b { transition: none; } }
 .sb-load-lead { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
-.rail-btn.rail-jobs:hover .ri-ring { animation: ri-twinkle 420ms ease-out; }
 /* --- «Сегодня» (static/parts/home.html, static/js/today.js) --- */
 .td-wrap { padding: 22px 28px 28px; display: flex; flex-direction: column; gap: 16px; }
 .td-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
@@ -4040,12 +3986,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-ft-c { font-size: var(--fs-caption); text-align: right; white-space: nowrap; }
 .db-w-features .db-ft-c .neg { color: #FF6961; }
 .db-spark-l { display: block; }
-/* «Обзор»: the toolbar keeps one row (the toolbar of «Задачи» and «Записи»); in a narrower window the progress
-   of the period keeps its bar, its words go to the tip */
-.db-bar { flex-wrap: nowrap; }
-.db-bar #db-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.db-bar .db-progress { flex: none; }
-@media (max-width: 1500px) { .db-bar .db-progress > span { display: none; } .db-bar .db-progress-bar { width: 80px; } }
 .db-wp button { padding: 0 5px; }
 /* «Сегодня»: the working time gone by — the line of «now» says how much; in a week or a month a past working day is a
    step dimmer, a day off hatched, today framed */
@@ -4062,7 +4002,6 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .td-tools { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; margin-left: auto; }
 /* a narrow window: the day over the width, the cards in a row under it */
 @media (max-width: 1250px) { .td-body { grid-template-columns: minmax(0, 1fr); } .td-body .td-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; } }
-@media (max-width: 1250px) { .db-bar .db-progress { display: none; } }
 /* ==================================================================   «Пульт встреч», stage 6 (docs/pult-plan.md): one card everywhere (static/js/pult_cards.js), the tasks
    ========================================================================= */
 /* the card: one frame, background and rounding; its head the icon of its kind in a square, the name, a number */
@@ -4551,9 +4490,6 @@ button.sc-at:hover { color: var(--accent-text); }
 .kv-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 @container (max-width: 860px) { .info-grid { grid-template-columns: minmax(0, 1fr); } }
 
-/* «Импорт» in the strip of the meeting, before the recording button */
-.strip-imp { margin-right: 8px; flex: none; }
-
 /* A window opens with motion (asked by the user, as on the try-on page): it fades in and grows a little from where
    it was opened. A panel shown again after «hidden» plays it again; one redrawn while open does not */
 @keyframes vx-pop { from { opacity: 0; transform: translateY(4px) scale(.97); } }
@@ -4845,12 +4781,11 @@ button.sc-at:hover { color: var(--accent-text); }
 .hm-mt.hm-mt-k-recording:hover { --hm-tint: rgb(var(--accent-rgb) / 0.15); }
 .hm-mt-slot { visibility: hidden; }  /* the place of «⋯»: the link of a recording stands where a meeting's does */
 
-/* About: the program's own icon (the dragon-V, assets/icon.ico) instead of the former willow drawing; it sways
-   twice on opening, a click shakes it, five quick clicks start the big easter egg (as before) */
+/* About: the program's own icon (the dragon-V, assets/icon.ico); it sways twice on opening, a click makes it flap
+   and breathe sparks (the block «About: the dragon's sparks» below), five quick clicks start the big easter egg */
 .about-logo { background: none; border: 0; box-shadow: none; border-radius: 24px; overflow: visible; }
 .about-mark { width: 104px; height: 104px; border-radius: 24px; display: block; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   transform-origin: 50% 90%; animation: mark-sway 2.4s ease-in-out 2; pointer-events: none; user-select: none; }
-.about-logo.about-shake .about-mark { animation: willow-shake .5s ease-in-out; }
 @media (prefers-reduced-motion: reduce) { .about-mark, .about-logo.about-shake .about-mark { animation: none; } }
 @keyframes mark-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 60% { transform: rotate(2deg); } }
 .about-logo:focus, .about-card:focus { outline: none; }  /* the easter egg is not in the tab order (tabindex -1): the window's focus goes on */
@@ -4905,3 +4840,347 @@ button.sc-at:hover { color: var(--accent-text); }
 /* «Выйти» at the very bottom of the rail, under «Настройки»; it turns red only under the pointer */
 .rail-quit:hover { color: #FF6961; }
 .rail-btn.hidden { display: none; }
+
+/* «Время во встречах»: under the chart, the busiest day on the left and the hint on the right, each in one place */
+.db-time-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.db-time-top { font-size: var(--fs-ui); color: #E6E7EA; font-weight: 500; }
+.db-time-hint { font-size: var(--fs-label); color: var(--hc-dim, #98989D); }
+
+/* Settings → Распознавание: the underline of the places the models heard differently, off */
+.no-disputed .word-disputed { text-decoration: none; }
+
+/* «Нагрузка»: the key of the bars once under the title; under each bar the hardware on the left and Verbaliox's own
+   share on the right, in the value's column (asked by the user: everything was piled under the GPU) */
+.vx-panel-load .ld-legend { margin: 2px 0 6px 0; }
+.ld-sub { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; margin: 1px 0 6px 54px; }
+.ld-sub .ld-note { margin: 0; min-width: 0; }
+.ld-own { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #C7C9CE; font-family: var(--font-mono); white-space: nowrap; }
+.ld-own i { width: 10px; height: 4px; border-radius: 2px; background: var(--accent); }
+
+/* «Расшифровка» without a text (asked by the user: the old «РАСПОЗНАВАНИЕ» panel, its row of chips and a full-width
+   band with two percents): one card of the content column (#tx-model-bar, renderTxModelBar in static/js/workspace.js)
+   — the head with its icon, the model as one segmented control, «Параметры» and «Расшифровать» on the right; at work,
+   the stage the server names, one bar and one percent. With a text the same card opens above it on request, and the
+   short row of the toolbar (model ▾, «Свести всё», ↻, ⋯) and the rest of that line take the shared 32px buttons */
+.tx-rc { display: flex; flex-direction: column; gap: 14px; padding: 16px; box-sizing: border-box; background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
+.tx-rc.hidden, .tx-rc .hidden { display: none; }
+.tx-rc.tx-rc-alone { margin-top: 6vh; }
+.tx-rc:not(.tx-rc-alone) { margin-bottom: 16px; }
+.tx-rc .vx-head-sub.hidden { display: none; }
+.tx-rc-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.tx-rc-label { flex: none; min-width: 56px; font-size: var(--fs-caption); font-weight: 500; color: var(--hc-dim, #AEAEB2); }
+.tx-rc-foot { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--line); }
+.tx-rc-foot .tx-model-status { flex: 1 1 12rem; min-width: 0; margin-right: auto; font-size: var(--fs-caption); }
+.tx-rc-foot .tx-model-status:empty { display: none; }
+.tx-rc .ui-btn { height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); font-weight: 500; gap: 6px; }
+.tx-rc .ui-btn-subtle { border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
+.tx-rc .ui-btn-subtle:hover { background: #34373B; color: #FFFFFF; }
+.tx-rc .ui-btn-primary { border-color: transparent; background: var(--fill-bg); color: var(--fill-fg); font-weight: 600; }
+.tx-rc .ui-btn-primary:hover { background: var(--fill-bg-hover); }
+/* the model: one segmented control, 32px like the buttons; a long list scrolls inside it instead of wrapping */
+.tx-seg { display: inline-flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; height: var(--ctl-h, 32px); box-sizing: border-box;
+  padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: var(--ctl-r, 8px); background: var(--bg-deep, #0E0F12); }
+.tx-seg::-webkit-scrollbar { display: none; }
+.tx-seg-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 12px; border-radius: 6px; font-size: var(--fs-ui);
+  color: var(--hc-dim, #AEAEB2); white-space: nowrap; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease, color var(--dur-fast, 120ms) ease; }
+.tx-seg-btn:hover:not(:disabled) { color: #F5F5F7; background: rgba(255, 255, 255, 0.05); }
+.tx-seg-btn.is-picked { background: var(--elevated); color: #F5F5F7; font-weight: 600; box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, 0.35); }
+.tx-seg-btn.is-picked:hover:not(:disabled) { background: var(--elevated); }
+.tx-seg-btn:disabled { cursor: default; opacity: 0.55; }
+.tx-seg-btn.is-busy:disabled, .tx-seg-btn.is-picked:disabled { opacity: 1; }
+.tx-seg-btn.is-in-merge { color: var(--accent-text); }
+.tx-seg-ok { font-size: 11px; line-height: 1; color: #30D158; }
+.tx-seg-btn .tx-chip-size { font-weight: 400; }
+/* at work: one bar of the whole job (the shared look of a progress bar), the percent, the time, «Отменить» */
+.tx-rc-prog { display: flex; flex-direction: column; gap: 10px; }
+.tx-rc-track { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.tx-rc-track > i { display: block; height: 100%; width: 0; border-radius: 3px; background-color: var(--accent); transition: width 0.3s ease; }
+.tx-rc-pct { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-rc-time { font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-rc-time:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .tx-rc-track > i { transition: none; } }
+/* the toolbar of a text: the short row and the tools in the shared 32px controls */
+.tx-quick .tx-model-chip { height: var(--ctl-h, 32px); box-sizing: border-box; padding: 0 12px; gap: 6px; border-radius: var(--ctl-r, 8px); border: 1px solid var(--line);
+  background: var(--elevated); color: #E6E7EA; font-size: var(--fs-ui); }
+.tx-quick .tx-model-chip:hover:not(:disabled) { background: #34373B; color: #FFFFFF; }
+.tx-quick .tx-more { width: var(--ctl-h, 32px); padding: 0; }
+.tx-quick .tx-model-chip .tb-ai { width: 14px; height: 14px; flex: none; }
+#tx-tools .ui-btn { height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); gap: 6px; }
+#tx-tools .tx-layout { height: var(--ctl-h, 32px); box-sizing: border-box; align-items: center; }
+#tx-tools .tx-layout button { height: 26px; font-size: var(--fs-ui); }
+#tx-tools #transcript-search { height: var(--ctl-h, 32px); border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); }
+#tx-tools .quick-lang { height: var(--ctl-h, 32px); min-width: var(--ctl-h, 32px); box-sizing: border-box; border-radius: var(--ctl-r, 8px); }
+.tx-rc-prog .tx-rc-row { min-height: var(--ctl-h, 32px); }  /* with «Отменить» or without it, the card keeps its height */
+
+/* «Анализ»: an analysis that failed says why over the cards, with «Повторить анализ» */
+.an-failed { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 12px 14px; border-radius: 12px;
+  background: rgb(255 69 58 / 0.08); border: 1px solid rgb(255 69 58 / 0.35); }
+.an-failed-ic { width: 32px; height: 32px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: rgb(255 69 58 / 0.16); color: #FF6961; }
+.an-failed-ic svg { width: 18px; height: 18px; }
+.an-failed-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-label); color: #C7C9CE; }
+.an-failed-text b { font-size: var(--fs-ui); color: #F5F5F7; font-weight: 600; }
+
+/* A filter or a search that hides every line of the text (reported by the user: after «Разделить по голосам» the
+   old speaker filter left only «Ни одна реплика не подходит…»): the empty state with «Показать все реплики» */
+.tx-empty-filtered { padding: 64px 16px; }
+.tx-empty-filtered .ui-btn { margin-top: 4px; height: var(--ctl-h, 32px); padding: 0 12px; border-radius: var(--ctl-r, 8px); font-size: var(--fs-ui); border: 1px solid var(--line); background: var(--elevated); color: #E6E7EA; }
+.tx-empty-filtered .ui-btn:hover { background: #34373B; color: #FFFFFF; }
+/* The heads of the sections, one pattern (asked by the user: «Обзор» was laid out otherwise than «Сегодня»): a 52×54
+   tile 24px from the left edge and 16px from the top (the date of «Сегодня», the icon of every other section), the
+   20px name with a 12px line under it (its place kept while it is empty), the pills after them, the controls of the
+   section on the right of the same row, everything centred on the tile */
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead.vx-shead {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; min-height: 0; padding: 16px 24px 12px; box-sizing: border-box;
+  background: none; border-bottom: 0; }
+#home-view .td-wrap { padding: 0 24px 28px; }
+#home-view .vx-shead.vx-shead { padding: 16px 0 0; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stile.vx-stile { flex: none; width: 52px; height: 54px; border-radius: 12px; box-sizing: border-box; border: 1px solid var(--line); }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stile svg { width: 24px; height: 24px; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stext.vx-stext { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; flex: 0 1 auto; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-stext h1 { margin: 0; font-size: var(--fs-title); line-height: 26px; font-weight: 700; letter-spacing: -0.02em; color: #F5F5F7;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .vx-ssub.vx-ssub { display: block; min-height: 16px; margin: 0; font-size: var(--fs-caption); line-height: 16px; color: var(--hc-dim, #8E8E93);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .tk-grow, :is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .td-grow { flex: 1 1 0; min-width: 0; }
+:is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .tk-head-actions, :is(#home-view, #dashboard-view, #libtable-view, #tasks-view, #people-view, #dict-view) .vx-shead .td-tools { margin-left: auto; }
+/* «Настройки»: the same tile and name at the same place, in the column of its sections */
+.settings-page .sx-nav > div:first-child { align-items: flex-start; gap: 16px; }
+.settings-page .sx-head-ic.sx-head-ic { width: 52px; height: 54px; border-radius: 12px; box-sizing: border-box; border: 1px solid var(--line); }
+.settings-page .sx-head-ic.sx-head-ic svg { width: 24px; height: 24px; }
+.settings-page .sx-nav > div:first-child h2 { margin-top: 5px; font-size: var(--fs-title); line-height: 26px; font-weight: 700; letter-spacing: -0.02em; }
+/* «Обзор»: «Дни периода» in «Настроить» (the gear beside the period's bar under the head before) */
+.db-days { padding: 2px 0 4px; }
+
+/* One height for the controls of a head row (asked by the user: the buttons of a row were of different heights): the
+   segmented controls, the buttons, the menu buttons and the search fields 32px (--ctl-h), with the corner of the
+   buttons; the filter chips stay one 28px size, centred on their row */
+:is(#tasks-view, #people-view, #libtable-view, #dict-view, #dashboard-view) .tk-search { height: var(--ctl-h); border-radius: var(--ctl-r); }
+/* one segmented control in every section (the period of «Обзор», the span of «Сегодня», the view of «Записи» and
+   «Задачи» were three looks): a 32px box without a frame, 3px inside, the corner of the buttons; 26px segments, the
+   chosen one raised grey; one weight for every segment, so a choice never moves the switch */
+.tk-seg, .lt-seg, #tasks-view .tk-bar .tk-seg { display: inline-flex; align-items: center; gap: 2px; height: var(--ctl-h); box-sizing: border-box;
+  padding: 3px; border: 0; border-radius: var(--ctl-r); background: rgba(255, 255, 255, 0.06); }
+.tk-seg-btn, .lt-seg-b, #tasks-view .tk-bar .tk-seg-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--hc-dim, #AEAEB2); font-size: var(--fs-ui); font-weight: 500; box-shadow: none; }
+.tk-seg-btn:hover, .lt-seg-b:hover, #tasks-view .tk-bar .tk-seg-btn:hover { color: #F5F5F7; }
+.tk-seg-btn.tk-on, .lt-seg-b.on, #tasks-view .tk-bar .tk-seg-btn.tk-on { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+.tk-seg.hidden, .lt-seg.hidden, #tasks-view .tk-bar .tk-seg.hidden { display: none; }
+#tasks-view .tk-bar .tk-btn { gap: 6px; }  /* «Колонки» of «Задачи» the width of that of «Записи» */
+#home-view .td-nav :is(.cal-nav, .cal-today-btn) { height: var(--ctl-h); min-width: var(--ctl-h); box-sizing: border-box; padding: 0 12px; border: 1px solid var(--line);
+  border-radius: var(--ctl-r); background: var(--elevated); color: #E6E7EA; font-size: var(--fs-ui); font-weight: 500; }
+#home-view .td-nav :is(.cal-nav, .cal-today-btn):hover { background: #34373B; }
+#home-view .td-nav .cal-nav { padding: 0; }
+
+/* The tabs of an open recording («Расшифровка | ✦ Анализ | Участники | Сведения»), the segmented control of every
+   other section (asked by the user: a round pill group with a blue tab looked like no other control): the box of
+   .tk-seg (32px, 3px inside, the 8px corner of the buttons, no frame), 26px segments with a 6px corner, the chosen one
+   raised grey; the counts and the ✦ of «Анализ» stay */
+#workspace-header .tb-rec-tabs { height: var(--ctl-h); box-sizing: border-box; padding: 3px; gap: 2px; border: 0; border-radius: var(--ctl-r); background: rgba(255, 255, 255, 0.06); }
+#workspace-header .tb-rec-tabs .tb-subtab { height: 26px; padding: 0 11px; gap: 6px; border-radius: 6px; font-size: var(--fs-ui); font-weight: 500; color: var(--hc-dim, #AEAEB2); background: transparent; }
+#workspace-header .tb-rec-tabs .tb-subtab:hover { color: #F5F5F7; background: transparent; }
+#workspace-header .tb-rec-tabs .tb-subtab.tb-active, #workspace-header .tb-rec-tabs .tb-subtab.tb-active:hover {
+  background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); outline: none; border-color: transparent; }
+#workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active, #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active:hover { background: transparent; box-shadow: none; }
+#workspace-header .tb-rec-tabs .tb-ind { border-radius: 6px; background: rgba(255, 255, 255, 0.14); outline: none; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+#workspace-header .tb-rec-tabs .tb-active .tb-ai { fill: url(#vs-ai-grad); }
+#workspace-header .tb-rec-tabs .tb-badge, #workspace-header .tb-rec-tabs .tb-active .tb-badge { background: rgba(255, 255, 255, 0.1); color: var(--hc-dim, #AEAEB2); font-weight: 500; }
+#workspace-header .tb-rec-tabs .tb-active .tb-badge { color: #FFFFFF; }
+
+/* «Обзор» → «Нагрузка системы и моделей» (dbSysloadHtml in static/js/dashboard.js): the bars of the «Нагрузка» window,
+   Verbaliox's share in the accent over the grey of the whole, its figure under each bar on the right (the line kept
+   when there is none); M and L: the models in memory, each with «Выгрузить» at the same place */
+.db-sl-legend { margin: 0 0 6px; }
+.db-w-sysload .ld-row { grid-template-columns: 36px minmax(40px, 1fr) 120px; gap: 10px; padding: 2px 0 0; }  /* the bars end at one x */
+.db-sl-own { display: flex; justify-content: flex-end; min-height: 16px; margin: 2px 0 6px 46px; }
+.db-sl-cap { margin-top: 6px; padding: 10px 0 2px; border-top: 1px solid var(--line); font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #AEAEB2); }
+.db-sl-model { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 7px 0; }
+.db-sl-model + .db-sl-model { border-top: 1px solid var(--line); }
+.db-sl-name, .db-sl-use { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.db-sl-use { align-items: flex-end; white-space: nowrap; }
+.db-sl-name b, .db-sl-use b { font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-sl-use b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.db-sl-name small, .db-sl-use small { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-sl-empty { padding: 6px 0 2px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+
+/* Menus: the item chosen now in the accent's tint and colour instead of a «✓» before it (asked by the user) */
+#text-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
+#text-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
+#text-menu .macos-menu-item.tm-on .tm-key { color: var(--accent-text); opacity: 0.8; }
+
+/* «Расшифровка»: the model, the speakers and the tools of the text in one row from the left edge of the head to its
+   right edge (asked by the user, variant 1): the speakers no longer stretch over the free width and push the tools
+   to a second line; a narrow window first shortens the labels (fitTranscriptToolbar), then wraps */
+#tx-subbar .tx-toolbar { max-width: none; }
+#tx-subbar #speaker-pills-container { flex: none; min-width: 0; }
+#tx-subbar .tx-toolbar #tx-tools { margin-left: auto; }
+#tx-subbar .tx-toolbar { justify-content: flex-start; }
+.tx-toolbar.tx-compact #tx-quick-status { display: none; }
+.tx-toolbar.tx-compact #tx-tools .relative.w-40 { width: 7.5rem; }
+
+
+/* The chosen segment of every segmented control in the accent (asked by the user): the recording's tabs, the
+   period of «Обзор», the span of «Сегодня», the views of «Записи» and «Задачи», Чат | Текст, the chart looks */
+.tk-seg-btn.tk-on, .lt-seg-b.on, #tasks-view .tk-bar .tk-seg-btn.tk-on,
+#workspace-header .tb-rec-tabs .tb-subtab.tb-active, #workspace-header .tb-rec-tabs .tb-subtab.tb-active:hover,
+#workspace-header .tb-rec-tabs .tb-ind, .cal-seg-on, .db-chsw button.on, .db-wp button.on, .tx-layout button[aria-checked="true"],
+.apple-segment-active, .st-tab.is-on, .rp-seg button[aria-checked="true"] {
+  background: rgb(var(--accent-rgb) / 0.3); color: #FFFFFF; box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.45); }
+#workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active, #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active:hover { background: transparent; box-shadow: none; }
+#workspace-header .tb-rec-tabs .tb-active .tb-badge { background: rgb(var(--accent-rgb) / 0.35); color: #FFFFFF; }
+
+/* One, paler accent (asked by the user: the solid fills, the switches and the icon squares were three shades):
+   the switches and the check boxes in the muted accent of the soft fill */
+.vs-switch:checked, [aria-checked="true"] > .vs-track, .vs-track[aria-checked="true"] { background: var(--accent-soft, var(--accent)); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: var(--accent-soft, var(--accent)); border-color: var(--accent-soft, var(--accent)); }
+
+/* «Фича: ● название» next to the recording's title: the chip's button centres it on the row like the label (reported
+   by the user: the chip sat 2px lower, aligned on the text's baseline) */
+.ft-chip-btn, .ft-add { display: inline-flex; align-items: center; vertical-align: middle; }
+#meeting-features .ft-chip { line-height: 18px; }
+
+/* «Это я» after a name: a small tag apart from the name (reported by the user: it stood almost against it) */
+:is(.pv-row-t b, .pv-who h2, .pc-who h2, .sp-dname b) em { display: inline-flex; align-items: center; margin-left: 8px; padding: 0 6px; height: 18px;
+  border-radius: 6px; background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-style: normal; font-size: 11px; font-weight: 500;
+  vertical-align: middle; white-space: nowrap; }
+
+/* the name and its tag on one centred line (reported by the user: the tag sat off centre) */
+.pv-who h2, .pc-who h2 { display: flex; align-items: center; }
+.pv-row-t b, .sp-dname b { display: inline-flex; align-items: center; }
+:is(.pv-row-t b, .pv-who h2, .pc-who h2, .sp-dname b) em { vertical-align: 0; line-height: 1; }
+
+/* CPU, RAM, GPU with their marks (asked by the user: the icons of the former sidebar back): the status bar, the load
+   window and the widget of «Обзор»; the label column a step wider so the bars still start at one x */
+.hw-ic { width: 14px; height: 14px; flex: none; opacity: 0.8; }
+.sb-k, .ld-k { display: inline-flex; align-items: center; gap: 5px; }
+.ld-row { grid-template-columns: 58px 1fr 136px; }
+.ld-sub { margin-left: 68px; }
+.db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 120px; }
+.db-sl-own { margin-left: 64px; }
+
+/* Settings in two columns: a section with a single card no longer leaves the right column empty (asked by the user:
+   «Обновления» stood alone on the left) — that card spans both columns */
+@container sxmain (min-width: 1280px) {
+  .settings-page .sx-section:not(.hidden):not(:has(> :nth-child(3))) { columns: 1; }
+}
+
+/* «Рабочий день»: the hours in fields of the windows' look, not black boxes (reported by the user) */
+.hm-pop .hm-select { background: var(--elevated); border: 1px solid var(--line); font-family: inherit; font-variant-numeric: tabular-nums;
+  font-size: var(--fs-ui); font-weight: 500; padding: 0 10px; }
+.hm-pop .hm-select:hover { background: #34373B; }
+.hm-pop .hm-select:focus { border-color: rgb(var(--accent-rgb) / 0.6); outline: none; }
+
+/* «Очередь» as an island in the top strip (asked by the user, the iPhone way): a dark capsule before «＋ Импорт» with
+   the ring of the job, its name and percent, «+N в очереди»; «Готово» green for a moment; no rail button, no
+   «Очередь пуста» in the status bar */
+.st-island { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl-h, 32px); box-sizing: border-box; padding: 0 12px 0 6px;
+  border-radius: 16px; background: #0B0C0E; border: 1px solid var(--line); color: #E6E7EA; font-size: var(--fs-ui); font-weight: 500;
+  white-space: nowrap; flex: none; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease; }
+.st-island:hover { background: #15171A; }
+.st-island.hidden { display: none; }
+.st-island svg { width: 20px; height: 20px; flex: none; }
+.st-island-t { font-variant-numeric: tabular-nums; }
+.st-island-n { color: var(--hc-dim, #9A9CA1); font-weight: 400; padding-left: 8px; border-left: 1px solid var(--line); }
+.st-island-n.st-island-solo { padding-left: 6px; border-left: 0; }
+.st-island-wait { color: var(--hc-dim, #AEAEB2); }
+.st-island-done { color: #7EE787; }
+#sb-queue { display: none !important; }
+
+/* The top-left corner without a notch (asked by the user): the first button of the rail exactly as high as the strip,
+   from the top, without a line of its own (the strip keeps its colours of the states) */
+.rail { padding-top: 0; }
+.rail > .rail-btn:first-of-type { height: 52px; box-sizing: border-box; justify-content: center; padding-top: 4px; padding-bottom: 4px; }
+/* «＋ Импорт ▾» in the strip on top: a split button as «● Запись ▾» (asked by the user), at its height, radius,
+   hairline before the ▾ and caret; «＋ Импорт» opens the window with everything, the ▾ the menu of what to import */
+.imp-split { display: inline-flex; align-items: center; flex: none; height: 32px; box-sizing: border-box; margin-right: 8px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--elevated); }
+.imp-split-main { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border: 0; border-radius: 7px 0 0 7px;
+  background: none; color: #E6E7EA; font-size: var(--fs-ui); line-height: 1; white-space: nowrap; transition: background-color var(--dur-fast) ease; }
+.imp-split-more { display: inline-flex; align-items: center; justify-content: center; height: 30px; width: 26px; padding: 0; border: 0;
+  border-left: 1px solid var(--line); border-radius: 0 7px 7px 0; background: none; color: #E6E7EA; transition: background-color var(--dur-fast) ease; }
+.imp-split-main:hover, .imp-split-more:hover, .imp-split-more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.07); }
+.imp-split-main:focus-visible, .imp-split-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.imp-split .vx-plus { width: 14px; height: 14px; flex: none; }
+.imp-split-more .vx-caret { opacity: 0.85; }
+
+/* The import window's modes: the segmented control under its head (files, folder, link, all options), the fields
+   of the other modes put away, the files of a chosen folder listed under its row; the speakers always in sight */
+.imp-seg { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; margin-top: -4px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
+.imp-seg button { height: 28px; padding: 0 14px; border-radius: 7px; font-size: var(--fs-ui); color: var(--hc-dim, #AEAEB2); white-space: nowrap; }
+.imp-seg button:hover { color: #F5F5F7; }
+.imp-seg button[aria-checked="true"] { background: rgb(var(--accent-rgb) / 0.3); color: #FFFFFF; box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.45); }
+.imp-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#modal-import [data-imp-off] { display: none !important; }
+.imp-link-lead { margin: 0; }
+.imp-sub-list { display: flex; flex-direction: column; gap: 2px; margin: -2px 0 4px 56px; padding-left: 10px; border-left: 1px solid var(--line); }
+.imp-sub-row { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 12px; align-items: center; padding: 1px 46px 1px 0; }
+.imp-sub-name { font-size: var(--fs-ui); color: #C7C7CC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-sub-size { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); text-align: right; }
+.imp-sub-more { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); padding: 1px 0; }
+.imp-card:not(.imp-more-open) .imp-grid3 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+
+/* About: the dragon's sparks. A click on the logo makes the dragon flap once (a short squash and tilt) and breathe a
+   few sparks from its mouth that rise and fade; the big easter egg ends with a burst. Without motion: none of it */
+.about-logo.about-shake .about-mark { animation: mark-flap .55s cubic-bezier(.3, .7, .4, 1); }
+@keyframes mark-flap {
+  0%, 100% { transform: none; }
+  18% { transform: rotate(-5deg) scale(1.05, 0.95); }
+  42% { transform: rotate(4deg) scale(0.97, 1.04); }
+  68% { transform: rotate(-1.5deg) scale(1.01, 0.99); }
+}
+.about-spark {
+  position: fixed; z-index: 80; pointer-events: none; width: var(--s, 4px); height: var(--s, 4px); border-radius: 50%;
+  background: radial-gradient(circle, #FFF4C2 0%, #FFB340 45%, rgba(255, 94, 58, 0) 75%);
+  box-shadow: 0 0 8px 2px rgba(255, 159, 10, 0.7);
+  animation: spark-rise var(--t, 1.2s) cubic-bezier(.2, .7, .4, 1) forwards;
+}
+@keyframes spark-rise {
+  0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+  12% { opacity: 1; }
+  60% { filter: hue-rotate(-18deg); }
+  100% { transform: translate(var(--x), var(--y)) scale(0.2); opacity: 0; filter: hue-rotate(-30deg); }
+}
+@media (prefers-reduced-motion: reduce) { .about-spark { display: none; } .about-logo.about-shake .about-mark { animation: none; } }
+
+/* «Колонки» of «Записи» and «Задачи»: wide enough for «Строки» and its two choices (the segment overflowed the
+   panel by a few pixels); the same width in both sections */
+.lt-colpop { width: 290px; }
+
+/* The strip's «Очередь» island with the ring alone: the strip tells about the only job, the island stays to open the
+   queue's window */
+.st-island.st-island-ring { padding: 0 6px; gap: 0; }
+
+/* Rows of «Люди» and the strip's meeting: reached by the keyboard, the focus shown */
+.pv-row:focus-visible, .strip-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The chips of the analysis bar and «+ Новый шаблон» with the line icons (VX_CARET, VX_PLUS) instead of «▾» and «+» */
+.an-sumbar .an-chip .vx-caret { margin-left: 2px; }
+.an-pop-link { display: flex; align-items: center; gap: 6px; }
+.an-pop-link .vx-plus { width: 14px; height: 14px; flex: none; }
+
+/* The recording's «⋯»: wide enough for its longest items on one line; «● Запись ▾»: the default preset by the accent */
+#recording-context-menu { width: 288px; }
+#rec-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
+#rec-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
+
+/* The search of a section's head: one width in «Записи», «Задачи», «Словарь» and the list of «Люди» */
+.tk-search, .lt-search, .pv-search { width: 280px; max-width: 100%; }
+
+/* «Люди» as the other sections: the list from x=96 under the head's tile, no line under the head */
+.pv-body { border-top: 0; padding-left: 24px; }
+.pv-side-top { padding-left: 0; }
+.pv-list { padding-left: 0; }
+.pv-note { padding-left: 0; }
+
+/* The strip's blue pill («Скоро», «Обработка») in the accent chosen in the settings, not a fixed steel blue */
+.st-pill.stp-blue { color: var(--accent-text); background: rgb(var(--accent-rgb) / 0.10); border-color: rgb(var(--accent-rgb) / 0.35); }
+.st-pill.stp-blue i { box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.18); }
+
+/* Notices at the bottom right, above the status bar: at the top they covered the heads of the sections («‹ Сегодня ›») */
+.toast-stack { top: auto; bottom: 40px; left: auto; right: 16px; transform: none; align-items: flex-end; max-width: min(460px, 90vw); }
+@keyframes toastInUp { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.toast-stack .toast { animation-name: toastInUp; }
+
+/* «Сегодня», a week or a month: the cards under the calendar share its whole width (auto-fill left empty columns) */
+.td-body.td-row .td-cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }

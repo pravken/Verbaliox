@@ -41,8 +41,9 @@ const LT_ICON = {
   feature: '<path d="M4 12V5a1 1 0 011-1h7l8 8-8 8z"/><circle cx="8.5" cy="8.5" r="1.3"/>',
   folder: '<path d="M3.5 7.5a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>',
   none: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/>',
-  gear: '<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>',
   reset: '<path d="M4 12a8 8 0 108-8 8.3 8.3 0 00-6 2.6L4 9"/><path d="M4 4v5h5"/>',
+  // «Колонки»: the sliders, as in «Задачи» (a gear here, sliders there)
+  cols: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
 };
 
 function ltPrefs() {
@@ -293,8 +294,27 @@ function ltWidth(col) {
   return w >= 40 ? Math.min(w, 900) : LT_COLS[col].w;
 }
 
+// The narrowest a column gets in a narrow window: the wide ones (the people, the feature) give a quarter of their
+// width before the table needs a scroll (at 1100 px the default columns overflowed the card by a few pixels)
+const LT_NAME_MIN = 150;
+function ltMinWidth(col) {
+  const w = ltWidth(col);
+  return w >= 120 ? Math.round(w * 0.75) : w;
+}
+
 function ltTableTpl(cols) {
-  return `${LT_LEAD} minmax(180px, 1fr) ${cols.filter(c => c !== 'name').map(c => `${ltWidth(c)}px`).join(' ')}`.trim();
+  const track = (c) => {
+    const w = ltWidth(c), min = ltMinWidth(c);
+    return min < w ? 'minmax(' + min + 'px, ' + w + 'px)' : w + 'px';
+  };
+  return [LT_LEAD, 'minmax(' + LT_NAME_MIN + 'px, 1fr)', ...cols.filter(c => c !== 'name').map(track)].join(' ');
+}
+
+// The table's least width: the lead columns, the name, the others at their least, the gaps (12 px) and the
+// padding and border of the head row (2 × 24 + 2)
+function ltTableMinW(cols) {
+  const others = cols.filter(c => c !== 'name');
+  return 22 + 18 + LT_NAME_MIN + others.reduce((s, c) => s + ltMinWidth(c), 0) + 12 * (others.length + 2) + 50;
 }
 
 function ltRowAttrs(m, extra = '') {
@@ -316,7 +336,7 @@ function ltTableHtml(groups, inFolders = false) {
     LT.ids.push(m.id);
     return `<div ${ltRowAttrs(m)}>${ltBox(m)}${ltKind(m)}` + cols.map(c => `<span class="lt-c lt-c-${c}">${ltCell(c, m)}</span>`).join('') + '</div>';
   }).join('') || `<div class="lt-none">${escapeHtml(t('ltFolderEmpty'))}</div>`)).join('');
-  const minW = 40 + 180 + cols.filter(c => c !== 'name').reduce((s, c) => s + ltWidth(c) + 12, 0) + 40;
+  const minW = ltTableMinW(cols);
   return { html: `<div class="lt-hrow">${head}</div>${body}`, tpl: ltTableTpl(cols), minW };
 }
 
@@ -402,12 +422,15 @@ function ltRenderRowState(id) {
   return true;  // a row not shown: its progress does not change what is shown
 }
 
-window.addEventListener('pointerup', () => {
+// the press ends with the up, and also when the browser takes the pointer over (a native drag of a row or of a
+// link: pointercancel and dragend, no up), or the progress waited for good
+function ltPressEnd() {
   if (!LT.pressed) return;
   LT.pressed = false;
   // after the click that follows this up: the row clicked is still the one under it
   if (LT.later) setTimeout(() => { if (LT.later && !LT.pressed) { LT.later = false; renderLibTable({ live: true }); } }, 0);
-}, true);
+}
+['pointerup', 'pointercancel', 'dragend'].forEach(type => window.addEventListener(type, ltPressEnd, true));
 
 function renderLibTable(opts = {}) {
   if (state.appView !== 'libtable') return;
@@ -518,7 +541,7 @@ function renderLibTableBar() {
     + `<button type="button" id="lt-folder-btn" class="lt-chip${ff && !folderOff ? ' on' : ''}" data-click="openLibTableFolderMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" ${folderOff ? `disabled title="${escapeHtml(t('ltFolderOffTip'))}"` : ''}><span class="lt-ell">${escapeHtml(ff && !folderOff ? `${t('ltCol_folder')}: ${ff}` : t('ltCol_folder'))}</span>${VX_CARET}</button>`
     + `<button type="button" id="lt-group-btn" class="lt-chip" data-click="openLibTableGroupMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" ${groupOff ? `disabled title="${escapeHtml(t('ltGroupOffTip'))}"` : ''}><span class="lt-ell">${escapeHtml(t(`ltGroupChip_${p.group}`))}</span>${VX_CARET}</button></span>`
     + `<span class="lt-fr"><span class="lt-seg" role="group" title="${escapeHtml(t('ltViewTip'))}">${views}</span>`
-    + `<span class="lt-cols-wrap"><button type="button" class="lt-btn" data-lt-cols data-click="toggleLibTableColumns" aria-haspopup="dialog" aria-expanded="${LT.colsOpen}" title="${escapeHtml(t(p.view === 'cards' ? 'ltColumnsCardsTip' : 'ltColumnsTip'))}">${LT_SVG(LT_ICON.gear, 14)}<span>${escapeHtml(t('ltColumns'))}</span></button>`
+    + `<span class="lt-cols-wrap"><button type="button" class="lt-btn" data-lt-cols data-click="toggleLibTableColumns" aria-haspopup="dialog" aria-expanded="${LT.colsOpen}" title="${escapeHtml(t(p.view === 'cards' ? 'ltColumnsCardsTip' : 'ltColumnsTip'))}">${LT_SVG(LT_ICON.cols, 14)}<span>${escapeHtml(t('ltColumns'))}</span></button>`
     + (LT.colsOpen ? ltColumnsPopHtml() : '') + '</span></span>';
 }
 
@@ -794,8 +817,11 @@ function ltOpen(id) {
     clearLibraryDrag();
     body.querySelectorAll('.drop-target').forEach(x => x.classList.remove('drop-target'));
   });
+  // the cursor's frame on a row only once the keyboard is used in the table, not on opening it or after a click
+  scroll.addEventListener('pointerdown', () => scroll.classList.remove('lt-kbd'));
   scroll.addEventListener('keydown', (e) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+    if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Home', 'End'].includes(e.key)) scroll.classList.add('lt-kbd');
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ltMove(e.key === 'ArrowDown' ? 1 : -1); }
     else if (e.key === 'Enter' && LT.cur != null) { e.preventDefault(); ltOpen(LT.cur); }
     else if (e.key === ' ' && LT.cur != null) { e.preventDefault(); ltToggle(LT.cur); ltPaintPick(); }
@@ -821,7 +847,7 @@ function ltOpen(id) {
     const move = (ev) => {
       w = Math.max(40, Math.min(900, Math.round(start + zpx(ev.clientX - x0))));
       const widths = { ...ltPrefs().widths, [c]: w };
-      body.style.setProperty('--lt-tpl', `${LT_LEAD} minmax(180px, 1fr) ${ltShownCols().filter(x => x !== 'name').map(x => `${x === c ? w : (Number(widths[x]) >= 40 ? Math.min(widths[x], 900) : LT_COLS[x].w)}px`).join(' ')}`);
+      body.style.setProperty('--lt-tpl', `${LT_LEAD} minmax(${LT_NAME_MIN}px, 1fr) ${ltShownCols().filter(x => x !== 'name').map(x => `${x === c ? w : (Number(widths[x]) >= 40 ? Math.min(widths[x], 900) : LT_COLS[x].w)}px`).join(' ')}`);
     };
     // the end is heard on the window and when the capture is lost (the handle redrawn, the window left):
     // the cursor «col-resize» and the selection off must never stay behind
@@ -857,7 +883,7 @@ function ltBulkFolder(e) {
     renderLibTable();
   };
   ltMenuUnder(e, [
-    ...ltFolderList().map(([f, d]) => ({ label: `${'   '.repeat(d)}${folderName(f)}`, key: list.every(m => m.folder_id === f.id) ? '✓' : '', run: move(f.id) })),
+    ...ltFolderList().map(([f, d]) => ({ label: `${'   '.repeat(d)}${folderName(f)}`, on: list.every(m => m.folder_id === f.id), run: move(f.id) })),
     { sep: true },
     { label: t('ltNoFolder'), run: move(null) },
     { label: `${t('ltNewFolder')}…`, run: async () => {
@@ -897,7 +923,7 @@ function ltBulkFeature(e) {
   ltMenuUnder(e, [
     ...feats.map(f => {
       const all = list.every(m => (m.features || []).includes(f.id));
-      return { label: f.name, key: all ? '✓' : '', run: () => ltSetFeatures(list, all ? 'remove' : 'add', f.id) };
+      return { label: f.name, on: all, run: () => ltSetFeatures(list, all ? 'remove' : 'add', f.id) };
     }),
     ...(feats.length ? [{ sep: true }] : []),
     { label: `${t('ltNewFeature')}…`, run: async () => {
@@ -986,6 +1012,7 @@ registerView('libtable', {
     syncLibTableButton();
     renderLibTable();
     renderLibSelectionBar();
+    document.getElementById('lt-scroll')?.classList.remove('lt-kbd');
     nextFrame(() => document.getElementById('lt-scroll')?.focus({ preventScroll: true }));
   },
   // the selection belongs to the table on screen: it does not stay behind, unseen, for Delete in another section

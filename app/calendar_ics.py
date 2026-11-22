@@ -22,8 +22,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 CACHE_SEC = 15 * 60
 # Outlook that failed (not set up, waiting for a password) is not started again every 15 minutes,
-# even by a forced read: each start may put its window in front of the user.
+# even by a forced read: each start may put its window in front of the user. A read the user asked for
+# (events(user=True): «Проверить» in Settings) starts it at once; a forced read alone, after an error other
+# than the timeout (OUTLOOK_TIMEOUT), too.
 OUTLOOK_RETRY_SEC = 6 * 60 * 60
+OUTLOOK_TIMEOUT = "Outlook не ответил за"
 _cache: Dict[str, Any] = {"source": "", "at": 0.0, "events": [], "error": ""}
 _lock = threading.Lock()
 _fetch_lock = threading.Lock()
@@ -526,16 +529,24 @@ def _load_text(source: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace")
 
 
-def events(force: bool = False) -> List[Dict[str, Any]]:
+def events(force: bool = False, cached: bool = False, user: bool = False) -> List[Dict[str, Any]]:
+    """force: read again now (a page refreshing its calendar). user: the user asked for it by an action of
+    their own, so a failed Outlook is tried again at once (OUTLOOK_RETRY_SEC). cached: only what was read
+    already, never a read now (Outlook through PowerShell takes up to 90 s, a link up to 60 s): for callers
+    holding a lock others wait on."""
+    force = force or user
     source = _source()
     if not source:
         return []
     with _lock:
+        if cached:
+            return list(_cache["events"]) if _cache["source"] == source else []
         fresh = _cache["source"] == source and time.time() - _cache["at"] < CACHE_SEC
         if fresh and not force:
             return list(_cache["events"])
         if (source.lower() == "outlook" and _cache["source"] == source and _cache["error"]
                 and not _cache["error"].startswith("Классический Outlook не настроен")  # checked without starting it
+                and not user and not (force and not _cache["error"].startswith(OUTLOOK_TIMEOUT))
                 and time.time() - _cache["at"] < OUTLOOK_RETRY_SEC):
             return list(_cache["events"])
     try:
@@ -567,19 +578,20 @@ def status() -> Dict[str, Any]:
         return {"source": _cache["source"], "error": _cache["error"], "count": len(_cache["events"])}
 
 
-def window(start: datetime, end: datetime) -> List[Dict[str, Any]]:
+def window(start: datetime, end: datetime, cached: bool = False) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    for ev in events():
+    for ev in events(cached=cached):
         if ev["all_day"]:
             continue
         out.extend(occurrences(ev, start, end))
     return sorted(out, key=lambda e: e["start"])
 
 
-def current_meeting(at: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
-    """The meeting going on now (or starting within 10 minutes): the shortest one if several."""
+def current_meeting(at: Optional[datetime] = None, cached: bool = False) -> Optional[Dict[str, Any]]:
+    """The meeting going on now (or starting within 10 minutes): the shortest one if several. cached: by the
+    calendar read already, without reading it now (events)."""
     at = at or datetime.now()
-    found = [e for e in window(at - timedelta(hours=12), at + timedelta(minutes=10))
+    found = [e for e in window(at - timedelta(hours=12), at + timedelta(minutes=10), cached=cached)
              if e["start"] - timedelta(minutes=10) <= at < e["end"] and is_meeting(e)]
     return min(found, key=lambda e: e["end"] - e["start"]) if found else None
 

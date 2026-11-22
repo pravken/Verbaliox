@@ -13,8 +13,9 @@ Settings: worktime_track (on), work_remind_hours (8; 0 = no notification).
 
 «Мои программы» (asked by the user, off until turned on: apps_track): a worked minute also notes the
 program in front, by its file name only (Teams, outlook.exe). Nothing else: no window titles (they hold the
-names of documents, letters and sites), no keys, no screen. A minute of a recording or a call is «meeting»,
-whatever program is in front. It stays in this computer's database and goes nowhere.
+names of documents, letters and sites), no keys, no screen. Only a minute with input goes to a program (asked by
+the user: count what is really used; the time of meetings comes from the recordings). «meeting» rows of earlier
+versions are still shown. A game controller counts as input (only whether its state changed). It stays in this computer's database and goes nowhere.
 """
 
 import sys
@@ -32,7 +33,7 @@ CHECK_SEC = 60.0
 
 _DDL = "CREATE TABLE IF NOT EXISTS work_minutes (day TEXT NOT NULL, minute INTEGER NOT NULL, PRIMARY KEY (day, minute))"
 _DDL_APPS = "CREATE TABLE IF NOT EXISTS app_minutes (day TEXT NOT NULL, minute INTEGER NOT NULL, app TEXT NOT NULL, PRIMARY KEY (day, minute))"
-MEETING = "meeting"  # a minute of a recording or a call
+MEETING = "meeting"  # a minute of a recording or a call in earlier versions (no longer noted)
 
 # the names people know for the usual programs; any other one is its file name without «.exe»
 # The names in Russian are said in English by the page (static/i18n.js appName_<key>)
@@ -44,7 +45,11 @@ APP_NAMES = {
     "acrobat": "Acrobat", "obsidian": "Obsidian", "notion": "Notion", "figma": "Figma", "verbaliox": "Verbaliox",
     "windowsterminal": "Терминал", "cmd": "Командная строка", "powershell": "PowerShell", "pycharm64": "PyCharm",
     "idea64": "IntelliJ IDEA", "1cv8": "1С:Предприятие", "1cv8c": "1С:Предприятие",
+    "claude": "Claude", "parsecd": "Parsec", "steam": "Steam", "discord": "Discord", "skype": "Skype", "whatsapp": "WhatsApp",
+    "spotify": "Spotify", "webex": "Webex", "ciscowebex": "Webex", "atmgr": "Webex", "vlc": "VLC", "photoshop": "Photoshop",
+    "datagrip64": "DataGrip", "webstorm64": "WebStorm", "rider64": "Rider", "cursor": "Cursor", "postman": "Postman",
 }
+
 
 
 def foreground_app() -> Optional[str]:
@@ -90,11 +95,14 @@ def foreground_app() -> Optional[str]:
 
 
 def app_name(app: str) -> str:
-    return APP_NAMES.get(app, app)
+    """The name people know; another program's file name with its first letter capital («parsecd» → «Parsecd»)."""
+    return APP_NAMES.get(app) or (app[:1].upper() + app[1:])
 
 
-def idle_seconds() -> Optional[float]:
-    """Seconds since the last keyboard or mouse input (Windows), None where it cannot be known."""
+def idle_seconds(pad: bool = True) -> Optional[float]:
+    """Seconds since the last keyboard, mouse or game controller input (Windows), None where it cannot be known.
+    pad=False: without the game controller, whose changes are seen by one caller only (the minute loop): the
+    page's look at it would take them away."""
     if sys.platform != "win32":
         return None
     try:
@@ -107,9 +115,76 @@ def idle_seconds() -> Optional[float]:
         info.cbSize = ctypes.sizeof(LASTINPUTINFO)
         if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
             return None
-        return ((ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000.0
+        idle = ((ctypes.windll.kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000.0
     except Exception:
         return None
+    return 0.0 if pad and gamepad_used() else idle
+
+
+def supported() -> bool:
+    """The time at the computer can be counted here (Windows tells the last input)."""
+    return idle_seconds(pad=False) is not None
+
+
+# XInput: a resting stick is never exactly at 0 and drifts (its packet number changes with no one touching it);
+# a move counts beyond these, as XInput's own dead zones; a trigger beyond its threshold
+LEFT_THUMB_DEADZONE = 7849
+RIGHT_THUMB_DEADZONE = 8689
+TRIGGER_THRESHOLD = 30
+
+_pad_lock = threading.Lock()
+_pad_states: Dict[int, tuple] = {}  # controller → (buttons, lt, rt, lx, ly, rx, ry) seen last
+
+
+def _pad_changed(before: Optional[tuple], now: tuple) -> bool:
+    """Whether someone used the controller between two looks: a button, a trigger, or a stick moved beyond its
+    dead zone. A drifting stick alone is no use."""
+    if before is None:
+        return False
+    if before[0] != now[0]:
+        return True
+    if abs(before[1] - now[1]) > TRIGGER_THRESHOLD or abs(before[2] - now[2]) > TRIGGER_THRESHOLD:
+        return True
+    left = max(abs(before[3] - now[3]), abs(before[4] - now[4]))
+    right = max(abs(before[5] - now[5]), abs(before[6] - now[6]))
+    return left > LEFT_THUMB_DEADZONE or right > RIGHT_THUMB_DEADZONE
+
+
+def gamepad_used() -> bool:
+    """A game controller (XInput) used since the last check: Windows does not count it as input, so a game
+    played with one looked like time away. Only whether it was used is kept, never what was pressed."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+
+        class XINPUT_STATE(ctypes.Structure):
+            _fields_ = [("dwPacketNumber", ctypes.c_uint), ("buttons", ctypes.c_ushort), ("lt", ctypes.c_ubyte),
+                        ("rt", ctypes.c_ubyte), ("lx", ctypes.c_short), ("ly", ctypes.c_short), ("rx", ctypes.c_short),
+                        ("ry", ctypes.c_short)]
+
+        dll = None
+        for name in ("xinput1_4", "xinput9_1_0", "xinput1_3"):
+            try:
+                dll = ctypes.WinDLL(name)
+                break
+            except OSError:
+                continue
+        if dll is None:
+            return False
+        used = False
+        with _pad_lock:
+            for pad in range(4):
+                st = XINPUT_STATE()
+                if dll.XInputGetState(pad, ctypes.byref(st)) != 0:  # not connected
+                    _pad_states.pop(pad, None)
+                    continue
+                now = (st.buttons, st.lt, st.rt, st.lx, st.ly, st.rx, st.ry)
+                used = _pad_changed(_pad_states.get(pad), now) or used
+                _pad_states[pad] = now
+        return used
+    except Exception:
+        return False
 
 
 def _in_call() -> bool:
@@ -257,7 +332,10 @@ def check(now: Optional[datetime] = None, idle: Optional[float] = None) -> bool:
     meeting = _recording() or _in_call()
     if not (idle < IDLE_MIN * 60 or meeting):
         return False
-    app = (MEETING if meeting else foreground_app()) if apps_enabled() else None
+    # «Мои программы»: the program actually used, with input in the last minutes; a recording or a call alone
+    # (only listening) counts the minute as work, not as a program's (the meetings' time is counted from the
+    # recordings, «Время во встречах»)
+    app = foreground_app() if apps_enabled() and idle < IDLE_MIN * 60 else None
     mark(now, app)
     hours = remind_hours()
     d = work_day(now).isoformat()

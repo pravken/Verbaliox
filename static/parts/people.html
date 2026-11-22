@@ -2,13 +2,12 @@
      The people and the departments on the left (a search, the ones picked can be merged), the card of the one
      chosen on the right: their open tasks, the recordings they spoke in, were named in or invited to. -->
     <div id="people-view" class="hidden flex-1 min-h-0 pv-view">
-      <header class="tk-head tk-head-lt">
-        <span class="tk-head-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5M16 6.5a3 3 0 010 5.5M17.5 14.6c1.6.6 2.6 2 3 4.4"/></svg></span>
-        <h1 class="tk-title" data-i18n="rlPeople">Люди</h1>
-        <p id="pv-sub" class="tk-sub"></p>
+      <header class="tk-head tk-head-lt vx-shead">
+        <span class="tk-head-ic vx-stile" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5M16 6.5a3 3 0 010 5.5M17.5 14.6c1.6.6 2.6 2 3 4.4"/></svg></span>
+        <div class="vx-stext"><h1 class="tk-title" data-i18n="rlPeople">Люди</h1><p id="pv-sub" class="tk-sub vx-ssub"></p></div>
         <span class="tk-grow"></span>
         <button id="pv-merge" class="tk-btn hidden" data-click="peopleMergePicked" data-i18n-title="spMergeTip" title="Объединить выбранных"></button>
-        <button class="tk-btn tk-btn-primary" data-click="peopleAdd"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="pvAdd">Человек</span></button>
+        <button class="tk-btn tk-btn-primary" data-click="peopleAdd"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span id="pv-add-label" data-i18n="pvAdd">Человек</span></button>
       </header>
       <div class="pv-body">
         <aside class="pv-side">

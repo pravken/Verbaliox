@@ -203,16 +203,25 @@ function renderRail() {
     b.classList.toggle('rail-on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
-  const ind = rail.querySelector('.rail-ind'), on = id && document.getElementById(id);
-  if (!ind) return;
-  if (!on) { ind.style.opacity = '0'; return; }
-  const top = `${on.offsetTop + 8}px`, height = `${on.offsetHeight - 16}px`;
-  ind.classList.toggle('rail-ind-still', !was);  // the first one is placed, not moved
-  Object.assign(ind.style, { top, height, opacity: '1' });
+  const on = id && document.getElementById(id);
+  if (!placeRailIndicator(!was)) return;
   if (was && was !== id) {  // the icon of the section chosen gives a small press
     on.classList.remove('rail-pick'); void on.offsetWidth; on.classList.add('rail-pick');
   }
 }
+
+// The bar at the rail's edge on the section's button; still: placed at once, not moved (the first one, a resize: the
+// buttons change height at 1180 px, and the bar stayed where the button had been)
+function placeRailIndicator(still) {
+  const rail = document.getElementById('app-rail');
+  const ind = rail && rail.querySelector('.rail-ind'), on = _railOn && document.getElementById(_railOn);
+  if (!ind) return false;
+  if (!on) { ind.style.opacity = '0'; return false; }
+  ind.classList.toggle('rail-ind-still', !!still);
+  Object.assign(ind.style, { top: `${on.offsetTop + 8}px`, height: `${on.offsetHeight - 16}px`, opacity: '1' });
+  return true;
+}
+window.addEventListener('resize', () => placeRailIndicator(true));
 
 // The highlight of the chosen tab in a group moves to it (chosen with the user): one element under the
 // tabs, placed on the chosen one; none chosen in the group (a recording open, under the app's views), it fades
@@ -320,7 +329,7 @@ function openRecordBarMenu(e) {
 function openMoveRecordMenu(m, r) {
   const folders = [...(state.folders || [])].sort((a, b) => folderName(a).localeCompare(folderName(b), state.uiLang));
   openTextMenuAt(folders.map(f => ({
-    label: folderName(f), key: (m.folder_id ?? null) === f.id ? '✓' : '',
+    label: folderName(f), on: (m.folder_id ?? null) === f.id,
     run: () => moveMeetingToFolder(m.id, f.id),
   })), r.right, r.bottom + 4, { right: true });
 }
@@ -413,15 +422,17 @@ function openRecMenu(e) {
   const def = defaultRecordPresetId();
   const key = state.system?.settings?.record_hotkey ?? 'Ctrl+Alt+R';  // empty: the hotkey is off
   const dkey = state.system?.settings?.dictation_hotkey ?? 'Ctrl+Alt+D';
-  const item = (fn, args, label, mark = '', hint = '') => `<button class="macos-menu-item rec-mi" role="menuitem" data-fn="${fn}" data-args='${escapeHtml(JSON.stringify(args))}'>`
-    + `<span class="rec-mi-mark" aria-hidden="true">${mark}</span><span class="flex-1 min-w-0 truncate">${escapeHtml(label)}</span>${hint ? `<kbd class="rec-mi-key">${escapeHtml(hint)}</kbd>` : ''}</button>`;
+  // no marks before the items (they were a tick, ◉, an emoji and ⚙, one of each kind): the default preset is told by
+  // the accent, as in the other menus
+  const item = (fn, args, label, on = false, hint = '') => `<button class="macos-menu-item rec-mi${on ? ' tm-on' : ''}" role="menuitem" data-fn="${fn}" data-args='${escapeHtml(JSON.stringify(args))}'${on ? ' aria-current="true"' : ''}>`
+    + `<span class="flex-1 min-w-0 truncate">${escapeHtml(label)}</span>${hint ? `<kbd class="rec-mi-key">${escapeHtml(hint)}</kbd>` : ''}</button>`;
   menu.innerHTML = `<div class="rec-mh">${escapeHtml(t('recMenuHead'))}</div>`
-    + recordPresets().map(p => item('recMenuPreset', [p.id], presetLabel(p), p.id === def ? '✓' : '', p.id === def ? key : '')).join('')
+    + recordPresets().map(p => item('recMenuPreset', [p.id], presetLabel(p), p.id === def, p.id === def ? key : '')).join('')
     + '<div class="my-1 h-px bg-white/10"></div>'
-    + item('recMenuLive', [], t('recMenuLive'), '◉')
-    + item('recMenuDictate', [], t('hmDict'), '🎙', dkey)
+    + item('recMenuLive', [], t('recMenuLive'))
+    + item('recMenuDictate', [], t('hmDict'), false, dkey)
     + '<div class="my-1 h-px bg-white/10"></div>'
-    + item('recMenuSettings', [], t('tbRecSettings') + '…', '⚙');
+    + item('recMenuSettings', [], t('tbRecSettings') + '…');
   menu.addEventListener('click', ev => {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
@@ -526,7 +537,7 @@ function renderStatusbar() {
   const text = (id) => (document.getElementById(id)?.textContent || '').trim();
   const put = (id, v) => { const el = document.getElementById(id); if (el && el.textContent !== v) el.textContent = v || '—'; };
   const items = state.queue || [];
-  if (typeof renderJobsRail === 'function') { renderJobsRail(); renderJobsPop(); }  // the rail's «Очередь» and its window
+  if (typeof renderJobsIsland === 'function') { renderJobsIsland(); renderJobsPop(); }  // the strip's «Очередь» and its window
   const q = document.getElementById('sb-queue');
   if (!q) return;
   const run = items.find(x => x.state === 'running');
@@ -549,7 +560,7 @@ function openStatusbarDownloads(e) {
   if (typeof toggleModelsPop === 'function') toggleModelsPop(e);
 }
 
-// The queue of the status bar opens the same window as «Очередь» on the rail (pult.js)
+// The queue of the status bar opens the same window as the strip's «Очередь» (pult.js)
 function openStatusbarQueue() {
   toggleJobsPop('status');
 }
@@ -563,18 +574,33 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// «Выйти» (asked by the user): the whole program closes from its own window, not only from the tray icon. While a
-// recording or a task runs it asks first. Only in the app's window (window.pywebview): a browser has no such button.
-async function quitApp() {
+// «Выйти» (asked by the user, like the power button of Windows): a menu with «Свернуть в трей» (the window hides, the
+// program goes on) and «Выйти полностью» (the whole program closes, after a question). Only in the app's window
+// (window.pywebview): a browser has no such button.
+function quitApp() {
   const api = window.pywebview && window.pywebview.api;
   if (!api || !api.quit_app) return;
-  let st = 'idle';
-  try { st = await api.app_state(); } catch (e) {}
-  if (st !== 'idle') {
-    const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : 'quitBusyWork'), t('quitOk'), true);
+  const btn = document.getElementById('rail-quit');
+  const r = btn.getBoundingClientRect();
+  // after this click, which closes the menus
+  setTimeout(() => openTextMenuAt([
+    { label: t('quitToTray'), run: () => { try { api.hide_to_tray && api.hide_to_tray(); } catch (e) {} } },
+    { label: t('quitFully'), key: 'Ctrl+Q', danger: true, run: () => quitFully() },
+  ], r.right + 6, r.top, { owner: btn }), 0);
+}
+let quitAsking = false;  // one question at a time: Ctrl+Q pressed twice opened two
+async function quitFully() {
+  const api = window.pywebview && window.pywebview.api;
+  if (!api || !api.quit_app || quitAsking) return;
+  quitAsking = true;
+  try {
+    let st = 'idle';
+    try { st = await api.app_state(); } catch (e) {}
+    // always asked; while something runs it says what is lost
+    const ok = await confirmDialog(t('quitBusyTitle'), t(st === 'recording' ? 'quitBusyRecording' : st === 'idle' ? 'quitIdle' : 'quitBusyWork'), t('quitOk'), true);
     if (!ok) return;
-  }
-  try { await api.quit_app(); } catch (e) {}
+    try { await api.quit_app(); } catch (e) {}
+  } finally { quitAsking = false; }
 }
 function showQuitButton() {
   const api = window.pywebview && window.pywebview.api;
@@ -585,6 +611,6 @@ showQuitButton();
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === 'KeyQ') && window.pywebview && window.pywebview.api) {
     e.preventDefault();
-    quitApp();
+    if (!e.repeat) quitFully();
   }
 });

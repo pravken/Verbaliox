@@ -40,15 +40,16 @@ await step('first run banner', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
-// Import: the model and the language in sight, the rest behind «Изменить» (8.3)
+// Import: the model, the language and the speakers in sight, the processing behind «Изменить» (8.3) in a mode of
+// its own (files, folder, link); «Все параметры» opens with it
 await step('import window', async () => {
-  await page.evaluate(() => openImportDialog());
+  await page.evaluate(() => openImportDialog({ mode: 'files' }));
   await sleep(400);
-  expect(await page.isVisible('#upload-model') && await page.isVisible('#upload-language'), 'model or language not shown');
-  expect(!(await page.isVisible('#upload-speakers')), 'the rare options are open');
+  expect(await page.isVisible('#upload-model') && await page.isVisible('#upload-language') && await page.isVisible('#upload-speakers'), 'model, language or speakers not shown');
+  expect(!(await page.isVisible('#imp-sound')), 'the rare options are open');
   await page.click('#imp-more-btn');
   await sleep(200);
-  expect(await page.isVisible('#upload-speakers'), '«Изменить» did not open the options');
+  expect(await page.isVisible('#imp-sound'), '«Изменить» did not open the options');
   await page.evaluate(() => closeModal('import'));
   await sleep(250);
 });
@@ -61,13 +62,15 @@ await step('read a recording', async () => {
   await sleep(1500);
   expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
   expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
-  // one short row (variant B): «Версия: … ▾», «Расшифровать заново», «⋯» and when the text was made
-  expect(/Версия:/.test(await page.textContent('#tx-model-chip')), 'no version button');
+  // one short row (variant B): «Модель: … ▾», «Расшифровать заново», «⋯» and when the text was made
+  expect(/Модель:/.test(await page.textContent('#tx-model-chip')), 'no model button');
   expect(await page.isVisible('#tx-redo-btn') && await page.isVisible('#tx-more-btn'), 'the row lacks its buttons');
   await page.click('#tx-model-chip');
   await sleep(200);
   const versions = await page.$$eval('#text-menu button', els => els.map(e => e.textContent));
-  expect(versions.some(x => x.includes('✓')), `the version shown is not marked: ${versions.join(' | ')}`);
+  // the version shown is told by the accent (aria-current), not by a «✓»
+  expect(await page.locator('#text-menu button.tm-on[aria-current="true"]').count() === 1, `the version shown is not marked: ${versions.join(' | ')}`);
+  expect(!versions.some(x => x.includes('✓')), `a tick is left in the menu: ${versions.join(' | ')}`);
   await page.keyboard.press('Escape');
   await page.click('#tx-more-btn');
   await sleep(200);
@@ -88,6 +91,50 @@ await step('read a recording', async () => {
   await page.click('#tx-view-menu button:has-text("Без запинок")');
   expect(await page.evaluate(() => !!state.noFillers) !== before, '«Без запинок» did not switch');
   await page.evaluate(() => txViewToggle('fillers'));
+});
+
+// A recording without a text (reported by the user: the old «РАСПОЗНАВАНИЕ» panel and a band with two percents):
+// one card in the content column; while the tracks are mixed it shows the stage and one labelled percent, never
+// «Идёт расшифровка»; the tools of a text are not shown; idle, it offers the model and «Расшифровать» (32px)
+await step('recording without a text', async () => {
+  await page.evaluate(() => {
+    const m = state.activeMeeting;
+    Object.assign(m, { segments: [], status: 'mixing', progress: 28, stage_text: 'Сведение дорожек: удаление эха колонок… 36%' });
+    renderTxModelBar(); updateProcessingBanner(m); renderTranscript();
+  });
+  expect(await page.isVisible('#tx-model-bar') && await page.isVisible('#tx-rc-prog'), 'no progress card');
+  expect(!(await page.isVisible('#tx-subbar')) && !(await page.isVisible('#workspace-processing-banner')), 'the toolbar or the old band is shown');
+  const card = await page.textContent('#tx-model-bar');
+  expect(/Сведение дорожек/.test(card) && !/Идёт расшифровка/.test(card), `the card while mixing: ${card.replace(/\s+/g, ' ')}`);
+  expect((await page.textContent('#tx-rc-pct')).trim() === 'Этап 36% · Всего 28%', 'the percents are not labelled');
+  await page.evaluate(() => { Object.assign(state.activeMeeting, { status: 'added', progress: 0, stage_text: '' }); renderTxModelBar(); updateProcessingBanner(state.activeMeeting); });
+  expect(await page.isVisible('#tx-rc-pick') && await page.isVisible('#tx-transcribe-btn'), 'no model choice or «Расшифровать»');
+  const geo = await page.evaluate(() => {
+    const r = id => document.getElementById(id).getBoundingClientRect();
+    return { card: [r('tx-model-bar').left, r('tx-model-bar').right], col: [r('transcript-inner').left, r('transcript-inner').right],
+      btns: ['tx-transcribe-btn', 'tx-proc-btn'].map(id => r(id).height), seg: r('tx-model-chips').height };
+  });
+  expect(geo.card.every((x, i) => Math.abs(x - geo.col[i]) < 1), `the card is off the content column: ${JSON.stringify(geo)}`);
+  expect(geo.btns.every(h => h === 32) && geo.seg === 32, `not 32px: ${JSON.stringify(geo)}`);
+  await page.evaluate(() => selectMeeting(state.activeMeeting.id, false));
+  await sleep(500);
+  expect(await page.isVisible('#tx-subbar') && !(await page.isVisible('#tx-model-bar')), 'the text does not come back');
+});
+
+// A speaker filter left from before «Разделить по голосам» (its speakers named anew) does not hide the whole text;
+// a filter or a search that hides every line offers «Показать все реплики», which clears both
+await step('stale speaker filter', async () => {
+  await page.evaluate(() => { state.speakerFilter = 'SPEAKER_99'; renderTranscript(); });
+  expect(await page.locator('#transcript-container .segment-row').count() > 0, 'a stale speaker filter hides the text');
+  expect(await page.evaluate(() => state.speakerFilter) === null, 'the stale filter is kept');
+  await page.fill('#transcript-search', 'нет-такого-слова');
+  await sleep(300);
+  expect(await page.isVisible('#tx-show-all'), 'no «Показать все реплики»');
+  await page.evaluate(() => { state.speakerFilter = 'SPEAKER_00'; });
+  await page.click('#tx-show-all');
+  await sleep(200);
+  expect(await page.locator('#transcript-container .segment-row').count() > 0 && await page.inputValue('#transcript-search') === ''
+    && await page.evaluate(() => state.speakerFilter) === null, '«Показать все реплики» did not clear the filter and the search');
 });
 
 // The transcript as a chat (docs/pult-plan.md, stage 5): each phrase a bubble with its time, the face and the
@@ -756,15 +803,15 @@ await step('records section', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
 });
 
-// Import: «＋ Импорт» in the strip on top is a menu with an icon at each way to add; Ctrl+O and files
-// dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
+// Import: «＋ Импорт ▾» in the strip on top is a split button; its ▾ is a menu with an icon at each way to add;
+// Ctrl+O and files dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
 await step('import menu and drop veil', async () => {
   await page.evaluate(() => switchAppView('libtable'));
   await sleep(300);
-  await page.click('#strip-import');
+  await page.click('#strip-import-more');
   await sleep(200);
   const rows = await page.$$eval('#imp-menu .imp-menu-row', els => els.map(e => [e.dataset.imp, !!e.querySelector('.imp-menu-ic svg')]));
-  expect(rows.map(r => r[0]).join() === 'files,folder,link,params' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
+  expect(rows.map(r => r[0]).join() === 'files,folder,link,all' && rows.every(r => r[1]), `the import menu: ${JSON.stringify(rows)}`);
   expect(/Ctrl\+O/.test(await page.textContent('#imp-menu')), 'the menu does not name Ctrl+O');
   await page.click('#imp-menu [data-imp="link"]');
   await sleep(400);
@@ -787,6 +834,79 @@ await step('import menu and drop veil', async () => {
   await sleep(200);
   expect(await page.isVisible('#drop-overlay') && /Отпустите/.test(await page.textContent('#drop-overlay-title')), 'no veil while files are dragged over «Главная»');
   await page.evaluate(() => hideDropOverlay());
+});
+
+// The import window in the mode of the ▾ menu's item (asked by the user: every item opened the same window):
+// «＋ Импорт» itself opens everything; each mode says what it is in the head and shows only its own fields, the
+// recognition card stays; the segmented control switches the mode; a second click on ▾ closes its menu; the split
+// button stands as «● Запись ▾» (same height, radius and ▾)
+await step('import window modes', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await sleep(300);
+  const vis = (sel) => page.evaluate(s => { const el = document.querySelector(s); return !!el && el.getClientRects().length > 0; }, sel);
+  const head = () => page.textContent('#imp-title');
+  await page.click('#strip-import');
+  await sleep(400);
+  expect(await page.isVisible('#modal-import'), '«＋ Импорт» did not open the window');
+  expect(await head() === 'Импорт' && await vis('#imp-empty') && await vis('#imp-link-row') && await vis('#imp-path-row'), '«＋ Импорт» does not show everything');
+  expect(await vis('#imp-sound'), '«＋ Импорт» does not show the processing');
+  expect(await page.getAttribute('#imp-modes [data-imp-mode="all"]', 'aria-checked') === 'true', 'the segment «Все параметры» is not chosen');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  const modes = { files: ['Импорт файлов', '#imp-empty'], folder: ['Импорт папки', '#imp-folder-empty'], link: ['Импорт по ссылке', '#imp-link-row'] };
+  for (const [mode, [title, own]] of Object.entries(modes)) {
+    await page.click('#strip-import-more');
+    await sleep(200);
+    await page.click(`#imp-menu [data-imp="${mode}"]`);
+    await sleep(400);
+    expect(await head() === title, `${mode}: the head says «${await head()}»`);
+    expect(await vis(own), `${mode}: its own field is not shown`);
+    for (const other of ['#imp-empty', '#imp-folder-empty', '#imp-link-row', '#imp-path-row']) {
+      const shown = await vis(other);
+      const want = other === own || (mode === 'folder' && other === '#imp-path-row');
+      expect(shown === want, `${mode}: ${other} is ${shown ? 'shown' : 'hidden'}`);
+    }
+    expect(await vis('#upload-model') && await vis('#upload-language') && await vis('#upload-speakers'), `${mode}: the recognition card is not whole`);
+    expect(await page.getAttribute(`#imp-modes [data-imp-mode="${mode}"]`, 'aria-checked') === 'true', `${mode}: its segment is not chosen`);
+    if (mode === 'link') {
+      expect(await page.evaluate(() => document.activeElement?.id) === 'url-import-input', '«Ссылка»: the cursor is not in the link');
+      expect(/YouTube/.test(await page.textContent('#modal-import .imp-link-lead')), '«Ссылка»: no hint of what a link can be');
+    }
+    await page.evaluate(() => closeModal('import'));
+    await sleep(250);
+  }
+  // the segmented control switches the mode inside the window
+  await page.evaluate(() => openImportDialog({ mode: 'files' }));
+  await sleep(300);
+  await page.click('#imp-modes [data-imp-mode="link"]');
+  await sleep(200);
+  expect(await head() === 'Импорт по ссылке' && await vis('#imp-link-row') && !(await vis('#imp-empty')), 'the segment did not switch to the link');
+  await page.click('#imp-modes [data-imp-mode="all"]');
+  await sleep(200);
+  expect(await head() === 'Импорт' && await vis('#imp-empty') && await vis('#imp-path-row'), 'the segment did not switch to everything');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  // Ctrl+O: the files mode
+  await page.keyboard.press('Control+o');
+  await sleep(400);
+  expect(await head() === 'Импорт файлов', 'Ctrl+O did not open the files mode');
+  await page.evaluate(() => closeModal('import'));
+  await sleep(250);
+  // a second click on ▾ closes its menu
+  await page.click('#strip-import-more');
+  await sleep(200);
+  expect(await page.isVisible('#imp-menu'), 'the ▾ did not open its menu');
+  await page.click('#strip-import-more');
+  await sleep(200);
+  expect(!(await page.isVisible('#imp-menu')), 'a second click on ▾ left its menu open');
+  // the split button as «● Запись ▾»
+  const box = await page.evaluate(() => {
+    const r = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return { top: Math.round(b.top), h: Math.round(b.height), w: Math.round(b.width) }; };
+    const rad = (s) => getComputedStyle(document.querySelector(s)).borderTopLeftRadius;
+    return { imp: r('.imp-split'), rec: r('.tb-rec-wrap'), impMore: r('#strip-import-more'), recMore: r('#tb-rec-more'), ri: rad('.imp-split'), rr: rad('.tb-rec-wrap') };
+  });
+  expect(box.imp.h === 32 && box.rec.h === 32 && box.imp.top === box.rec.top, `the split buttons differ: ${JSON.stringify(box)}`);
+  expect(box.ri === box.rr && box.impMore.w === box.recMore.w && box.impMore.h === box.recMore.h, `the ▾ parts differ: ${JSON.stringify(box)}`);
 });
 
 // «Через минуту: …» goes by itself once a recording is going on (reported by the user: it stayed)
@@ -1059,16 +1179,20 @@ await step('meeting strip', async () => {
   await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
 });
 
-// «Очередь» on the rail and the load of the status bar: each opens its window next to it, Escape and a click
-// outside close it
+// «Очередь» as the island of the top strip and the load of the status bar: each opens its window next to it, Escape
+// and a click outside close it
 await step('queue and load windows', async () => {
-  await page.click('#rail-jobs');
+  expect(await page.locator('#rail-jobs').count() === 0, 'the rail still has its «Очередь»');
+  await page.evaluate(() => { state.queue = [{ id: 9902, state: 'running', kind: 'transcribe', title: 'Тест', progress: 40, position: 0 }]; renderJobsIsland(); });
+  expect(await page.isVisible('#strip-island'), 'no island while a job runs');
+  await page.click('#strip-island');
   await sleep(300);
   expect(await page.isVisible('#jobs-pop'), 'the queue window did not open');
-  const r = await page.evaluate(() => [document.getElementById('jobs-pop').getBoundingClientRect().left, document.getElementById('app-rail').getBoundingClientRect().right]);
-  expect(r[0] >= r[1] && r[0] - r[1] < 20, `the queue window is not next to the rail: ${r}`);
+  const r = await page.evaluate(() => [document.getElementById('jobs-pop').getBoundingClientRect(), document.getElementById('strip-island').getBoundingClientRect()].map(x => [x.top, x.right, x.bottom]));
+  expect(r[0][0] >= r[1][2] && Math.abs(r[0][1] - r[1][1]) < 2, `the queue window is not under the island: ${JSON.stringify(r)}`);
   await page.keyboard.press('Escape');
   expect(!(await page.isVisible('#jobs-pop')), 'Escape did not close the queue window');
+  await page.evaluate(() => { state.queue = []; renderJobsIsland(); clearTimeout(island.doneTimer); island.doneTimer = null; island.html = ''; document.getElementById('strip-island').classList.add('hidden'); });
   await page.click('#sb-load');
   await sleep(500);
   expect(await page.isVisible('#load-pop'), 'the load window did not open');
@@ -1092,6 +1216,115 @@ await step('language from the server', async () => {
   await sleep(1200);
   const kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
   expect(kept[0] === 'ru' && kept[1] === 'week', `a choice on the page was not kept on the server: ${kept}`);
+});
+
+// The strip: a failed calendar answer is not asked again at once (its redraw asked again: a request loop)
+await step('strip back-off', async () => {
+  let calls = 0;
+  await page.route('**/api/calendar/range*', r => { calls++; return r.fulfill({ status: 404, body: '{}' }); });
+  await page.evaluate(() => { strip.at = 0; strip.failAt = 0; renderStrip(); });
+  await sleep(2000);
+  await page.evaluate(() => { renderStrip(); renderStrip(); });
+  await sleep(300);
+  await page.unroute('**/api/calendar/range*');
+  expect(calls >= 1 && calls <= 2, `the strip asked the calendar ${calls} times in 2 s after a failure`);
+  await page.evaluate(() => { strip.failAt = 0; });
+});
+
+// Opening a recording, then back on the open one before the answer: the open one wins and the screen takes input
+// again (the pending state of the first stayed: the text hidden and the screen inert)
+await step('pending race', async () => {
+  await page.evaluate(() => openMeeting(1));
+  await sleep(1200);
+  await page.route(/\/api\/meetings\/2$/, async r => { await new Promise(f => setTimeout(f, 1200)); await r.continue(); });
+  await page.evaluate(() => { selectMeeting(2); selectMeeting(1); });
+  await sleep(2200);
+  await page.unroute(/\/api\/meetings\/2$/);
+  const st = await page.evaluate(() => {
+    const box = document.getElementById('workspace-content');
+    return { pending: state.pendingMeetingId, cls: box.classList.contains('rec-pending'), inert: box.inert, id: state.activeMeeting && state.activeMeeting.id };
+  });
+  expect(st.pending == null && !st.cls && !st.inert && st.id === 1, `the screen stayed pending: ${JSON.stringify(st)}`);
+});
+
+// The queue's island: the ring alone when the strip tells about the only job (the queue's window is opened from
+// here alone); «Готово» only after an island in sight and not after a cancel; its window closes with it
+await step('queue island', async () => {
+  // the only job is the recording the strip tells about: the ring alone, still opening the queue
+  const r = await page.evaluate(() => {
+    const m = state.meetings[0];
+    state.queue = [{ id: m.id, state: 'running', kind: 'transcribe', title: m.title, progress: 30, position: 1 }];
+    strip.kind = 'after'; strip.click = m.id;
+    renderJobsIsland();
+    const el = document.getElementById('strip-island');
+    return { hidden: el.classList.contains('hidden'), cls: el.className, text: el.textContent.trim(), w: el.getBoundingClientRect().width };
+  });
+  expect(!r.hidden && /st-island-ring/.test(r.cls) && !r.text, 'no compact island');
+  await page.evaluate(() => document.getElementById('strip-island').click());
+  await sleep(300);
+  expect(await page.isVisible('#jobs-pop'), 'the compact island does not open the queue');
+  // the job ends: «Готово», and the window opened from the island closes with it
+  await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
+  expect(/st-island-done/.test(await page.getAttribute('#strip-island', 'class')), 'no «Готово»');
+  await sleep(2900);
+  expect(!(await page.isVisible('#strip-island')) && !(await page.isVisible('#jobs-pop')), 'the island or its window stayed');
+  // cancelled: no «Готово»
+  await page.evaluate(() => { const m = state.meetings[0]; state.queue = [{ id: m.id, state: 'running', kind: 'analysis', title: m.title, progress: 3, position: 1 }]; strip.kind = 'free'; renderJobsIsland(); islandCancelled(); renderJobsIsland(); state.queue = []; renderJobsIsland(); });
+  expect(!(await page.isVisible('#strip-island')), '«Готово» after a cancel');
+  // never visible: no «Готово»
+  await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
+  expect(!(await page.isVisible('#strip-island')), '«Готово» with nothing before');
+});
+
+// Menus: one open at a time, a second press of the button closes its menu, Esc closes the menu on top only (one
+// Esc closed «Нагрузка» and left the settings; «Показатели» and the drawer at once)
+await step('one menu at a time', async () => {
+  await page.evaluate(() => switchAppView('libtable')); await sleep(500);
+  await page.click('#tb-rec-more'); await sleep(200);
+  expect(await page.isVisible('#rec-menu'), 'rec menu did not open');
+  await page.click('#strip-import-more'); await sleep(250);
+  expect(await page.isVisible('#imp-menu'), 'import menu did not open');
+  expect(!(await page.isVisible('#rec-menu')), '«● Запись ▾» stayed open with «Импорт ▾»');
+  await page.click('#strip-import-more'); await sleep(250);
+  expect(!(await page.isVisible('#imp-menu')), 'a second click did not close «Импорт ▾»');
+  await page.click('#tb-rec-more'); await sleep(200);
+  await page.click('#tb-rec-more'); await sleep(250);
+  expect(!(await page.isVisible('#rec-menu')), 'a second click did not close «● Запись ▾»');
+  await page.click('#tb-rec-more'); await sleep(200);
+  await page.keyboard.press('Escape'); await sleep(200);
+  expect(!(await page.isVisible('#rec-menu')), 'Esc did not close «● Запись ▾»');
+});
+await step('esc closes the top layer only', async () => {
+  await page.evaluate(() => switchAppView('settings')); await sleep(600);
+  const view = await page.evaluate(() => state.appView);
+  await page.click('#sb-load'); await sleep(300);
+  expect(await page.isVisible('#load-pop'), 'no load window');
+  await page.keyboard.press('Escape'); await sleep(300);
+  const after = await page.evaluate(() => state.appView);
+  expect(!(await page.isVisible('#load-pop')) && after === view, `Esc: load ${await page.isVisible('#load-pop')}, view ${view} → ${after}`);
+  // the recording's menus: Esc and a second click
+  await page.evaluate(() => openMeeting(1)); await sleep(1200);
+  await page.click('[data-click="openActiveRecordingMenu"]'); await sleep(250);
+  expect(await page.isVisible('#recording-context-menu'), 'no ⋯ menu');
+  await page.click('[data-click="openActiveRecordingMenu"]'); await sleep(350);
+  expect(!(await page.isVisible('#recording-context-menu')), 'a second click did not close ⋯');
+  await page.click('[data-click="openActiveRecordingMenu"]'); await sleep(250);
+  await page.keyboard.press('Escape'); await sleep(350);
+  expect(!(await page.isVisible('#recording-context-menu')), 'Esc did not close ⋯');
+  // «Обзор»: «Показатели» over the drawer, one Esc each
+  await page.evaluate(() => switchAppView('dashboard')); await sleep(1200);
+  await page.evaluate(() => dbOpenDetail('meetings')); await sleep(600);
+  await page.evaluate(() => dbKpiPanel()); await sleep(300);
+  const st = () => page.evaluate(() => [DB.kpiCfg, !!DB_DETAIL.kind]);
+  const s0 = await st();
+  await page.keyboard.press('Escape'); await sleep(300);
+  const s1 = await st();
+  expect(s0[0] && s0[1] && !s1[0] && s1[1], `one Esc: ${JSON.stringify([s0, s1])}`);
+  await page.keyboard.press('Escape'); await sleep(300);
+  expect(!(await st())[1], 'the second Esc did not close the drawer');
+  await page.evaluate(() => toggleDashEdit()); await sleep(300);
+  await page.keyboard.press('Escape'); await sleep(300);
+  expect(!(await page.evaluate(() => DB.edit)), 'Esc did not leave «Настроить»');
 });
 
 await browser.close();

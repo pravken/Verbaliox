@@ -24,6 +24,8 @@ const DB_WIDGETS = {
   worked: { title: 'dbWorked', sizes: ['S', 'M', 'L', 'W'], icon: '⏱' },
   // asked by the user: where the working time goes, by the program in front (app/worktime.py); off until turned on
   apps: { title: 'dbApps', sizes: ['M', 'L', 'W'], icon: '▤' },
+  // asked by the user: the load of the computer and the models in memory, as the «Нагрузка» window of the status bar
+  sysload: { title: 'dbSysload', sizes: ['S', 'M', 'L'], icon: '◫' },
 };
 // rows that add up to 12: W · M+M · L+S · M+M · W
 const DB_DEFAULT = [['kpis', 'W'], ['time', 'M'], ['load', 'M'], ['features', 'L'], ['people', 'S'], ['decisions', 'M'], ['dull', 'M'], ['summary', 'W']];
@@ -319,33 +321,14 @@ function dbRenderHead() {
   if (sub) {
     const last = d ? new Date(`${d.end}T12:00:00`) : null;
     if (last) last.setDate(last.getDate() - 1);
-    // the dates only: the switch beside says which period (the toolbar keeps one row in a narrow window)
-    sub.textContent = d ? `${fmt(d.start)} – ${fmt(calKey(last))}` : '';
+    // the dates of the period under the name (the switch beside says which period); «Аналитика периода» until they come
+    sub.textContent = d ? `${fmt(d.start)} – ${fmt(calKey(last))}` : t('dbOverviewSub');
     sub.title = d ? t(`dbPeriodName_${p.period}`) : '';
   }
-  // How far the period is (asked by the user: «сколько дней прошло»): a bar and «Прошло 4 дня из 7»
+  // How far the period is (asked by the user: «сколько дней прошло»): a pill of the head that fills as the period
+  // goes, as the pills of «Сегодня»; calendar or working days as chosen in «Настроить»
   const prog = document.getElementById('db-progress');
-  if (prog) {
-    prog.classList.toggle('hidden', !d);
-    if (d) {
-      // calendar days, or working days (Monday to Friday) as the user chose with the gear (asked by the user);
-      // a public holiday of the country chosen in the settings is no working day
-      const work = dbPrefs().days === 'work', hol = d.holidays || {};
-      const a = new Date(`${d.start}T00:00:00`), b = new Date(`${d.end}T00:00:00`), now = new Date();
-      const days = [];
-      for (let x = new Date(a); x < b; x.setDate(x.getDate() + 1)) if (!work || ((x.getDay() + 6) % 7 < 5 && !hol[calKey(x)])) days.push(new Date(x));
-      const all = days.length;
-      const done = days.filter(x => x.getTime() + 864e5 <= now.getTime()).length;  // the days over
-      const today = days.find(x => x <= now && now < new Date(x.getTime() + 864e5));
-      const pct = all ? Math.max(0, Math.min(100, (done + (today ? (now - today) / 864e5 : 0)) / all * 100)) : 0;
-      const label = t(work ? 'dbPeriodProgressWork' : 'dbPeriodProgress').replace('{done}', () => plural(done, t(work ? 'dbWorkDayForms' : 'dbDayForms'))).replace('{all}', () => all);
-      prog.innerHTML = `<i class="db-progress-bar"><i style="width:${pct.toFixed(1)}%"></i></i><span>${escapeHtml(label)}</span>`
-        + `<button class="db-prog-cfg" data-click="dbProgressMenu" data-click-args='[{"$": "el"}]' title="${escapeHtml(t('dbDaysTip'))}" aria-label="${escapeHtml(t('dbDaysTip'))}">`
-        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>';
-      prog.setAttribute('aria-label', label);
-      prog.title = label;
-    }
-  }
+  if (prog) prog.innerHTML = d ? dbProgressPill(d) : '';
   document.getElementById('db-periods').innerHTML = DB_PERIODS.map(k =>
     `<button role="radio" aria-checked="${p.period === k}" class="tk-seg-btn${p.period === k ? ' tk-on' : ''}" data-click="setDashPeriod" data-click-args='["${k}"]'>${escapeHtml(t(`dbPeriod_${k}`))}</button>`).join('');
   const f = p.feature ? featureById(p.feature) : null;
@@ -356,14 +339,26 @@ function dbRenderHead() {
   document.getElementById('db-edit-btn').setAttribute('aria-pressed', DB.edit ? 'true' : 'false');
 }
 
-// the gear of the period's progress: calendar or working days
-function dbProgressMenu(el) {
-  const r = el.getBoundingClientRect(), cur = dbPrefs().days === 'work' ? 'work' : 'cal';
-  const pick = days => { dbSave({ days }); dbRenderHead(); };
-  setTimeout(() => openTextMenuAt([
-    { label: `${cur === 'cal' ? '✓ ' : '   '}${t('dbDaysCal')}`, run: () => pick('cal') },
-    { label: `${cur === 'work' ? '✓ ' : '   '}${t('dbDaysWork')}`, run: () => pick('work') },
-  ], r.left, r.bottom + 6), 0);
+// The pill «Прошло 4 дня из 7»: calendar days, or working days (Monday to Friday) as the user chose in «Настроить»
+// (asked by the user); a public holiday of the country chosen in the settings is no working day
+function dbProgressPill(d) {
+  const work = dbPrefs().days === 'work', hol = d.holidays || {};
+  const a = new Date(`${d.start}T00:00:00`), b = new Date(`${d.end}T00:00:00`), now = new Date();
+  const days = [];
+  for (let x = new Date(a); x < b; x.setDate(x.getDate() + 1)) if (!work || ((x.getDay() + 6) % 7 < 5 && !hol[calKey(x)])) days.push(new Date(x));
+  const all = days.length;
+  const done = days.filter(x => x.getTime() + 864e5 <= now.getTime()).length;  // the days over
+  const today = days.find(x => x <= now && now < new Date(x.getTime() + 864e5));
+  const part = all ? Math.max(0, Math.min(1, (done + (today ? (now - today) / 864e5 : 0)) / all)) : 0;
+  const label = t(work ? 'dbPeriodProgressWork' : 'dbPeriodProgress').replace('{done}', () => plural(done, t(work ? 'dbWorkDayForms' : 'dbDayForms'))).replace('{all}', () => all);
+  return tdPill(label, part, `${label} · ${t(work ? 'dbDaysWork' : 'dbDaysCal')}`);
+}
+
+// «Настроить»: which days the pill of the period counts
+function setDashDays(days) {
+  dbSave({ days: days === 'work' ? 'work' : 'cal' });
+  dbRenderHead();
+  renderDashDrawer();
 }
 
 // One way to write hours (and other numbers) in all the widgets: one decimal place at most, the decimal comma in
@@ -375,7 +370,7 @@ function dbNum(n) {
 
 // --- The day's time: the next meeting, the free windows, the load of the week (asked by the user) ---
 // They read the calendar of today (home.events, static/js/home.js) and of the week (DB.week): no request
-const DB_LOCAL_WIDGETS = ['load', 'worked', 'apps', 'people'];
+const DB_LOCAL_WIDGETS = ['load', 'worked', 'apps', 'people', 'sysload'];
 const DB_TIME_WIDGETS = ['load'];  // redrawn as the time goes (dbTickNow); «Рабочий день» after its numbers come
 
 // The meeting going on or the next one of today (not an all-day one); null when there is none left
@@ -724,6 +719,64 @@ function dbDullHtml(d) {
     + `<span class="db-dull-sub">${escapeHtml(t('dbDullStreak').replace('{n}', () => x.streak).replace('{h}', () => dbNum(x.hours)))}</span></button>`).join('');
 }
 
+// --- «Нагрузка системы и моделей» (asked by the user): the figures of the «Нагрузка» window of the status bar
+// (static/js/pult.js renderLoadPop) in a widget. It reads vram.data, which the status bar's poll of /api/vram keeps
+// fresh (static/js/settings.js loadVram): no request of its own. Each new picture redraws the widget while «Обзор» is
+// shown (dbOnVramData from renderVram); hidden, nothing is drawn. S: the three bars; M and L: the models in memory too.
+// Verbaliox's share in the accent over the grey of the whole, the value orange above 85 % (loadLevel)
+function dbSysloadHtml(size) {
+  const data = vram.data;
+  if (!data) return `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
+  const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
+  const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
+  const row = (k, all, mine, value, tip, ownText) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>`
+    + `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`
+    + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
+    + `<div class="db-sl-own">${ownText ? `<span class="ld-own"><i></i>Verbaliox ${escapeHtml(ownText)}</span>` : ''}</div>`;
+  const cpu = sys.cpu_percent;
+  let html = `<div class="ld-legend db-sl-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
+  html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`, `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`,
+    own.cpu_percent != null ? `${Math.round(own.cpu_percent)}%` : '');
+  html += ram
+    ? row('RAM', pct(ram.used_gb, ram.total_gb), pct(own.ram_gb, ram.total_gb), `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
+      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', own.ram_gb != null ? gbText(own.ram_gb) : '')
+    : row('RAM', 0, 0, '—', '', '');
+  // without a video card that reports its memory the row keeps its place, said in words
+  html += gpu
+    ? row('GPU', pct(gpu.used_gb, gpu.total_gb), pct(own.gpu_gb, gpu.total_gb), `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
+      own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '', own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '')
+    : row('GPU', 0, 0, t('dbSlNoGpu'), t('mpNoGpu'), '');
+  if (size === 'S') return html;
+  const models = loadModels();
+  html += `<div class="db-sl-cap">${escapeHtml(t('ldInMemory'))}</div>`;
+  if (!models.length) return `${html}<div class="db-sl-empty">${escapeHtml(t('dbSlEmpty'))}</div>`;
+  return html + models.map(({ c, i }) => {
+    const u = loadModelUse(c, own);
+    const can = !vram.busy && !c.loading && c.kind !== 'dub' && (c.can_unload || c.in_use);
+    const tip = c.kind === 'dub' ? t('tipVramDub') : vramChipTitle(c);
+    return `<div class="db-sl-model"><span class="db-sl-name"><b>${escapeHtml(loadModelName(c))}</b><small>${escapeHtml(loadModelPurpose(c))}</small></span>`
+      + `<span class="db-sl-use"><b>${escapeHtml(u.mem)}</b><small>${escapeHtml(u.more)}</small></span>`
+      + `<button data-click="vramChipClick" data-click-args='[${i}]' class="tk-btn tk-btn-sm" title="${escapeHtml(tip)}" ${can ? '' : 'disabled'}>${escapeHtml(t('mpActUnload'))}</button></div>`;
+  }).join('');
+}
+
+// A new picture of the load (renderVram in static/js/settings.js): the widget follows while «Обзор» is shown
+// (drawn only when it changed, so a refresh never swallows a click on «Выгрузить»); hidden, nothing is drawn
+function dbOnVramData() {
+  if (state.appView !== 'dashboard' || document.hidden || DB.edit || (DB.drag && DB.drag.on)) return;
+  dbPrefs().layout.forEach((w, i) => {
+    if (w.id !== 'sysload') return;
+    const c = document.querySelector(`#db-grid .db-w[data-i="${i}"] .db-c`);
+    const html = c && dbWidgetHtml('sysload', dbSize(w));
+    if (c && c._vxHtml !== html) { c._vxHtml = html; c.innerHTML = html; }
+  });
+}
+
+// While the widget is shown, the poll of the load keeps its pace even without a video card (static/js/settings.js)
+function dbSysloadLive() {
+  return state.appView === 'dashboard' && !document.hidden && dbPrefs().layout.some(w => w.id === 'sysload');
+}
+
 function dbWidgetHtml(id, size) {
   const d = DB.data;
   if (!d && !DB_LOCAL_WIDGETS.includes(id)) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
@@ -732,6 +785,7 @@ function dbWidgetHtml(id, size) {
     case 'load': return dbLoadHtml();
     case 'worked': return dbWorkedHtml(size);
     case 'apps': return dbAppsHtml(size);
+    case 'sysload': return dbSysloadHtml(size);
     case 'dull': return dbDullHtml(d);
     case 'mytasks': return dbTasks(d, size);
     case 'waiting': return dbWaitingHtml(d, size);
@@ -958,7 +1012,9 @@ function dbTime(d) {
   const rows = b.map(x => ({ label: label(x), value: x.hours, cls: x.kind === 'day' && x.key === today ? 'today' : '',
     tip: `${label(x)}: ${dbNum(x.hours)} ${t('dbHoursShort')}${x.meetings.length ? '\n' + x.meetings.map(m => `· ${m.title}`).join('\n') : ''}` }));
   return dbChartHtml('time', rows, 0)
-    + `<div class="db-note">${escapeHtml(t('dbTimeTop').replace('{when}', () => label(top)).replace('{h}', () => dbNum(top.hours)).replace('{n}', () => top.meetings.length))}</div>`;
+    // the summary and the hint on lines of their own (asked by the user: one long line read oddly)
+    + `<div class="db-time-foot"><span class="db-time-top">${escapeHtml(t('dbTimeTop').replace('{when}', () => label(top)).replace('{h}', () => dbNum(top.hours)).replace('{n}', () => top.meetings.length))}</span>`
+    + `<span class="db-time-hint">${escapeHtml(t('dbTimeHover'))}</span></div>`;
 }
 
 // «Частые участники»: the meetings together in the widget's own period, a bar to the first one, the hours together
@@ -1144,7 +1200,7 @@ function dbDetailMeetings(d) {
 }
 
 function dbDetailTasks(list, today, mine) {
-  if (!list.length) return vxEmpty(mine ? 'task' : 'clock', t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'));
+  if (!list.length) return vxEmpty(mine ? 'task' : 'wait', t(mine ? 'dbNoMyTasks' : 'dbNoWaiting'));
   return list.map(x => `<div class="db-dt-task${x.status === 'done' ? ' done' : ''}">`
     + (mine && x.status !== 'done' ? `<button class="db-ck" data-click="dbDetailDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
     + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><span class="db-dt-text">${escapeHtml(x.what)}</span>`
@@ -1194,9 +1250,9 @@ function dbRenderDetail() {
       + ((d.meetings || []).map(m => `<button class="db-dt-row db-dt-row2" data-click="dashOpenSummary" data-click-args='[${m.id}]'>`
         + `<span class="db-dt-main"><b class="db-dt-one">${escapeHtml(m.title || t('hmUntitled'))}</b><small><span>${escapeHtml(dbAgo(m.date, today))}</span></small></span><span class="db-dt-dur">${escapeHtml(dbHm(m.duration))}</span></button>`).join('')
         || vxEmpty('meet', t('dbNoMeetingsYet')))
-      + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${JSON.stringify(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
+      + `<button class="tk-btn tk-btn-sm db-dt-card" data-click="openPersonCard" data-click-args='[${jsArg(person)}]'>${escapeHtml(t('dbDtCard'))}</button>`;
   }
-  const ic = { meetings: 'meet', useless: 'over', decisions: 'dec', tasks: 'task', waiting: 'clock' }[kind] || 'people';
+  const ic = { meetings: 'meet', useless: 'over', decisions: 'dec', tasks: 'task', waiting: 'wait' }[kind] || 'people';
   box.innerHTML = vxHead(ic, title, { sub: period, close: 'data-click="dbCloseDetail"' }) + `<div class="db-dt-body">${body}</div>`;
 }
 
@@ -1227,6 +1283,7 @@ function addDashWidget(id) {
   if (!def) return;
   dbSave({ layout: [...dbPrefs().layout, { id, size: def.sizes[Math.min(1, def.sizes.length - 1)] }] });
   renderDashboard();
+  if (id === 'sysload' && typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);
   if (id === 'apps' && !DB.apps) dbLoadApps().then(() => { if (state.appView === 'dashboard') renderDashboard(); });
   document.querySelector('#db-grid .db-w:last-child')?.scrollIntoView({ block: 'nearest', behavior: scrollMotion() });
 }
@@ -1237,8 +1294,8 @@ function resetDashboard() {
 }
 
 // the line icons of the widgets in the panel «Виджеты» (the icon language of the rail and the cards)
-const DB_LIB_IC = { kpis: 'grid', mytasks: 'task', waiting: 'clock', features: 'tag', time: 'chart', people: 'people', decisions: 'dec',
-  summary: 'spark', load: 'chart', dull: 'redo', worked: 'clock', apps: 'grid' };
+const DB_LIB_IC = { kpis: 'grid', mytasks: 'task', waiting: 'wait', features: 'tag', time: 'chart', people: 'people', decisions: 'dec',
+  summary: 'spark', load: 'chart', dull: 'redo', worked: 'clock', apps: 'grid', sysload: 'chart' };
 
 function renderDashDrawer() {
   const box = document.getElementById('db-drawer');
@@ -1255,8 +1312,17 @@ function renderDashDrawer() {
   box.innerHTML = vxHead('grid', t('dbWidgets'), { close: 'data-click="toggleDashEdit"' }) + `<p class="db-drawer-hint">${escapeHtml(t('dbEditHint'))}</p>`
     + (ids.some(id => !on.has(id)) ? `<div class="db-cap">${escapeHtml(t('dbAddCap'))}</div>${ids.filter(id => !on.has(id)).map(id => item(id, true)).join('')}` : '')
     + `<div class="db-cap">${escapeHtml(t('dbOnCap'))}</div>${ids.filter(id => on.has(id)).map(id => item(id, false)).join('')}`
+    + dbDaysOptionHtml()
     + `<div class="db-drawer-foot"><button class="tk-btn tk-btn-sm" data-click="resetDashboard">${escapeHtml(t('dbReset'))}</button>`
     + `<button class="tk-btn tk-btn-primary tk-btn-sm" data-click="toggleDashEdit">${escapeHtml(t('dbDone'))}</button></div>`;
+}
+
+// «Настроить»: the days the pill of the period counts (it was a gear beside the pill under the head)
+function dbDaysOptionHtml() {
+  const cur = dbPrefs().days === 'work' ? 'work' : 'cal';
+  return `<div class="db-cap">${escapeHtml(t('dbDaysCap'))}</div><div class="db-days"><div class="tk-seg" role="radiogroup" aria-label="${escapeHtml(t('dbDaysTip'))}">`
+    + ['cal', 'work'].map(k => `<button role="radio" aria-checked="${cur === k}" class="tk-seg-btn${cur === k ? ' tk-on' : ''}" data-click="setDashDays" data-click-args='["${k}"]'>${escapeHtml(t(k === 'work' ? 'dbDaysWork' : 'dbDaysCal'))}</button>`).join('')
+    + '</div></div>';
 }
 
 // --- Arranging the widgets («Настроить»), asked by the user: the browser's own drag showed nothing until
@@ -1279,7 +1345,7 @@ function dbFlip(grid, change) {
     const a = before.get(el);
     if (!a || el.classList.contains('db-slot')) return;
     const b = el.getBoundingClientRect();
-    const dx = a.left - b.left, dy = a.top - b.top;
+    const dx = zpx(a.left - b.left), dy = zpx(a.top - b.top);
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
     el.style.transition = 'none';
     el.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -1290,10 +1356,11 @@ function dbFlip(grid, change) {
   moved.forEach(el => { el.style.transition = 'transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1)'; el.style.transform = ''; });
 }
 
-// The widget under the pointer, by the grid's own layout (not the boxes moved by the animation)
+// The widget under the pointer, by the grid's own layout (not the boxes moved by the animation). The pointer and the
+// box are in the window's pixels, the offsets in the page's own (the interface scale): divided by the zoom first
 function dbHit(grid, x, y) {
   const g = grid.getBoundingClientRect();
-  const px = x - g.left - grid.clientLeft + grid.scrollLeft, py = y - g.top - grid.clientTop + grid.scrollTop;
+  const px = zpx(x - g.left) - grid.clientLeft + grid.scrollLeft, py = zpx(y - g.top) - grid.clientTop + grid.scrollTop;
   let last = null;
   for (const el of dbTiles(grid)) {
     const r = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
@@ -1312,7 +1379,7 @@ function dbDragMove(e) {
     dbDragLift(d);
   }
   e.preventDefault();
-  d.el.style.transform = `translate(${d.x - d.x0}px, ${d.y - d.y0}px) scale(1.02)`;
+  d.el.style.transform = `translate(${zpx(d.x - d.x0)}px, ${zpx(d.y - d.y0)}px) scale(1.02)`;
   if (!d.raf) d.raf = requestAnimationFrame(dbDragFrame);
 }
 
@@ -1322,10 +1389,10 @@ function dbDragLift(d) {
   const slot = document.createElement('div');
   slot.className = 'db-slot';
   slot.style.gridColumn = el.style.gridColumn;
-  slot.style.height = `${r.height}px`;
+  slot.style.height = `${zpx(r.height)}px`;
   el.after(slot);
   d.slot = slot;
-  Object.assign(el.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  Object.assign(el.style, { left: `${zpx(r.left)}px`, top: `${zpx(r.top)}px`, width: `${zpx(r.width)}px`, height: `${zpx(r.height)}px` });
   el.classList.add('db-lifted');
   document.body.classList.add('db-dragging-now');
   try { grid.setPointerCapture(d.pid); } catch (err) {}
@@ -1378,7 +1445,7 @@ function dbDragEnd(e, cancel) {
   // the widget settles into its slot, then the grid is drawn in the new order
   const to = d.slot.getBoundingClientRect(), from = d.el.getBoundingClientRect();
   d.el.style.transition = 'transform 140ms cubic-bezier(0.2, 0.7, 0.2, 1)';
-  d.el.style.transform = `translate(${d.x - d.x0 + to.left - from.left}px, ${d.y - d.y0 + to.top - from.top}px)`;
+  d.el.style.transform = `translate(${zpx(d.x - d.x0 + to.left - from.left)}px, ${zpx(d.y - d.y0 + to.top - from.top)}px)`;
   setTimeout(done, 140);
 }
 function dbDragUp(e) { dbDragEnd(e, false); }
@@ -1440,6 +1507,7 @@ registerView('dashboard', {
       DB.waveTimer = setTimeout(() => grid.classList.remove('db-wave'), 1000);
     }
     loadDashboard();
+    if (dbPrefs().layout.some(w => w.id === 'sysload') && typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);
   },
   hide: () => { DB.edit = false; DB.kpiCfg = false; },
   refresh: (changed) => { if (changed) loadDashboard(); },

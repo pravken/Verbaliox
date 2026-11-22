@@ -47,6 +47,7 @@ const SERVER_TEXT_EN = {
   "Ollama вернула не все векторы": "Ollama did not return all vectors",
   "Ollama не запущена или в ней нет моделей — перевод невозможен": "Ollama is not running or has no models — translation is not possible",
   "Не удалось запустить Ollama: модель не удалена": "Ollama could not be started: the model was not deleted",
+  "В Ollama несколько вариантов этой модели: удалите нужный по его полному имени": "Ollama has several variants of this model: delete the one you need by its full name",
   "Ollama не запущена: установите её в «Настройки → Анализ»": "Ollama is not running: install it in Settings → Analysis",
   "Ollama не отвечает или в ней нет моделей": "Ollama does not answer or has no models",
   "Ollama не установлена. Подтвердите установку в окне настроек или установите её вручную: https://ollama.com/download": "Ollama is not installed. Confirm the installation in Settings or install it by hand: https://ollama.com/download",
@@ -332,6 +333,10 @@ const SERVER_TEXT_EN = {
   "Сочетание уже занято другой программой": "Another program already uses this combination",
   "Релиз не подписан ключом автора — обновление отменено": "The release is not signed with the author's key: the update is cancelled",
   "Подпись релиза не прошла проверку — обновление отменено": "The signature of the release did not check out: the update is cancelled",
+  "Ollama установлена на компьютер.": "Ollama is installed on the computer.",
+  "Сервер Ollama не найден на ПК. Запускаю автоматическую установку Ollama через winget": "The Ollama server was not found on this computer. Installing Ollama automatically with winget",
+  "Запуск фоновой службы Ollama": "Starting the Ollama background service",
+  "Подключение к локальному серверу Ollama": "Connecting to the local Ollama server",
 };
 
 // Messages with values in them: {} in the Russian text, {0} {1} … in the English one
@@ -447,4 +452,11 @@ const SERVER_PATTERNS_EN = [
   ["Ошибка: {}", "Error: {0}"],
   ["На раскладке клавиатуры это сочетание (AltGr) печатает «{}» — выберите другое", "On a keyboard layout this combination (AltGr) types “{0}”: choose another one"],
   ["Микрофон: {}", "Microphone: {0}"],
+  ["Модель {} скачана и выбрана как активная.", "The model {0} is downloaded and selected as the active one."],
+  ["Запрошена установка модели {}", "Installing the model {0} was asked for"],
+  ["Скачивание {} — {} / {} МБ ({}%)", "Downloading {0} — {1} / {2} MB ({3}%)"],
+  ["Ollama — {}", "Ollama — {0}"],
+  ["winget: {}", "winget: {0}"],
+  ["ОШИБКА: {}", "ERROR: {0}"],
+  ["[{}] {}", "[{0}] {1}"],
 ];

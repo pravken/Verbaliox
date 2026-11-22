@@ -297,12 +297,20 @@ def use_program_folder_for_ollama_models() -> None:
 
 def installed_name(name: str, models: List[str]) -> Optional[str]:
     """The name Ollama lists a model of the catalog under: the same, or a variant of the tag
-    («gemma4:e4b» installed as «gemma4:e4b-it-q4_K_M»), or «:latest» of a name without a tag."""
+    («gemma4:e4b» installed as «gemma4:e4b-it-q4_K_M»), or «:latest» of a name without a tag (only that one:
+    «qwen3» is not «qwen3:8b», found in the review)."""
     if name in models:
         return name
     if ":" not in name:
-        return next((m for m in models if m == f"{name}:latest" or m.startswith(name + ":")), None)
+        return f"{name}:latest" if f"{name}:latest" in models else None
     return next((m for m in models if m.startswith(name + "-")), None)
+
+
+def _variants(name: str, models: List[str]) -> List[str]:
+    """Every name Ollama lists for `name` when it is not listed as it is (installed_name)."""
+    if ":" not in name:
+        return [f"{name}:latest"] if f"{name}:latest" in models else []
+    return [m for m in models if m.startswith(name + "-")]
 
 
 def delete_ollama_model(name: str) -> None:
@@ -316,10 +324,15 @@ def delete_ollama_model(name: str) -> None:
     with httpx.Client(timeout=30.0) as client:
         tags = client.get(f"{base}/api/tags")
         listed = [m["name"] for m in tags.json().get("models", [])] if tags.status_code == 200 else [name]
-        target = installed_name(name, listed)
-        if target is None:
+        # exactly the model the page named; the catalog's name only when one variant of its tag is there
+        # (with several, deleting the first one listed could take the model the user kept)
+        found = [name] if name in listed else _variants(name, listed)
+        if not found:
             print(f"[ollama] {name} is not in Ollama's list: already deleted", flush=True)
             return
+        if len(found) > 1:
+            raise RuntimeError("В Ollama несколько вариантов этой модели: удалите нужный по его полному имени")
+        target = found[0]
         r = client.request("DELETE", f"{base}/api/delete", json={"model": target})
     if r.status_code == 404:  # deleted in the meantime (another window, the Ollama app itself)
         return

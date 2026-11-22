@@ -434,25 +434,3 @@ document.addEventListener('keydown', (e) => {
     togglePlayPause();
   }
 });
-
-// --- Easter egg: willow fluff from the logo ---
-function releaseWillowFluff(count, spread, origin) {
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const logo = origin || document.getElementById('app-logo');
-  if (!logo) return;
-  const r = logo.getBoundingClientRect();
-  for (let i = 0; i < count; i++) {
-    const el = document.createElement('span');
-    el.className = 'willow-fluff';
-    el.style.left = `${zpx(r.left + r.width * (0.35 + Math.random() * 0.5))}px`;
-    el.style.top = `${zpx(r.top + r.height * (0.15 + Math.random() * 0.5))}px`;
-    // Drift right and up like fluff in a breeze, wider for the burst
-    el.style.setProperty('--x', `${(30 + Math.random() * 90) * spread}px`);
-    el.style.setProperty('--y', `${(-20 - Math.random() * 70) * spread + Math.random() * 40 * spread}px`);
-    el.style.setProperty('--r', `${Math.round(Math.random() * 360)}deg`);
-    el.style.setProperty('--t', `${(2.2 + Math.random() * 1.8) * (spread > 1 ? 1.4 : 1)}s`);
-    el.style.animationDelay = `${Math.random() * (spread > 1 ? 700 : 250)}ms`;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 6500);
-  }
-}

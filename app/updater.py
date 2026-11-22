@@ -649,6 +649,37 @@ def _restore(backup: Path, app_dir: Path, added: List[str], log_dir: Path) -> Li
     return failed
 
 
+# An installation never takes this long: a mark older than this names no installer at work
+INSTALL_MAX_SECONDS = 2 * 3600
+
+
+def _boot_time() -> Optional[float]:
+    """When Windows started (unix seconds); None when not known."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        k32 = ctypes.WinDLL("kernel32")
+        k32.GetTickCount64.restype = ctypes.c_ulonglong
+        return time.time() - k32.GetTickCount64() / 1000.0
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _denied_is_running(since: Optional[float]) -> bool:
+    """A process the app may not look at (access denied) has the installer's number. After a power cut the
+    number may belong to a protected process of the next session, and every start would wait on «Идёт
+    установка обновления» (found in the review): a mark written before Windows started, or long ago, names
+    no installer at work."""
+    if since is None:
+        return True
+    boot = _boot_time()
+    if boot is not None and since < boot:
+        return False
+    return time.time() - since < INSTALL_MAX_SECONDS
+
+
 def _process_running(pid: int, since: Optional[float] = None) -> bool:
     """True while the process `pid` runs. With `since` (when it wrote its mark), a process started after
     that moment is another program that got the same number, not the installer."""
@@ -667,7 +698,7 @@ def _process_running(pid: int, since: Optional[float] = None) -> bool:
             k32.CloseHandle.argtypes = [wintypes.HANDLE]
             h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
             if not h:
-                return ctypes.get_last_error() == 5  # access denied: it exists
+                return ctypes.get_last_error() == 5 and _denied_is_running(since)  # access denied: it exists
             try:
                 code = wintypes.DWORD()
                 if not k32.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:  # STILL_ACTIVE
@@ -688,7 +719,7 @@ def _process_running(pid: int, since: Optional[float] = None) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True
+        return _denied_is_running(since)
     except OSError:
         return False
     return True

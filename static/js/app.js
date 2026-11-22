@@ -747,7 +747,13 @@ function renderAnalysisOverview(box) {
     cards.push(card('mfu', t('mfuTitle'), lines.map(s => `<div class="an-row-text">${escapeHtml(s)}</div>`).join(''), { icon: 'note', open: 'mfu' }));
   }
   const ask = `<button class="sum-ask" data-click="runCustomQuestion" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`}>${recCardIcon('ask')}<span>${escapeHtml(t('recAskPh'))}</span></button>`;
-  box.innerHTML = `${recAnalysisBar()}<div class="sum-grid">
+  // the analysis failed and nothing was made: why, and «Повторить» (found by the user: an empty analysis said nothing)
+  const failed = sums.error && !anHasContent('tldr') && !anHasContent('protocol') && !anIsBusy('protocol')
+    ? `<div class="an-failed" role="alert"><span class="an-failed-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg></span>`
+      + `<span class="an-failed-text"><b>${escapeHtml(t('anFailedTitle'))}</b><span>${escapeHtml(serverText(String(sums.error)))}</span></span>`
+      + `<button class="an-btn an-btn-primary" data-click="generateSummaryForActiveTab" ${ai ? '' : `aria-disabled="true" title="${escapeHtml(t('anNeedModel'))}"`}>${escapeHtml(t('anFailedRetry'))}</button></div>`
+    : '';
+  box.innerHTML = `${recAnalysisBar()}${failed}<div class="sum-grid">
       <div class="sum-main">${lead}${decisions}${tasks}${mine}${cards.join('')}</div>
       <div class="sum-side">${topics}${ask}</div>
     </div>`
@@ -774,10 +780,11 @@ function openAnalysisMenu(kind, el) {
   if (kind === 'model') {
     const sel = document.getElementById('summary-llm-select');
     const opts = sel ? [...sel.options].filter(o => o.value) : [];
-    at([...opts.map(o => ({ label: `${o.value === sel.value ? '✓ ' : '   '}${o.textContent}`, run: () => {
+    at([...opts.map(o => ({ label: o.textContent, on: o.value === sel.value, run: () => {
         sel.value = o.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
-        renderAnalysisHead();
+        // the overview's bar above the cards has the model's chip too (it kept the model before)
+        if (state.activeSummaryTab === 'protocol') renderSummaryPanel(); else renderAnalysisHead();
       } })),
       { sep: true }, { label: t('anModelsSettings'), run: () => openModal('settings', 'analysis') }]);
   } else if (kind === 'cfg') {
@@ -844,7 +851,7 @@ function openOverviewConfig(el) {
   pop.innerHTML = `<div class="an-pop-title">${escapeHtml(t('anCfgTitle'))}</div>`
     + keys.map(([k, label]) => `<label class="an-pop-row"><input type="checkbox" data-k="${escapeHtml(k)}" ${off.includes(k) ? '' : 'checked'}>
         <span class="flex-1">${escapeHtml(label)}</span><span class="an-pop-tag">${escapeHtml(anHasContent(k) ? '' : t('anNotMadeShort'))}</span></label>`).join('')
-    + `<div class="an-pop-foot"><button class="an-pop-link" data-a="new">+ ${escapeHtml(t('anNewTemplate'))}</button></div>`;
+    + `<div class="an-pop-foot"><button class="an-pop-link" data-a="new">${VX_PLUS}${escapeHtml(t('anNewTemplate'))}</button></div>`;
   pop.addEventListener('change', e => {
     const k = e.target.dataset && e.target.dataset.k;
     if (k) toggleOverviewCard(k);
@@ -1960,9 +1967,35 @@ async function cancelPendingExports(id) {
 // the app can do with it (play from there, search, ask the assistant, add to the dictionary).
 const TEXT_AREAS = '#studio-captions, #transcript-container, #summary-content, #ask-thread, #info-content, .markdown-body';
 
-function closeTextMenu() {
+// The button a menu was opened from (asked by the user: a second click on it must close the menu, not draw it
+// again). The click that reaches the button closes the menu first (document click), so the button's own
+// handler then sees the menu just closed by this same press and opens nothing.
+let _menuOwner = null, _pressOwner = null, _closedOwner = null, _closedAt = 0;
+// the keyboard's Enter or Space on a button opens its menu as a click does: that button is the owner too
+document.addEventListener('keydown', (e) => {
+  const f = document.activeElement;
+  _pressOwner = (e.key === 'Enter' || e.key === ' ') && f instanceof Element && !f.closest('#text-menu') ? f.closest('button, [role="button"], [data-click]') : null;
+}, true);
+document.addEventListener('pointerdown', e => {
+  _pressOwner = e.button === 0 && (e.target instanceof Element && !e.target.closest('#text-menu') && e.target.closest('button, [role="button"], [data-click]')) || null;
+}, true);
+
+function closeTextMenu(e) {
   const menu = document.getElementById('text-menu');
-  if (menu && !menu.classList.contains('is-leaving')) { menu.id = ''; removeWithExit(menu); }
+  if (menu && !menu.classList.contains('is-leaving')) {
+    menu.id = '';
+    removeWithExit(menu);
+    if (_menuOwner) {
+      if (_menuOwner.dataset.menuTip != null) { _menuOwner.title = _menuOwner.dataset.menuTip; delete _menuOwner.dataset.menuTip; }
+      _menuOwner.setAttribute('aria-expanded', 'false');
+      // only a click on the menu's own button closed it «for this press»; an item chosen or a click elsewhere did not
+      if (e && e.type === 'click' && e.target instanceof Element && _menuOwner.contains(e.target)) {
+        _closedOwner = _menuOwner;
+        _closedAt = performance.now();
+      }
+    }
+    _menuOwner = null;
+  }
 }
 
 function textMenuItems(e) {
@@ -2875,17 +2908,33 @@ document.addEventListener('contextmenu', (e) => {
 
 // A small menu of items ({label, key, run, disabled} or {sep}) at a point of the window
 function openTextMenuAt(items, x, y, opts) {
+  const owner = (opts && opts.owner) || _pressOwner;
+  // the same button by its key: a bar redrawn between the clicks (the filters of «Записи», the overview's head) has a
+  // new element for it
+  const same = (a, b) => !!a && !!b && (a === b || (!!vxOwnerKey(a) && vxOwnerKey(a) === vxOwnerKey(b)));
+  const wasOpen = !!document.getElementById('text-menu') && same(_menuOwner, owner);
   closeTextMenu();
+  // the same button pressed again while its menu was open: the menu stays closed
+  if (owner && (wasOpen || (same(_closedOwner, owner) && performance.now() - _closedAt < 600))) { _closedOwner = null; return; }
   closeQuickLangMenu();
   const menu = document.createElement('div');
   menu.id = 'text-menu';
   menu.className = 'fixed min-w-[220px] macos-menu z-[60]';
   const clean = items.filter((it, i, a) => !it.sep || (i > 0 && !a[i - 1].sep && i < a.length - 1));
+  // the item chosen now is told by colour, not by a «✓» before it (asked by the user): a menu with a ticked item
+  // loses the ticks and the blanks that kept the others in line with it
+  if (clean.some(it => /^✓ /.test(it.label || ''))) {
+    clean.forEach((it, i) => {
+      if (it.sep || it.info || typeof it.label !== 'string') return;
+      const on = /^✓ {1,2}/.test(it.label);
+      clean[i] = { ...it, on: it.on || on, label: on ? it.label.replace(/^✓ {1,2}/, '') : it.label.replace(/^ {3}/, '') };
+    });
+  }
   menu.innerHTML = clean.map((it, i) => it.sep
     ? '<div class="my-1 h-px bg-white/10"></div>'
     : it.info  // a line that only says something (who chose a disputed word), not an action
     ? `<div class="tm-info">${escapeHtml(it.label)}</div>`
-    : `<button class="macos-menu-item gap-6${it.danger ? ' tm-danger' : ''}" data-i="${i}" ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
+    : `<button class="macos-menu-item gap-6${it.danger ? ' tm-danger' : ''}${it.on ? ' tm-on' : ''}" data-i="${i}" ${it.on ? 'aria-current="true"' : ''} ${it.disabled ? 'disabled style="opacity:.4"' : ''}><span class="min-w-0 truncate">${escapeHtml(it.label)}</span>`
       + `<span class="tm-key">${escapeHtml(it.key || '')}</span></button>`).join('');
   // Keeps the selection: a click in the menu must not clear it before the action reads it
   menu.addEventListener('mousedown', ev => ev.preventDefault());
@@ -2900,6 +2949,12 @@ function openTextMenuAt(items, x, y, opts) {
   menu.style.maxHeight = `${viewH() - 8}px`;  // a long list scrolls instead of leaving the window
   menu.style.overflowY = 'auto';
   document.body.appendChild(menu);
+  _menuOwner = owner && document.contains(owner) ? owner : null;
+  if (_menuOwner) {
+    // its tooltip would cover the menu's first item while the pointer stays on the button
+    if (_menuOwner.hasAttribute('title')) { _menuOwner.dataset.menuTip = _menuOwner.title; _menuOwner.removeAttribute('title'); }
+    _menuOwner.setAttribute('aria-expanded', 'true');
+  }
   // x, y are a point of the window (clientX/Y); the menu is placed in the page's own pixels.
   // opts.right: x is the menu's right edge (a menu under a button at the right)
   const r = menu.getBoundingClientRect();
@@ -2913,49 +2968,72 @@ window.addEventListener('blur', closeTextMenu);
 // The page scrolling under the menu closes it; a long menu scrolling its own list does not
 document.addEventListener('scroll', (e) => { if (!(e.target instanceof Element && e.target.closest('#text-menu'))) closeTextMenu(); }, true);
 
-// --- About (GET /api/about) and its easter eggs: the willow hears everything ---
+// --- About (GET /api/about) and its easter eggs: the dragon hears everything ---
 const ABOUT_LINES = {
   ru: [
-    'Участник 3 просил не записывать. Записано.',
-    '[неразборчиво] — но мы поняли.',
-    'Ваша последняя фраза уже в протоколе. [00:00]',
-    'Пункт помечен [?]: доказательств нет. Пока.',
-    'Слова-паразиты удалены. Паразиты — нет.',
-    'Обещание найдено: «сделаю к пятнице». Пятница не найдена.',
-    'Верба не спит. Верба транскрибирует.',
-    'Тишина длилась 3 секунды. Расшифровано: «…».',
-    'Голос узнан: это вы. Опять.',
+    'Дракон проснулся. Протокол встречи — тоже.',
+    'Участник «Дракон» подключился. Микрофон: огнеопасно.',
+    'Искры распознаны как речь. Уверенность: 12%.',
+    '[рычание] — помечено как «согласен».',
+    'Задача назначена: Дракон. Срок: когда остынет.',
+    'Дракон не спит. Дракон конспектирует.',
+    'Сокровище найдено: час встречи без единого «эээ».',
+    'Слова-паразиты сожжены. Пепел сохранён в черновиках.',
+    'Голос узнан: это вы. Дракон кивнул.',
   ],
   en: [
-    'Participant 3 asked not to be recorded. Recorded.',
-    '[inaudible], but we got it.',
-    'Your last sentence is already in the minutes. [00:00]',
-    'Point marked [?]: no evidence. Yet.',
-    'Filler words removed. The fillers themselves are still here.',
-    'Promise found: "done by Friday". Friday not found.',
-    'The willow does not sleep. The willow transcribes.',
-    'Silence lasted 3 seconds. Transcribed: "…".',
-    'Voice recognized: it is you. Again.',
+    'The dragon woke up. So did the minutes.',
+    'Participant "Dragon" joined. Microphone: flammable.',
+    'Sparks recognized as speech. Confidence: 12%.',
+    '[growl], marked as "agreed".',
+    'Task assigned: Dragon. Due: once it cools down.',
+    'The dragon does not sleep. The dragon takes notes.',
+    'Treasure found: an hour-long meeting without a single "um".',
+    'Filler words burned. The ashes are kept in drafts.',
+    'Voice recognized: it is you. The dragon nodded.',
   ],
 };
 const ABOUT_EGG = {
   ru: [
-    ['00:00', 'Участник 1', '#64D2FF', '…он опять кликает по вербе.'],
-    ['00:02', 'Участник 2', '#BF5AF2', 'Пусть. Мы всё равно всё записываем.'],
-    ['00:04', 'Участник ?', '#FF453A', 'Тише. Он читает субтитры.'],
-    ['00:07', null, null, 'Разделение по голосам: найдено 4 участника. В комнате — 1 человек. [?]'],
-    ['00:09', null, null, 'Обещание: «больше не кликать по логотипу». Срок: никогда.'],
-    ['00:11', 'Участник 4', '#FF9F0A', 'Не оборачивайся.'],
+    ['00:00', 'Участник 1', '#64D2FF', '…он опять тыкает в дракона.'],
+    ['00:02', 'Участник 2', '#BF5AF2', 'Пусть. Дракон всё равно всё записывает.'],
+    ['00:04', 'Дракон', '#FF453A', 'Ррр. [перевод: «ещё раз — и подпалю протокол»]'],
+    ['00:07', null, null, 'Разделение по голосам: найдено 4 участника. Крыльев в комнате: 2. [?]'],
+    ['00:09', null, null, 'Обещание: «больше не тыкать в дракона». Срок: никогда.'],
+    ['00:11', 'Участник 4', '#FF9F0A', 'Не оборачивайся. За спиной стало тепло.'],
   ],
   en: [
-    ['00:00', 'Participant 1', '#64D2FF', '…he is clicking the willow again.'],
-    ['00:02', 'Participant 2', '#BF5AF2', 'Let him. We are recording everything anyway.'],
-    ['00:04', 'Participant ?', '#FF453A', 'Quiet. He is reading the captions.'],
-    ['00:07', null, null, 'Speaker separation: 4 participants found. People in the room: 1. [?]'],
-    ['00:09', null, null, 'Promise: "no more clicking the logo". Due: never.'],
-    ['00:11', 'Participant 4', '#FF9F0A', 'Do not turn around.'],
+    ['00:00', 'Participant 1', '#64D2FF', '…he is poking the dragon again.'],
+    ['00:02', 'Participant 2', '#BF5AF2', 'Let him. The dragon records everything anyway.'],
+    ['00:04', 'Dragon', '#FF453A', 'Grrr. [translated: "once more and the minutes catch fire"]'],
+    ['00:07', null, null, 'Speaker separation: 4 participants found. Wings in the room: 2. [?]'],
+    ['00:09', null, null, 'Promise: "no more poking the dragon". Due: never.'],
+    ['00:11', 'Participant 4', '#FF9F0A', 'Do not turn around. It just got warm behind you.'],
   ],
 };
+
+// A few sparks from the dragon's mouth (the head of the icon, at its top right): they rise and fade; more and
+// wider for the burst at the end of the big easter egg. Without motion: none
+function releaseDragonSparks(count, spread, origin) {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const logo = origin || document.getElementById('about-logo');
+  if (!logo) return;
+  const r = logo.getBoundingClientRect();
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('span');
+    el.className = 'about-spark';
+    el.style.left = `${zpx(r.left + r.width * (0.8 + Math.random() * 0.08))}px`;
+    el.style.top = `${zpx(r.top + r.height * (0.32 + Math.random() * 0.06))}px`;
+    // out of the mouth to the right, then up as embers do
+    el.style.setProperty('--x', `${(14 + Math.random() * 46) * spread}px`);
+    el.style.setProperty('--y', `${(-24 - Math.random() * 56) * spread}px`);
+    el.style.setProperty('--s', `${4 + Math.round(Math.random() * 3)}px`);
+    el.style.setProperty('--t', `${(0.9 + Math.random() * 0.7) * (spread > 1 ? 1.5 : 1)}s`);
+    el.style.animationDelay = `${Math.random() * (spread > 1 ? 600 : 180)}ms`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+}
 const about = { clicks: [], line: -1, typing: null, egg: [], eggOn: false };
 
 async function openAbout() {
@@ -2995,7 +3073,7 @@ function aboutLogoClick() {
   logo.classList.remove('about-shake');
   void logo.offsetWidth;  // restart the animation
   logo.classList.add('about-shake');
-  releaseWillowFluff(10, 1.3, logo);
+  releaseDragonSparks(8, 1, logo);
   const now = Date.now();
   about.clicks = about.clicks.filter(t => now - t < 2000).concat(now);
   if (about.clicks.length >= 5) { about.clicks = []; startAboutEgg(); return; }
@@ -3040,10 +3118,10 @@ function startAboutEgg() {
   about.egg.push(setTimeout(() => {
     const row = document.createElement('div');
     row.className = 'glitch pt-3';
-    row.textContent = en ? 'Kidding. Everything runs locally, the microphone is off. Probably.'
-      : 'Шутка. Всё работает локально, микрофон выключен. Наверное.';
+    row.textContent = en ? 'Kidding. Everything runs locally, the microphone is off. So is the dragon. Probably.'
+      : 'Шутка. Всё работает локально, микрофон выключен. Дракон — тоже. Наверное.';
     list.appendChild(row);
-    releaseWillowFluff(60, 3.4, document.getElementById('about-logo'));
+    releaseDragonSparks(36, 2.2, document.getElementById('about-logo'));
   }, 900 + lines.length * 1700 + 600));
   about.egg.push(setTimeout(endAboutEgg, 900 + lines.length * 1700 + 6000));
 }

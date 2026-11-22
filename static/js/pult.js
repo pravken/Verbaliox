@@ -1,5 +1,5 @@
 // Verbaliox page script: «Пульт встреч» (docs/pult-plan.md, stages 1–2). The strip of the meeting at the top,
-// the «Очередь» window of the rail and of the status bar, the load indicator of the status bar and its window.
+// the «Очередь» island of the strip and its window, the load indicator of the status bar and its window.
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 // --- The strip of the meeting ---
@@ -8,7 +8,8 @@
 // day or a day off. Order everywhere: the pill, the meeting, its details, the buttons of the state.
 const STRIP_SOON_MS = 15 * 60e3;
 const STRIP_RECENT_MS = 3 * 3600e3;  // the recording just made stays on the strip this long
-const strip = { events: [], holidays: {}, configured: false, at: 0, loading: null, call: null, callAt: 0, callOff: false,
+const STRIP_RETRY_MS = 45000;  // after a failed load: the next try this much later, not on the next redraw
+const strip = { events: [], holidays: {}, configured: false, at: 0, failAt: 0, loading: null, call: null, callAt: 0, callOff: false,
   skip: new Set(), html: '', click: null };
 let stripSeen = new Set();  // recordings whose «Итоги готовы» were opened or hidden
 try { stripSeen = new Set(JSON.parse(localStorage.getItem('verbaliox_strip_seen') || '[]')); } catch (e) { /* storage off */ }
@@ -23,12 +24,15 @@ function stripDayStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); retur
 // The meetings of today and of the week ahead (the next one after a free day), and the public holidays
 async function stripLoad(force) {
   if (!force && Date.now() - strip.at < 300000) return;
+  // a failed answer redraws the strip, which asks again: without this pause, a request loop
+  if (!force && Date.now() - strip.failAt < STRIP_RETRY_MS) return;
   if (strip.loading) return strip.loading;
   strip.loading = (async () => {
     const a = stripDayStart(new Date()), b = new Date(a.getTime() + 8 * 86400e3);
     const data = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
       .then(r => (r.ok ? r.json() : null)).catch(() => null);
-    if (!data) return;
+    if (!data) { strip.failAt = Date.now(); return; }
+    strip.failAt = 0;
     strip.at = Date.now();
     strip.configured = !!data.configured;
     strip.holidays = data.holidays || {};
@@ -140,12 +144,17 @@ function stripState() {
     const q = (state.queue || []).find(x => x.id === m.id);
     const running = q && q.state === 'running';
     const mins = Math.max(1, Math.round((m.duration || 0) / 60));
-    const grow = running ? serverText(m.stage_text || q.stage_text || '')
+    // the tracks of a stopped recording being mixed: not a wait for the transcription (reported by the user)
+    const mixing = m.status === 'mixing';
+    const open = state.appView === 'library' && state.activeMeeting && state.activeMeeting.id === m.id;
+    const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
       : state.queueMeeting ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
-    return { kind: 'after', pill: running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running ? 'blue' : 'grey',
+    return { kind: 'after', pill: mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
+      : running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running || mixing ? 'blue' : 'grey',
       lead: m.title || t('hmUntitled'), meta: m.duration ? t('stripRecorded').replace('{n}', () => mins) : '', grow, click: m.id, tip: t('tbRecOpen'),
-      acts: [act('openMeeting', [m.id], t('tbRecOpen'), 'ghost')] };
+      // the recording already open: no «Открыть запись» that does nothing
+      acts: open ? [] : [act('openMeeting', [m.id], t('tbRecOpen'), 'ghost')] };
   }
   if (m && m.status === 'completed' && !stripSeen.has(m.id)) {
     const mins = Math.max(1, Math.round((m.duration || 0) / 60));
@@ -191,6 +200,8 @@ function renderStrip() {
   const main = document.getElementById('strip-main');
   main.classList.toggle('strip-link', !!s.click);
   main.title = s.click ? s.tip || '' : '';
+  // reached by the keyboard too while it opens something (Enter and Space: core.js)
+  if (s.click) { main.setAttribute('role', 'button'); main.tabIndex = 0; } else { main.removeAttribute('role'); main.removeAttribute('tabindex'); }
   document.getElementById('strip-acts').innerHTML = acts;
 }
 
@@ -218,9 +229,11 @@ function stripHide(id) {
   renderStrip();
 }
 
-// «Не записывать»: the strip leaves this meeting (or this call) alone until it is over
+// «Не записывать»: the strip leaves this meeting (or this call) alone until it is over. A meeting during a call
+// leaves the call too: else the strip came back at once with the call, and one press was not enough
 function stripSkip(key) {
   strip.skip.add(key);
+  if (strip.call) strip.skip.add(`call:${strip.call}`);
   renderStrip();
 }
 
@@ -229,14 +242,8 @@ function stripOpenCalendarSettings() {
   selectSettingsTab('calendar');
 }
 
-// --- «Очередь»: the window of the rail button and of the status bar ---
-const jobs = { open: false, at: 'rail', html: '' };
-
-const JOBS_ICON = {
-  run: '<circle cx="12" cy="12" r="8" opacity=".3"/><path class="ri-arc" d="M12 4a8 8 0 018 8"/>',
-  wait: '<circle cx="12" cy="12" r="8"/><path class="ri-pz1" d="M10 9v6"/><path class="ri-pz2" d="M14 9v6"/>',
-  ok: '<circle class="ri-ring" cx="12" cy="12" r="8"/><path class="ri-ok" pathLength="1" d="M8.5 12.5l2.3 2.2 4.7-5"/>',
-};
+// --- «Очередь»: the window of the strip's island (and of the status bar) ---
+const jobs = { open: false, at: 'island', html: '' };
 const PANEL_ICON = {
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   chart: '<path d="M4 19h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
@@ -251,24 +258,89 @@ function jobsHold() {
   return '';
 }
 
-// The rail button: a turning arc while a job runs, a pause while all wait, a check when nothing is left; the count
-function renderJobsRail() {
-  const btn = document.getElementById('rail-jobs');
-  if (!btn) return;
-  const items = state.queue || [];
-  const run = items.some(q => q.state === 'running'), wait = !run && items.length > 0;
-  const mode = run ? 'run' : wait ? 'wait' : 'ok';
-  if (btn.dataset.mode !== mode) {
-    btn.dataset.mode = mode;
-    btn.classList.toggle('rail-jobs-run', run);
-    btn.classList.toggle('rail-jobs-wait', wait);
-    document.getElementById('rail-jobs-ic').innerHTML = JOBS_ICON[mode];
+// «Очередь» as an island in the top strip (asked by the user: the rail's button said «Очередь пуста» most of the
+// time): nothing while nothing runs; a capsule before «＋ Импорт» with a progress ring and the job, «+N в очереди»;
+// «Готово» for a moment when the last job ends. The strip itself already tells about its recording: then the capsule
+// keeps only the count of the others, or only its ring (the queue window, with «Пауза» and «Отменить всё», is opened
+// from here alone). A click opens the queue's window under it.
+const island = { doneTimer: null, html: '', cancelAt: 0 };
+function islandRing(pct) {
+  const c = 56.5, d = Math.max(2, Math.min(100, pct || 0)) / 100 * c;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="3"/>`
+    + `<circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="${d.toFixed(1)} ${c}" transform="rotate(-90 12 12)"/></svg>`;
+}
+// The queue cancelled (all of it, or its last job): it ends without «Готово» (the jobs may still be listed a moment
+// while they stop, so a time, not a flag the next drawing would clear)
+function islandCancelled() { island.cancelAt = Date.now(); }
+function islandHide(el) {
+  island.html = '';
+  el.classList.add('hidden');
+  el.innerHTML = '';
+  if (jobs.open && jobs.at === 'island') closeJobsPop();
+}
+function renderJobsIsland() {
+  let el = document.getElementById('strip-island');
+  if (!el) {
+    const acts = document.getElementById('strip-acts');
+    if (!acts) return;
+    el = document.createElement('button');
+    el.id = 'strip-island';
+    el.type = 'button';
+    el.className = 'st-island hidden';
+    el.setAttribute('aria-haspopup', 'dialog');
+    el.setAttribute('aria-expanded', 'false');
+    el.dataset.click = 'toggleJobsPop';
+    el.dataset.clickArgs = '["island"]';
+    acts.after(el);
   }
-  const n = document.getElementById('rail-jobs-n');
-  n.textContent = items.length ? String(items.length) : '';
-  n.classList.toggle('hidden', !items.length);
-  n.classList.toggle('rail-badge-wait', wait);
-  btn.title = items.length ? `${t('rlTipQueue')} · ${run ? t('jobsRunning') : jobsHold() || t('jobsWaitingShort')}` : t('rlTipQueue');
+  const items = state.queue || [];
+  const q = items.find(x => x.state === 'running');
+  let html = '', cls = '', label = '';
+  if (items.length) {
+    clearTimeout(island.doneTimer);
+    island.doneTimer = null;
+    const others = items.filter(x => x !== q).length;
+    const moreText = others ? t('islandMore').replace('{n}', () => others) : '';
+    const more = others ? `<span class="st-island-n">${escapeHtml(moreText)}</span>` : '';
+    // the strip already says how its own recording goes: only the others then, or the ring alone
+    const told = q && strip.kind === 'after' && strip.click === q.id;
+    const m = q ? (state.meetings || []).find(x => x.id === q.id) || {} : {};
+    const pct = q ? m.progress ?? q.progress ?? 0 : 0;
+    if (q && !told) {
+      label = `${queueKindLabel(q)} · ${pct}%`;
+      html = `${islandRing(pct)}<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
+    } else if (!q) {
+      label = jobsHold() || t('islandWaiting');
+      html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity=".45"/><path d="M10 9v6M14 9v6"/></svg>`
+        + `<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
+      cls = 'st-island-wait';
+    } else if (others) {
+      label = moreText;
+      html = `<span class="st-island-n st-island-solo">${escapeHtml(moreText)}</span>`;
+    } else {
+      label = `${queueKindLabel(q)} · ${pct}%`;
+      html = islandRing(pct);
+      cls = 'st-island-ring';
+    }
+  } else if (island.html && !island.doneTimer && Date.now() - island.cancelAt > 20000) {
+    // the last job ended while the island was in sight: «Готово» for a moment
+    label = t('islandDone');
+    html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.8"/></svg><span class="st-island-t">${escapeHtml(label)}</span>`;
+    cls = 'st-island-done';
+    island.doneTimer = setTimeout(() => { island.doneTimer = null; islandHide(el); }, 2600);
+  } else if (island.doneTimer) {
+    return;  // «Готово» is shown
+  }
+  const sig = cls + html;
+  if (sig === island.html) return;
+  if (!html) { islandHide(el); return; }
+  const appear = el.classList.contains('hidden');
+  island.html = sig;
+  el.innerHTML = html;
+  el.className = `st-island ${cls}`;
+  el.title = label ? `${t('rlTipQueue')} · ${label}` : t('rlTipQueue');
+  el.setAttribute('aria-label', el.title);
+  if (appear) animateIn(el);
 }
 
 function renderJobsPop() {
@@ -301,7 +373,7 @@ function renderJobsPop() {
 }
 
 function toggleJobsPop(at) {
-  const where = at === 'status' ? 'status' : 'rail';
+  const where = at === 'status' ? 'status' : 'island';
   if (jobs.open && jobs.at === where) { closeJobsPop(); return; }
   closeLoadPop();
   jobs.open = true;
@@ -309,18 +381,22 @@ function toggleJobsPop(at) {
   jobs.html = '';
   const pop = document.getElementById('jobs-pop');
   pop.classList.remove('hidden');
-  document.getElementById('rail-jobs')?.setAttribute('aria-expanded', String(where === 'rail'));
+  document.getElementById('strip-island')?.setAttribute('aria-expanded', String(where === 'island'));
   renderJobsPop();
-  placePanel(pop, where === 'rail' ? document.getElementById('rail-jobs') : document.getElementById('sb-queue'), where);
+  placePanel(pop, jobsAnchor(where), where);
   animateIn(pop);
   if (typeof loadQueue === 'function') loadQueue().catch(() => {});
+}
+
+function jobsAnchor(where) {
+  return document.getElementById(where === 'island' ? 'strip-island' : 'sb-queue');
 }
 
 function closeJobsPop() {
   if (!jobs.open) return;
   jobs.open = false;
   document.getElementById('jobs-pop')?.classList.add('hidden');
-  document.getElementById('rail-jobs')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('strip-island')?.setAttribute('aria-expanded', 'false');
 }
 
 function jobsOpen(id) {
@@ -328,16 +404,15 @@ function jobsOpen(id) {
   openMeeting(id);
 }
 
-// A window opens next to what opened it: right of the rail, its bottom level with the button; above the status
-// bar at its left or right end
+// A window opens next to what opened it: under the strip's island; above the status bar at its left or right end
 function placePanel(pop, anchor, where) {
   if (!pop || !anchor) return;
   const r = anchor.getBoundingClientRect();
   Object.assign(pop.style, { left: '', right: '', top: '', bottom: '' });
   pop.style.maxHeight = `${viewH() - 60}px`;
-  if (where === 'rail') {
-    pop.style.left = `${zpx(r.right) + 8}px`;
-    pop.style.top = `${Math.max(8, Math.min(zpx(r.bottom) - pop.offsetHeight, viewH() - pop.offsetHeight - 38))}px`;
+  if (where === 'island') {  // under the strip's island, its right edge with the island's
+    pop.style.top = `${zpx(r.bottom) + 8}px`;
+    pop.style.right = `${Math.max(8, viewW() - zpx(r.right))}px`;
   } else {
     pop.style.bottom = '36px';
     if (where === 'status-left') pop.style.left = `${Math.max(8, zpx(r.left))}px`;
@@ -430,6 +505,14 @@ function renderLoadIndicator() {
   btn.title = `${t('sbLoadTip')}${own.ram_gb != null ? `\nVerbaliox: CPU ${Math.round(own.cpu_percent || 0)}%, RAM ${gbText(own.ram_gb)}` : ''}`;
 }
 
+// The marks of the processor, the memory and the video card (asked by the user: the icons of the former sidebar
+// back), before CPU, RAM and GPU in the status bar, the load window and the widget of «Обзор»
+const HW_IC = {
+  CPU: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z"/></svg>',
+  RAM: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5h18v8.25H3V7.5zM6.75 10.5v2.25m3.75-2.25v2.25m3.75-2.25v2.25m3.75-2.25v2.25M6 15.75v2.25m4-2.25v2.25m4-2.25v2.25m4-2.25v2.25"/></svg>',
+  GPU: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 6.75h19.5v10.5H2.25V6.75zM4.5 17.25v2.25M9 13.875a1.875 1.875 0 100-3.75 1.875 1.875 0 000 3.75zM14.25 9.75h4.5m-4.5 2.25h4.5m-4.5 2.25h4.5"/></svg>',
+};
+
 function renderLoadPop() {
   const pop = document.getElementById('load-pop');
   const data = vram.data;
@@ -437,25 +520,30 @@ function renderLoadPop() {
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
   const hw = (state.system && state.system.hardware) || {};
   const bar = (all, mine) => `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`;
-  const row = (k, all, mine, value, tip, note) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
-    + (note ? `<div class="ld-note">${escapeHtml(note)}</div>` : '');
+  // each resource: its bar and value, under them the hardware on the left and Verbaliox's own share on the right
+  // (asked by the user: the shares of the program in one line under the GPU read as a part of the GPU)
+  const row = (k, all, mine, value, tip, note, own) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
+    + (note || own ? `<div class="ld-sub"><span class="ld-note">${escapeHtml(note || '')}</span>${own ? `<span class="ld-own"><i class="ld-me"></i>${escapeHtml(own)}</span>` : ''}</div>` : '');
   const cpu = sys.cpu_percent;
-  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`;
+  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`
+    + `<div class="ld-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
   html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`,
-    `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`, [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '));
+    `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`, [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '),
+    own.cpu_percent != null ? `${Math.round(own.cpu_percent || 0)}%` : '');
   if (ram) {
     const rp = (100 * ram.used_gb) / Math.max(0.1, ram.total_gb);
     html += row('RAM', rp, own.ram_gb != null ? (100 * own.ram_gb) / Math.max(0.1, ram.total_gb) : 0, `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
-      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)));
+      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)),
+      own.ram_gb != null ? gbText(own.ram_gb) : '');
   }
   if (gpu) {
     const vp = (100 * gpu.used_gb) / Math.max(0.1, gpu.total_gb);
     const mine = own.gpu_gb != null ? (100 * own.gpu_gb) / Math.max(0.1, gpu.total_gb) : 0;
     html += row('GPU', vp, mine, `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
       own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}${own.gpu_exact ? '' : `\n${t('ldGpuApprox')}`}` : '',
-      hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '');
+      hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '',
+      own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '');
   }
-  html += `<div class="ld-legend"><span><i class="ld-me"></i>Verbaliox${own.ram_gb != null ? ` · CPU ${Math.round(own.cpu_percent || 0)}%, RAM ${gbText(own.ram_gb)}${gpu && own.gpu_gb != null ? `, ${t('ldVramShort')} ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : ''}` : ''}</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
   const models = loadModels();
   const vramSum = models.reduce((s, { c }) => s + (c.kind === 'ollama' && c.where === 'gpu' ? Number(c.size_gb || 0) : 0), 0);
   const ramSum = models.reduce((s, { c }) => s + (c.ram_gb != null ? Number(c.ram_gb) : c.kind === 'ollama' && c.where !== 'gpu' ? Number(c.size_gb || 0) : 0), 0);
@@ -512,17 +600,17 @@ function onVramData() {
   renderLoadPop();
 }
 
-// Outside click and Escape close the windows; the status bar and the rail follow the queue
+// Outside click and Escape close the windows; the strip's island follows the queue
 document.addEventListener('pointerdown', e => {
-  if (jobs.open && !e.target.closest('#jobs-pop, #rail-jobs, #sb-queue, .macos-menu')) closeJobsPop();
+  if (jobs.open && !e.target.closest('#jobs-pop, #sb-queue, #strip-island, .macos-menu')) closeJobsPop();
   if (load.open && !e.target.closest('#load-pop, #sb-load')) closeLoadPop();
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (jobs.open) { const at = jobs.at; closeJobsPop(); document.getElementById(at === 'rail' ? 'rail-jobs' : 'sb-queue')?.focus(); }
+  if (jobs.open) { const at = jobs.at; closeJobsPop(); jobsAnchor(at)?.focus(); }
   if (load.open) { closeLoadPop(); document.getElementById('sb-load')?.focus(); }
 });
 window.addEventListener('resize', () => {
-  if (jobs.open) placePanel(document.getElementById('jobs-pop'), document.getElementById(jobs.at === 'rail' ? 'rail-jobs' : 'sb-queue'), jobs.at);
+  if (jobs.open) placePanel(document.getElementById('jobs-pop'), jobsAnchor(jobs.at), jobs.at);
   if (load.open) placePanel(document.getElementById('load-pop'), document.getElementById('sb-load'), 'status-left');
 });

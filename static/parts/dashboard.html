@@ -1,23 +1,23 @@
 <!-- «Обзор» (static/js/dashboard.js): the analytics of a period in widgets the user arranges; part of static/parts/workspace.html.
      The full list of tasks and its calendar stay on the Tasks page («Все задачи →»). -->
     <div id="dashboard-view" class="hidden flex-1 min-h-0 tk-view">
-      <!-- The head as in «Записи» and «Задачи»: the section's icon in a square, its name and what it shows -->
-      <header class="tk-head tk-head-lt">
-        <span class="tk-head-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="4" rx="1.5"/><rect x="13" y="10" width="7" height="10" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/></svg></span>
-        <h1 class="tk-title"><span data-i18n="rlOverview">Обзор</span></h1>
-        <p class="tk-sub" data-i18n="dbOverviewSub">Аналитика периода</p>
-      </header>
-      <div class="tk-bar db-bar">
-        <span id="db-sub" class="tk-sub"></span>
-        <span id="db-progress" class="db-progress hidden" role="img"></span>
+      <!-- The head as in every section (asked by the user: «Сегодня» first): the section's icon in the tile of the date
+           of «Сегодня», the name with the dates of the period under it, how much of the period is over in a pill, then the
+           period, the feature and «Настроить» on the same row (the choice of calendar or working days is in «Настроить») -->
+      <header class="tk-head tk-head-lt vx-shead">
+        <span class="tk-head-ic vx-stile" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="4" rx="1.5"/><rect x="13" y="10" width="7" height="10" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/></svg></span>
+        <div class="vx-stext"><h1 class="tk-title" data-i18n="rlOverview">Обзор</h1><span id="db-sub" class="tk-sub vx-ssub"></span></div>
+        <span id="db-progress" class="td-pills"></span>
         <span class="tk-grow"></span>
-        <div id="db-periods" class="tk-seg" role="radiogroup" data-i18n-title="dbPeriod" title="Период"></div>
-        <button id="db-feature-btn" class="tk-btn" data-click="openDashFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"></button>
-        <button id="db-edit-btn" class="tk-btn" data-click="toggleDashEdit" aria-pressed="false">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 14v6M14 17h6"/></svg>
-          <span id="db-edit-label" data-i18n="dbEdit">Настроить</span>
-        </button>
-      </div>
+        <div class="tk-head-actions">
+          <div id="db-periods" class="tk-seg" role="radiogroup" data-i18n-title="dbPeriod" title="Период"></div>
+          <button id="db-feature-btn" class="tk-btn" data-click="openDashFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"></button>
+          <button id="db-edit-btn" class="tk-btn" data-click="toggleDashEdit" aria-pressed="false">
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 14v6M14 17h6"/></svg>
+            <span id="db-edit-label" data-i18n="dbEdit">Настроить</span>
+          </button>
+        </div>
+      </header>
       <div class="db-body">
         <div id="db-grid" class="db-grid"></div>
         <aside id="db-drawer" class="db-drawer hidden" aria-label="Виджеты" data-i18n-aria="dbWidgets"></aside>

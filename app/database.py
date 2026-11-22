@@ -131,6 +131,9 @@ def init_db() -> None:
                                 or not cur.execute("SELECT 1 FROM meetings WHERE folder_id IS NOT NULL LIMIT 1").fetchone()):
             _sort_existing_meetings(cur)
         cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('folders_sorted_v1', '1')")
+        if not cur.execute("SELECT 1 FROM settings WHERE key = 'formerly_local_v1'").fetchone():
+            _fix_formerly_local(cur)
+            cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('formerly_local_v1', '1')")
 
         cur.execute(
             """
@@ -171,6 +174,7 @@ def init_db() -> None:
             "auto_summary": "true",
             "analysis_after_meetings": "true",
             "mcp_local_only": "false",  # the agent (app/mcp_server.py) also gets the dictations
+            "show_disputed": "true",  # the dotted underline of the places the models heard differently
             "economy_mode": "false",  # «Только запись»: no model works (app/economy.py; the tray menu)
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
@@ -1394,6 +1398,13 @@ def update_meeting_fields(meeting_id: int, **fields: Any) -> None:
             pass
 
 
+# Files whose length could not be read, by recording: (its id, the file's mtime). Asked on every load of
+# «Главная»: not read again until the file changes (found in the review: ffprobe ran on them each time)
+_duration_failed: set = set()
+# A recording still being made or mixed: its file is not whole yet, a length read now is not its own
+_DURATION_UNSETTLED = ("recording", "mixing")
+
+
 def fill_durations(meetings: List[Dict[str, Any]]) -> int:
     """The length of recordings that have none yet, read from their files and kept (reported by the user:
     the meeting hours of «Главная» stood still). It was written only when a transcription began, so a
@@ -1401,7 +1412,8 @@ def fill_durations(meetings: List[Dict[str, Any]]) -> int:
     get it too. Returns how many got one."""
     from app.audio_utils import get_media_duration
 
-    lacking = {int(m["id"]): m for m in meetings if m.get("id") and float(m.get("duration") or 0) <= 0}
+    lacking = {int(m["id"]): m for m in meetings if m.get("id") and float(m.get("duration") or 0) <= 0
+               and m.get("status") not in _DURATION_UNSETTLED}
     if not lacking:
         return 0
     with _db_lock:  # the list given to the page has no file paths
@@ -1409,11 +1421,18 @@ def fill_durations(meetings: List[Dict[str, Any]]) -> int:
         ids, rows = list(lacking), []
         for k in range(0, len(ids), 500):  # SQLite takes up to 999 values in one query
             part = ids[k:k + 500]
-            rows += conn.execute(f"SELECT id, media_path FROM meetings WHERE id IN ({','.join('?' * len(part))})", part).fetchall()
+            rows += conn.execute(f"SELECT id, media_path, status FROM meetings WHERE id IN ({','.join('?' * len(part))})",
+                                 part).fetchall()
         conn.close()
     found = []
-    for mid, path in rows:
-        if not path or not Path(path).is_file():
+    for mid, path, status in rows:
+        if not path or status in _DURATION_UNSETTLED:
+            continue
+        try:
+            key = (int(mid), Path(path).stat().st_mtime)
+        except OSError:  # no such file
+            continue
+        if key in _duration_failed:
             continue
         try:
             d = float(get_media_duration(path) or 0)
@@ -1422,10 +1441,14 @@ def fill_durations(meetings: List[Dict[str, Any]]) -> int:
         if d > 0:
             lacking[int(mid)]["duration"] = d
             found.append((d, int(mid)))
+        else:
+            _duration_failed.add(key)
     if found:
         with _db_lock:
             conn = get_connection()
-            conn.executemany("UPDATE meetings SET duration = ? WHERE id = ? AND (duration IS NULL OR duration <= 0)", found)
+            conn.executemany("UPDATE meetings SET duration = ? WHERE id = ? AND (duration IS NULL OR duration <= 0) "
+                             f"AND COALESCE(status, '') NOT IN ({','.join('?' * len(_DURATION_UNSETTLED))})",
+                             [(d, mid, *_DURATION_UNSETTLED) for d, mid in found])
             conn.commit()
             conn.close()
     return len(found)
@@ -1652,7 +1675,9 @@ _LIST_COLUMNS = """id, title, filename, media_path, duration, status, progress, 
     speakers_json, created_at, completed_at, folder_id, source, recorded_at, has_video, media_size, series_id,
     transcript_verified, transcript_model,
     obsidian_path, exports_json,
-    has_transcript, has_summary"""
+    has_transcript, has_summary,
+    CASE WHEN has_summary = 1 AND summaries_json LIKE '{"error"%' AND length(summaries_json) < 4000
+         THEN summaries_json END AS summary_probe"""
 
 # What a recording has been through, for the badges in the library: the languages of its
 # translations and dubs (read inside SQLite, so the large JSON is not loaded for every row)
@@ -1699,6 +1724,17 @@ def _list_speakers(meeting_id: int, raw: str) -> Dict[str, Any]:
     return speakers
 
 
+def _has_results(probe: Optional[str]) -> bool:
+    """summaries_json that may be only an error (read when it starts with one): any other section filled."""
+    if not probe:
+        return True
+    try:
+        sums = json.loads(probe)
+    except ValueError:
+        return True
+    return not isinstance(sums, dict) or any(k != "error" and str(v or "").strip() for k, v in sums.items())
+
+
 def list_meetings() -> List[Dict[str, Any]]:
     with _db_lock:  # only the reading holds the lock; what is made of the rows is done after it
         conn = get_connection()
@@ -1722,7 +1758,9 @@ def list_meetings() -> List[Dict[str, Any]]:
         d["translations_langs"] = [x for x in (d.pop("tr_langs") or "").split(",") if x]
         d["dub_langs"] = [x for x in (d.pop("dub_langs") or "").split(",") if x and x != "None"]
         d["has_transcript"] = bool(d["has_transcript"])
-        d["has_summary"] = bool(d["has_summary"])
+        # an analysis that failed keeps only its error: that is no results (found by the user: «Итоги готовы»,
+        # «Открыть итоги» and an empty analysis)
+        d["has_summary"] = bool(d["has_summary"]) and _has_results(d.pop("summary_probe", None))
         d["speakers"] = {k: dict(v) if isinstance(v, dict) else v
                          for k, v in _list_speakers(d["id"], d.pop("speakers_json", "{}") or "{}").items()}
         d["is_video"] = is_video(d)
@@ -2302,34 +2340,54 @@ def dictation_ids() -> set:
     return {int(r["id"]) for r in rows}
 
 
+def _fix_formerly_local(cur: sqlite3.Cursor) -> None:
+    """Once: every recording the user had closed to the agent by a folder marked «только локально» (or a
+    folder inside it) gets the mark itself. Told by the folder it was in, the mark opened again when the
+    folder was deleted or the recording moved out of it. The «Диктовки» folder had the mark on its own: its
+    recordings follow the setting of the agent instead."""
+    folders = cur.execute("SELECT id, parent_id, system_key, local_only FROM folders").fetchall()
+    children: Dict[int, List[int]] = {}
+    for f in folders:
+        if f["parent_id"] is not None:
+            children.setdefault(int(f["parent_id"]), []).append(int(f["id"]))
+
+    def subtree(fid: int) -> set:
+        out, todo = set(), [fid]
+        while todo:
+            x = todo.pop()
+            if x not in out:
+                out.add(x)
+                todo.extend(children.get(x, []))
+        return out
+
+    skip = set()
+    for f in folders:
+        if f["system_key"] == "dictations":
+            skip |= subtree(int(f["id"]))
+    closed = set()
+    for f in folders:
+        if f["local_only"] and int(f["id"]) not in skip:
+            closed |= subtree(int(f["id"]))
+    closed -= skip
+    ids = sorted(closed)
+    for i in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+        part = ids[i:i + 500]
+        cur.execute(f"UPDATE meetings SET local_only = 1 WHERE folder_id IN ({','.join('?' * len(part))})", part)
+
+
 def formerly_local_ids() -> set:
     """Ids of the recordings the user had marked «только локально» (themselves, or by a folder and the folders
-    inside it) while that mark existed: the agent keeps not getting them (the mark is gone with the cloud
-    models, what the user once closed does not open by itself). The «Диктовки» folder had the mark on its
-    own: it follows the setting of the agent (dictation_ids)."""
-    dict_fid = system_folder_id("dictations")
-    skip = set(folder_subtree_ids(dict_fid)) if dict_fid is not None else set()
+    inside it: set on the recordings once by _fix_formerly_local) while that mark existed: the agent keeps not
+    getting them (the mark is gone with the cloud models, what the user once closed does not open by itself,
+    not by a folder deleted or a recording moved either). The «Диктовки» folder had the mark on its own: its
+    recordings follow the setting of the agent (dictation_ids)."""
     with _db_lock:
         conn = get_connection()
         try:
-            marked = [int(r["id"]) for r in conn.execute("SELECT id FROM folders WHERE local_only = 1").fetchall()]
             own = {int(r["id"]) for r in conn.execute("SELECT id FROM meetings WHERE local_only = 1").fetchall()}
-        except sqlite3.OperationalError:  # a database made after the mark was gone has no such column
-            marked, own = [], set()
-        conn.close()
-    folders = set()
-    for fid in marked:
-        if fid not in skip:
-            folders.update(folder_subtree_ids(fid))
-    folders -= skip
-    if folders:
-        with _db_lock:
-            conn = get_connection()
-            ids = list(folders)
-            own |= {int(r["id"]) for r in conn.execute(
-                f"SELECT id FROM meetings WHERE folder_id IN ({','.join('?' * len(ids))})", ids).fetchall()}
+        finally:
             conn.close()
-    return own - dictation_ids()
+    return own - dictation_ids() if own else own
 
 
 def folder_subtree_ids(folder_id: int) -> List[int]:

@@ -180,12 +180,13 @@ def api_hotkey() -> Dict[str, Any]:
     return {**hotkey_state, "dictation": dict(dictation_hotkey_state), "translate": dict(translate_hotkey_state)}
 
 @router.get("/api/calendar/upcoming")
-def api_calendar_upcoming(refresh: bool = False) -> Dict[str, Any]:
+def api_calendar_upcoming(refresh: bool = False, user: bool = False) -> Dict[str, Any]:
     """The next meetings of the user's calendar (Settings -> General -> Calendar), with the series they continue."""
     from app import calendar_ics, series
 
-    if refresh:
-        calendar_ics.events(force=True)
+    if refresh or user:
+        # «Проверить» in Settings sends refresh: an action of the user, as user does (calendar_ics.events)
+        calendar_ics.events(force=True, user=True)
     items = calendar_ics.upcoming()
     done = sorted((r for r in list_meetings() if r.get("status") == "completed"),
                   key=lambda r: str(r.get("recorded_at") or r.get("created_at") or ""), reverse=True)
@@ -494,6 +495,52 @@ def api_import_pick_folder() -> Dict[str, Any]:
     chosen = native_dialog.run(["--mode", "folder", "--dir", str(Path.home()), "--title", "Добавить папку с записями"],
                                timeout=900)
     return {"available": True, "path": (chosen or "").strip()}
+
+class FolderFilesPayload(BaseModel):
+    path: str
+
+# The entries of a folder the import window looks through as it is typed (a folder of 100 000 files took the
+# server's time on every key)
+FOLDER_SCAN_LIMIT = 2000
+
+
+@router.post("/api/import/folder-files")
+def api_import_folder_files(payload: FolderFilesPayload) -> Dict[str, Any]:
+    """The folder mode of the import window: the audio and video files a folder holds, listed before it is
+    added (the same choice /api/meetings/local-path makes). Not a folder: is_dir false and no files. A network
+    path (\\\\host\\share) is not looked into: typed letter by letter, each step asked a server on the network
+    (found in the review). Up to FOLDER_SCAN_LIMIT entries are looked through (truncated then)."""
+    import os
+    from itertools import islice
+
+    raw_path = payload.path.strip().strip('"').strip("'")
+    if raw_path.startswith(("\\\\", "//")):
+        return {"is_dir": False, "count": 0, "files": [], "error": "Сетевые пути не открываются"}
+    target = Path(raw_path) if raw_path else None
+    try:
+        if target is None or not target.is_dir():
+            return {"is_dir": False, "count": 0, "files": []}
+        with os.scandir(target) as it:
+            entries = list(islice(it, FOLDER_SCAN_LIMIT + 1))
+        truncated = len(entries) > FOLDER_SCAN_LIMIT
+        found = []
+        for e in entries[:FOLDER_SCAN_LIMIT]:
+            try:
+                if e.is_file() and Path(e.name).suffix.lower() in SUPPORTED_EXTENSIONS:
+                    found.append(Path(e.path))
+            except OSError:
+                continue
+        found.sort()
+    except OSError:
+        return {"is_dir": False, "count": 0, "files": []}
+    files = []
+    for p in found[:200]:
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        files.append({"name": p.name, "size": size})
+    return {"is_dir": True, "count": len(found), "files": files, "truncated": truncated}
 
 class LocalPathPayload(BaseModel):
     path: str

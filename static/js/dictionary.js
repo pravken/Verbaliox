@@ -34,7 +34,7 @@ function renderDictPage() {
   const groups = dcGroups();
   if (DC.group && !groups.some(([g]) => g === DC.group)) DC.group = '';
   document.getElementById('dc-sub').textContent = terms.length
-    ? `${plural(terms.length, t('dcWordsForms'))} · ${plural(groups.length, t('dcGroupsForms'))}` : '';
+    ? `${plural(terms.length, t('dcWordsForms'))} · ${plural(groups.length, t('dcGroupsForms'))}` : t('dcSubEmpty');  // the head as the others: a line under the title
   document.getElementById('dc-groups').innerHTML = groups.map(([g]) => `<option value="${escapeHtml(g)}"></option>`).join('');
   renderDictOffers();
   const q = DC.q.trim().toLocaleLowerCase();
@@ -75,7 +75,7 @@ function renderDictOffers() {
   if (!list.length) { box.innerHTML = ''; return; }
   box.innerHTML = pultCardHead(t('dcOffers'), list.length, 'spark')
     + `<p class="dc-note">${escapeHtml(t('dcOffersNote'))}</p>`
-    + list.map((o, i) => `<div class="dc-offer">
+    + list.map((o, i) => `<div class="dc-offer" data-offer="${i}">
         <span class="dc-offer-w"><b>${escapeHtml(o.right)}</b> <span class="tk-dim">${escapeHtml(t('dcInsteadOf').replace('{w}', () => o.wrong))}</span></span>
         <span class="dc-offer-rec" title="${escapeHtml(o.title)}">${escapeHtml(o.title)}</span>
         <button class="tk-btn tk-btn-sm tk-btn-primary" ${pageCall('click', 'acceptDictOffer', [i])}>${escapeHtml(t('rdSasDictAdd'))}</button>
@@ -92,22 +92,38 @@ function dcFocusAdd() {
 }
 function onDictSearch(value) { DC.q = value; renderDictPage(); }
 
+// A suggestion's buttons wait for the server's answer: a double click sent it twice, and the second removal by its
+// index took the neighbour away. The suggestion is removed by itself, not by an index that moved meanwhile
+function dcOfferBusy(i, on) {
+  document.querySelectorAll(`#dict-view [data-offer="${i}"] button`).forEach(b => { b.disabled = on; });
+}
+function dcOfferDrop(o) {
+  const k = DC.offers.indexOf(o);
+  if (k >= 0) DC.offers.splice(k, 1);
+}
+
 async function acceptDictOffer(i) {
   const o = DC.offers[i];
-  if (!o) return;
+  if (!o || o.busy) return;
+  o.busy = true;
+  dcOfferBusy(i, true);
   const res = await fetch('/api/dictionary/learn', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pairs: [{ wrong: o.wrong, right: o.right }] }) }).catch(() => null);
-  if (!res || !res.ok) { showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
-  DC.offers.splice(i, 1);
+  o.busy = false;
+  if (!res || !res.ok) { dcOfferBusy(i, false); showError(res ? serverText((await readJson(res)).detail) : t('errNoNetwork')); return; }
+  dcOfferDrop(o);
   await loadDictionary();
 }
 
 async function hideDictOffer(i) {
   const o = DC.offers[i];
-  if (!o) return;
+  if (!o || o.busy) return;
+  o.busy = true;
+  dcOfferBusy(i, true);
   await fetch('/api/dictionary/offers/hide', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ wrong: o.wrong, right: o.right }) }).catch(() => null);
-  DC.offers.splice(i, 1);
+  o.busy = false;
+  dcOfferDrop(o);
   renderDictPage();
 }
 
@@ -115,10 +131,11 @@ async function hideDictOffer(i) {
 document.addEventListener('change', async e => {
   const key = DICT_SWITCHES[e.target?.id];
   if (!key || !e.target.closest('#dict-view')) return;
-  const value = String(!!e.target.checked);
+  const box = e.target, value = String(!!box.checked);
   const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => null);
-  if (!res || !res.ok) { showError(t('errorGeneric')); return; }
+  // not saved: the switch goes back to what is in effect
+  if (!res || !res.ok) { box.checked = !box.checked; showError(t('errorGeneric')); return; }
   if (state.system && state.system.settings) state.system.settings[key] = value;
   if (typeof _settingsBaseline === 'object' && _settingsBaseline) _settingsBaseline[key] = value;
 });
