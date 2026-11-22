@@ -6,6 +6,20 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.1 — English
+
+- **A short recording is mixed at once.** A recording of up to 3 minutes no longer waits two minutes after it ends
+  for its tracks to be mixed: its mix takes seconds. A longer recording still waits for the end of the meeting
+  («Don't disturb in meetings»).
+- **The wait is explained.** While the mix waits, the recording says why with a countdown — «Starts in 1:40: a
+  pause in case the next meeting begins right away», or «Starts after the meeting» while a call or a calendar
+  meeting goes on — instead of 1 % «after the meeting».
+- **A recording can be deleted while its tracks wait or are mixed.** A waiting one is deleted at once with its
+  tracks; one being mixed is deleted as soon as the mix is over («The recording will be deleted as soon as its
+  tracks are mixed»). No tracks are left behind, a restart meanwhile included.
+- **Deleting several recordings** says why the ones left were not deleted, in the program's words, instead of «they
+  may be processing».
+
 ## 0.9.0 — English
 
 - **Back and forward** at the start of the top strip, like in a browser (also Alt+← / Alt+→ and the mouse's side
@@ -801,6 +815,19 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.1
+
+- **Короткая запись сводится сразу.** Запись до 3 минут больше не ждёт две минуты после окончания, пока сведутся
+  её дорожки: сведение занимает секунды. Длинная запись по-прежнему ждёт конца встречи («Не мешать на встречах»).
+- **Ожидание объяснено.** Пока сведение ждёт, запись показывает причину и отсчёт — «Начнётся через 1:40 — пауза на
+  случай, если следующая встреча начнётся сразу» или «Начнётся после встречи», пока идёт звонок или встреча по
+  календарю, — а не 1 % «после встречи».
+- **Запись можно удалить, пока её дорожки ждут сведения или сводятся.** Ожидающая удаляется сразу вместе с
+  дорожками; сводящаяся — как только сведение закончится («Запись удалится, как только сведутся дорожки»). Дорожки
+  не остаются на диске, в том числе после перезапуска в это время.
+- **Удаление нескольких записей** называет причину, по которой часть из них не удалилась, а не «возможно, они
+  сейчас обрабатываются».
 
 ## 0.9.0
 
