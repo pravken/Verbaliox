@@ -345,11 +345,14 @@ def ask_library(
             return {"answer": "", "sources": [], "found": False, "mode": mode}
         if sum(_transcript_chars(m) for m in scope_meetings) <= FULL_MODE_MAX_CHARS:
             mode = "full"
-            max_chars = FULL_MODE_MAX_CHARS + 4000
+            # the conversation takes its room from the fragments: with both, the prompt ran over the model's
+            # context and Ollama dropped its start (the instructions)
+            max_chars = FULL_MODE_MAX_CHARS + 4000 - len(talk)
             fragments = full_fragments(scope_meetings)
     if mode == "search":
         # a follow-up («а кто это предложил?») has few words of its own: the previous question is searched too
-        query = f"{past[-1]['question']} {question}" if past else question
+        # (after the question's own words: only the first keywords of a query are searched)
+        query = f"{question} {past[-1]['question']}" if past else question
         fragments = retrieve(query, meeting_ids, limit=MAX_FRAGMENTS)
         if chosen and len(fragments) < 3:
             # Few keyword hits in a folder: its overviews still say what the recordings are about

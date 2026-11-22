@@ -501,6 +501,36 @@ class LibraryScopeTest(unittest.TestCase):
         llm.chat.side_effect = RuntimeError("down")
         self.assertTrue(about_recordings("сколько будет 2+2", llm, False))
 
+    def test_a_follow_up_searches_its_own_words_first(self):
+        from app import library_qa
+
+        long_q = ("Какие сроки релиза мобильного приложения назвали аналитики маркетинга разработчики "
+                  "дизайнеры тестировщики менеджеры")
+        history = [{"question": long_q, "answer": "Пятница."}]
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", return_value="да"), \
+                mock.patch.object(library_qa, "retrieve", return_value=[]) as found:
+            library_qa.ask_library("а бюджет?", history=history)
+        self.assertIn("бюдж", library_qa._terms(found.call_args[0][0]))
+
+    def test_the_conversation_takes_its_room_from_the_fragments(self):
+        from app import library_qa
+
+        folder = create_folder("Scope")
+        m = _done_meeting()
+        set_meeting_folder(m["id"], folder["id"])
+        many = [{"meeting_id": m["id"], "title": "Т", "date": "2026-01-01", "start": float(i), "speaker": "А",
+                 "text": "x", "context": "слово " * 180} for i in range(40)]
+        history = [{"question": "вопрос " * 150, "answer": "ответ " * 300}] * 3
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch.object(library_qa, "full_fragments", return_value=many), \
+                mock.patch("app.ollama_client._ollama_chat", side_effect=["да", "Ответ [1]."]) as chat:
+            res = library_qa.ask_library("а подробнее?", meeting_ids=meeting_ids_in_folder(folder["id"]), history=history)
+        self.assertEqual(res["mode"], "full")
+        self.assertLessEqual(len(chat.call_args[0][3]), library_qa.FULL_MODE_MAX_CHARS + 4000 + 200)
+
     def test_a_follow_up_gets_the_conversation(self):
         from app import library_qa
 
