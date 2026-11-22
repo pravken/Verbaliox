@@ -835,7 +835,14 @@ def _resplit_runner(meeting_id: int, num_speakers: int) -> str:
         m["segments"], m["speakers"] = segments, speakers
         return ("segments", "speakers", "segments_backup")
 
-    edit_meeting(meeting_id, _put)
+    edit_meeting(meeting_id, _put, resplit=True)  # the speakers named in the analysis are found again (app/speaker_refs)
+    try:  # and the tasks of a speaker found again under another name («Участник 2» is «Участник 3» now) follow it
+        from app import commitments
+        from app.speaker_refs import name_changes
+
+        commitments.rename_people(meeting_id, name_changes(old_segments, meeting.get("speakers") or {}, segments, speakers))
+    except Exception:
+        traceback.print_exc()
     return f"Участники разделены заново: {len(speakers)}, реплик: {len(segments)}"
 
 

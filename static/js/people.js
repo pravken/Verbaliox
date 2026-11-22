@@ -343,6 +343,7 @@ function spAfterTranscriptEdit(m, data) {
   renderSpeakerPillsBar();
   renderTranscript();
   renderSpeakersPanel();
+  renderAnalysisNames();
 }
 
 // «Разделить заново»: the voices split again on the text there is (nothing is recognized again);

@@ -1,7 +1,6 @@
 """The home page: the latest recordings with a line of their overview, the meetings of the working
 day from the calendar, the dictation button."""
 
-import json
 import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
@@ -42,11 +41,11 @@ def api_home_recent(limit: int = 8) -> List[Dict[str, Any]]:
         conn = get_connection()
         try:
             marks = ",".join("?" * len(ids))
-            for r in conn.execute(f"SELECT id, summaries_json FROM meetings WHERE id IN ({marks})", ids).fetchall():
-                try:
-                    lines[r["id"]] = _first_line(json.loads(r["summaries_json"] or "{}"))
-                except ValueError:
-                    lines[r["id"]] = ""
+            from app.speaker_refs import resolve_raw
+
+            for r in conn.execute(f"SELECT id, summaries_json, speakers_json FROM meetings WHERE id IN ({marks})", ids).fetchall():
+                # the speakers named in it by their current names (app/speaker_refs)
+                lines[r["id"]] = _first_line(resolve_raw(r["summaries_json"], r["speakers_json"]))
         finally:
             conn.close()
     open_tasks: Dict[int, int] = {}

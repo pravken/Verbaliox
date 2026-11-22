@@ -704,22 +704,42 @@ def rename_in_text(text: str, old: str, new: str) -> str:
     return re.sub("\x00(\\d+)\x00", lambda m: done[int(m.group(1))], text)
 
 
-def rename_in_analysis(meeting_id: int, old: str, new: str) -> List[str]:
-    """The analysis of a recording with a person's name written anew (rename_in_text); the sections changed."""
-    from app.database import get_meeting, merge_summaries
+def rename_in_analysis(meeting_id: int, old: str, new: str, speaker_renamed: bool = False) -> List[str]:
+    """The analysis of a recording with a person's name written anew (rename_in_text); the sections changed.
+    A speaker named in it by reference (app/speaker_refs) shows its current name by itself: such a mention
+    is left alone, unless the speaker is still called by the old name (a contact renamed, a mention put
+    under someone else), then it becomes the new name. speaker_renamed=True: the old name was a speaker's,
+    renamed just now; the references follow it already (another speaker with the same name keeps its own)."""
+    from app.database import change_summaries
+    from app.speaker_refs import MARK_RE, speaker_name
 
-    m = get_meeting(meeting_id)
-    if not m:
+    old_key = " ".join((old or "").split()).casefold()
+    if not old_key or not (new or "").strip():
         return []
-    changed = {}
-    for key, value in (m.get("summaries") or {}).items():
-        if key != "error" and isinstance(value, str) and value.strip():
-            fixed = rename_in_text(value, old, new)
+    done: List[str] = []
+
+    def change(current: Dict[str, Any], speakers: Dict[str, Any]) -> Dict[str, Any]:
+        out = {}
+        for key, value in current.items():
+            if key == "error" or not isinstance(value, str) or not value.strip():
+                continue
+            kept: List[str] = []
+
+            def hold(m: "re.Match") -> str:
+                if not speaker_renamed and (speaker_name(speakers, m.group(1)) or m.group(2)).casefold() == old_key:
+                    return " ".join(new.split())
+                kept.append(m.group(0))
+                return f"\x01{len(kept) - 1}\x01"
+
+            text = rename_in_text(MARK_RE.sub(hold, value), old, new)
+            fixed = re.sub("\x01(\\d+)\x01", lambda m: kept[int(m.group(1))], text)
             if fixed != value:
-                changed[key] = fixed
-    if changed:
-        merge_summaries(meeting_id, changed)
-    return sorted(changed)
+                out[key] = fixed
+        done.extend(out)
+        return out
+
+    change_summaries(meeting_id, change, raw=True)
+    return sorted(done)
 
 
 def rename_everywhere(old: str, new: str) -> int:
@@ -732,8 +752,11 @@ def rename_everywhere(old: str, new: str) -> int:
 
     with _db_lock:
         conn = get_connection()
+        # also an analysis naming a speaker of that name by reference (app/speaker_refs): its text may not have it
+        like = f"%{old.split()[-1][:4]}%"
         ids = [int(r["id"]) for r in conn.execute(
-            "SELECT id FROM meetings WHERE summaries_json LIKE ?", (f"%{old.split()[-1][:4]}%",)).fetchall()]
+            "SELECT id FROM meetings WHERE summaries_json LIKE ? OR (summaries_json LIKE '%⟦spk:%' AND speakers_json LIKE ?)",
+            (like, like)).fetchall()]
         task_ids = [int(r["meeting_id"]) for r in conn.execute(
             "SELECT DISTINCT meeting_id FROM commitments WHERE meeting_id IS NOT NULL").fetchall()] \
             if conn.execute("SELECT name FROM sqlite_master WHERE name = 'commitments'").fetchone() else []

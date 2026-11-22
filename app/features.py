@@ -417,7 +417,7 @@ def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:
     and the tasks of those meetings; the card (asked by the user) adds the people met in them, the
     meetings and hours of each of the last WEEKS weeks, the hours in all. None when there is no such feature."""
     from app import commitments
-    from app.database import _loads_dict
+    from app.speaker_refs import resolve_raw
 
     f = next((x for x in list_features() if x["id"] == int(feature_id)), None)
     if not f:
@@ -430,7 +430,7 @@ def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:
         conn.close()
     meetings = []
     for r in rows:
-        sums = _loads_dict(r["summaries_json"])
+        sums = resolve_raw(r["summaries_json"], r["speakers_json"])  # the speakers by their current names
         meetings.append({"id": r["id"], "title": r["title"] or "", "date": str(r["recorded_at"] or r["created_at"] or "")[:16],
                          "duration": r["duration"] or 0, "tldr": str(sums.get("tldr") or "")[:400],
                          "decisions": decisions_of(sums.get("protocol") or "")})

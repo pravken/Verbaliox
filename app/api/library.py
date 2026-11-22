@@ -1024,7 +1024,7 @@ def api_update_speaker(meeting_id: int, payload: SpeakerUpdatePayload) -> Dict[s
         try:  # and the analysis names them anew (asked by the user: a fixed typo stayed in the summary)
             from app.people import rename_in_analysis
 
-            if rename_in_analysis(meeting_id, renamed[0], name):
+            if rename_in_analysis(meeting_id, renamed[0], name, speaker_renamed=True):
                 m = get_meeting(meeting_id) or m
         except Exception:
             traceback.print_exc()
