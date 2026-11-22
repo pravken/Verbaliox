@@ -199,7 +199,10 @@ function renderStrip() {
   document.getElementById('strip-grow').className = `strip-grow${s.growCls ? ` strip-grow-${s.growCls}` : ''}`;
   const main = document.getElementById('strip-main');
   main.classList.toggle('strip-link', !!s.click);
-  main.title = s.click ? s.tip || '' : '';
+  // no tooltip: in the window of the app it was drawn over the strip's own text at the pointer (reported by the user);
+  // the strip says what it opens with its button, and a screen reader hears it
+  main.removeAttribute('title');
+  if (s.click && s.tip) main.setAttribute('aria-label', [s.pill, s.lead, s.tip].filter(Boolean).join(' · ')); else main.removeAttribute('aria-label');
   // reached by the keyboard too while it opens something (Enter and Space: core.js)
   if (s.click) { main.setAttribute('role', 'button'); main.tabIndex = 0; } else { main.removeAttribute('role'); main.removeAttribute('tabindex'); }
   document.getElementById('strip-acts').innerHTML = acts;
