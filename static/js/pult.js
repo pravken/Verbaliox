@@ -227,9 +227,11 @@ function stripHide(id) {
   renderStrip();
 }
 
-// «Не записывать»: the strip leaves this meeting (or this call) alone until it is over
+// «Не записывать»: the strip leaves this meeting (or this call) alone until it is over. A meeting during a call
+// leaves the call too: else the strip came back at once with the call, and one press was not enough
 function stripSkip(key) {
   strip.skip.add(key);
+  if (strip.call) strip.skip.add(`call:${strip.call}`);
   renderStrip();
 }
 
