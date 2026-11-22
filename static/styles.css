@@ -5181,3 +5181,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .toast-stack { top: auto; bottom: 40px; left: auto; right: 16px; transform: none; align-items: flex-end; max-width: min(460px, 90vw); }
 @keyframes toastInUp { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
 .toast-stack .toast { animation-name: toastInUp; }
+
+/* «Сегодня», a week or a month: the cards under the calendar share its whole width (auto-fill left empty columns) */
+.td-body.td-row .td-cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
