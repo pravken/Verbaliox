@@ -1458,11 +1458,19 @@ async function bulkDelete() {
   if (!list.length) return;
   const choice = await confirmDeleteDialog(list);
   if (!choice) return;
-  let failed = 0;
+  let failed = 0, later = 0;
+  const reasons = new Map();  // the server's reason → how many recordings it kept (reported by the user: only a guess was shown)
   for (const m of list) {
-    const res = await fetch(`/api/meetings/${m.id}${deleteQuery(choice, m)}`, { method: 'DELETE' });
-    if (!res.ok) failed++;
-    else if (state.activeMeeting && state.activeMeeting.id === m.id) {
+    const res = await fetch(`/api/meetings/${m.id}${deleteQuery(choice, m)}`, { method: 'DELETE' }).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok) {
+      failed++;
+      const why = (typeof data.detail === 'string' && serverText(data.detail)) || t('errorGeneric');
+      reasons.set(why, (reasons.get(why) || 0) + 1);
+      continue;
+    }
+    if (data.later) later++;  // its tracks are being mixed: deleted as soon as the mix is over
+    if (state.activeMeeting && state.activeMeeting.id === m.id) {
       state.activeMeeting = null;
       document.getElementById('workspace-content').classList.add('hidden');
       document.getElementById('workspace-empty').classList.remove('hidden');
@@ -1472,7 +1480,16 @@ async function bulkDelete() {
   state.multi.clear();
   renderLibSelectionBar();
   await loadMeetingsList();
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('bulkDeleted').replace('{n}', () => list.length));
+  if (failed) {
+    // the most frequent reason, and how many recordings had another one
+    const [why, n] = [...reasons].sort((a, b) => b[1] - a[1])[0];
+    const rest = failed - n;
+    showError(t('bulkSomeFailed').replace('{n}', () => failed).replace('{why}', () => why)
+      + (rest ? ` ${t('bulkOtherReasons').replace('{n}', () => rest)}` : ''));
+    return;
+  }
+  showToast([list.length > later ? t('bulkDeleted').replace('{n}', () => list.length - later) : '',
+    later ? t('bulkDeleteLater').replace('{n}', () => later) : ''].filter(Boolean).join(' · '));
 }
 
 // One name for all, numbered: "Interview {n}" -> "Interview 1", "Interview 2"…; {title} and {date} too

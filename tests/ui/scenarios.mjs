@@ -1518,6 +1518,25 @@ await step('mix wait cleanup', async () => {
   await sleep(800);
 });
 
+// A bulk delete that fails says why, in the server's words (reported by the user: only «возможно, они сейчас
+// обрабатываются» was shown, for recordings whose mix waited)
+await step('bulk delete reason', async () => {
+  const why = 'Запись обрабатывается: обработка отменяется, удалите её через несколько секунд.';
+  await page.route(/\/api\/meetings\/[12](\?|$)/, r => r.request().method() === 'DELETE'
+    ? r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: why }) }) : r.continue());
+  const toast = await page.evaluate(async () => {
+    const ask = window.confirmDeleteDialog;
+    window.confirmDeleteDialog = async () => ({});
+    state.multi = new Set([1, 2]);
+    try { await bulkDelete(); } finally { window.confirmDeleteDialog = ask; }
+    return document.getElementById('toast').textContent;
+  });
+  await page.unroute(/\/api\/meetings\/[12](\?|$)/);
+  expect(toast.includes(`Не удалось удалить записей: 2. ${why}`), `the reason is not shown: «${toast}»`);
+  expect(!toast.includes('возможно'), 'the guess is still shown');
+  expect(await page.evaluate(() => [1, 2].every(id => state.meetings.some(m => m.id === id))), 'a recording went');
+});
+
 // The citations of an answer as the server reads them (app/library_qa.cited_numbers): the ranges [1-3] / [5–6] /
 // [2, 4-5] give a link for each source, count in the list of the sources and leave the history sent with a follow-up
 await step('citation ranges', async () => {
