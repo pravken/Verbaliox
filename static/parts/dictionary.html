@@ -30,7 +30,7 @@
             <input id="settings-dict-variants" type="text" class="tk-input" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
               data-i18n-placeholder="dictVariantsPh" placeholder="Варианты распознавания" data-i18n-title="dictVariantsTip" title="Через запятую — как модель может услышать это слово">
             <input id="settings-dict-cat" type="text" class="tk-input" list="dc-groups" data-keydown="onEnter" data-keydown-args='[{"$": "event"}, "addSettingsDictItem"]'
-              data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа" data-i18n-title="rdSasDictCatPh" title="Группа">
+              data-i18n-placeholder="rdSasDictCatPh" placeholder="Группа терминов (необязательно)" data-i18n-title="dcGroupTip" title="Группа объединяет слова в списке словаря: по группам работают фильтры над списком. Поле необязательное.">
             <datalist id="dc-groups"></datalist>
             <button id="settings-dict-add" data-click="addSettingsDictItem" class="tk-btn tk-btn-primary"><svg class="vx-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="rdSasDictAdd">Добавить</span></button>
           </div>

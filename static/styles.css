@@ -5338,3 +5338,10 @@ textarea.ft-dr-in { height: auto; min-height: var(--ctl-h, 32px); padding: 6px 1
 /* «Словарь»: «В отдельном окне» in the head of the card «Фичи» */
 .dc-ft-link { margin-left: 4px; padding: 0; border: 0; background: none; color: var(--accent-text); font-size: var(--fs-caption); font-weight: 400; letter-spacing: 0; text-transform: none; cursor: pointer; }
 .dc-ft-link:hover { text-decoration: underline; }
+
+/* «Словарь»: the add row keeps every placeholder whole («Группа терминов (необязательно)»): the fields share a
+   wide card in one row; in a narrow one the group and «Добавить» go to a second row */
+.dc-add { display: flex; flex-wrap: wrap; }
+.dc-add > .tk-input { flex: 1 1 220px; min-width: 0; }
+.dc-add > #settings-dict-cat { flex-basis: 250px; }
+.dc-add > .tk-btn { flex: none; }
