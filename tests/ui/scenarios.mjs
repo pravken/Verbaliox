@@ -1179,6 +1179,18 @@ await step('meeting strip', async () => {
   await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
 });
 
+// While recording, the time on the red button opens the studio and does not stop the recording (asked by the user)
+await step('recording time opens the studio', async () => {
+  await page.evaluate(() => { window.__recOrig = [window.isRecording, window.shellQuickRecord]; window.__stops = 0;
+    window.isRecording = () => true; window.shellQuickRecord = () => { window.__stops++; };
+    document.getElementById('studio-timer').textContent = '01:23'; updateRecordButtonState(); switchAppView('home'); });
+  await page.click('#tb-rec-clock');
+  await sleep(300);
+  const r = await page.evaluate(() => [state.appView, window.__stops]);
+  expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
+  await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
+});
+
 // «Очередь» as the island of the top strip and the load of the status bar: each opens its window next to it, Escape
 // and a click outside close it
 await step('queue and load windows', async () => {

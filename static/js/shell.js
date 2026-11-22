@@ -395,8 +395,11 @@ function updateRecordButtonState() {
   btn.setAttribute('aria-busy', String(starting));
   document.getElementById('tb-rec-label').textContent = recording ? t('tbRecStop') : starting ? t('tbRecStarting') : t('tbRecord');
   const clock = document.getElementById('tb-rec-clock');
-  clock.textContent = recording ? timer : '';
+  // the time is the way to the studio: its own click target inside the button (the button itself stops)
+  const clockText = document.getElementById('tb-rec-clock-t');
+  if (clockText) clockText.textContent = recording ? timer : ''; else clock.textContent = recording ? timer : '';
   clock.classList.toggle('hidden', !recording);
+  clock.classList.toggle('tb-rec-here', state.appView === 'studio');  // in the studio already: no way to it
   syncLibLiveRow();
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
   btn.title = recording ? t('tipTbRecordStop') : t('tipTbRecord');
@@ -443,6 +446,12 @@ function openRecMenu(e) {
   const r = e.currentTarget.getBoundingClientRect();
   placeMenuAt(menu, { clientX: r.right, clientY: r.bottom + 6 });
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+}
+
+// The studio of the running recording (asked by the user): the time on the red button leads there
+function openRecordStudio(e) {
+  if (e) e.stopPropagation();  // the time is inside the red button, which stops the recording
+  if (state.appView !== 'studio') switchAppView('studio');
 }
 
 // A preset of the menu: recorded at once, where the user is (as the red button)

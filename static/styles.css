@@ -5184,3 +5184,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 
 /* «Сегодня», a week or a month: the cards under the calendar share its whole width (auto-fill left empty columns) */
 .td-body.td-row .td-cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+/* While recording, the time on the red button leads to the studio (asked by the user): a light capsule with a wave
+   mark, lit under the pointer; in the studio itself only the time */
+#tb-rec-clock:not(.hidden) { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 6px; margin-right: 2px;
+  border-radius: 12px; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease; }
+#tb-rec-clock:hover { background: rgba(255, 255, 255, 0.1); }
+#tb-rec-clock .tb-rec-wave { width: 14px; height: 14px; opacity: 0.8; flex: none; }
+#tb-rec-clock.tb-rec-here { cursor: inherit; background: none; }
+#tb-rec-clock.tb-rec-here .tb-rec-wave { display: none; }
