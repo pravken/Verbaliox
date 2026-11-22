@@ -5166,3 +5166,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 
 /* The search of a section's head: one width in «Записи», «Задачи», «Словарь» and the list of «Люди» */
 .tk-search, .lt-search, .pv-search { width: 280px; max-width: 100%; }
+
+/* «Люди» as the other sections: the list from x=96 under the head's tile, no line under the head */
+.pv-body { border-top: 0; padding-left: 24px; }
+.pv-side-top { padding-left: 0; }
+.pv-list { padding-left: 0; }
+.pv-note { padding-left: 0; }

@@ -34,7 +34,7 @@ function renderDictPage() {
   const groups = dcGroups();
   if (DC.group && !groups.some(([g]) => g === DC.group)) DC.group = '';
   document.getElementById('dc-sub').textContent = terms.length
-    ? `${plural(terms.length, t('dcWordsForms'))} · ${plural(groups.length, t('dcGroupsForms'))}` : '';
+    ? `${plural(terms.length, t('dcWordsForms'))} · ${plural(groups.length, t('dcGroupsForms'))}` : t('dcSubEmpty');  // the head as the others: a line under the title
   document.getElementById('dc-groups').innerHTML = groups.map(([g]) => `<option value="${escapeHtml(g)}"></option>`).join('');
   renderDictOffers();
   const q = DC.q.trim().toLocaleLowerCase();
