@@ -329,7 +329,7 @@ function openRecordBarMenu(e) {
 function openMoveRecordMenu(m, r) {
   const folders = [...(state.folders || [])].sort((a, b) => folderName(a).localeCompare(folderName(b), state.uiLang));
   openTextMenuAt(folders.map(f => ({
-    label: folderName(f), key: (m.folder_id ?? null) === f.id ? '✓' : '',
+    label: folderName(f), on: (m.folder_id ?? null) === f.id,
     run: () => moveMeetingToFolder(m.id, f.id),
   })), r.right, r.bottom + 4, { right: true });
 }
