@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import sys
+import threading
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -613,9 +614,11 @@ class SegmentsTableTest(unittest.TestCase):
             ids.append(m["id"])
         holds = []
         real = database.get_connection
+        me = threading.get_ident()
 
         def counting():
-            holds.append(database._db_lock._is_owned())
+            if threading.get_ident() == me:  # a background thread of the app may open a connection meanwhile
+                holds.append(database._db_lock._is_owned())
             return real()
 
         with mock.patch.object(database, "SPEAKER_SECONDS_STEP", 1), \
