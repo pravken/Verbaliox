@@ -108,7 +108,7 @@ function applyUiScale(pct) {
 // chosen in Settings → Общие from the presets approved then (ui_accent); the fill under white text is the accent darkened until white reads on it (4.8:1 and more)
 const THEME_ACCENTS = {
   steel: '#4C7FD9', lavender: '#8C7FD0', slate: '#7D8A9C', turquoise: '#43A6B4',
-  emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#A8324A',
+  emerald: '#3F9E78', sage: '#6F9C80', ochre: '#C09A4D', cherry: '#B0417E',  // cherry: moved from #A8324A to raspberry, away from the red of the recording (asked by the user)
 };
 const THEME_BGS = {
   slate: '#121418', deepblue: '#10141C', petrol: '#0E1617', moss: '#121411',
