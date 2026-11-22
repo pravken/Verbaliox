@@ -1179,6 +1179,18 @@ await step('meeting strip', async () => {
   await page.evaluate(() => { state.meetings = state.meetings.filter(m => m.id !== 9901); stripSeen.delete(9901); strip.at = 0; strip.html = ''; });
 });
 
+// «Назад» / «Вперёд» of the strip walk the sections visited, and are off where there is no step (asked by the user)
+await step('back and forward buttons', async () => {
+  await page.click('#rail-libtable'); await sleep(700);
+  await page.click('#rail-tasks'); await sleep(700);
+  expect(!(await page.isDisabled('#nav-back')), '«Назад» is off after two steps');
+  await page.click('#nav-back'); await sleep(600);
+  expect(await page.evaluate(() => state.appView) === 'libtable', '«Назад» did not go to «Записи»');
+  expect(!(await page.isDisabled('#nav-fwd')), '«Вперёд» is off after a step back');
+  await page.click('#nav-fwd'); await sleep(600);
+  expect(await page.evaluate(() => state.appView) === 'tasks', '«Вперёд» did not come back to «Задачи»');
+});
+
 // While recording, the time on the red button opens the studio and does not stop the recording (asked by the user)
 await step('recording time opens the studio', async () => {
   await page.evaluate(() => { window.__recOrig = [window.isRecording, window.shellQuickRecord]; window.__stops = 0;

@@ -5300,3 +5300,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .ri-host:is(:hover, .ri-play) .ri-t3 { animation: ri-tile 380ms 140ms var(--ease-out) both; }
 .ri-host:is(:hover, .ri-play) .ri-t4 { animation: ri-tile 380ms 210ms var(--ease-out) both; }
 @media (prefers-reduced-motion: reduce) { .ri-host * { animation: none !important; transition: none !important; } }
+
+/* «Назад» / «Вперёд» at the start of the strip (asked by the user): two quiet square buttons of the controls' height;
+   not active while there is no step */
+.strip-nav { display: inline-flex; gap: 2px; flex: none; margin-right: 2px; }
+.strip-nav-b { width: 28px; height: var(--ctl-h, 32px); display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--ctl-r, 8px);
+  background: none; color: #C7C9CE; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease, color var(--dur-fast, 120ms) ease; }
+.strip-nav-b svg { width: 18px; height: 18px; }
+.strip-nav-b:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #FFFFFF; }
+.strip-nav-b:disabled { color: rgba(255, 255, 255, 0.22); cursor: default; }

@@ -9,6 +9,12 @@
     <header id="app-strip" class="strip" data-i18n-aria="stripAria" aria-label="Текущая встреча">
       <!-- The gradient of the "AI" marks of the page (fill: url(#vs-ai-grad)) -->
       <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="vs-ai-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D4B3FF"/><stop offset="1" stop-color="#6CC8FF"/></linearGradient></defs></svg>
+      <!-- «Назад» / «Вперёд» inside the app (asked by the user): the same as Alt+←/→ and the mouse's side buttons
+           (navGo in static/js/shell.js), not active while there is no step -->
+      <span class="strip-nav">
+        <button id="nav-back" type="button" class="strip-nav-b" data-click="navGo" data-click-args="[-1]" disabled data-i18n-title="navBackTip" title="Назад (Alt+←)" data-i18n-aria="navBackTip" aria-label="Назад (Alt+←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button id="nav-fwd" type="button" class="strip-nav-b" data-click="navGo" data-click-args="[1]" disabled data-i18n-title="navFwdTip" title="Вперёд (Alt+→)" data-i18n-aria="navFwdTip" aria-label="Вперёд (Alt+→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </span>
       <div id="strip-main" data-click="stripOpen" class="strip-main" aria-live="polite">
         <span id="strip-pill" class="st-pill stp-grey"><i aria-hidden="true"></i><span id="strip-pill-t"></span></span>
         <span id="strip-lead" class="strip-lead"></span>

@@ -96,6 +96,14 @@ function navRecord() {
     NAV.fwd = [];
   }
   NAV.last = p;
+  navButtons();
+}
+
+// The strip's ‹ › follow the steps there are
+function navButtons() {
+  const b = document.getElementById('nav-back'), f = document.getElementById('nav-fwd');
+  if (b) b.disabled = !NAV.back.length;
+  if (f) f.disabled = !NAV.fwd.length;
 }
 
 async function navGo(dir) {
@@ -118,6 +126,7 @@ async function navGo(dir) {
   } finally {
     NAV.moving = false;
     NAV.last = Object.assign(navPlace(), { t: 0 });
+    navButtons();
   }
 }
 
