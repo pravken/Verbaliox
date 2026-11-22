@@ -1025,6 +1025,7 @@ function animateIn(el) {
   el.classList.remove('vx-in');
   void el.offsetWidth;  // restarts the animation
   el.classList.add('vx-in');
+  el._vxInAt = performance.now();  // pultRise leaves a section alone while it fades in
 }
 
 function switchWorkspaceTab(tab) {

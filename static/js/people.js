@@ -806,7 +806,9 @@ async function renderPeopleView(rise = false) {
   if (!PV.sel || !dir.items.some(p => p.name === PV.sel)) PV.sel = (shown[0] || {}).name || '';
   drawPeopleView();
   await pvLoadCard();
-  if (rise) pultRise(document.getElementById('people-view'), '.pv-row, #pv-card .pcard');
+  // the list comes in with the section itself (the rows rising again after the section's own motion jerked the list
+  // twice: reported by the user); pultRise keeps the rule for every section
+  if (rise) pultRise(document.getElementById('people-view'), '#pv-card .pcard');
 }
 
 function pvRows() {
