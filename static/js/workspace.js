@@ -113,6 +113,12 @@ function toggleTxModelBar(open) {
 // The stage the server names, apart from its own percent: «Сведение дорожек: удаление эха колонок… 36%» is the
 // stage «Сведение дорожек», its step «удаление эха колонок…» and 36% of that step, while m.progress is the whole job
 function txStageParts(m) {
+  // the mix of a stopped recording waiting for the end of a meeting, or deleted once mixed: why, not «1 %»
+  if (m.status === 'mixing' && (m.mix_deleting || m.mix_wait != null)) {
+    const name = t('status_mixing');
+    const detail = m.mix_deleting ? t('mixDeleting') : mixWaitLine(m);
+    return { text: `${name}: ${detail}`, name, detail, stage: null };
+  }
   let s = serverText(m.stage_text || '') || t('processingShort');
   const pm = s.match(/\s*(\d{1,3})\s*%/);
   const stage = pm ? Number(pm[1]) : null;
@@ -125,8 +131,88 @@ function txStageParts(m) {
   return { text: s, name: (i > 0 ? s.slice(0, i) : s).replace(/(…|\.\.\.)$/, ''), detail: detail.charAt(0).toUpperCase() + detail.slice(1), stage };
 }
 
+// The mix of a stopped recording waits for the end of a meeting («Не мешать на встречах», app/api/recording.py):
+// m.mix_wait is when it begins (unix seconds; 0 — after the meeting going on), counted down on the card, the rows
+// and the strip. Reported by the user: «после встречи» and 1 % for two minutes looked like a hang.
+function mixWaiting(m) {
+  return !!m && m.status === 'mixing' && m.mix_wait != null && !m.mix_deleting;
+}
+
+function mixWaitLeft(until) {
+  return Math.max(0, Math.ceil(Number(until) - Date.now() / 1000));
+}
+
+function mixWaitClock(until) {
+  const left = mixWaitLeft(until);
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
+
+// «Начнётся через 1:40 — пауза…», «Начнётся после встречи»; at zero, until the server says it began: «Начинается»
+function mixWaitLine(m) {
+  if (!Number(m.mix_wait)) return t('mixWaitMeeting');
+  return mixWaitLeft(m.mix_wait) ? t('mixWaitIn').replace('{t}', () => mixWaitClock(m.mix_wait)) : t('mixWaitStarting');
+}
+
+// in the place of a row's percent: the time left, or a word while a meeting goes on
+function mixWaitSlot(m) {
+  return Number(m.mix_wait) ? mixWaitClock(m.mix_wait) : t('mixWaitSlot');
+}
+
+// «Сведение дорожек · 1:40» in the strip's pill; «Сведение · 1:40» in the narrow status chip of «Записи»
+function mixWaitPill(m) {
+  return `${t('status_mixing')} · ${Number(m.mix_wait) ? mixWaitClock(m.mix_wait) : t('mixWaitAfterShort')}`;
+}
+
+function mixWaitChip(m) {
+  return Number(m.mix_wait) ? `${t('mixShort')} · ${mixWaitClock(m.mix_wait)}` : t('mixWaitChipMeeting');
+}
+
+function mixWaitTip(m) {
+  return t(Number(m.mix_wait) ? 'mixWaitTip' : 'mixWaitTipMeeting');
+}
+
+// The attributes of an element that counts down (form: line, slot or chip): mixTick redraws its text every second
+function mixTickAttrs(m, form) {
+  if (!mixWaiting(m) || !Number(m.mix_wait)) return '';
+  startMixTicker();
+  return ` data-mix-until="${Number(m.mix_wait)}" data-mix-form="${form}"`;
+}
+
+function mixTickOn(el, m, form) {
+  if (mixWaiting(m) && Number(m.mix_wait)) {
+    el.dataset.mixUntil = String(Number(m.mix_wait));
+    el.dataset.mixForm = form;
+    startMixTicker();
+  } else {
+    delete el.dataset.mixUntil;
+    delete el.dataset.mixForm;
+  }
+}
+
+const MIX_FORMS = { line: mixWaitLine, slot: mixWaitSlot, chip: mixWaitChip };
+let mixTicker = null;
+
+function startMixTicker() {
+  if (!mixTicker) mixTicker = setInterval(mixTick, 1000);
+}
+
+function mixTick() {
+  const els = document.querySelectorAll('[data-mix-until]');
+  for (const el of els) {
+    const m = { status: 'mixing', mix_wait: Number(el.dataset.mixUntil) };
+    el.textContent = (MIX_FORMS[el.dataset.mixForm] || mixWaitLine)(m);
+  }
+  const counting = (state.meetings || []).some(m => mixWaiting(m) && Number(m.mix_wait));
+  if (counting && typeof renderStrip === 'function') renderStrip();
+  if (!els.length && !counting) {
+    clearInterval(mixTicker);
+    mixTicker = null;
+  }
+}
+
 // One percent, or both labelled when the stage's own differs from the whole job's («Этап 36% · Всего 28%»)
 function txPctLabel(m, parts) {
+  if (mixWaiting(m)) return '';  // nothing is done yet: the time left is in the line above
   const total = Number(m.progress) || 0;
   if (parts.stage == null || Math.abs(parts.stage - total) <= 1) return `${total}%`;
   return `${t('txRcStage').replace('{n}', () => parts.stage)} · ${t('txRcTotal').replace('{n}', () => total)}`;
@@ -208,6 +294,7 @@ function renderTxModelBar() {
   const subEl = document.getElementById('tx-rc-sub');
   subEl.textContent = sub;
   subEl.classList.toggle('hidden', !sub);
+  mixTickOn(subEl, progress ? m : null, 'line');  // the time left of a mix that waits, every second
   if (progress) renderTxCardProgress(m, parts);
   const notModel = pick === 'merged' || pick === 'teams';  // not made by a model: nothing to transcribe with
   document.getElementById('tx-proc-btn').classList.toggle('hidden', notModel);
@@ -259,6 +346,7 @@ function renderTxModelBar() {
   status.className = `tx-model-status ${cls}`;
   // with a text the card's head says it (the foot keeps one row of buttons)
   if (!noText) {
+    mixTickOn(subEl, null);
     subEl.textContent = text;
     subEl.title = text;
     subEl.className = `vx-head-sub ${cls}${text ? '' : ' hidden'}`;
@@ -276,6 +364,7 @@ function renderTxCardProgress(m, parts) {
   const sub = document.getElementById('tx-rc-sub');
   sub.textContent = parts.detail;
   sub.classList.toggle('hidden', !parts.detail);
+  mixTickOn(sub, m, 'line');
   const q = (state.queue || []).find(x => x.id === m.id);
   const running = !!(q && q.state === 'running');
   const fill = document.getElementById('tx-rc-fill');

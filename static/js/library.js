@@ -42,9 +42,8 @@ async function loadMeetingsList(opts = {}) {
       // a recording opened while its tracks were mixed had no file: its player is loaded now it has one
       await selectMeeting(updated.id, state.activeMeeting.status === 'mixing');
       if (finished) buildPlayerWaveformEnvelope(state.activeMeeting);
-    } else if (updated && (updated.progress !== state.activeMeeting.progress || updated.stage_text !== state.activeMeeting.stage_text)) {
-      state.activeMeeting.progress = updated.progress;
-      state.activeMeeting.stage_text = updated.stage_text;
+    } else if (updated && ['progress', 'stage_text', 'mix_wait', 'mix_deleting'].some(f => updated[f] !== state.activeMeeting[f])) {
+      for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_deleting']) state.activeMeeting[f] = updated[f];
       updateProcessingBanner(state.activeMeeting);
     }
   }
@@ -63,9 +62,9 @@ async function loadMeetingsList(opts = {}) {
 // net: every 5 min while the stream is connected (the events carry the changes), at the old 2 s / 8 s
 // cadence when it is not, never while the window is hidden.
 const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false, listEtag: '', polledAt: 0 };
-const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now'];
+const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now', 'mix_wait', 'mix_deleting'];
 // the fields no sort, group or filter of the list reads: a change of only these redraws one row
-const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now'];
+const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now', 'mix_wait', 'mix_deleting'];
 
 function startLiveUpdates() {
   if (!window.EventSource) return;
@@ -302,8 +301,7 @@ function handleLiveEvent(ev) {
       if (ev.status === 'completed') buildPlayerWaveformEnvelope(state.activeMeeting);
     });
   } else {
-    active.progress = m.progress;
-    active.stage_text = m.stage_text;
+    for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_deleting']) active[f] = m[f];
     updateProcessingBanner(active);
     if (active.asr_now !== m.asr_now) { active.asr_now = m.asr_now; renderTxModelBar(); }
   }
@@ -939,7 +937,7 @@ function meetingRowHtml(m, depth) {
         </div>
         <div class="flex items-center justify-between gap-2 text-[11.5px] mt-0.5 ${isSelected ? 'text-white' : 'text-apple-secondary'}">
           <span class="flex items-center gap-1.5 min-w-0">
-            <span class="font-mono shrink-0">${isBusy ? `${m.progress}%` : formatTime(m.duration)}</span>
+            <span class="font-mono shrink-0">${isBusy ? libBusyLabel(m) : formatTime(m.duration)}</span>
             <span class="rec-badges">${recordingBadgesHtml(m)}</span>
           </span>
           <span class="truncate shrink-0 max-w-[55%]">${escapeHtml(libSortValue(m))} · ${escapeHtml(status)}</span>
@@ -1556,6 +1554,13 @@ function rowMoreButton(m) {
     title="${escapeHtml(t('tipRecordingMore'))}" class="row-more opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 px-1 rounded hover:bg-black/20 text-[11.5px] shrink-0 transition">•••</button>`;
 }
 
+// The place of a busy recording's percent: the time left while the mix of a stopped recording waits for the end
+// of a meeting (workspace.js mixWaitLine), counted down every second
+function libBusyLabel(m) {
+  if (!mixWaiting(m)) return `${Number(m.progress) || 0}%`;
+  return `<span${mixTickAttrs(m, 'slot')} title="${escapeHtml(mixWaitTip(m))}">${escapeHtml(mixWaitSlot(m))}</span>`;
+}
+
 function meetingCompactRowHtml(m, depth) {
   const picked = libIsSelected(m);
   const isSelected = picked && libSelectionShown();
@@ -1571,7 +1576,7 @@ function meetingCompactRowHtml(m, depth) {
       ${libFeatureDot(m)}
       <span class="truncate flex-1 min-w-0">${escapeHtml(libTitle(m))}</span>
       <span class="rec-badges shrink-0 ${isSelected ? 'text-white' : 'text-apple-secondary'}">${recordingBadgesHtml(m)}</span>
-      <span class="font-mono text-[11px] shrink-0 ${isSelected ? 'text-white' : 'text-apple-tertiary'}">${isBusy ? `${m.progress}%` : libPrefs().sort === 'size' ? formatSize(m.size_bytes) : formatTime(m.duration)}</span>
+      <span class="font-mono text-[11px] shrink-0 ${isSelected ? 'text-white' : 'text-apple-tertiary'}">${isBusy ? libBusyLabel(m) : libPrefs().sort === 'size' ? formatSize(m.size_bytes) : formatTime(m.duration)}</span>
       ${rowMoreButton(m)}
     </div>`;
 }
@@ -1590,7 +1595,7 @@ function meetingTileHtml(m) {
          class="lib-tile group ${isSelected ? 'lib-tile-on' : soft ? 'lib-row-soft' : ''}">
       <div class="lib-tile-cover">
         ${cover}
-        <span class="lib-tile-time">${isBusy ? `${m.progress}%` : formatTime(m.duration)}</span>
+        <span class="lib-tile-time">${isBusy ? libBusyLabel(m) : formatTime(m.duration)}</span>
         ${isBusy ? `<span class="lib-tile-progress" style="width:${m.progress}%"></span>` : ''}
       </div>
       <div class="px-1.5 pt-1 pb-1.5 min-w-0">

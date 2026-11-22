@@ -150,7 +150,7 @@ function stripState() {
     const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
       : state.queueMeeting ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
-    return { kind: 'after', pill: mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
+    return { kind: 'after', pill: mixWaiting(m) ? mixWaitPill(m) : mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
       : running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running || mixing ? 'blue' : 'grey',
       lead: m.title || t('hmUntitled'), meta: m.duration ? t('stripRecorded').replace('{n}', () => mins) : '', grow, click: m.id, tip: t('tbRecOpen'),
       // the recording already open: no «Открыть запись» that does nothing
