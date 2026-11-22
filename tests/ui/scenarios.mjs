@@ -1441,6 +1441,24 @@ await step('features drawer', async () => {
   await page.evaluate(id => fetch(`/api/features/${id}`, { method: 'DELETE' }).then(() => loadFeatures()), fid);
 });
 
+// The citations of an answer as the server reads them (app/library_qa.cited_numbers): the ranges [1-3] / [5–6] /
+// [2, 4-5] give a link for each source, count in the list of the sources and leave the history sent with a follow-up
+await step('citation ranges', async () => {
+  const r = await page.evaluate(() => {
+    const src = k => ({ n: k, meeting_id: 1, title: `Встреча ${k}`, start: 10 * k, text: `фрагмент ${k}` });
+    const byN = Object.fromEntries([1, 2, 3, 4, 5, 6].map(k => [k, src(k)]));
+    const box = document.createElement('div');
+    box.textContent = 'Итог [1-3], сроки [5–6] и [2, 4-5]; ещё [9].';
+    linkifyCitations(box, byN, 0);
+    const chat = { items: [{ question: 'q', status: 'done', data: { found: true, answer: 'Итог [1-3] и [2, 4-5].' } }, {}] };
+    return { links: [...box.querySelectorAll('.lib-cite')].map(b => b.textContent).join(','), rest: box.textContent.includes('[9]'),
+      cited: [...citedNumbers('Итог [1-3], сроки [5–6] и [2, 4-5].')].sort().join(','), history: assistantHistory(chat, chat.items[1])[0].answer };
+  });
+  expect(r.links === '1,2,3,5,6,2,4,5' && r.rest, `the ranges are not links: ${JSON.stringify(r)}`);
+  expect(r.cited === '1,2,3,4,5,6', `the ranges are not counted: ${r.cited}`);
+  expect(r.history === 'Итог и.', `the history keeps the citations: ${r.history}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

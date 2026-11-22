@@ -529,27 +529,47 @@ async function makeDigest(days) {
   renderAskThread();
 }
 
-// "[2]" in an answer becomes a button to its source. Text nodes are rewritten, never the sanitized
-// HTML string: a [2] inside a link title or an image's alt text stays text there
+// The citations of an answer: [2], [1, 3] and the ranges [1-3] / [11–12] / [2, 4-5] the models also write (read as
+// cited_numbers in app/library_qa.py does)
+const CITE_GROUP = /\[(\d{1,3}(?:\s*[-–—]\s*\d{1,3})?(?:\s*[,;]\s*\d{1,3}(?:\s*[-–—]\s*\d{1,3})?)*)\]/g;
+function citeGroupNumbers(group) {
+  const out = [];
+  for (const part of String(group).split(/\s*[,;]\s*/)) {
+    const ends = part.split(/\s*[-–—]\s*/).filter(Boolean).map(Number);
+    if (ends.length === 2 && ends[1] > ends[0] && ends[1] - ends[0] <= 60) for (let n = ends[0]; n <= ends[1]; n++) out.push(n);
+    else out.push(...ends);
+  }
+  return out;
+}
+function citedNumbers(text) {
+  return new Set([...String(text || '').matchAll(CITE_GROUP)].flatMap(m => citeGroupNumbers(m[1])));
+}
+
+// "[2]" in an answer becomes a button to its source, "[1-3]" a button for each of them. Text nodes are rewritten, never
+// the sanitized HTML string: a [2] inside a link title or an image's alt text stays text there
 function linkifyCitations(root, byN, itemId) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (walker.nextNode()) {
     const n = walker.currentNode;
-    if (/\[\d{1,3}\]/.test(n.nodeValue) && !n.parentElement.closest('button, a, code')) nodes.push(n);
+    if (/\[\d{1,3}/.test(n.nodeValue) && !n.parentElement.closest('button, a, code')) nodes.push(n);
   }
   for (const node of nodes) {
     const frag = document.createDocumentFragment();
     let last = 0;
-    for (const m of node.nodeValue.matchAll(/\[(\d{1,3})\]/g)) {
-      const src = byN[m[1]];
-      if (!src) continue;
-      const b = document.createElement('button');
-      b.className = 'lib-cite';
-      b.textContent = m[1];
-      b.title = `${src.title} · ${formatTime(src.start)}`;
-      b.addEventListener('click', () => openLibrarySource(itemId, Number(m[1])));
-      frag.append(node.nodeValue.slice(last, m.index), b);
+    for (const m of node.nodeValue.matchAll(CITE_GROUP)) {
+      const nums = [...new Set(citeGroupNumbers(m[1]))].filter(n => byN[n]);
+      if (!nums.length) continue;  // a group naming no source stays text
+      frag.append(node.nodeValue.slice(last, m.index));
+      for (const n of nums) {
+        const src = byN[n];
+        const b = document.createElement('button');
+        b.className = 'lib-cite';
+        b.textContent = String(n);
+        b.title = `${src.title} · ${formatTime(src.start)}`;
+        b.addEventListener('click', () => openLibrarySource(itemId, n));
+        frag.append(b);
+      }
       last = m.index + m[0].length;
     }
     if (!last) continue;

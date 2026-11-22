@@ -489,11 +489,12 @@ function askLibrary() {
 }
 
 // The conversation so far, for a follow-up («а подробнее?», «кто это предложил?»): the last answered
-// questions before this one, their answers without the [n] citations (asked by the user)
+// questions before this one, their answers without the citations [n], [1, 3], [1-3] (asked by the user)
+const CITE_STRIP = new RegExp(`\\s?${CITE_GROUP.source}`, 'g');
 function assistantHistory(chat, item) {
   const before = chat.items.slice(0, Math.max(0, chat.items.indexOf(item)));
   return before.filter(x => x.status === 'done' && x.data && x.data.found && x.data.answer).slice(-3)
-    .map(x => ({ question: String(x.question).slice(0, 1000), answer: String(x.data.answer).replace(/\s?\[\d{1,3}(?:\s*[,;]\s*\d{1,3})*\]/g, '').slice(0, 2000) }));
+    .map(x => ({ question: String(x.question).slice(0, 1000), answer: String(x.data.answer).replace(CITE_STRIP, '').slice(0, 2000) }));
 }
 
 async function assistantSend(text, scopeArg) {
@@ -711,7 +712,7 @@ function renderAssistantItem(item, isLast) {
     if (!data.found) {
       body = `<div class="as-a"><div class="text-xs text-apple-secondary">${escapeHtml(t('libraryAskNothing'))}</div></div>`;
     } else {
-      const cited = new Set([...(data.answer || '').matchAll(/\[(\d{1,3})\]/g)].map(x => Number(x[1])));
+      const cited = citedNumbers(data.answer);  // [2], [1, 3] and the ranges [1-3] (library.js)
       const shown = (data.sources || []).filter(s => !cited.size || cited.has(s.n)).slice(0, 20);
       const recs = new Set(shown.map(s => s.meeting_id)).size;
       const sources = assistantSourcesHtml(item, shown);
