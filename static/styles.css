@@ -5268,3 +5268,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
    recording's transcript read --cap-size, set by A−/A+ of the studio (14 px by default) */
 :root { --cap-size: 14px; }
 .tx-chat .ch-bub { font-size: var(--cap-size, 14px); }
+
+/* «Обзор» on the rail: its tiles breathe one after another under the pointer, as the board of widgets rearranges
+   (reported by the user: the only rail button without a motion of its own) */
+.rail :is(.ri-t1, .ri-t2, .ri-t3, .ri-t4) { transform-box: fill-box; transform-origin: center; }
+.rail-btn:hover .ri-t1 { animation: ri-tile 380ms var(--ease-out); }
+.rail-btn:hover .ri-t2 { animation: ri-tile 380ms 70ms var(--ease-out) both; }
+.rail-btn:hover .ri-t3 { animation: ri-tile 380ms 140ms var(--ease-out) both; }
+.rail-btn:hover .ri-t4 { animation: ri-tile 380ms 210ms var(--ease-out) both; }
+@keyframes ri-tile { 45% { transform: scale(0.72); } }
