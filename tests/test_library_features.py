@@ -563,6 +563,19 @@ class LibraryScopeTest(unittest.TestCase):
         self.assertEqual(user.count("Что решили по релизу?"), library_qa.HISTORY_TURNS)
         self.assertTrue(user.rstrip().endswith("Вопрос: а подробнее?"))
 
+    def test_overviews_are_whole_recordings_and_their_export_names_no_moment(self):
+        """Reported by the user: a brief's marks all read «▶ 00:00»: a whole recording is cited, not a moment."""
+        from app import library_qa
+        from app.assistant_chats import answer_text
+
+        frags = library_qa.summary_fragments([{"id": 1, "title": "Т", "summaries": {"tldr": "Обзор."}, "created_at": "2026-11-12"}])
+        self.assertTrue(frags[0]["whole"])
+        text = answer_text("q", "a [1]", [{"n": 1, "title": "Т", "date": "2026-11-12", "start": 0.0, "whole": True},
+                                         {"n": 2, "title": "Т", "date": "2026-11-12", "start": 75.0, "text": "фраза"}], "Источники")
+        self.assertIn("[1] Т · 2026-11-12\n", text + "\n")
+        self.assertIn("00:01:15", text)
+        self.assertNotIn("00:00:00", text)
+
     def test_small_talk_is_told_from_questions(self):
         from app.library_qa import is_small_talk
 

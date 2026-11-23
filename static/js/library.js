@@ -564,7 +564,7 @@ function linkifyCitations(root, byN, itemId) {
         const b = document.createElement('button');
         b.className = 'lib-cite';
         b.textContent = String(n);
-        b.title = `${src.title} · ${formatTime(src.start)}`;
+        b.title = src.whole ? src.title : `${src.title} · ${formatTime(src.start)}`;
         b.addEventListener('click', () => openLibrarySource(itemId, n));
         frag.append(b);
       }

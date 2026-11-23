@@ -203,7 +203,7 @@ def brief(series_id: Optional[int] = None, person: Optional[str] = None, model_n
         system += " Отдельным разделом «## Задачи» перечисли открытые задачи: кто, кому, что, срок."
     answer = llm.chat(system, promised + "Материалы встреч (от старых к новым):\n\n" + "\n\n".join(blocks))
     sources = [{"n": n, "meeting_id": int(m["id"]), "title": m.get("title") or "", "date": _when(m)[:10], "start": 0.0,
-                "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
+                "whole": True, "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
     return {"answer": answer, "sources": sources, "found": True, "model": llm.label,
             "mode": "brief", "count": len(meetings)}
 

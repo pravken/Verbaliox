@@ -78,6 +78,6 @@ def make_digest(folder_id: Optional[int] = None, days: Optional[int] = None, ans
     )
     answer = llm.chat(system, "Материалы записей:\n\n" + "\n\n".join(blocks) + "\n\nСоставь дайджест.")
     sources = [{"n": n, "meeting_id": int(m["id"]), "title": m.get("title") or "", "date": _when(m)[:10],
-                "start": 0.0, "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
+                "start": 0.0, "whole": True, "speaker": "", "text": ""} for n, m in enumerate(meetings, 1)]
     return {"answer": answer, "sources": sources, "found": True, "model": llm.label,
             "mode": "digest", "count": len(meetings)}

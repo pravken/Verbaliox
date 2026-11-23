@@ -109,9 +109,12 @@ def save_chats(chats: Any) -> List[Dict[str, Any]]:
 def _sources_lines(sources: List[Dict[str, Any]]) -> List[str]:
     lines = []
     for s in sources or []:
+        who = f"{s.get('speaker')}: " if s.get("speaker") else ""
+        if s.get("whole"):  # the whole recording (a brief, a digest, an overview): no moment to name
+            lines.append(f"[{s.get('n')}] {s.get('title', '')} · {s.get('date', '')}")
+            continue
         start = float(s.get("start") or 0)
         t = f"{int(start // 3600):02d}:{int(start % 3600 // 60):02d}:{int(start % 60):02d}"
-        who = f"{s.get('speaker')}: " if s.get("speaker") else ""
         lines.append(f"[{s.get('n')}] {s.get('title', '')} · {s.get('date', '')} · {t} — {who}{s.get('text', '')}")
     return lines
 

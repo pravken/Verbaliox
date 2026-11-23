@@ -1587,6 +1587,18 @@ await step('citation ranges', async () => {
   expect(r.history === 'Итог и.', `the history keeps the citations: ${r.history}`);
 });
 
+// A brief cites whole meetings: its marks name the meeting's date, not «▶ 00:00» (reported by the user)
+await step('brief cites whole meetings', async () => {
+  const r = await page.evaluate(() => {
+    const item = { data: { mode: 'brief', sources: [{ n: 1, meeting_id: 1, title: 'Планёрка', date: '2026-11-12', start: 0, whole: true, text: '' }] } };
+    const moment = { data: { sources: [{ n: 1, meeting_id: 1, title: 'Планёрка', date: '2026-11-12', start: 75, text: 'фраза' }] } };
+    return [asRefLabel(item.data.sources[0], item), asRefLabel(moment.data.sources[0], moment), asRefTip(item.data.sources[0], item),
+      asRefLabel({ n: 1, date: '2026-11-12', start: 0 }, { data: { mode: 'digest' } })];
+  });
+  expect(r[0] === '12.11' && r[1] === '01:15' && r[3] === '12.11', `the marks: ${JSON.stringify(r)}`);
+  expect(r[2].includes('Планёрка') && !r[2].includes('00:00'), `the tooltip: ${r[2]}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
