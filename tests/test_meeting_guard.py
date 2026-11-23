@@ -237,3 +237,31 @@ class TranscriptionWaitsForTheMeetingTest(unittest.TestCase):
             self.assertTrue(recording._wait_for_meeting_end(7))
         self.assertEqual(slept.call_count, 2)
         self.assertEqual(progress.call_args_list[0].kwargs["stage_text"], "Сведение дорожек: начнётся после встречи")
+
+
+class LeftEarlyTest(unittest.TestCase):
+    """Asked by the user: a meeting left before its end in the calendar held the mix until that end."""
+
+    def setUp(self):
+        from app import meeting_guard
+
+        self.addCleanup(meeting_guard._left.clear)
+        self.event = {"title": "Планёрка", "uid": "u1", "start": __import__("datetime").datetime(2026, 11, 23, 11, 0)}
+
+    def test_a_stopped_recording_ends_the_calendar_meeting_unless_a_call_goes_on(self):
+        from app import app_status, meeting_guard
+
+        with mock.patch("app.calendar_ics.current_meeting", return_value=self.event), \
+                mock.patch.object(meeting_guard, "enabled", return_value=True), \
+                mock.patch("app.economy.on", return_value=False):
+            app_status.set_recording(True)
+            self.assertEqual(meeting_guard.busy(), "recording")
+            app_status.set_recording(False)  # stopped before the calendar's end
+            with mock.patch.object(meeting_guard, "_in_call", return_value=False):
+                self.assertEqual(meeting_guard.busy(), "")  # left: nothing holds the mix
+            with mock.patch.object(meeting_guard, "_in_call", return_value=True):
+                self.assertEqual(meeting_guard.busy(), "calendar")  # still in the call: it holds
+            other = dict(self.event, uid="u2")
+            with mock.patch("app.calendar_ics.current_meeting", return_value=other), \
+                    mock.patch.object(meeting_guard, "_in_call", return_value=False):
+                self.assertEqual(meeting_guard.busy(), "calendar")  # another meeting, not left

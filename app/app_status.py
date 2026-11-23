@@ -121,7 +121,12 @@ def take_notices() -> List[Dict[str, Any]]:
 
 
 def set_recording(active: bool) -> None:
+    was = bool(_ui.get("recording"))
     _ui.update(recording=bool(active), since=time.time() if active else 0.0)
+    if was and not active:  # stopped during a calendar meeting: it holds the mix no longer once the call is over
+        from app import meeting_guard
+
+        meeting_guard.recording_ended()
 
 
 def background() -> List[str]:

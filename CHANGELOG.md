@@ -15,6 +15,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   the menu lists those recordings, and the other person replaces the speaker there and the name in the answer.
 - **«Mix now»**: a stopped recording whose mix waits for a meeting says which one (the calendar's meeting and its
   end) and can be mixed at once.
+- **A meeting left early no longer holds the mix**: once the recording is stopped and no call app holds the
+  microphone, the calendar's meeting is taken for over.
 - **A brief, a digest and overviews cite whole meetings**: their marks show the meeting's date and open it, instead
   of «▶ 00:00».
 - **«Open tasks from the last meeting»** in the meeting strip opens the brief with them.
@@ -1041,6 +1043,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   перечисляет эти записи, и другой человек заменяет участника в них и имя в тексте ответа.
 - **«Свести сейчас»**: остановленная запись, чьё сведение ждёт встречи, называет её (встреча из календаря и её конец)
   и сводится сразу по кнопке.
+- **Встреча, из которой вышли раньше, больше не держит сведение**: после остановки записи, если микрофон не занят
+  приложением звонка, встреча из календаря считается законченной.
 - **Бриф, дайджест и обзоры ссылаются на встречи целиком**: их метки показывают дату встречи и открывают её, а не
   «▶ 00:00».
 - **«Открытых задач с прошлой встречи»** в полосе встречи открывает бриф с ними.
