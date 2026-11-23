@@ -280,6 +280,15 @@ def merge(versions: Dict[str, Dict[str, Any]], lang: str, chat: Optional[Callabl
             try:
                 by_llm += _ask_in_parts(places, disputed[b:b + _LLM_BATCH], chat)
             except Exception as e:  # the model stopped answering: the rest is decided by accuracy
+                from app.cancel_scope import Aborted
+
+                if isinstance(e, Aborted):
+                    # the job was stopped («Отменить», «Выгрузить всё»), the model did not fail: a merge half
+                    # decided by accuracy was saved in place of the text shown (the user's log: «[merge]
+                    # analysis model failed: Обработка отменена»). Nothing of it is saved
+                    if check_cancel:
+                        check_cancel()
+                    raise
                 print(f"[merge] analysis model failed: {e}", flush=True)
                 break
 

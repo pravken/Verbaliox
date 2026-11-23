@@ -169,6 +169,46 @@ class MergeJobTest(unittest.TestCase):
         transcriber._merge_runner(self.mid)
         self.assertEqual(self.db.get_meeting(self.mid)["speakers"][sid]["name"], "Анна")
 
+    def _with_chat(self, chat):
+        from unittest import mock
+
+        p = mock.patch("app.llm.target", return_value=mock.Mock(chat=chat))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_a_stop_while_the_model_answers_saves_nothing(self):
+        """«Выгрузить всё» or «Отменить» during the merge (the user's log: «[merge] analysis model failed:
+        Обработка отменена»): no merge half decided by accuracy replaces the text; the MFU and the versions stay."""
+        from app.cancel_scope import Aborted
+
+        self.db.update_meeting_fields(self.mid, mfu="1. Отчёт — Участник 1")
+
+        def stopped(*a, **k):
+            raise Aborted("Обработка отменена")
+
+        self._with_chat(stopped)
+        with self.assertRaises(transcriber.JobCancelled):
+            transcriber._merge_runner(self.mid)
+        m = self.db.get_meeting(self.mid)
+        self.assertEqual(m["transcript_model"], "gigaam-v3")
+        self.assertEqual([v["model"] for v in m["transcript_versions"]], ["large-v3"])
+        self.assertEqual(m["mfu"], "1. Отчёт — Участник 1")
+
+    def test_the_mfu_saved_during_a_merge_stays_with_every_version(self):
+        """The MFU pasted while the merge waits for the analysis model (reported by the user): the merge
+        writes its text and its versions only, the MFU saved meanwhile and every version stay."""
+        def answer(*a, **k):
+            self.db.update_meeting_fields(self.mid, mfu="1. Отчёт — Участник 1")  # «Сохранить» on the page now
+            raise RuntimeError("timed out")  # the model did not answer: decided by accuracy
+
+        self._with_chat(answer)
+        transcriber._merge_runner(self.mid)
+        transcriber._merge_runner(self.mid)  # and merged again
+        m = self.db.get_meeting(self.mid)
+        self.assertEqual(m["transcript_model"], "merged")
+        self.assertEqual(sorted(v["model"] for v in m["transcript_versions"]), ["gigaam-v3", "large-v3"])
+        self.assertEqual(m["mfu"], "1. Отчёт — Участник 1")
+
     def test_a_disputed_word_can_take_the_other_variant(self):
         from fastapi.testclient import TestClient
 
