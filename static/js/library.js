@@ -42,6 +42,7 @@ async function loadMeetingsList(opts = {}) {
       // a recording opened while its tracks were mixed had no file: its player is loaded now it has one
       await selectMeeting(updated.id, state.activeMeeting.status === 'mixing');
       if (finished) buildPlayerWaveformEnvelope(state.activeMeeting);
+      mfuTasksIfDue();
     } else if (updated && ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting'].some(f => updated[f] !== state.activeMeeting[f])) {
       for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting']) state.activeMeeting[f] = updated[f];
       updateProcessingBanner(state.activeMeeting);
@@ -299,6 +300,7 @@ function handleLiveEvent(ev) {
     // Segments and speakers only change when a processing stage finishes
     selectMeeting(ev.id, active.status === 'mixing').then(() => {
       if (ev.status === 'completed') buildPlayerWaveformEnvelope(state.activeMeeting);
+      mfuTasksIfDue();
     });
   } else {
     for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting']) active[f] = m[f];

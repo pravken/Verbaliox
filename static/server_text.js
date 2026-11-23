@@ -112,6 +112,7 @@ const SERVER_TEXT_EN = {
   "Запись сейчас не обрабатывается": "The recording is not being processed",
   "Запись сейчас обрабатывается": "The recording is being processed now",
   "Запись уже обрабатывается": "The recording is already being processed",
+  "Запись обрабатывается: задачи обновятся после окончания обработки": "The recording is being processed: the tasks will be updated once it is done",
   "Запись уже обрабатывается. Дождитесь окончания или отмените обработку.": "The recording is already being processed. Wait until it is done or cancel the processing.",
   "Teams не ответил вовремя": "Teams did not answer in time",
   "только в Windows": "Windows only",

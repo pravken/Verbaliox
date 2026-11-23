@@ -1267,11 +1267,26 @@ async function saveMfu() {
   if (changed) refreshTasksAfterMfu(m);
 }
 
-// The tasks made again with the MFU (or without it, once cleared): the summaries use it the next time they are made
+// The tasks made again with the MFU (or without it, once cleared): the summaries use it the next time they are made.
+// A recording being recognized (merged, translated) is asked again once its job ends (mfuTasksIfDue): the analysis
+// model beside the speech models took the video card from both and the computer hung (reported by the user)
 function refreshTasksAfterMfu(m) {
+  if (!DONE_STATUSES.includes(m.status)) {
+    (state.mfuTasksDue = state.mfuTasksDue || new Set()).add(m.id);
+    showToast(t('mfuTasksAfterJob'));
+    return;
+  }
   if (!aiAvailable()) { showToast(t('mfuNoModel')); return; }
   showToast(t('mfuTasksUpdating'));
   createAnalysisSection('commitments');
+}
+
+// The open recording's job ended: the tasks asked for by a change of its MFU meanwhile are made now
+function mfuTasksIfDue() {
+  const m = state.activeMeeting;
+  if (!m || !state.mfuTasksDue || !state.mfuTasksDue.has(m.id) || !DONE_STATUSES.includes(m.status)) return;
+  state.mfuTasksDue.delete(m.id);
+  if (m.status === 'completed') refreshTasksAfterMfu(m);
 }
 
 // --- My notes of a recording: plain text, saved as it is typed; every summary takes it in ---
