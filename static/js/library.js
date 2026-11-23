@@ -42,8 +42,8 @@ async function loadMeetingsList(opts = {}) {
       // a recording opened while its tracks were mixed had no file: its player is loaded now it has one
       await selectMeeting(updated.id, state.activeMeeting.status === 'mixing');
       if (finished) buildPlayerWaveformEnvelope(state.activeMeeting);
-    } else if (updated && ['progress', 'stage_text', 'mix_wait', 'mix_deleting'].some(f => updated[f] !== state.activeMeeting[f])) {
-      for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_deleting']) state.activeMeeting[f] = updated[f];
+    } else if (updated && ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting'].some(f => updated[f] !== state.activeMeeting[f])) {
+      for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting']) state.activeMeeting[f] = updated[f];
       updateProcessingBanner(state.activeMeeting);
     }
   }
@@ -62,9 +62,9 @@ async function loadMeetingsList(opts = {}) {
 // net: every 5 min while the stream is connected (the events carry the changes), at the old 2 s / 8 s
 // cadence when it is not, never while the window is hidden.
 const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false, listEtag: '', polledAt: 0 };
-const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now', 'mix_wait', 'mix_deleting'];
+const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now', 'mix_wait', 'mix_why', 'mix_deleting'];
 // the fields no sort, group or filter of the list reads: a change of only these redraws one row
-const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now', 'mix_wait', 'mix_deleting'];
+const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now', 'mix_wait', 'mix_why', 'mix_deleting'];
 
 function startLiveUpdates() {
   if (!window.EventSource) return;
@@ -301,7 +301,7 @@ function handleLiveEvent(ev) {
       if (ev.status === 'completed') buildPlayerWaveformEnvelope(state.activeMeeting);
     });
   } else {
-    for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_deleting']) active[f] = m[f];
+    for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting']) active[f] = m[f];
     updateProcessingBanner(active);
     if (active.asr_now !== m.asr_now) { active.asr_now = m.asr_now; renderTxModelBar(); }
   }

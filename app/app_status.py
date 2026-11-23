@@ -43,6 +43,8 @@ mixing: set = set()
 # (0: after the meeting going on), shown on the card as a countdown; and the ones marked for deletion, deleted
 # as soon as the mix is over
 mix_wait: Dict[int, float] = {}
+# while a meeting goes on (mix_wait 0): which one holds it — {"kind": "calendar"|"recording", "title", "end": "HH:MM"}
+mix_why: Dict[int, Dict[str, str]] = {}
 mix_deleting: set = set()
 
 
@@ -52,6 +54,8 @@ def mix_state(meeting_id: int) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     if meeting_id in mix_wait:
         out["mix_wait"] = mix_wait.get(meeting_id, 0.0)
+        if not out["mix_wait"] and mix_why.get(meeting_id):
+            out["mix_why"] = mix_why[meeting_id]
     if meeting_id in mix_deleting:
         out["mix_deleting"] = True
     return out

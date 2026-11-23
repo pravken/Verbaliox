@@ -974,7 +974,7 @@ def _mix_fields(meeting_id: int) -> Dict[str, Any]:
     from app import app_status
 
     st = app_status.mix_state(meeting_id)
-    return {"mix_wait": st.get("mix_wait"), "mix_deleting": bool(st.get("mix_deleting"))}
+    return {"mix_wait": st.get("mix_wait"), "mix_why": st.get("mix_why"), "mix_deleting": bool(st.get("mix_deleting"))}
 
 
 def save_meeting_results(

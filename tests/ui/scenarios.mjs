@@ -1522,6 +1522,17 @@ await step('mix wait countdown', async () => {
     renderTxModelBar();
   });
   expect((await sub()) === 'Начнётся после встречи', `during a meeting: «${await sub()}»`);
+  expect(await page.isVisible('#tx-rc-mixnow'), '«Свести сейчас» is not offered while the mix waits');
+  // which meeting holds it, and «Свести сейчас» lets it go (asked by the user: «откуда эта пауза»)
+  await page.evaluate(() => { state.activeMeeting.mix_why = { kind: 'calendar', title: 'Планёрка', end: '11:30' }; renderTxModelBar(); });
+  expect((await sub()) === 'Начнётся после встречи «Планёрка» (до 11:30)', `the meeting is not named: «${await sub()}»`);
+  if (shots) await page.screenshot({ path: `${shots}/mix-wait-why.png` });
+  let asked = '';
+  await page.route('**/api/meetings/9902/mix-now', r => { asked = r.request().method(); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await page.click('#tx-rc-mixnow');
+  await sleep(300);
+  expect(asked === 'POST' && !(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» did not ask the server');
+  await page.evaluate(() => { delete state.activeMeeting.mix_why; });
   await page.evaluate(() => {
     state.activeMeeting.mix_wait = Date.now() / 1000 + 100;
     renderTxModelBar();

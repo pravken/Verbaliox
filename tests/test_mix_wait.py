@@ -127,7 +127,7 @@ class MixWaitTest(unittest.TestCase):
         self.assertEqual(waited.call_count, 2)
         self.assertEqual(progress[0], ("Сведение дорожек: пауза на случай следующей встречи", until))
         self.assertEqual(progress[-1][0], "Сведение дорожек записи...")
-        self.assertEqual(fields, {"mix_wait": None, "mix_deleting": False})  # the countdown is over
+        self.assertEqual(fields, {"mix_wait": None, "mix_why": None, "mix_deleting": False})  # the countdown is over
         self.assertNotIn(m["id"], app_status.mix_wait)
 
     def test_a_meeting_going_on_says_after_the_meeting(self):
@@ -142,6 +142,38 @@ class MixWaitTest(unittest.TestCase):
                 mock.patch.object(database, "update_meeting_progress", side_effect=lambda mid, **kw: seen.append(kw["stage_text"])):
             recording._wait_for_meeting_end(m["id"], None)  # not known how long: taken for a long one
         self.assertEqual(seen[0], "Сведение дорожек: начнётся после встречи")
+
+    def test_mix_now_lets_a_waiting_mix_go(self):
+        """Asked by the user: «Свести сейчас» instead of waiting for the meeting's end with no way on."""
+        import threading
+
+        from app import database
+
+        m = database.create_meeting(title="Сейчас", filename="n", media_path="", source="recording")
+        self.addCleanup(database.delete_meeting, m["id"])
+        wake = threading.Event()
+        with recording._mix_lock:
+            recording._mixes[m["id"]] = {"wake": wake, "delete": None, "seconds": None}
+        self.addCleanup(recording._mixes.pop, m["id"], None)
+        app_status.mixing.add(m["id"])
+        self.addCleanup(app_status.mixing.discard, m["id"])
+        self.assertFalse(recording.mix_now(m["id"]))  # not waiting yet
+        why = {"kind": "calendar", "title": "Планёрка", "end": "11:30"}
+        done = []
+        with mock.patch.object(meeting_guard, "hold_until", return_value=0.0), \
+                mock.patch.object(meeting_guard, "hold_reason", return_value=why):
+            th = threading.Thread(target=lambda: done.append(recording._wait_for_meeting_end(m["id"], None)))
+            th.start()
+            for _ in range(100):
+                if m["id"] in app_status.mix_wait:
+                    break
+                wake.wait(0.02)
+            self.assertEqual(app_status.mix_state(m["id"]).get("mix_why"), why)  # the page names the meeting
+            self.assertTrue(recording.mix_now(m["id"]))
+            th.join(5)
+        self.assertEqual(done, [True])
+        self.assertNotIn(m["id"], app_status.mix_wait)
+        self.assertNotIn(m["id"], app_status.mix_why)
 
     def test_the_list_shows_the_wait(self):
         from app import database

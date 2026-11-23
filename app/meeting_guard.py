@@ -190,6 +190,26 @@ def holds_queue(now: Optional[float] = None) -> bool:
         return bool(_state["ended"]) and now - _state["ended"] < QUIET_SEC
 
 
+def hold_reason() -> Dict[str, str]:
+    """What holds the queue now, for the page (asked by the user: «откуда эта пауза»): an own recording, or the
+    calendar's meeting with its title and end. {} when nothing, or not known."""
+    with _lock:
+        kind = _state["busy"]
+    if kind == "recording":
+        return {"kind": "recording"}
+    if kind == "calendar":
+        try:
+            from app import calendar_ics
+
+            e = calendar_ics.current_meeting(cached=True)
+            if e:
+                return {"kind": "calendar", "title": str(e.get("title") or "")[:120], "end": e["end"].strftime("%H:%M")}
+        except Exception:
+            pass
+        return {"kind": "calendar"}
+    return {}
+
+
 def hold_until(now: Optional[float] = None) -> Optional[float]:
     """What holds_queue() says, with when it ends: None — nothing is held; 0.0 — a meeting goes on (its end
     is not known); a time — QUIET_SEC after the end of the last meeting. The page counts down to it."""
