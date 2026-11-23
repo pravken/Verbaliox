@@ -128,8 +128,12 @@ function formatDurationShort(sec) {
 
 // Stages of a job run at very different speeds (e.g. translation vs. speech synthesis), so the
 // remaining time is estimated from the progress rate of the last few minutes, not since the start.
+// The rate needs a few points of progress in the window: one point (86 → 87 %) over a long step made the
+// estimate grow with every second of the step, «≈ ещё 1 мин» became «≈ 41 мин» in 4 minutes (reported by
+// the user, the merge of the versions); with less, the rate since the start of the job is used
 const _progressHistory = {};
 const ETA_WINDOW_SEC = 240;
+const ETA_MIN_POINTS = 3;
 
 function jobTiming(q, pct) {
   if (!q || !q.started_at) return null;
@@ -144,7 +148,7 @@ function jobTiming(q, pct) {
   let remaining = null;
   const first = samples[0];
   const span = now - first.t;  // includes time without progress, so a stall raises the estimate
-  if (samples.length >= 2 && pct > first.p && span >= 30 && pct < 100) {
+  if (samples.length >= 2 && pct - first.p >= ETA_MIN_POINTS && span >= 30 && pct < 100) {
     remaining = (100 - pct) * span / (pct - first.p);
   } else if (pct >= 5 && pct < 100 && elapsed >= 10) {
     remaining = elapsed * (100 - pct) / pct;
