@@ -13,6 +13,13 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   someone else…», a contact or a typed name), and the analysis shows the new name at once. In a brief, a digest
   or another answer of the assistant the names of the speakers of the cited recordings are such buttons too:
   the menu lists those recordings, and the other person replaces the speaker there and the name in the answer.
+- **«Mix now»**: a stopped recording whose mix waits for a meeting says which one (the calendar's meeting and its
+  end) and can be mixed at once.
+- **A brief, a digest and overviews cite whole meetings**: their marks show the meeting's date and open it, instead
+  of «▶ 00:00».
+- **«Open tasks from the last meeting»** in the meeting strip opens the brief with them.
+- **Update check**: when GitHub limits its API (403, 60 requests an hour per address), the release is found by
+  its public feed and its own files; the signature is checked as always.
 
 ## 0.9.2 — English
 
@@ -1032,6 +1039,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   («Это другой человек…», из контактов или введённое имя), и анализ сразу показывает новое имя. В брифе,
   дайджесте и других ответах ассистента имена участников цитируемых записей — такие же кнопки: меню
   перечисляет эти записи, и другой человек заменяет участника в них и имя в тексте ответа.
+- **«Свести сейчас»**: остановленная запись, чьё сведение ждёт встречи, называет её (встреча из календаря и её конец)
+  и сводится сразу по кнопке.
+- **Бриф, дайджест и обзоры ссылаются на встречи целиком**: их метки показывают дату встречи и открывают её, а не
+  «▶ 00:00».
+- **«Открытых задач с прошлой встречи»** в полосе встречи открывает бриф с ними.
+- **Проверка обновлений**: когда GitHub ограничивает API (403, 60 запросов в час на адрес), релиз находится по
+  открытой ленте и его собственным файлам; подпись проверяется как всегда.
 
 ## 0.9.2
 
