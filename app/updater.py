@@ -42,6 +42,12 @@ LATEST_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 # releases/latest never names a pre-release
 RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=30"
 CHECK_INTERVAL_SEC = 6 * 3600
+# When the API refuses (403/429: GitHub allows 60 requests an hour per address without an account, and an office or
+# a VPN shares one address — reported by the user): the public feed of the releases and the release's own files,
+# which have no such limit. The signature of SHA256SUMS.txt is checked the same way.
+FEED_URL = f"https://github.com/{GITHUB_REPO}/releases.atom"
+RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}"
+RATE_LIMITED = "GitHub временно ограничил число проверок с этого адреса. Программа проверит снова позже."
 # Files are only ever downloaded from this repository's releases
 DOWNLOAD_PREFIX = f"https://github.com/{GITHUB_REPO}/releases/download/"
 # The author's release key (minisign format, app/release_sign.py, docs/release-signing.md). Set: an
@@ -96,6 +102,86 @@ def is_git_checkout() -> bool:
 
 
 # ------------------------------------------------------------------ check
+def changelog_notes(tag: str, text: str) -> str:
+    """The notes of a release from CHANGELOG.md, as the release page has them (tools/release_notes.py): every
+    section of the version, the English one first. A beta gets the sections of its coming version."""
+    base = re.sub(r"^v", "", tag.strip()).split("-")[0]
+    sections, inside = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = re.match(rf"^## {re.escape(base)}(\s|$)", line) is not None
+            if inside:
+                sections.append([])
+        if inside and line.strip() != "---":
+            sections[-1].append(line)
+    english = [x for x in sections if x[0].rstrip().endswith("English")]
+    blocks = english + [x for x in sections if x not in english]
+    return "\n\n".join("\n".join(x).strip() for x in blocks).strip()
+
+
+def _latest_from_feed(c: Any, beta: bool) -> Optional[Dict[str, Any]]:
+    """The newest release by the public feed (no API, no limit per hour): its tag from the feed, its files
+    from its SHA256SUMS.txt, its notes from CHANGELOG.md of that tag. None: no release."""
+    r = c.get(FEED_URL)
+    r.raise_for_status()
+    tags = {t for t in re.findall(rf"/{re.escape(GITHUB_REPO)}/releases/tag/([\w.\-]+)", r.text, re.IGNORECASE)}
+    # a pre-release is told by its version (v0.9.0-beta.1): the feed does not say which ones are
+    tags = [t for t in tags if beta or parse_version(t)[3] == 1]
+    if not tags:
+        return None
+    tag = max(tags, key=parse_version)
+    base = f"{DOWNLOAD_PREFIX}{tag}/"
+    sums = c.get(base + "SHA256SUMS.txt")
+    sums.raise_for_status()
+    names = [ln.split()[-1].lstrip("*") for ln in sums.text.splitlines() if len(ln.split()) == 2]
+    zip_name = next((n for n in names if re.fullmatch(r"Verbaliox-v[\w.\-]+\.zip", n)), None)
+    notes = ""
+    try:
+        log = c.get(f"{RAW_URL}/{tag}/CHANGELOG.md")
+        if log.status_code == 200:
+            notes = changelog_notes(tag, log.text)[:20000]
+    except Exception:
+        pass
+    return {
+        "version": tag.lstrip("v"), "tag": tag, "name": tag, "notes": notes,
+        "url": f"https://github.com/{GITHUB_REPO}/releases/tag/{tag}", "published_at": None,
+        "zip_url": base + zip_name if zip_name else None, "zip_name": zip_name,
+        "sums_url": base + "SHA256SUMS.txt", "sig_url": base + "SHA256SUMS.txt.minisig",
+        "zip_digest": "",  # GitHub's own digest comes only with the API: SHA256SUMS.txt and its signature still hold
+    }
+
+
+def _latest_from_api(r: Any, beta: bool) -> Optional[Dict[str, Any]]:
+    """The newest release by the API's answer (releases/latest, or the recent ones with betas). None: no release."""
+    rel = None
+    if r.status_code != 404:  # 404: no release published yet
+        r.raise_for_status()
+        rel = r.json()
+        if beta:
+            rel = max((x for x in rel if isinstance(x, dict) and not x.get("draft")),
+                      key=lambda x: parse_version(x.get("tag_name") or ""), default=None)
+    if rel is None:
+        return None
+    assets = {a.get("name"): a.get("browser_download_url") for a in rel.get("assets") or []
+              if str(a.get("browser_download_url") or "").startswith(DOWNLOAD_PREFIX)}
+    # GitHub's own SHA-256 of each uploaded file ("sha256:<hex>"), independent of SHA256SUMS.txt
+    digests = {a.get("name"): str(a.get("digest") or "") for a in rel.get("assets") or []}
+    zip_name = next((n for n in assets if re.fullmatch(r"Verbaliox-v[\w.\-]+\.zip", n or "")), None)
+    return {
+        "version": str(rel.get("tag_name") or "").lstrip("v"),
+        "tag": rel.get("tag_name"),
+        "name": rel.get("name") or rel.get("tag_name"),
+        "notes": (rel.get("body") or "")[:20000],
+        "url": rel.get("html_url"),
+        "published_at": rel.get("published_at"),
+        "zip_url": assets.get(zip_name) if zip_name else None,
+        "zip_name": zip_name,
+        "sums_url": assets.get("SHA256SUMS.txt"),
+        "sig_url": assets.get("SHA256SUMS.txt.minisig"),
+        "zip_digest": digests.get(zip_name, "").removeprefix("sha256:").lower() if zip_name else "",
+    }
+
+
 def check(force: bool = False) -> Dict[str, Any]:
     """The latest release, cached; never raises."""
     import httpx
@@ -114,34 +200,14 @@ def check(force: bool = False) -> Dict[str, Any]:
                               headers={"Accept": "application/vnd.github+json",
                                        "User-Agent": f"Verbaliox/{current_version()}"}) as c:
                 r = c.get(RELEASES_URL if beta else LATEST_URL)
-            rel = None
-            if r.status_code != 404:  # 404: no release published yet
-                r.raise_for_status()
-                rel = r.json()
-                if beta:
-                    rel = max((x for x in rel if isinstance(x, dict) and not x.get("draft")),
-                              key=lambda x: parse_version(x.get("tag_name") or ""), default=None)
-            if rel is None:
-                latest = None
-            else:
-                assets = {a.get("name"): a.get("browser_download_url") for a in rel.get("assets") or []
-                          if str(a.get("browser_download_url") or "").startswith(DOWNLOAD_PREFIX)}
-                # GitHub's own SHA-256 of each uploaded file ("sha256:<hex>"), independent of SHA256SUMS.txt
-                digests = {a.get("name"): str(a.get("digest") or "") for a in rel.get("assets") or []}
-                zip_name = next((n for n in assets if re.fullmatch(r"Verbaliox-v[\w.\-]+\.zip", n or "")), None)
-                latest = {
-                    "version": str(rel.get("tag_name") or "").lstrip("v"),
-                    "tag": rel.get("tag_name"),
-                    "name": rel.get("name") or rel.get("tag_name"),
-                    "notes": (rel.get("body") or "")[:20000],
-                    "url": rel.get("html_url"),
-                    "published_at": rel.get("published_at"),
-                    "zip_url": assets.get(zip_name) if zip_name else None,
-                    "zip_name": zip_name,
-                    "sums_url": assets.get("SHA256SUMS.txt"),
-                    "sig_url": assets.get("SHA256SUMS.txt.minisig"),
-                    "zip_digest": digests.get(zip_name, "").removeprefix("sha256:").lower() if zip_name else "",
-                }
+                if r.status_code in (403, 429):  # the API's limit per hour: the public feed instead
+                    try:
+                        latest = _latest_from_feed(c, beta)
+                    except Exception as e:
+                        print(f"[update] the API refused ({r.status_code}) and the feed failed: {e}", flush=True)
+                        raise RuntimeError(RATE_LIMITED) from None
+                else:
+                    latest = _latest_from_api(r, beta)
             with _lock:
                 _state.update(checked_at=time.time(), latest=latest, error="", beta=beta)
         except Exception as e:

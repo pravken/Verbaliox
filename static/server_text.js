@@ -126,6 +126,7 @@ const SERVER_TEXT_EN = {
   "Классический Outlook на этом компьютере не найден. Для нового Outlook и Outlook в браузере добавьте опубликованную ссылку .ics": "Classic Outlook was not found on this computer. For the new Outlook and Outlook on the web, add a published .ics link",
   "Контрольная сумма архива FFmpeg не совпала — файл отклонён": "The FFmpeg archive checksum did not match — the file was rejected",
   "Контрольная сумма архива не совпала — файл повреждён или подменён": "The archive checksum did not match — the file is damaged or replaced",
+  "GitHub временно ограничил число проверок с этого адреса. Программа проверит снова позже.": "GitHub has limited the checks from this address for a while. The program will check again later.",
   "Контрольные суммы релиза не совпадают между собой — обновление отменено": "The release checksums do not match each other — the update was cancelled",
   "Копия не найдена": "The copy was not found",
   "Копия сделана более новой версией программы: обновите Verbaliox": "The backup was made by a newer version: update Verbaliox",
