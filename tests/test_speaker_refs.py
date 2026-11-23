@@ -236,6 +236,41 @@ class StoredAnalysisTest(unittest.TestCase):
         self._rename("SPEAKER_00", "Анна Белова")
         self.assertEqual(database.get_meeting(self.mid)["summaries"]["protocol"], "Вклад: Вера Орлова")
 
+    def test_a_name_of_an_answer_put_right_in_every_recording_it_cites(self):
+        """«Это другой человек…» on a name of a brief: the speakers of that name in the cited recordings take the
+        other name (their analyses follow by the references), the answer's text too; another recording keeps it."""
+        database.merge_summaries(self.mid, {"protocol": "Борис Лапин взял смету"})
+        other = database.create_meeting("Созвон", str(self.wav), str(self.wav))["id"]
+        database.save_meeting_results(other, segments=[{"id": 0, "start": 0.0, "end": 5.0, "speaker": "SPEAKER_00", "text": "да"}],
+                                      speakers=_spk(["Борис Лапин"]), transcript_model="large-v3")
+        database.merge_summaries(other, {"tldr": "Борис Лапин согласен"})
+        apart = database.create_meeting("Не в ответе", str(self.wav), str(self.wav))["id"]
+        database.save_meeting_results(apart, segments=[], speakers=_spk(["Борис Лапин"]), transcript_model="large-v3")
+        text = "Борис Лапин взял смету; Борис Лапинов и **Борис Лапин** — разные. борис лапин"
+        r = self.c.post("/api/assistant/rename-person", json={
+            "old": "Борис Лапин", "new": "Глеб Нестеров", "meeting_ids": [self.mid, other], "text": text})
+        self.assertEqual(r.status_code, 200, r.text)
+        data = r.json()
+        self.assertEqual(sorted(x["id"] for x in data["meetings"]), sorted([self.mid, other]))
+        self.assertEqual(data["text"], "Глеб Нестеров взял смету; Борис Лапинов и **Глеб Нестеров** — разные. борис лапин")
+        self.assertEqual(database.get_meeting(self.mid)["speakers"]["SPEAKER_02"]["name"], "Глеб Нестеров")
+        self.assertEqual(database.get_meeting(self.mid)["summaries"]["protocol"], "Глеб Нестеров взял смету")
+        self.assertEqual(database.get_meeting(other)["summaries"]["tldr"], "Глеб Нестеров согласен")
+        self.assertEqual(database.get_meeting(apart)["speakers"]["SPEAKER_00"]["name"], "Борис Лапин")
+
+    def test_a_name_of_an_answer_checked(self):
+        bad = [({"old": "", "new": "Вера", "meeting_ids": [self.mid]}, 400),
+               ({"old": "Вера", "new": " Вера ", "meeting_ids": [self.mid]}, 400),
+               ({"old": "Вера", "new": "Нина", "meeting_ids": [self.mid, 987654]}, 404),
+               ({"old": "Вера", "new": "Нина", "meeting_ids": ["x"]}, 422)]
+        for body, code in bad:
+            r = self.c.post("/api/assistant/rename-person", json=body)
+            self.assertEqual(r.status_code, code, body)
+        self.assertEqual(database.get_meeting(self.mid)["speakers"]["SPEAKER_00"]["name"], "Анна Котова")
+        # a name no cited recording has: only the text changes
+        r = self.c.post("/api/assistant/rename-person", json={"old": "Вера", "new": "Нина", "meeting_ids": [self.mid], "text": "Вера и Верам; Вера Котова, Ольга Вера"})
+        self.assertEqual(r.json(), {"meetings": [], "busy": [], "text": "Нина и Верам; Вера Котова, Ольга Вера"})  # full names stay
+
 
 if __name__ == "__main__":
     unittest.main()

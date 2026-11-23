@@ -16,6 +16,8 @@ const SERVER_TEXT_EN = {
   "Пустой текст: чтобы убрать раздел, удалите его": "The text is empty: to remove the section, delete it",
   "Укажите, что и на что исправить": "Give the word to correct and the right one",
   "Укажите, кого на кого заменить": "Give the person to replace and the one to put in their place",
+  "Новое имя совпадает с прежним": "The new name is the same as the old one",
+  "Слишком много записей": "Too many recordings",
   "Обновление через git из программы работает только в Windows": "Updating via git from the app works on Windows only",
   "Это не клон git с update.bat: обновите программу из «Настройки → Общие → Обновления»": "This is not a git clone with update.bat: update the app in Settings → General → Updates",
   "Фича с таким названием уже есть": "A feature with this name already exists",

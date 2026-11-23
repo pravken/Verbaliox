@@ -813,6 +813,7 @@ function renderAssistant(scrollDown) {
       b.className = 'as-ref';
       b.textContent = `▶ ${asRefLabel(s, item)}`;
     });
+    markAnswerNames(el, item);  // a person's name: a click puts another person in its place (app.js)
   }
   if (scrollDown) {
     const scroller = document.getElementById('library-answer');

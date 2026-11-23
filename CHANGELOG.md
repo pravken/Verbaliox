@@ -6,6 +6,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.3 — English
+
+- **A wrong person's name is put right with a click**: in a recording's analysis a speaker's name is a quiet
+  button; its menu renames the speaker («Rename the speaker…») or puts another person in its place («This is
+  someone else…», a contact or a typed name), and the analysis shows the new name at once. In a brief, a digest
+  or another answer of the assistant the names of the speakers of the cited recordings are such buttons too:
+  the menu lists those recordings, and the other person replaces the speaker there and the name in the answer.
+
 ## 0.9.2 — English
 
 - **The meeting strip on top keeps its text in its place**: nothing slides under its buttons any more; the queue
@@ -1016,6 +1024,14 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.3
+
+- **Неверное имя человека исправляется одним нажатием**: в анализе записи имя участника — неброская кнопка;
+  её меню переименовывает участника («Переименовать участника…») или ставит на его место другого человека
+  («Это другой человек…», из контактов или введённое имя), и анализ сразу показывает новое имя. В брифе,
+  дайджесте и других ответах ассистента имена участников цитируемых записей — такие же кнопки: меню
+  перечисляет эти записи, и другой человек заменяет участника в них и имя в тексте ответа.
 
 ## 0.9.2
 

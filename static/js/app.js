@@ -2443,6 +2443,7 @@ function markSuspects(box) {
   box.querySelectorAll('.an-person').forEach(el => el.replaceWith(...el.childNodes));
   box.querySelectorAll('.an-suspect').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
   box.querySelectorAll('.an-md').forEach(el => el.normalize());
+  markSpeakerRefs(box);  // a speaker's name first: its menu renames the speaker
   if (!list.length) { markPeople(box); return; }
   const esc = w => w.split(/\s+/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
   // the longest first: «Claude Code» before «Claude»
@@ -2799,6 +2800,226 @@ async function replacePersonInAnalysis(oldName, newName, undo = false) {
   if (!data.changed.length && !data.tasks) { showToast(t('pnReplaceNone').replace('{name}', () => oldName)); return; }
   showToast(t('pnReplaced').replace('{name}', () => oldName).replace('{other}', () => newName),
     { label: t('spUndo'), onClick: () => replacePersonInAnalysis(newName, oldName, true) });
+}
+
+// --- The names of speakers as buttons: the analysis of a recording and the assistant's answers ---
+// (asked by the user: «not that Дмитрий» in a brief or an analysis, put right with a click on the name)
+// A name is a speaker's when it is written in full as the speaker is called, by the rule the server keeps the
+// analysis's references by (app/speaker_refs.mark_text): long enough to be told from a word, one speaker's alone,
+// a one-word name not beside another capitalised word («Анна Петрова» for the speaker «Анна» is someone else).
+const NAME_REF_DEFAULT = /^(SPEAKER_|Спикер |Speaker )/i;
+const oneSpaced = (s) => String(s || '').split(/\s+/).filter(Boolean).join(' ');
+function speakerRefNames(speakers) {
+  const seen = new Map();
+  for (const [sid, sp] of Object.entries(speakers || {})) {
+    const name = oneSpaced(sp && sp.name);
+    if (name.length < 3 || NAME_REF_DEFAULT.test(name) || /[⟦⟧|]/.test(name)) continue;
+    if (!seen.has(name)) seen.set(name, []);
+    seen.get(name).push(sid);
+  }
+  return new Map([...seen].filter(([, ids]) => ids.length === 1).map(([n, ids]) => [n, ids[0]]));
+}
+
+// The names of `names` (name → what its button carries in data-ref) in the text of root's elements of `selector`
+// become buttons that open openNameRefMenu. Text nodes are rewritten, never the sanitized HTML: a name is text
+// in the button, never markup
+let nameRefSeq = 0;
+function chipNames(root, selector, names, tip) {
+  if (!root) return;
+  root.querySelectorAll('.name-ref').forEach(el => el.replaceWith(document.createTextNode(el.textContent)));
+  root.normalize();
+  if (!names || !names.size) return;
+  const esc = w => w.split(' ').map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[ \\t\\u00a0]+');
+  const words = [...names.keys()].sort((a, b) => b.length - a.length);
+  const rx = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${words.map(esc).join('|')})(?![\\p{L}\\p{N}_-])`, 'gu');
+  const capAfter = /^[ \t]+\p{Lu}\p{Ll}/u, capBefore = /(?<![\p{L}\p{N}_-])\p{Lu}[\p{Ll}-]+[ \t]+$/u;
+  const boxes = selector ? [...root.querySelectorAll(selector)] : [root];
+  for (const box of boxes) {
+    if (box.closest('.an-edit')) continue;
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement.closest('code, pre, a, button, .an-suspect, .an-person, .an-guess') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0, any = false;
+      for (const hit of text.matchAll(rx)) {
+        const name = oneSpaced(hit[0]);
+        if (!names.has(name)) continue;
+        const end = hit.index + hit[0].length;
+        if (!name.includes(' ') && (capAfter.test(text.slice(end, end + 40)) || capBefore.test(text.slice(Math.max(0, hit.index - 40), hit.index)))) continue;
+        frag.append(text.slice(last, hit.index));
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'name-ref';
+        b.textContent = hit[0];
+        b.title = tip.replace('{name}', () => name);
+        b.dataset.name = name;
+        b.dataset.ref = String(names.get(name));
+        b.dataset.menuKey = `nref-${++nameRefSeq}`;  // each name its own menu (core.js vxOwnerKey)
+        b.dataset.click = 'openNameRefMenu';
+        b.dataset.clickArgs = '[{"$":"el"}]';
+        frag.append(b);
+        last = end;
+        any = true;
+      }
+      if (!any) continue;
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  }
+}
+
+// The analysis of the open recording: its speakers' names (the rows of the overview's cards too)
+function markSpeakerRefs(box) {
+  const m = state.activeMeeting;
+  if (!m || !box) return;
+  chipNames(box, '.an-md, .sc-t', speakerRefNames(m.speakers), t('nrTip'));
+}
+
+function openNameRefMenu(el) {
+  if (!el || !el.isConnected) return;
+  if (el.closest('#summary-content')) openSpeakerRefMenu(el);
+  else if (el.closest('[data-as-answer]')) openAnswerNameMenu(el);
+}
+
+function contactNamed(name) {
+  return (contacts.list || []).find(p => p.kind === 'person' && [p.name, ...(p.aliases || [])].some(s => s === name)) || null;
+}
+
+// The people to choose from for «Это другой человек…»: `first` (the speakers concerned), then the contacts
+async function namePickList(first, except) {
+  if (typeof loadContacts === 'function') await loadContacts(true);
+  const people = (contacts.list || []).filter(p => p.kind === 'person').map(p => p.name);
+  return [...new Set([...first, ...people].map(oneSpaced))]
+    .filter(n => n && n !== except && !NAME_REF_DEFAULT.test(n) && !/^(Участник|Speaker) \d+$/i.test(n)).slice(0, 16);
+}
+
+function openSpeakerRefMenu(el) {
+  const m = state.activeMeeting;
+  const sid = el.dataset.ref;
+  const s = ((m && m.speakers) || {})[sid];
+  if (!s) return;
+  const r = el.getBoundingClientRect();
+  const name = s.name || sid;
+  const contact = contactNamed(name);
+  const items = [{ info: true, label: t('nrAnTitle').replace('{name}', () => name) }, { sep: true },
+    { label: t('nrRename'), run: async () => {
+      const value = await askText(t('spkRenameLabel').replace('{name}', () => name), name);
+      if (value && value.trim() && value.trim() !== name) await renameSpeaker(sid, value);
+    } },
+    { label: t('pnIsSomeoneElse'), run: () => setTimeout(() => openSpeakerOtherMenu(sid, r), 0) },
+    ...(contact ? [{ sep: true }, { label: t('pnOpenCard').replace('{name}', () => contact.name), run: () => openPersonCard(contact.name) }] : [])];
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 4, { owner: el }), 0);
+}
+
+// Another person in place of this speaker, in this recording: the speaker takes their name (the analysis and the
+// tasks follow on the server); the toast puts it back
+async function openSpeakerOtherMenu(sid, r) {
+  const m = state.activeMeeting;
+  const s = ((m && m.speakers) || {})[sid];
+  if (!s) return;
+  const old = s.name || sid;
+  const here = Object.entries(m.speakers || {}).filter(([id]) => id !== sid).map(([, sp]) => sp && sp.name);
+  const names = await namePickList(here, old);
+  const put = async (name) => {
+    if (!name || name === old || state.activeMeeting !== m) return;
+    await updateSpeaker(sid, name, null);
+    if (((state.activeMeeting?.speakers || {})[sid] || {}).name !== name) return;
+    showToast(t('nrSpeakerNow').replace('{old}', () => old).replace('{name}', () => name),
+      { label: t('spUndo'), onClick: () => updateSpeaker(sid, old, null) });
+  };
+  openTextMenuAt([{ info: true, label: t('nrOtherWho').replace('{name}', () => old) }, { sep: true },
+    ...names.map(n => ({ label: n, run: () => put(n) })),
+    { sep: true }, { label: t('pnReplaceOther'), run: async () => {
+      const typed = await askText(t('pnReplaceAsk').replace('{name}', () => old), '');
+      if (typed && typed.trim()) put(oneSpaced(typed));
+    } }], r.left, r.bottom + 4);
+}
+
+// The recordings an answer of the assistant cites, as the list of «Записи» has them
+function answerMeetings(item) {
+  const data = (item && item.data) || {};
+  const cited = citedNumbers(data.answer);
+  const ids = [...new Set((data.sources || []).filter(s => !cited.size || cited.has(s.n)).map(s => s.meeting_id))];
+  return ids.map(id => (state.meetings || []).find(x => x.id === id)).filter(Boolean);
+}
+
+// The names of an answer: the speakers of the recordings it cites, and the people of the contacts
+function markAnswerNames(el, item) {
+  if (!contacts.list && typeof loadContacts === 'function') {
+    loadContacts().then(list => { if (list && list.length && el.isConnected) markAnswerNames(el, item); });
+  }
+  const names = new Map();
+  for (const m of answerMeetings(item)) for (const n of speakerRefNames(m.speakers).keys()) names.set(n, item.id);
+  for (const p of contacts.list || []) if (p.kind === 'person' && oneSpaced(p.name).length >= 3) names.set(oneSpaced(p.name), item.id);
+  chipNames(el, null, names, t('nrAnsTip'));
+}
+
+function answerMeetingsWith(item, name) {
+  return answerMeetings(item).filter(m => Object.values(m.speakers || {}).some(sp => sp && oneSpaced(sp.name) === name));
+}
+
+function openAnswerNameMenu(el) {
+  const item = assistantFindItem(Number(el.dataset.ref));
+  const name = el.dataset.name;
+  if (!item || !name) return;
+  const r = el.getBoundingClientRect();
+  const recs = answerMeetingsWith(item, name);
+  const contact = contactNamed(name);
+  const items = [{ info: true, label: recs.length ? t('nrAnsIn') : t('nrAnsNone') },
+    ...recs.map(m => ({ info: true, label: `${m.title}${assistantMeetingDate(m) ? ` · ${assistantMeetingDate(m)}` : ''}` })),
+    { sep: true }, { label: t('pnIsSomeoneElse'), run: () => setTimeout(() => openAnswerOtherMenu(item, name, recs, r), 0) },
+    ...(contact ? [{ label: t('pnOpenCard').replace('{name}', () => contact.name), run: () => openPersonCard(contact.name) }] : [])];
+  setTimeout(() => openTextMenuAt(items, r.left, r.bottom + 4, { owner: el, maxWidth: 380 }), 0);
+}
+
+async function openAnswerOtherMenu(item, old, recs, r) {
+  const here = recs.flatMap(m => Object.values(m.speakers || {}).map(sp => sp && sp.name));
+  const names = await namePickList(here, old);
+  openTextMenuAt([{ info: true, label: t('nrAnsWho').replace('{name}', () => old) }, { sep: true },
+    ...names.map(n => ({ label: n, run: () => renameInAnswer(item, old, n, recs) })),
+    { sep: true }, { label: t('pnReplaceOther'), run: async () => {
+      const typed = await askText(t('pnReplaceAsk').replace('{name}', () => old), '');
+      if (typed && typed.trim()) renameInAnswer(item, old, oneSpaced(typed), recs);
+    } }], r.left, r.bottom + 4, { maxWidth: 380 });
+}
+
+// The speakers of that name in the recordings listed take the other name (their analyses follow), and so does the
+// answer's text; the conversation is saved with it
+async function renameInAnswer(item, old, name, recs) {
+  if (!item || !item.data || !name || name === old) return;
+  const res = await fetch('/api/assistant/rename-person', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old, new: name, meeting_ids: recs.map(m => m.id), text: item.data.answer || '' }),
+  }).catch(() => null);
+  if (!res) { showError(t('errNoNetwork')); return; }
+  const data = await readJson(res);
+  if (!res.ok) { showError(errorText(data, res)); return; }
+  item.data.answer = data.text;
+  assistantSaveSoon();
+  const changed = new Set((data.meetings || []).map(x => x.id));
+  for (const m of state.meetings || []) {  // the list as it is now, until it is read again
+    if (!changed.has(m.id)) continue;
+    for (const sp of Object.values(m.speakers || {})) if (sp && oneSpaced(sp.name) === old) sp.name = name;
+  }
+  const open = state.activeMeeting;
+  if (open && changed.has(open.id)) {
+    const fresh = await fetch(`/api/meetings/${open.id}`).then(x => (x.ok ? x.json() : null)).catch(() => null);
+    if (fresh && state.activeMeeting === open) {
+      state.activeMeeting = fresh;
+      renderSpeakerPillsBar();
+      renderSpeakersPanel();
+      renderTranscript();
+      renderAnalysisNames();
+    }
+  }
+  if (typeof loadMeetingsList === 'function') loadMeetingsList();
+  renderAssistant();
+  showToast(t('nrAnsDone').replace('{old}', () => old).replace('{name}', () => name).replace('{n}', () => String(changed.size))
+    + ((data.busy || []).length ? `. ${t('nrAnsBusy').replace('{n}', () => String(data.busy.length))}` : ''), null, 'success');
 }
 
 function openSuspectMenu(el) {

@@ -1599,6 +1599,68 @@ await step('brief cites whole meetings', async () => {
   expect(r[2].includes('Планёрка') && !r[2].includes('00:00'), `the tooltip: ${r[2]}`);
 });
 
+// A speaker's name in the analysis is a button (asked by the user: «not that Дмитрий»): its menu renames the
+// speaker or puts another person in its place, and the analysis shows the new name at once
+await step('name chip in the analysis', async () => {
+  await page.evaluate(() => { switchAppView('library'); openMeeting(1); });
+  await sleep(1200);
+  await page.evaluate(() => { switchWorkspaceTab('summary'); selectSummaryTab('protocol'); });
+  await sleep(600);
+  const chip = page.locator('#summary-content .name-ref', { hasText: 'Олег' }).first();
+  await chip.click();
+  await sleep(300);
+  const items = await page.$$eval('#text-menu button', els => els.map(e => e.textContent.trim()));
+  expect(items.includes('Переименовать участника…') && items.includes('Это другой человек…'), `the menu: ${items.join(' | ')}`);
+  await page.locator('#text-menu button', { hasText: 'Это другой человек…' }).click();
+  for (let i = 0; i < 30 && !(await page.locator('#text-menu button', { hasText: 'Другое имя…' }).count()); i++) await sleep(100);
+  await page.locator('#text-menu button', { hasText: /^Мария$/ }).click();
+  let text = '';
+  for (let i = 0; i < 30 && !/готовит Мария/.test(text); i++) { await sleep(100); text = await page.textContent('#summary-content'); }
+  expect(/готовит Мария/.test(text), 'the analysis does not show the other person');
+  const back = await page.evaluate(async () => { await updateSpeaker('SPEAKER_01', 'Олег', null); return document.querySelector('#summary-content').textContent; });
+  expect(/готовит Олег/.test(back), 'the name did not come back');
+});
+
+// The names in a brief: the speakers of the recordings it cites are buttons; «Это другой человек…» renames the
+// speaker there and in the answer's text
+await step('name chip in a brief', async () => {
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(500);
+  await page.evaluate(async () => {
+    for (let i = 0; i < 30 && !ASSIST.loaded; i++) await new Promise(res => setTimeout(res, 100));
+    assistantNewChat();
+    currentChat().items.push({ id: 993, question: 'Бриф', scope: state.askScope, scopeLabel: '', status: 'done', at: new Date().toISOString(),
+      data: { found: true, mode: 'brief', answer: '- **Олег** готовит список [1]\n- Анна посмотрит сроки [2], Анна Петрова в копии',
+        sources: [{ n: 1, meeting_id: 2, title: 'Созвон по проекту', date: '2026-11-20', start: 0, whole: true, text: '' },
+          { n: 2, meeting_id: 3, title: 'Разбор итогов недели', date: '2026-11-21', start: 0, whole: true, text: '' }] } });
+    renderAssistant();
+  });
+  await sleep(300);
+  const chips = await page.$$eval('#ask-thread [data-as-answer="993"] .name-ref', els => els.map(e => e.textContent));
+  expect(chips.join() === 'Олег,Анна', `the chips: ${chips.join()}`);  // «Анна Петрова» is someone else
+  await page.locator('#ask-thread .name-ref', { hasText: 'Анна' }).click();
+  await sleep(300);
+  const items = await page.$$eval('#text-menu > *', els => els.map(e => e.textContent.trim()));
+  expect(items.some(x => x.startsWith('Созвон по проекту')) && items.some(x => x.startsWith('Разбор итогов недели')), `the menu: ${items.join(' | ')}`);
+  await page.locator('#text-menu button', { hasText: 'Это другой человек…' }).click();
+  for (let i = 0; i < 30 && !(await page.locator('#text-menu button', { hasText: 'Другое имя…' }).count()); i++) await sleep(100);
+  await page.locator('#text-menu button', { hasText: /^Мария$/ }).click();
+  let r = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(100);
+    r = await page.evaluate(async () => ({ answer: assistantFindItem(993).data.answer,
+      spk: (await fetch('/api/meetings/3').then(x => x.json())).speakers.SPEAKER_02.name }));
+    if (r.answer.includes('Мария посмотрит') && r.spk === 'Мария') break;
+  }
+  expect(r.answer === '- **Олег** готовит список [1]\n- Мария посмотрит сроки [2], Анна Петрова в копии' && r.spk === 'Мария', `after: ${JSON.stringify(r)}`);
+  await page.evaluate(async () => {
+    for (const id of [2, 3]) await fetch(`/api/meetings/${id}/speakers`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speaker_id: 'SPEAKER_02', name: 'Анна' }) });
+    const chat = currentChat();
+    chat.items = chat.items.filter(i => i.id !== 993);
+    renderAssistant();
+  });
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
