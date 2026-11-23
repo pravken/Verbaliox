@@ -20,7 +20,10 @@ def ecapa_loaded_on() -> Optional[str]:
     torch and scikit-learn (seconds and hundreds of MB), and the page's first look at the models
     (/api/vram) or an idle unload imported them only to learn that nothing was loaded."""
     mod = sys.modules.get("app.diarizer")
-    return mod.ecapa_loaded_on() if mod is not None else None
+    # a module still being imported by another thread (a transcription starting) has no function yet: nothing is
+    # loaded then — the page's look at the models failed with «partially initialized module» (seen in a user's log)
+    fn = getattr(mod, "ecapa_loaded_on", None) if mod is not None else None
+    return fn() if fn is not None else None
 
 
 def _ollama_base() -> str:
