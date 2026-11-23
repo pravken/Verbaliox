@@ -3701,10 +3701,17 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .strip-rec { background: rgba(255, 69, 58, 0.10); --sline: rgba(255, 69, 58, 0.35); }
 .strip-after { background: var(--sidebar); }
 .strip-ready { background: rgba(48, 209, 88, 0.08); --sline: rgba(48, 209, 88, 0.3); }
-.strip-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; height: 100%; font-size: var(--fs-ui); }
+/* overflow hidden: a narrow strip cuts its own text instead of sliding it under the buttons next to it (reported by the user) */
+.strip-main { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 12px; height: 100%; font-size: var(--fs-ui); }
 .strip-main.strip-link { cursor: pointer; }
 .strip-lead { font-weight: 600; color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; min-width: 72px; flex: 0 1 auto; }
-.strip-meta { color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 3 auto; }
+/* short, and whole or not at all: «записано 12 мин» cut to «записа…» said nothing (reported by the user); the title gives way */
+.strip-lead-t { display: inline-block; transition: transform 0.4s ease; }
+.strip-lead-over { text-overflow: clip; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.strip-main:hover .strip-lead-over { -webkit-mask-image: none; mask-image: none; }
+.strip-main:hover .strip-lead-over .strip-lead-t { transform: translateX(var(--lead-shift, 0)); transition: transform var(--lead-time, 2s) linear 0.3s; }
+@media (prefers-reduced-motion: reduce) { .strip-main:hover .strip-lead-over .strip-lead-t { transform: none; } }
+.strip-meta { color: var(--hc-dim, #AEAEB2); white-space: nowrap; flex: none; }
 .strip-grow { flex: 1; min-width: 0; color: #8E9198; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip-grow-live { color: #FFD4D1; }
 .strip-lead.hidden, .strip-meta.hidden { display: none; }
@@ -5084,7 +5091,7 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-island:hover { background: #15171A; }
 .st-island.hidden { display: none; }
 .st-island svg { width: 20px; height: 20px; flex: none; }
-.st-island-t { font-variant-numeric: tabular-nums; }
+.st-island-t { font-variant-numeric: tabular-nums; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-island-n { color: var(--hc-dim, #9A9CA1); font-weight: 400; padding-left: 8px; border-left: 1px solid var(--line); }
 .st-island-n.st-island-solo { padding-left: 6px; border-left: 0; }
 .st-island-wait { color: var(--hc-dim, #AEAEB2); }

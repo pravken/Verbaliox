@@ -6,6 +6,117 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.2 — English
+
+- **The meeting strip on top keeps its text in its place**: nothing slides under its buttons any more; the queue
+  island says why jobs wait in a few words («Waiting for the meeting to end»), the whole sentence in its tooltip.
+- **«recorded N min»** is shown whole; a long recording title fades at its end and scrolls to it when the pointer is
+  over the strip.
+
+### Also in 0.9.1
+
+- **A short recording is mixed at once.** A recording of up to 3 minutes no longer waits two minutes after it ends
+  for its tracks to be mixed: its mix takes seconds. A longer recording still waits for the end of the meeting
+  («Don't disturb in meetings»).
+- **The wait is explained.** While the mix waits, the recording says why with a countdown — «Starts in 1:40: a
+  pause in case the next meeting begins right away», or «Starts after the meeting» while a call or a calendar
+  meeting goes on — instead of 1 % «after the meeting».
+- **A recording can be deleted while its tracks wait or are mixed.** A waiting one is deleted at once with its
+  tracks; one being mixed is deleted as soon as the mix is over («The recording will be deleted as soon as its
+  tracks are mixed»). No tracks are left behind, a restart meanwhile included.
+- **Deleting several recordings** says why the ones left were not deleted, in the program's words, instead of «they
+  may be processing».
+- **The red button while recording**: only «Stop» stops; the dot, the time and the sources open the recording studio.
+- **The selection bar of Recordings**: quiet actions with icons, ✕ with the count, «Delete» apart in red.
+
+### Also in 0.9.0
+
+- **Back and forward** at the start of the top strip, like in a browser (also Alt+← / Alt+→ and the mouse's side
+  buttons).
+- **The recording time** on the red button opens the recording studio; captions have one size in every window.
+- **Features in their own panel**: «Manage features…» in the feature menus of Overview and Recordings and on a
+  recording's feature chip opens a panel over any section; the Dictionary keeps its features card.
+- **Assistant**: a greeting gets a short reply; a general question (explain a term, give advice, write a text) is
+  answered by the model from what it knows, with its reasoning on and marked as not from the library; only a
+  question about the recordings is answered from them, and only the cited moments are listed as sources. The
+  assistant remembers the last three questions of the conversation, so «and in more detail?» works.
+- **Speaker names in the analysis follow renames** even after the speakers are split again or merged: the
+  analysis refers to the speaker, not to the name written at the time.
+- **Windows notifications, the tray menu and meeting reminders** follow the interface language.
+- The «Cherry» accent became «Raspberry», apart from the red of a recording. Menus and windows keep inside the
+  program's window. Dictionary fields explain themselves.
+
+- **A new look, «Meeting desk»**: a rail of sections on the left (Today, Overview, Recordings, Tasks, People,
+  Dictionary, Assistant; Ctrl+1…6), at the bottom «Settings» and «Quit». The old sidebar is gone.
+- **The meeting strip on top** says what is going on — free until the end of the day, a meeting in N minutes,
+  going without recording, recording, waiting for transcription, results ready — with the button of that
+  moment (Join, Record, Mark the moment, Open the results) and «＋ Import».
+- **Load in the status bar**: CPU, RAM and the video memory with the program's own share; a click lists the
+  models in memory, each with «Unload».
+- **Today and Overview**: Today is the calendar (day, week, month; the working time gone by shaded) with the
+  cards of the day; Overview is the analytics: «Statistics» tiles with a trend and the metrics of your choice,
+  charts as columns, bars, a ring or a line, every part in a colour of its own.
+- **My programs** (off by default): how the working time is split between programs — only the
+  program's name is kept, no window titles, keys or screenshots, and it never leaves the computer.
+- **Recordings**: table, cards and folders; «Columns» in every view, compact rows; search shows the places
+  found in the texts; a selection bar; import from a menu, Ctrl+O or by dropping files on any screen.
+- **A recording**: Transcript first, as a chat or as text; Analysis as cards with ▶ links to the moments;
+  Details with «Transcribe again» and «Recreate the analysis»; a lower player that also folds into one line.
+- **Tasks** as a table, cards or a calendar; **People** and **Dictionary** are sections of their own; the
+  assistant shows its sources as ▶ time marks; one window after an update instead of two.
+- Fixes: quitting or shutting Windows down during a transcription is no longer counted as a crash; a start
+  during an update no longer rolls the installation back; the MCP server follows its setting for
+  dictations at once;
+  backups keep the minutes worked on this computer.
+- **«Don't disturb in meetings» holds everything now**: while a meeting goes on and two minutes after it, the
+  transcription, the mix of a stopped recording and the speaker models wait; Nemotron leaves memory with the
+  other speech models. Models no longer load in the middle of a call and slow the computer down.
+- **Live captions are off by default** and never start by themselves while «Don't disturb in meetings» holds;
+  turn them on on the recording screen or in Settings → Recording.
+- **Meeting hours in Overview** count every recording again, the ones not transcribed yet and cancelled included.
+- **Dragging widgets** in «Customize»: the widget lifts and a slot shows where it lands.
+- **Calendar month**: today is marked again.
+- «Customize» names each widget instead of its internal key.
+- Settings: switching tabs fades like the views.
+- Interface texts in a plainer, neutral tone.
+- **Analysis on the computer only**: sending text to cloud models over their API is removed. Saved API keys,
+  the cloud request log and the «local only» marks are deleted; Ollama always does the analysis. Recordings
+  marked «local only» before stay hidden from the agent (MCP).
+- **One look for every window, menu and notice**: a head with its icon, the close button in one place, one
+  button everywhere (32 px, the same corners), the side panels of Overview slide in and out; notices show
+  their kind in a coloured square and the time left as a thin line.
+- **Dictionary**: the words are the main card with group chips and rows like in Recordings; suggestions,
+  correction and features in a column on the right from 1100 px.
+- **A click on a day of the week or the month opens that day**: its meetings, the recordings made that day
+  and the hours worked; ‹ › step a day.
+- **Assistant**: a clear send button; the conversation title shows that it can be renamed.
+- Fixes: the calendar from classic Outlook without a mail profile no longer opens Outlook's first-run wizard
+  every 15 minutes; deleting an Ollama model starts Ollama when needed and deletes the name it really has;
+  the shortcuts show the new icon after the next update; «About» shows the new icon.
+- **Accent to choose** in Settings → General: eight colours for the picked-out buttons and marks; the
+  background stays one.
+- Settings fill a wide window in two columns; «Reset this tab» is gone. Today's date tile has a green frame.
+  Model buttons are of one size; the agent's lines are copied with an icon in the code.
+- **«Quit»** at the bottom of the rail, like the power button of Windows: «Minimize to the tray» or «Quit
+  completely» (Ctrl+Q), which always asks first.
+- **The queue is an island in the top strip**: nothing while nothing runs; the job with its progress ring and
+  «+N queued»; a click opens the queue. The rail's «Queue» button is gone.
+- **One, paler accent** for buttons, switches and the chosen segment of every switch; menus mark the current item
+  in the accent instead of a tick. A second click on a menu's button closes it; Escape closes only the top layer;
+  one menu at a time.
+- **«＋ Import ▾»** like «● Record ▾»: the button opens everything, the menu opens the window for files, a folder or
+  a link.
+- **Transcript**: a recording without a text shows one card with the model choice and the progress of the mixing
+  or the recognition; the model, the speakers and the tools of the text in one row.
+- **My programs** counts only the minutes with input (a game controller too); the time of meetings comes from the
+  recordings.
+- Fixes: a question to the assistant right after the start waits for Ollama to come up; the calendar from Outlook
+  never closes an Outlook in use; «Minimize to the tray» only with a tray icon;
+  an update interrupted by a power loss no longer blocks the start; the strip no longer asks the calendar in a loop
+  after an error; a recording opened and left quickly no longer stays hidden; widgets drag right at any interface
+  scale; recordings once closed to the agent stay closed when their folder goes; the shortcuts window lists
+  Ctrl+1…6.
+
 ## 0.9.1 — English
 
 - **A short recording is mixed at once.** A recording of up to 3 minutes no longer waits two minutes after it ends
@@ -905,6 +1016,111 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.2
+
+- **Полоса встречи сверху держит текст на месте**: ничего больше не уходит под её кнопки; островок очереди называет
+  причину ожидания коротко («Ждут конца встречи»), полная фраза — в подсказке.
+- **«записано N мин»** видно целиком; длинное название записи плавно гаснет к концу и прокручивается до конца при
+  наведении на полосу.
+
+### А также в 0.9.1
+
+- **Короткая запись сводится сразу.** Запись до 3 минут больше не ждёт две минуты после окончания, пока сведутся
+  её дорожки: сведение занимает секунды. Длинная запись по-прежнему ждёт конца встречи («Не мешать на встречах»).
+- **Ожидание объяснено.** Пока сведение ждёт, запись показывает причину и отсчёт — «Начнётся через 1:40 — пауза на
+  случай, если следующая встреча начнётся сразу» или «Начнётся после встречи», пока идёт звонок или встреча по
+  календарю, — а не 1 % «после встречи».
+- **Запись можно удалить, пока её дорожки ждут сведения или сводятся.** Ожидающая удаляется сразу вместе с
+  дорожками; сводящаяся — как только сведение закончится («Запись удалится, как только сведутся дорожки»). Дорожки
+  не остаются на диске, в том числе после перезапуска в это время.
+- **Удаление нескольких записей** называет причину, по которой часть из них не удалилась, а не «возможно, они
+  сейчас обрабатываются».
+- **Красная кнопка во время записи**: останавливает только «Стоп»; точка, время и источники открывают студию записи.
+- **Панель выделения в «Записях»**: спокойные действия со значками, ✕ с числом выбранных, «Удалить» отдельно и красным.
+
+### А также в 0.9.0
+
+- **«Назад» и «Вперёд»** в начале верхней полосы, как в браузере (а также Alt+← / Alt+→ и боковые кнопки мыши).
+- **Время записи** на красной кнопке открывает студию записи; субтитры одного размера во всех окнах.
+- **Фичи в отдельной панели**: «Управлять фичами…» в меню фич «Обзора» и «Записей» и в чипе фичи записи открывает
+  панель поверх любого раздела; в «Словаре» карточка фич остаётся.
+- **Ассистент**: на приветствие отвечает коротко; общий вопрос (объяснить понятие, дать совет, написать текст)
+  получает ответ модели из её знаний, с размышлениями и пометкой, что он не по записям; по записям отвечает
+  только на вопросы о них, а в источниках — только места, на которые ссылается ответ. Ассистент помнит три
+  последних вопроса разговора, так что «а подробнее?» работает.
+- **Имена участников в анализе следуют переименованиям** и после повторного разделения или объединения
+  участников: анализ ссылается на участника, а не на имя, записанное в тот момент.
+- **Уведомления Windows, меню значка в трее и напоминания о встречах** — на языке интерфейса.
+- Акцент «Вишня» стал «Малиной» и больше не сливается с красным цветом записи. Меню и окна не выходят за
+  пределы окна программы. Поля «Словаря» поясняют себя.
+
+- **Новый вид — «Пульт встреч»**: слева полоса разделов (Сегодня, Обзор, Записи, Задачи, Люди, Словарь, Ассистент;
+  Ctrl+1…6), внизу «Настройки» и «Выйти». Старой боковой панели больше нет.
+- **Полоса встречи сверху** показывает, что происходит: свободно до конца дня, встреча через N минут, идёт без
+  записи, идёт запись, ждёт расшифровки, итоги готовы — и кнопку этого момента (Подключиться, Записать,
+  Отметить момент, Открыть итоги), рядом «＋ Импорт».
+- **Нагрузка в строке состояния**: процессор, память и видеопамять с долей самой программы; по щелчку — модели
+  в памяти, у каждой своя «Выгрузить».
+- **«Сегодня» и «Обзор»**: «Сегодня» — календарь (день, неделя, месяц; прошедшее рабочее время подсвечено) и
+  карточки дня; «Обзор» — аналитика: плитки «Статистики» с динамикой и выбором показателей, диаграммы
+  столбцами, полосами, кругом или линией, у каждой части свой цвет.
+- **«Мои программы»** (по умолчанию выключено): как рабочее время делится между программами. Хранится
+  только название программы — без заголовков окон, нажатий клавиш и снимков экрана, данные не покидают компьютер.
+- **«Записи»**: таблица, карточки и папки; «Колонки» во всех видах, компактные строки; поиск показывает найденные
+  места в тексте; панель выделения; импорт из меню, по Ctrl+O или перетаскиванием файлов на любом экране.
+- **Запись**: сначала «Расшифровка» — чатом или текстом; «Анализ» карточками со ссылками ▶ на моменты;
+  «Сведения» с «Расшифровать заново» и «Пересоздать анализ»; проигрыватель ниже, сворачивается в одну строку.
+- **«Задачи»** — таблицей, карточками или календарём; **«Люди»** и **«Словарь»** — отдельные разделы; ассистент
+  показывает источники метками ▶ времени; после обновления — одно окно вместо двух.
+- Исправления: выход из программы или выключение Windows во время расшифровки больше не считаются сбоем; запуск
+  во время обновления больше не откатывает установку; MCP-сервер сразу учитывает настройку диктовок; резервная
+  копия и восстановление сохраняют отработанное время этого компьютера.
+- **«Не мешать на встречах» держит всё**: пока идёт встреча и две минуты после неё, ждут расшифровка, сведение
+  остановленной записи и модели участников; Nemotron выгружается вместе с остальными моделями речи. Модели
+  больше не загружаются посреди звонка и не тормозят компьютер.
+- **Субтитры по умолчанию выключены** и не включаются сами, пока действует «Не мешать на встречах»; включить
+  можно на экране записи или в «Настройки → Запись».
+- **Часы встреч в «Обзоре»** снова считают все записи, в том числе ещё не расшифрованные и отменённые.
+- **Перетаскивание виджетов** в «Настроить»: виджет приподнимается, а место показывает, куда он встанет.
+- **Календарь, месяц**: сегодняшний день снова выделен.
+- В «Настроить» у каждого виджета своё название вместо служебного ключа.
+- Настройки: вкладки переключаются с плавным появлением, как разделы.
+- Тексты интерфейса — проще и в спокойном, деловом тоне.
+- **Анализ только на компьютере**: возможность отправлять текст в облачные модели по API убрана. Сохранённые
+  API-ключи, журнал облачных запросов и пометки «только локально» удаляются; анализ всегда выполняет Ollama.
+  Записи, помеченные раньше «только локально», по-прежнему скрыты от агента (MCP).
+- **Один вид у всех окон, меню и уведомлений**: заголовок со значком, кнопка закрытия на одном месте, одна
+  кнопка везде (32 px, одинаковые углы), боковые панели «Обзора» выезжают и уезжают; уведомления показывают
+  свой вид цветным квадратом и оставшееся время тонкой полоской.
+- **«Словарь»**: слова — главная карточка с группами и строками как в «Записях»; предложения, исправление и
+  фичи — в колонке справа начиная с 1100 px.
+- **Щелчок по дню недели или месяца открывает этот день**: его встречи, записи этого дня и отработанные часы;
+  ‹ › — на день назад и вперёд.
+- **Ассистент**: понятная кнопка отправки; по заголовку разговора видно, что его можно переименовать.
+- Исправления: календарь из классического Outlook без почтового профиля больше не открывает мастер первого
+  запуска Outlook каждые 15 минут; удаление модели Ollama при необходимости запускает Ollama и удаляет модель
+  под её настоящим именем; ярлыки показывают новый значок после следующего обновления; в «О программе» — новый значок.
+- **Акцент на выбор** в «Настройки → Общие»: восемь цветов для выделенных кнопок и отметок; фон остаётся один.
+- Настройки на широком окне — в две колонки; «Сбросить вкладку» убрана. Сегодняшний день в «Сегодня» — в зелёной
+  рамке. Кнопки у моделей одного размера; строки для агента копируются значком в самом коде.
+- **«Выйти»** внизу полосы разделов — как кнопка питания Windows: «Свернуть в трей» или «Выйти полностью»
+  (Ctrl+Q), полный выход всегда с подтверждением.
+- **Очередь — островок в полосе сверху**: пока ничего не выполняется, его нет; идёт задача — её кольцо прогресса и
+  «+N в очереди»; щелчок открывает очередь. Кнопки «Очередь» на полосе разделов больше нет.
+- **Один, приглушённый акцент** у кнопок, переключателей и выбранного пункта во всех переключателях; в меню текущий
+  пункт выделен акцентом вместо галочки. Повторный щелчок по кнопке меню закрывает его; Esc закрывает только верхнее
+  окно; открыто одно меню за раз.
+- **«＋ Импорт ▾»** как «● Запись ▾»: кнопка открывает всё сразу, меню — окно для файлов, папки или ссылки.
+- **Расшифровка**: у записи без текста — одна карточка с выбором модели и ходом сведения или распознавания; модель,
+  участники и инструменты текста — в одну строку.
+- **«Мои программы»** считают только минуты с действиями (геймпад тоже); время встреч — по записям.
+- Исправления: вопрос ассистенту сразу после запуска дожидается, пока Ollama запустится; календарь из Outlook больше
+  не закрывает Outlook, с которым работают; «Свернуть в трей» — только когда
+  есть значок в трее; обновление, прерванное отключением питания, больше не мешает запуску; полоса сверху не
+  запрашивает календарь по кругу после ошибки; запись, открытая и тут же покинутая, больше не остаётся скрытой;
+  виджеты перетаскиваются верно при любом масштабе; записи, закрытые раньше от агента, остаются закрытыми и после
+  удаления их папки; окно горячих клавиш показывает Ctrl+1…6.
 
 ## 0.9.1
 

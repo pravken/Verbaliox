@@ -193,13 +193,26 @@ function renderStrip() {
   pill.className = `st-pill ${s.cls.split(' ').map(c => `stp-${c}`).join(' ')}`;
   document.getElementById('strip-pill-t').textContent = s.pill;
   const put = (id, v) => { const el = document.getElementById(id); el.textContent = v || ''; el.classList.toggle('hidden', !v); };
-  put('strip-lead', s.lead);
+  // the title: when it is cut, a hover scrolls it to its end and back (asked by the user, instead of a running line)
+  const lead = document.getElementById('strip-lead');
+  lead.innerHTML = s.lead ? `<span class="strip-lead-t">${escapeHtml(s.lead)}</span>` : '';
+  lead.classList.toggle('hidden', !s.lead);
+  lead.title = s.lead || '';
+  requestAnimationFrame(() => {
+    const over = lead.scrollWidth - lead.clientWidth;
+    lead.classList.toggle('strip-lead-over', over > 4);
+    lead.style.setProperty('--lead-shift', `${-over}px`);
+    lead.style.setProperty('--lead-time', `${Math.min(6, Math.max(1.2, over / 40))}s`);
+  });
   put('strip-meta', s.meta);
   document.getElementById('strip-grow').textContent = s.grow || '';
   document.getElementById('strip-grow').className = `strip-grow${s.growCls ? ` strip-grow-${s.growCls}` : ''}`;
   const main = document.getElementById('strip-main');
   main.classList.toggle('strip-link', !!s.click);
-  main.title = s.click ? s.tip || '' : '';
+  // no tooltip: in the window of the app it was drawn over the strip's own text at the pointer (reported by the user);
+  // the strip says what it opens with its button, and a screen reader hears it
+  main.removeAttribute('title');
+  if (s.click && s.tip) main.setAttribute('aria-label', [s.pill, s.lead, s.tip].filter(Boolean).join(' · ')); else main.removeAttribute('aria-label');
   // reached by the keyboard too while it opens something (Enter and Space: core.js)
   if (s.click) { main.setAttribute('role', 'button'); main.tabIndex = 0; } else { main.removeAttribute('role'); main.removeAttribute('tabindex'); }
   document.getElementById('strip-acts').innerHTML = acts;
@@ -251,6 +264,15 @@ const PANEL_ICON = {
 const panelHead = (id, icon, title) => `<div class="vx-panel-h"><span class="vx-panel-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${PANEL_ICON[icon]}</svg></span><h4 id="${id}">${escapeHtml(title)}</h4></div>`;
 
 // Why the queue waits, or nothing
+// The same reasons in a few words, for the island (the sentence of jobsHold took the whole strip: reported by the
+// user, its text slid under the buttons); the sentence stays in the island's tooltip and the queue window
+function jobsHoldShort() {
+  if (typeof economyOn === 'function' && economyOn()) return t('islandHoldEconomy');
+  if (state.queuePaused) return t('islandHoldPaused');
+  if (state.queueMeeting) return t('islandHoldMeeting');
+  return '';
+}
+
 function jobsHold() {
   if (typeof economyOn === 'function' && economyOn()) return t('jobsHoldEconomy');
   if (state.queuePaused) return t('jobsHoldPaused');
@@ -311,8 +333,9 @@ function renderJobsIsland() {
       html = `${islandRing(pct)}<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
     } else if (!q) {
       label = jobsHold() || t('islandWaiting');
+      const short = jobsHoldShort() || t('islandWaiting');
       html = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity=".45"/><path d="M10 9v6M14 9v6"/></svg>`
-        + `<span class="st-island-t">${escapeHtml(label)}</span>${more}`;
+        + `<span class="st-island-t">${escapeHtml(short)}</span>${more}`;
       cls = 'st-island-wait';
     } else if (others) {
       label = moreText;
