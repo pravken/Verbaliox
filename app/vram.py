@@ -393,10 +393,13 @@ def _retry_unload_later(names: List[str]) -> None:
         _retrying[n] = time.time()
 
     def run() -> None:
+        # imported here, as in ollama_unload: the name is not the module's (a NameError every 10 s kept the
+        # model loaded after «Выгрузить всё», reported by the user with the log)
+        from app.ollama_client import _ollama_address, analysis_running
+
         left, end = list(fresh), time.time() + RETRY_FOR_SEC
         while left and time.time() < end:
             time.sleep(10)
-            from app.ollama_client import analysis_running
 
             if set(left) & set(analysis_running()):
                 print(f"[vram] {', '.join(left)} in use again: not unloaded", flush=True)
