@@ -14,6 +14,8 @@ if (shots) mkdirSync(shots, { recursive: true });
 const browser = await pw.chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 1300, height: 860 } });
 page.setDefaultTimeout(8000);
+// FAKE_NOW=2026-11-22T21:30:00Z: the page lives at that moment (a weekend evening, the last day of a month…)
+if (process.env.FAKE_NOW) await page.clock.install({ time: new Date(process.env.FAKE_NOW) });
 // CPU_SLOW=6: the page runs as on a slow computer (CI), to bring out what only fails there
 if (process.env.CPU_SLOW) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_SLOW) });
 const errors = [];
