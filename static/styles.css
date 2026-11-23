@@ -3714,6 +3714,10 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .strip-meta { color: var(--hc-dim, #AEAEB2); white-space: nowrap; flex: none; }
 .strip-grow { flex: 1; min-width: 0; color: #8E9198; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip-grow-live { color: #FFD4D1; }
+/* a part of the strip's text that opens something of its own (the open tasks of last time → the brief) */
+.strip-link-b { border: 0; padding: 0; background: none; font: inherit; color: var(--accent-text); cursor: pointer; text-decoration: underline;
+  text-decoration-color: rgb(var(--accent-rgb) / 0.4); text-underline-offset: 3px; }
+.strip-link-b:hover { text-decoration-color: currentColor; }
 .strip-lead.hidden, .strip-meta.hidden { display: none; }
 .strip-acts { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .strip-acts:empty { display: none; }
