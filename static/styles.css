@@ -3234,6 +3234,11 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-more { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--accent-hi); font-weight: 500; font-size: var(--fs-label); background: none; border: 0; cursor: pointer; padding: 0; }
 .db-more:hover { text-decoration: underline; }
 .db-c { min-width: 0; }
+.db-feature-grp { display: inline-flex; }
+.db-feature-grp .db-feature-on { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.db-feature-x { width: var(--ctl-h, 32px); padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; color: var(--hc-dim, #AEAEB2); }
+.db-feature-x:hover { color: #FFFFFF; }
+.db-kts-note { margin: 10px 2px 0; }
 .db-note { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); line-height: 1.45; margin: 4px 0 8px; }
 /* the reminder of recordings whose transcription was cancelled (app/untranscribed.py) */
 .db-untx { grid-column: span 12; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.28); font-size: var(--fs-body, 13px); color: #F5F5F7; }
