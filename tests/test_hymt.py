@@ -258,5 +258,75 @@ class TranslateRecommendationTest(unittest.TestCase):
         self.assertEqual(hardware.TRANSLATE_LARGE_MIN_VRAM_GB, ollama_client.TRANSLATE_MODELS[0]["min_vram_gb"])
 
 
+TG_12B = "translategemma:12b"
+
+
+@unittest.skipIf(ollama_client is None, "app dependencies not installed")
+class TranslateGemmaTest(unittest.TestCase):
+    """TranslateGemma (Gemma Terms of Use): a translator the user may install by hand. Never offered, never an
+    analysis model; listed with the translators, its license to check."""
+
+    def setUp(self):
+        from app.database import init_db
+
+        init_db()
+
+    def test_it_is_a_translator(self):
+        for m in (TG_12B, "translategemma:4b", "TranslateGemma:27b"):
+            self.assertTrue(ollama_client.is_translate_only_model(m), m)
+            self.assertTrue(ollama_client.is_translategemma(m), m)
+        self.assertFalse(ollama_client.is_translategemma(RAW_7B))
+        models = ["gemma4:e4b", "gemma4:e2b", TG_12B, "translategemma:4b"]
+        self.assertEqual(ollama_client.chat_models(models), ["gemma4:e4b", "gemma4:e2b"])
+        self.assertEqual(ollama_client.translate_models(models), models)
+
+    def test_it_is_listed_with_the_translators_never_offered(self):
+        cat = ollama_client.translate_catalog([TG_12B, "gemma4:e4b", LOCAL_1_8B])
+        self.assertEqual([m["id"] for m in cat], [ollama_client.HYMT_7B, ollama_client.HYMT_1_8B, TG_12B])
+        tg = cat[-1]
+        self.assertEqual((tg["installed"], tg["installed_as"], tg["offered"]), (True, TG_12B, False))
+        self.assertEqual(tg["license"], "Gemma Terms")
+        self.assertTrue(tg["license_check"])
+        self.assertIn("коммерческим", tg["desc_ru"])
+        self.assertIn("commercial", tg["desc_en"])
+        self.assertTrue(all(m["offered"] for m in cat[:2]))
+        # it is not offered when it is not installed
+        self.assertNotIn(TG_12B, [m["id"] for m in ollama_client.translate_catalog(["gemma4:e4b"])])
+
+    def test_status_keeps_it_out_of_the_analysis_list(self):
+        on_disk = ["gemma4:e4b", "gemma4:e2b", TG_12B, RAW_7B]
+        with mock.patch.object(ollama_client, "_is_ollama_port_open", return_value=False), \
+                mock.patch.object(ollama_client, "models_on_disk", return_value=on_disk), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value="ollama"), \
+                mock.patch.object(ollama_client, "get_all_settings", return_value={"ollama_model": TG_12B}), \
+                mock.patch.object(ollama_client, "update_settings") as save:
+            st = ollama_client.get_ollama_status()
+        self.assertEqual(st["chat_models"], ["gemma4:e4b", "gemma4:e2b"])
+        self.assertNotIn(TG_12B, [m["id"] for m in st["catalog"]])
+        self.assertIn(TG_12B, [m["id"] for m in st["translate_catalog"]])
+        save.assert_called_once_with({"ollama_model": "gemma4:e4b"})  # never the analysis model
+
+
+@unittest.skipIf(live_translate is None, "app dependencies not installed")
+class TranslateGemmaPromptTest(HyMtPromptTest):
+    def test_the_card_prompt_and_options(self):
+        fake, out = self._run(TG_12B, "Давайте перенесём встречу на пятницу\nПояснение")
+        (kind, body), = fake.posts
+        self.assertEqual(kind, "chat")
+        self.assertEqual(body["messages"], [{"role": "user", "content":
+            "You are a professional English (en) to Russian (ru) translator. Your goal is to accurately convey the "
+            "meaning and nuances of the original English text while adhering to Russian grammar, vocabulary, and "
+            "cultural sensitivities. Produce only the Russian translation, without any additional explanations or "
+            "commentary. Please translate the following English text into Russian:\n\n\nLet's move the meeting to Friday"}])
+        self.assertEqual(body["options"], {"temperature": 0.1, "num_ctx": 2048, "num_predict": 200})
+        self.assertNotIn("think", body)
+        self.assertEqual(out, "Давайте перенесём встречу на пятницу")
+
+    def test_an_unknown_source_is_left_out(self):
+        p = live_translate.translategemma_prompt("Hola", None, "ru")
+        self.assertTrue(p.startswith("You are a professional translator into Russian (ru)."))
+        self.assertTrue(p.endswith("Please translate the following text into Russian:\n\n\nHola"))
+
+
 if __name__ == "__main__":
     unittest.main()

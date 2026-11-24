@@ -408,10 +408,19 @@ def is_embedding_model(name: str) -> bool:
     return n.split(":")[0] == semantic or any(h in n for h in _EMBEDDING_HINTS)
 
 
+# The translators: Hy-MT (Tencent) and TranslateGemma (Google). They answer a chat with a translation of it
+TRANSLATE_ONLY_HINTS = ("hy-mt", "translategemma")
+
+
 def is_translate_only_model(name: str) -> bool:
-    """A translator (Hy-MT): it answers a chat with a translation of it, so it never writes an analysis,
-    an answer of the assistant or a dub's text; only the live captions translate with it."""
-    return "hy-mt" in str(name or "").lower()
+    """A translator (Hy-MT, TranslateGemma): it answers a chat with a translation of it, so it never writes an
+    analysis, an answer of the assistant or a dub's text; only the live captions and the dictation translate with it."""
+    n = str(name or "").lower()
+    return any(h in n for h in TRANSLATE_ONLY_HINTS)
+
+
+def is_translategemma(name: str) -> bool:
+    return "translategemma" in str(name or "").lower()
 
 
 def chat_models(models: List[str]) -> List[str]:
@@ -440,10 +449,31 @@ def translate_model_installed_as(model_id: str, models: List[str]) -> Optional[s
 
 
 def translate_catalog(models: List[str]) -> List[Dict[str, Any]]:
+    """The translators of TRANSLATE_MODELS (offered for download), then any other translator the user installed
+    in Ollama: never offered, listed with the trash and with a licence to check (TranslateGemma: the Gemma Terms
+    of Use, with restrictions of use; an older Hy-MT: Tencent's own licence)."""
     out = []
     for item in TRANSLATE_MODELS:
         as_name = translate_model_installed_as(item["id"], models)
-        out.append({**item, "installed": as_name is not None, "installed_as": as_name or ""})
+        out.append({**item, "installed": as_name is not None, "installed_as": as_name or "", "offered": True})
+    known = {str(m["installed_as"]).lower() for m in out if m["installed_as"]}
+    for m in models:
+        if not is_translate_only_model(m) or m.lower() in known:
+            continue
+        gemma = is_translategemma(m)
+        out.append({
+            "id": m, "local": m, "name": format_llm_model_name(m), "installed": True, "installed_as": m, "offered": False,
+            "badge": "Gemma Terms" if gemma else "Локальная", "size": "Локальная", "vram": "GPU/CPU",
+            "license": "Gemma Terms" if gemma else "", "license_check": True,
+            "desc_ru": ("Google TranslateGemma — модель только для перевода, установлена в Ollama вручную. Лицензия — "
+                        "Gemma Terms of Use с ограничениями использования: проверьте её перед коммерческим использованием."
+                        if gemma else "Модель только для перевода, установлена в Ollama вручную. Проверьте её "
+                        "лицензию перед коммерческим использованием."),
+            "desc_en": ("Google TranslateGemma: a model for translation only, installed in Ollama by hand. Its licence is "
+                        "the Gemma Terms of Use with use restrictions: check it before commercial use."
+                        if gemma else "A model for translation only, installed in Ollama by hand. Check its licence "
+                        "before commercial use."),
+        })
     return out
 
 

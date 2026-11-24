@@ -93,16 +93,72 @@ HYMT_OPTIONS = {"temperature": 0.7, "top_p": 0.6, "top_k": 20, "repeat_penalty":
                 "num_predict": 200}
 
 
+# TranslateGemma: the prompt of its model card, nearly greedy (as measured in tools/bench_translate.py)
+TRANSLATEGEMMA_OPTIONS = {"temperature": 0.1, "num_ctx": NUM_CTX, "num_predict": 200}
+# A dictation is longer than a caption line: a paragraph or a few
+LONG_TEXT_OPTIONS = {"num_ctx": 4096, "num_predict": 1024}
+
+
 def hymt_prompt(text: str, dst: str) -> str:
     """The English prompt of the Hy-MT model card: one user message, no system prompt, no context lines."""
     return (f"Translate the following text into {dst}. Note that you should only output the "
             f"translated result without any additional explanation:\n\n{text}")
 
 
+def translategemma_prompt(text: str, src: Optional[str], dst: str) -> str:
+    """The format of the TranslateGemma model card (tools/bench_translate.py): one user message, the languages by
+    name and code, two blank lines before the text. `src`, `dst`: codes of app/translation.TEXT_LANGUAGES; a source
+    that is not known is left out of the sentence."""
+    from app.translation import TEXT_LANGUAGES
+
+    d = TEXT_LANGUAGES.get(dst, dst)
+    s = TEXT_LANGUAGES.get(src or "")
+    if not s:
+        return (f"You are a professional translator into {d} ({dst}). Your goal is to accurately convey the meaning "
+                f"and nuances of the original text while adhering to {d} grammar, vocabulary, and cultural "
+                f"sensitivities. Produce only the {d} translation, without any additional explanations or "
+                f"commentary. Please translate the following text into {d}:\n\n\n{text}")
+    return (f"You are a professional {s} ({src}) to {d} ({dst}) translator. Your goal is to accurately convey "
+            f"the meaning and nuances of the original {s} text while adhering to {d} grammar, vocabulary, and "
+            f"cultural sensitivities. Produce only the {d} translation, without any additional explanations or "
+            f"commentary. Please translate the following {s} text into {d}:\n\n\n{text}")
+
+
 def _is_translator(model: Optional[str]) -> bool:
     from app.ollama_client import is_translate_only_model
 
     return is_translate_only_model(model or "")
+
+
+def translator_payload(model: str, text: str, src: Optional[str], dst: str, long: bool = False) -> Dict[str, Any]:
+    """The request of a translator (Hy-MT, TranslateGemma) with the prompt and the sampling of its model card.
+    `src`, `dst`: language codes. `long`: a dictation (paragraphs), not a caption line."""
+    from app.ollama_client import is_translategemma
+    from app.translation import TEXT_LANGUAGES
+
+    if is_translategemma(model):
+        content, options = translategemma_prompt(text, src, dst), dict(TRANSLATEGEMMA_OPTIONS)
+    else:
+        content, options = hymt_prompt(text, TEXT_LANGUAGES.get(dst, dst)), dict(HYMT_OPTIONS)
+    if long:
+        options.update(LONG_TEXT_OPTIONS)
+    return {"model": model, "stream": False, "messages": [{"role": "user", "content": content}], "options": options}
+
+
+def translator_chat(model: str, text: str, src: Optional[str], dst: str, timeout: float = 30.0,
+                    long: bool = False) -> str:
+    """One answer of a translator (a retry samples another one)."""
+    from app import idle_unload
+    from app.llm_text import strip_think
+    from app.ollama_client import raise_for_ollama
+
+    idle_unload.touch(model)
+    payload = translator_payload(model, text, src, dst, long=long)
+    payload["keep_alive"] = idle_unload.ollama_keep_alive() or KEEP_ALIVE
+    with httpx.Client(timeout=timeout) as c:
+        r = c.post(f"{_base_url()}/api/chat", json=payload)
+        raise_for_ollama(r)
+        return strip_think(str((r.json().get("message") or {}).get("content") or "")).strip('"«»`')
 
 
 def _base_url() -> str:
@@ -295,7 +351,8 @@ class LiveTranslator:
         target = target or self.target_for(src_lang or self._source_lang())
         dst = TEXT_LANGUAGES.get(target, target)
         if _is_translator(model or self._model):
-            return self._chat_translator(text, dst, timeout, model or self._model)
+            return translator_chat(model or self._model, text, _base(src_lang or self._source_lang()) or None, target,
+                                   timeout)
         # Live speech arrives in fragments; Qwen models, left alone with a fragment, sometimes
         # answer in Chinese or ask for "the full sentence" instead of translating
         system = (
@@ -324,22 +381,6 @@ class LiveTranslator:
             r = c.post(f"{_base_url()}/api/chat", json=payload)
             from app.ollama_client import raise_for_ollama
 
-            raise_for_ollama(r)
-            return strip_think(str((r.json().get("message") or {}).get("content") or "")).strip('"«»`')
-
-    def _chat_translator(self, text: str, dst: str, timeout: float, model: Optional[str]) -> str:
-        """Hy-MT: the prompt and the sampling of its model card (a retry samples another answer)."""
-        from app import idle_unload
-        from app.llm_text import strip_think
-        from app.ollama_client import raise_for_ollama
-
-        idle_unload.touch(model)
-        payload = {
-            "model": model, "stream": False, "keep_alive": idle_unload.ollama_keep_alive() or KEEP_ALIVE,
-            "messages": [{"role": "user", "content": hymt_prompt(text, dst)}], "options": dict(HYMT_OPTIONS),
-        }
-        with httpx.Client(timeout=timeout) as c:
-            r = c.post(f"{_base_url()}/api/chat", json=payload)
             raise_for_ollama(r)
             return strip_think(str((r.json().get("message") or {}).get("content") or "")).strip('"«»`')
 
