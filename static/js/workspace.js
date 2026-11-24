@@ -1382,7 +1382,8 @@ async function openTranslateModal() {
     .sort((a, b) => (a.c === preferred ? -1 : b.c === preferred ? 1 : a.n.localeCompare(b.n)))
     .map(({ c, n }) => `<option value="${c}">${escapeHtml(n)} (${c.toUpperCase()})${have.includes(c) ? ' ✓' : ''}</option>`).join('');
 
-  const models = ollama.models || [];
+  // the models that write text: not the search model, not a caption translator (Hy-MT)
+  const models = ollama.chat_models || ollama.models || [];
   const active = (state.system && state.system.settings && state.system.settings.ollama_model) || ollama.active_model || '';
   document.getElementById('translate-model').innerHTML = models.length
     ? models.map(x => `<option value="${escapeHtml(x)}" ${x === active ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('')

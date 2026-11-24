@@ -304,6 +304,13 @@
                     <button data-click="studioSetSpeed" data-click-args='["fast"]' id="studio-speed-fast" class="tk-seg-btn" data-i18n="studioSpeedFast">Скорость</button>
                   </div>
                 </div>
+                <!-- The translator offered for this computer (by its video card) while it is not downloaded -->
+                <div id="st-tr-offer" class="st-mrow hidden">
+                  <span class="st-mlabel"></span>
+                  <span id="st-tr-offer-text" class="st-moffer" data-i18n-title="tipStTrOffer" title="Модель только для перевода субтитров: в замерах программы переводит точнее модели анализа. Скачивается в Ollama"></span>
+                  <span id="st-tr-offer-gb" class="st-mgb"></span>
+                  <button id="st-tr-offer-btn" data-click="studioPullTranslateModel" class="ui-btn ui-btn-primary st-moffer-btn" data-i18n="uiDownload">Скачать</button>
+                </div>
               </div>
               <p id="st-models-note" class="st-pop-note"></p>
             </div>

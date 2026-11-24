@@ -5341,6 +5341,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-mstate.is-ready::before { border: 1.5px solid #FF9F0A; }
 .st-mstate.is-missing { color: #FF6961; }
 .st-mstate.is-missing::before { border: 1.5px solid #FF6961; }
+/* the translator offered for this computer: its name under the lists, the size in line, «Скачать» in the state column */
+.st-moffer { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
+.st-moffer-btn { justify-self: start; }
 .st-pop-note { margin: 0; width: 100%; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-label); line-height: 1.45; color: var(--hc-dim, #8E8E93); white-space: pre-line; }
 .st-pop-note:empty { display: none; }
 /* what the captions are doing when it needs saying (the translation model loading, an error), under the row */

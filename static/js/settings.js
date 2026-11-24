@@ -682,6 +682,11 @@ const MODEL_DISPLAY_NAMES = {
   'qwen2.5:14b': 'Qwen 14B Pro',
   'mistral:7b': 'Mistral 7B',
   'qwen2.5:1.5b': 'Qwen Lite',
+  // the translators of live captions (app/ollama_client.TRANSLATE_MODELS): any tag; the 1.8B by its downloaded
+  // name and by the one the program re-creates it under
+  'hf.co/tencent/hy-mt3-7b-gguf': 'Hy-MT3 7B',
+  'hf.co/tencent/hy-mt3-1.8b-gguf': 'Hy-MT3 1.8B',
+  'hy-mt3-1.8b': 'Hy-MT3 1.8B',
       };
 
 // GigaAM / Parakeet (app/asr_onnx.py): downloaded by the server, progress shown as a pulsing label
@@ -1545,7 +1550,7 @@ function updateOllamaUI(ollama) {
             ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
         </div>
       `;
-    }).join('');
+    }).join('') + translateModelCards(ollama, ps);
   }
 
   const dlPanel = document.getElementById('ollama-download-panel');
@@ -2196,6 +2201,56 @@ async function buildSemanticIndex() {
   setTimeout(loadSemanticStatus, 800);
 }
 
+// The translator of live captions the computer is offered (app/hardware.py by the card), with its catalog entry
+function recommendedTranslateModel(ollama) {
+  const id = ((state.system || {}).hardware || {}).recommended_translate_model;
+  return ((ollama || state.lastOllama || (state.system || {}).ollama || {}).translate_catalog || []).find(m => m.id === id) || null;
+}
+
+// Under the analysis models: the translator offered for this computer, and any other one already downloaded.
+// The same card as the analysis models; it translates the captions only, so it has no «Выбрать»
+function translateModelCards(ollama, ps) {
+  const rec = recommendedTranslateModel(ollama);
+  const items = (ollama.translate_catalog || []).filter(m => m === rec || m.installed);
+  return items.map(item => {
+    const desc = state.uiLang === 'en' ? item.desc_en : item.desc_ru;
+    let action;
+    if (ps && ps.active && ps.model === item.id) {
+      action = `<span class="ui-btn bg-apple-blue/20 text-apple-blue font-mono animate-pulse">${ps.progress || 1}%</span>`;
+    } else if (item.installed) {
+      // the trash at the place of the analysis models' one; there is nothing to select
+      action = `<div class="flex items-center gap-1.5">
+        <button data-id="${escapeHtml(item.installed_as || item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
+          class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button></div>`;
+    } else {
+      action = `<button data-id="${escapeHtml(item.id)}" data-click="pullTranslateModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipStTrOffer'))}"
+        class="ui-btn ui-btn-primary">${SVG_ICONS.download}<span>${t('uiDownload')} (${escapeHtml(item.size)})</span></button>`;
+    }
+    return `
+      <div class="mc-card p-3 rounded-xl border transition bg-apple-sidebar border-white/10">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center flex-wrap gap-2">
+              <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
+              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(item.badge)}</span>
+              <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+              <span class="text-[11px] text-apple-tertiary" title="${escapeHtml(t('tipMcCaptionTranslation'))}">${escapeHtml(t('mcCaptionTranslation'))}</span>
+              ${modelInfoButton(item.id)}
+            </div>
+          </div>
+          <div class="shrink-0">${action}</div>
+        </div>
+        ${modelInfoBlock(item.id, `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(desc)}</p>
+          ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
+      </div>`;
+  }).join('');
+}
+
+// A translator is downloaded without becoming the analysis model (the server does not select it either)
+function pullTranslateModel(id) {
+  return pullOllamaModel(id, false);
+}
+
 // Can this local model answer: 'ready', 'missing' (not downloaded) or 'off' (Ollama is not installed).
 // A stopped Ollama is ready: analysis starts it, and its models are read from its folder. Before the
 // first status arrives it is taken as ready.
@@ -2444,10 +2499,12 @@ function startOllamaPollingLoop(model) {
       const data = await readJson(res);
       if (window._ollamaPollTimer !== timer) return;
       updateOllamaUI(data);
+      if (typeof studioPullProgress === 'function') studioPullProgress();  // «Скачать» of the captions' models
       if (!data.pull_state || !data.pull_state.active) {
         clearInterval(timer);
         window._ollamaPollTimer = null;
         await loadSystemInfo();
+        if (typeof studioTranslateModelsChanged === 'function') studioTranslateModelsChanged();  // a translator downloaded
         if (data.pull_state && data.pull_state.progress === 100) {
           const pretty = formatModelName(model);
           showToast(t('llmReadyToast').replace('{name}', () => pretty));

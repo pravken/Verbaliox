@@ -1189,6 +1189,7 @@ function renderStudioModels(target) {
     trSel.disabled = !liveCap.session;
     row('tr', models[1]);
   }
+  studioRenderTrOffer(target);
   // the video memory once the models not loaded yet are in it, when there is a video card
   const gpu = vram.data && vram.data.gpu;
   const lines = [];
@@ -1201,6 +1202,45 @@ function renderStudioModels(target) {
   const note = document.getElementById('st-models-note');
   const text = lines.join('\n');
   if (note.textContent !== text) note.textContent = text;
+}
+
+// The translator offered for this computer (app/hardware.py by the card) while it is not downloaded: its name,
+// its size in the size column and «Скачать» in the state column, like the rows above
+function studioRenderTrOffer(target) {
+  const rec = target && typeof recommendedTranslateModel === 'function' ? recommendedTranslateModel() : null;
+  const show = !!rec && !rec.installed;
+  document.getElementById('st-tr-offer').classList.toggle('hidden', !show);
+  if (!show) return;
+  const text = t('stTrOffer').replace('{name}', () => formatModelName(rec.id));
+  const el = document.getElementById('st-tr-offer-text');
+  if (el.textContent !== text) el.textContent = text;
+  const gb = studioSizeGb(rec.size);
+  document.getElementById('st-tr-offer-gb').textContent = gb != null ? studioGb(gb) : '';
+  const pull = state.ollamaPullState || {};
+  const busy = !!pull.active;
+  const btn = document.getElementById('st-tr-offer-btn');
+  const label = busy && pull.model === rec.id ? `${pull.progress || 1}%` : t('uiDownload');
+  if (btn.textContent !== label) btn.textContent = label;
+  btn.disabled = busy;  // one Ollama download at a time
+}
+
+async function studioPullTranslateModel() {
+  const rec = typeof recommendedTranslateModel === 'function' ? recommendedTranslateModel() : null;
+  if (!rec || rec.installed) return;
+  await pullTranslateModel(rec.id);
+  studioPullProgress();
+}
+
+// The percent of the download on «Скачать» while the popover is open (the settings' download loop calls it)
+function studioPullProgress() {
+  if (document.getElementById('st-models-pop')?.classList.contains('hidden')) return;
+  studioRenderTrOffer(document.getElementById('live-translate-select')?.value);
+}
+
+// A model downloaded into Ollama: the captions' list of translation models is asked again
+function studioTranslateModelsChanged() {
+  studio.llmModels = null;
+  renderStudioCapBar();
 }
 
 // The chips of the captions follow the hidden switch and list: the recording, the ready-made settings and the
