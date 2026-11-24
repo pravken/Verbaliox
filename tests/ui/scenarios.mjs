@@ -1269,6 +1269,12 @@ await step('recording time opens the studio', async () => {
   await page.click('#tb-rec-label');
   await sleep(200);
   expect(await page.evaluate(() => window.__stops) === 1, 'only «Стоп» must stop the recording');
+  // the strip offers the studio with its captions from any section while it records (asked by the user)
+  await page.evaluate(() => { switchAppView('libtable'); strip.html = ''; renderStrip(); });
+  expect(await page.isVisible('#strip-acts button[data-click="openRecordStudio"]'), 'the strip has no way to the captions');
+  await page.click('#strip-acts button[data-click="openRecordStudio"]');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'studio', 'the strip did not open the studio');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 

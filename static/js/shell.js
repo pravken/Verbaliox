@@ -444,6 +444,8 @@ function updateRecordButtonState() {
   // While it records, its screen is the text, the notes and the people: the presets and the sources fold away
   document.getElementById('studio-view')?.classList.toggle('st-live', recording);
   if (recording && typeof hmAskExpire === 'function') hmAskExpire();  // «Через минуту: …» has no point now
+  // the strip says «Идёт запись» with «Субтитры и текст» at once, not at its next look (asked by the user)
+  if (recording !== state._stripRec) { state._stripRec = recording; if (typeof renderStrip === 'function') renderStrip(); }
 }
 
 // The red button's menu (asked by the user: one place for recording instead of a «Студия» tab, its card on
