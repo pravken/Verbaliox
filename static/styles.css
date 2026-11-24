@@ -5464,3 +5464,46 @@ textarea.ft-dr-in { height: auto; min-height: var(--ctl-h, 32px); padding: 6px 1
 .dc-add > .tk-input { flex: 1 1 220px; min-width: 0; }
 .dc-add > #settings-dict-cat { flex-basis: 250px; }
 .dc-add > .tk-btn { flex: none; }
+
+/* Settings, one row for every option in every section (asked by the user: the settings were overloaded and every
+   card laid its options out its own way): the name and at most one line under it on the left, the control at the
+   right edge of the card; rows of a card are divided by a line. A card's title sits above its rows. */
+.sx-card-title { margin: 0; font-size: var(--fs-ui); font-weight: 600; color: #FFFFFF; line-height: 1.35; }
+.sx-card-cap { margin: 2px 0 0; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
+.sx-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 30px; padding: 10px 0; }
+label.sx-row { cursor: pointer; }
+label.sx-row:has(.vs-switch:disabled) { cursor: default; }
+.settings-card > .sx-row, .settings-card > .sx-block { margin-top: 0; }
+.settings-card > .sx-row:first-child, .settings-card > .sx-block:first-child { padding-top: 0; }
+.settings-card > .sx-row:last-child, .settings-card > .sx-block:last-child { padding-bottom: 0; }
+.settings-card > .sx-head + .sx-row, .settings-card > .sx-head + .sx-block { margin-top: 6px; }
+.sx-row + .sx-row, .sx-row + .sx-block, .sx-block + .sx-row, .sx-block + .sx-block { border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.06)); }
+.sx-row.hidden + .sx-row, .sx-row.hidden + .sx-block { border-top: 0; }
+.sx-row-text { flex: 1; min-width: 0; }
+.sx-row-label { display: block; font-size: var(--fs-ui); line-height: 1.35; color: #F5F5F7; }
+.sx-row-cap { display: block; margin-top: 2px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
+.sx-row-cap:empty { display: none; }
+.sx-path { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.sx-row-ctl { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.sx-row-ctl.sx-col { flex-direction: column; align-items: flex-end; gap: 6px; }
+.sx-row-ctl .ui-btn { height: 30px; padding: 0 12px; font-size: var(--fs-label); }
+/* an option that only matters while the one above is on: indented under it */
+.sx-row.sx-dep { padding-left: 24px; }
+/* a block: a row whose content is wider than a control (a list, a code, a field across the card) */
+.sx-block { padding: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+/* one size of list in every row, so the right edges line up from section to section */
+.sx-select { height: 30px; width: 240px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14));
+  background: var(--bg); color: #F5F5F7; color-scheme: dark; font-size: var(--fs-caption); }
+.sx-select.sx-narrow { width: 140px; }
+.sx-select:focus { outline: none; border-color: rgb(var(--accent-rgb) / 0.7); }
+.sx-select:disabled { opacity: 0.5; }
+.sx-input { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); background: var(--bg);
+  color: #F5F5F7; font-size: var(--fs-caption); min-width: 0; }
+.sx-input:focus { outline: none; border-color: rgb(var(--accent-rgb) / 0.7); }
+.sx-input.sx-mono { font-family: var(--font-mono); }
+.sx-ctl-name { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.sx-status { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.sx-head { min-width: 0; }
+/* the part of an option that follows it at once (the programs of «Записывать звонки»): no line between them */
+.sx-block.sx-dep { padding-left: 24px; }
+.sx-row + .sx-tight, .sx-block + .sx-tight { border-top: 0; padding-top: 0; }

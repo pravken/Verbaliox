@@ -224,8 +224,8 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
     document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
-    document.getElementById('set-economy-mode').checked = s.economy_mode === 'true';
-    document.getElementById('set-economy-for').value = s.economy_for || '0';
+    // «Только запись»: one list, «Выключен» or for how long it is on (economy_mode + economy_for)
+    document.getElementById('set-economy-for').value = s.economy_mode === 'true' ? (s.economy_for || '0') : 'off';
     document.getElementById('set-live-captions-auto').checked = s.live_captions_auto === 'true';
     document.getElementById('set-cpu-threads').value = s.cpu_threads || 'auto';
     loadWatchFolder();
@@ -1795,9 +1795,8 @@ const CALL_APP_NAMES = { zoom: 'Zoom', teams: 'Microsoft Teams', telegram: 'Tele
 
 async function fillCallSettings(s) {
   const st = await fetch('/api/calls/status').then(r => r.json()).catch(() => ({ supported: false }));
-  const callBlock = document.getElementById('call-record-block');
-  callBlock.classList.toggle('hidden', !st.supported);
-  callBlock.closest('.settings-card')?.classList.toggle('hidden', !st.supported);  // no empty «Звонки» card
+  // the automatic recording of calls only where it works; the Teams captions of the same card stay
+  document.querySelectorAll('#modal-settings [data-call-row]').forEach(el => el.classList.toggle('hidden', !st.supported));
   document.getElementById('set-call-record').checked = s.call_auto_record === 'true';
   document.getElementById('set-import-copy').checked = s.import_copy === 'true';
   document.getElementById('set-voice-filter').checked = s.rec_voice_filter !== 'false';
@@ -1832,7 +1831,8 @@ async function refreshCallMicNow() {
 setInterval(refreshCallMicNow, 3000);
 
 function renderCallSettings() {
-  document.getElementById('call-record-options').classList.toggle('opacity-50', !document.getElementById('set-call-record').checked);
+  const off = !document.getElementById('set-call-record').checked;
+  for (const id of ['call-record-options', 'call-preset-row']) document.getElementById(id)?.classList.toggle('opacity-50', off);
 }
 
 function callSettingsPayload() {
@@ -2413,6 +2413,11 @@ function syncDeviceAuto(save = true) {
 
 let _settingsBaseline = null;
 
+function economyForValue() {
+  const v = document.getElementById('set-economy-for').value;
+  return v && v !== 'off' ? v : (((state.system || {}).settings || {}).economy_for || '0');
+}
+
 function settingsFormValues() {
   return {
     whisper_model: document.getElementById('set-whisper-model').value,
@@ -2429,10 +2434,11 @@ function settingsFormValues() {
     start_with_windows: String(document.getElementById('set-start-with-windows').checked),
     close_to_tray: String(document.getElementById('set-close-to-tray').checked),
     quiet_mode: String(document.getElementById('set-quiet-mode').checked),
-    economy_mode: String(document.getElementById('set-economy-mode').checked),
+    economy_mode: String(document.getElementById('set-economy-for').value !== 'off'),
     mcp_local_only: String(document.getElementById('set-mcp-local-only').checked),
     show_disputed: String(document.getElementById('set-show-disputed').checked),
-    economy_for: document.getElementById('set-economy-for').value || '0',
+    // «Выключен» keeps the duration chosen before: the tray menu turns the mode on for it
+    economy_for: economyForValue(),
     live_captions_auto: String(document.getElementById('set-live-captions-auto').checked),
     cpu_threads: document.getElementById('set-cpu-threads').value || 'auto',
     vad_filter: String(document.getElementById('set-vad').checked),
@@ -2898,7 +2904,7 @@ const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
     ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check'],
-    ['set-economy-mode', 'economy_mode', 'check'], ['set-economy-for', 'economy_for', 'value']],
+    ['set-economy-for', 'economy_for', 'value']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],

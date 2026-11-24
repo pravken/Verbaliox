@@ -559,8 +559,10 @@ function onEconomyEvent(ev) {
     state.system.settings.economy_mode = ev.on ? 'true' : 'false';
     state.system.settings.economy_until = ev.until ? String(ev.until) : '';
   }
-  const box = document.getElementById('set-economy-mode');
-  if (box) box.checked = !!ev.on;
+  // Settings → Общие: the list of «Только запись» follows the tray menu
+  const sel = document.getElementById('set-economy-for');
+  if (sel && !ev.on) sel.value = 'off';
+  else if (sel && sel.value === 'off') sel.value = ((state.system && state.system.settings) || {}).economy_for || '0';
   if (ev.on && typeof stopLiveCaptions === 'function' && liveCap.session) {
     stopLiveCaptions();  // the server ended its session: the recording goes on without them
     const capToggle = document.getElementById('live-captions-toggle');

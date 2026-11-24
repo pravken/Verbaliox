@@ -77,184 +77,167 @@
         <div data-stab="general" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavGeneral">Общие</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescGeneral">Язык, запуск вместе с Windows, трей, память и уведомления.</p>
           </div>
-        <!-- Interface language (applied at once, remembered in this browser profile) -->
-        <div class="settings-card !space-y-0 flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="uiLangTitle">Язык интерфейса</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="uiLangDesc">Меняется сразу, без сохранения.</p>
+        <!-- The interface: language, scale, highlight colour (applied at once: setUILanguage, applyUiScale, applyTheme) -->
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="sxInterfaceTitle">Интерфейс</h4></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="uiLangTitle">Язык интерфейса</span></span>
+            <div class="sx-row-ctl">
+              <div class="apple-segmented" role="group" data-i18n-aria="uiLangTitle" aria-label="Язык интерфейса">
+                <button data-click="setUILanguage" data-click-args='["ru"]' id="lang-btn-ru" class="apple-segment-btn apple-segment-active">Русский</button>
+                <button data-click="setUILanguage" data-click-args='["en"]' id="lang-btn-en" class="apple-segment-btn text-apple-secondary hover:text-white">English</button>
+              </div>
+            </div>
           </div>
-          <div class="apple-segmented shrink-0">
-            <button data-click="setUILanguage" data-click-args='["ru"]' id="lang-btn-ru" class="apple-segment-btn apple-segment-active">Русский</button>
-            <button data-click="setUILanguage" data-click-args='["en"]' id="lang-btn-en" class="apple-segment-btn text-apple-secondary hover:text-white">English</button>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="uiScaleTitle">Масштаб интерфейса</span></span>
+            <div class="sx-row-ctl">
+              <div class="apple-segmented" role="radiogroup" data-i18n-aria="uiScaleTitle" aria-label="Масштаб интерфейса">
+                <button data-click="setUiScale" data-click-args='["75"]' id="scale-btn-75" role="radio" class="apple-segment-btn">75 %</button>
+                <button data-click="setUiScale" data-click-args='["90"]' id="scale-btn-90" role="radio" class="apple-segment-btn">90 %</button>
+                <button data-click="setUiScale" data-click-args='["100"]' id="scale-btn-100" role="radio" class="apple-segment-btn">100 %</button>
+                <button data-click="setUiScale" data-click-args='["115"]' id="scale-btn-115" role="radio" class="apple-segment-btn">115 %</button>
+                <button data-click="setUiScale" data-click-args='["130"]' id="scale-btn-130" role="radio" class="apple-segment-btn">130 %</button>
+                <button data-click="setUiScale" data-click-args='["150"]' id="scale-btn-150" role="radio" class="apple-segment-btn">150 %</button>
+              </div>
+            </div>
+          </div>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="accentTitle">Цвет выделения</span></span>
+            <div class="sx-row-ctl">
+              <div id="theme-accents" class="theme-row" role="radiogroup" data-i18n-aria="accentTitle" aria-label="Цвет выделения"></div>
+            </div>
           </div>
         </div>
 
-        <!-- Start with Windows, in the tray (app/autostart.py, run.py --minimized) -->
+        <!-- Start with Windows, in the tray (app/autostart.py, run.py --minimized); the notifications -->
         <div class="settings-card">
-          <div>
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="startupTitle">Запуск и трей</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="startupHint">Чтобы автозапись по календарю, звонкам и горячие клавиши работали всегда, программа может работать в трее.</p>
-          </div>
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span data-i18n="startWithWindows">Запускать вместе с Windows (в трее, без окна)</span>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="startupTitle">Запуск и трей</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="startWithWindows">Запускать вместе с Windows</span>
+              <span class="sx-row-cap" data-i18n="startWithWindowsCap">В трее, без окна</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-start-with-windows" data-change="syncStartupToggles" data-change-args='[{"$": "el"}]' />
           </label>
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span data-i18n="closeToTray">Закрытие окна оставляет программу в трее (выход — из меню значка)</span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="closeToTray">Закрытие окна сворачивает в трей</span>
+              <span class="sx-row-cap" data-i18n="closeToTrayCap">Выход — из меню значка в трее</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-close-to-tray" />
+          </label>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="quietModeToggle">Тихий режим (без уведомлений)</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-quiet-mode" />
           </label>
         </div>
 
-        <!-- Memory (app/idle_unload.py) and notifications -->
+        <!-- Memory: models unloaded when idle (app/idle_unload.py), the memory kept for other programs
+             (app/mem_reserve.py), the «Только запись» mode (app/economy.py: off, or on for a time) -->
         <div class="settings-card">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="idleUnloadTitle">Память и уведомления</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="idleUnloadDesc">Модели выгружаются из видеопамяти и ОЗУ, если программа ими не пользуется указанное время; при следующей задаче они загрузятся снова за несколько секунд.</p>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="idleUnloadTitle">Память</h4></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-idle-unload" class="sx-row-label" data-i18n="idleUnloadLabel">Выгрузка неиспользуемых моделей</label>
+              <span class="sx-row-cap" data-i18n="idleUnloadDesc">Неиспользуемые модели освобождают память; загрузка обратно — несколько секунд</span>
+              <span id="idle-unload-status" class="sx-row-cap"></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="unloadAllModelsNow" class="ui-btn ui-btn-subtle" data-i18n="idleUnloadNow">Выгрузить сейчас</button>
+              <select id="set-idle-unload" class="sx-select sx-narrow">
+                <option value="0" data-i18n="idleUnloadNever">Не выгружать</option>
+                <option value="1" data-i18n="idleMin1">1 мин</option>
+                <option value="5" data-i18n="idleMin5">5 мин</option>
+                <option value="10" data-i18n="idleMin10">10 мин</option>
+                <option value="15" data-i18n="idleMin15">15 мин</option>
+                <option value="30" data-i18n="idleMin30">30 мин</option>
+                <option value="60" data-i18n="idleMin60">60 мин</option>
+              </select>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <select id="set-idle-unload" data-i18n-title="a11yIdleUnload" title="Выгружать модели из памяти через" class="h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
-              <option value="0" data-i18n="idleUnloadNever">Не выгружать</option>
-              <option value="1" data-i18n="idleMin1">1 мин</option>
-              <option value="5" data-i18n="idleMin5">5 мин</option>
-              <option value="10" data-i18n="idleMin10">10 мин</option>
-              <option value="15" data-i18n="idleMin15">15 мин</option>
-              <option value="30" data-i18n="idleMin30">30 мин</option>
-              <option value="60" data-i18n="idleMin60">60 мин</option>
-            </select>
-            <button data-click="unloadAllModelsNow" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="idleUnloadNow">Выгрузить всё сейчас</button>
-            <span id="idle-unload-status" class="text-[11.5px] text-apple-tertiary"></span>
-          </div>
-          <!-- The memory left to the system (app/mem_reserve.py): the app and its models never take it -->
-          <div class="mem-reserve">
-            <div class="text-xs text-apple-label" data-i18n="memReserveTitle">Оставлять системе</div>
-            <div class="flex items-center gap-2 flex-wrap">
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="memReserveTitle">Резерв памяти для других программ</span>
+              <span class="sx-row-cap" id="mem-reserve-hint" data-i18n="memReserveHint">Эту память модели не займут. Видеопамять — после перезапуска Ollama</span></span>
+            <div class="sx-row-ctl">
               <label class="mem-reserve-field"><span data-i18n="memReserveRam">ОЗУ</span>
-                <select id="set-mem-reserve-ram" data-i18n-title="memReserveRamTip" title="Оперативная память, которую программа и модели не займут" class="h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none"></select></label>
+                <select id="set-mem-reserve-ram" class="sx-select sx-narrow"></select></label>
               <label class="mem-reserve-field"><span data-i18n="memReserveVram">Видеопамять</span>
-                <select id="set-mem-reserve-vram" data-i18n-title="memReserveVramTip" title="Видеопамять, которую модели не займут" class="h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none"></select></label>
+                <select id="set-mem-reserve-vram" class="sx-select sx-narrow"></select></label>
             </div>
-            <p id="mem-reserve-hint" class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="memReserveHint">Программа и модели не займут эту часть памяти: при нехватке простаивающие модели выгружаются автоматически, а Ollama не занимает больше. Запас видеопамяти — со следующего запуска Ollama.</p>
           </div>
-          <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipQuietMode" title="Без всплывающих уведомлений Windows: о начале и конце записи, о готовых расшифровках. Переключается и в меню значка в трее">
-            <span data-i18n="quietModeToggle">Тихий режим (без уведомлений)</span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-quiet-mode" />
-          </label>
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="economyToggle">Только запись</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="economyHint">Пока режим включён: работает только запись, модели выгружены, расшифровка, анализ и субтитры ждут. Субтитры Teams сохраняются с записью в любом случае. Переключается и в меню значка в трее.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-economy-mode" />
-          </label>
-          <label class="flex items-center gap-2 ml-6 text-[11.5px] text-apple-secondary">
-            <span data-i18n="economyForLabel">Включать на</span>
-            <select id="set-economy-for" class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
-              <option value="0" data-i18n="economyFor0">до выключения</option>
-              <option value="30" data-i18n="economyFor30">30 минут</option>
-              <option value="60" data-i18n="economyFor60">1 час</option>
-              <option value="120" data-i18n="economyFor120">2 часа</option>
-              <option value="240" data-i18n="economyFor240">4 часа</option>
-              <option value="day" data-i18n="economyForDay">до конца дня</option>
-            </select>
-          </label>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-economy-for" class="sx-row-label" data-i18n="economyToggle">Режим «Только запись»</label>
+              <span class="sx-row-cap" data-i18n="economyHint">Пока включено, работает только запись; остальное ждёт</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-economy-for" class="sx-select">
+                <option value="off" data-i18n="economyOff">Выключен</option>
+                <option value="0" data-i18n="economyFor0">До выключения</option>
+                <option value="30" data-i18n="economyFor30">На 30 минут</option>
+                <option value="60" data-i18n="economyFor60">На 1 час</option>
+                <option value="120" data-i18n="economyFor120">На 2 часа</option>
+                <option value="240" data-i18n="economyFor240">На 4 часа</option>
+                <option value="day" data-i18n="economyForDay">До конца дня</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <!-- FFmpeg availability (download only on explicit click) -->
-        <div id="ffmpeg-row" class="hidden settings-card !space-y-0 flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <div class="text-[13px] font-semibold text-white" data-i18n="ffmpegTitle">FFmpeg (извлечение звука)</div>
-            <div id="ffmpeg-status-text" class="text-[11.5px] text-apple-secondary truncate"></div>
-          </div>
-          <button id="ffmpeg-download-btn" data-click="installFfmpeg" class="hidden ui-btn ui-btn-primary shrink-0" data-i18n="ffmpegDownloadBtn">Скачать FFmpeg</button>
-        </div>
-        <!-- The accent: the colour of the picked-out buttons and marks (applyTheme in static/js/core.js); the background stays one -->
-        <div class="settings-card !space-y-0 flex items-center justify-between gap-3 flex-wrap">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="accentTitle">Акцент</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5"><span data-i18n="accentDesc">Цвет выделенных кнопок и отметок. Меняется сразу.</span> <span id="theme-accent-name" class="text-apple-label"></span></p>
-          </div>
-          <div id="theme-accents" class="theme-row shrink-0" role="radiogroup" data-i18n-aria="accentTitle" aria-label="Акцент"></div>
-        </div>
-        <!-- Interface scale: CSS zoom on the page (applyUiScale in static/js/core.js) -->
-        <div class="settings-card !space-y-0 flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="uiScaleTitle">Масштаб интерфейса</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="uiScaleDesc">Размер текста, кнопок и списков в окне. Меняется сразу.</p>
-          </div>
-          <div class="apple-segmented shrink-0" role="radiogroup" data-i18n-title="uiScaleTitle" title="Масштаб интерфейса">
-            <button data-click="setUiScale" data-click-args='["75"]' id="scale-btn-75" role="radio" class="apple-segment-btn">75 %</button>
-            <button data-click="setUiScale" data-click-args='["90"]' id="scale-btn-90" role="radio" class="apple-segment-btn">90 %</button>
-            <button data-click="setUiScale" data-click-args='["100"]' id="scale-btn-100" role="radio" class="apple-segment-btn">100 %</button>
-            <button data-click="setUiScale" data-click-args='["115"]' id="scale-btn-115" role="radio" class="apple-segment-btn">115 %</button>
-            <button data-click="setUiScale" data-click-args='["130"]' id="scale-btn-130" role="radio" class="apple-segment-btn">130 %</button>
-            <button data-click="setUiScale" data-click-args='["150"]' id="scale-btn-150" role="radio" class="apple-segment-btn">150 %</button>
+        <div id="ffmpeg-row" class="hidden settings-card">
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="ffmpegTitle">FFmpeg (звук из видео)</span>
+              <span id="ffmpeg-status-text" class="sx-row-cap truncate"></span></span>
+            <div class="sx-row-ctl">
+              <button id="ffmpeg-download-btn" data-click="installFfmpeg" class="hidden ui-btn ui-btn-primary" data-i18n="ffmpegDownloadBtn">Скачать FFmpeg</button>
+            </div>
           </div>
         </div>
         </div>
         <div data-stab="updates" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavUpdates">Обновления</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescUpdates">Новые версии программы и бета-версии.</p>
           </div>
         <!-- Version and updates from GitHub Releases (app/updater.py) -->
         <div class="settings-card">
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="updateTitle">Обновления</h4>
-              <p id="update-status-text" class="text-[11.5px] text-apple-secondary leading-snug"></p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <button id="update-install-btn" data-click="installUpdate" class="hidden ui-btn ui-btn-primary h-8 px-3 text-[11.5px]" data-i18n="updateInstallBtn">Установить</button>
-              <button id="update-check-btn" data-click="checkForUpdates" data-click-args='[true]' class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="updateCheckBtn">Проверить сейчас</button>
+          <div class="sx-row">
+            <span class="sx-row-text"><span id="update-status-text" class="sx-row-label"></span></span>
+            <div class="sx-row-ctl">
+              <button id="update-install-btn" data-click="installUpdate" class="hidden ui-btn ui-btn-primary" data-i18n="updateInstallBtn">Установить</button>
+              <button id="update-check-btn" data-click="checkForUpdates" data-click-args='[true]' class="ui-btn ui-btn-subtle" data-i18n="updateCheckBtn">Проверить сейчас</button>
             </div>
           </div>
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span data-i18n="updateAutoToggle">Проверять обновления при запуске</span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="updateAutoToggle">Проверять обновления при запуске</span>
+              <span class="sx-row-cap" data-i18n="updateHint">С GitHub запрашивается только номер последней версии</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-update-check" checked />
           </label>
-          <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipUpdateAutoInstall"
-            title="Новая версия скачивается в фоне и устанавливается, когда вы закрываете программу. Данные, модели и настройки не затрагиваются">
-            <span data-i18n="updateAutoInstall">Скачивать и устанавливать обновления автоматически</span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="updateAutoInstall">Устанавливать обновления автоматически</span>
+              <span class="sx-row-cap" data-i18n="updateAutoInstallCap">При закрытии программы. Записи, модели и настройки не затрагиваются</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-update-auto" checked />
           </label>
-          <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipUpdateBeta"
-            title="Предлагать и бета-версии: в них изменения появляются раньше, но ещё проходят проверку. Обычные версии тоже предлагаются">
-            <span data-i18n="updateBetaToggle">Получать бета-версии</span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="updateBetaToggle">Получать бета-версии</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-update-beta" />
           </label>
-          <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="updateHint">С GitHub запрашивается только номер последней версии. Ваши записи, модели и настройки при обновлении не затрагиваются.</p>
         </div>
         </div>
         <div data-stab="about" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavAbout">О программе</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescAbout">Версия, компьютер и поддержка проекта.</p>
           </div>
-        <!-- The version and the computer -->
+        <!-- The version and the computer; support of the project -->
         <div class="settings-card">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white">Verbaliox <span id="settings-version" class="text-apple-secondary font-normal"></span></h4>
-              <p id="settings-hw-name" class="text-[11.5px] text-apple-secondary mt-0.5"></p>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label">Verbaliox <span id="settings-version" class="text-apple-secondary"></span></span>
+              <span id="settings-hw-name" class="sx-row-cap"></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="copySystemInfo" id="settings-copy-info" class="ui-btn ui-btn-subtle" data-i18n="rdSasCopyInfo">Копировать сведения</button>
             </div>
-            <button data-click="copySystemInfo" id="settings-copy-info" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="rdSasCopyInfo">Копировать сведения</button>
           </div>
-        </div>
-
-        <!-- Support the project -->
-        <div class="settings-card">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="supportTitle">Поддержать проект</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="supportDesc">Verbaliox бесплатна. Если она экономит вам время, можно поддержать разработчика.</p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-            <button data-click="openAbout" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" data-i18n="aboutBtn">О программе</button>
-            <button data-click="openSupport" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px] shrink-0 gap-1.5">
-              <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.9 4.5 6.6 4.5c2.1 0 3.6 1.2 4.4 2.5.8-1.3 2.3-2.5 4.4-2.5 3.7 0 5.7 3.9 4.2 7.3C19.5 16.4 12 21 12 21z"/></svg><span data-i18n="supportBtn">Поддержать на Ko-fi</span>
-            </button>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="supportTitle">Поддержать проект</span></span>
+            <div class="sx-row-ctl">
+              <button data-click="openAbout" class="ui-btn ui-btn-subtle" data-i18n="aboutBtn">О программе</button>
+              <button data-click="openSupport" class="ui-btn ui-btn-primary gap-1.5">
+                <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.9 4.5 6.6 4.5c2.1 0 3.6 1.2 4.4 2.5.8-1.3 2.3-2.5 4.4-2.5 3.7 0 5.7 3.9 4.2 7.3C19.5 16.4 12 21 12 21z"/></svg><span data-i18n="supportBtn">Поддержать на Ko-fi</span>
+              </button>
             </div>
           </div>
         </div>
@@ -262,52 +245,38 @@
         <div data-stab="record" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavRecord">Запись</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescRecord">Источник звука, текст во время записи, звонки и папка для записей.</p>
           </div>
         <!-- Audio source and level -->
         <div class="settings-card">
-          <div>
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="recSettingsTitle">Источник звука</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="recSettingsDesc">Выберите источник (микрофон, системный звук или оба) и проверьте уровень сигнала</p>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="recSourceModeLabel">Источник записи</label>
-              <select id="set-record-source" data-change="onSettingsRecordSourceChange"
-                data-i18n-title="tipRecordSourceSelect"
-                title="Выберите, откуда записывать звук: только микрофон, системный звук (динамики) или оба канала одновременно"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="recSettingsTitle">Источник звука</h4></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-record-source" class="sx-row-label" data-i18n="recSourceModeLabel">Записывать</label></span>
+            <div class="sx-row-ctl">
+              <select id="set-record-source" data-change="onSettingsRecordSourceChange" class="sx-select">
                 <option value="mic" data-i18n="sourceMic">Только микрофон</option>
                 <option value="system" data-i18n="sourceSystem">Системный звук</option>
                 <option value="both" data-i18n="sourceBoth">Микрофон и системный звук</option>
               </select>
             </div>
-
-            <div>
-              <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="recMicDeviceLabel">Микрофон</label>
-              <select id="set-record-mic" data-change="onSettingsRecordMicChange"
-                data-i18n-title="tipRecordMicSelect"
-                title="Выберите конкретное устройство микрофона"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
+          </div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-record-mic" class="sx-row-label" data-i18n="recMicDeviceLabel">Микрофон</label></span>
+            <div class="sx-row-ctl">
+              <select id="set-record-mic" data-change="onSettingsRecordMicChange" class="sx-select">
                 <option value="" data-i18n="optDefault">По умолчанию</option>
               </select>
             </div>
           </div>
-
-          <!-- Live SoundCloud Waveform & dB Meter inside Settings -->
-          <div class="bg-apple-sidebar border apple-border rounded-xl p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
+          <!-- The level of the signal and its wave -->
+          <div class="sx-block">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 min-w-0">
                 <span id="settings-audio-dot" class="w-2 h-2 rounded-full bg-apple-tertiary transition"></span>
                 <span id="settings-audio-status" class="text-[11.5px] font-medium text-apple-secondary" data-i18n="audioMeterIdle">Уровень сигнала — нажмите «Проверить звук»</span>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="sx-row-ctl">
                 <span id="settings-db-readout" class="text-[11.5px] font-mono text-apple-tertiary">-60 dB</span>
-                <button data-click="toggleSettingsAudioTest" id="btn-test-settings-audio"
-                  data-i18n-title="tipTestAudioBtn"
-                  title="Запустить проверку уровня звука и визуализацию звуковой волны"
-                  class="ui-btn ui-btn-subtle h-6 px-2.5 text-[11.5px]">
+                <button data-click="toggleSettingsAudioTest" id="btn-test-settings-audio" class="ui-btn ui-btn-subtle">
                   <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/>
                   </svg>
@@ -315,118 +284,99 @@
                 </button>
               </div>
             </div>
-
             <canvas id="settings-waveform-canvas" class="w-full h-11 block rounded-lg bg-black/30"></canvas>
+          </div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="recSoundsToggle">Звуковые сигналы записи</span>
+              <span class="sx-row-cap" data-i18n="recSoundsHint">В саму запись не попадают</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-rec-sounds" checked />
+          </label>
+        </div>
+
+        <!-- The microphone's sound: the speakers' echo taken out, the noise filter (app/voice_filter.py) -->
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="micAutoTitle">Улучшение звука микрофона</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="echoToggle">Убирать эхо колонок</span>
+              <span class="sx-row-cap" data-i18n="echoHint">Убирает из микрофона звук колонок. В наушниках не нужно. ~1 мин на час записи</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-echo-cancel" checked />
+          </label>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-voice-filter" class="sx-row-label" data-i18n="voiceFilterToggle">Шумоподавление микрофона (DeepFilterNet)</label>
+              <span class="sx-row-cap" data-i18n="voiceFilterHint">Оставляет только голос. Применяется после остановки записи</span>
+              <span id="voice-filter-status" class="sx-row-cap"></span></span>
+            <div class="sx-row-ctl">
+              <button type="button" id="voice-filter-download" class="hidden ui-btn ui-btn-subtle" data-click="installVoiceFilter" data-i18n="voiceFilterDownload">Скачать фильтр</button>
+              <input type="checkbox" role="switch" class="vs-switch" id="set-voice-filter" checked />
+            </div>
           </div>
         </div>
 
         <!-- Live captions in the studio -->
         <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="liveCapTitle">Субтитры во время записи</h4>
-          </div>
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="liveModelLabel">Модель для субтитров во время записи</label>
-            <select id="set-live-model" data-i18n-title="tipLiveModel"
-              title="Субтитры в студии нужны, чтобы следить за речью; после записи файл расшифровывается основной моделью"
-              class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
-              <option value="auto" data-i18n="liveModelAuto">Авто</option>
-            </select>
-            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="liveModelHint">Авто: для русской речи — GigaAM, для других европейских языков и автоопределения — Parakeet (если скачаны; работают на процессоре и не занимают видеокарту). Иначе Whisper Turbo (или основная модель, если Turbo не скачана)</p>
-          </div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="liveAutoToggle">Включать субтитры при начале записи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="liveAutoHint">Выключено: запись начинается без субтитров, их можно включить на экране записи. Субтитры нагружают процессор и память. При «Не мешать на встречах» автоматически не включаются. Субтитры Teams сохраняются с записью в любом случае.</span></span>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="liveCapTitle">Субтитры во время записи</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="liveAutoToggle">Включать при начале записи</span>
+              <span class="sx-row-cap" data-i18n="liveAutoHint">Субтитры нагружают процессор. На встречах автоматически не включаются</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-live-captions-auto" />
           </label>
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" for="set-cpu-threads" data-i18n="cpuThreadsLabel">Потоки процессора для GigaAM и Parakeet</label>
-            <select id="set-cpu-threads" class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
-              <option value="auto" data-i18n="cpuThreadsAuto">Авто — половина ядер, не больше 8</option>
-              <option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8">8</option>
-              <option value="12">12</option><option value="16">16</option>
-              <option value="all" data-i18n="cpuThreadsAll">Все ядра</option>
-            </select>
-            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="cpuThreadsHint">Меньше потоков — процессор свободнее во время встречи, но расшифровка на процессоре идёт дольше.</p>
-          </div>
-          <div class="text-xs text-apple-label">
-            <span data-i18n="micAutoTitle">Звук микрофона улучшается автоматически</span>
-            <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="micAutoHint">Эхо колонок убирается, когда записываются и микрофон, и звук компьютера (в наушниках эха нет, и запись не меняется). Шум — вентилятор, клавиатуру, улицу — убирает ИИ-фильтр DeepFilterNet, когда он скачан.</span>
-          </div>
-          <div class="flex items-center gap-2 -mt-1">
-            <span id="voice-filter-status" class="text-[11.5px] text-apple-tertiary flex-1 min-w-0 truncate"></span>
-            <button type="button" id="voice-filter-download" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px] shrink-0" data-click="installVoiceFilter" data-i18n="voiceFilterDownload">Скачать фильтр</button>
-          </div>
-          <details id="mic-more" class="sx-more">
-            <summary data-i18n="sxMore">Дополнительно</summary>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="echoToggle">Убирать эхо колонок из микрофона</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="echoHint">Когда записываются и микрофон, и звук компьютера: голоса собеседников, которые микрофон услышал из колонок, вычитаются при сохранении записи. В наушниках эха нет — запись не меняется. Сохранение длится дольше: около минуты на час записи.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-echo-cancel" checked />
-          </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="voiceFilterToggle">✦ ИИ-очистка голоса в микрофоне</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="voiceFilterHint">Нейросеть DeepFilterNet убирает из микрофона шум — вентилятор, клавиатуру, улицу, гул комнаты — и оставляет голос, как фильтры Discord или NVIDIA Broadcast. Работает на компьютере после остановки записи; сохранение длится дольше.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-voice-filter" checked />
-          </label>
-          </details>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="recSoundsToggle">Звуковые сигналы записи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="recSoundsHint">Короткий сигнал за минуту до автозаписи встречи, перед началом записи и после её остановки. В саму запись сигналы не попадают.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-rec-sounds" checked />
-          </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="teamsToggle">Субтитры и участники из Teams</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="teamsHint">Во время записи программа читает живые субтитры Teams: имена говорящих попадают в участники, их голоса после расшифровки подписываются этими именами, а сам текст субтитров становится ещё одной версией расшифровки (значок «Субтитры Teams») и участвует в сведении. Субтитры нужно включить у себя в Teams.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-teams-captions" />
-          </label>
-          <!-- outside the label: a click on the link does not flip the switch -->
-          <div class="flex flex-wrap gap-x-4 -mt-1">
-            <button type="button" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="showTeamsHelp" data-i18n="teamsHelpLink">Как включить субтитры в Teams</button>
-            <button type="button" id="teams-check-btn" class="vs-link text-apple-blue hover:underline text-[11.5px]" data-click="teamsCheck" data-i18n="teamsCheck" data-i18n-title="tipTeamsCheck" title="Во время встречи с включёнными субтитрами: проверить, видит ли их программа">Проверить</button>
-          </div>
-
-        </div>
-
-        <!-- Calls recorded by themselves (app/call_watch.py) -->
-        <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="callsTitle">Звонки</h4>
-          </div>
-          <div id="call-record-block" class="space-y-2">
-            <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-              <span><span data-i18n="callRecordToggle">Записывать звонки автоматически</span>
-                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="callRecordHint">Запись начинается, когда выбранная программа держит микрофон дольше 5 секунд, и останавливается через 15 секунд после того, как она его отпустит. Запись, начатую вручную, автозапись не останавливает.</span></span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-call-record" data-change="renderCallSettings" />
-            </label>
-            <div id="call-record-options" class="pl-6 space-y-2">
-              <div id="call-apps" class="flex flex-wrap gap-x-4 gap-y-1.5"></div>
-              <div id="call-mic-now" class="text-[11.5px] text-apple-tertiary"></div>
-              <div class="flex items-center gap-2">
-                <span id="lbl-call-preset" class="text-[11.5px] text-apple-secondary" data-i18n="callPresetLabel">Набор настроек записи</span>
-                <select id="set-call-preset" aria-labelledby="lbl-call-preset" class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none"></select>
-              </div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-live-model" class="sx-row-label" data-i18n="liveModelLabel">Модель субтитров</label>
+              <span class="sx-row-cap" data-i18n="liveModelHint">Авто: GigaAM для русского, Parakeet для других языков, иначе Whisper Turbo</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-live-model" class="sx-select">
+                <option value="auto" data-i18n="liveModelAuto">Авто</option>
+              </select>
             </div>
           </div>
-
         </div>
 
-        <!-- Where recordings made in the app are kept -->
+        <!-- Calls recorded by themselves (app/call_watch.py); the Teams captions read while recording (app/teams_captions.py) -->
         <div class="settings-card">
-          <div>
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="recDirTitle">Папка для записей</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="recDirDesc">Сюда сохраняются записи, сделанные в студии.</p>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="callsTitle">Звонки</h4></div>
+          <label id="call-record-block" class="sx-row" data-call-row>
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="callRecordToggle">Записывать звонки автоматически</span>
+              <span class="sx-row-cap" data-i18n="callRecordHint">Запись идёт, пока выбранная программа использует микрофон</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-call-record" data-change="renderCallSettings" />
+          </label>
+          <div id="call-record-options" class="sx-block sx-dep sx-tight" data-call-row>
+            <div id="call-apps" class="flex flex-wrap gap-x-4 gap-y-1.5"></div>
+            <div id="call-mic-now" class="sx-status"></div>
           </div>
-          <div class="flex items-center gap-2">
-            <div id="set-recordings-dir" class="flex-1 min-w-0 h-8 leading-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono truncate"></div>
-            <button data-click="pickRecordingsDir" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="exportDirPickBtn">Выбрать…</button>
-            <button data-click="openRecordingsDir" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="exportDirOpenBtn">Открыть</button>
-            <button data-click="resetRecordingsDir" id="recdir-reset-btn" class="hidden ui-btn ui-btn-subtle h-8 px-2.5 text-[11.5px] shrink-0" data-i18n-title="tipRecDirReset" title="Вернуть папку по умолчанию" data-i18n="recDirReset">Сбросить</button>
+          <div id="call-preset-row" class="sx-row sx-dep" data-call-row>
+            <span class="sx-row-text"><label id="lbl-call-preset" for="set-call-preset" class="sx-row-label" data-i18n="callPresetLabel">Настройки для звонков</label></span>
+            <div class="sx-row-ctl">
+              <select id="set-call-preset" aria-labelledby="lbl-call-preset" class="sx-select"></select>
+            </div>
           </div>
-          <p id="set-imports-dir" class="text-[11.5px] text-apple-tertiary break-all"></p>
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span class="flex-1 min-w-0"><span class="block text-[13px] text-white" data-i18n="importCopyTitle">Копировать импортированные файлы в папку программы</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="importCopyHint">Выключено: файл остаётся на своём месте, а запись ссылается на него (не переносите и не удаляйте его). Включено: программа хранит свою копию.</span></span>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-teams-captions" class="sx-row-label" data-i18n="teamsToggle">Субтитры и участники из Teams</label>
+              <span class="sx-row-cap" data-i18n="teamsHint">Имена говорящих и текст субтитров Teams попадают в запись. Включите субтитры в Teams</span>
+              <span class="flex flex-wrap gap-x-4 mt-0.5 text-[11.5px]">
+                <button type="button" class="vs-link text-apple-blue hover:underline" data-click="showTeamsHelp" data-i18n="teamsHelpLink">Как включить субтитры в Teams</button>
+                <button type="button" id="teams-check-btn" class="vs-link text-apple-blue hover:underline" data-click="teamsCheck" data-i18n="teamsCheck">Проверить</button>
+              </span></span>
+            <div class="sx-row-ctl">
+              <input type="checkbox" role="switch" class="vs-switch" id="set-teams-captions" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Where recordings made in the app are kept; imported files copied or referred to -->
+        <div class="settings-card">
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="recDirTitle">Папка для записей</span>
+              <span id="set-recordings-dir" class="sx-row-cap sx-path"></span>
+              <span id="set-imports-dir" class="sx-row-cap sx-path"></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="resetRecordingsDir" id="recdir-reset-btn" class="hidden ui-btn ui-btn-subtle" data-i18n="recDirReset">Сбросить</button>
+              <button data-click="pickRecordingsDir" class="ui-btn ui-btn-subtle" data-i18n="exportDirPickBtn">Выбрать…</button>
+              <button data-click="openRecordingsDir" class="ui-btn ui-btn-subtle" data-i18n="exportDirOpenBtn">Открыть</button>
+            </div>
+          </div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="importCopyTitle">Копировать импортированные файлы в папку программы</span>
+              <span class="sx-row-cap" data-i18n="importCopyHint">Выключено — запись ссылается на файл: не перемещайте и не удаляйте его</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-import-copy" />
           </label>
         </div>
@@ -434,64 +384,51 @@
         <div data-stab="hotkeys" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavHotkeys">Горячие клавиши</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescHotkeys">Сочетания клавиш, которые работают в любой программе.</p>
           </div>
         <!-- System-wide hotkeys (app/tray.py, app/dictation.py) -->
         <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="hotkeysTitle">Горячие клавиши</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="hotkeysDesc">Работают в любой программе, даже когда окно Verbaliox свёрнуто.</p>
-          </div>
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="hotkeyLabel">Записать встречу</label>
-            <div class="flex items-center gap-2">
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-record-hotkey" class="sx-row-label" data-i18n="hotkeyLabel">Записать встречу</label>
+              <span class="sx-row-cap" data-i18n="hotkeyHint">Старт и стоп записи из любой программы</span>
+              <span class="sx-row-cap"><span id="hotkey-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="clearHotkey" class="ui-btn ui-btn-subtle" data-i18n="hotkeyClear">Отключить</button>
               <input id="set-record-hotkey" type="text" readonly data-keydown="captureHotkey" data-keydown-args='[{"$": "event"}]' data-focus="selectOnFocus" data-focus-args='[{"$": "el"}]'
-                data-i18n-title="tipHotkey" title="Нажмите сочетание клавиш: запись начнётся и остановится из любой программы, окно не разворачивается"
-                class="w-44 h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:border-apple-blue cursor-pointer" />
-              <button data-click="clearHotkey" class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="hotkeyClear">Отключить</button>
-              <span id="hotkey-status" class="text-[11.5px] text-apple-tertiary"></span>
+                class="sx-input sx-mono w-44 cursor-pointer" />
             </div>
-            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="hotkeyHint">Начинает и останавливает запись из любой программы, источник — как в студии. Запись попадает в медиатеку и расшифровывается.</p>
           </div>
-
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="dictationLabel">Надиктовать текст</label>
-            <div class="flex items-center gap-2 flex-wrap">
-              <input id="set-dictation-hotkey" type="text" readonly data-keydown="captureHotkey" data-keydown-args='[{"$": "event"}]' data-focus="selectOnFocus" data-focus-args='[{"$": "el"}]'
-                data-i18n-title="tipDictation" title="Нажмите сочетание: начнётся запись микрофона; нажмите ещё раз — текст появится там, где стоит курсор (в любой программе)"
-                class="w-44 h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:border-apple-blue cursor-pointer" />
-              <button data-click="clearHotkey" data-click-args='["set-dictation-hotkey"]' class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="hotkeyClear">Отключить</button>
-              <select id="set-dictation-language" data-i18n-title="a11yDictationLang" title="Язык диктовки" class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-dictation-hotkey" class="sx-row-label" data-i18n="dictationLabel">Надиктовать текст</label>
+              <span class="sx-row-cap" data-i18n="dictationHint">Нажмите, говорите, нажмите снова — текст появится у курсора</span>
+              <span class="sx-row-cap"><span id="dictation-hotkey-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <select id="set-dictation-language" data-i18n-title="a11yDictationLang" title="Язык диктовки" class="sx-select sx-narrow">
                 <option value="auto" data-i18n="studioSpeechAuto">Авто</option>
                 <option value="ru">Русский</option>
                 <option value="en">English</option>
               </select>
-              <span id="dictation-hotkey-status" class="text-[11.5px] text-apple-tertiary"></span>
+              <button data-click="clearHotkey" data-click-args='["set-dictation-hotkey"]' class="ui-btn ui-btn-subtle" data-i18n="hotkeyClear">Отключить</button>
+              <input id="set-dictation-hotkey" type="text" readonly data-keydown="captureHotkey" data-keydown-args='[{"$": "event"}]' data-focus="selectOnFocus" data-focus-args='[{"$": "el"}]'
+                class="sx-input sx-mono w-44 cursor-pointer" />
             </div>
-            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="dictationHint">Нажмите и говорите, нажмите ещё раз — текст напечатается там, где стоит курсор, в любой программе. Только микрофон, в медиатеку ничего не сохраняется.</p>
           </div>
-
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="dictTrLabel">Надиктовать с переводом</label>
-            <div class="flex items-center gap-2 flex-wrap">
-              <input id="set-translate-hotkey" type="text" readonly data-keydown="captureHotkey" data-keydown-args='[{"$": "event"}]' data-focus="selectOnFocus" data-focus-args='[{"$": "el"}]'
-                data-i18n-title="tipDictTr" title="Нажмите сочетание: говорите на своём языке, а в программу вставится перевод"
-                class="w-44 h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:border-apple-blue cursor-pointer" />
-              <button data-click="clearHotkey" data-click-args='["set-translate-hotkey"]' class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="hotkeyClear">Отключить</button>
-              <label for="set-dictation-translate-to" class="text-[11.5px] text-apple-secondary" data-i18n="dictTrTo">на</label>
-              <select id="set-dictation-translate-to" class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-translate-hotkey" class="sx-row-label" data-i18n="dictTrLabel">Надиктовать с переводом</label>
+              <span class="sx-row-cap" data-i18n="dictTrHint">То же, но вставляется перевод. Не получилось перевести — вставляется исходный текст</span>
+              <span class="sx-row-cap"><span id="translate-hotkey-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <select id="set-dictation-translate-to" data-i18n-title="dictTrTo" title="Язык перевода" class="sx-select sx-narrow">
                 <option value="en">English</option>
               </select>
-              <span id="translate-hotkey-status" class="text-[11.5px] text-apple-tertiary"></span>
+              <button data-click="clearHotkey" data-click-args='["set-translate-hotkey"]' class="ui-btn ui-btn-subtle" data-i18n="hotkeyClear">Отключить</button>
+              <input id="set-translate-hotkey" type="text" readonly data-keydown="captureHotkey" data-keydown-args='[{"$": "event"}]' data-focus="selectOnFocus" data-focus-args='[{"$": "el"}]'
+                class="sx-input sx-mono w-44 cursor-pointer" />
             </div>
-            <p class="text-[11px] text-apple-tertiary mt-1" data-i18n="dictTrHint">Говорите на любом языке — вставится перевод. Переводит локальная модель Ollama. Если перевод не удался, вставляется исходный текст.</p>
-            <label class="vs-row cursor-pointer text-[11.5px] text-apple-label mt-2.5" data-i18n-title="tipDictSave"
-              title="Звук, текст и перевод каждой диктовки сохраняются записью в папке «Диктовки» медиатеки">
-              <span data-i18n="dictSave">Сохранять диктовки в медиатеку (папка «Диктовки»)</span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-dictation-save" checked />
-            </label>
           </div>
-
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="dictSave">Сохранять диктовки в медиатеку (папка «Диктовки»)</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-dictation-save" checked />
+          </label>
         </div>
         </div>
         <div data-stab="recognition" class="sx-section space-y-3 hidden">
@@ -531,6 +468,19 @@
           </div>
           </div>
           </details>
+          <!-- The processor threads of GigaAM and Parakeet (app/asr_onnx.py) -->
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-cpu-threads" class="sx-row-label" data-i18n="cpuThreadsLabel">Нагрузка на процессор (GigaAM, Parakeet)</label>
+              <span class="sx-row-cap" data-i18n="cpuThreadsHint">Меньше потоков — свободнее компьютер, но расшифровка дольше</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-cpu-threads" class="sx-select">
+                <option value="auto" data-i18n="cpuThreadsAuto">Авто — половина ядер, не больше 8</option>
+                <option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8">8</option>
+                <option value="12">12</option><option value="16">16</option>
+                <option value="all" data-i18n="cpuThreadsAll">Все ядра</option>
+              </select>
+            </div>
+          </div>
           <!-- GigaAM / Parakeet on the NVIDIA GPU (app/onnx_gpu.py) -->
           <div id="onnx-gpu-box" class="hidden space-y-1.5">
           <label class="vs-row cursor-pointer text-xs text-apple-label">
