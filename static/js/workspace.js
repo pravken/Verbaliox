@@ -388,7 +388,8 @@ function renderTxCardProgress(m, parts) {
 async function mixNowActive() {
   const m = state.activeMeeting;
   if (!m) return;
-  const r = await fetch(`/api/meetings/${m.id}/mix-now`, { method: 'POST' });
+  const r = await fetch(`/api/meetings/${m.id}/mix-now`, { method: 'POST' }).catch(() => null);
+  if (!r) { showError(t('errNoNetwork')); return; }
   if (!r.ok) { showError(serverText((await readJson(r)).detail)); return; }
   document.getElementById('tx-rc-mixnow').classList.add('hidden');
   showToast(t('mixNowStarted'), null, 'status');

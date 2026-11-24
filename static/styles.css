@@ -3234,7 +3234,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-more { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--accent-hi); font-weight: 500; font-size: var(--fs-label); background: none; border: 0; cursor: pointer; padding: 0; }
 .db-more:hover { text-decoration: underline; }
 .db-c { min-width: 0; }
-.db-feature-grp { display: inline-flex; }
+.db-feature-grp { display: inline-flex; min-width: 0; }
+/* a long feature name is cut, the head keeps to one line (its period, ✕ and «Настроить» stay in place) */
+#db-feature-btn { max-width: 200px; }
 .db-feature-grp .db-feature-on { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .db-feature-x { width: var(--ctl-h, 32px); padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; color: var(--hc-dim, #AEAEB2); }
 .db-feature-x:hover { color: #FFFFFF; }
