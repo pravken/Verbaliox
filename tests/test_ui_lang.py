@@ -113,7 +113,9 @@ class NoticesTest(unittest.TestCase):
         from app import dictation
 
         set_lang("en")
+        # no translator of the captions: the test never asks (or starts) an Ollama of the computer it runs on
         with mock.patch("app.live_translate.phrase_language", return_value="ru"), \
+                mock.patch("app.live_translate.translation_model", return_value=None), \
                 mock.patch("app.llm.target", side_effect=RuntimeError("Ollama is off")):
             text, note = dictation.translate("привет", "en")
         self.assertEqual((text, note), ("привет", "Translation unavailable: Ollama is off"))
