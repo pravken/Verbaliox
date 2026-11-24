@@ -122,7 +122,8 @@ def changelog_notes(tag: str, text: str) -> str:
 def _latest_from_feed(c: Any, beta: bool) -> Optional[Dict[str, Any]]:
     """The newest release by the public feed (no API, no limit per hour): its tag from the feed, its files
     from its SHA256SUMS.txt, its notes from CHANGELOG.md of that tag. None: no release."""
-    r = c.get(FEED_URL)
+    # the client asks the API for JSON: the feed is asked for as what it is
+    r = c.get(FEED_URL, headers={"Accept": "application/atom+xml, application/xml;q=0.9, */*;q=0.8"})
     r.raise_for_status()
     tags = {t for t in re.findall(rf"/{re.escape(GITHUB_REPO)}/releases/tag/([\w.\-]+)", r.text, re.IGNORECASE)}
     # a pre-release is told by its version (v0.9.0-beta.1): the feed does not say which ones are

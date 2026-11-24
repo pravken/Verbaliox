@@ -106,6 +106,7 @@ class BetaChannelTest(unittest.TestCase):
             if req.url.host == "api.github.com":
                 return httpx.Response(403, json={"message": "API rate limit exceeded"})
             if url.endswith("releases.atom"):
+                assert "atom" in req.headers.get("accept", ""), req.headers.get("accept")
                 return httpx.Response(200, text=feed) if feed_ok else httpx.Response(503)
             if url.endswith("/SHA256SUMS.txt"):
                 tag = url.split("/")[-2]
