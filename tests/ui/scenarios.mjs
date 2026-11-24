@@ -1460,6 +1460,58 @@ await step('back and forward buttons', async () => {
   expect(await page.evaluate(() => state.appView) === 'tasks', '«Вперёд» did not come back to «Задачи»');
 });
 
+// While recording the capsule shows the way to the studio (asked by the user: it was not obvious): «Студия ›» between the
+// sources and «Стоп», with the green outline while the captions are off; the time opens the studio, never stops; a hint
+// under the chip once, kept closed as a setting across a reload
+await step('recording capsule leads to the studio', async () => {
+  const fake = () => page.evaluate(() => {
+    window.__recOrig = window.__recOrig || [window.isRecording, window.shellQuickRecord]; window.__stops = 0;
+    window.isRecording = () => true; window.shellQuickRecord = () => { window.__stops++; };
+    document.getElementById('live-captions-toggle').checked = false;
+    document.getElementById('studio-timer').textContent = '00:07'; switchAppView('home'); updateRecordButtonState(); });
+  await fake();
+  expect(await page.isVisible('#tb-rec-studio'), 'no «Студия» chip while recording');
+  const boxes = await page.evaluate(() => ['tb-rec', 'tb-rec-studio', 'tb-rec-stop', 'tb-rec-wrap'].map(id => {
+    const r = document.getElementById(id).getBoundingClientRect(); return [r.left, r.right, r.top + r.height / 2];
+  }));
+  expect(boxes[1][0] >= boxes[0][1] && boxes[2][0] >= boxes[1][1] && boxes[2][1] <= boxes[3][1] && Math.abs(boxes[1][2] - boxes[2][2]) < 1,
+    `the chip is not between the time and «Стоп»: ${JSON.stringify(boxes)}`);
+  expect(await page.evaluate(() => document.getElementById('tb-rec-studio').classList.contains('is-call')), 'captions off: the chip has no green outline');
+  await page.evaluate(() => { document.getElementById('live-captions-toggle').checked = true; updateRecordButtonState(); });
+  expect(await page.evaluate(() => { const c = document.getElementById('tb-rec-studio').classList; return c.contains('is-on') && !c.contains('is-call'); }),
+    'captions on: the chip is not in the accent');
+  await page.evaluate(() => { document.getElementById('live-captions-toggle').checked = false; updateRecordButtonState(); });
+  // the hint: shown on the first recording, closed by ✕, not shown again after a reload
+  expect(await page.isVisible('#tb-rec-hint'), 'no hint on the first recording');
+  expect(/Субтитры и текст записи/.test(await page.textContent('#tb-rec-hint')), 'the hint says something else');
+  await page.click('#tb-rec-hint .tb-rec-hint-x');
+  expect(!(await page.isVisible('#tb-rec-hint')), '✕ did not close the hint');
+  let seen = '';
+  for (let i = 0; i < 30 && seen !== 'true'; i++) { await sleep(100); seen = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.hint_studio_entry_seen)); }
+  expect(seen === 'true', `the closed hint was not saved: ${seen}`);
+  await page.reload();
+  for (let i = 0; i < 40 && !(await page.evaluate(() => !!(state.system && state.system.settings))); i++) await sleep(100);
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
+  await page.evaluate(() => document.getElementById('first-run-wizard')?.remove());
+  await fake();
+  await sleep(200);
+  expect(await page.isVisible('#tb-rec-studio') && !(await page.isVisible('#tb-rec-hint')), 'the hint came back after a reload');
+  // the time opens the studio and does not stop; there the capsule keeps its width, its way to the studio inert
+  const wHome = await page.evaluate(() => document.getElementById('tb-rec-wrap').getBoundingClientRect().width);
+  await page.click('#tb-rec-clock');
+  await sleep(300);
+  const r = await page.evaluate(() => [state.appView, window.__stops, document.getElementById('tb-rec-studio').getAttribute('aria-disabled'),
+    document.getElementById('tb-rec-wrap').getBoundingClientRect().width]);
+  expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
+  expect(r[2] === 'true' && Math.abs(r[3] - wHome) < 1, `in the studio the chip is not inert or the capsule changed its width: ${r} / ${wHome}`);
+  await page.evaluate(() => switchAppView('libtable'));
+  await page.click('#tb-rec-studio');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'studio', '«Студия ›» did not open the studio');
+  await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; window.__recOrig = undefined;
+    document.getElementById('live-captions-toggle').checked = false; updateRecordButtonState(); switchAppView('home'); });
+});
+
 // While recording, only «Стоп» of the red button stops; the time and the sources open the studio (asked by the user:
 // a click on the microphone stopped the recording)
 await step('recording time opens the studio', async () => {
@@ -1475,9 +1527,9 @@ await step('recording time opens the studio', async () => {
   await sleep(300);
   r = await page.evaluate(() => [state.appView, window.__stops]);
   expect(r[0] === 'studio' && r[1] === 0, `the dot stopped the recording: ${r}`);
-  // in the studio the time does nothing more; «Стоп» stops
-  await page.click('#tb-rec-clock');
-  await page.click('#tb-rec-label');
+  // in the studio the time does nothing more (inert); «Стоп», a button of its own, stops
+  await page.evaluate(() => recButtonClick());
+  await page.click('#tb-rec-stop');
   await sleep(200);
   expect(await page.evaluate(() => window.__stops) === 1, 'only «Стоп» must stop the recording');
   // the strip offers the studio with its captions from any section while it records (asked by the user)

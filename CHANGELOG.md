@@ -10,6 +10,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 - **«Captions and text»** in the meeting strip while recording: the studio with the live captions and the text from any
   section.
+- **The way to the studio is in the recording button**: while recording, a click on the dot, the time or the sources
+  opens the studio; «Studio ›» between them and «Stop» shows whether the captions are on (a green outline while they
+  are off). On the first recording a hint under it says where the captions and the text are; once closed it is not
+  shown again. The tray menu has «Studio: captions and text» while recording.
 - **A call is a meeting too**: while a call app (Teams, Zoom, Telegram…) or a browser holds the microphone,
   transcriptions wait, recorded or not, in the calendar or not. During a meeting a transcription starts only on the
   user's «Transcribe» and «Yes, start now».
@@ -1206,6 +1210,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 ## 0.9.4
 
 - **«Субтитры и текст»** в полосе встречи во время записи: студия с живыми субтитрами и текстом из любого раздела.
+- **Путь в студию — в кнопке записи**: во время записи нажатие на точку, время или источники открывает студию; «Студия ›»
+  между ними и «Стоп» показывает, включены ли субтитры (зелёная рамка, пока они выключены). При первой записи под ней
+  появляется подсказка, где субтитры и текст; закрытая, она больше не показывается. В меню значка в трее во время
+  записи — «Студия: субтитры и текст».
 - **Звонок — тоже встреча**: пока микрофон держит приложение звонка (Teams, Zoom, Telegram…) или браузер, расшифровки
   ждут, даже без записи и без встречи в календаре. Во время встречи расшифровка начинается только по «Расшифровать»
   и «Да, начать сейчас».

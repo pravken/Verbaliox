@@ -17,7 +17,7 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MAX_VALUE_CHARS = 256 * 1024  # summary templates: up to 30 prompts of 4000 characters
 
 BOOLS = {
-    "diarization_enabled", "auto_summary", "analysis_after_meetings", "mcp_local_only", "show_disputed", "economy_mode", "live_captions_auto", "vad_filter", "audio_enhance", "clean_fillers", "batched_inference",
+    "diarization_enabled", "auto_summary", "analysis_after_meetings", "mcp_local_only", "show_disputed", "economy_mode", "live_captions_auto", "hint_studio_entry_seen", "vad_filter", "audio_enhance", "clean_fillers", "batched_inference",
     "keep_model_loaded", "onnx_gpu", "onnx_gpu_vad", "voice_profiles", "update_check", "quiet_mode",
     "call_auto_record", "semantic_search", "auto_title", "obsidian_auto", "summary_grounding", "analysis_chain", "auto_commitments", "auto_chapters", "dictionary_fuzzy", "asr_ensemble", "rec_echo_cancel", "teams_captions", "rec_sounds", "meeting_follow", "import_copy", "rec_voice_filter",
     "delete_media_after", "update_auto", "update_beta", "obsidian_summary", "obsidian_tasks", "obsidian_chapters",

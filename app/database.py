@@ -180,6 +180,7 @@ def init_db() -> None:
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
             "live_captions_auto": "false",  # captions start with a recording; off by default (asked by the user: they load a model)
+            "hint_studio_entry_seen": "false",  # the hint under «Студия ›» of the recording capsule was shown and closed (static/js/shell.js)
             "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
