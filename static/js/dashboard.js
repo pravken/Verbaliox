@@ -732,24 +732,9 @@ function dbSysloadHtml(size) {
   const data = vram.data;
   if (!data) return `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
-  const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
-  const row = (k, all, mine, value, tip, ownText) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>`
-    + `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`
-    + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
-    + `<div class="db-sl-own">${ownText ? `<span class="ld-own"><i></i>Verbaliox ${escapeHtml(ownText)}</span>` : ''}</div>`;
-  const cpu = sys.cpu_percent;
-  let html = `<div class="ld-legend db-sl-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
-  html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`, `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`,
-    own.cpu_percent != null ? `${Math.round(own.cpu_percent)}%` : '');
-  html += ram
-    ? row('RAM', pct(ram.used_gb, ram.total_gb), pct(own.ram_gb, ram.total_gb), `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
-      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', own.ram_gb != null ? gbText(own.ram_gb) : '')
-    : row('RAM', 0, 0, '—', '', '');
-  // without a video card that reports its memory the row keeps its place, said in words
-  html += gpu
-    ? row('GPU', pct(gpu.used_gb, gpu.total_gb), pct(own.gpu_gb, gpu.total_gb), `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
-      own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '', own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '')
-    : row('GPU', 0, 0, t('dbSlNoGpu'), t('mpNoGpu'), '');
+  // the same columns as the «Нагрузка» window (static/js/pult.js ldRowsHtml); without a video card that reports its
+  // memory the GPU row keeps its place, said in words
+  let html = ldHeadHtml() + ldRowsHtml(sys, own, gpu, ram, null, [t('dbSlNoGpu'), t('mpNoGpu')]);
   if (size === 'S') return html;
   const models = loadModels();
   html += `<div class="db-sl-cap">${escapeHtml(t('ldInMemory'))}</div>`;
