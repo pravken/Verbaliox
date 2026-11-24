@@ -81,10 +81,28 @@ def serbian_to_latin(text: str) -> str:
     return "".join(_SR_BACK.get(ch, ch) for ch in text)
 
 
-# The fast model of live captions, first found among the installed ones. Measured en<->ru
+# The small general model of live captions when no translator (Hy-MT3) is installed. Measured en<->ru
 # (bench-report/translation.md): gemma4:e2b is near e4b in quality at ~0.4 s a phrase. Only models free
 # for commercial use: qwen2.5:3b (Qwen Research licence), llama3.2 and gemma2 (their own terms) are out.
-FAST_MODEL_HINTS = ("gemma4:e2b", "qwen3.5:2b", "qwen2.5:1.5b")
+FAST_MODEL_HINTS = ("gemma4:e2b",)
+
+# Hy-MT translates with the prompt and the sampling of its model card (bench-report/translation-2026-11.md,
+# tools/bench_translate.py). Measured with top_p 0.6; the card of Hy-MT3 gives 0.8 (temperature 0.7, top_k 20,
+# repetition_penalty 1.05 as here): kept as measured.
+HYMT_OPTIONS = {"temperature": 0.7, "top_p": 0.6, "top_k": 20, "repeat_penalty": 1.05, "num_ctx": NUM_CTX,
+                "num_predict": 200}
+
+
+def hymt_prompt(text: str, dst: str) -> str:
+    """The English prompt of the Hy-MT model card: one user message, no system prompt, no context lines."""
+    return (f"Translate the following text into {dst}. Note that you should only output the "
+            f"translated result without any additional explanation:\n\n{text}")
+
+
+def _is_translator(model: Optional[str]) -> bool:
+    from app.ollama_client import is_translate_only_model
+
+    return is_translate_only_model(model or "")
 
 
 def _base_url() -> str:
@@ -95,26 +113,45 @@ def _base_url() -> str:
 
 
 def installed_models() -> List[str]:
+    """The models the captions can translate with (the translators too); a downloaded Hy-MT3 1.8B with its
+    broken template is repaired on the way (app/ollama_client.repair_hymt_models)."""
+    from app.ollama_client import repair_hymt_models, translate_models
+
     try:
         with httpx.Client(timeout=2.0) as c:
-            from app.ollama_client import chat_models
-
-            return chat_models([m.get("name") for m in c.get(f"{_base_url()}/api/tags").json().get("models") or []])
+            names = [m.get("name") for m in c.get(f"{_base_url()}/api/tags").json().get("models") or []]
     except Exception:
         return []
+    try:
+        names = repair_hymt_models(_base_url(), names)
+    except Exception:
+        traceback.print_exc()
+    return translate_models(names)
 
 
 def model_choices() -> Dict[str, Any]:
-    """{"quality": configured model, "fast": a small installed model or None}."""
+    """{"quality", "fast", "installed"}. «Качество»: Hy-MT3-7B, else Hy-MT3-1.8B, else the analysis model;
+    «Скорость»: Hy-MT3-1.8B, else gemma4:e2b, else the same as «Качество». A model chosen in the studio
+    (LiveTranslator.model_override) comes before both."""
     from app.database import get_all_settings
+    from app.ollama_client import HYMT_1_8B, HYMT_7B, chat_models, translate_model_installed_as
 
     models = installed_models()
-    quality = get_all_settings().get("ollama_model") or (models[0] if models else None)
-    if quality and models and quality not in models:
-        same = [m for m in models if m.startswith(quality.split(":")[0])]
-        quality = same[0] if same else models[0]
-    fast = next((m for m in FAST_MODEL_HINTS if m in models), None)
+    general = chat_models(models)
+    analysis = get_all_settings().get("ollama_model") or (general[0] if general else None)
+    if analysis and general and analysis not in general:
+        same = [m for m in general if m.startswith(analysis.split(":")[0])]
+        analysis = same[0] if same else general[0]
+    large = translate_model_installed_as(HYMT_7B, models)
+    small = translate_model_installed_as(HYMT_1_8B, models)
+    quality = large or small or analysis
+    fast = small or next((m for m in FAST_MODEL_HINTS if m in models), None) or quality
     return {"quality": quality, "fast": fast, "installed": models}
+
+
+def small_chat_model() -> Optional[str]:
+    """A small installed model that writes text (not a translator), for short checks; None: the analysis model."""
+    return next((m for m in FAST_MODEL_HINTS if m in installed_models()), None)
 
 
 AUTO = "auto"  # target "auto": a pair of languages, each line goes into the other one (RU ⇄ EN)
@@ -257,6 +294,8 @@ class LiveTranslator:
         src = TEXT_LANGUAGES.get(src_lang or self._source_lang() or "", "the source language")
         target = target or self.target_for(src_lang or self._source_lang())
         dst = TEXT_LANGUAGES.get(target, target)
+        if _is_translator(model or self._model):
+            return self._chat_translator(text, dst, timeout, model or self._model)
         # Live speech arrives in fragments; Qwen models, left alone with a fragment, sometimes
         # answer in Chinese or ask for "the full sentence" instead of translating
         system = (
@@ -285,6 +324,22 @@ class LiveTranslator:
             r = c.post(f"{_base_url()}/api/chat", json=payload)
             from app.ollama_client import raise_for_ollama
 
+            raise_for_ollama(r)
+            return strip_think(str((r.json().get("message") or {}).get("content") or "")).strip('"«»`')
+
+    def _chat_translator(self, text: str, dst: str, timeout: float, model: Optional[str]) -> str:
+        """Hy-MT: the prompt and the sampling of its model card (a retry samples another answer)."""
+        from app import idle_unload
+        from app.llm_text import strip_think
+        from app.ollama_client import raise_for_ollama
+
+        idle_unload.touch(model)
+        payload = {
+            "model": model, "stream": False, "keep_alive": idle_unload.ollama_keep_alive() or KEEP_ALIVE,
+            "messages": [{"role": "user", "content": hymt_prompt(text, dst)}], "options": dict(HYMT_OPTIONS),
+        }
+        with httpx.Client(timeout=timeout) as c:
+            r = c.post(f"{_base_url()}/api/chat", json=payload)
             raise_for_ollama(r)
             return strip_think(str((r.json().get("message") or {}).get("content") or "")).strip('"«»`')
 

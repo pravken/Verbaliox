@@ -54,6 +54,51 @@ RECOMMENDED_LLM_MODELS: List[Dict[str, Any]] = [
     },
 ]
 
+# The translators of live captions (bench-report/translation-2026-11.md): Tencent Hy-MT3, Apache-2.0. They
+# only translate: never offered as the analysis model (is_translate_only_model). One is offered by the card:
+# the 7B on a card of 10 GB (app/hardware.py), else the 1.8B. Nothing is downloaded without the user.
+HYMT_7B = "hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M"
+HYMT_1_8B = "hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M"
+# The 1.8B as the program re-creates it: its GGUF comes with a chat template without {{ .Prompt }} (the model
+# never gets the text and answers nonsense). The template is the one of chat_template.jinja of
+# tencent/Hy-MT3-1.8B; the GGUF has add_bos_token = false, the template puts the BOS. The 7B's own template
+# is right and is used as it is.
+HYMT_1_8B_LOCAL = "hy-mt3-1.8b"
+_HY_BOS = "<｜hy_begin▁of▁sentence｜>"
+_HY_EOS = "<｜hy_place▁holder▁no▁2｜>"
+HYMT_1_8B_TEMPLATE = (
+    "{{ if .System }}" + _HY_BOS + "{{ .System }}<｜hy_place▁holder▁no▁3｜>{{ else }}"
+    + _HY_BOS + "{{ end }}<｜hy_User｜>{{ .Prompt }}<｜hy_Assistant｜>{{ .Response }}" + _HY_EOS
+)
+HYMT_1_8B_STOP = [_HY_EOS, "<｜hy_place▁holder▁no▁8｜>"]
+
+TRANSLATE_MODELS: List[Dict[str, Any]] = [
+    {
+        "id": HYMT_7B,
+        "local": HYMT_7B,  # the name it is used under
+        "name": "Hy-MT3 7B",
+        "badge": "4.9 GB · Apache",
+        "size": "4.9 GB",
+        "vram": "10+ GB VRAM",
+        "license": "Apache",
+        "desc_ru": "Tencent Hy-MT3 7B — модель только для перевода живых субтитров, для анализа не используется. В замерах программы переводит с английского на русский и обратно точнее Gemma 4 E4B, около 0,4 секунды на фразу; помещается в видеокарту 10 ГБ вместе с распознаванием речи.",
+        "desc_en": "Tencent Hy-MT3 7B: a model for live caption translation only, not used for analysis. In the app's measurements it translates English to Russian and back more accurately than Gemma 4 E4B, about 0.4 seconds a phrase; fits a 10 GB card together with speech recognition.",
+        "min_vram_gb": 9.5,  # a 10 GB card reports a little under 10
+    },
+    {
+        "id": HYMT_1_8B,
+        "local": HYMT_1_8B_LOCAL,
+        "name": "Hy-MT3 1.8B",
+        "badge": "1.3 GB · Apache",
+        "size": "1.3 GB",
+        "vram": "< 10 GB / CPU",
+        "license": "Apache",
+        "desc_ru": "Tencent Hy-MT3 1.8B — модель только для перевода живых субтитров, для анализа не используется. В замерах программы переводит с английского на русский и обратно точнее Gemma 4 E2B и быстрее её, около 0,15 секунды на фразу. Для видеокарт меньше 10 ГБ и компьютеров без видеокарты.",
+        "desc_en": "Tencent Hy-MT3 1.8B: a model for live caption translation only, not used for analysis. In the app's measurements it translates English to Russian and back more accurately and faster than Gemma 4 E2B, about 0.15 seconds a phrase. For cards under 10 GB and computers without one.",
+        "min_vram_gb": 0,
+    },
+]
+
 _LLM_DISPLAY_NAMES: Dict[str, str] = {
     "gemma4:e4b": "Gemma 4 E4B",
     "gemma4:e2b": "Gemma 4 E2B",
@@ -68,6 +113,10 @@ _LLM_DISPLAY_NAMES: Dict[str, str] = {
     "qwen2.5:14b": "Qwen 14B Pro",
     "mistral:7b": "Mistral 7B",
     "qwen2.5:1.5b": "Qwen Lite",
+    # any tag; the 1.8B by its downloaded name and by the one the program re-creates it under
+    "hf.co/tencent/hy-mt3-7b-gguf": "Hy-MT3 7B",
+    "hf.co/tencent/hy-mt3-1.8b-gguf": "Hy-MT3 1.8B",
+    "hy-mt3-1.8b": "Hy-MT3 1.8B",
 }
 
 
@@ -359,8 +408,92 @@ def is_embedding_model(name: str) -> bool:
     return n.split(":")[0] == semantic or any(h in n for h in _EMBEDDING_HINTS)
 
 
+def is_translate_only_model(name: str) -> bool:
+    """A translator (Hy-MT): it answers a chat with a translation of it, so it never writes an analysis,
+    an answer of the assistant or a dub's text; only the live captions translate with it."""
+    return "hy-mt" in str(name or "").lower()
+
+
 def chat_models(models: List[str]) -> List[str]:
+    """The models that can write an analysis: not embedding models, not translators."""
+    return [m for m in models if not is_embedding_model(m) and not is_translate_only_model(m)]
+
+
+def translate_models(models: List[str]) -> List[str]:
+    """The models live captions can translate with: the analysis models and the translators."""
     return [m for m in models if not is_embedding_model(m)]
+
+
+def _listed(name: str, models: List[str]) -> Optional[str]:
+    """`name` as Ollama lists it: the same name in any case, or with «:latest»."""
+    want = name.lower() if ":" in name else f"{name.lower()}:latest"
+    return next((m for m in models if (m.lower() if ":" in m else f"{m.lower()}:latest") == want), None)
+
+
+def translate_model_installed_as(model_id: str, models: List[str]) -> Optional[str]:
+    """The name a translator of TRANSLATE_MODELS is installed under: the one the program made of it
+    (the 1.8B with a working template), else the downloaded one; None when it is not there."""
+    item = next((m for m in TRANSLATE_MODELS if m["id"].lower() == str(model_id or "").lower()), None)
+    if not item:
+        return _listed(model_id, models) if model_id else None
+    return _listed(item["local"], models) or _listed(item["id"], models)
+
+
+def translate_catalog(models: List[str]) -> List[Dict[str, Any]]:
+    out = []
+    for item in TRANSLATE_MODELS:
+        as_name = translate_model_installed_as(item["id"], models)
+        out.append({**item, "installed": as_name is not None, "installed_as": as_name or ""})
+    return out
+
+
+_PROMPT_IN_TEMPLATE = re.compile(r"\{\{-?\s*\.Prompt\s*-?\}\}")
+_hymt_checked: set = set()  # downloaded 1.8B names whose template was found right (asked once)
+
+
+def template_is_broken(template: str) -> bool:
+    """The chat template never puts the user's text in (the 1.8B GGUF of Hy-MT3 under Ollama 0.40.8)."""
+    return not _PROMPT_IN_TEMPLATE.search(template or "")
+
+
+def _raw_hymt_1_8b(models: List[str]) -> List[str]:
+    stem = HYMT_1_8B.split(":")[0].lower()
+    return [m for m in models if m.lower().split(":")[0] == stem]
+
+
+def repair_hymt_models(base_url: str, models: List[str], strict: bool = False) -> List[str]:
+    """The downloaded Hy-MT3 1.8B with its broken template is made again as HYMT_1_8B_LOCAL (the same file,
+    the template of its model card) and the downloaded name is removed, so one copy is listed. Returns
+    Ollama's list of models after it; a model it could not repair stays as it is (logged; `strict`: raised)."""
+    raws = [m for m in _raw_hymt_1_8b(models) if m not in _hymt_checked]
+    if not raws:
+        return models
+    base = base_url.rstrip("/")
+    out = list(models)
+    with httpx.Client(timeout=120.0) as client:
+        for raw in raws:
+            try:
+                if not _listed(HYMT_1_8B_LOCAL, out):
+                    show = client.post(f"{base}/api/show", json={"model": raw})
+                    raise_for_ollama(show)
+                    if not template_is_broken(str(show.json().get("template") or "")):
+                        _hymt_checked.add(raw)  # a template fixed upstream: the model is used as it is
+                        continue
+                    r = client.post(f"{base}/api/create", json={
+                        "model": HYMT_1_8B_LOCAL, "from": raw, "template": HYMT_1_8B_TEMPLATE,
+                        "parameters": {"stop": HYMT_1_8B_STOP}, "stream": False})
+                    raise_for_ollama(r)
+                    out.append(f"{HYMT_1_8B_LOCAL}:latest")
+                    print(f"[ollama] {raw}: chat template repaired, now {HYMT_1_8B_LOCAL}", flush=True)
+                d = client.request("DELETE", f"{base}/api/delete", json={"model": raw})
+                if d.status_code != 404:
+                    raise_for_ollama(d)
+                out = [m for m in out if m != raw]
+            except Exception as e:
+                print(f"[ollama] {raw}: the chat template is not repaired: {e}", flush=True)
+                if strict:
+                    raise
+    return out
 
 
 def raise_for_ollama(resp: "httpx.Response") -> None:
@@ -402,18 +535,20 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
                     models = [m["name"] for m in data.get("models", [])]
         except Exception:
             running = False
+    if running and not _pull_state["active"] and _raw_hymt_1_8b(models):
+        models = repair_hymt_models(base_url, models)  # once: a downloaded 1.8B gets its working template
     if not running:
         # started only when analysis needs it: what it has downloaded is on the disk
         models = models_on_disk()
 
-    # The embedding model chosen as the analysis model (it was listed among them before 0.5.1): the
-    # first model that writes text takes its place, once
-    if models and is_embedding_model(active_model):
+    # The embedding model chosen as the analysis model (it was listed among them before 0.5.1), or a
+    # translator: the first model that writes text takes its place, once
+    if models and (is_embedding_model(active_model) or is_translate_only_model(active_model)):
         usable = chat_models(models)
         if usable:
             active_model = usable[0]
             update_settings({"ollama_model": active_model})
-            print(f"[ollama] analysis model was an embedding model, now {active_model}", flush=True)
+            print(f"[ollama] analysis model was an embedding model or a translator, now {active_model}", flush=True)
 
     # Build catalog with installed flags
     catalog = []
@@ -449,6 +584,7 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
         "models": models,
         "chat_models": chat_models(models),  # the ones that can write text (not embedding models)
         "catalog": catalog,
+        "translate_catalog": translate_catalog(models),  # the translators of live captions
         "pull_state": dict(_pull_state),
     }
 
@@ -635,6 +771,16 @@ def start_model_pull(
                                 last_logged_status = status_txt
                                 _append_log(f"Ollama — {status_txt}")
 
+            if is_translate_only_model(model_name):
+                # a translator is not the analysis model; the 1.8B gets its working template
+                if _raw_hymt_1_8b([model_name]):
+                    _pull_state["status"] = f"Настройка шаблона {pretty_name}"
+                    _append_log(f"Настройка шаблона {pretty_name}")
+                    _hymt_checked.discard(model_name)
+                    repair_hymt_models(base_url, [model_name], strict=True)
+                _append_log(f"Модель {pretty_name} скачана: она переводит живые субтитры.")
+                _pull_state.update({"active": False, "status": f"Модель {pretty_name} установлена", "progress": 100})
+                return
             # Automatically set this newly downloaded model as the active LLM model
             update_settings({"ollama_model": model_name})
             _append_log(f"Модель {pretty_name} скачана и выбрана как активная.")

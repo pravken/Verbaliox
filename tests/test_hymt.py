@@ -1,0 +1,262 @@
+"""The translators of live captions, Tencent Hy-MT3 (bench-report/translation-2026-11.md): which model «Качество»
+and «Скорость» take, that a translator is never an analysis model, the repair of the 1.8B's broken chat
+template, the prompt of its model card and the model offered by the video card."""
+
+import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
+import unittest
+from unittest import mock
+
+try:
+    from app import live_translate, ollama_client
+except ImportError:  # httpx/app dependencies are not installed (e.g. in the release CI job)
+    live_translate = ollama_client = None
+
+RAW_7B = "hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M"
+RAW_1_8B = "hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M"
+LOCAL_1_8B = "hy-mt3-1.8b:latest"
+
+
+class _Resp:
+    def __init__(self, status=200, data=None):
+        self.status_code = status
+        self._data = data or {}
+        self.text = ""
+
+    def json(self):
+        return self._data
+
+    def read(self):
+        return b""
+
+
+class _Ollama:
+    """httpx.Client for /api/show, /api/create, /api/delete and /api/chat; records the requests."""
+
+    def __init__(self, template="", chat=""):
+        self.template, self.chat = template, chat
+        self.posts, self.deleted = [], []
+
+    def __call__(self, *a, **k):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def post(self, url, json=None, **k):
+        self.posts.append((url.rsplit("/api/", 1)[1], json))
+        if url.endswith("/api/show"):
+            return _Resp(200, {"template": self.template})
+        if url.endswith("/api/chat"):
+            return _Resp(200, {"message": {"content": self.chat}})
+        return _Resp(200, {"status": "success"})
+
+    def request(self, method, url, json=None, **k):
+        self.deleted.append(json["model"])
+        return _Resp(200)
+
+
+@unittest.skipIf(live_translate is None, "app dependencies not installed")
+class ModelChoicesTest(unittest.TestCase):
+    def setUp(self):
+        from app.database import init_db
+
+        init_db()
+
+    def _choices(self, installed, analysis="gemma4:e4b"):
+        with mock.patch.object(live_translate, "installed_models", return_value=installed), \
+                mock.patch("app.database.get_all_settings", return_value={"ollama_model": analysis}):
+            c = live_translate.model_choices()
+        return c["quality"], c["fast"]
+
+    def test_without_a_translator_as_before(self):
+        self.assertEqual(self._choices(["gemma4:e4b", "gemma4:e2b"]), ("gemma4:e4b", "gemma4:e2b"))
+        # no small model: «Скорость» takes the model of «Качество»
+        self.assertEqual(self._choices(["gemma4:e4b"]), ("gemma4:e4b", "gemma4:e4b"))
+
+    def test_both_translators(self):
+        self.assertEqual(self._choices(["gemma4:e4b", "gemma4:e2b", RAW_7B, LOCAL_1_8B]), (RAW_7B, LOCAL_1_8B))
+
+    def test_only_the_small_translator(self):
+        self.assertEqual(self._choices(["gemma4:e4b", "gemma4:e2b", LOCAL_1_8B]), (LOCAL_1_8B, LOCAL_1_8B))
+        # the downloaded name, when its template was found right and it was kept
+        self.assertEqual(self._choices(["gemma4:e4b", RAW_1_8B]), (RAW_1_8B, RAW_1_8B))
+
+    def test_only_the_large_translator(self):
+        self.assertEqual(self._choices(["gemma4:e4b", "gemma4:e2b", RAW_7B]), (RAW_7B, "gemma4:e2b"))
+        self.assertEqual(self._choices([RAW_7B, "gemma4:e4b"]), (RAW_7B, RAW_7B))
+
+    def test_the_analysis_model_is_never_a_translator(self):
+        # only translators installed: the analysis model of the settings stays the quality fallback
+        self.assertEqual(self._choices([LOCAL_1_8B], analysis="gemma4:e4b"), (LOCAL_1_8B, LOCAL_1_8B))
+
+    def test_qwen_is_no_longer_offered(self):
+        self.assertEqual(live_translate.FAST_MODEL_HINTS, ("gemma4:e2b",))
+
+    def test_the_check_of_the_analysis_takes_no_translator(self):
+        with mock.patch.object(live_translate, "installed_models", return_value=[LOCAL_1_8B]):
+            self.assertIsNone(live_translate.small_chat_model())
+        with mock.patch.object(live_translate, "installed_models", return_value=[LOCAL_1_8B, "gemma4:e2b"]):
+            self.assertEqual(live_translate.small_chat_model(), "gemma4:e2b")
+
+
+@unittest.skipIf(ollama_client is None, "app dependencies not installed")
+class TranslateOnlyTest(unittest.TestCase):
+    def setUp(self):
+        from app.database import init_db
+
+        init_db()
+
+    def test_translators_are_not_analysis_models(self):
+        models = ["gemma4:e4b", RAW_7B, LOCAL_1_8B, RAW_1_8B, "bge-m3:latest"]
+        for m in (RAW_7B, LOCAL_1_8B, RAW_1_8B):
+            self.assertTrue(ollama_client.is_translate_only_model(m))
+        self.assertFalse(ollama_client.is_translate_only_model("gemma4:e4b"))
+        self.assertEqual(ollama_client.chat_models(models), ["gemma4:e4b"])
+        self.assertEqual(ollama_client.translate_models(models), ["gemma4:e4b", RAW_7B, LOCAL_1_8B, RAW_1_8B])
+
+    def test_status_lists_translators_apart(self):
+        on_disk = ["gemma4:e4b", RAW_7B, LOCAL_1_8B]
+        with mock.patch.object(ollama_client, "_is_ollama_port_open", return_value=False), \
+                mock.patch.object(ollama_client, "models_on_disk", return_value=on_disk), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value="ollama"), \
+                mock.patch.object(ollama_client, "get_all_settings", return_value={"ollama_model": LOCAL_1_8B}), \
+                mock.patch.object(ollama_client, "update_settings") as save:
+            st = ollama_client.get_ollama_status()
+        self.assertEqual(st["chat_models"], ["gemma4:e4b"])
+        self.assertNotIn(RAW_7B, [m["id"] for m in st["catalog"]])
+        self.assertNotIn(LOCAL_1_8B, [m["id"] for m in st["catalog"]])
+        # a translator set as the analysis model gives its place to one that writes text
+        self.assertEqual(st["active_model"], "gemma4:e4b")
+        save.assert_called_once_with({"ollama_model": "gemma4:e4b"})
+        tr = {m["id"]: m for m in st["translate_catalog"]}
+        self.assertEqual(tr[ollama_client.HYMT_7B]["installed_as"], RAW_7B)
+        self.assertEqual(tr[ollama_client.HYMT_1_8B]["installed_as"], LOCAL_1_8B)
+
+    def test_display_names(self):
+        for name, pretty in ((RAW_7B, "Hy-MT3 7B"), (RAW_1_8B, "Hy-MT3 1.8B"), (LOCAL_1_8B, "Hy-MT3 1.8B")):
+            self.assertEqual(ollama_client.format_llm_model_name(name), pretty)
+
+    def test_the_translators_share_the_card(self):
+        from app import vram
+
+        self.assertEqual(vram._sharing_size(RAW_7B), 5.3)
+        self.assertEqual(vram._sharing_size(RAW_1_8B), 1.5)
+        self.assertEqual(vram._sharing_size("hy-mt3-1.8b"), 1.5)
+
+
+@unittest.skipIf(ollama_client is None, "app dependencies not installed")
+class RepairTemplateTest(unittest.TestCase):
+    BROKEN = "{{ if .System }}<|hy_begin|>{{ .System }}{{ end }}<|hy_User|>onse }}"
+
+    def setUp(self):
+        ollama_client._hymt_checked.clear()
+
+    def _repair(self, models, template):
+        fake = _Ollama(template=template)
+        with mock.patch.object(ollama_client.httpx, "Client", fake):
+            out = ollama_client.repair_hymt_models("http://127.0.0.1:11434", models)
+        return fake, out
+
+    def test_broken_template_is_detected(self):
+        self.assertTrue(ollama_client.template_is_broken(self.BROKEN))
+        self.assertTrue(ollama_client.template_is_broken(""))
+        self.assertFalse(ollama_client.template_is_broken(ollama_client.HYMT_1_8B_TEMPLATE))
+        self.assertFalse(ollama_client.template_is_broken("<|startoftext|>{{- .Prompt -}}<|extra_0|>"))
+
+    def test_the_template_of_the_report(self):
+        t = ollama_client.HYMT_1_8B_TEMPLATE
+        self.assertIn("<｜hy_User｜>{{ .Prompt }}<｜hy_Assistant｜>{{ .Response }}", t)
+        self.assertTrue(t.endswith("<｜hy_place▁holder▁no▁2｜>"))
+        self.assertEqual(ollama_client.HYMT_1_8B_STOP, ["<｜hy_place▁holder▁no▁2｜>",
+                                                        "<｜hy_place▁holder▁no▁8｜>"])
+
+    def test_broken_model_is_made_again_and_the_download_removed(self):
+        fake, out = self._repair(["gemma4:e4b", RAW_1_8B], self.BROKEN)
+        create = [body for kind, body in fake.posts if kind == "create"]
+        self.assertEqual(create, [{"model": "hy-mt3-1.8b", "from": RAW_1_8B, "template": ollama_client.HYMT_1_8B_TEMPLATE,
+                                   "parameters": {"stop": ollama_client.HYMT_1_8B_STOP}, "stream": False}])
+        self.assertEqual(fake.deleted, [RAW_1_8B])
+        self.assertEqual(out, ["gemma4:e4b", LOCAL_1_8B])
+
+    def test_a_right_template_is_kept_and_asked_once(self):
+        right = "{{ .System }}<|hy_User|>{{ .Prompt }}<|hy_Assistant|>{{ .Response }}"
+        fake, out = self._repair([RAW_1_8B], right)
+        self.assertEqual([k for k, _ in fake.posts], ["show"])
+        self.assertEqual((fake.deleted, out), ([], [RAW_1_8B]))
+        fake, _ = self._repair([RAW_1_8B], right)
+        self.assertEqual(fake.posts, [])
+
+    def test_with_the_repaired_one_there_the_download_only_goes(self):
+        fake, out = self._repair([LOCAL_1_8B, RAW_1_8B], self.BROKEN)
+        self.assertEqual(fake.posts, [])
+        self.assertEqual((fake.deleted, out), ([RAW_1_8B], [LOCAL_1_8B]))
+
+    def test_the_7b_is_left_alone(self):
+        fake, out = self._repair([RAW_7B], self.BROKEN)
+        self.assertEqual((fake.posts, fake.deleted, out), ([], [], [RAW_7B]))
+
+
+@unittest.skipIf(live_translate is None, "app dependencies not installed")
+class HyMtPromptTest(unittest.TestCase):
+    def _translator(self, model):
+        t = live_translate.LiveTranslator.__new__(live_translate.LiveTranslator)
+        t._source_lang = lambda: "en"
+        t.target, t.pair, t.speed = "ru", ["en", "ru"], "quality"
+        t._model, t.model_override = model, None
+        t._fallback_model = lambda: None
+        return t
+
+    def _run(self, model, answer):
+        fake = _Ollama(chat=answer)
+        with mock.patch.object(live_translate.httpx, "Client", fake), \
+                mock.patch.object(live_translate, "_base_url", return_value="http://127.0.0.1:11434"), \
+                mock.patch("app.idle_unload.touch"), mock.patch("app.idle_unload.ollama_keep_alive", return_value="10m"):
+            out = self._translator(model)._translate_clean("Let's move the meeting to Friday", "en", target="ru")
+        return fake, out
+
+    def test_the_card_prompt_and_sampling(self):
+        fake, out = self._run(LOCAL_1_8B, "Давайте перенесём встречу на пятницу перенесём встречу на пятницу\nПояснение")
+        (kind, body), = fake.posts
+        self.assertEqual(kind, "chat")
+        self.assertEqual(body["messages"], [{"role": "user", "content":
+            "Translate the following text into Russian. Note that you should only output the translated result "
+            "without any additional explanation:\n\nLet's move the meeting to Friday"}])
+        self.assertEqual(body["options"], {"temperature": 0.7, "top_p": 0.6, "top_k": 20, "repeat_penalty": 1.05,
+                                           "num_ctx": 2048, "num_predict": 200})
+        self.assertNotIn("think", body)
+        self.assertEqual(out, "Давайте перенесём встречу на пятницу")  # one line, the repeat collapsed
+
+    def test_a_general_model_keeps_the_captions_prompt(self):
+        fake, out = self._run("gemma4:e2b", "Давайте перенесём встречу на пятницу")
+        body = fake.posts[-1][1]
+        self.assertEqual(body["messages"][0]["role"], "system")
+        self.assertEqual(body["messages"][1], {"role": "user", "content": "Let's move the meeting to Friday"})
+
+
+class TranslateRecommendationTest(unittest.TestCase):
+    def test_by_the_card(self):
+        from app import hardware
+
+        self.assertEqual(hardware.recommended_translate_model(24.0), RAW_7B)
+        self.assertEqual(hardware.recommended_translate_model(9.8), RAW_7B)  # an RTX 3080 10 GB reports a little under 10
+        self.assertEqual(hardware.recommended_translate_model(8.0), RAW_1_8B)
+        with mock.patch.object(hardware, "_gpu_probe", return_value=("RTX 3080", 9.8, 8.0)):
+            self.assertEqual(hardware.get_hardware_info()["recommended_translate_model"], RAW_7B)
+        with mock.patch.object(hardware, "_gpu_probe", return_value=("RTX 3060", 6.0, 5.0)):
+            self.assertEqual(hardware.get_hardware_info()["recommended_translate_model"], RAW_1_8B)
+        with mock.patch.object(hardware, "_gpu_probe", return_value=None):
+            self.assertEqual(hardware.get_hardware_info()["recommended_translate_model"], RAW_1_8B)
+
+    @unittest.skipIf(ollama_client is None, "app dependencies not installed")
+    def test_the_names_are_the_catalogs(self):
+        from app import hardware
+
+        self.assertEqual((hardware.TRANSLATE_LARGE, hardware.TRANSLATE_SMALL), (ollama_client.HYMT_7B, ollama_client.HYMT_1_8B))
+        self.assertEqual(hardware.TRANSLATE_LARGE_MIN_VRAM_GB, ollama_client.TRANSLATE_MODELS[0]["min_vram_gb"])
+
+
+if __name__ == "__main__":
+    unittest.main()
