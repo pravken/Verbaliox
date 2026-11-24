@@ -5507,3 +5507,6 @@ label.sx-row:has(.vs-switch:disabled) { cursor: default; }
 /* the part of an option that follows it at once (the programs of «Записывать звонки»): no line between them */
 .sx-block.sx-dep { padding-left: 24px; }
 .sx-row + .sx-tight, .sx-block + .sx-tight { border-top: 0; padding-top: 0; }
+/* a field across the card with its button (a model by name) */
+.sx-field { display: flex; align-items: center; gap: 8px; }
+.sx-field .ui-btn { height: 30px; padding: 0 12px; font-size: var(--fs-label); flex-shrink: 0; }

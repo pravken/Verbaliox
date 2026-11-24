@@ -35,7 +35,7 @@
           </button>
           <button data-click="selectSettingsTab" data-click-args='["analysis"]' id="stab-analysis" class="sx-nav-btn" type="button">
             <svg class="sx-nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/></svg>
-            <span class="flex-1 min-w-0 truncate" data-i18n="rdSasNavAnalysis">ИИ-анализ</span>
+            <span class="flex-1 min-w-0 truncate" data-i18n="rdSasNavAnalysis">Анализ</span>
           </button>
           <button data-click="selectSettingsTab" data-click-args='["calendar"]' id="stab-calendar" class="sx-nav-btn" type="button">
             <svg class="sx-nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>
@@ -652,15 +652,14 @@
         </div>
         <div data-stab="analysis" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
-            <h3 class="sx-section-title" data-i18n="rdSasNavAnalysis">ИИ-анализ</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescAnalysis">Локальные модели анализа и что делать после распознавания.</p>
+            <h3 class="sx-section-title" data-i18n="rdSasNavAnalysis">Анализ</h3>
           </div>
         <!-- Section 3: Ollama Local AI Model Manager -->
         <div class="settings-card">
           <div class="sx-card-head">
             <div>
-              <h4 id="ollama-section-title" class="text-[13px] font-semibold text-white" data-i18n="ollamaSectionTitle">Языковые модели для анализа (Ollama)</h4>
-              <p id="ollama-section-desc" class="text-[11.5px] text-apple-secondary" data-i18n="ollamaSectionDesc">Модели с открытыми весами работают локально; перед коммерческим использованием проверьте лицензию модели</p>
+              <h4 id="ollama-section-title" class="sx-card-title" data-i18n="ollamaSectionTitle">Модели анализа (Ollama)</h4>
+              <p id="ollama-section-desc" class="sx-card-cap" data-i18n="ollamaSectionDesc">Перед коммерческим использованием проверьте лицензию модели</p>
             </div>
             <span id="settings-ollama-pill" class="text-[11.5px] font-mono px-2.5 py-0.5 rounded-full bg-white/5 text-apple-secondary shrink-0"></span>
           </div>
@@ -673,22 +672,14 @@
           </div>
 
           <!-- Custom Model Input -->
-          <div class="flex gap-2 items-center pt-1">
+          <div class="sx-field">
             <input id="custom-ollama-model-input" type="text"
-              data-i18n-title="tipCustomOllamaInput"
-              title="Введите название любой модели из каталога Ollama"
               data-i18n-placeholder="phCustomOllama" placeholder="Или введите имя любой модели из библиотеки Ollama…"
-              class="flex-1 h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none" />
-            <button data-click="pullCustomOllamaModel"
-              data-i18n-title="tipPullCustomOllama"
-              title="Скачать указанную модель через Ollama"
-              class="ui-btn ui-btn-subtle h-8 px-3 text-white">
+              class="sx-input flex-1" />
+            <button data-click="pullCustomOllamaModel" class="ui-btn ui-btn-subtle">
               <span data-i18n="downloadBtn">Скачать</span>
             </button>
           </div>
-          <!-- where models are downloaded: they go on in the background when the window is closed (the note stood under
-               every section, in the middle of the page with two columns: reported by the user) -->
-          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="bgDownloadNote">Скачивание моделей продолжается в фоне при закрытии окна</p>
 
           <!-- Live Download & Installation Status Window -->
           <div id="ollama-download-panel" class="hidden rounded-xl bg-apple-bg border border-apple-blue/40 p-3.5 space-y-2.5">
@@ -712,83 +703,76 @@
 
         </div>
 
-        <!-- The translators (Hy-MT3, a TranslateGemma installed by hand): live captions and the dictation with
-             translation; the analysis is done by the model above (static/js/settings.js translateModelCards) -->
-        <div class="settings-card" id="translate-models-card">
-          <div class="sx-card-head">
-            <div>
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="trSectionTitle">Модели перевода (Ollama)</h4>
-              <p class="text-[11.5px] text-apple-secondary" data-i18n="trSectionDesc">Модели только переводят: живые субтитры и диктовку с переводом. Анализ встреч выполняет модель выше</p>
-            </div>
-          </div>
-          <div id="translate-catalog-list" class="space-y-2"></div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label for="set-live-tr-quality" class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="trQualityLabel">Субтитры: «Качество»</label>
-              <select id="set-live-tr-quality" data-i18n-title="tipTrQuality" title="Модель перевода субтитров в режиме «Качество» и диктовки с переводом"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
-                <option value="" data-i18n="liveModelAuto">Авто</option>
-              </select>
-            </div>
-            <div>
-              <label for="set-live-tr-fast" class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="trFastLabel">Субтитры: «Быстро»</label>
-              <select id="set-live-tr-fast" data-i18n-title="tipTrFast" title="Модель перевода субтитров в режиме «Быстро»"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
-                <option value="" data-i18n="liveModelAuto">Авто</option>
-              </select>
-            </div>
-          </div>
-          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="trChoiceHint">Авто: для «Качества» — Hy-MT3 7B, затем Hy-MT3 1.8B, затем модель анализа; для «Быстро» — Hy-MT3 1.8B, затем Gemma 4 E2B, затем модель «Качества». Диктовку с переводом переводит модель «Качества». Модель, выбранная в студии, действует до конца сеанса субтитров.</p>
-        </div>
-
         <!-- What runs by itself after a transcription -->
-        <div class="settings-card !space-y-0">
-          <div class="min-w-0 pb-1">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="afterTitle">После расшифровки</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="afterDesc">Что выполняется автоматически, когда запись расшифрована.</p>
-          </div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label" data-i18n-title="tipAutoSummaryToggle" title="Генерировать структурированный протокол автоматически сразу после завершения транскрибации">
-            <span data-i18n="autoSummaryToggle">Создавать обзор автоматически после расшифровки</span>
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="afterTitle">После расшифровки</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="autoSummaryToggle">Создавать обзор</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-auto-summary" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="afterMeetingsToggle">Анализ — только когда нет встречи</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="afterMeetingsHint">Только на время встречи (идёт запись или встреча по календарю): расшифровка и анализ ждут её конца, начатый анализ останавливается, модели выгружаются из памяти — компьютер не нагружен, экран можно показывать. Через несколько минут после встречи записи расшифровываются и анализируются автоматически. Субтитры автоматически не включаются; субтитры, перевод и анализ, запущенные вручную, не ждут. Переключается и в меню значка в трее.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-analysis-after-meetings" checked />
-          </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="autoTitleToggle">Называть записи по содержанию</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="autoTitleHint">Если у записи типовое название («Запись 14-05», «zoom_0», «VID_2024…»), после расшифровки модель даст ей название по тексту. Названия, введённые вручную, не меняются.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-auto-title" checked />
-          </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="autoCommitmentsToggle">Находить задачи после автоматического обзора</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="autoCommitmentsHint">Кто что пообещал, кому и к какому сроку — во вкладке «Обещания» и в «Ассистенте». Открытые обещания серии попадают в «С прошлого раза» и в справку перед встречей.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="autoCommitmentsToggle">Находить задачи автоматически</span>
+              <span class="sx-row-cap" data-i18n="autoCommitmentsHint">Кто, что и к какому сроку — в «Задачах» и в справке перед встречей</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-auto-commitments" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="chainToggle">Анализ по шагам: решения → задачи → протокол</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="chainHint">Сначала находятся решения, потом задачи с их учётом, потом протокол. Решения, открытые вопросы и следующие шаги в протоколе — те же списки, что в задачах, слово в слово. Примерно на четверть дольше: на слабом компьютере можно выключить.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="autoTitleToggle">Называть записи по содержанию</span>
+              <span class="sx-row-cap" data-i18n="autoTitleHint">Записи с типовым названием получают название по тексту. Ваши названия не меняются</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-auto-title" checked />
+          </label>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="afterMeetingsToggle">Не мешать на встречах</span>
+              <span class="sx-row-cap" data-i18n="afterMeetingsHint">Во время встречи расшифровка и анализ ждут, модели выгружаются. Ручной запуск работает сразу</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-analysis-after-meetings" checked />
+          </label>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="chainToggle">Согласованный анализ (решения, задачи, протокол)</span>
+              <span class="sx-row-cap" data-i18n="chainHint">Решения и задачи в протоколе совпадают слово в слово. На ~25% дольше</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-analysis-chain" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="groundingToggle">Проверять пересказ по расшифровке</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="groundingHint">Каждый пункт сверяется с текстом записи: найденные получают ссылку на место в записи, а то, чего в записи нет, помечается «не найдено в записи». Работает без модели.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="groundingToggle">Проверять обзор по тексту записи</span>
+              <span class="sx-row-cap" data-i18n="groundingHint">Каждый пункт получает ссылку на место в записи или пометку «не найдено»</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-summary-grounding" checked />
           </label>
         </div>
 
         <!-- Search by meaning (app/semantic.py) -->
         <div class="settings-card">
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="semanticToggle">Поиск по смыслу</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="semanticHint">Ассистент и поиск находят фрагменты, близкие по смыслу, а не только по словам: «о чём договорились по срокам» найдёт «давайте перенесём на пятницу». Работает локально через Ollama, текст никуда не отправляется.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="semanticToggle">Поиск по смыслу</span>
+              <span class="sx-row-cap" data-i18n="semanticHint">Находит по смыслу, а не только по словам. Работает локально</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-semantic" />
           </label>
           <input id="set-semantic-model" type="hidden" value="bge-m3" />
-          <div id="semantic-model-card" class="pl-6"></div>
+          <div id="semantic-model-card" class="sx-block sx-dep sx-tight"></div>
           <div id="semantic-status" class="pl-6 text-[11.5px] text-apple-secondary"></div>
         </div>
+        <!-- The translators (Hy-MT3, a TranslateGemma installed by hand): live captions and the dictation with
+             translation; the analysis is done by the model above (static/js/settings.js translateModelCards) -->
+        <div class="settings-card" id="translate-models-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="trSectionTitle">Модели перевода (Ollama)</h4>
+            <p class="sx-card-cap" data-i18n="trSectionDesc">Для субтитров и диктовки с переводом</p></div>
+          <div id="translate-catalog-list" class="space-y-2"></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-live-tr-quality" class="sx-row-label" data-i18n="trQualityLabel">Субтитры: «Качество»</label>
+              <span class="sx-row-cap" data-i18n="trQualityCap">И диктовка с переводом</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-live-tr-quality" class="sx-select">
+                <option value="" data-i18n="liveModelAuto">Авто</option>
+              </select>
+            </div>
+          </div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-live-tr-fast" class="sx-row-label" data-i18n="trFastLabel">Субтитры: «Быстро»</label></span>
+            <div class="sx-row-ctl">
+              <select id="set-live-tr-fast" class="sx-select">
+                <option value="" data-i18n="liveModelAuto">Авто</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         </div>
         <div data-stab="calendar" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
