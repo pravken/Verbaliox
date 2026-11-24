@@ -60,3 +60,30 @@ class FastModelTest(unittest.TestCase):
             self.assertEqual(live_translate.model_choices(), {"quality": "gemma4:e4b", "fast": "gemma4:e2b",
                                                               "auto": {"quality": "gemma4:e4b", "fast": "gemma4:e2b"},
                                                               "installed": ["gemma4:e4b", "gemma4:e2b", "qwen2.5:1.5b"]})
+
+
+class DraftIntervalTest(unittest.TestCase):
+    """The draft is translated as often as the model allows: a fast translator keeps up with the speech."""
+
+    def _tr(self, cost):
+        from app.live_translate import LiveTranslator
+
+        tr = LiveTranslator.__new__(LiveTranslator)  # no worker thread, no Ollama
+        tr._draft_cost = cost
+        return tr
+
+    def test_before_the_first_draft_the_slow_interval(self):
+        from app.live_translate import DRAFT_INTERVAL_SEC
+
+        self.assertEqual(self._tr(None).draft_interval(), DRAFT_INTERVAL_SEC)
+
+    def test_a_fast_model_every_half_second(self):
+        from app.live_translate import DRAFT_MIN_INTERVAL_SEC
+
+        self.assertEqual(self._tr(0.12).draft_interval(), DRAFT_MIN_INTERVAL_SEC)
+
+    def test_a_slow_model_not_more_often_than_the_limit(self):
+        from app.live_translate import DRAFT_INTERVAL_SEC
+
+        self.assertEqual(self._tr(0.6).draft_interval(), DRAFT_INTERVAL_SEC)
+        self.assertAlmostEqual(self._tr(0.3).draft_interval(), 0.9)

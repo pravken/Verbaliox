@@ -20,7 +20,8 @@ import httpx
 
 KEEP_ALIVE = "30m"
 NUM_CTX = 2048            # short lines: a small context loads and runs faster
-DRAFT_INTERVAL_SEC = 1.2  # how often the draft line is translated
+DRAFT_INTERVAL_SEC = 1.2  # how often the draft line is translated with a slow model (or before the first one)
+DRAFT_MIN_INTERVAL_SEC = 0.5  # with a fast one (Hy-MT3 1.8B: ~0.15 s a phrase): about three times its own time
 MAX_ATTEMPTS = 4
 
 _CJK_RUN = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]+")
@@ -285,6 +286,7 @@ class LiveTranslator:
         self.draft_translation = ""
         self.draft_target = ""
         self._last_draft_at = 0.0
+        self._draft_cost: Optional[float] = None  # seconds a draft translation takes (smoothed)
         self._cond = threading.Condition()
         self._stop = False
         self._model: Optional[str] = None
@@ -504,8 +506,12 @@ class LiveTranslator:
                     self._last_draft_at = time.time()
                     src = phrase_language(draft) or self._source_lang()
                     target = self.target_for(src)
+                    started = time.time()
                     tr = draft if _base(src) == _base(target) else \
                         self._translate_clean(draft, None, timeout=10.0, target=target)
+                    if tr is not draft:
+                        took = time.time() - started
+                        self._draft_cost = took if self._draft_cost is None else 0.7 * self._draft_cost + 0.3 * took
                     self.draft_target = target
                     with self._cond:
                         if draft == self._draft_text:  # still the current draft
@@ -524,6 +530,13 @@ class LiveTranslator:
                         line["translation"] = ""
                 time.sleep(1.0)
 
+    def draft_interval(self) -> float:
+        """How often the draft is translated: a fast model keeps up with the speech (about three times its own time,
+        not under DRAFT_MIN_INTERVAL_SEC), a slow one is not loaded more than every DRAFT_INTERVAL_SEC."""
+        if self._draft_cost is None:
+            return DRAFT_INTERVAL_SEC
+        return min(DRAFT_INTERVAL_SEC, max(DRAFT_MIN_INTERVAL_SEC, 3 * self._draft_cost))
+
     def _draft_due(self) -> bool:
         return bool(self._draft_text) and self._draft_text != self._draft_done_for \
-            and time.time() - self._last_draft_at >= DRAFT_INTERVAL_SEC
+            and time.time() - self._last_draft_at >= self.draft_interval()

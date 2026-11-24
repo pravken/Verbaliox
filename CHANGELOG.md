@@ -61,6 +61,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   translation model is the one of the chosen mode in «Translation models»: Settings shows the same values. The models
   can be chosen before a recording too. A recording preset no longer switches the captions or the translation. With
   «Do not disturb in meetings» captions do not start by themselves on a meeting only; a voice note starts with them.
+- **Captions follow the speech**: «Text as it is spoken» and «Translate as it is spoken» are on by default, and the
+  draft is translated as often as the model allows: about every half second with Hy-MT3 1.8B, every 1.2 s with a slower one.
 
 ## 0.9.3 — English
 
@@ -1254,6 +1256,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   перевода — модель выбранного режима в «Моделях перевода»: в настройках те же значения. Модели можно выбрать и до
   записи. Шаблон записи больше не переключает субтитры и перевод. При «Не мешать на встречах» субтитры не включаются
   сами только на встречах; голосовая заметка начинается с ними.
+- **Субтитры успевают за речью**: «Текст по ходу речи» и «Перевод по ходу речи» включены по умолчанию, а черновик
+  переводится так часто, как позволяет модель: с Hy-MT3 1.8B — примерно раз в полсекунды, с медленной — раз в 1,2 с.
 
 ## 0.9.3
 

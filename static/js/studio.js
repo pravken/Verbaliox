@@ -1444,8 +1444,9 @@ async function initLiveCaptionControls() {
   speech.innerHTML = `<option value="auto">${escapeHtml(t('studioSpeechAuto'))}</option>` + textLangOptions(codes, true);
   speech.value = studio.speech;
   document.getElementById('live-captions-toggle').checked = s.live_captions_auto === 'true';
-  document.getElementById('live-draft-toggle').checked = !!prefs.draft;
-  document.getElementById('live-draft-tr-toggle').checked = !!prefs.draftTr;
+  // on unless turned off: the text and its translation follow the speech, not the end of the phrase
+  document.getElementById('live-draft-toggle').checked = prefs.draft !== false;
+  document.getElementById('live-draft-tr-toggle').checked = prefs.draftTr !== false;
   renderStudioControls();
 }
 

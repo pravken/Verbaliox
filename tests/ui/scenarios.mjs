@@ -1054,6 +1054,10 @@ await step('dashboard rises once', async () => {
 await step('live captions as a chat', async () => {
   const rows = await page.evaluate(() => {
     switchAppView('studio');
+    // «Текст по ходу речи» off (on by default): the phrase still being spoken waits as a pending bubble
+    const draftBox = document.getElementById('live-draft-toggle');
+    const draftWas = draftBox.checked;
+    draftBox.checked = false;
     [[1, 'Начнём с плана.', 'Мария'], [2, 'Я посмотрю сроки.', 'Анна'], [3, 'И проверю оценку.', 'Анна']]
       .forEach(([id, text, who]) => liveCap.lines.set(id, { id, text, who, lang: 'ru', translation: '' }));
     liveCap.partial = 'ещё говорит';
@@ -1062,6 +1066,7 @@ await step('live captions as a chat', async () => {
     liveCap.lines.clear();
     liveCap.partial = '';
     capReset();
+    draftBox.checked = draftWas;
     return out;
   });
   expect(rows.length === 4 && rows.every(r => r.bub), `the lines are not bubbles: ${JSON.stringify(rows)}`);
