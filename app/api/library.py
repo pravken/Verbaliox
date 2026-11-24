@@ -990,38 +990,48 @@ def api_update_speaker(meeting_id: int, payload: SpeakerUpdatePayload) -> Dict[s
         raise HTTPException(status_code=400, detail="Некорректный идентификатор участника")
     if payload.color and not _COLOR_RE.match(payload.color):
         raise HTTPException(status_code=400, detail="Цвет должен быть в формате #RRGGBB")
-    name = payload.name.strip()[:120]
+    m = set_speaker(meeting_id, payload.speaker_id, payload.name, payload.color, payload.dismiss_suggestion)
+    if m is None:
+        raise HTTPException(status_code=404, detail="Встреча не найдена")
+    return m
+
+
+def set_speaker(meeting_id: int, speaker_id: str, new_name: str, color: Optional[str] = None,
+                dismiss_suggestion: bool = False) -> Optional[Dict[str, Any]]:
+    """A speaker of a recording renamed (or recoloured): its tasks and the analysis follow, the voice teaches its
+    profile. The recording read anew; None when there is none. Checked by the caller (ids, a running job)."""
+    name = new_name.strip()[:120]
     learned: List[Any] = []  # the voice to teach its profile, after the change (it uses the database)
     renamed: List[str] = []  # the former name, for the tasks of the recording
 
     def change(m: Dict[str, Any]) -> tuple:
         speakers = m.get("speakers") or {}
-        if payload.speaker_id not in speakers:
-            speakers[payload.speaker_id] = {
-                "id": payload.speaker_id,
-                "name": name or payload.speaker_id,
-                "color": payload.color or "#6366f1",
+        if speaker_id not in speakers:
+            speakers[speaker_id] = {
+                "id": speaker_id,
+                "name": name or speaker_id,
+                "color": color or "#6366f1",
                 "sample_start": 0.0,
                 "sample_end": 5.0,
             }
         else:
-            spk = speakers[payload.speaker_id]
+            spk = speakers[speaker_id]
             old_name = spk.get("name") or ""
-            spk["name"] = name or payload.speaker_id
-            if payload.color:
-                spk["color"] = payload.color
+            spk["name"] = name or speaker_id
+            if color:
+                spk["color"] = color
             if name and name != old_name:
                 renamed.append(old_name)
                 learned.append(spk.get("embedding"))
                 spk.pop("voice_profile", None)
-            if payload.dismiss_suggestion or (name and name != old_name):
+            if dismiss_suggestion or (name and name != old_name):
                 spk.pop("voice_suggest", None)
         m["speakers"] = speakers
         return ("speakers",)
 
     m = edit_meeting(meeting_id, change)
     if m is None:
-        raise HTTPException(status_code=404, detail="Встреча не найдена")
+        return None
     if renamed:
         from app import commitments
 

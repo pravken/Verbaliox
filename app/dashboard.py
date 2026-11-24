@@ -354,7 +354,11 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     fmap = feature_map()
     library = list_meetings()
     meetings = [m for m in library if _counted(m)]
+    # the recordings of the period a feature filter leaves out: said under the figures (reported by the user:
+    # «three meetings went by and the figures are zeros» — they had not the feature chosen)
+    outside = 0
     if feature_id:
+        outside = sum(1 for m in meetings if start <= _day(m) < end and feature_id not in fmap.get(m["id"], []))
         meetings = [m for m in meetings if feature_id in fmap.get(m["id"], [])]
     now = [m for m in meetings if start <= _day(m) < end]
     before = [m for m in meetings if prev <= _day(m) < start]
@@ -439,6 +443,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     recent = sorted(meetings, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True)[:8]
     return {
         "period": period, "start": start.isoformat(), "end": end.isoformat(), "today": iso, "feature": feature_id,
+        "outside": outside,
         "kpi": {"meetings": len(now), "meetings_before": len(before),
                 "hours": round(sum(float(m.get("duration") or 0) for m in now) / 3600, 1),
                 "hours_before": round(sum(float(m.get("duration") or 0) for m in before) / 3600, 1),

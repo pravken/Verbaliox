@@ -40,6 +40,25 @@ class OllamaUnloadTest(unittest.TestCase):
         finally:
             vram._BLOBS.pop("qwen3:8b", None)
 
+    def test_a_model_left_loaded_is_unloaded_by_the_retry_later(self):
+        """«Выгрузить всё» with Ollama busy: the retry in the background stops the runner of a model still
+        there (a NameError there kept a 6 GB model on the card while Whisper loaded)."""
+        threads = []
+        with mock.patch("threading.Thread", side_effect=lambda target, **kw: threads.append(target) or mock.Mock()), \
+                mock.patch("time.sleep"), mock.patch.object(vram, "RETRY_FOR_SEC", 60.0), \
+                mock.patch("app.ollama_client.analysis_running", return_value=[]), \
+                mock.patch.object(vram, "ollama_unload", side_effect=[["gemma4:e4b"], []]) as unload, \
+                mock.patch.object(vram, "_stop_ollama_runners") as stop, \
+                mock.patch("app.ollama_client._ollama_address", return_value=("127.0.0.1", 11434)), \
+                mock.patch("traceback.print_exc") as tb:
+            vram._retrying.pop("gemma4:e4b", None)
+            vram._retry_unload_later(["gemma4:e4b"])
+            self.assertEqual(len(threads), 1)
+            threads[0]()  # the thread's body, here
+        tb.assert_not_called()  # no error in the loop
+        self.assertEqual(unload.call_count, 2)
+        stop.assert_called_once_with(["gemma4:e4b"])
+
 
 if __name__ == "__main__":
     unittest.main()

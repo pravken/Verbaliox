@@ -89,6 +89,51 @@ class BetaChannelTest(unittest.TestCase):
         self.assertEqual(version, "0.5.0")
         self.assertTrue(asked[0].endswith("/releases/latest"))
 
+    def _limited(self, beta, feed_ok=True):
+        import httpx
+
+        from app import database
+
+        database.init_db()
+        database.update_settings({"update_beta": "true" if beta else "false", "update_check": "true", "update_auto": "false"})
+        self.addCleanup(database.update_settings, {"update_beta": "false"})
+        feed = ('<feed><entry><link href="https://github.com/pravken/Verbaliox/releases/tag/v0.9.2"/></entry>'
+                '<entry><link href="https://github.com/pravken/Verbaliox/releases/tag/v1.0.0-beta.1"/></entry>'
+                '<entry><link href="https://github.com/pravken/Verbaliox/releases/tag/v0.9.1"/></entry></feed>')
+
+        def answer(req):
+            url = str(req.url)
+            if req.url.host == "api.github.com":
+                return httpx.Response(403, json={"message": "API rate limit exceeded"})
+            if url.endswith("releases.atom"):
+                assert "atom" in req.headers.get("accept", ""), req.headers.get("accept")
+                return httpx.Response(200, text=feed) if feed_ok else httpx.Response(503)
+            if url.endswith("/SHA256SUMS.txt"):
+                tag = url.split("/")[-2]
+                return httpx.Response(200, text=f"{'a' * 64}  Verbaliox-{tag}.zip\n{'b' * 64}  Verbaliox.exe\n")
+            if url.endswith("/CHANGELOG.md"):
+                return httpx.Response(200, text="# Changelog\n\n## 0.9.2 — English\n\n- New.\n\n## 0.9.2\n\n- Новое.\n\n## 0.9.1\n\n- Старое.\n")
+            return httpx.Response(404)
+
+        real = httpx.Client
+        with mock.patch("httpx.Client", side_effect=lambda **kw: real(transport=httpx.MockTransport(answer), **kw)):
+            return updater.check(force=True)
+
+    def test_the_feed_stands_in_when_the_api_limits(self):
+        """Reported by the user: «403 rate limit exceeded» — 60 requests an hour per address without an account."""
+        st = self._limited(beta=False)
+        self.assertEqual(st["error"], "")
+        latest = st["latest"]
+        self.assertEqual(latest["version"], "0.9.2")  # not the beta
+        self.assertEqual(latest["zip_url"], "https://github.com/pravken/Verbaliox/releases/download/v0.9.2/Verbaliox-v0.9.2.zip")
+        self.assertTrue(latest["sig_url"].endswith("/v0.9.2/SHA256SUMS.txt.minisig"))
+        self.assertTrue(latest["notes"].startswith("## 0.9.2 — English"))
+        self.assertNotIn("Старое", latest["notes"])
+        self.assertEqual(self._limited(beta=True)["latest"]["version"], "1.0.0-beta.1")
+
+    def test_a_limit_without_the_feed_is_said_plainly(self):
+        self.assertEqual(self._limited(beta=False, feed_ok=False)["error"], updater.RATE_LIMITED)
+
     def test_a_beta_tester_is_offered_the_final_release(self):
         self.assertTrue(updater.is_newer("0.6.0", "0.6.0-beta.2"))
 

@@ -136,7 +136,11 @@ function stripState() {
     const people = (next.attendees || []).map(a => String(a).replace(/@.*$/, '')).filter(Boolean).slice(0, 4).join(', ');
     return { kind: 'soon', pill: t('stripSoon').replace('{n}', () => min), cls: 'blue', lead: next.title || t('hmUntitled'),
       meta: [`${stripClock(next.s)}–${stripClock(next.e)}`, stripService(next)].filter(Boolean).join(' · '),
-      grow: [bf && bf.open_tasks ? t('stripOpenTasks').replace('{n}', () => bf.open_tasks) : '', people].filter(Boolean).join(' · '),
+      grow: people,
+      // the open tasks of last time open the brief with them (asked by the user), as on the meeting's card in «Сегодня»
+      growLink: bf && bf.open_tasks ? { fn: 'openBriefFor', args: bf.series_id ? ['series', bf.series_id] : ['person', bf.person],
+        label: t('stripOpenTasks').replace('{n}', () => bf.open_tasks),
+        tip: t('hmBriefTip').replace('{n}', () => bf.open_tasks).replace('{title}', () => bf.last.title).replace('{date}', () => bf.last.date) } : null,
       acts: [joinAct(next)].filter(Boolean) };
   }
   const m = stripRecent();
@@ -185,7 +189,7 @@ function renderStrip() {
   strip.click = s.click || null;
   strip.kind = s.kind;
   const acts = s.acts.map(a => `<button ${pageCall('click', a.fn, a.args)} class="st-btn${a.cls ? ` st-btn-${a.cls}` : ''}"${a.title ? ` title="${escapeHtml(a.title)}"` : ''}>${escapeHtml(a.label)}</button>`).join('');
-  const sig = JSON.stringify([s.kind, s.pill, s.cls, s.lead, s.meta, s.grow, acts, s.tip]);
+  const sig = JSON.stringify([s.kind, s.pill, s.cls, s.lead, s.meta, s.grow, s.growLink, acts, s.tip]);
   if (sig === strip.html) return;
   strip.html = sig;
   bar.className = `strip strip-${s.kind}`;
@@ -205,7 +209,10 @@ function renderStrip() {
     lead.style.setProperty('--lead-time', `${Math.min(6, Math.max(1.2, over / 40))}s`);
   });
   put('strip-meta', s.meta);
-  document.getElementById('strip-grow').textContent = s.grow || '';
+  const g = s.growLink;
+  document.getElementById('strip-grow').innerHTML = (g
+    ? `<button type="button" class="strip-link-b" ${pageCall('click', 'stopThen', [{ $: 'event' }, g.fn, ...g.args])} title="${escapeHtml(g.tip || '')}">${escapeHtml(g.label)}</button>${s.grow ? ' · ' : ''}`
+    : '') + escapeHtml(s.grow || '');
   document.getElementById('strip-grow').className = `strip-grow${s.growCls ? ` strip-grow-${s.growCls}` : ''}`;
   const main = document.getElementById('strip-main');
   main.classList.toggle('strip-link', !!s.click);

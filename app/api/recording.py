@@ -656,6 +656,29 @@ def _recorded_seconds(payload: RecordFinishPayload, recovered: Optional[Dict[str
     return took if 0 <= took < 3 * 86400 else None
 
 
+def mix_now(meeting_id: int) -> bool:
+    """«Свести сейчас»: a mix that waits for the end of a meeting begins at once (asked by the user: 8 minutes of
+    «после встречи» with no way to go on). False when its mix is not waiting."""
+    from app import app_status
+
+    with _mix_lock:
+        job = _mixes.get(meeting_id)
+        if not job or meeting_id not in app_status.mix_wait or job.get("delete") is not None:
+            return False
+        job["now"] = True
+        wake = job.get("wake")
+    if wake is not None:
+        wake.set()
+    return True
+
+
+@router.post("/api/meetings/{meeting_id}/mix-now")
+def api_mix_now(meeting_id: int) -> Dict[str, Any]:
+    if not mix_now(meeting_id):
+        raise HTTPException(status_code=409, detail="Сведение этой записи не ожидает")
+    return {"ok": True}
+
+
 def _delete_asked(meeting_id: int) -> bool:
     with _mix_lock:
         return (_mixes.get(meeting_id) or {}).get("delete") is not None
@@ -736,10 +759,17 @@ def _wait_for_meeting_end(meeting_id: int, seconds: Optional[float] = None) -> b
             with _mix_lock:
                 if (_mixes.get(meeting_id) or {}).get("delete") is not None:
                     return False
+                if (_mixes.get(meeting_id) or {}).get("now"):  # «Свести сейчас»: the user lets it go now
+                    print(f"[record] meeting {meeting_id}: mixed now, as asked, without waiting for the meeting", flush=True)
+                    until = None
                 if until is None:
                     app_status.mix_wait.pop(meeting_id, None)  # from now on a deletion waits for the mix
                     return True
                 app_status.mix_wait[meeting_id] = until
+                if not until:
+                    app_status.mix_why[meeting_id] = meeting_guard.hold_reason()
+                else:
+                    app_status.mix_why.pop(meeting_id, None)
             if until != shown:
                 if shown is None:
                     print(f"[record] meeting {meeting_id}: the mix waits for the end of the meeting", flush=True)
@@ -753,6 +783,7 @@ def _wait_for_meeting_end(meeting_id: int, seconds: Optional[float] = None) -> b
     finally:
         with _mix_lock:
             app_status.mix_wait.pop(meeting_id, None)
+            app_status.mix_why.pop(meeting_id, None)
         if shown is not None and not _delete_asked(meeting_id):
             update_meeting_progress(meeting_id, stage_text="Сведение дорожек записи...")
 

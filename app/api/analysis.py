@@ -815,7 +815,14 @@ class CommitmentExtractPayload(BaseModel):
 @router.post("/api/meetings/{meeting_id}/commitments")
 def api_extract_commitments(meeting_id: int, payload: CommitmentExtractPayload) -> List[Dict[str, Any]]:
     from app import commitments
+    from app.transcriber import is_job_active
 
+    if is_job_active(meeting_id):
+        # The recording is being recognized (or merged, translated): its text is not final, and the analysis
+        # model loaded beside the speech models took the video card from both — «Сохранить и обновить задачи»
+        # on the MFU during recognition ran 13 minutes and the computer hung (reported by the user with the
+        # log). The page asks again once the job ends; the job's own analysis reads the MFU as it is then
+        raise HTTPException(status_code=409, detail="Запись обрабатывается: задачи обновятся после окончания обработки")
     try:
         items = commitments.extract(meeting_id, payload.model or None)
     except ValueError as e:

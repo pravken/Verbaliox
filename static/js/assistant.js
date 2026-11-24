@@ -581,7 +581,8 @@ function openLibrarySource(itemId, n) {
 
 // --- Copy and save an answer ---
 function assistantAnswerText(item) {
-  const sources = (item.data?.sources || []).map(s => `[${s.n}] ${s.title} · ${s.date} · ${formatTime(s.start)} — ${s.speaker ? s.speaker + ': ' : ''}${s.text}`);
+  const sources = (item.data?.sources || []).map(s => asWhole(s, item) ? `[${s.n}] ${s.title} · ${s.date}`
+    : `[${s.n}] ${s.title} · ${s.date} · ${formatTime(s.start)} — ${s.speaker ? s.speaker + ': ' : ''}${s.text}`);
   return [item.question, '', item.data?.answer || '', ...(sources.length ? ['', t('libraryAskSources') + ':', ...sources] : [])].join('\n');
 }
 
@@ -736,6 +737,20 @@ function renderAssistantItem(item, isLast) {
   return q + body + follow;
 }
 
+// A source that is a whole recording (a brief, a digest, an overview: start 0 meant nothing, reported by the user:
+// «▶ 00:00» everywhere in a brief) is named by its date; older saved answers of a brief or a digest too
+function asWhole(s, item) {
+  return !!(s && (s.whole || ['brief', 'digest'].includes(item?.data?.mode)));
+}
+function asRefLabel(s, item) {
+  if (!asWhole(s, item)) return formatTime(s.start);
+  const m = String(s.date || '').match(/^\d{4}-(\d{2})-(\d{2})/);
+  return m ? `${m[2]}.${m[1]}` : t('asWholeRec');
+}
+function asRefTip(s, item) {
+  return asWhole(s, item) ? `«${s.title}»${s.date ? `, ${s.date}` : ''} — ${t('asOpenRec')}` : `${s.title}, ${formatTime(s.start)} — ${t('asOpenAt')}\n«${s.text}»`;
+}
+
 // The sources of an answer: one line per recording, its full name and date, then its moments («06:12, 19:40»),
 // each opening the recording there
 function assistantSourcesHtml(item, shown) {
@@ -747,7 +762,7 @@ function assistantSourcesHtml(item, shown) {
   return [...byRec.values()].map(list => {
     const first = list[0];
     const moments = list.sort((a, b) => a.start - b.start).map(s => `<button data-click="openLibrarySource" data-click-args='[${Number(item.id) || 0}, ${Number(s.n) || 0}]'
-        class="as-ref" title="${escapeHtml(`«${s.text}»`)}">▶ ${escapeHtml(formatTime(s.start))}</button>`).join('');
+        class="as-ref" title="${escapeHtml(asWhole(s, item) ? asRefTip(s, item) : `«${s.text}»`)}">▶ ${escapeHtml(asWhole(s, item) ? t('asOpenRecShort') : formatTime(s.start))}</button>`).join('');
     return `<div class="as-srcrow"><span class="as-srcrow-t">${escapeHtml(first.title)}${first.date ? `<span class="as-srcrow-d">, ${escapeHtml(first.date)}</span>` : ''}</span><span class="as-srcrow-m">${moments}</span></div>`;
   }).join('');
 }
@@ -794,10 +809,11 @@ function renderAssistant(scrollDown) {
     el.querySelectorAll('.lib-cite').forEach(b => {
       const s = byN[b.textContent];
       if (!s) return;
-      b.title = `${s.title}, ${formatTime(s.start)} — ${t('asOpenAt')}\n«${s.text}»`;
+      b.title = asRefTip(s, item);
       b.className = 'as-ref';
-      b.textContent = `▶ ${formatTime(s.start)}`;
+      b.textContent = `▶ ${asRefLabel(s, item)}`;
     });
+    markAnswerNames(el, item);  // a person's name: a click puts another person in its place (app.js)
   }
   if (scrollDown) {
     const scroller = document.getElementById('library-answer');

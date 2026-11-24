@@ -14,6 +14,8 @@ if (shots) mkdirSync(shots, { recursive: true });
 const browser = await pw.chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 1300, height: 860 } });
 page.setDefaultTimeout(8000);
+// FAKE_NOW=2026-11-22T21:30:00Z: the page lives at that moment (a weekend evening, the last day of a month…)
+if (process.env.FAKE_NOW) await page.clock.install({ time: new Date(process.env.FAKE_NOW) });
 // CPU_SLOW=6: the page runs as on a slow computer (CI), to bring out what only fails there
 if (process.env.CPU_SLOW) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_SLOW) });
 const errors = [];
@@ -1520,6 +1522,17 @@ await step('mix wait countdown', async () => {
     renderTxModelBar();
   });
   expect((await sub()) === 'Начнётся после встречи', `during a meeting: «${await sub()}»`);
+  expect(await page.isVisible('#tx-rc-mixnow'), '«Свести сейчас» is not offered while the mix waits');
+  // which meeting holds it, and «Свести сейчас» lets it go (asked by the user: «откуда эта пауза»)
+  await page.evaluate(() => { state.activeMeeting.mix_why = { kind: 'calendar', title: 'Планёрка', end: '11:30' }; renderTxModelBar(); });
+  expect((await sub()) === 'Начнётся после встречи «Планёрка» (до 11:30)', `the meeting is not named: «${await sub()}»`);
+  if (shots) await page.screenshot({ path: `${shots}/mix-wait-why.png` });
+  let asked = '';
+  await page.route('**/api/meetings/9902/mix-now', r => { asked = r.request().method(); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await page.click('#tx-rc-mixnow');
+  await sleep(300);
+  expect(asked === 'POST' && !(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» did not ask the server');
+  await page.evaluate(() => { delete state.activeMeeting.mix_why; });
   await page.evaluate(() => {
     state.activeMeeting.mix_wait = Date.now() / 1000 + 100;
     renderTxModelBar();
@@ -1572,6 +1585,80 @@ await step('citation ranges', async () => {
   expect(r.links === '1,2,3,5,6,2,4,5' && r.rest, `the ranges are not links: ${JSON.stringify(r)}`);
   expect(r.cited === '1,2,3,4,5,6', `the ranges are not counted: ${r.cited}`);
   expect(r.history === 'Итог и.', `the history keeps the citations: ${r.history}`);
+});
+
+// A brief cites whole meetings: its marks name the meeting's date, not «▶ 00:00» (reported by the user)
+await step('brief cites whole meetings', async () => {
+  const r = await page.evaluate(() => {
+    const item = { data: { mode: 'brief', sources: [{ n: 1, meeting_id: 1, title: 'Планёрка', date: '2026-11-12', start: 0, whole: true, text: '' }] } };
+    const moment = { data: { sources: [{ n: 1, meeting_id: 1, title: 'Планёрка', date: '2026-11-12', start: 75, text: 'фраза' }] } };
+    return [asRefLabel(item.data.sources[0], item), asRefLabel(moment.data.sources[0], moment), asRefTip(item.data.sources[0], item),
+      asRefLabel({ n: 1, date: '2026-11-12', start: 0 }, { data: { mode: 'digest' } })];
+  });
+  expect(r[0] === '12.11' && r[1] === '01:15' && r[3] === '12.11', `the marks: ${JSON.stringify(r)}`);
+  expect(r[2].includes('Планёрка') && !r[2].includes('00:00'), `the tooltip: ${r[2]}`);
+});
+
+// A speaker's name in the analysis is a button (asked by the user: «not that Дмитрий»): its menu renames the
+// speaker or puts another person in its place, and the analysis shows the new name at once
+await step('name chip in the analysis', async () => {
+  await page.evaluate(() => { switchAppView('library'); openMeeting(1); });
+  await sleep(1200);
+  await page.evaluate(() => { switchWorkspaceTab('summary'); selectSummaryTab('protocol'); });
+  await sleep(600);
+  const chip = page.locator('#summary-content .name-ref', { hasText: 'Олег' }).first();
+  await chip.click();
+  await sleep(300);
+  const items = await page.$$eval('#text-menu button', els => els.map(e => e.textContent.trim()));
+  expect(items.includes('Переименовать участника…') && items.includes('Это другой человек…'), `the menu: ${items.join(' | ')}`);
+  await page.locator('#text-menu button', { hasText: 'Это другой человек…' }).click();
+  for (let i = 0; i < 30 && !(await page.locator('#text-menu button', { hasText: 'Другое имя…' }).count()); i++) await sleep(100);
+  await page.locator('#text-menu button', { hasText: /^Мария$/ }).click();
+  let text = '';
+  for (let i = 0; i < 30 && !/готовит Мария/.test(text); i++) { await sleep(100); text = await page.textContent('#summary-content'); }
+  expect(/готовит Мария/.test(text), 'the analysis does not show the other person');
+  const back = await page.evaluate(async () => { await updateSpeaker('SPEAKER_01', 'Олег', null); return document.querySelector('#summary-content').textContent; });
+  expect(/готовит Олег/.test(back), 'the name did not come back');
+});
+
+// The names in a brief: the speakers of the recordings it cites are buttons; «Это другой человек…» renames the
+// speaker there and in the answer's text
+await step('name chip in a brief', async () => {
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(500);
+  await page.evaluate(async () => {
+    for (let i = 0; i < 30 && !ASSIST.loaded; i++) await new Promise(res => setTimeout(res, 100));
+    assistantNewChat();
+    currentChat().items.push({ id: 993, question: 'Бриф', scope: state.askScope, scopeLabel: '', status: 'done', at: new Date().toISOString(),
+      data: { found: true, mode: 'brief', answer: '- **Олег** готовит список [1]\n- Анна посмотрит сроки [2], Анна Петрова в копии',
+        sources: [{ n: 1, meeting_id: 2, title: 'Созвон по проекту', date: '2026-11-20', start: 0, whole: true, text: '' },
+          { n: 2, meeting_id: 3, title: 'Разбор итогов недели', date: '2026-11-21', start: 0, whole: true, text: '' }] } });
+    renderAssistant();
+  });
+  await sleep(300);
+  const chips = await page.$$eval('#ask-thread [data-as-answer="993"] .name-ref', els => els.map(e => e.textContent));
+  expect(chips.join() === 'Олег,Анна', `the chips: ${chips.join()}`);  // «Анна Петрова» is someone else
+  await page.locator('#ask-thread .name-ref', { hasText: 'Анна' }).click();
+  await sleep(300);
+  const items = await page.$$eval('#text-menu > *', els => els.map(e => e.textContent.trim()));
+  expect(items.some(x => x.startsWith('Созвон по проекту')) && items.some(x => x.startsWith('Разбор итогов недели')), `the menu: ${items.join(' | ')}`);
+  await page.locator('#text-menu button', { hasText: 'Это другой человек…' }).click();
+  for (let i = 0; i < 30 && !(await page.locator('#text-menu button', { hasText: 'Другое имя…' }).count()); i++) await sleep(100);
+  await page.locator('#text-menu button', { hasText: /^Мария$/ }).click();
+  let r = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(100);
+    r = await page.evaluate(async () => ({ answer: assistantFindItem(993).data.answer,
+      spk: (await fetch('/api/meetings/3').then(x => x.json())).speakers.SPEAKER_02.name }));
+    if (r.answer.includes('Мария посмотрит') && r.spk === 'Мария') break;
+  }
+  expect(r.answer === '- **Олег** готовит список [1]\n- Мария посмотрит сроки [2], Анна Петрова в копии' && r.spk === 'Мария', `after: ${JSON.stringify(r)}`);
+  await page.evaluate(async () => {
+    for (const id of [2, 3]) await fetch(`/api/meetings/${id}/speakers`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speaker_id: 'SPEAKER_02', name: 'Анна' }) });
+    const chat = currentChat();
+    chat.items = chat.items.filter(i => i.id !== 993);
+    renderAssistant();
+  });
 });
 
 await browser.close();

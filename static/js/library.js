@@ -42,8 +42,9 @@ async function loadMeetingsList(opts = {}) {
       // a recording opened while its tracks were mixed had no file: its player is loaded now it has one
       await selectMeeting(updated.id, state.activeMeeting.status === 'mixing');
       if (finished) buildPlayerWaveformEnvelope(state.activeMeeting);
-    } else if (updated && ['progress', 'stage_text', 'mix_wait', 'mix_deleting'].some(f => updated[f] !== state.activeMeeting[f])) {
-      for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_deleting']) state.activeMeeting[f] = updated[f];
+      mfuTasksIfDue();
+    } else if (updated && ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting'].some(f => updated[f] !== state.activeMeeting[f])) {
+      for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting']) state.activeMeeting[f] = updated[f];
       updateProcessingBanner(state.activeMeeting);
     }
   }
@@ -62,9 +63,9 @@ async function loadMeetingsList(opts = {}) {
 // net: every 5 min while the stream is connected (the events carry the changes), at the old 2 s / 8 s
 // cadence when it is not, never while the window is hidden.
 const live = { connected: false, greeted: false, reloadTimer: null, renderQueued: false, listEtag: '', polledAt: 0 };
-const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now', 'mix_wait', 'mix_deleting'];
+const LIVE_PROGRESS_FIELDS = ['status', 'progress', 'stage_text', 'error_message', 'duration', 'asr_now', 'mix_wait', 'mix_why', 'mix_deleting'];
 // the fields no sort, group or filter of the list reads: a change of only these redraws one row
-const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now', 'mix_wait', 'mix_deleting'];
+const LIVE_ROW_FIELDS = ['progress', 'stage_text', 'asr_now', 'mix_wait', 'mix_why', 'mix_deleting'];
 
 function startLiveUpdates() {
   if (!window.EventSource) return;
@@ -127,8 +128,12 @@ function formatDurationShort(sec) {
 
 // Stages of a job run at very different speeds (e.g. translation vs. speech synthesis), so the
 // remaining time is estimated from the progress rate of the last few minutes, not since the start.
+// The rate needs a few points of progress in the window: one point (86 → 87 %) over a long step made the
+// estimate grow with every second of the step, «≈ ещё 1 мин» became «≈ 41 мин» in 4 minutes (reported by
+// the user, the merge of the versions); with less, the rate since the start of the job is used
 const _progressHistory = {};
 const ETA_WINDOW_SEC = 240;
+const ETA_MIN_POINTS = 3;
 
 function jobTiming(q, pct) {
   if (!q || !q.started_at) return null;
@@ -143,7 +148,7 @@ function jobTiming(q, pct) {
   let remaining = null;
   const first = samples[0];
   const span = now - first.t;  // includes time without progress, so a stall raises the estimate
-  if (samples.length >= 2 && pct > first.p && span >= 30 && pct < 100) {
+  if (samples.length >= 2 && pct - first.p >= ETA_MIN_POINTS && span >= 30 && pct < 100) {
     remaining = (100 - pct) * span / (pct - first.p);
   } else if (pct >= 5 && pct < 100 && elapsed >= 10) {
     remaining = elapsed * (100 - pct) / pct;
@@ -299,9 +304,10 @@ function handleLiveEvent(ev) {
     // Segments and speakers only change when a processing stage finishes
     selectMeeting(ev.id, active.status === 'mixing').then(() => {
       if (ev.status === 'completed') buildPlayerWaveformEnvelope(state.activeMeeting);
+      mfuTasksIfDue();
     });
   } else {
-    for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_deleting']) active[f] = m[f];
+    for (const f of ['progress', 'stage_text', 'mix_wait', 'mix_why', 'mix_deleting']) active[f] = m[f];
     updateProcessingBanner(active);
     if (active.asr_now !== m.asr_now) { active.asr_now = m.asr_now; renderTxModelBar(); }
   }
@@ -564,7 +570,7 @@ function linkifyCitations(root, byN, itemId) {
         const b = document.createElement('button');
         b.className = 'lib-cite';
         b.textContent = String(n);
-        b.title = `${src.title} · ${formatTime(src.start)}`;
+        b.title = src.whole ? src.title : `${src.title} · ${formatTime(src.start)}`;
         b.addEventListener('click', () => openLibrarySource(itemId, n));
         frag.append(b);
       }

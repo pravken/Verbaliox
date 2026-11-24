@@ -1795,6 +1795,12 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .an-guess .ft-chip { font-size: 11.5px; line-height: 16px; padding: 0 6px; }
 .an-guess .ft-yes, .an-guess .ft-no { width: 18px; height: 18px; font-size: 11px; }
 .an-person-invented:hover, .an-person-invented:focus-visible { color: #FF6961; }
+/* A speaker's name in the analysis or in an answer of the assistant (app.js chipNames): a quiet button whose menu
+   renames the speaker or puts another person in its place */
+.name-ref { display: inline; vertical-align: baseline; font: inherit; color: inherit; letter-spacing: inherit; background: none; border: 0;
+  padding: 0; margin: 0; cursor: pointer; border-radius: 3px; text-decoration: underline; text-decoration-color: transparent;
+  text-decoration-thickness: 1px; text-underline-offset: 3px; transition: text-decoration-color .12s, background-color .12s; }
+.name-ref:hover, .name-ref:focus-visible { text-decoration-color: rgb(var(--accent-rgb) / 0.75); background: rgb(var(--accent-rgb) / 0.08); outline: none; }
 /* The dictionary in its own window (settings.js openDictionary): the section of Settings, moved in */
 .upd-pill { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 40%; height: 20px; padding: 0 8px; border-radius: 6px; font-size: var(--fs-caption); font-weight: 600;
   color: #7EE787; background: rgba(48, 209, 88, 0.12); border: 1px solid rgba(48, 209, 88, 0.35); flex-shrink: 1; cursor: pointer; }
@@ -3228,6 +3234,13 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-more { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--accent-hi); font-weight: 500; font-size: var(--fs-label); background: none; border: 0; cursor: pointer; padding: 0; }
 .db-more:hover { text-decoration: underline; }
 .db-c { min-width: 0; }
+.db-feature-grp { display: inline-flex; min-width: 0; }
+/* a long feature name is cut, the head keeps to one line (its period, ✕ and «Настроить» stay in place) */
+#db-feature-btn { max-width: 200px; }
+.db-feature-grp .db-feature-on { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.db-feature-x { width: var(--ctl-h, 32px); padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; color: var(--hc-dim, #AEAEB2); }
+.db-feature-x:hover { color: #FFFFFF; }
+.db-kts-note { margin: 10px 2px 0; }
 .db-note { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); line-height: 1.45; margin: 4px 0 8px; }
 /* the reminder of recordings whose transcription was cancelled (app/untranscribed.py) */
 .db-untx { grid-column: span 12; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.28); font-size: var(--fs-body, 13px); color: #F5F5F7; }
@@ -3714,6 +3727,10 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .strip-meta { color: var(--hc-dim, #AEAEB2); white-space: nowrap; flex: none; }
 .strip-grow { flex: 1; min-width: 0; color: #8E9198; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip-grow-live { color: #FFD4D1; }
+/* a part of the strip's text that opens something of its own (the open tasks of last time → the brief) */
+.strip-link-b { border: 0; padding: 0; background: none; font: inherit; color: var(--accent-text); cursor: pointer; text-decoration: underline;
+  text-decoration-color: rgb(var(--accent-rgb) / 0.4); text-underline-offset: 3px; }
+.strip-link-b:hover { text-decoration-color: currentColor; }
 .strip-lead.hidden, .strip-meta.hidden { display: none; }
 .strip-acts { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .strip-acts:empty { display: none; }

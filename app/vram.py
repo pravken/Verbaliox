@@ -20,7 +20,10 @@ def ecapa_loaded_on() -> Optional[str]:
     torch and scikit-learn (seconds and hundreds of MB), and the page's first look at the models
     (/api/vram) or an idle unload imported them only to learn that nothing was loaded."""
     mod = sys.modules.get("app.diarizer")
-    return mod.ecapa_loaded_on() if mod is not None else None
+    # a module still being imported by another thread (a transcription starting) has no function yet: nothing is
+    # loaded then — the page's look at the models failed with «partially initialized module» (seen in a user's log)
+    fn = getattr(mod, "ecapa_loaded_on", None) if mod is not None else None
+    return fn() if fn is not None else None
 
 
 def _ollama_base() -> str:
@@ -393,10 +396,13 @@ def _retry_unload_later(names: List[str]) -> None:
         _retrying[n] = time.time()
 
     def run() -> None:
+        # imported here, as in ollama_unload: the name is not the module's (a NameError every 10 s kept the
+        # model loaded after «Выгрузить всё», reported by the user with the log)
+        from app.ollama_client import _ollama_address, analysis_running
+
         left, end = list(fresh), time.time() + RETRY_FOR_SEC
         while left and time.time() < end:
             time.sleep(10)
-            from app.ollama_client import analysis_running
 
             if set(left) & set(analysis_running()):
                 print(f"[vram] {', '.join(left)} in use again: not unloaded", flush=True)

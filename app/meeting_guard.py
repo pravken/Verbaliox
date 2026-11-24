@@ -25,7 +25,8 @@ import threading
 import time
 import traceback
 from contextlib import contextmanager
-from typing import Dict, Iterator, List, Optional, Set
+from datetime import datetime
+from typing import Any, Dict, Iterator, List, Optional, Set
 
 POLL_SEC = 20.0
 QUIET_SEC = 120.0  # without a meeting this long: the next one did not start right after, the analysis can go
@@ -46,6 +47,54 @@ def enabled(settings: Optional[Dict[str, str]] = None) -> bool:
     return (settings.get("analysis_after_meetings") or "true").lower() == "true"
 
 
+# The calendar's meetings the user left early: its recording was stopped during it (asked by the user: the mix
+# waited for the end of a meeting the calendar still showed). Such a meeting holds nothing any more while no call app
+# holds the microphone. event key → when its recording stopped
+_left: Dict[str, float] = {}
+
+
+def recording_ended(now: Optional[float] = None) -> None:
+    """Called when the app's own recording stops: the calendar's meeting going on now is taken for left."""
+    now = time.time() if now is None else now
+    try:
+        from app import calendar_ics
+
+        e = calendar_ics.current_meeting(cached=True)
+        # only a meeting begun already: one due within 10 minutes (the next, right after) is not left — stopping
+        # the recording of the meeting before it released the next one before it began
+        if e and _naive(e["start"]) <= datetime.fromtimestamp(now):
+            with _lock:
+                for k in [k for k, at in _left.items() if now - at > 24 * 3600]:
+                    _left.pop(k, None)
+                _left[_event_key(e)] = now
+            print("[meeting_guard] the recording stopped during a calendar meeting: it holds nothing while no call goes on", flush=True)
+    except Exception:
+        traceback.print_exc()
+
+
+def _naive(at: datetime) -> datetime:
+    return at.astimezone().replace(tzinfo=None) if at.tzinfo else at
+
+
+def _event_key(e: Dict[str, Any]) -> str:
+    try:
+        from app import calendar_ics
+
+        return calendar_ics.event_key(e)
+    except Exception:
+        return str(e.get("uid") or e.get("title") or "")
+
+
+def _in_call() -> bool:
+    """A call app or a browser holds the microphone: the user is still in a meeting (Windows; elsewhere not known)."""
+    try:
+        from app import call_watch
+
+        return bool(call_watch.meeting_app(call_watch.apps_using_microphone()))
+    except Exception:
+        return False
+
+
 def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = False) -> str:
     """Why the analysis waits: "economy" (recording only, app/economy.py), "recording", "calendar", or ""
     (no meeting, or the setting is off). cached_calendar: the calendar as read already, never read now."""
@@ -62,8 +111,12 @@ def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = Fals
     try:
         from app import calendar_ics
 
-        if calendar_ics.current_meeting(cached=True) if cached_calendar else calendar_ics.current_meeting():
-            return "calendar"
+        e = calendar_ics.current_meeting(cached=True) if cached_calendar else calendar_ics.current_meeting()
+        if e:
+            with _lock:
+                left = _event_key(e) in _left
+            if not (left and not _in_call()):
+                return "calendar"
     except Exception:
         pass
     return ""
@@ -188,6 +241,26 @@ def holds_queue(now: Optional[float] = None) -> bool:
         if _state["busy"] and _state["busy"] != "economy":
             return True
         return bool(_state["ended"]) and now - _state["ended"] < QUIET_SEC
+
+
+def hold_reason() -> Dict[str, str]:
+    """What holds the queue now, for the page (asked by the user: «откуда эта пауза»): an own recording, or the
+    calendar's meeting with its title and end. {} when nothing, or not known."""
+    with _lock:
+        kind = _state["busy"]
+    if kind == "recording":
+        return {"kind": "recording"}
+    if kind == "calendar":
+        try:
+            from app import calendar_ics
+
+            e = calendar_ics.current_meeting(cached=True)
+            if e:
+                return {"kind": "calendar", "title": str(e.get("title") or "")[:120], "end": e["end"].strftime("%H:%M")}
+        except Exception:
+            pass
+        return {"kind": "calendar"}
+    return {}
 
 
 def hold_until(now: Optional[float] = None) -> Optional[float]:

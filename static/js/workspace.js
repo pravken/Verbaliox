@@ -149,8 +149,16 @@ function mixWaitClock(until) {
 
 // «Начнётся через 1:40 — пауза…», «Начнётся после встречи»; at zero, until the server says it began: «Начинается»
 function mixWaitLine(m) {
-  if (!Number(m.mix_wait)) return t('mixWaitMeeting');
+  if (!Number(m.mix_wait)) return mixWaitWhy(m) || t('mixWaitMeeting');
   return mixWaitLeft(m.mix_wait) ? t('mixWaitIn').replace('{t}', () => mixWaitClock(m.mix_wait)) : t('mixWaitStarting');
+}
+
+// which meeting holds the mix (asked by the user: «откуда эта пауза»): the calendar's one with its end, or a recording
+function mixWaitWhy(m) {
+  const w = m.mix_why || {};
+  if (w.kind === 'recording') return t('mixWaitRecording');
+  if (w.kind === 'calendar' && w.title) return t('mixWaitCalendar').replace('{title}', () => w.title).replace('{end}', () => w.end || '');
+  return '';
 }
 
 // in the place of a row's percent: the time left, or a word while a meeting goes on
@@ -168,7 +176,7 @@ function mixWaitChip(m) {
 }
 
 function mixWaitTip(m) {
-  return t(Number(m.mix_wait) ? 'mixWaitTip' : 'mixWaitTipMeeting');
+  return Number(m.mix_wait) ? t('mixWaitTip') : `${mixWaitWhy(m) || t('mixWaitTipMeeting')}. ${t('mixWaitWhyTip')}`;
 }
 
 // The attributes of an element that counts down (form: line, slot or chip): mixTick redraws its text every second
@@ -373,6 +381,18 @@ function renderTxCardProgress(m, parts) {
   document.getElementById('tx-rc-pct').textContent = txPctLabel(m, parts);
   document.getElementById('tx-rc-time').textContent = running ? formatTiming(jobTiming(q, m.progress || 0)) : '';
   document.getElementById('tx-rc-cancel').classList.toggle('hidden', m.status === 'mixing');
+  document.getElementById('tx-rc-mixnow').classList.toggle('hidden', !mixWaiting(m));
+}
+
+// «Свести сейчас»: the mix that waits for the end of a meeting begins at once (app/api/recording.py mix_now)
+async function mixNowActive() {
+  const m = state.activeMeeting;
+  if (!m) return;
+  const r = await fetch(`/api/meetings/${m.id}/mix-now`, { method: 'POST' }).catch(() => null);
+  if (!r) { showError(t('errNoNetwork')); return; }
+  if (!r.ok) { showError(serverText((await readJson(r)).detail)); return; }
+  document.getElementById('tx-rc-mixnow').classList.add('hidden');
+  showToast(t('mixNowStarted'), null, 'status');
 }
 
 // «Скачать…»: the models not downloaded yet; the one chosen is picked and downloaded before «Расшифровать»

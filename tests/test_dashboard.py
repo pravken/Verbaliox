@@ -71,6 +71,9 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual([b["key"] for b in d["buckets"]][:2], ["2026-11-16", "2026-11-17"])
         only = dashboard.build("week", feature_id=f["id"], today=self.TODAY)
         self.assertEqual(only["kpi"]["meetings_before"], 0)
+        # the recordings of the week the filter leaves out are told (reported by the user: zeros with a filter on)
+        self.assertEqual(only["outside"], d["kpi"]["meetings"] - only["kpi"]["meetings"])
+        self.assertEqual(d["outside"], 0)
 
     def test_hours_of_recordings_not_transcribed_yet_or_cancelled(self):
         """Reported by the user: the meeting hours stood still. The length was written only when a

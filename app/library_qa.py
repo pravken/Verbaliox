@@ -197,7 +197,7 @@ def summary_fragments(meetings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not text:
             continue
         out.append({
-            "meeting_id": int(m["id"]), "title": m.get("title") or "", "date": _meeting_date(m), "start": 0.0,
+            "meeting_id": int(m["id"]), "title": m.get("title") or "", "date": _meeting_date(m), "start": 0.0, "whole": True,
             "speaker": "", "text": text.splitlines()[0][:200], "context": "Обзор записи:\n" + text[:SUMMARY_FRAGMENT_CHARS],
         })
     return out
@@ -410,6 +410,7 @@ def ask_library(
     cited = cited_numbers(answer)
     sources = [
         {k: f[k] for k in ("meeting_id", "title", "date", "start", "speaker", "text")} | {"n": n}
+        | ({"whole": True} if f.get("whole") else {})
         for n, f in enumerate(fragments, start=1) if n in cited
     ]
     return {"answer": answer, "sources": sources, "found": True, "model": llm.label, "mode": mode}

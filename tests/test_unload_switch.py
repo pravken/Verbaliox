@@ -252,3 +252,17 @@ class TeamsMarksByWordsTest(unittest.TestCase):
         self.assertEqual(transcriber.apply_speaker_marks(speakers, segments, marks), 1)
         self.assertEqual(speakers["SPEAKER_00"]["name"], "Pavel Orlov")
         self.assertEqual(speakers["SPEAKER_01"]["name"], "Участник 2")
+
+
+class EcapaWhileImportingTest(unittest.TestCase):
+    """Seen in a user's log: /api/vram asked app.diarizer while another thread was still importing it."""
+
+    def test_a_module_half_imported_counts_as_nothing_loaded(self):
+        import sys
+        import types
+
+        from app import vram
+
+        half = types.ModuleType("app.diarizer")  # no functions yet, as during its import
+        with mock.patch.dict(sys.modules, {"app.diarizer": half}):
+            self.assertIsNone(vram.ecapa_loaded_on())

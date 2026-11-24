@@ -668,7 +668,7 @@ def enqueue_cut_job(meeting_id: int, kind: str, intervals: List[Tuple[float, flo
 def _merge_runner(meeting_id: int) -> str:
     """One transcript from the transcripts of several models (app/transcript_merge.py), shown as the
     version "merged"; the others stay."""
-    from app import llm
+    from app import cancel_scope, llm
     from app.database import all_transcripts
     from app.model_manager import format_whisper_model_name
     from app.transcript_merge import MERGED, merge
@@ -687,10 +687,13 @@ def _merge_runner(meeting_id: int) -> str:
     # The version on screen is the base: its phrases and speakers — with the names given there — are
     # what the merged text keeps (the most accurate model's were taken, with the names before the renaming)
     shown = meeting.get("transcript_model") or ""
-    res = merge(versions, meeting.get("language") or "", chat,
-                progress=lambda pct, text: update_meeting_progress(meeting_id, progress=pct, stage_text=text),
-                check_cancel=lambda: _check_cancel(meeting_id),
-                base=shown if shown not in ("", MERGED, "teams") else None)
+    try:
+        res = merge(versions, meeting.get("language") or "", chat,
+                    progress=lambda pct, text: update_meeting_progress(meeting_id, progress=pct, stage_text=text),
+                    check_cancel=lambda: _check_cancel(meeting_id),
+                    base=shown if shown not in ("", MERGED, "teams") else None)
+    except cancel_scope.Aborted:  # stopped while the analysis model answered: the recording stays as it was
+        raise JobCancelled()
     # names given on screen, only when the result is split by the same voices (the version shown is its
     # base): another model's split numbers other people alike, SPEAKER_00 there is not SPEAKER_00 here
     same_split = res["base"] == shown
@@ -1817,7 +1820,7 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
     words around it, a portion of places at a time. Returns the merge result, None if it was not made."""
     from datetime import datetime
 
-    from app import llm
+    from app import cancel_scope, llm
     from app.database import all_transcripts, save_transcript_version
     from app.model_manager import format_whisper_model_name
     from app.transcript_merge import MERGED, merge
@@ -1889,9 +1892,12 @@ def _run_ensemble(meeting_id: int, main_model: str, extra: List[str], wav_path: 
         print(f"[ensemble] no analysis model: {e}", flush=True)
     # the Teams captions of the recording (app/teams_captions.py) are one more voice, a light one
     versions = {m: v for m, v in all_transcripts(meeting_id).items() if m in [main_model, *done, "teams"]}
-    res = merge(versions, detected_lang or "", chat, base=main_model,
-                progress=lambda pct, text: update_meeting_progress(meeting_id, progress=86 + 3 * pct // 100, stage_text=text),
-                check_cancel=lambda: _check_cancel(meeting_id))
+    try:
+        res = merge(versions, detected_lang or "", chat, base=main_model,
+                    progress=lambda pct, text: update_meeting_progress(meeting_id, progress=86 + 3 * pct // 100, stage_text=text),
+                    check_cancel=lambda: _check_cancel(meeting_id))
+    except cancel_scope.Aborted:  # stopped while the analysis model answered: the main model's text stays
+        raise JobCancelled()
     _check_cancel(meeting_id)
     stash_transcript_for(meeting_id, MERGED)
     save_meeting_results(meeting_id, speakers=res["speakers"], segments=res["segments"], language=detected_lang,
