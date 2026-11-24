@@ -634,6 +634,10 @@ await step('first run wizard', async () => {
 // green «Сохранено»), the new features as cards, all the changes folded as «Новое» and «Исправлено»; «Готово»
 // marks every step answered, and they are not asked again
 await step('window after an update', async () => {
+  // what the step changes is put back as it was: leaving the steps unanswered opened this window again over the
+  // later steps after a reload (CI: «#upd-after intercepts pointer events» in the calendar steps)
+  const before = await page.evaluate(() => fetch('/api/system').then(r => r.json())
+    .then(d => ({ holiday_country: d.settings.holiday_country || '', holiday_subdiv: d.settings.holiday_subdiv || '', setup_done: d.settings.setup_done || '[]' })));
   await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
   await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
   await page.waitForSelector('#upd-after select[data-hol-country] option[value="RS"]', { state: 'attached' });
@@ -660,8 +664,8 @@ await step('window after an update', async () => {
   await page.evaluate(sv => openSetupSteps(sv), set);
   await sleep(400);
   expect(!(await page.$('#upd-after')), 'asked again after it was answered');
-  await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
+  await page.evaluate(b => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: b }) }), before);
 });
 
 // A calendar meeting about to start with a Teams link: «Подключиться» on its card joins the call (asked by the user)
@@ -1240,10 +1244,17 @@ await step('studio choices kept', async () => {
   expect(ready, 'the translation models are not listed');
   expect(await page.evaluate(() => !document.getElementById('studio-cap-model').disabled && !document.getElementById('studio-tr-model').disabled),
     'the model lists are locked before a recording');
-  await page.evaluate(parakeet);
-  await openModels();
-  await page.selectOption('#studio-cap-model', 'parakeet-v3');
-  await page.selectOption('#studio-tr-model', 'gemma4:e2b');
+  // the popover is opened right before each choice: a re-render of the studio may close it in between (CI timed
+  // out «waiting for element to be visible» here)
+  const choose = async (sel, value) => {
+    for (let i = 0; i < 3; i++) {
+      await page.evaluate(parakeet);
+      await openModels();
+      try { await page.selectOption(sel, value, { timeout: 2500 }); return; } catch (e) { if (i === 2) throw e; }
+    }
+  };
+  await choose('#studio-cap-model', 'parakeet-v3');
+  await choose('#studio-tr-model', 'gemma4:e2b');
   const keys = ['live_captions_auto', 'live_translate_to', 'live_speed', 'live_whisper_model', 'live_translate_model_fast', 'live_translate_model_quality'];
   const want = JSON.stringify(['true', 'en', 'fast', 'parakeet-v3', 'gemma4:e2b', '']);
   let saved = '';
