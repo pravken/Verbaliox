@@ -345,6 +345,9 @@ def _queue_finish(meeting_id: int) -> None:
         if _running_id == meeting_id:
             _running_id = None
     _publish_queue_changed()
+    # the queue empty: the models go a minute later unless used meanwhile. The automatic analysis runs in the
+    # transcription's own job, so the models are never let go between the two
+    _work_done_if_idle()
 
 
 def queue_snapshot() -> List[Dict[str, Any]]:
@@ -498,6 +501,17 @@ def _run_pending_exports(meeting_id: int) -> None:
         process(meeting_id)
     except Exception:
         traceback.print_exc()
+    _work_done_if_idle()  # an export that asked the analysis model counted as a use: the minute starts again
+
+
+def _work_done_if_idle() -> None:
+    """Nothing running or waiting in the queue: the models go a minute later unless used (app/idle_unload.py)."""
+    with _jobs_lock:
+        idle = not _queue and not _preloading and _running_id is None
+    if idle:
+        from app import idle_unload
+
+        idle_unload.work_done("the processing finished")
 
 
 # A job on a finished recording (dub, translation, cut, subtitles) gives it back the status it had:

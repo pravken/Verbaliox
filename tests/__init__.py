@@ -15,3 +15,12 @@ except ImportError:
     import sys
 
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "stubs"))
+
+# The background unload of idle models never runs in the tests: a job a test finishes would start its minute
+# (app/idle_unload.work_done), and its unload would reach the Ollama of the computer the tests run on
+try:
+    from app import idle_unload as _idle_unload
+
+    _idle_unload._started = True
+except ImportError:  # the release CI runs without the app's packages
+    pass
