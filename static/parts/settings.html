@@ -896,115 +896,97 @@
         <div data-stab="export" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavExport">Экспорт и связи</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescExport">Имена файлов, папка экспорта, папка автоимпорта и заметки.</p>
           </div>
         <!-- File names of recordings and exports (app/naming.py) -->
         <div class="settings-card">
-          <div>
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="fileNameTitle">Имена файлов</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="fileNameDesc">Шаблон имени для записей из студии и всех экспортов: {date} — дата записи, {time} — время, {title} — название, {lang} — язык. Запись получает имя по названию, как только оно появится.</p>
-          </div>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="fileNameTitle">Имена файлов</h4>
+            <p class="sx-card-cap" data-i18n="fileNameDesc">{date}, {time}, {title}, {lang} — дата, время, название, язык</p></div>
           <input id="set-file-name-template" type="text" spellcheck="false" placeholder="{date} {title}" data-input="updateFileNamePreview"
-            class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:border-apple-blue" />
+            class="sx-input sx-mono w-full" />
           <div class="flex flex-wrap gap-1" id="file-name-tokens"></div>
-          <div class="flex items-center gap-2 pt-1">
-            <span class="text-[11.5px] text-apple-secondary" data-i18n="dateFoldersLabel">Папки по дате</span>
-            <select id="set-date-folders" data-change="updateFileNamePreview" data-i18n-title="tipDateFolders"
-              title="Записи, экспорты и заметки Obsidian раскладываются по папкам с датой записи"
-              class="h-7 bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
-              <option value="off" data-i18n="dateFoldersOff">Не создавать</option>
-              <option value="day" data-i18n="dateFoldersDay">По дням — 2026-10-21</option>
-              <option value="month" data-i18n="dateFoldersMonth">По месяцам — 2026-10</option>
-              <option value="year_month" data-i18n="dateFoldersYearMonth">Год и месяц — 2026\2026-10</option>
-            </select>
-          </div>
           <div class="text-[11.5px] text-apple-tertiary font-mono break-all" id="file-name-preview"></div>
-        </div>
-
-        <!-- Export Folder -->
-        <div class="settings-card">
-          <div>
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="exportDirTitle">Папка для экспорта</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="exportDirDesc">При каждом экспорте открывается окно «Сохранить как». Эта папка предлагается первой и автоматически запоминается последняя выбранная.</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <div id="set-export-dir" class="flex-1 min-w-0 h-8 leading-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono truncate"></div>
-            <button data-click="pickExportDir" data-i18n-title="tipExportDirPick" title="Выбрать папку, которая предлагается по умолчанию при сохранении файлов"
-              class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="exportDirPickBtn">Выбрать…</button>
-            <button data-click="openExportDir" data-i18n-title="tipExportDirOpen" title="Открыть папку экспорта в проводнике"
-              class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="exportDirOpenBtn">Открыть</button>
-          </div>
-        </div>
-
-        <!-- Auto-import folder (app/watch_folder.py) -->
-        <div class="settings-card">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="watchTitle">Папка автоимпорта аудио и видео</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="watchDesc">Новые аудио и видео, которые появятся в этой папке (синхронизация с телефона, диктофон, записи Zoom), добавятся в медиатеку и расшифруются автоматически. Файлы, которые уже есть в папке, не добавляются.</p>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-date-folders" class="sx-row-label" data-i18n="dateFoldersLabel">Папки по дате</label>
+              <span class="sx-row-cap" data-i18n="dateFoldersCap">Уже сохранённые записи и заметки переносятся автоматически</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-date-folders" data-change="updateFileNamePreview" class="sx-select">
+                <option value="off" data-i18n="dateFoldersOff">Не создавать</option>
+                <option value="day" data-i18n="dateFoldersDay">По дням — 2026-10-21</option>
+                <option value="month" data-i18n="dateFoldersMonth">По месяцам — 2026-10</option>
+                <option value="year_month" data-i18n="dateFoldersYearMonth">Год и месяц — 2026\2026-10</option>
+              </select>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <div id="watch-folder-path" class="flex-1 min-w-0 h-8 leading-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono truncate"></div>
-            <button data-click="pickWatchFolder" class="ui-btn ui-btn-subtle h-8" data-i18n="exportDirPickBtn">Выбрать…</button>
-            <button data-click="watchFolderOff" class="ui-btn ui-btn-subtle h-8" data-i18n="hotkeyClear">Отключить</button>
+        </div>
+
+        <!-- The folders: the one an export suggests first, the one watched for new files (app/watch_folder.py) -->
+        <div class="settings-card">
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="exportDirTitle">Папка для экспорта</span>
+              <span class="sx-row-cap" data-i18n="exportDirDesc">Предлагается первой в окне «Сохранить как»</span>
+              <span id="set-export-dir" class="sx-row-cap sx-path"></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="pickExportDir" class="ui-btn ui-btn-subtle" data-i18n="exportDirPickBtn">Выбрать…</button>
+              <button data-click="openExportDir" class="ui-btn ui-btn-subtle" data-i18n="exportDirOpenBtn">Открыть</button>
+            </div>
           </div>
-          <div id="watch-folder-status" class="text-[11.5px] text-apple-tertiary"></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="watchTitle">Папка автоимпорта</span>
+              <span class="sx-row-cap" data-i18n="watchDesc">Новые файлы из папки расшифровываются автоматически</span>
+              <span id="watch-folder-path" class="sx-row-cap sx-path"></span>
+              <span class="sx-row-cap"><span id="watch-folder-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="watchFolderOff" class="ui-btn ui-btn-subtle" data-i18n="hotkeyClear">Отключить</button>
+              <button data-click="pickWatchFolder" class="ui-btn ui-btn-subtle" data-i18n="exportDirPickBtn">Выбрать…</button>
+            </div>
+          </div>
         </div>
 
         <!-- Obsidian vault (app/obsidian.py) -->
         <div class="settings-card">
           <div class="sx-card-head">
             <div>
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="obsTitle">Obsidian</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="obsDesc">Заметка на каждую встречу в формате Markdown: свойства (дата, участники, длительность), «Кратко», обзор, задачи чек-листом и расшифровка с таймкодами.</p>
+              <h4 class="sx-card-title" data-i18n="obsTitle">Obsidian</h4>
+              <p class="sx-card-cap" data-i18n="obsDesc">Заметка на каждую встречу: участники, обзор, задачи, расшифровка</p>
             </div>
             <span id="obs-pill" class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-white/5 text-apple-secondary shrink-0"></span>
           </div>
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="obsVaultLabel">Папка хранилища (vault)</label>
-            <div class="flex items-center gap-2">
-              <div id="set-obsidian-vault" class="flex-1 min-w-0 h-8 leading-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono truncate"></div>
-              <button data-click="pickObsidianVault" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="exportDirPickBtn">Выбрать…</button>
-              <button data-click="openObsidianFolder" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px] shrink-0" data-i18n="exportDirOpenBtn">Открыть</button>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="obsVaultLabel">Папка хранилища</span>
+              <span id="set-obsidian-vault" class="sx-row-cap sx-path"></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="pickObsidianVault" class="ui-btn ui-btn-subtle" data-i18n="exportDirPickBtn">Выбрать…</button>
+              <button data-click="openObsidianFolder" class="ui-btn ui-btn-subtle" data-i18n="exportDirOpenBtn">Открыть</button>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="obsSubfolderLabel">Папка внутри хранилища</label>
-              <input id="set-obsidian-subfolder" type="text" placeholder="Verbaliox" data-input="updateObsidianPreview"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
-            </div>
-            <div>
-              <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="obsFilenameLabel">Имя файла</label>
-              <input id="set-obsidian-filename" type="text" placeholder="{date} {title}" data-input="updateObsidianPreview" data-i18n-title="obsFilenameTip" title="{date} — дата, {time} — время, {title} — название, {lang} — язык, {feature} — фича записи"
-                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-3 text-xs text-white font-mono placeholder-apple-tertiary focus:outline-none focus:border-apple-blue" />
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-obsidian-subfolder" class="sx-row-label" data-i18n="obsSubfolderLabel">Папка внутри хранилища</label></span>
+            <div class="sx-row-ctl">
+              <input id="set-obsidian-subfolder" type="text" placeholder="Verbaliox" data-input="updateObsidianPreview" class="sx-input sx-ctl-w" />
             </div>
           </div>
-          <p id="obs-preview" class="text-[11.5px] text-apple-tertiary leading-snug break-all"></p>
-          <div class="flex items-center gap-2 flex-wrap">
-            <button data-click="obsidianExportAll" data-click-args='[{"$": "event"}]' id="obs-export-all" class="ui-btn ui-btn-subtle h-8 px-3 text-[11.5px]" aria-haspopup="dialog" data-i18n="obsExportAll">Реэкспорт всех расшифровок</button>
-            <span id="obs-export-all-status" class="text-[11.5px] text-apple-tertiary"></span>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-obsidian-filename" class="sx-row-label" data-i18n="obsFilenameLabel">Имя файла</label>
+              <span id="obs-preview" class="sx-row-cap sx-path"></span></span>
+            <div class="sx-row-ctl">
+              <input id="set-obsidian-filename" type="text" placeholder="{date} {title}" data-input="updateObsidianPreview" class="sx-input sx-mono sx-ctl-w" />
+            </div>
           </div>
-          <div class="space-y-0.5">
-            <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-              <span><span data-i18n="obsAutoToggle">Сохранять заметку автоматически после обработки</span>
-                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="obsAutoHint">И обновлять её после каждого нового раздела анализа. При включении сохраняются и все прежние записи.</span></span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-auto" />
-            </label>
-            <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-              <span><span data-i18n="obsFeatureFolders">Раскладывать по папкам фич</span>
-                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="obsFeatureFoldersHint">Заметка записи с фичей сохраняется в папку с названием фичи; без фичи — в общую папку.</span></span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-feature_folders" data-change="updateObsidianPreview" />
-            </label>
-            <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-              <span><span data-i18n="obsGenerateToggle">Создавать обзор и задачи для заметки, если их ещё нет</span>
-                <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="obsGenerateHint">Через локальную модель Ollama; без неё заметка сохранится с тем, что уже есть.</span></span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-generate" checked />
-            </label>
-          </div>
-          <div>
-            <div class="text-[11.5px] text-apple-secondary mb-1" data-i18n="obsIncludeLabel">Что включать в заметку</div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="obsAutoToggle">Сохранять заметку автоматически</span>
+              <span class="sx-row-cap" data-i18n="obsAutoHint">При включении сохраняются и все прежние записи</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-auto" />
+          </label>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="obsFeatureFolders">Папка для каждой фичи</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-feature_folders" data-change="updateObsidianPreview" />
+          </label>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="obsGenerateToggle">Создавать обзор и задачи для заметки, если их ещё нет</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-obsidian-generate" checked />
+          </label>
+          <div class="sx-block">
+            <div class="sx-row-label" data-i18n="obsIncludeLabel">Что включать в заметку</div>
             <div class="grid grid-cols-2 gap-x-3">
               <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-summary" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncSummary">«Кратко» и обзор</span></label>
               <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-tasks" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncTasks">Задачи</span></label>
@@ -1014,28 +996,27 @@
               <label class="settings-toggle flex items-center gap-2.5 cursor-pointer text-xs text-apple-label"><input type="checkbox" id="set-obsidian-more" checked class="rounded bg-apple-sidebar border-white/20 text-apple-blue" /><span data-i18n="obsIncMore">Остальной анализ: решения, письмо, конспект, свои шаблоны, ответы</span></label>
             </div>
           </div>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="obsExportAll">Сохранить заметки для всех записей</span>
+              <span class="sx-row-cap"><span id="obs-export-all-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="obsidianExportAll" data-click-args='[{"$": "event"}]' id="obs-export-all" class="ui-btn ui-btn-subtle" aria-haspopup="dialog" data-i18n="obsExportAllBtn">Сохранить…</button>
+            </div>
+          </div>
         </div>
         <!-- The library for an agent: Claude Desktop, Claude Code (app/mcp_server.py) -->
         <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="mcpTitle">Доступ агента (MCP)</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="mcpDesc">Claude или другой агент ищет по встречам, читает нужные разделы, решения и задачи — без выгрузки файлов. Только чтение, работает и при закрытой программе.</p>
-          </div>
-          <div>
-            <div class="mb-1">
-              <span class="text-[11.5px] text-apple-secondary" data-i18n="mcpDesktop">Claude Desktop — в claude_desktop_config.json</span>
-            </div>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="mcpTitle">Доступ для ИИ-агентов (MCP)</h4>
+            <p class="sx-card-cap" data-i18n="mcpDesc">Claude и другие агенты ищут по встречам. Только чтение</p></div>
+          <div class="sx-block">
+            <span class="sx-row-cap" data-i18n="mcpDesktop">Claude Desktop — в claude_desktop_config.json</span>
             <div class="mcp-wrap"><pre id="mcp-desktop" class="mcp-code"></pre><button data-click="copyMcpConfig" data-click-args='["desktop"]' class="mcp-copy" data-i18n-title="copy" title="Копировать" data-i18n-aria="copy" aria-label="Копировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
-          </div>
-          <div>
-            <div class="mb-1">
-              <span class="text-[11.5px] text-apple-secondary" data-i18n="mcpCode">Claude Code — команда в терминале</span>
-            </div>
+            <span class="sx-row-cap" data-i18n="mcpCode">Claude Code — команда в терминале</span>
             <div class="mcp-wrap"><pre id="mcp-code" class="mcp-code"></pre><button data-click="copyMcpConfig" data-click-args='["code"]' class="mcp-copy" data-i18n-title="copy" title="Копировать" data-i18n-aria="copy" aria-label="Копировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           </div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="mcpLocalToggle">Отдавать агенту и диктовки</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="mcpLocalHint">Выключено: записи папки «Диктовки» агент не видит — в них может быть любая продиктованная информация.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="mcpLocalToggle">Открыть агенту и диктовки</span>
+              <span class="sx-row-cap" data-i18n="mcpLocalHint">Выключено — записи папки «Диктовки» агенту не видны</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-mcp-local-only" />
           </label>
         </div>

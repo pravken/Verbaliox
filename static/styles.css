@@ -5512,3 +5512,4 @@ label.sx-row:has(.vs-switch:disabled) { cursor: default; }
 .sx-field .ui-btn { height: 30px; padding: 0 12px; font-size: var(--fs-label); flex-shrink: 0; }
 .sx-select.sx-time-sel { width: 84px; font-family: var(--font-mono); }
 .sx-row.hidden, .sx-row-cap.hidden, .sx-block.hidden, .sx-field.hidden { display: none; }
+.sx-input.sx-ctl-w { width: 260px; }
