@@ -13,6 +13,7 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **A call is a meeting too**: while a call app (Teams, Zoom, Telegram…) or a browser holds the microphone,
   transcriptions wait, recorded or not, in the calendar or not. During a meeting a transcription starts only on the
   user's «Transcribe» and «Yes, start now».
+- **Live captions with Teams no longer jump**: a line keeps the speaker it was given, and the room for the names stays.
 
 ## 0.9.3 — English
 
@@ -1159,6 +1160,7 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Звонок — тоже встреча**: пока микрофон держит приложение звонка (Teams, Zoom, Telegram…) или браузер, расшифровки
   ждут, даже без записи и без встречи в календаре. Во время встречи расшифровка начинается только по «Расшифровать»
   и «Да, начать сейчас».
+- **Субтитры с Teams больше не дёргаются**: строка сохраняет найденного говорящего, а место под имена не пропадает.
 
 ## 0.9.3
 

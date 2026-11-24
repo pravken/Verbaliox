@@ -1547,6 +1547,7 @@ function capJumpToNew() {
 
 function capReset() {
   capView.rows.clear();
+  capView.hadWho = false;
   capView.draftKey = null;
   document.getElementById('studio-cap-rows').innerHTML = '';
   capView.stick = true;
@@ -1589,6 +1590,10 @@ function capSpeaker(ln) {
     const last = before[before.length - 1];
     if (last && end - (_recStartTime + last.at * 1000) < 60e3) best = last.name;
   }
+  // a name once found stays while the line is not settled (reported by the user: the names came and went and the
+  // lines jumped — Teams' recent lines slide on, and the one a line matched drops out of them)
+  if (best) ln.whoSeen = best;
+  else if (ln.whoSeen) best = ln.whoSeen;
   if (Date.now() - end > (best ? 30e3 : 90e3)) ln.who = best;
   return best;
 }
@@ -1691,7 +1696,9 @@ function capDrawLines(lines, fresh, target, view) {
     avEl.classList.toggle('hidden', !who);
   }
   // the lines make room for the marks once someone is named (the text of all lines starts at one place)
-  document.getElementById('studio-cap-rows').classList.toggle('cap-has-who', anyWho);
+  // once on, the room stays: the whole list does not shift back and forth with the names
+  capView.hadWho = capView.hadWho || anyWho;
+  document.getElementById('studio-cap-rows').classList.toggle('cap-has-who', capView.hadWho);
 
   if (liveCap.partial) {
     let row = capView.draftKey ? capView.rows.get(capView.draftKey) : null;

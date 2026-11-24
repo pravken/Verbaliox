@@ -1667,6 +1667,23 @@ await step('name chip in a brief', async () => {
   });
 });
 
+// A caption line keeps the name it was given while Teams' recent lines slide on (reported by the user: names came
+// and went and the captions jumped)
+await step('caption names stay', async () => {
+  const r = await page.evaluate(() => {
+    const keep = [_recStartTime, stPeople.teams];
+    try {
+      _recStartTime = Date.now() - 20e3;
+      const ln = { text: 'давайте посмотрим план', wall: Date.now() - 10e3, wallEnd: Date.now() - 8e3 };
+      stPeople.teams = { recent: [{ at: 9, name: 'Анна Смирнова', text: 'давайте посмотрим план' }] };
+      const first = capSpeaker(ln);
+      stPeople.teams = { recent: [] };  // the line Teams matched slid out of its recent ones
+      return [first, capSpeaker(ln)];
+    } finally { [_recStartTime, stPeople.teams] = keep; }
+  });
+  expect(r[0] === 'Анна Смирнова' && r[1] === 'Анна Смирнова', `the name did not stay: ${JSON.stringify(r)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
