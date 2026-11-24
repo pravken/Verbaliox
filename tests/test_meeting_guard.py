@@ -265,3 +265,20 @@ class LeftEarlyTest(unittest.TestCase):
             with mock.patch("app.calendar_ics.current_meeting", return_value=other), \
                     mock.patch.object(meeting_guard, "_in_call", return_value=False):
                 self.assertEqual(meeting_guard.busy(), "calendar")  # another meeting, not left
+
+    def test_the_next_meeting_due_soon_is_not_taken_for_left(self):
+        """Stopping the recording of a meeting minutes before the next one: the calendar's «current» meeting is
+        the next one (due within 10 minutes), and it was taken for left before it began."""
+        import datetime as dt
+
+        from app import meeting_guard
+
+        now = dt.datetime(2026, 11, 23, 10, 55)
+        upcoming = dict(self.event, start=dt.datetime(2026, 11, 23, 11, 0))
+        with mock.patch("app.calendar_ics.current_meeting", return_value=upcoming):
+            meeting_guard.recording_ended(now=now.timestamp())
+        self.assertEqual(meeting_guard._left, {})
+        begun = dict(self.event, start=dt.datetime(2026, 11, 23, 10, 30))
+        with mock.patch("app.calendar_ics.current_meeting", return_value=begun):
+            meeting_guard.recording_ended(now=now.timestamp())
+        self.assertEqual(len(meeting_guard._left), 1)

@@ -25,6 +25,7 @@ import threading
 import time
 import traceback
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set
 
 POLL_SEC = 20.0
@@ -59,7 +60,9 @@ def recording_ended(now: Optional[float] = None) -> None:
         from app import calendar_ics
 
         e = calendar_ics.current_meeting(cached=True)
-        if e:
+        # only a meeting begun already: one due within 10 minutes (the next, right after) is not left — stopping
+        # the recording of the meeting before it released the next one before it began
+        if e and _naive(e["start"]) <= datetime.fromtimestamp(now):
             with _lock:
                 for k in [k for k, at in _left.items() if now - at > 24 * 3600]:
                     _left.pop(k, None)
@@ -67,6 +70,10 @@ def recording_ended(now: Optional[float] = None) -> None:
             print("[meeting_guard] the recording stopped during a calendar meeting: it holds nothing while no call goes on", flush=True)
     except Exception:
         traceback.print_exc()
+
+
+def _naive(at: datetime) -> datetime:
+    return at.astimezone().replace(tzinfo=None) if at.tzinfo else at
 
 
 def _event_key(e: Dict[str, Any]) -> str:
