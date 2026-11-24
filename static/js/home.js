@@ -82,10 +82,17 @@ async function hmLoad(force) {
 // themselves, the dashboard and the pills). Kept by the date of the working day (home.days) for five minutes; another
 // day also brings its recordings outside any meeting and its hours worked
 const hmEventsLoading = {};  // one request at a time for a day; a failed one is tried again at the next tick
+// Today's while a meeting starts within the hour: every minute (a meeting moved or cancelled in the calendar is not
+// recorded at its old time; the server reads the calendar more often then, app/brief_notice.py keep_fresh)
+const HM_EVENTS_SOON_MS = 60000;
+function hmSoonMeeting(events) {
+  const now = Date.now();
+  return (events || []).some(e => e.e > now && e.s - now < 3600e3);
+}
 async function hmLoadEvents(force, date) {
   const d = hmDay(date), key = calKey(d.from), today = key === calKey(hmDay().from);
   const at = today ? home.eventsAt : (home.days[key] || {}).at || 0;
-  if (!force && Date.now() - at < 300000) return;
+  if (!force && Date.now() - at < (today && hmSoonMeeting(home.events) ? HM_EVENTS_SOON_MS : 300000)) return;
   if (hmEventsLoading[key]) return hmEventsLoading[key];
   hmEventsLoading[key] = (async () => {
     // three hours on each side: meetings a little past the edges stretch the day ("fit")
@@ -578,6 +585,11 @@ let hmAutoRec = null;  // {key, end}: the recording started for a meeting
 
 async function hmAutoTick() {
   await hmLoadEvents(false);
+  // a meeting about to be recorded or asked about: by the calendar read for its start (the server reads it two
+  // minutes before), not by the one of a few minutes ago — the meeting may have moved
+  const t0 = Date.now();
+  if (home.events.some(e => !home.started.has(e.key) && t0 >= e.s.getTime() - 75e3 && t0 < e.s.getTime() + 5 * 60e3
+    && home.eventsAt < e.s.getTime() - 60e3)) await hmLoadEvents(true);
   const now = Date.now();
   if (hmAutoRec && !isRecording() && !_quickRecBusy) hmAutoRec = null;  // the user stopped it: it stays stopped
   hmAskExpire();

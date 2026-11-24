@@ -22,8 +22,10 @@ function stripClock(d) { return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}
 function stripDayStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 // The meetings of today and of the week ahead (the next one after a free day), and the public holidays
+// (every 5 minutes; every minute while a meeting starts within the hour: a meeting moved or cancelled in the calendar
+// leaves the strip sooner, the server reads the calendar more often then, app/brief_notice.py keep_fresh)
 async function stripLoad(force) {
-  if (!force && Date.now() - strip.at < 300000) return;
+  if (!force && Date.now() - strip.at < (hmSoonMeeting(strip.events) ? HM_EVENTS_SOON_MS : 300000)) return;
   // a failed answer redraws the strip, which asks again: without this pause, a request loop
   if (!force && Date.now() - strip.failAt < STRIP_RETRY_MS) return;
   if (strip.loading) return strip.loading;
