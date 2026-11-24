@@ -84,6 +84,10 @@ TRANSLATE_MODELS: List[Dict[str, Any]] = [
         "desc_ru": "Tencent Hy-MT3 7B — модель только для перевода живых субтитров, для анализа не используется. В замерах программы переводит с английского на русский и обратно точнее Gemma 4 E4B, около 0,4 секунды на фразу; помещается в видеокарту 10 ГБ вместе с распознаванием речи.",
         "desc_en": "Tencent Hy-MT3 7B: a model for live caption translation only, not used for analysis. In the app's measurements it translates English to Russian and back more accurately than Gemma 4 E4B, about 0.4 seconds a phrase; fits a 10 GB card together with speech recognition.",
         "min_vram_gb": 9.5,  # a 10 GB card reports a little under 10
+        # measured (bench-report/translation-2026-11.md, a 10 GB card with GigaAM): the median seconds a phrase
+        # ru→en and en→ru, and the video memory it takes beside speech recognition (app/vram.SHARES_THE_CARD_GB)
+        "phrase_sec": [0.21, 0.40],
+        "card_gb": 5.3,
     },
     {
         "id": HYMT_1_8B,
@@ -96,6 +100,8 @@ TRANSLATE_MODELS: List[Dict[str, Any]] = [
         "desc_ru": "Tencent Hy-MT3 1.8B — модель только для перевода живых субтитров, для анализа не используется. В замерах программы переводит с английского на русский и обратно точнее Gemma 4 E2B и быстрее её, около 0,15 секунды на фразу. Для видеокарт меньше 10 ГБ и компьютеров без видеокарты.",
         "desc_en": "Tencent Hy-MT3 1.8B: a model for live caption translation only, not used for analysis. In the app's measurements it translates English to Russian and back more accurately and faster than Gemma 4 E2B, about 0.15 seconds a phrase. For cards under 10 GB and computers without one.",
         "min_vram_gb": 0,
+        "phrase_sec": [0.10, 0.16],
+        "card_gb": 1.5,
     },
 ]
 
@@ -615,8 +621,20 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
         "chat_models": chat_models(models),  # the ones that can write text (not embedding models)
         "catalog": catalog,
         "translate_catalog": translate_catalog(models),  # the translators of live captions
+        "live_translate": _live_translate_choices(models),  # what «Качество» and «Скорость» take
         "pull_state": dict(_pull_state),
     }
+
+
+def _live_translate_choices(models: List[str]) -> Dict[str, Any]:
+    try:
+        from app.live_translate import choose_models
+
+        c = choose_models(models, get_all_settings())
+        return {k: c[k] for k in ("quality", "fast", "auto")}
+    except Exception:
+        traceback.print_exc()
+        return {}
 
 
 def _close_ollama_app(seconds: float = 10.0) -> None:

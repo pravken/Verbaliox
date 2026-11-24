@@ -261,6 +261,65 @@ class TranslateRecommendationTest(unittest.TestCase):
 TG_12B = "translategemma:12b"
 
 
+@unittest.skipIf(live_translate is None, "app dependencies not installed")
+class ChosenModelsTest(unittest.TestCase):
+    """Settings → ИИ-анализ → «Модели перевода»: the lists «Качество» and «Скорость» (empty: «Авто»)."""
+
+    def setUp(self):
+        from app.database import init_db
+
+        init_db()
+
+    def _choose(self, installed, **chosen):
+        settings = {"ollama_model": "gemma4:e4b", **{f"live_translate_model_{k}": v for k, v in chosen.items()}}
+        return live_translate.choose_models(installed, settings)
+
+    def test_empty_is_auto(self):
+        c = self._choose(["gemma4:e4b", "gemma4:e2b", RAW_7B, LOCAL_1_8B], quality="", fast="")
+        self.assertEqual((c["quality"], c["fast"]), (RAW_7B, LOCAL_1_8B))
+        self.assertEqual(c["auto"], {"quality": RAW_7B, "fast": LOCAL_1_8B})
+
+    def test_a_chosen_installed_model_comes_first(self):
+        installed = ["gemma4:e4b", "gemma4:e2b", RAW_7B, LOCAL_1_8B, TG_12B]
+        c = self._choose(installed, quality="gemma4:e4b", fast=TG_12B)
+        self.assertEqual((c["quality"], c["fast"]), ("gemma4:e4b", TG_12B))
+        self.assertEqual(c["auto"], {"quality": RAW_7B, "fast": LOCAL_1_8B})  # what «Авто» would take, for the lists
+        # the name as Ollama lists it: any case, «:latest» left out
+        c = self._choose(installed, quality=RAW_7B.lower(), fast="hy-mt3-1.8b")
+        self.assertEqual((c["quality"], c["fast"]), (RAW_7B, LOCAL_1_8B))
+
+    def test_a_chosen_model_not_installed_gives_its_place_to_auto(self):
+        c = self._choose(["gemma4:e4b", "gemma4:e2b", LOCAL_1_8B], quality=RAW_7B, fast="bge-m3:latest")
+        self.assertEqual((c["quality"], c["fast"]), (LOCAL_1_8B, LOCAL_1_8B))
+        c = self._choose([], quality=RAW_7B)
+        self.assertEqual(c["quality"], "gemma4:e4b")  # Ollama not answering: the analysis model, as before
+
+    def test_model_choices_reads_the_settings(self):
+        with mock.patch.object(live_translate, "installed_models", return_value=["gemma4:e4b", "gemma4:e2b", RAW_7B]), \
+                mock.patch("app.database.get_all_settings", return_value={
+                    "ollama_model": "gemma4:e4b", "live_translate_model_quality": "gemma4:e2b"}):
+            c = live_translate.model_choices()
+        self.assertEqual((c["quality"], c["fast"]), ("gemma4:e2b", "gemma4:e2b"))
+
+    def test_the_studio_choice_still_wins(self):
+        t = live_translate.LiveTranslator.__new__(live_translate.LiveTranslator)
+        t.model_override, t.speed = "gemma4:e2b", "quality"
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch.object(live_translate, "model_choices") as choices:
+            self.assertEqual(t._resolve_model(), "gemma4:e2b")
+        choices.assert_not_called()
+
+    def test_the_settings_keys_are_checked(self):
+        from app.settings_schema import clean
+
+        self.assertEqual(clean("live_translate_model_quality", ""), "")
+        self.assertEqual(clean("live_translate_model_fast", RAW_1_8B), RAW_1_8B)
+        self.assertEqual(clean("live_translate_model_quality", " translategemma:4b "), "translategemma:4b")
+        for bad in ("gemma4:e4b; rm -rf", "../x", "a" * 300, "<b>"):
+            with self.assertRaises(ValueError):
+                clean("live_translate_model_quality", bad)
+
+
 @unittest.skipIf(ollama_client is None, "app dependencies not installed")
 class TranslateGemmaTest(unittest.TestCase):
     """TranslateGemma (Gemma Terms of Use): a translator the user may install by hand. Never offered, never an
@@ -298,13 +357,17 @@ class TranslateGemmaTest(unittest.TestCase):
         with mock.patch.object(ollama_client, "_is_ollama_port_open", return_value=False), \
                 mock.patch.object(ollama_client, "models_on_disk", return_value=on_disk), \
                 mock.patch.object(ollama_client, "find_ollama_executable", return_value="ollama"), \
-                mock.patch.object(ollama_client, "get_all_settings", return_value={"ollama_model": TG_12B}), \
+                mock.patch.object(ollama_client, "get_all_settings", return_value={
+                    "ollama_model": TG_12B, "live_translate_model_fast": TG_12B}), \
                 mock.patch.object(ollama_client, "update_settings") as save:
             st = ollama_client.get_ollama_status()
         self.assertEqual(st["chat_models"], ["gemma4:e4b", "gemma4:e2b"])
         self.assertNotIn(TG_12B, [m["id"] for m in st["catalog"]])
         self.assertIn(TG_12B, [m["id"] for m in st["translate_catalog"]])
         save.assert_called_once_with({"ollama_model": "gemma4:e4b"})  # never the analysis model
+        # what the lists of the settings show: «Авто · Hy-MT3 7B» and the chosen one of «Скорость»
+        self.assertEqual(st["live_translate"]["auto"], {"quality": RAW_7B, "fast": "gemma4:e2b"})
+        self.assertEqual(st["live_translate"]["fast"], TG_12B)
 
 
 @unittest.skipIf(live_translate is None, "app dependencies not installed")

@@ -784,6 +784,35 @@
 
         </div>
 
+        <!-- The translators (Hy-MT3, a TranslateGemma installed by hand): live captions and the dictation with
+             translation; the analysis is done by the model above (static/js/settings.js translateModelCards) -->
+        <div class="settings-card" id="translate-models-card">
+          <div class="sx-card-head">
+            <div>
+              <h4 class="text-[13px] font-semibold text-white" data-i18n="trSectionTitle">Модели перевода (Ollama)</h4>
+              <p class="text-[11.5px] text-apple-secondary" data-i18n="trSectionDesc">Модели только переводят живые субтитры. Анализ встреч выполняет модель выше</p>
+            </div>
+          </div>
+          <div id="translate-catalog-list" class="space-y-2"></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="set-live-tr-quality" class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="trQualityLabel">Субтитры: «Качество»</label>
+              <select id="set-live-tr-quality" data-i18n-title="tipTrQuality" title="Модель перевода субтитров в режиме «Качество»"
+                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
+                <option value="" data-i18n="liveModelAuto">Авто</option>
+              </select>
+            </div>
+            <div>
+              <label for="set-live-tr-fast" class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="trFastLabel">Субтитры: «Быстро»</label>
+              <select id="set-live-tr-fast" data-i18n-title="tipTrFast" title="Модель перевода субтитров в режиме «Быстро»"
+                class="w-full h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
+                <option value="" data-i18n="liveModelAuto">Авто</option>
+              </select>
+            </div>
+          </div>
+          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="trChoiceHint">Авто: для «Качества» — Hy-MT3 7B, затем Hy-MT3 1.8B, затем модель анализа; для «Быстро» — Hy-MT3 1.8B, затем Gemma 4 E2B, затем модель «Качества». Модель, выбранная в студии, действует до конца сеанса субтитров.</p>
+        </div>
+
         <!-- What runs by itself after a transcription -->
         <div class="settings-card !space-y-0">
           <div class="min-w-0 pb-1">

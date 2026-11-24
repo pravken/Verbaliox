@@ -1122,7 +1122,9 @@ function studioModelInfo(kind, id) {
       state: chip ? 'loaded' : item && item.installed ? 'ready' : 'missing' };
   }
   const chip = chips.find(c => c.kind === 'ollama' && c.name === id);
-  const cat = (((state.system || {}).ollama || {}).catalog || []).find(x => x.id === id || x.installed_as === id);
+  const ollama = state.lastOllama || (state.system || {}).ollama || {};
+  // the analysis models and the translators (Hy-MT3) have their sizes in the catalogs
+  const cat = [...(ollama.catalog || []), ...(ollama.translate_catalog || [])].find(x => x.id === id || x.installed_as === id);
   const loaded = !!(chip && chip.loaded);
   return { gb: loaded && chip.size_gb ? Number(chip.size_gb) : (cat ? studioSizeGb(cat.size) : null),
     where: chip && chip.where ? chip.where : gpu ? 'gpu' : 'cpu',

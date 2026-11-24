@@ -44,6 +44,9 @@ CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "mem_reserve_vram": {"auto", "0.5", "1", "1.5", "2", "3", "4"}}
 SPEECH_MODELS = {"whisper_model", "speech_model_ru", "live_whisper_model"}
 FOLDERS = {"recordings_dir", "export_dir", "obsidian_vault", "watch_folder"}
+# Ollama models chosen by name (app/live_translate.CHOICE_KEYS): empty is «Авто»
+OLLAMA_MODELS = {"live_translate_model_quality", "live_translate_model_fast"}
+OLLAMA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$")
 
 
 def _is_local_host(host: str) -> bool:
@@ -124,6 +127,10 @@ def clean(key: str, value: Any) -> str:
         return text_s
     if key in SPEECH_MODELS:
         if not is_speech_model(text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
+    if key in OLLAMA_MODELS:
+        if text_s and not OLLAMA_NAME_RE.match(text_s):
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
     if key == "dictation_translate_to":

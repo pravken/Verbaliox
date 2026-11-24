@@ -183,6 +183,8 @@ def init_db() -> None:
             "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
+            "live_translate_model_quality": "",  # the translation model of live captions; "" = «Авто» (app/live_translate.py)
+            "live_translate_model_fast": "",
             "vad_filter": "true",
             "audio_enhance": "true",
             "clean_fillers": "true",

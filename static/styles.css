@@ -3199,9 +3199,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .ens-dl.is-busy { color: #8E8E93; background: none; border-color: transparent; padding: 0; }
 
 /* A model card (Settings): name, badges, the measures in dots on one line; what it is under «i» */
-.mm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; }
+.mm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; min-height: 24px; }  /* a line of text only (the translators) as high as one of dots */
 .mm-part { display: inline-flex; align-items: center; gap: 6px; }
 .mm-lbl { font-size: 11px; color: var(--hc-dim, #8E8E93); }
+.mm-lbl.mm-warn { color: #FFB340; }  /* a license to check (a translator installed by hand) */
 .mm-line .mc-sub { display: inline; margin: 0 0 0 4px; font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
 .mm-val { font-variant-numeric: tabular-nums; }
 /* A card that opens on a click says so under the cursor: a lighter edge and tint, the «i» lights up */

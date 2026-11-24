@@ -58,4 +58,5 @@ class FastModelTest(unittest.TestCase):
         with mock.patch.object(live_translate, "installed_models", return_value=["gemma4:e4b", "gemma4:e2b", "qwen2.5:1.5b"]), \
                 mock.patch("app.database.get_all_settings", return_value={"ollama_model": "gemma4:e4b"}):
             self.assertEqual(live_translate.model_choices(), {"quality": "gemma4:e4b", "fast": "gemma4:e2b",
+                                                              "auto": {"quality": "gemma4:e4b", "fast": "gemma4:e2b"},
                                                               "installed": ["gemma4:e4b", "gemma4:e2b", "qwen2.5:1.5b"]})

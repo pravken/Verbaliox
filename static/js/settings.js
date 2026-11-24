@@ -249,6 +249,12 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-translate-hotkey').value = s.dictation_translate_hotkey ?? 'Ctrl+Alt+T';
     document.getElementById('set-dictation-save').checked = s.dictation_save !== 'false';
     fillDictationTranslateLangs(s.dictation_translate_to || 'en');
+    // the translation models of the captions: read again from the settings
+    for (const kind of ['quality', 'fast']) {
+      const sel = document.getElementById(`set-live-tr-${kind}`);
+      if (sel) delete sel.dataset.ready;
+    }
+    if (state.lastOllama) renderTranslateChoices(state.lastOllama);
     document.getElementById('set-calendar-ics').value = s.calendar_ics || '';
     loadCalendarSource();
     document.getElementById('set-onnx-gpu').checked = s.onnx_gpu !== 'false';
@@ -1550,8 +1556,11 @@ function updateOllamaUI(ollama) {
             ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
         </div>
       `;
-    }).join('') + translateModelCards(ollama, ps);
+    }).join('');
   }
+  const trBox = document.getElementById('translate-catalog-list');
+  if (trBox && ollama.translate_catalog) trBox.innerHTML = translateModelCards(ollama, ps);
+  renderTranslateChoices(ollama);
 
   const dlPanel = document.getElementById('ollama-download-panel');
   if (dlPanel && ps && (ps.active || (ps.logs && ps.logs.length > 0))) {
@@ -2207,36 +2216,43 @@ function recommendedTranslateModel(ollama) {
   return ((ollama || state.lastOllama || (state.system || {}).ollama || {}).translate_catalog || []).find(m => m.id === id) || null;
 }
 
-// Under the analysis models: the translator offered for this computer, and any other one already downloaded.
-// The same card as the analysis models; it translates the captions only, so it has no «Выбрать»
+// «Модели перевода»: the card of its own under the analysis models, the same row as theirs (name, badge, video
+// memory, info; the action on the right). Every Hy-MT3 (the one for this computer marked, the other size can be
+// downloaded too), and any other translator installed by hand (TranslateGemma: never offered, its license to check)
 function translateModelCards(ollama, ps) {
   const rec = recommendedTranslateModel(ollama);
-  const items = (ollama.translate_catalog || []).filter(m => m === rec || m.installed);
-  return items.map(item => {
+  return (ollama.translate_catalog || []).filter(m => m.offered !== false || m.installed).map(item => {
     const desc = state.uiLang === 'en' ? item.desc_en : item.desc_ru;
     let action;
     if (ps && ps.active && ps.model === item.id) {
       action = `<span class="ui-btn bg-apple-blue/20 text-apple-blue font-mono animate-pulse">${ps.progress || 1}%</span>`;
     } else if (item.installed) {
-      // the trash at the place of the analysis models' one; there is nothing to select
+      // the trash at the place of the analysis models' one; the choice is the lists under the card
       action = `<div class="flex items-center gap-1.5">
         <button data-id="${escapeHtml(item.installed_as || item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
           class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button></div>`;
     } else {
       action = `<button data-id="${escapeHtml(item.id)}" data-click="pullTranslateModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipStTrOffer'))}"
-        class="ui-btn ui-btn-primary">${SVG_ICONS.download}<span>${t('uiDownload')} (${escapeHtml(item.size)})</span></button>`;
+        class="ui-btn ${item === rec ? 'ui-btn-primary' : 'ui-btn-subtle text-white'}">${SVG_ICONS.download}<span>${t('uiDownload')} (${escapeHtml(item.size)})</span></button>`;
     }
+    // a model installed by hand: «Локальная» and its license in orange (to check before commercial use)
+    const badge = item.offered === false
+      ? `<span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-apple-amber/15 text-apple-amber" title="${escapeHtml(t('trLicenseCheck'))}">${escapeHtml(t('trLocal'))}${item.license ? ` · ${escapeHtml(item.license)}` : ''} ⚠</span>`
+      : `<span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(item.badge)}</span>`;
+    const recChip = item === rec
+      ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-blue/15 text-apple-blue" title="${escapeHtml(t('tipTrRecommended'))}">${escapeHtml(t('trRecommended'))}</span>` : '';
     return `
-      <div class="mc-card p-3 rounded-xl border transition bg-apple-sidebar border-white/10">
+      <div class="mc-card p-3 rounded-xl border transition bg-apple-sidebar border-white/10" data-tr-model="${escapeHtml(item.id)}">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <div class="flex items-center flex-wrap gap-2">
               <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(item.badge)}</span>
+              ${badge}
               <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
-              <span class="text-[11px] text-apple-tertiary" title="${escapeHtml(t('tipMcCaptionTranslation'))}">${escapeHtml(t('mcCaptionTranslation'))}</span>
               ${modelInfoButton(item.id)}
+              ${recChip}
             </div>
+            ${translateMetersLine(item)}
           </div>
           <div class="shrink-0">${action}</div>
         </div>
@@ -2245,6 +2261,50 @@ function translateModelCards(ollama, ps) {
       </div>`;
   }).join('');
 }
+
+// The line under the name, at the place of the analysis models' measures: the measured time of a phrase and the
+// video memory beside speech recognition; a model installed by hand has its license to check there instead
+function translateMetersLine(item) {
+  const part = (label, value) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${meterVal(value)}</span>`;
+  if (item.offered === false) {
+    return `<div class="mm-line"><span class="mm-part"><span class="mm-lbl mm-warn">${escapeHtml(t('trLicenseCheck'))}</span></span></div>`;
+  }
+  const sec = item.phrase_sec || [];
+  const parts = [];
+  if (sec.length === 2) parts.push(part(t('trMmPhrase'), `${meterNum(sec[0])}–${meterNum(sec[1])} ${t('unitSec')}`));
+  if (item.card_gb) parts.push(part(t('trMmCard'), `${meterNum(item.card_gb)} ${t('unitGB')}`));
+  return `<div class="mm-line">${parts.join('')}</div>`;
+}
+
+// The lists «Качество» and «Скорость» of the captions: «Авто · <the model it takes now>», the installed
+// translators, the installed analysis models. A chosen model that is not installed (deleted) stays in its list
+// marked so; the server takes «Авто» for it (app/live_translate.choose_models)
+function renderTranslateChoices(ollama) {
+  const s = (state.system && state.system.settings) || {};
+  const trs = (ollama.translate_catalog || []).filter(m => m.installed).map(m => m.installed_as || m.id);
+  const general = ollama.chat_models || [];
+  const auto = (ollama.live_translate || {}).auto || {};
+  for (const [kind, key] of [['quality', 'live_translate_model_quality'], ['fast', 'live_translate_model_fast']]) {
+    const sel = document.getElementById(`set-live-tr-${kind}`);
+    if (!sel) continue;
+    const value = sel.dataset.ready ? sel.value : (s[key] || '');
+    const opt = (v, label) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`;
+    const group = (label, list) => list.length ? `<optgroup label="${escapeHtml(label)}">${list.map(m => opt(m, formatModelName(m))).join('')}</optgroup>` : '';
+    const known = [...trs, ...general];
+    const html = opt('', auto[kind] ? `${t('liveAutoShort')} · ${formatModelName(auto[kind])}` : t('liveAutoShort'))
+      + group(t('trGroupTranslators'), trs) + group(t('trGroupGeneral'), general)
+      + (value && !known.includes(value) ? opt(value, t('trNotInstalled').replace('{name}', () => formatModelName(value))) : '');
+    if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
+    sel.value = value;
+    sel.dataset.ready = '1';
+  }
+}
+
+// A choice of «Качество» / «Скорость» saved: the studio asks for its models again («Авто · …» follows it)
+document.addEventListener('change', (e) => {
+  if (!/^set-live-tr-(quality|fast)$/.test(e.target?.id || '')) return;
+  if (typeof studioTranslateModelsChanged === 'function') setTimeout(studioTranslateModelsChanged, 600);
+});
 
 // A translator is downloaded without becoming the analysis model (the server does not select it either)
 function pullTranslateModel(id) {
@@ -2410,6 +2470,8 @@ function settingsFormValues() {
     dictation_language: document.getElementById('set-dictation-language')?.value || 'auto',
     dictation_translate_hotkey: document.getElementById('set-translate-hotkey')?.value.trim() || '',
     dictation_translate_to: document.getElementById('set-dictation-translate-to')?.value || 'en',
+    live_translate_model_quality: document.getElementById('set-live-tr-quality')?.value ?? '',
+    live_translate_model_fast: document.getElementById('set-live-tr-fast')?.value ?? '',
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
     onnx_gpu: document.getElementById('set-onnx-gpu')?.checked ? 'true' : 'false',
@@ -2847,7 +2909,8 @@ const SETTINGS_RESET = {
     ['set-onnx-parakeet-device', 'onnx_parakeet_device', 'value'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
   analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-analysis-after-meetings', 'analysis_after_meetings', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
-    ['set-semantic', 'semantic_search', 'check']],
+    ['set-semantic', 'semantic_search', 'check'], ['set-live-tr-quality', 'live_translate_model_quality', 'value'],
+    ['set-live-tr-fast', 'live_translate_model_fast', 'value']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
     ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check'],
     ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
@@ -2864,6 +2927,7 @@ const SETTINGS_DEFAULTS = {
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
+  live_translate_model_quality: '', live_translate_model_fast: '',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   holiday_country: '', holiday_subdiv: '', meet_notify: 'true', meet_notify_before: '300', worktime_track: 'true', apps_track: 'false', work_remind_hours: '8',
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',

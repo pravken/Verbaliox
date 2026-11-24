@@ -185,24 +185,41 @@ def installed_models() -> List[str]:
     return translate_models(names)
 
 
-def model_choices() -> Dict[str, Any]:
-    """{"quality", "fast", "installed"}. «Качество»: Hy-MT3-7B, else Hy-MT3-1.8B, else the analysis model;
-    «Скорость»: Hy-MT3-1.8B, else gemma4:e2b, else the same as «Качество». A model chosen in the studio
-    (LiveTranslator.model_override) comes before both."""
-    from app.database import get_all_settings
-    from app.ollama_client import HYMT_1_8B, HYMT_7B, chat_models, translate_model_installed_as
+# The models chosen in Settings → ИИ-анализ → «Модели перевода» for «Качество» and «Скорость»; empty: «Авто»
+CHOICE_KEYS = {"quality": "live_translate_model_quality", "fast": "live_translate_model_fast"}
 
-    models = installed_models()
+
+def choose_models(models: List[str], settings: Dict[str, Any]) -> Dict[str, Any]:
+    """{"quality", "fast", "auto": {"quality", "fast"}, "installed"} for the installed `models`. «Авто»:
+    «Качество» takes Hy-MT3-7B, else Hy-MT3-1.8B, else the analysis model; «Скорость» takes Hy-MT3-1.8B, else
+    gemma4:e2b, else the same as «Качество». A model chosen in the settings comes first while it is installed
+    (one that is not, or not listed yet, gives its place to «Авто»)."""
+    from app.ollama_client import (HYMT_1_8B, HYMT_7B, _listed, chat_models, translate_model_installed_as,
+                                   translate_models)
+
+    models = translate_models(models)
     general = chat_models(models)
-    analysis = get_all_settings().get("ollama_model") or (general[0] if general else None)
+    analysis = settings.get("ollama_model") or (general[0] if general else None)
     if analysis and general and analysis not in general:
         same = [m for m in general if m.startswith(analysis.split(":")[0])]
         analysis = same[0] if same else general[0]
     large = translate_model_installed_as(HYMT_7B, models)
     small = translate_model_installed_as(HYMT_1_8B, models)
-    quality = large or small or analysis
-    fast = small or next((m for m in FAST_MODEL_HINTS if m in models), None) or quality
-    return {"quality": quality, "fast": fast, "installed": models}
+    auto_quality = large or small or analysis
+    auto_fast = small or next((m for m in FAST_MODEL_HINTS if m in models), None) or auto_quality
+    out: Dict[str, Any] = {"auto": {"quality": auto_quality, "fast": auto_fast}, "installed": models}
+    for kind, key in CHOICE_KEYS.items():
+        chosen = str(settings.get(key) or "").strip()
+        out[kind] = (_listed(chosen, models) if chosen else None) or out["auto"][kind]
+    return out
+
+
+def model_choices() -> Dict[str, Any]:
+    """choose_models for the models Ollama has now. A model chosen in the studio
+    (LiveTranslator.model_override) comes before both."""
+    from app.database import get_all_settings
+
+    return choose_models(installed_models(), get_all_settings())
 
 
 def small_chat_model() -> Optional[str]:
@@ -330,10 +347,11 @@ class LiveTranslator:
         # Ollama may have just been started: wait for it instead of failing the first lines
         if self.model_override:
             return self.model_override
-        for _ in range(60):
+        for i in range(60):
             choices = model_choices()
             model = choices["fast"] if self.speed == "fast" and choices["fast"] else choices["quality"]
-            if model:
+            # a list not read yet (Ollama starting) would give the analysis model instead of the chosen one
+            if model and (choices["installed"] or i >= 10):
                 return model
             time.sleep(0.5)
         raise RuntimeError("Ollama не отвечает или в ней нет моделей")
