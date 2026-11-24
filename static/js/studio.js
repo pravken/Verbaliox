@@ -3005,8 +3005,11 @@ async function studioMicTest() {
 // The popovers of the captions' chips close on a click elsewhere, as a menu does
 document.addEventListener('click', (e) => {
   const inside = e.target instanceof Element && e.target.closest('.st-pop-wrap');
-  if (!inside || !inside.querySelector('#st-models-pop')) closeStudioModelsPop();
-  if (!inside || !inside.querySelector('#st-cap-more')) closeStudioCapMore();
+  // a click on something drawn again under it (no longer in the page: the model lists are refilled every second
+  // while the popover is open) is not a click elsewhere
+  const gone = e.target instanceof Element && !e.target.isConnected;
+  if (!gone && (!inside || !inside.querySelector('#st-models-pop'))) closeStudioModelsPop();
+  if (!gone && (!inside || !inside.querySelector('#st-cap-more'))) closeStudioCapMore();
   // the rail's panels: not by a click in a panel, on a rail button (its own toggle), in a window opened from a panel,
   // or on a chip drawn again under the click (it is no longer in the page)
   const el = e.target instanceof Element ? e.target : null;
