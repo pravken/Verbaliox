@@ -1320,6 +1320,8 @@ function renderStudioCapBar() {
   const capPill = document.getElementById('st-cap-pill');
   capPill.setAttribute('aria-checked', String(on));
   capPill.classList.toggle('is-on', on);
+  // off: the chip is outlined and glows softly, so the captions are easy to find and turn on
+  capPill.classList.toggle('is-call', !on);
   const opt = sel.selectedOptions[0];
   const label = opt ? opt.textContent : t('liveNoTranslation');
   const lab = document.getElementById('st-tr-pill-label');
