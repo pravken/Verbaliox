@@ -211,6 +211,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Hugging Face Transformers (runs Nemotron) | Apache 2.0 |
 | safetensors / regex / typer, rich, markdown-it-py, mdurl / shellingham / Pygments (Transformers dependencies) | Apache 2.0 / Apache 2.0 AND CNRI-Python / MIT / ISC / BSD-2-Clause |
 | Gemma 4 E4B / E2B ([google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) rev. 4ecc2ba6, [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) rev. 4adf1574; Ollama `gemma4:e4b` dc35e8d9c606, `gemma4:e2b` b37049369adf) | Apache 2.0 |
+| Tencent Hy-MT3 7B / 1.8B ([tencent/Hy-MT3-7B-GGUF](https://huggingface.co/tencent/Hy-MT3-7B-GGUF), [tencent/Hy-MT3-1.8B-GGUF](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF) Q4_K_M; optional download, live caption translation only; the program re-creates the 1.8B in Ollama as `hy-mt3-1.8b` with the chat template of `tencent/Hy-MT3-1.8B`, since the one in its GGUF does not pass the text) | Apache 2.0 |
 | Ollama, FastAPI, pywebview | MIT / BSD-3 |
 | ONNX Runtime, CTranslate2, pythonnet | MIT |
 | scikit-learn, httpx, uvicorn | BSD-3 |

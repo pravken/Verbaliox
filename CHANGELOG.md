@@ -28,6 +28,13 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   minutes before each reminder and each meeting's start, and the reminder follows that read (a moved meeting gets its
   reminder at its new time). If the read fails, the reminder comes as before. While a meeting starts within the hour,
   the calendar is read every 5 minutes instead of 15.
+- **A translation model for live captions**: the captions' models offer one model of Tencent Hy-MT3 (Apache 2.0) by the
+  video card, Hy-MT3 7B (4.9 GB) on a card of 10 GB and more, else Hy-MT3 1.8B (1.3 GB); in the app's measurements
+  both translate English to Russian and back more accurately than the Gemma models used so far. It is downloaded
+  only on «Download» (in the popover of the caption models or in Settings → AI analysis); «Quality» then translates
+  with Hy-MT3 7B (else 1.8B) and «Speed» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
+  Hy-MT3 only translates: it is not offered as the analysis model. The 1.8B is set up in Ollama with a working chat
+  template (the one in its file does not pass the text to the model).
 
 ## 0.9.3 — English
 
@@ -1188,6 +1195,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   за две минуты до каждого напоминания и начала каждой встречи, и напоминание следует этому чтению (о перенесённой
   встрече напомнит её новое время). Если чтение не удалось, напоминание приходит как раньше. Пока до встречи меньше
   часа, календарь читается каждые 5 минут вместо 15.
+- **Модель перевода для живых субтитров**: модели субтитров предлагают одну модель Tencent Hy-MT3 (Apache 2.0) по
+  видеокарте — Hy-MT3 7B (4,9 ГБ) на картах от 10 ГБ, иначе Hy-MT3 1.8B (1,3 ГБ); в замерах программы обе переводят
+  с английского на русский и обратно точнее прежних моделей Gemma. Скачивается только по «Скачать» (в окне моделей
+  субтитров или в «Настройки → ИИ-анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Скорость» —
+  Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Hy-MT3 только переводит: моделью анализа она
+  не предлагается. Модель 1.8B настраивается в Ollama с рабочим шаблоном чата (шаблон из её файла не передаёт
+  модели текст).
 
 ## 0.9.3
 
