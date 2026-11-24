@@ -73,7 +73,7 @@
 
     <!-- =====================================================================
          STUDIO: recording, its sources, the text while recording, the user's notes and marks
-         (studio* in static/js/studio.js). Ready-made settings on top, the sources and the meeting on
+         (studio* in static/js/studio.js). Ready-made settings on top, the rail of the recording's options on
          the left, the recording and what goes on in it on the right
          ===================================================================== -->
     <div id="studio-view" class="hidden flex-1 min-h-0 flex flex-col bg-apple-bg">
@@ -98,9 +98,37 @@
       <span class="st-hk"><kbd id="st-hotkey" class="st-kbd">Ctrl+Alt+R</kbd><span data-i18n="rdSasHotkeyAnywhere">запись из любого окна</span></span>
     </div>
     <div class="flex-1 min-h-0 flex">
+    <!-- The options of the recording as a rail of four buttons (asked by the user: the column of cards was hardly used and
+         scrolled): each button shows its state, a click opens its panel beside the rail (studioRail* in static/js/studio.js;
+         Esc, a click elsewhere or a second click closes it). The controls live in the panels, so the recording reads them
+         with the panels closed -->
     <div id="side-studio" class="studio-settings st-side">
-      <section class="st-card">
-        <h3 class="pcd-h st-card-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v2.5"/></svg></span><span class="pcd-t" data-i18n="rdSasSources">Источники</span></h3>
+      <nav class="st-rail" data-i18n-aria="stRailAria" aria-label="Параметры записи">
+        <button id="st-rail-source" type="button" class="st-rail-btn" data-click="studioRailToggle" data-click-args='["source"]' aria-haspopup="dialog" aria-expanded="false" aria-controls="st-fly-source">
+          <span class="st-rail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v2.5"/></svg><i class="st-rail-dot" aria-hidden="true"></i></span>
+          <span class="st-rail-name" data-i18n="stRailSource">Источник</span>
+          <span id="st-rail-source-state" class="st-rail-state"></span>
+        </button>
+        <button id="st-rail-video" type="button" class="st-rail-btn" data-click="studioRailToggle" data-click-args='["video"]' aria-haspopup="dialog" aria-expanded="false" aria-controls="st-fly-video">
+          <span class="st-rail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></svg><i class="st-rail-dot" aria-hidden="true"></i></span>
+          <span class="st-rail-name" data-i18n="stRailVideo">Видео</span>
+          <span id="st-rail-video-state" class="st-rail-state"></span>
+        </button>
+        <button id="st-rail-meet" type="button" class="st-rail-btn" data-click="studioRailToggle" data-click-args='["meet"]' aria-haspopup="dialog" aria-expanded="false" aria-controls="st-fly-meet">
+          <span class="st-rail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0111 0M15.5 5.6a3 3 0 010 5.8M17.5 19.5a5.5 5.5 0 00-2.2-4.4"/></svg><i class="st-rail-dot" aria-hidden="true"></i></span>
+          <span class="st-rail-name" data-i18n="stRailMeet">Встреча</span>
+          <span id="st-rail-meet-state" class="st-rail-state"></span>
+        </button>
+        <button id="st-rail-after" type="button" class="st-rail-btn" data-click="studioRailToggle" data-click-args='["after"]' aria-haspopup="dialog" aria-expanded="false" aria-controls="st-fly-after">
+          <span class="st-rail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6L13 3z"/></svg><i class="st-rail-dot" aria-hidden="true"></i></span>
+          <span class="st-rail-name" data-i18n="stRailAfter">После записи</span>
+          <span id="st-rail-after-state" class="st-rail-state"></span>
+        </button>
+      </nav>
+
+      <!-- Источник: what is recorded, the microphone, its level and a test -->
+      <div id="st-fly-source" class="hidden st-cap-pop st-fly" role="dialog" data-i18n-aria="stRailSource" aria-label="Источник">
+        <div class="st-pop-h" data-i18n="stRailSource">Источник</div>
         <div id="st-source-seg" class="tk-seg st-seg" role="radiogroup" data-i18n-title="tipRecordSourceSelect" title="Источник записи">
           <button data-click="studioSetSource" data-click-args='["both"]' id="st-src-both" class="tk-seg-btn" role="radio" data-i18n="rdSasSrcBoth">Микрофон и ПК</button>
           <button data-click="studioSetSource" data-click-args='["mic"]' id="st-src-mic" class="tk-seg-btn" role="radio" data-i18n="rdSasSrcMic">Микрофон</button>
@@ -114,34 +142,34 @@
           <option value="both" data-i18n="sourceBoth">Микрофон и системный звук</option>
         </select>
         <div class="st-sub">
-          <div class="flex items-center gap-2">
-            <span class="st-sub-title flex-1" data-i18n="recMicDeviceLabel">Микрофон</span>
-            <button id="st-mic-test" data-click="studioMicTest" class="st-btn" data-i18n-title="rdSasMicTestTip"
+          <label for="record-mic-select" class="st-sub-title" data-i18n="recMicDeviceLabel">Микрофон</label>
+          <select id="record-mic-select" data-change="syncRecordModalToSettings"
+            data-i18n-title="tipRecordMicSelect" title="Устройство микрофона"
+            class="st-field w-full"></select>
+          <div class="st-lvl">
+            <span id="record-signal-dot" class="signal-dot" data-i18n-title="tipSignalDot" title="Горит зелёным, когда на входе есть звук"></span>
+            <div class="st-meter-track flex-1">
+              <div id="record-level-bar" data-vx-live class="h-full bg-apple-green transition-all duration-75" style="width: 2%"></div>
+            </div>
+            <span id="record-db-display" class="st-lvl-db">-60 dB</span>
+            <button id="st-mic-test" type="button" data-click="studioMicTest" class="st-btn" data-i18n-title="rdSasMicTestTip"
               title="Запишет три секунды с микрофона и сразу проиграет их">
               <span id="st-mic-test-label" data-i18n="rdSasMicTest">Проверить</span></button>
           </div>
-        <select id="record-mic-select" data-change="syncRecordModalToSettings"
-          data-i18n-title="tipRecordMicSelect" title="Устройство микрофона"
-          class="st-field w-full"></select>
-      <div class="st-meter">
-        <div class="flex items-center justify-between">
-          <div id="record-timer-display" class="text-xl font-mono font-semibold text-white tracking-wider">00:00</div>
-          <div class="flex items-center gap-2">
-            <span class="rec-src rec-src-studio hidden" data-rec-src></span>
-            <span id="record-signal-dot" class="signal-dot" data-i18n-title="tipSignalDot" title="Горит зелёным, когда на входе есть звук"></span>
-            <span id="record-db-display" class="text-[11.5px] font-mono text-apple-secondary w-12 text-right">-60 dB</span>
-          </div>
         </div>
-        <canvas id="record-waveform-canvas" class="w-full h-12 block"></canvas>
-        <div class="st-meter-track">
-          <div id="record-level-bar" data-vx-live class="h-full bg-apple-green transition-all duration-75" style="width: 2%"></div>
+        <!-- Kept for the scripts of the recording; the studio's bar shows the time and the level -->
+        <div class="hidden" aria-hidden="true">
+          <div id="record-timer-display">00:00</div>
+          <span class="rec-src rec-src-studio hidden" data-rec-src></span>
+          <canvas id="record-waveform-canvas"></canvas>
+          <p id="record-status-hint"></p>
         </div>
-        <p id="record-status-hint" class="st-hint" data-i18n="recordWaveHint">Индикатор показывает уровень сигнала выбранного источника в реальном времени</p>
       </div>
-        </div>
-        <div class="st-group">
-          <span class="st-sub-title" data-i18n="recVideoLabel">Видео</span>
-          <div id="st-video-chips" class="st-chips mt-2"></div>
+
+      <!-- Видео: none, the screen or a window -->
+      <div id="st-fly-video" class="hidden st-cap-pop st-fly" role="dialog" data-i18n-aria="stRailVideo" aria-label="Видео">
+        <div class="st-pop-h" data-i18n="stRailVideo">Видео</div>
+        <div id="st-video-chips" class="st-chips"></div>
         <select id="record-video-select" data-change="saveRecordVideoPref" data-i18n-title="tipRecordVideo"
           title="Записывать вместе со звуком экран, окно программы или вкладку браузера"
           class="hidden w-full h-8 bg-apple-card border apple-border rounded-lg px-2.5 text-xs text-white focus:outline-none">
@@ -151,71 +179,45 @@
           <option value="app_window" class="rec-app-video hidden" data-i18n="recVideoAppWindow">Окно программы (запись приложением)</option>
         </select>
         <select id="record-window-select" data-i18n-title="tipRecordWindow" title="Окно, которое записывается"
-          class="hidden st-field mt-2 w-full"></select>
-        <video id="record-video-preview" muted autoplay playsinline class="hidden mt-2 w-full rounded-lg bg-black border apple-border max-h-40 object-contain"></video>
-        </div>
-      </section>
+          class="hidden st-field w-full"></select>
+        <video id="record-video-preview" muted autoplay playsinline class="hidden w-full rounded-lg bg-black border apple-border max-h-40 object-contain"></video>
+      </div>
 
-      <section class="st-card st-card-meet">
-        <h3 class="pcd-h st-card-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg></span><span class="pcd-t" data-i18n="rdSasMeeting">Встреча</span></h3>
+      <!-- Встреча: the title, the meetings of the calendar, the participants -->
+      <div id="st-fly-meet" class="hidden st-cap-pop st-fly" role="dialog" data-i18n-aria="stRailMeet" aria-label="Встреча">
+        <div class="st-pop-h" data-i18n="stRailMeet">Встреча</div>
         <label for="record-title-input" class="st-sub-title" data-i18n="recTitleLabel">Название записи</label>
         <input id="record-title-input" type="text"
           data-i18n-title="tipRecordTitleInput" title="Название новой записи"
           placeholder="Встреча / Голосовая заметка" data-i18n-placeholder="phRecordTitle"
           class="st-field w-full" />
-        <div id="studio-upcoming" class="hidden"></div>
+        <div id="studio-upcoming" class="hidden st-fly-upcoming"></div>
         <!-- Who is at the meeting: how many (for splitting by voices) and «Сейчас говорит» while recording -->
-        <div id="studio-people" class="st-people"></div>
-      <div class="st-save">
-        <p id="record-save-hint" class="st-hint break-words"></p>
-        <button data-click="openModal" data-click-args='["settings", "record"]' class="st-btn self-start" data-i18n="recordChangeFolder">Изменить папку для записей…</button>
+        <div id="studio-people" class="st-people st-sub"></div>
+        <button id="st-folder-link" type="button" data-click="openModal" data-click-args='["settings", "record"]' class="st-link st-fly-link" data-i18n="stFolderLink">Папка записей…</button>
       </div>
-      </section>
 
-      <section class="st-card">
-        <h3 class="pcd-h st-card-h"><span class="pcd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12a7 7 0 11-2.05-4.95M19 4.5V8h-3.5"/></svg></span><span class="pcd-t" data-i18n="rdSasAuto">Автоматически</span></h3>
-        <p class="st-hint" data-i18n="rdSasAfterStop">После остановки запись сразу ставится на распознавание.</p>
-        <label class="st-toggle">
-          <span class="min-w-0 flex-1"><span class="block text-[13px] text-white" data-i18n="rdSasAutoAnalysis">✦ Анализ после распознавания</span>
-            <span class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="rdSasAutoAnalysisHint">Итоги, решения и задачи появятся автоматически</span></span>
+      <!-- После записи: the switches, which are settings of the whole program -->
+      <div id="st-fly-after" class="hidden st-cap-pop st-fly" role="dialog" data-i18n-aria="stRailAfter" aria-label="После записи">
+        <div class="st-pop-h" data-i18n="stRailAfter">После записи</div>
+        <label class="st-toggle" data-i18n-title="rdSasAutoAnalysisHint" title="Итоги, решения и задачи появятся автоматически">
+          <span class="st-toggle-t" data-i18n="rdSasAutoAnalysis">✦ Анализ после распознавания</span>
           <input type="checkbox" id="st-auto-summary" data-change="studioSetAuto" data-change-args='["auto_summary", {"$": "checked"}]' role="switch" class="vs-switch" />
         </label>
-        <label class="st-toggle">
-          <span class="min-w-0 flex-1"><span class="block text-[13px] text-white" data-i18n="rdSasAutoCall">Начинать, когда начинается звонок</span>
-            <span class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="rdSasAutoCallHint">Запись начнётся автоматически и остановится в конце звонка</span></span>
+        <label class="st-toggle" data-i18n-title="rdSasAutoCallHint" title="Запись начнётся автоматически и остановится в конце звонка">
+          <span class="st-toggle-t" data-i18n="rdSasAutoCall">Начинать, когда начинается звонок</span>
           <input type="checkbox" id="st-call-record" data-change="studioSetAuto" data-change-args='["call_auto_record", {"$": "checked"}]' role="switch" class="vs-switch" />
         </label>
-        <label class="st-toggle">
-          <span class="min-w-0 flex-1"><span class="block text-[13px] text-white" data-i18n="rdSasMeetingFollow">Новая встреча Teams — новая запись</span>
-            <span class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="rdSasMeetingFollowHint">При переходе в другую встречу запись сохраняется и начинается новая; когда встреча заканчивается, запись останавливается</span></span>
+        <label class="st-toggle" data-i18n-title="rdSasMeetingFollowHint" title="При переходе в другую встречу запись сохраняется и начинается новая; когда встреча заканчивается, запись останавливается">
+          <span class="st-toggle-t" data-i18n="rdSasMeetingFollow">Новая встреча Teams — новая запись</span>
           <input type="checkbox" id="st-meeting-follow" data-change="studioSetAuto" data-change-args='["meeting_follow", {"$": "checked"}]' role="switch" class="vs-switch" />
         </label>
         <!-- Decided by itself (on once the filter is downloaded); the switch is in Settings → Record -->
-        <div class="st-toggle">
-          <span class="min-w-0 flex-1"><span class="block text-[13px] text-white" data-i18n="voiceFilterToggle">✦ ИИ-очистка голоса в микрофоне</span>
-            <span id="st-voice-filter-note" class="block text-[11.5px] text-apple-tertiary leading-snug" data-i18n="stVoiceFilterHint">Шум убирается из микрофона при сохранении записи</span></span>
+        <div class="st-toggle st-toggle-col">
+          <span class="st-toggle-t" data-i18n="voiceFilterToggle">✦ ИИ-очистка голоса в микрофоне</span>
+          <span id="st-voice-filter-note" class="st-hint" data-i18n="stVoiceFilterHint">Шум убирается из микрофона при сохранении записи</span>
+          <button type="button" id="st-voice-filter-download" class="hidden st-btn self-start" data-click="studioInstallVoiceFilter" data-i18n="voiceFilterDownload">Скачать фильтр</button>
         </div>
-        <button type="button" id="st-voice-filter-download" class="hidden st-btn self-start" data-click="studioInstallVoiceFilter" data-i18n="voiceFilterDownload">Скачать фильтр</button>
-      </section>
-
-      <!-- The old buttons of this column: the scripts still keep them in step, the record card has them now -->
-      <div class="hidden">
-      <div class="space-y-2">
-        <button id="btn-start-rec" data-click="startLiveRecording"
-          data-i18n-title="tipStartRecBtn" title="Начать запись звука с выбранного источника"
-          class="ui-btn h-9 w-full rounded-lg bg-apple-red hover:bg-apple-red/90 text-white font-semibold shadow-lg">
-          <span id="rec-dot-indicator" class="w-2.5 h-2.5 rounded-full bg-white shrink-0"></span>
-          <span data-i18n="startRecBtn">Начать запись</span>
-        </button>
-        <button id="btn-stop-rec" data-click="stopAndTranscribeRecording"
-          data-i18n-title="tipStopRecBtn" title="Остановить запись и сразу отправить аудио на распознавание речи"
-          class="hidden ui-btn h-9 w-full rounded-lg bg-apple-blue hover:bg-apple-blueHover text-white font-semibold shadow-lg">
-          <svg class="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
-          <span data-i18n="stopRecBtn">Остановить и расшифровать</span>
-        </button>
-        <button id="btn-cancel-rec" data-click="cancelLiveRecording" data-i18n-title="tipStudioCancel" title="Остановить запись без сохранения"
-          class="hidden ui-btn ui-btn-subtle h-8 w-full" data-i18n="studioCancel">Отменить</button>
-      </div>
       </div>
     </div>
 

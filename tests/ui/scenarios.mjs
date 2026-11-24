@@ -513,6 +513,67 @@ await step('studio source', async () => {
   expect(await page.evaluate(() => document.getElementById('record-source-select').value) === 'mic', 'the Studio source was reset');
 });
 
+// The studio's options as a rail of four buttons (asked by the user: the column of cards was hardly used and scrolled):
+// the buttons of one size in one column, each opens its panel beside it with the focus inside, Esc closes it and gives
+// the focus back, a second click closes it, the choice of the source shows under its button; nothing scrolls at 1280×800
+await step('studio options rail', async () => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); switchAppView('studio'); });
+  await sleep(600);
+  const keys = ['source', 'video', 'meet', 'after'];
+  const boxes = await page.evaluate(ks => ks.map(k => { const r = document.getElementById(`st-rail-${k}`).getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }), keys);
+  expect(boxes.every(b => Math.abs(b[0] - boxes[0][0]) < 0.5 && Math.abs(b[2] - boxes[0][2]) < 0.5 && Math.abs(b[3] - boxes[0][3]) < 0.5 && b[2] > 0),
+    `the rail's buttons are not of one size in one column: ${JSON.stringify(boxes)}`);
+  expect(boxes.every((b, i) => !i || Math.abs((b[1] - boxes[i - 1][1]) - (boxes[1][1] - boxes[0][1])) < 0.5), `the rail's buttons are not evenly spaced: ${JSON.stringify(boxes)}`);
+  const noScroll = (id) => page.evaluate(i => { const e = document.getElementById(i); return e.scrollHeight <= e.clientHeight + 1; }, id);
+  expect(await noScroll('side-studio'), 'the rail scrolls');
+  for (const k of keys) {
+    await page.click(`#st-rail-${k}`);
+    await sleep(150);
+    const s = await page.evaluate(key => {
+      const fly = document.getElementById(`st-fly-${key}`), btn = document.getElementById(`st-rail-${key}`);
+      const f = fly.getBoundingClientRect(), b = btn.getBoundingClientRect();
+      return { shown: !fly.classList.contains('hidden'), exp: btn.getAttribute('aria-expanded'), focus: fly.contains(document.activeElement),
+        beside: f.left >= b.right, inView: f.bottom <= innerHeight, others: document.querySelectorAll('.st-fly:not(.hidden)').length };
+    }, k);
+    expect(s.shown && s.exp === 'true' && s.focus && s.beside && s.inView && s.others === 1, `the panel «${k}» did not open beside its button: ${JSON.stringify(s)}`);
+    expect(await noScroll(`st-fly-${k}`), `the panel «${k}» scrolls`);
+    await page.keyboard.press('Escape');
+    await sleep(150);
+    const c = await page.evaluate(key => [document.getElementById(`st-fly-${key}`).classList.contains('hidden'),
+      document.getElementById(`st-rail-${key}`).getAttribute('aria-expanded'), document.activeElement?.id], k);
+    expect(c[0] && c[1] === 'false' && c[2] === `st-rail-${k}`, `Esc did not close the panel «${k}» or the focus did not come back: ${c}`);
+  }
+  // a second click closes; a click elsewhere closes
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.click('#st-rail-source');
+  await sleep(150);
+  expect(await page.evaluate(() => document.getElementById('st-fly-source').classList.contains('hidden')), 'a second click did not close the panel');
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.mouse.click(1200, 700);  // the empty captions' pane, away from the panel
+  await sleep(150);
+  expect(await page.evaluate(() => document.getElementById('st-fly-source').classList.contains('hidden')), 'a click elsewhere did not close the panel');
+  // the source chosen in the panel: under the rail's button, and the recording reads it with the panel closed
+  const before = await page.evaluate(() => document.getElementById('record-source-select').value);
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.click('#st-src-system');
+  await sleep(150);
+  const label = await page.evaluate(() => [document.getElementById('st-rail-source-state').textContent, t('rdSasSrcSystem')]);
+  expect(label[0] === label[1], `the rail did not show the source: ${label}`);
+  await page.keyboard.press('Escape');
+  await sleep(150);
+  expect(await page.evaluate(() => document.getElementById('record-source-select').value) === 'system', 'the source was lost as the panel closed');
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.click(`#st-src-${before}`);
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1300, height: 860 });
+  await sleep(150);
+});
+
 // First-run wizard: a set is chosen and its settings are written; nothing is really downloaded here
 await step('first run wizard', async () => {
   const sent = [];

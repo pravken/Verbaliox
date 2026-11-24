@@ -730,8 +730,8 @@ label.settings-toggle { display: flex; }
 
 /* Parts of the app: tabs along the top of the main area */
 #studio-view.studio-focus .studio-settings { display: none; }
-/* recording: the presets and the sources fold away; the meeting card stays (its people are clicked while they speak) */
-#studio-view.st-live .st-presets, #studio-view.st-live #side-studio .st-card:not(.st-card-meet) { display: none; }
+/* recording: the presets fold away; the rail stays (its «Встреча» holds the people clicked while they speak) */
+#studio-view.st-live .st-presets { display: none; }
 
 /* Signal on the input: one dot of a fixed size, so nothing jumps when it changes */
 .signal-dot {
@@ -2275,19 +2275,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   padding: 1px 6px; border-radius: 5px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.16)); background: rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; color: #C7C7CC;
 }
-.st-side {
-  width: 340px; flex-shrink: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
-  border-right: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); background: rgba(255, 255, 255, 0.015);
-}
-.st-card {
-  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px;
-  border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); background: rgba(255, 255, 255, 0.03);
-}
 .st-sub { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.18); }
 .st-sub.st-dim { opacity: 0.45; }
 .st-sub-title { font-size: var(--fs-caption); line-height: 1.35; font-weight: 600; color: #E5E5EA; }
-.st-meter { display: flex; flex-direction: column; gap: 6px; }
-.st-meter #record-timer-display { display: none; }
 .st-toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 2px 0; }
 .st-meet { display: flex; align-items: flex-start; gap: 6px; border-radius: 10px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); padding: 2px 8px 2px 2px; }
 .st-meet.is-on { border-color: rgb(var(--accent-rgb) / 0.6); background: rgb(var(--accent-rgb) / 0.08); }
@@ -2325,7 +2315,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .st-pane-idle.hidden { display: none; }
 /* on the whole window the row keeps the captions' chips; the tabs go (only the text is shown there) */
 #studio-view.studio-focus .st-rec, #studio-view.studio-focus .st-rec-info, #studio-view.studio-focus .st-utabs, #studio-view.studio-focus .st-keys { display: none; }
-@media (max-width: 1250px) { .st-side { width: 320px; } .st-keys { display: none; } }
+@media (max-width: 1250px) { .st-keys { display: none; } }
 
 /* The first-run banner: its one action, under the text */
 .first-run-btn { margin-top: 6px; }
@@ -5255,23 +5245,49 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-btn-rec:hover:not(:disabled) { background: rgba(255, 69, 58, 0.26); }
 .st-btn-rec svg { width: 12px; height: 12px; flex: none; color: #FF453A; }
 :is(.st-btn, .lt-chip, .tk-seg-btn).hidden { display: none; }
-/* the column of the cards: 24px from the edge as the heads of the sections, 16px to the recording */
-.st-side { width: 340px; padding: 16px 0 16px 24px; gap: 12px; border-right: 0; background: none; box-sizing: border-box; }
-.st-card { gap: 12px; padding: 12px 16px 16px; background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
-.st-card > .st-card-h { margin: 0; }
+/* The rail of the recording's options (asked by the user: the column of cards was hardly used and scrolled): a card of
+   four buttons of one size, 24px from the edge as the heads of the sections, level with the recording's card; under
+   each icon its name and its state, a dot in the icon's corner. Its panels open beside it, in the look of the
+   captions' popovers (studioRail* in static/js/studio.js) */
+.st-side { position: relative; flex: none; padding: 16px 0 16px 24px; box-sizing: border-box; }
+.st-rail { display: flex; flex-direction: column; gap: 4px; width: 112px; padding: 6px; box-sizing: border-box;
+  background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
+.st-rail-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  width: 100%; height: 74px; padding: 8px 2px 6px; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px;
+  background: none; color: #E5E5EA; font-family: inherit; cursor: pointer;
+  transition: background-color var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease; }
+.st-rail-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.st-rail-btn[aria-expanded="true"] { background: rgb(var(--accent-rgb) / 0.14); border-color: rgb(var(--accent-rgb) / 0.55); color: var(--accent-text); }
+.st-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.st-rail-ic { position: relative; display: flex; width: 20px; height: 20px; margin-bottom: 4px; flex: none; }
+.st-rail-ic svg { width: 20px; height: 20px; }
+.st-rail-dot { position: absolute; top: -2px; right: -4px; width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; display: none; }
+.st-rail-dot.is-rec { display: block; background: #FF453A; box-shadow: 0 0 0 2px var(--sec-card); }
+.st-rail-dot.is-on { display: block; background: var(--accent); box-shadow: 0 0 0 2px var(--sec-card); }
+.st-rail-name, .st-rail-state { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.st-rail-name { font-size: var(--fs-label); line-height: 1.3; font-weight: 500; }
+.st-rail-state { font-size: 11px; line-height: 1.3; color: var(--hc-dim, #8E8E93); }
+.st-rail-btn[aria-expanded="true"] .st-rail-state { color: var(--accent-text); opacity: 0.8; }
+.st-cap-pop.st-fly { left: calc(100% + 8px); right: auto; top: 16px; width: 340px; max-width: 340px; max-height: calc(100% - 16px); overflow-y: auto;
+  align-items: stretch; box-sizing: border-box; }
+.st-fly > .st-sub-title { margin-bottom: -6px; }
+.st-fly .st-sub { padding-top: 12px; }
+.st-fly-link { align-self: flex-start; padding-top: 0; }
+.st-fly-upcoming { display: flex; flex-direction: column; gap: 6px; }
+.st-fly-upcoming.hidden { display: none; }
+.st-lvl { display: flex; align-items: center; gap: 8px; }
+.st-lvl-db { width: 48px; flex: none; text-align: right; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.st-toggle-t { flex: 1; min-width: 0; font-size: var(--fs-ui); line-height: 1.35; color: #F5F5F7; }
+.st-toggle.st-toggle-col { flex-direction: column; align-items: flex-start; gap: 4px; cursor: default; }
 .st-seg { display: flex; width: 100%; }
 .st-seg .tk-seg-btn { flex: 1 1 auto; justify-content: center; padding: 0 6px; min-width: 0; }
 .st-seg .tk-seg-btn:disabled { cursor: default; opacity: 0.6; }
-/* the groups of a card apart by a line, as the rows of the settings */
-.st-sub, .st-group { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line); }
-.st-group { gap: 0; }
+/* the groups of a panel apart by a line, as the rows of the settings */
+.st-sub { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line); }
 .st-sub-title { font-size: var(--fs-ui); line-height: 1.35; font-weight: 500; color: #E5E5EA; }
 .st-hint { margin: 0; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
-/* the level of the input: a panel of the card's line, the track the grey of the bars elsewhere */
-.st-meter { gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, 0.02); }
+/* the level of the input: the track the grey of the bars elsewhere */
 .st-meter-track { height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
-.st-meter .st-meter-track { width: 100%; }
-.st-meter .st-hint { text-align: left; }
 .st-field { height: var(--ctl-h); box-sizing: border-box; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--ctl-r); background: var(--elevated);
   color: #F5F5F7; color-scheme: dark; font-family: inherit; font-size: var(--fs-ui); outline: none; }
 .st-field::placeholder { color: var(--hc-dim, #8E8E93); }
@@ -5291,7 +5307,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .lt-chip.st-person-add { border-style: solid; color: var(--accent-text); background: transparent; }
 .lt-chip .vx-plus { width: 14px; height: 14px; flex: none; }
 .st-people-hint, .st-people-teams { font-size: var(--fs-label); }
-.st-save { display: flex; flex-direction: column; gap: 8px; }
 .st-toggle { padding: 0; }
 .st-toggle + .st-toggle { padding-top: 12px; border-top: 1px solid var(--line); }
 .st-meet { border-color: var(--line); border-radius: 8px; }
@@ -5385,7 +5400,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .studio-cap-head::after { background: linear-gradient(var(--bg-deep), transparent); }
 #studio-notes { padding: 16px 24px 16px 16px; }
 #studio-ask { padding: 16px 24px 16px 16px; }
-@media (max-width: 1250px) { .st-side { width: 320px; } }
 .st-cap-bar.studio-focus-only { display: none; }
 @container (max-width: 860px) { .st-rec #studio-focus-btn { width: var(--ctl-h); padding: 0; } }
 /* a narrow studio: the bar keeps its level as a short track without the figure, so the heading keeps its words */

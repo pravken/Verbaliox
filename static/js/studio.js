@@ -906,16 +906,17 @@ function renderStudioPeople() {
   stPeople.marks.forEach(m => { counts[m.name] = (counts[m.name] || 0) + 1; });
   const options = [`<option value="0">${escapeHtml(t('stPeopleAuto'))}</option>`,
     ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
-  const html = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
+  const html = `<div class="st-people-head"><span class="st-sub-title" title="${escapeHtml(t('stPeopleHint'))}">${escapeHtml(t('stPeopleTitle'))}</span>
       <label class="st-people-count">${escapeHtml(t('stPeopleCount'))}
         <select class="st-field" data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
     <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="lt-chip st-person${counts[n] ? ' is-marked' : ''}"
         ${rec ? '' : 'disabled'} data-click="stPeopleMark" data-click-args='[${i}]'
         title="${escapeHtml(rec ? t('tipStPersonMark') : t('tipStPersonIdle'))}">${escapeHtml(n)}${counts[n] ? `<span class="st-person-n">${counts[n]}</span>` : ''}</button>`).join('')}
       <button type="button" class="lt-chip st-person-add" data-click="stPeopleAdd">${VX_PLUS}${escapeHtml(t('stPeopleAdd'))}</button></div>
-    <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>
+    ${rec ? `<p class="st-people-hint">${escapeHtml(t('stPeopleHintRec'))}</p>` : ''}
     ${stTeamsOn() ? `<p class="st-people-teams">${escapeHtml(stTeamsLine())}
       <button type="button" class="st-link" data-click="showTeamsHelp">${escapeHtml(t('teamsHelpLink'))}</button></p>` : ''}`;
+  renderStudioRail();
   // Drawn again only when something changed: the captions call this every second, and a list being
   // opened (how many) closed under the pointer
   if (box._html === html) return;
@@ -988,6 +989,7 @@ function showTeamsHelp() {
 function stPeopleSetCount(v) {
   stPeople.count = Number(v) || 0;
   stPeople.manual = true;
+  renderStudioRail();
 }
 
 async function stPeopleAdd() {
@@ -1029,11 +1031,11 @@ function saveRecordVideoPref() {
   renderStudioState();
 }
 
+// «Папка записей…» of the panel «Встреча»: the folder itself in its tooltip, changed in Settings → Recording
 function renderRecordSaveHint() {
   const dir = state.system && state.system.paths && state.system.paths.recordings;
-  // only the path may break anywhere, not the words around it
-  document.getElementById('record-save-hint').innerHTML = dir
-    ? escapeHtml(t('recordSaveHint')).replace('{dir}', () => `<span class="break-all">${escapeHtml(dir)}</span>`) : '';
+  const link = document.getElementById('st-folder-link');
+  if (link) link.title = dir ? t('recordSaveHint').replace('{dir}', () => dir) : '';
 }
 
 // --- Live captions while recording ---
@@ -1763,13 +1765,12 @@ function renderStudioState() {
       .filter(Boolean).join(' · ');
   document.getElementById('studio-heading').textContent = t(rec ? 'studioRecording' : 'studioIdle');
   document.getElementById('studio-rec-dot').classList.toggle('studio-idle', !rec);
-  for (const id of ['studio-start-btn', 'btn-start-rec']) document.getElementById(id).classList.toggle('hidden', rec);
-  for (const id of ['studio-stop-btn', 'studio-cancel-btn', 'btn-stop-rec', 'btn-cancel-rec']) document.getElementById(id).classList.toggle('hidden', !rec);
+  document.getElementById('studio-start-btn').classList.toggle('hidden', rec);
+  for (const id of ['studio-stop-btn', 'studio-cancel-btn']) document.getElementById(id).classList.toggle('hidden', !rec);
   // What is recorded cannot change mid-recording; how captions look can
   for (const id of ['record-preset-select', 'record-source-select', 'record-mic-select', 'record-video-select', 'record-window-select', 'record-title-input']) {
     document.getElementById(id).disabled = rec;
   }
-  document.getElementById('rec-dot-indicator').classList.toggle('animate-ping', rec);
   updateRecordButtonState();
   renderStudioExtras();
 }
@@ -2742,6 +2743,79 @@ function renderStudioExtras() {
   }
   renderStudioTab();
   renderStudioCapBar();
+  renderStudioRail();
+}
+
+// --- The rail of the recording's options: four buttons that show their state, each opening its panel beside the
+// rail (asked by the user: the column of cards was hardly used and scrolled). One panel at a time; Esc, a second click
+// or a click elsewhere closes it (the layers of static/js/core.js), the focus goes into it and back to its button ---
+const ST_RAIL = ['source', 'video', 'meet', 'after'];
+
+function studioRailToggle(key) {
+  const fly = document.getElementById(`st-fly-${key}`);
+  if (!fly) return;
+  const open = fly.classList.contains('hidden');
+  closeStudioRail();
+  if (!open) return;
+  if (key === 'meet') renderUpcomingMeetings();
+  fly.classList.remove('hidden');
+  document.getElementById(`st-rail-${key}`).setAttribute('aria-expanded', 'true');
+  studioRailPlace(key);
+  const first = fly.querySelector('button:not([disabled]):not(.hidden), select:not([disabled]):not(.hidden), input:not([disabled])');
+  if (first) first.focus({ preventScroll: true });
+  else { fly.tabIndex = -1; fly.focus({ preventScroll: true }); }
+}
+
+// level with its button, kept inside the rail's height (the panel never scrolls)
+function studioRailPlace(key) {
+  const rail = document.getElementById('side-studio');
+  const fly = document.getElementById(`st-fly-${key}`);
+  const btn = document.getElementById(`st-rail-${key}`);
+  if (!rail || !fly || !btn || fly.classList.contains('hidden')) return;
+  const max = rail.clientHeight - fly.offsetHeight - 8;
+  fly.style.top = `${Math.max(8, Math.min(btn.offsetTop, max))}px`;
+}
+
+function closeStudioRail() {
+  for (const k of ST_RAIL) {
+    document.getElementById(`st-fly-${k}`)?.classList.add('hidden');
+    document.getElementById(`st-rail-${k}`)?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+// What each button shows without opening: a short state under its name, the whole of it in the tooltip, a dot for
+// the video being recorded (red) and for anything on after the recording (blue). Called each second with the captions:
+// it writes only what changed (a write of a class, even the same one, has the page look over its menus)
+function renderStudioRail() {
+  const put = (el, prop, value) => { if (el && el[prop] !== value) el[prop] = value; };
+  const set = (key, text, tip, dot) => {
+    const btn = document.getElementById(`st-rail-${key}`);
+    if (!btn) return;
+    put(document.getElementById(`st-rail-${key}-state`), 'textContent', text);
+    const label = `${btn.querySelector('.st-rail-name').textContent}: ${tip}`;
+    put(btn, 'title', label);
+    if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+    put(btn.querySelector('.st-rail-dot'), 'className', `st-rail-dot${dot ? ` ${dot}` : ''}`);
+  };
+  const src = document.getElementById('record-source-select')?.value || 'both';
+  const micSel = document.getElementById('record-mic-select');
+  const mic = src !== 'system' && micSel && micSel.selectedIndex >= 0 ? micSel.options[micSel.selectedIndex].textContent.trim() : '';
+  const srcFull = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') }[src] || '';
+  set('source', t({ mic: 'rdSasSrcMic', system: 'rdSasSrcSystem' }[src] || 'rdSasSrcBoth'), mic ? `${srcFull} (${mic})` : srcFull, '');
+  const vSel = document.getElementById('record-video-select');
+  const v = vSel?.value || '';
+  const vShort = { screen: 'stRailVideoScreen', app_desktop: 'rdSasVideoDesktop', app_window: 'stRailVideoWindow' }[v] || 'rdSasVideoNone';
+  const vFull = vSel && vSel.selectedIndex >= 0 ? vSel.options[vSel.selectedIndex].textContent.trim() : t('rdSasVideoNone');
+  set('video', t(vShort), vFull, v ? 'is-rec' : '');
+  const n = stPeople.count || stPeople.names.length;
+  const people = n ? t('stRailPeopleN').replace('{n}', () => String(n)) : t('stRailPeopleAuto');
+  set('meet', people, people, '');
+  const s = state.system?.settings || {};
+  const on = [
+    s.auto_summary !== 'false' && 'rdSasAutoAnalysis', s.call_auto_record === 'true' && 'rdSasAutoCall', s.meeting_follow !== 'false' && 'rdSasMeetingFollow',
+  ].filter(Boolean).map(k => t(k).replace(/^✦\s*/, ''));
+  set('after', on.length ? t('stRailOnN').replace('{n}', () => String(on.length)) : t('stRailOff'),
+    on.length ? on.join('; ') : t('stRailOff'), on.length ? 'is-on' : '');
 }
 
 // --- The tabs under the recording: the text, the user's notes, questions ---
@@ -2813,6 +2887,7 @@ function studioFillAuto() {
   const v = document.getElementById('st-voice-filter');
   if (v) v.checked = s.rec_voice_filter !== 'false';
   studioVoiceFilterState();
+  renderStudioRail();
 }
 
 // The voice filter (app/voice_filter.py): not downloaded yet, the switch says so and offers the download
@@ -2856,6 +2931,7 @@ async function studioSetAuto(key, on) {
   const el = mirror && document.getElementById(mirror);
   if (el) el.checked = on;
   if (key === 'call_auto_record' && typeof renderCallSettings === 'function') renderCallSettings();
+  renderStudioRail();
 }
 
 // --- A test of the microphone: three seconds recorded, then played back ---
@@ -2931,4 +3007,10 @@ document.addEventListener('click', (e) => {
   const inside = e.target instanceof Element && e.target.closest('.st-pop-wrap');
   if (!inside || !inside.querySelector('#st-models-pop')) closeStudioModelsPop();
   if (!inside || !inside.querySelector('#st-cap-more')) closeStudioCapMore();
+  // the rail's panels: not by a click in a panel, on a rail button (its own toggle), in a window opened from a panel,
+  // or on a chip drawn again under the click (it is no longer in the page)
+  const el = e.target instanceof Element ? e.target : null;
+  if (el && (!el.isConnected || el.closest('.st-fly, .st-rail-btn, .modal-backdrop, [id^="modal-"]'))) return;
+  closeStudioRail();
 });
+document.getElementById('record-mic-select')?.addEventListener('change', renderStudioRail);
