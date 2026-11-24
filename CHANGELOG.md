@@ -45,6 +45,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   cannot write an analysis and are listed with the translation models only. TranslateGemma (Gemma Terms of Use) is
   never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «Check the license before
   commercial use», and it translates with the prompt of its model card.
+- **Models leave the memory a minute after the processing**: once the queue has nothing running or waiting (a
+  transcription with its automatic analysis counts as one job) and nothing uses the app for 60 seconds, the speech
+  models and the analysis model are unloaded; a model asked by hand (a question to the assistant) stays for the time
+  set in «Free the models from memory after». Live captions starting unload the analysis model they do not use (not
+  during a running analysis), switching «Quality» ↔ «Fast» unloads the previous translation model, and the captions'
+  models go a minute after the captions end. Each unload is written in the log with its reason.
 
 ## 0.9.3 — English
 
@@ -1222,6 +1228,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   не пишут анализ и показываются только среди моделей перевода. TranslateGemma (Gemma Terms of Use) программа не
   предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Проверьте лицензию перед
   коммерческим использованием» и переводит промптом со своей карточки.
+- **Модели выгружаются через минуту после обработки**: когда в очереди ничего не выполняется и не ждёт (расшифровка
+  с автоматическим анализом — одна задача) и программой не пользуются 60 секунд, модели распознавания и модель
+  анализа выгружаются; модель, к которой обращались вручную (вопрос ассистенту), остаётся на время из «Выгружать
+  модели через». Запуск субтитров выгружает модель анализа, которую они не используют (кроме времени идущего
+  анализа), переключение «Качество» ↔ «Быстро» выгружает предыдущую модель перевода, а модели субтитров выгружаются
+  через минуту после их окончания. Каждая выгрузка записывается в журнал с причиной.
 
 ## 0.9.3
 
