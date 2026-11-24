@@ -1918,10 +1918,15 @@ await step('mix wait countdown', async () => {
   expect((await sub()) === 'Начнётся после встречи «Планёрка» (до 11:30)', `the meeting is not named: «${await sub()}»`);
   if (shots) await page.screenshot({ path: `${shots}/mix-wait-why.png` });
   let asked = '';
-  await page.route('**/api/meetings/9902/mix-now', r => { asked = r.request().method(); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await page.route('**/api/meetings/9902/mix-now', r => {
+    asked = r.request().method();
+    meeting.mix_wait = null;  // as the server: the mix starts, so the page's next poll no longer shows the wait
+    r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
   await page.click('#tx-rc-mixnow');
   await sleep(300);
-  expect(asked === 'POST' && !(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» did not ask the server');
+  expect(asked === 'POST', '«Свести сейчас» did not ask the server');
+  expect(!(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» is still offered after the mix started');
   await page.evaluate(() => { delete state.activeMeeting.mix_why; });
   await page.evaluate(() => {
     state.activeMeeting.mix_wait = Date.now() / 1000 + 100;
