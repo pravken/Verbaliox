@@ -1102,6 +1102,8 @@ const VX_LAYERS = [
   ...['bulk-menu', 'series-menu', 'digest-menu', 'lib-view-menu', 'lib-filter-menu', 'as-menu', 'an-cfg-pop']
     .map(id => [id, () => vxThere(id), vxRemove(id), `#${id}`]),
   ['quick-lang-menu', () => vxThere('quick-lang-menu'), vxCall('closeQuickLangMenu'), '#quick-lang-menu'],
+  ['st-models-pop', () => vxShown('st-models-pop'), vxCall('closeStudioModelsPop'), '#st-models-pop'],
+  ['st-cap-more', () => vxShown('st-cap-more'), vxCall('closeStudioCapMore'), '#st-cap-more'],
   ['tk-pop', () => vxThere('tk-pop'), vxCall('tkClosePop'), '#tk-pop'],
   ['hm-day-pop', () => vxShown('hm-day-pop'), () => {
     document.getElementById('hm-day-pop')?.classList.add('hidden');

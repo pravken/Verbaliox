@@ -245,84 +245,122 @@
           title="Поставить отметку в этом месте записи (M)"><span aria-hidden="true">⚑</span><span data-i18n="rdSasMark">Отметить</span></button>
       </div>
 
-      <!-- What goes on in the recording -->
-      <div class="st-tabs">
-        <div class="tk-seg" role="tablist">
-        <button data-click="studioTab" data-click-args='["text"]' id="st-tab-text" class="tk-seg-btn" role="tab" data-i18n="rdSasTabText">Текст</button>
-        <button data-click="studioTab" data-click-args='["notes"]' id="st-tab-notes" class="tk-seg-btn" role="tab" data-i18n="rdSasTabNotes">Мои заметки</button>
-        <button data-click="studioTab" data-click-args='["ask"]' id="st-tab-ask" class="tk-seg-btn" role="tab" data-i18n="rdSasTabAsk">Вопросы</button>
+      <!-- What goes on in the recording: the tabs on the left, the captions' choices on the right, in one row -->
+      <div class="st-tabrow">
+        <div class="st-utabs" role="tablist" data-i18n-title="tipStTabsKeys" title="Клавиши во время записи: M — отметка, N — заметка">
+          <button data-click="studioTab" data-click-args='["text"]' id="st-tab-text" class="st-utab" role="tab" data-i18n="rdSasTabText">Текст</button>
+          <button data-click="studioTab" data-click-args='["notes"]' id="st-tab-notes" class="st-utab" role="tab" data-i18n="rdSasTabNotes">Мои заметки</button>
+          <button data-click="studioTab" data-click-args='["ask"]' id="st-tab-ask" class="st-utab" role="tab" data-i18n="rdSasTabAsk">Вопросы</button>
         </div>
-        <span class="flex-1"></span>
         <span class="st-keys"><kbd class="st-kbd">M</kbd><span data-i18n="rdSasKeyMark">отметка</span> <kbd class="st-kbd">N</kbd><span data-i18n="rdSasKeyNote">заметка</span></span>
+        <!-- The captions: on/off, the language of the translation, the models and the rest under the gear.
+             The hidden checkbox and list keep the state the recording, the ready-made settings and the
+             economy mode read and set (studio.js renderStudioCapBar draws the chips from them) -->
+        <div class="st-capctl">
+          <div class="hidden" aria-hidden="true">
+            <input type="checkbox" id="live-captions-toggle" data-change="studioToggleCaptions" data-change-args='[{"$": "checked"}]' tabindex="-1" />
+            <select id="live-translate-select" data-change="studioConfigure" tabindex="-1" data-i18n-title="tipLiveTranslate" title="Переводить субтитры на другой язык через локальную модель Ollama"></select>
+          </div>
+          <button id="st-cap-pill" data-click="studioCaptionsPill" class="st-pill" role="switch" aria-checked="false" data-i18n-title="tipLiveCaptions"
+            title="Показывать текст речи во время записи. После остановки запись, как обычно, расшифровывается полностью и точнее">
+            <svg class="st-pill-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 10.2a2 2 0 1 0 0 3.6M17 10.2a2 2 0 1 0 0 3.6"/></svg>
+            <span class="st-pill-txt" data-i18n="stCapPill">Субтитры</span>
+            <span class="st-pill-sw" aria-hidden="true"></span>
+          </button>
+          <button id="st-tr-pill" data-click="openStudioTranslateMenu" data-click-args='[{"$": "el"}]' class="st-pill" aria-haspopup="menu" aria-expanded="false" data-i18n-title="tipLiveTranslate"
+            title="Переводить субтитры на другой язык через локальную модель Ollama">
+            <svg class="st-pill-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802"/></svg>
+            <span id="st-tr-pill-label" class="st-pill-txt st-pill-lang"></span>
+            <svg class="st-pill-chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>
+          </button>
+          <div class="st-pop-wrap">
+            <button id="st-models-pill" data-click="toggleStudioModelsPop" class="st-pill" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="tipStModelsPill"
+              title="Модели субтитров и память, которую они займут">
+              <svg class="st-pill-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 6.75h19.5v10.5H2.25V6.75zM4.5 17.25v2.25M9 13.875a1.875 1.875 0 100-3.75 1.875 1.875 0 000 3.75zM14.25 9.75h4.5m-4.5 2.25h4.5m-4.5 2.25h4.5"/></svg>
+              <span id="st-models-gb" class="st-pill-txt">—</span>
+            </button>
+            <!-- The models writing the captions and the translation: their size, whether they are in memory; changed while the captions run -->
+            <div id="st-models-pop" class="hidden st-cap-pop st-models-pop" role="dialog" data-i18n-aria="stModelsTitle" aria-label="Модели субтитров">
+              <div class="st-pop-h" data-i18n="stModelsTitle">Модели субтитров</div>
+              <div id="studio-models" class="st-mrows">
+                <div class="st-mrow">
+                  <span class="st-mlabel" data-i18n="stModelAsr">Распознавание</span>
+                  <select id="studio-cap-model" data-change="studioSetCaptionModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioCapModel" title="Модель, которая пишет субтитры. «Авто» выбирает по языку речи"
+                    class="st-field st-msel"></select>
+                  <span id="st-cap-model-gb" class="st-mgb"></span>
+                  <span id="st-cap-model-state" class="st-mstate"></span>
+                </div>
+                <div id="studio-tr-model-wrap" class="st-mrow">
+                  <span class="st-mlabel" data-i18n="studioModelTranslation">Перевод</span>
+                  <select id="studio-tr-model" data-change="studioSetTranslateModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioTrModel" title="Модель перевода. «Авто» — по переключателю «Качество / Скорость»"
+                    class="st-field st-msel"></select>
+                  <span id="st-tr-model-gb" class="st-mgb"></span>
+                  <span id="st-tr-model-state" class="st-mstate"></span>
+                </div>
+                <div id="st-speed-row" class="st-mrow">
+                  <span class="st-mlabel"></span>
+                  <div class="tk-seg" data-i18n-title="tipStudioSpeed" title="Небольшая модель: быстрее, но перевод проще">
+                    <button data-click="studioSetSpeed" data-click-args='["quality"]' id="studio-speed-quality" class="tk-seg-btn" data-i18n="studioSpeedQuality">Качество</button>
+                    <button data-click="studioSetSpeed" data-click-args='["fast"]' id="studio-speed-fast" class="tk-seg-btn" data-i18n="studioSpeedFast">Скорость</button>
+                  </div>
+                </div>
+              </div>
+              <p id="st-models-note" class="st-pop-note"></p>
+            </div>
+          </div>
+          <!-- The rest of the captions' choices, under the gear: how the text comes, the language of the speech,
+               the quick languages, how the translation is shown, the size of the text -->
+          <div class="st-pop-wrap">
+            <button id="st-cap-more-btn" data-click="toggleStudioCapMore" class="st-pill st-pill-sq" aria-haspopup="dialog" aria-expanded="false"
+              data-i18n-title="tipStCapMore" title="Ещё настройки субтитров" data-i18n-aria="tipStCapMore" aria-label="Ещё настройки субтитров">
+              <svg class="st-pill-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+            <div id="st-cap-more" class="hidden st-cap-pop" role="dialog" data-i18n-aria="tipStCapMore" aria-label="Ещё настройки субтитров">
+              <div class="st-pop-group">
+                <div class="st-pop-h" data-i18n="stGroupCaptions">Субтитры</div>
+                <label class="flex items-center gap-2 cursor-pointer text-xs text-apple-secondary" data-i18n-title="tipLiveDraft"
+                  title="Показывать фразу по мере произнесения, не дожидаясь паузы. Черновик может поправляться, пока фраза не закончится">
+                  <input type="checkbox" id="live-draft-toggle" data-change="studioConfigure" role="switch" class="vs-switch vs-sm" />
+                  <span data-i18n="liveDraftToggle">Текст по ходу речи</span>
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-apple-secondary">
+                  <span data-i18n="studioSpeechLang">Речь</span>
+                  <select id="studio-speech" data-change="studioConfigure" data-change-args='[true]' data-i18n-title="tipStudioSpeech" title="Язык речи; «Авто» определяет его по каждой фразе"
+                    class="st-field w-[160px]"></select>
+                </label>
+              </div>
+              <div class="st-pop-group">
+                <div class="st-pop-h" data-i18n="stGroupTranslation">Перевод</div>
+                <!-- Quick choices: two languages (right-click to change them) and "auto" between them -->
+                <div id="studio-quick-langs" class="flex items-center gap-1"></div>
+                <!-- Only while translating: how the translation is shown and whether it follows the speech -->
+                <div id="studio-tr-options" class="flex flex-col items-start gap-2">
+                  <div class="tk-seg">
+                    <button data-click="studioSetView" data-click-args='["under"]' id="studio-view-under" class="tk-seg-btn" data-i18n="studioViewUnder">Под фразой</button>
+                    <button data-click="studioSetView" data-click-args='["side"]' id="studio-view-side" class="tk-seg-btn" data-i18n="studioViewSide">Рядом</button>
+                    <button data-click="studioSetView" data-click-args='["tr"]' id="studio-view-tr" class="tk-seg-btn" data-i18n="studioViewTr">Только перевод</button>
+                  </div>
+                  <label class="flex items-center gap-2 cursor-pointer text-xs text-apple-secondary" data-i18n-title="tipLiveDraftTr"
+                    title="Переводить фразу, пока её произносят, не дожидаясь паузы. Дополнительно нагружает модель перевода">
+                    <input type="checkbox" id="live-draft-tr-toggle" data-change="studioConfigure" role="switch" class="vs-switch vs-sm" />
+                    <span data-i18n="liveDraftTrToggle">Перевод по ходу речи</span>
+                  </label>
+                </div>
+              </div>
+              <div class="st-pop-group">
+                <div class="st-pop-h" data-i18n="stGroupFont">Размер текста</div>
+                <div class="flex items-center gap-1">
+                  <button data-click="studioFont" data-click-args='[-2]' class="st-btn st-btn-sq" data-i18n-title="tipStudioFontSmaller" title="Мельче">A−</button>
+                  <button data-click="studioFont" data-click-args='[2]' class="st-btn st-btn-sq" data-i18n-title="tipStudioFontLarger" title="Крупнее">A+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div id="st-pane-text" class="flex-1 min-h-0 flex flex-col">
-      <div class="st-cap-bar">
-        <label class="flex items-center gap-2 cursor-pointer text-xs text-apple-label" data-i18n-title="tipLiveCaptions"
-          title="Показывать текст речи во время записи. После остановки запись, как обычно, расшифровывается полностью и точнее">
-          <input type="checkbox" id="live-captions-toggle" data-change="studioToggleCaptions" data-change-args='[{"$": "checked"}]' role="switch" class="vs-switch vs-sm" />
-          <span data-i18n="liveCaptionsToggle">Субтитры в реальном времени</span>
-        </label>
-        <label class="flex items-center gap-1.5 text-xs text-apple-secondary">
-          <span data-i18n="studioTranslateTo">Перевод</span>
-          <select id="live-translate-select" data-change="studioConfigure" data-i18n-title="tipLiveTranslate" title="Переводить субтитры на другой язык через локальную модель Ollama"
-            class="st-field w-[160px]"></select>
-        </label>
-        <!-- The rest of the captions' choices, under the gear: how the text comes, the language of the speech,
-             the quick languages, how the translation is shown, the size of the text, the models -->
-        <details id="st-cap-more" class="st-cap-more">
-          <summary class="st-btn st-btn-sq" data-i18n-title="tipStCapMore" title="Ещё настройки субтитров"
-            data-i18n-aria="tipStCapMore" aria-label="Ещё настройки субтитров">⚙</summary>
-          <div class="st-cap-pop">
-        <label class="flex items-center gap-2 cursor-pointer text-xs text-apple-secondary" data-i18n-title="tipLiveDraft"
-          title="Показывать фразу по мере произнесения, не дожидаясь паузы. Черновик может поправляться, пока фраза не закончится">
-          <input type="checkbox" id="live-draft-toggle" data-change="studioConfigure" role="switch" class="vs-switch vs-sm" />
-          <span data-i18n="liveDraftToggle">Текст по ходу речи</span>
-        </label>
-        <label class="flex items-center gap-1.5 text-xs text-apple-secondary">
-          <span data-i18n="studioSpeechLang">Речь</span>
-          <select id="studio-speech" data-change="studioConfigure" data-change-args='[true]' data-i18n-title="tipStudioSpeech" title="Язык речи; «Авто» определяет его по каждой фразе"
-            class="st-field w-[160px]"></select>
-        </label>
-        <!-- Quick choices: two languages (right-click to change them) and "auto" between them -->
-        <div id="studio-quick-langs" class="flex items-center gap-1"></div>
-        <!-- Only while translating: how the translation is shown and which model makes it -->
-        <div id="studio-tr-options" class="flex items-center gap-3">
-          <div class="tk-seg">
-            <button data-click="studioSetView" data-click-args='["under"]' id="studio-view-under" class="tk-seg-btn" data-i18n="studioViewUnder">Под фразой</button>
-            <button data-click="studioSetView" data-click-args='["side"]' id="studio-view-side" class="tk-seg-btn" data-i18n="studioViewSide">Рядом</button>
-            <button data-click="studioSetView" data-click-args='["tr"]' id="studio-view-tr" class="tk-seg-btn" data-i18n="studioViewTr">Только перевод</button>
-          </div>
-          <div class="tk-seg" data-i18n-title="tipStudioSpeed" title="Небольшая модель: быстрее, но перевод проще">
-            <button data-click="studioSetSpeed" data-click-args='["quality"]' id="studio-speed-quality" class="tk-seg-btn" data-i18n="studioSpeedQuality">Качество</button>
-            <button data-click="studioSetSpeed" data-click-args='["fast"]' id="studio-speed-fast" class="tk-seg-btn" data-i18n="studioSpeedFast">Скорость</button>
-          </div>
-          <label class="flex items-center gap-1.5 cursor-pointer text-xs text-apple-label" data-i18n-title="tipLiveDraftTr"
-            title="Переводить фразу, пока её произносят, не дожидаясь паузы. Дополнительно нагружает модель перевода">
-            <input type="checkbox" id="live-draft-tr-toggle" data-change="studioConfigure" role="switch" class="vs-switch vs-sm" />
-            <span data-i18n="liveDraftTrToggle">Перевод по ходу речи</span>
-          </label>
-        </div>
-        <div class="flex items-center gap-1">
-          <button data-click="studioFont" data-click-args='[-2]' class="st-btn st-btn-sq" data-i18n-title="tipStudioFontSmaller" title="Мельче">A−</button>
-          <button data-click="studioFont" data-click-args='[2]' class="st-btn st-btn-sq" data-i18n-title="tipStudioFontLarger" title="Крупнее">A+</button>
-        </div>
-        <!-- The models writing the captions and the translation now; can be changed by hand -->
-        <div id="studio-models" class="hidden flex items-center gap-2 flex-wrap">
-          <label class="flex items-center gap-1 text-[11.5px] text-apple-tertiary">
-            <span data-i18n="studioModelCaptions">Субтитры</span>
-            <select id="studio-cap-model" data-change="studioSetCaptionModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioCapModel" title="Модель, которая пишет субтитры. «Авто» выбирает по языку речи"
-              class="st-field max-w-[170px]"></select>
-          </label>
-          <label id="studio-tr-model-wrap" class="flex items-center gap-1 text-[11.5px] text-apple-tertiary">
-            <span data-i18n="studioModelTranslation">Перевод</span>
-            <select id="studio-tr-model" data-change="studioSetTranslateModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioTrModel" title="Модель перевода. «Авто» — по переключателю «Качество / Скорость»"
-              class="st-field max-w-[170px]"></select>
-          </label>
-        </div>
-          </div>
-        </details>
-        <span id="studio-status" class="text-[11.5px] text-apple-tertiary"></span>
-      </div>
+      <!-- What the captions are doing when it needs saying: the translation model loading, an error -->
+      <div id="studio-status" class="hidden st-cap-status"></div>
       <!-- Models in memory: shown here when the studio covers the whole window -->
       <div class="studio-focus-only st-cap-bar st-focus-bar">
         <span class="text-[11px] font-mono text-apple-tertiary shrink-0">VRAM</span>
