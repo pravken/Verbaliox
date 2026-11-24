@@ -1,0 +1,843 @@
+{
+ "date": "2026-11-24 18:52",
+ "pc": "Windows 10, AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD, 32 threads, CUDA devices seen by CTranslate2: 1",
+ "ollama_version": "0.40.8",
+ "dataset": "google/wmt24pp en-ru_RU.jsonl",
+ "sample": [
+  {
+   "id": 938,
+   "domain": "literary",
+   "en": "“You’re the prettiest girl I’ve ever seen.” Aquilo puts one digit under their chin and forces Ivory to look up at him.",
+   "ru": "\"Я не видел девушки красивее тебя\". Акило взял их за подбородок одним пальцем, заставляя Айвори смотреть ему в глаза."
+  },
+  {
+   "id": 11,
+   "domain": "news",
+   "en": "A final push for female equality",
+   "ru": "Последний шаг к равноправию для женщин"
+  },
+  {
+   "id": 453,
+   "domain": "social",
+   "en": "If I can get the file to fucking open. (Fuck One Drive.)",
+   "ru": "Если, конечно, чертов файл откроется (дурацкий One Drive)."
+  },
+  {
+   "id": 376,
+   "domain": "social",
+   "en": "BUT I was about to place some around Finsbury Park for you to find if you wanted one but it’s too windy and they wouldn’t stay put.",
+   "ru": "НО я думал разложить их по парку Финсбери, чтобы вы могли их там поискать, если кому-то интересно, но сегодня слишком сильный ветер, их сразу сдует."
+  },
+  {
+   "id": 759,
+   "domain": "speech",
+   "en": "Mom says you don't want to visit us. She says that? Yeah. Everybody's got a story, son. I guess that's hers. Life's funny that way, you know?",
+   "ru": "Мама говорит, ты не хочешь к нам приезжать. Она так говорит? Да. Сынок, у каждого есть свое видение ситуации. Наверное, у нее оно такое. Жизнь поэтому – забавная штука, да?"
+  },
+  {
+   "id": 979,
+   "domain": "literary",
+   "en": "“Yup, Operation Firestorm,” Cohren answered. “We thought it would be over in a few weeks, but…we underestimate them”",
+   "ru": "\"Ага, операция Огненный шторм\", - ответил Корен. \"Мы думали, что всё закончится за несколько недель, но... мы их недооценили\"."
+  },
+  {
+   "id": 590,
+   "domain": "social",
+   "en": "new ath. i know what that means..",
+   "ru": "новый исторический максимум, дальше мне ясно..."
+  },
+  {
+   "id": 131,
+   "domain": "news",
+   "en": "Ethan Frenchman is a Disability Rights Washington staff attorney who advocates for people with disabilities in jails and prisons.",
+   "ru": "Итан Френчмэн – государственный адвокат штата Вашингтон по правам людей с ограниченными возможностями, защищающий людей с инвалидностью в тюрьмах."
+  },
+  {
+   "id": 26,
+   "domain": "news",
+   "en": "Brewers froth over winemakers\" exemption from anti-waste rules",
+   "ru": "Пивовары против исключений в правилах по борьбе с отходами для виноделов"
+  },
+  {
+   "id": 323,
+   "domain": "social",
+   "en": "In the top is one of those ESP32 camera boards with a fisheye-lens camera and an IR-LED I stole off a Raspberry Pi camera.",
+   "ru": "В верхней части – контроллер ESP32 с широкоугольной камерой и ИК-светодиодом, который я снял с камеры Raspberry Pi."
+  },
+  {
+   "id": 603,
+   "domain": "social",
+   "en": "nothing makes me more happy than elon musk losing money. $tslq",
+   "ru": "больше всего на свете люблю, когда илон маск теряет деньги. $tslq"
+  },
+  {
+   "id": 480,
+   "domain": "social",
+   "en": "@user19 I can only assume that it's my visa or passport pic. I should've paid closer attention.",
+   "ru": "@user35 Могу только предположить, что с фотографией на визе или паспорте. Надо было присмотреться повнимательнее."
+  },
+  {
+   "id": 142,
+   "domain": "news",
+   "en": "How Betta Edu became a scapegoat of a dysfunctional political system",
+   "ru": "Как Бетта Эду стала козлом отпущения несостоятельной политической системы"
+  },
+  {
+   "id": 120,
+   "domain": "news",
+   "en": "Bring back oversight for WA's jails. Lives depend on it",
+   "ru": "Верните надзор за тюрьмами штата Вашингтон. От этого зависят жизни людей"
+  },
+  {
+   "id": 582,
+   "domain": "social",
+   "en": "Now I wonder if a million meters in 2024 might be possible? 🤔 #peloton",
+   "ru": "Теперь думаю: а что если попробовать миллион метров в 2024 году? 🤔  #пелотон"
+  },
+  {
+   "id": 99,
+   "domain": "news",
+   "en": "Scottish tenants are likely to face further alarming rent increases if experts are not heeded (Picture: Adobe)",
+   "ru": "Если к экспертам не прислушаются, арендаторы в Шотландии с большей вероятностью столкнутся с серьезным повышением цен. (Иллюстрация: Adobe.)"
+  },
+  {
+   "id": 174,
+   "domain": "social",
+   "en": "@user13 personally I basically think that shared experience is kind of essential to all we do, other things feel alienated (often, not 100% of course)",
+   "ru": "@user13 В общем, лично я думаю, что в любой работе важно учитывать общий опыт, иначе возникает ощущение изолированности (не всегда, конечно, но часто)."
+  },
+  {
+   "id": 669,
+   "domain": "social",
+   "en": "But the slots approach looks promising. I’ll give it a try.",
+   "ru": "Но идея со слотами выглядит многообещающе. Я попробую."
+  },
+  {
+   "id": 615,
+   "domain": "social",
+   "en": "@user1 I can't believe the level that was so hard and took so long to complete is only 17 seconds long!",
+   "ru": "@user1 Просто не верится, что этот жутко сложный уровень, с которым так долго мучились, длится всего 17 секунд!"
+  },
+  {
+   "id": 208,
+   "domain": "social",
+   "en": "we are in a period of flux and i am anxious to discover where we might settle.",
+   "ru": "Мы переживаем переходный период, и мне весьма тревожно, чем все это кончится."
+  },
+  {
+   "id": 1,
+   "domain": "news",
+   "en": "Siso's depictions of land, water center new gallery exhibition",
+   "ru": "Работы Сисо, изображающие землю и воду, в центре новой выставки в галерее"
+  },
+  {
+   "id": 165,
+   "domain": "social",
+   "en": "I don't even remember what I can do anymore., Might upgrade to whiskey.",
+   "ru": "Я уже даже не помню, что умею. Может, перейду на виски."
+  },
+  {
+   "id": 572,
+   "domain": "social",
+   "en": "i should stop tooting about this tbh but this tailwind component library pointing out how bad the default tailwind setup is is hilarious to me",
+   "ru": "Я тут, может, всех уже задолбал, но мне очень смешно, какая в Tailwind убогая базовая конфигурация, что ее нужно дополнять библиотекой компонентов."
+  },
+  {
+   "id": 2,
+   "domain": "news",
+   "en": "\"People Swimming in the Swimming Pool\" from 2022 is one Vicente Siso artwork that will display at Tierra del Sol Gallery beginning Jan. 13. (photo courtesy of Vicente Siso)",
+   "ru": "Картина 2022 года \"Люди, плавающие в бассейне\" – одна из работ Висенте Сисо, которая будет выставлена в галерее Тьерра дель Соль начиная с 13 января. (Фото: Висент Сисо.)"
+  },
+  {
+   "id": 817,
+   "domain": "literary",
+   "en": "\"It's not that bad, right, Kayel?\"",
+   "ru": "\"Всё ведь не так плохо, да ведь, Кэйел?\""
+  },
+  {
+   "id": 948,
+   "domain": "literary",
+   "en": "“What woke you guys up?” Cohren asked.",
+   "ru": "\"А что вас разбудило, ребят?\" - спросил Корен."
+  },
+  {
+   "id": 290,
+   "domain": "social",
+   "en": "I think it was 18bucks but looking at what could have been stuck all over me, WELL worth it.",
+   "ru": "Я заплатила что-то вроде 18 долларов, но когда я вижу, сколько всего могло на меня налипнуть, думаю, что комбез отработал свою цену по полной."
+  },
+  {
+   "id": 627,
+   "domain": "social",
+   "en": "reconditioning all the container soil I used last year and starting my cucurbits. It's half spent potting soil from a friend's weed operation and half topsoil from my folks beds",
+   "ru": "Заменила прошлогоднюю землю в контейнерах и начинаю сажать тыквенные. Теперь там наполовину горшечная земля от подружкиных огородных экспериментов, а наполовину – верхний слой земли с родительских грядок"
+  },
+  {
+   "id": 249,
+   "domain": "social",
+   "en": "Fuck you King Louis the 14th, one of your descendents is an anarchist!",
+   "ru": "Шах и мат, король Людовик Четырнадцатый, один из твоих потомков – анархист!"
+  },
+  {
+   "id": 218,
+   "domain": "social",
+   "en": "Starting to be bored of sludge too #watertemple",
+   "ru": "Начинаю ненавидеть еще и слякоть #храмводы"
+  },
+  {
+   "id": 305,
+   "domain": "social",
+   "en": "That is to say, it is a delight, she employed all of this excellent skill in a service of a larger social point this week.",
+   "ru": "То есть, просто невероятно, как она на этой неделе использовала это, обсуждая важную социальную проблему."
+  },
+  {
+   "id": 502,
+   "domain": "social",
+   "en": "In case you're interested in the challenge ahead I face.",
+   "ru": "Если вдруг вам интересно, во что я ввязываюсь."
+  },
+  {
+   "id": 400,
+   "domain": "social",
+   "en": "Amazing how there's two PKs #DCU should have had and got neither. The fix is so in for Miami #MLS #mastodonfc",
+   "ru": "Удивительно, что должны были поставить два пенальти #ДСЮ, а не поставили ни одного. Майами подсуживают #МЛС #фкмастодон"
+  },
+  {
+   "id": 94,
+   "domain": "news",
+   "en": "Politicians get it wrong when it comes to rent caps",
+   "ru": "Политики ошибаются относительно максимальных значений арендной платы"
+  },
+  {
+   "id": 910,
+   "domain": "literary",
+   "en": "White, varying shades of blue paint",
+   "ru": "Белая и голубые краски разных оттенков"
+  },
+  {
+   "id": 640,
+   "domain": "social",
+   "en": "Cork underlay is down, fashioned a toilet-roll sawdust extractor accessory for the hoover 😂",
+   "ru": "Положили пробковую подложку, приспособили на пылесос втулку от туалетной бумаги, чтобы собирать мелкие опилки 😂"
+  },
+  {
+   "id": 554,
+   "domain": "social",
+   "en": "The VFR Chart for the trip",
+   "ru": "Карта VFR полета"
+  },
+  {
+   "id": 543,
+   "domain": "social",
+   "en": "Heck yea, end of study unit 1.",
+   "ru": "Йес, прошла первый модуль!"
+  },
+  {
+   "id": 193,
+   "domain": "social",
+   "en": "with no reason to question the pedestal we put them on, those parasocial relationships became prominent building blocks that shaped our lives.",
+   "ru": "Мы могли не сомневаться в тех, кого обожали, и эти парасоциальные отношения очень помогали нам сформироваться."
+  },
+  {
+   "id": 19,
+   "domain": "news",
+   "en": "The World Bank hopes to spread that message.",
+   "ru": "Всемирный Банк надеется распространить эту идею."
+  },
+  {
+   "id": 899,
+   "domain": "literary",
+   "en": "“Which notebook is that?” Ivory asked, sitting down next to Kari on her bed.",
+   "ru": "\"Который блокнот?\" – спросили Айвори, садясь рядом с Кари на ее кровать."
+  },
+  {
+   "id": 415,
+   "domain": "social",
+   "en": "Heheh not one but three!",
+   "ru": "Хехехе, не один моток, а три!"
+  },
+  {
+   "id": 933,
+   "domain": "literary",
+   "en": "“Do you even know what the word ‘no’ means?” They spat out, pushing the crown prince away from them.",
+   "ru": "\"Ты не знаешь, что означает слово \"нет\"?\" - выпалили они, отталкивая наследного принца."
+  },
+  {
+   "id": 823,
+   "domain": "literary",
+   "en": "Nyssi blinked and turned back to Tenuk. \"Of course he can drive.\"",
+   "ru": "Нисси моргнула и повернулась к Тенуку: \"Разумеется, он умеет водить\"."
+  },
+  {
+   "id": 6,
+   "domain": "news",
+   "en": "Adapt the old, accommodate the new to solve issue",
+   "ru": "Решение проблемы: адаптация старого и новые подходы"
+  },
+  {
+   "id": 857,
+   "domain": "literary",
+   "en": "\"You alright?\" Nyssi couldn't help but ask.",
+   "ru": "\"Ты в порядке?\" – не удержавшись спросила Нисси."
+  },
+  {
+   "id": 279,
+   "domain": "social",
+   "en": "So, my life kind of sucks right now.",
+   "ru": "Ну в общем у меня сейчас все плохо."
+  },
+  {
+   "id": 359,
+   "domain": "social",
+   "en": "So I guess I'll have to wait till tomorrow to figure out if it actually is enough for this setup or If I need the better panel I ordered.",
+   "ru": "Видимо, придется подождать до завтра, там и разберемся, хватить ли ее для такой конструкции или понадобится панель получше, которую я заказал."
+  },
+  {
+   "id": 794,
+   "domain": "literary",
+   "en": "JANUARY 14th, 10:26 PM, 2543.",
+   "ru": "14 января 2543 года, 22:26."
+  },
+  {
+   "id": 566,
+   "domain": "social",
+   "en": "Pics are from saturday, ended up with a flat tire after our last landing",
+   "ru": "Субботние фотки, после последней посадки обнаружила спущенное колесо."
+  },
+  {
+   "id": 523,
+   "domain": "social",
+   "en": "Happy Saturday lovelies. Welcome to 4000ft.",
+   "ru": "Всех с субботой, мои хорошие! Добро пожаловать на 1200 метров."
+  },
+  {
+   "id": 113,
+   "domain": "news",
+   "en": "Politicians who think they can overturn judges\" decisions are effectively putting themselves above the law",
+   "ru": "Политики, считающие, что они могут отменить решение судьи, ставят себя выше закона."
+  },
+  {
+   "id": 488,
+   "domain": "social",
+   "en": "Stumpy has been crowned. All hail King Stumpy.",
+   "ru": "Пенек был коронован, да здравствует король Пенек!"
+  },
+  {
+   "id": 236,
+   "domain": "social",
+   "en": "and sure, these other sources are AWARE that \"war is bad\", but then you're still selling the killing machines as figures and merch. So, like, what are we doing?",
+   "ru": "Да, другие источники ЗНАЮТ, что \"война - это плохо\", но сами-то по-прежнему торгуют фигурками и мерчем с машинами-убийцами. И вот что, простите, мы делаем?"
+  },
+  {
+   "id": 367,
+   "domain": "social",
+   "en": "Maybe the panel trickle-charged the battery just enough for 38 seconds of runtime. It only took a bit over two hours to do that.",
+   "ru": "Может быть, панель слегка зарядила аккумулятор на 38 секунд работы. Правда, на это ушло чуть больше двух часов."
+  },
+  {
+   "id": 969,
+   "domain": "literary",
+   "en": "“Lieutenant Nemic…Lieutenant Valturi…” He said Cohren was slower, glancing at Cohren’s pistol holster before glancing up again. “I assume that the company is ready”",
+   "ru": "\"Лейтенант Немик... Лейтенант Валтури...\" Он произнёс \"Корен\" медленнее, оглядев кобуру и снова подняв взгляд. \"Я полагаю, рота готова\"."
+  },
+  {
+   "id": 512,
+   "domain": "social",
+   "en": "Happy Saturday morning. I did this today ^_^",
+   "ru": "Всех с утром субботы! Сегодня я сделала это ^_^"
+  },
+  {
+   "id": 351,
+   "domain": "social",
+   "en": "Turns out the USB-C breakout I was using to plug into the Battery Charger had 5V and GND swapped on the silkscreen.",
+   "ru": "Оказалось, что на плате USB-C, через которую я подключал зарядник, были перепутаны 5В и земля."
+  },
+  {
+   "id": 880,
+   "domain": "literary",
+   "en": "A shared look of horror came from the advisor and Queen Eirwen herself. She slowly looked down at the floor. “Yes, my king.” She bowed.",
+   "ru": "Советник и сама Королева Эирвен посмотрели на него с ужасом. Она перевела взгляд в пол. \"Да, мой король\". Она поклонилась."
+  },
+  {
+   "id": 298,
+   "domain": "social",
+   "en": "field 0 is the degree, field 1 is the minute, field 2 is the second",
+   "ru": "Поле 0 для градусов, поле 1 для минут, поле 2 для секунд"
+  },
+  {
+   "id": 103,
+   "domain": "news",
+   "en": "FTSE 250 firm famous for sausage rolls and steak bakes plans to rise branch network but not prices.",
+   "ru": "Компания с индексом FTSE 250, знаменитая своими сосисками в тесте и мясными пирогами, планирует расширить свою сеть, не поднимая цены."
+  },
+  {
+   "id": 917,
+   "domain": "literary",
+   "en": "They walked through the halls again, trying to tune out the whispers of the maids again.",
+   "ru": "Они снова прошлись по коридорам, вновь стараясь не слушать шепот прислуги."
+  },
+  {
+   "id": 921,
+   "domain": "literary",
+   "en": "They covered their ears, as tuning them out wasn’t working. They made their way to the royal painter’s room, which was on the east wing, second door on the left.",
+   "ru": "Они заткнули уши, потому что просто отключиться не получалось. Они отправились в комнату королевского художника, которая была в восточном крыле, вторая дверь слева."
+  },
+  {
+   "id": 61,
+   "domain": "news",
+   "en": "Gensler also added that the approval of the bitcoin funds did not imply the SEC would approve funds or exchange-traded products (ETPs) based on other digital currencies or assets.",
+   "ru": "Генслер также добавил, что разрешение на работу фондов для биткойна не предполагает, что Комиссия по ценным бумагам и биржам одобрит фонды или биржевые продукты, основанные на прочих цифровых валютах."
+  },
+  {
+   "id": 984,
+   "domain": "literary",
+   "en": "“Exodus XO, Exodus CO” Cohrens radio crackled. “We're picking up heat signatures 350 yards out, 20 degrees right”",
+   "ru": "\"Заместитель ротного Исхода, командир Исхода\", - рация Корена затрещала. \"Мы видим тепловые следы на расстоянии 350 ярдов, 20 градусов справа\"."
+  },
+  {
+   "id": 43,
+   "domain": "news",
+   "en": "Government Shutdown Debate Fuels House Republican Civil War",
+   "ru": "Споры о приостановке деятельности правительства разжигают гражданскую войну в Палате представителей"
+  },
+  {
+   "id": 634,
+   "domain": "social",
+   "en": "Pleased with the little side niche",
+   "ru": "Как мне нравится эта маленькая ниша сбоку"
+  },
+  {
+   "id": 181,
+   "domain": "social",
+   "en": "several hours in, every news outlet is headlining the story, and yet the AT&T status site still claims there’s no outage. Slowest static site i’ve ever used…",
+   "ru": "Прошло несколько часов, в новостях всюду пишут и говорят о ситуации, а на сайте AT&T на странице для отслеживания неполадок все еще написано, что все работает. Никогда не видел такого медленного статичного сайта."
+  },
+  {
+   "id": 155,
+   "domain": "social",
+   "en": "I guess I should find a job, but I'm quite lazy. Hire me now, I'll drink all your beer.",
+   "ru": "Может, мне надо найти работу, но я довольно ленивый. Наймите меня немедленно, я выпью у вас все пиво."
+  },
+  {
+   "id": 988,
+   "domain": "literary",
+   "en": "“Can’t tell,” Cohren stated. He reached for his mic and spoke. “Exodus Company, hold fire unless fired upon, let's draw them out",
+   "ru": "\"Непонятно\", - заявил Корен. Он взял микрофон и произнес: \"Рота Исход, не открывать огонь первыми, давайте их выманим\"."
+  },
+  {
+   "id": 905,
+   "domain": "literary",
+   "en": "“It’s your birthday soon, isn’t it?” Ivory asked, remembering that the princess’ birthday was in a few days. Kari nodded, a sad glint in her light blue eyes.",
+   "ru": "\"У тебя же скоро день рождения?\" – спросили Айвори, вспомнив что через несколько дней день рождения принцессы. Кари кивнула, в ее голубых глазах промелькнула грусть."
+  },
+  {
+   "id": 201,
+   "domain": "social",
+   "en": "there is too much to focus on and no way to streamline it … will we ever escape the oversaturation?",
+   "ru": "Нам нужно обращать внимание на такое количество всего и этот список никак не сократить... Получится ли у нас избежать перенасыщения?"
+  },
+  {
+   "id": 835,
+   "domain": "literary",
+   "en": "\"But... one of them is a giant monster!\"",
+   "ru": "\"Но... один из них гигантский монстр!\""
+  },
+  {
+   "id": 651,
+   "domain": "social",
+   "en": "2. HTML for section 7",
+   "ru": "2. HTML раздела 7"
+  },
+  {
+   "id": 536,
+   "domain": "social",
+   "en": "This one only had 1 question",
+   "ru": "Тут был только один вопрос."
+  },
+  {
+   "id": 752,
+   "domain": "speech",
+   "en": "Your Honor, my client accepts the jury as presently constituted. The jury is satisfactory to both sides? We accept the jury. The jury is satisfactory to us. Swear the jury.",
+   "ru": "Ваша честь, мой клиент принимает предложенный состав жюри присяжных. Состав жюри устраивает обе стороны? Нас устраивает. Мы принимаем этот состав. Приведите присяжных к присяге."
+  },
+  {
+   "id": 266,
+   "domain": "social",
+   "en": "@user43 shouldn't that be 'i can't get starter'? otherwise, perfect. :D",
+   "ru": "@user43 Слова можно исправить на \"не могу зачать\", а так отлично подходит :D"
+  },
+  {
+   "id": 69,
+   "domain": "news",
+   "en": "Complaints of Russian language use in Ukraine rise 30% - RT Russia & Former Soviet Union",
+   "ru": "Количество жалоб на использование русского языка в Украине возросло на 30% – RT в России и бывшем СССР"
+  },
+  {
+   "id": 927,
+   "domain": "literary",
+   "en": "“Well I didn’t.” Ivory found the art supplies on their list and put it in a crate that they found. “And I’m not a girl.”",
+   "ru": "\"А я – нет\". Айвори нашли всё, что им было нужно, и положили в найденную тут же корзину. \"И я не девочка\"."
+  },
+  {
+   "id": 79,
+   "domain": "news",
+   "en": "As the latest tranche of NHS figures reveals more bad news, we should be outraged",
+   "ru": "Поскольку Национальная служба здравоохранения публикует в последнее время еще больше плохих новостей, нам следует возмутиться"
+  },
+  {
+   "id": 57,
+   "domain": "news",
+   "en": "Regulators Approve New Bitcoin ETFs in Watershed Moment for Crypto",
+   "ru": "Регуляторы одобрили новые биржевые фонды для биткойна в решающий для криптовалюты момент"
+  },
+  {
+   "id": 462,
+   "domain": "social",
+   "en": "Floor repair person is doing a vacuum, so hopefully that means he's finishing up.",
+   "ru": "Мастер включил пылесос, надеюсь, это означает, что он скоро закончит."
+  },
+  {
+   "id": 714,
+   "domain": "speech",
+   "en": "Starfire. The princess of Tamaran. Comfortable, I hope. Lord Bagrok! Oh! Such a formidable spirit. Your sister was wise to hand you over. Garbler neck!",
+   "ru": "Звездный огонь. Принцесса Тамаран. Надеюсь, вам комфортно. Лорд Багрок! Какой грозный дух! Ваша сестра мудро поступила, передав вас. Черт!"
+  },
+  {
+   "id": 891,
+   "domain": "literary",
+   "en": "The rumors, of course, also applied to them as they were the only person allowed to enter the room.",
+   "ru": "Слухи, конечно, касались и их самих, так как они были единственным человеком, которому разрешалось заходить в комнату."
+  },
+  {
+   "id": 256,
+   "domain": "social",
+   "en": "@user43 that is a bodacious looking loaf you've birthed there. impressive!",
+   "ru": "@user43 Новорожденный хлеб выглядит роскошно. респект!"
+  },
+  {
+   "id": 430,
+   "domain": "social",
+   "en": "First steps are already done.",
+   "ru": "Первые шаги уже сделаны."
+  },
+  {
+   "id": 317,
+   "domain": "social",
+   "en": "Let's just say the birds will have a better Internet connection than me in 2015.",
+   "ru": "Скажем так: интернет у этих птичек будет получше, чем у меня в 2015."
+  },
+  {
+   "id": 384,
+   "domain": "social",
+   "en": "Let me know if you find them!",
+   "ru": "Если найдете стикеры, пишите!"
+  },
+  {
+   "id": 408,
+   "domain": "social",
+   "en": "Easter weekend: Eastercon 2024 at Telford.",
+   "ru": "На пасхальных выходных на Eastercon 2024 в Телфорде."
+  },
+  {
+   "id": 225,
+   "domain": "social",
+   "en": "Having read ahead, the next few battles sound like hard work. I just want to wander around and occasionally pick some mushrooms.",
+   "ru": "Почитал, там дальше такие битвы, что придется впахивать. Я хочу просто гулять и иногда собирать грибы."
+  },
+  {
+   "id": 392,
+   "domain": "social",
+   "en": "I'm not selling them because it's not economical.",
+   "ru": "Я их не продаю, это невыгодно."
+  },
+  {
+   "id": 473,
+   "domain": "social",
+   "en": "Either there was a window in time where I had set these public, or something else is happening. Not all of my private repos are in there.",
+   "ru": "Или был период, когда я делал эти репозитории публичными, или тут какая-то другая история. Хотя там выложены не все мои приватные репозитории."
+  },
+  {
+   "id": 441,
+   "domain": "social",
+   "en": "@user4 @user3 You can do it! And I would be happy to share my insights with you.",
+   "ru": "@user4 @user3 У вас все получится! С радостью поделюсь своим опытом."
+  },
+  {
+   "id": 866,
+   "domain": "literary",
+   "en": "\"You mean... the horrible god monster thing that we... helped kill?\" Tenuk stuttered.",
+   "ru": "\"Ты имеешь в виду...  жуткого монстра, которого мы...  помогли убить?\" – Тенук запнулся."
+  },
+  {
+   "id": 78,
+   "domain": "news",
+   "en": "Don't let SNP to turn health service crisis into the \"new normal\" - Scotsman comment",
+   "ru": "Не позволим Шотландской национальной партии сделать кризис системы здравоохранения \"новой нормой\" – комментарий Scotsman"
+  },
+  {
+   "id": 495,
+   "domain": "social",
+   "en": "I've wanted to fly since I was a child.",
+   "ru": "Я с детства хотела летать."
+  },
+  {
+   "id": 339,
+   "domain": "social",
+   "en": "A few more sensors in general would be nice I guess.",
+   "ru": "По-моему, не помешала бы еще пара-тройка датчиков."
+  },
+  {
+   "id": 332,
+   "domain": "social",
+   "en": "That is almost a bummer because I was planning on mounting a TP-Link cpe210 on the roof and having it point downwards to the garden.",
+   "ru": "Просто облом какой-то, я-то уже собирался поставить на крыше TP-Link cpe210 и направить ее в сторону сада."
+  },
+  {
+   "id": 956,
+   "domain": "literary",
+   "en": "“Cause the regular alarms are shit. And because Daybreak doesn't sleep in” Cohren stated.",
+   "ru": "\"Потому что обычные будильники - хрень. И потому что в Рассвете не спят\", - заявил Корен."
+  },
+  {
+   "id": 87,
+   "domain": "news",
+   "en": "Move will also help transform land at the derelict Gartshore Works site.",
+   "ru": "Это также поможет облагородить заброшенный участок, принадлежащий Gartshore Works."
+  }
+ ],
+ "models": [
+  {
+   "model": "hy-mt3-1.8b@app",
+   "license": "Apache-2.0",
+   "license_verdict": "ok",
+   "n": 100,
+   "directions": {
+    "en-ru": {
+     "chrf++": 42.55,
+     "sec_median": 0.185,
+     "sec_p90": 0.333,
+     "errors": 0,
+     "hyps": [
+      "Ты самая красивая девушка, которую я когда-либо видел». Акило кладет один палец под подбородок и заставляет Айвори поднять на него глаза.",
+      "Последний рывок за равенство женщин",
+      "Если у меня получится открыть этот чертов файл. (Чёртова OneDrive.)",
+      "НО я как раз собирался положить несколько экземпляров в районе Финсбери-Парка, чтобы ты могла найти их, если захочешь, но сейчас слишком ветрено, и они не останутся на месте.",
+      "Мама говорит, что ты не хочешь нам приезжать. Она так говорит? Ага. У каждого свои истории, сынок. Наверное, это её история. Жизнь — забавная штука, понимаешь?",
+      "— Да, операция «Огненный шторм», — ответил Коурен. — Мы думали, что все закончится через несколько недель, но... мы их недооценили.",
+      "новый ат. Я знаю, что это значит…",
+      "Этан Френчмен — сотрудник правозащитной организации Disability Rights Washington, который выступает в защиту людей с инвалидностью в тюрьмах и колониях.",
+      "Пивовары возмущаются из-за освобождения виноделов от правил по борьбе с отходами",
+      "Вверху находится одна из таких плат для камер ESP32 с камерой с обзором в форме зрачка и ИК-лучевым светодиодом, которые я украл у камеры Raspberry Pi.",
+      "Ничто не делает меня счастливее, чем потеря Элона Маска денег. $tslq",
+      "@user19 Я могу только предположить, что это фото из моего визы или паспорта. Надо было быть внимательнее.",
+      "Как Бета Эду стала козлом отпущения неэффективной политической системы",
+      "Верните надзор за тюрьмами WA. От этого зависят жизни.",
+      "Теперь мне интересно, возможно ли будет проехать миллион метров в 2024 году? 🤔 #пелотон",
+      "Шотландские арендаторы, вероятно, столкнутся с дальнейшим тревожным ростом арендной платы, если экспертов не будут учитывать (Изображение: Adobe)",
+      "@user13 лично я считаю, что совместный опыт в какой-то степени необходим для всего, что мы делаем; другие вещи кажутся оторванными от нас (часто, конечно, не на 100%).",
+      "Но внешний вид слотов выглядит перспективным. Я попробую.",
+      "@user1 Не могу поверить, что уровень был таким сложным и на его прохождение ушло столько времени — а всего за него нужно всего 17 секунд!",
+      "мы находимся в периоде перемен, и я волнуюсь, желая выяснить, где мы могли бы обосноваться.",
+      "Изображения земли и воды Сисо в новой выставке в галерее",
+      "Я даже не помню, что я теперь умею. Может, перейду на виски.",
+      "Честно говоря, мне надо бы прекратить перекрикивать на эту тему, но то, что эта библиотека компонентов Tailwind указывает на плохое стандартное настройку Tailwind, — это меня смешит до безумия.",
+      "Люди, плавающие в бассейне\" от 2022 года — одно из произведений Висенте Сисо, которое будет выставлено в галерее Tierra del Sol с 13 января. (фото предоставлено Висенте Сисо)",
+      "Не так уж это и плохо, да, Каэль?",
+      "— Что вас разбудило? — спросил Корен.",
+      "Думаю, это было 18 баксов, но судя по тому, что могло прилипнуть ко мне повсюду, ОНО того стоило.",
+      "переработка всей почвы для контейнеров, которую я использовал в прошлом году, и начало выращивания бахчевых культур. Это наполовину уже испробованная почва для рассады из работы друга по удалению сорняков, а наполовину — верхний слой почвы с участка моих родителей",
+      "Чёрт тебя побери, король Людовик XIV, один из твоих потомков — анархист!",
+      "И мне тоже надоела грязь #водныйхрам",
+      "То есть это просто чудо: она применила всю эту превосходную навык в целях достижения более значимой социальной цели на этой неделе.",
+      "Если тебе интересна вызов, с которым мне предстоит справиться.",
+      "Удивительно, что в #DCU должны были быть две победы по пенальти, а ни одной не получили. Майами сейчас в хорошей форме #MLS #mastodonfc",
+      "Политики ошибаются, когда речь идет о лимитах арендной платы",
+      "Белая краска с различными оттенками синего",
+      "Покрытие из пробки установлено, сделал приспособление для удаления опилок из туалетного рулона для пылесоса 😂",
+      "Карта VFR для поездки",
+      "Ага-ага, конец учебного модуля 1.",
+      "Поскольку у нас не было причин сомневаться в подставке, на которую мы их поставили, эти парасоциальные отношения стали важными строительными блоками, которые определили наше жизнь.",
+      "Всемирный банк надеется распространить это послание.",
+      "— Какой тут блокнот? — спросила Айвори, садясь рядом с Кари на её кровать.",
+      "Хе-хе, не один, а три!",
+      "Ты вообще знаешь, что значит слово „нет“?» — выплюнул он и оттолкнул наследного принца от себя.",
+      "Нисси моргнула и снова повернулась к Тенуку. «Конечно, он может водить».",
+      "Приспособьте старое, примирите новое, чтобы решить проблему",
+      "— Ты в порядке? — невольно спросила Нисси.",
+      "Ну, сейчас у меня жизнь довольно хреновая.",
+      "Похоже, придется подождать до завтра, чтобы понять: действительно ли это достаточно для этой конструкции или мне нужен лучший панель, который я заказал.",
+      "14 ЯНВАРЯ, 22:26, 2543 год.",
+      "Фотографии с субботы: при посадке сломался шина",
+      "Счастливого субботнего дня, дорогие. Добро пожаловать на высоту 4000 футов.",
+      "Политики, которые думают, что могут изменить решения судей, фактически ставят себя выше закона.",
+      "Колобок был коронован. Да здравствует Король Колобок!",
+      "И да, другие источники прекрасно знают, что «война — это плохо», но при этом вы всё равно продаёте убийственные механизмы как фигурки и товары. Так что, типа, а что мы делаем?",
+      "Возможно, панель немного зарядила аккумулятор на достаточное время для 38 секунд работы. На это ушло чуть больше двух часов.",
+      "Лейтенант Немик… Лейтенант Вальтури…» Он сказал, что Корен медленнее, бросил взгляд на кобуру с пистолетом Корена, а затем снова поднял глаза. «Полагаю, рота готова».",
+      "Счастливого субботнего утра. Я сделал это сегодня ^_^",
+      "Оказалось, что USB-C разъем, который я использовал для подключения к зарядному устройству аккумулятора, имел перепутанные значения 5 В и GND на сетчатом экране.",
+      "Учитель и сама королева Эирвен выразили общий страх. Она медленно посмотрела на пол. «Да, мой король». Она поклонилась.",
+      "поле 0 — градус, поле 1 — минута, поле 2 — секунда",
+      "Компания FTSE 250, известная своими бутербродами с кровяной колбасой и стейком, планирует расширять сеть филиалов, но не повышать цены.",
+      "Они снова прошли по залам, снова пытаясь не слышать шепота служанок.",
+      "Они прикрыли уши — игнорировать их не помогало. Они направились в комнату королевского художника, которая находилась в восточном крыле, за второй дверью слева.",
+      "Генслер также добавил, что одобрение фондов на биткоинах не означает, что SEC одобрит фонды или торгуемые на бирже продукты (ETP), основанные на других цифровых валютах или активах.",
+      "XO Exodus, CO Exodus». Радио Коренса трещало. «Мы фиксируем сигнатуры тепловых излучений в 350 ярдах, на 20 градусов правее».",
+      "Дебаты о приостановке работы правительства усиливают гражданскую войну в Республиканской партии США",
+      "Доволен маленькой боковой нишею",
+      "Уже несколько часов — все новостные издания выдвигают эту тему на первые полосы, а у сайта состояния AT&T всё ещё утверждается, что сбоев нет. Самый медленный статичный сайт из всех, которые мне доводилось использовать…",
+      "Думаю, мне стоит найти работу, но я довольно ленивый. Наняйте меня сейчас — я выпью всю вашу пиво.",
+      "Не могу сказать», — заявил Кохрен. Он потянулся к микрофону и заговорил. «Рота Экзодус, прекратите огонь, если не получите по ногам, давайте вытягиваем их",
+      "Скоро твой день рождения, да?» — спросила Айвори, вспомнив, что день рождения принцессы был через несколько дней. Кари кивнула, и в её светло-голубых глазах промелькнуло печальное выражение.",
+      "Слишком много всего, на что нужно обращать внимание, и нет способа упорядочить это… Мы когда-нибудь сможем избавиться от перенасыщения?",
+      "Но... один из них — огромное чудовище!",
+      "2. HTML для раздела 7",
+      "У этого было только 1 вопрос",
+      "Уважаемый судья, мой клиент принимает состав суда в нынешнем виде. Состав суда удовлетворяет обе стороны? Мы принимаем состав суда. нам подходит. Присядьте членам суда.",
+      "@user43 разве не должно быть «я не могу получить стартер»? Иначе — идеально. :D",
+      "Жалобы на использование русского языка в Украине выросли на 30% — RT Россия и бывшие советские страны",
+      "— Ну, я не делала. Айвори нашла материалы для творчества из их списка и поставила их в ящик, который нашла. — И я не девочка.",
+      "Поскольку последние данные Национальной службы здравоохранения сообщают новые плохие новости, нам следует возмутиться.",
+      "Регуляторы одобряют новые биткоин-ETF в решающий момент для криптовалют",
+      "Ремонтник пола пылесошет, так что, надеюсь, он заканчивает.",
+      "Звездная огонька. Принцесса Тамарана. Надеюсь, вам там комфортно. Лорд Багрок! Ох! Какой могущественный дух. Ваша сестра поступила мудро, передав вас мне. Шея гарблера!",
+      "Разумеется, слухи относились и к ним, поскольку они были единственным человеком, допущенным в комнату.",
+      "@user43, это же потрясающая булка, которую ты создал. Потрясающе!",
+      "Первые шаги уже сделаны.",
+      "Скажем так, птицы в 2015 году будут иметь лучше интернет-соединение, чем я.",
+      "Дайте знать, если найдете их!",
+      "Пасхальные выходные: Eastercon 2024 в Телфорде.",
+      "Прочитав заранее, следующие несколько боёв кажутся тяжёлой работой. Я просто хочу бродить и время от времени собирать грибы.",
+      "Я не продаю их, потому что это невыгодно.",
+      "Либо в какой-то момент времени я поместил эти публичные данные, либо происходит что-то ещё. Не все мои приватные хранилища находятся там.",
+      "@user4 @user3 Вы справитесь! И я с радостью поделюсь своими мыслями с вами.",
+      "Ты имеешь в виду... эту ужасную богоманскую тварь, которую мы... помогли убить?\" — запнулся Тенук.",
+      "Не позволяйте SNP превратить кризис в системе здравоохранения в «новую норму» — комментарий шотландца",
+      "Я хотел летать с детства.",
+      "Думаю, было бы неплохо добавить еще несколько датчиков в целом.",
+      "Это почти обидно, потому что я планировал установить TP-Link cpe210 на крыше и направить его вниз — в сад.",
+      "Потому что обычные сигналы — отстой. И потому что Дейбрэйк не спит», — сказал Кохрен.",
+      "Движение также поможет преобразовать землю на заброшенном объекте Гартшор-Уоркс."
+     ]
+    },
+    "ru-en": {
+     "chrf++": 42.55,
+     "sec_median": 0.133,
+     "sec_p90": 0.212,
+     "errors": 0,
+     "hyps": [
+      "I've never seen a girl more beautiful than you.\" Akiyo grabbed their chin with one finger, forcing Ivory to look him in the eyes.",
+      "The final step toward equality for women",
+      "If, of course, that damn file opens (the stupid OneDrive).",
+      "But I thought I would spread them out around Finbury Park so you could look for them there, if anyone is interested, but today there’s too strong a wind; they get blown away right away.",
+      "Mom says you don’t want to come visit us. Does she really say that? Yes. Son, everyone has their own view of the situation. Probably she has that view. Life is therefore a funny thing, isn’t it?",
+      "Yes, Operation Firestorm,\" Coren replied. \"We thought everything would be over in a few weeks, but... we underestimated them.",
+      "new historical maximum; beyond that, I have no idea...",
+      "Ian Frenchman is a state attorney for Washington State for people with disabilities, defending people with disabilities in prisons.",
+      "Brewers against exemptions from waste control rules for vintners",
+      "In the upper part – an ESP32 controller with a wide-angle camera and an IR LED, which I removed from the Raspberry Pi camera.",
+      "I love most of all in the world when Elon Musk loses money. $tslq",
+      "@user35 I can only assume that it’s with the photo on the visa or passport. You should have looked more closely.",
+      "How Betta Edu became a scapegoat of an unsustainable political system",
+      "Take back oversight of Washington State prisons. People's lives depend on this.",
+      "Now I’m thinking: what if we try a million meters in 2024? 🤔 #peloton",
+      "If experts are not listened to, tenants in Scotland are more likely to face a significant price increase. (Illustration: Adobe.)",
+      "@user13 In general, personally I think that in any job it is important to take overall experience into account; otherwise there is a feeling of isolation (not always, of course, but often).",
+      "But the slot idea looks very promising. I'll give it a try.",
+      "@user1 I just can't believe that this super difficult level, which they've been struggling with for so long, lasts only 17 seconds!",
+      "We are going through a transitional period, and I am very worried about what this will all end up like.",
+      "Siso's works depicting land and water, at the center of the new exhibition in the gallery",
+      "I don’t even remember what I can do anymore. Maybe I’ll switch to whisky.",
+      "I’m here—maybe I’ve already pissed everyone off—but I find it really funny how rudimentary and basic the Tailwind configuration is; it needs to be supplemented with a component library.",
+      "The painting of 2022 “People Swimming in the Pool” is one of Vícente Siso’s works, which will be exhibited at Terra del Sol Gallery starting January 13. (Photo: Vícente Siso.)",
+      "It's not that bad after all, right, Kayel?",
+      "What woke you up, guys?\" — asked Koren.",
+      "I paid something like $18, but when I see how much all of that could have piled up on me, I think the jumpsuit has fully lived up to its price.",
+      "I've replaced the soil from last year in the containers and am starting to plant pumpkin plants. Now it is half potting soil from my friend's garden experiments, and half—the top layer of soil from the parent plots.",
+      "Shah and mat, King Louis XIV, one of your descendants – an anarchist!",
+      "I’m starting to hate the mud too #watertemple",
+      "So, it's simply incredible how she used this this week, discussing an important social issue.",
+      "If you suddenly are curious about what I'm getting involved in.",
+      "It's amazing that they were supposed to award two penalties #DSU, but they didn't award any. Miami is being criticized #MLS #FCMaestodon",
+      "Politicians are wrong regarding maximum rental rates.",
+      "White and blue colors in various shades",
+      "They placed a cork backing and adapted a toilet paper sleeve to the vacuum so that it could collect small sawdust 😂",
+      "VFR flight chart",
+      "Yes, the first module is over!",
+      "We could not doubt those we loved, and these parasocial relationships greatly helped us to form ourselves.",
+      "The World Bank hopes to spread this idea.",
+      "What notebook?\" Ivory asked, sitting next to Kari on her bed.",
+      "Hahaha, not just one coil, but three!",
+      "Don't you know what the word 'no' means?\" they snapped out, pushing the heir apparent away.",
+      "Nissi blinked and turned to Tenuku: \"Of course, he knows how to drive.",
+      "Solution to the problem: adaptation of old methods and new approaches",
+      "Are you okay?\" Nissi asked, unable to hold back.",
+      "Well, in general, I'm currently in a bad spot.",
+      "Apparently, we'll have to wait until tomorrow; then we'll figure out whether it's enough for such a structure or we'll need a better panel that I ordered.",
+      "January 14, 2543, 22:26.",
+      "Saturday photos: after the last landing, I noticed a slipped wheel.",
+      "Happy Saturday to everyone, my good ones! Welcome to 1,200 meters.",
+      "Politicians who believe they can overturn a judge’s decision place themselves above the law.",
+      "The stump was crowned; long live King Stump!",
+      "Yes, other sources KNOW that \"war is bad,\" but they themselves still trade figurines and merch with killer cars. And so what, pardon me, are we doing?",
+      "Maybe the panel briefly charged the battery for 38 seconds of operation. However, it took a little more than two hours for that to happen.",
+      "Lieutenant Nemik... Lieutenant Valturi...\" He pronounced \"Koren\" more slowly, glancing at his holster and raising his gaze again. \"I believe the company is ready.",
+      "Good morning everyone on Saturday! Today I did it ^_^",
+      "It turned out that on the USB-C plug through which I connected the charger, 5V and ground were swapped.",
+      "The advisor and Queen Eirwen themselves looked at him with horror. She shifted her gaze to the floor. “Yes, my king.” She bowed.",
+      "Field 0 for degrees, field 1 for minutes, field 2 for seconds",
+      "A company on the FTSE 250 index, famous for its fried sausage and meat pies, plans to expand its network without raising prices.",
+      "They walked again through the corridors, once again trying not to listen to the whispers of the servants.",
+      "They covered their ears because they simply couldn't shut off. They went to the royal artist's room, which was in the eastern wing, the second door on the left.",
+      "Gensler also added that the fund approval for Bitcoin does not imply that the Securities and Exchange Commission will approve funds or exchange products based on other digital currencies.",
+      "Deputy Platoon Iskhod, Platoon Commander Iskhod,\" Koren's radio screeched. \"We see thermal signatures at 350 yards, 20 degrees to the right.",
+      "Disputes over the suspension of government activity are fueling civil war in the House of Representatives.",
+      "How I love this little niche on the side",
+      "Several hours have passed; in the news, everywhere they write and talk about the situation, yet on AT&T’s website, on the troubleshooting page, it still says that everything is working. I have never seen such a slow, static website.",
+      "Maybe I need to find a job, but I'm quite lazy. Hire me right away; I'll drink all the beer at your place.",
+      "Not clear,\" said Koren. He took the microphone and said, \"Company Exodus—do not open fire first; let's lure them out.",
+      "Are you soon having your birthday?\" Aivori asked, remembering that in a few days it would be the princess's birthday. Kari nodded; sadness flashed in her blue eyes.",
+      "We need to pay attention to this amount of everything, and this list can’t be reduced in any way... Will we be able to avoid overstimulation?",
+      "But... one of them is a giant monster!",
+      "2. HTML Section 7",
+      "There was only one question here.",
+      "Your Honor, my client accepts the proposed jury composition. Does the jury composition satisfy both sides? We are satisfied. We accept this composition. Bring the jurors to swear an oath.",
+      "@user43 You can correct the words to \"can't conceive,\" but it works great like this :D",
+      "The number of complaints about the use of the Russian language in Ukraine has increased by 30% – RT in Russia and the former USSR",
+      "And I—no.\" Ayvor found everything they needed and put it into the basket they found right away. \"And I'm not a girl.",
+      "Since the National Health Service has recently been publishing even more bad news, we should be outraged.",
+      "Regulators approved new Bitcoin exchange funds at a pivotal moment for cryptocurrency.",
+      "The master turned on the vacuum cleaner; I hope that means he will be finished soon.",
+      "Starlight. Princess Tamaran. I hope you're comfortable. Lord Bagrok! What formidable spirit! Your sister acted wisely by handing you over. Damn!",
+      "The rumors, of course, also concerned them themselves, since they were the only person who was allowed to enter the room.",
+      "@user43 The newborn bread looks luxurious. Well done!",
+      "The first steps have already been taken.",
+      "Let's put it this way: these birds will have better internet than I did in 2015.",
+      "If you find stickers, write!",
+      "On Easter weekends at Eastercon 2024 in Telford.",
+      "I read that there are more battles like that, so you’ll have to work hard. I just want to go for walks and sometimes pick mushrooms.",
+      "I don't sell them; it's not profitable.",
+      "Either it was the period when I made these repositories public, or there’s some other story here. Although not all of my private repositories are posted there.",
+      "@user4 @user3 You will succeed in everything! I will gladly share my experience.",
+      "You mean... the horrible monster that we... helped kill?\" – Tenuk faltered.",
+      "Let’s not allow the Scottish National Party to make the health system crisis a “new norm” – comment by Scotsman",
+      "I have wanted to fly since childhood.",
+      "In my opinion, a couple more sensors wouldn't hurt.",
+      "This is just a total disaster; I was already about to put the TP-Link cpe210 on the roof and direct it toward the garden.",
+      "Because ordinary alarms are crap. And because they don't sleep in Dawn,\" said Koren.",
+      "This will also help improve a neglected plot owned by Gartshore Works."
+     ]
+    }
+   },
+   "engine": "Ollama 0.40.8",
+   "prompt": "live captions (app.live_translate)",
+   "ollama_model": "hy-mt3-1.8b:latest",
+   "digest": "b50d66f47b49",
+   "file_mb": 1286,
+   "quant": "Q4_K_M",
+   "memory_mb": 1463,
+   "vram_mb": 1463,
+   "gpu_used_mb": 21325
+  }
+ ]
+}
