@@ -1105,6 +1105,7 @@ const VX_LAYERS = [
   ['quick-lang-menu', () => vxThere('quick-lang-menu'), vxCall('closeQuickLangMenu'), '#quick-lang-menu'],
   ['st-models-pop', () => vxShown('st-models-pop'), vxCall('closeStudioModelsPop'), '#st-models-pop'],
   ['st-cap-more', () => vxShown('st-cap-more'), vxCall('closeStudioCapMore'), '#st-cap-more'],
+  ...['source', 'video', 'meet', 'after'].map(k => [`st-fly-${k}`, () => vxShown(`st-fly-${k}`), vxCall('closeStudioRail'), `#st-fly-${k}`]),
   ['tk-pop', () => vxThere('tk-pop'), vxCall('tkClosePop'), '#tk-pop'],
   ['hm-day-pop', () => vxShown('hm-day-pop'), () => {
     document.getElementById('hm-day-pop')?.classList.add('hidden');

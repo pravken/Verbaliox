@@ -14,6 +14,11 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   opens the studio; «Studio ›» between them and «Stop» shows whether the captions are on (a green outline while they
   are off). On the first recording a hint under it says where the captions and the text are; once closed it is not
   shown again. The tray menu has «Studio: captions and text» while recording.
+- **The studio's options in a narrow rail**: the column of cards on the left gave way to four buttons — «Source»,
+  «Video», «Meeting», «After stop». Each shows its state (the source, the video, the number of people, how many
+  switches are on), a click opens its panel beside the rail; Esc or a click elsewhere closes it. The captions and the
+  text get the width; the big level meter and the long hints are gone (the level is in the recording bar, the
+  recordings folder is in Settings → Recording).
 - **A call is a meeting too**: while a call app (Teams, Zoom, Telegram…) or a browser holds the microphone,
   transcriptions wait, recorded or not, in the calendar or not. During a meeting a transcription starts only on the
   user's «Transcribe» and «Yes, start now».
@@ -1214,6 +1219,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   между ними и «Стоп» показывает, включены ли субтитры (зелёная рамка, пока они выключены). При первой записи под ней
   появляется подсказка, где субтитры и текст; закрытая, она больше не показывается. В меню значка в трее во время
   записи — «Студия: субтитры и текст».
+- **Параметры студии — в узкой панели**: колонка карточек слева заменена четырьмя кнопками — «Источник», «Видео»,
+  «Встреча», «После записи». Каждая показывает состояние (источник, видео, число участников, сколько переключателей
+  включено), нажатие открывает её панель рядом; Esc или нажатие вне панели закрывает её. Субтитры и текст получают
+  всю ширину; большой индикатор уровня и длинные подсказки убраны (уровень — в строке записи, папка записей — в
+  «Настройки → Запись»).
 - **Звонок — тоже встреча**: пока микрофон держит приложение звонка (Teams, Zoom, Telegram…) или браузер, расшифровки
   ждут, даже без записи и без встречи в календаре. Во время встречи расшифровка начинается только по «Расшифровать»
   и «Да, начать сейчас».
