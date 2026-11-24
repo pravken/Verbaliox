@@ -61,7 +61,7 @@ async function installVoiceFilter() {
   }
 }
 
-// Settings → General → «Акцент»: the colour of the picked-out buttons and marks, applied at once and saved
+// Settings → General → «Цвет выделения»: the colour of the picked-out buttons and marks, applied at once and saved
 // (ui_accent); the background stays one
 function renderAccentChoices() {
   const el = document.getElementById('theme-accents');
@@ -72,8 +72,6 @@ function renderAccentChoices() {
     return `<button role="radio" aria-checked="${k === on}" class="theme-sw${k === on ? ' on' : ''}" data-click="setAccent" `
       + `data-click-args='["${k}"]' title="${name}" aria-label="${name}"><i style="background:${THEME_ACCENTS[k]}"></i></button>`;
   }).join('');
-  const label = document.getElementById('theme-accent-name');
-  if (label) label.textContent = t(`theme_accent_${on}`);
 }
 
 async function setAccent(key) {
