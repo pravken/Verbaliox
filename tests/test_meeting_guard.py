@@ -314,3 +314,87 @@ class RunNowTest(unittest.TestCase):
         self.assertTrue(transcriber.run_now(77))
         self.assertFalse(transcriber._waits_for_meeting(transcriber._run_job, (77,)))
         self.assertTrue(transcriber._waits_for_meeting(transcriber._run_job, (78,)))
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class VoiceNoteIsNoMeetingTest(unittest.TestCase):
+    """Reported by the user: a voice note of a minute, recorded by hand with no call and no meeting in the
+    calendar, held the queue («ждёт конца встречи») while it recorded and 2 minutes after. Only a recording of a
+    meeting (a call or the calendar started it, or it follows a Teams meeting) holds it now."""
+
+    def setUp(self):
+        init_db()
+        update_settings({"analysis_after_meetings": "true"})
+        app_status.set_recording(False)
+        meeting_guard._state.update(busy="", quiet_since=0.0, ended=0.0, ended_kind="", looked=True)
+        for p in (mock.patch("app.calendar_ics.current_meeting", return_value=None),
+                  mock.patch.object(meeting_guard, "_in_call", return_value=False),
+                  mock.patch("app.economy.on", return_value=False),
+                  mock.patch("app.transcriber.wake_queue")):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tearDown(self):
+        meeting_guard._state.update(busy="", ended=0.0, ended_kind="")
+        app_status.set_recording(False)
+
+    def test_a_voice_note_holds_nothing_and_starts_no_pause(self):
+        app_status.set_recording(True, meeting=False)
+        self.assertEqual(meeting_guard.busy(), "")
+        meeting_guard.check(now=1000.0)
+        self.assertFalse(meeting_guard.holds_queue(now=1000.0))
+        self.assertEqual(meeting_guard.hold_state(now=1000.0), {})
+        app_status.set_recording(False)
+        meeting_guard.check(now=1060.0)  # stopped after a minute
+        self.assertFalse(meeting_guard.holds_queue(now=1061.0))  # no pause of 2 minutes after it
+        self.assertIsNone(meeting_guard.hold_until(now=1061.0))
+        self.assertEqual(meeting_guard.hold_state(now=1061.0), {})
+
+    def test_a_recording_of_a_meeting_holds_and_starts_the_pause(self):
+        app_status.set_recording(True, meeting=True)
+        self.assertEqual(meeting_guard.busy(), "recording")
+        meeting_guard.check(now=1000.0)
+        self.assertTrue(meeting_guard.holds_queue(now=1000.0))
+        self.assertEqual(meeting_guard.hold_state(now=1000.0), {"kind": "meeting", "reason": "recording"})
+        app_status.set_recording(False)
+        meeting_guard.check(now=2000.0)
+        self.assertTrue(meeting_guard.holds_queue(now=2000.0 + 20))
+        st = meeting_guard.hold_state(now=2000.0 + 20)
+        self.assertEqual(st, {"kind": "pause", "until": 2000.0 + meeting_guard.QUIET_SEC,
+                              "left": int(meeting_guard.QUIET_SEC) - 20, "reason": "recording"})
+        self.assertEqual(meeting_guard.hold_state(now=2000.0 + meeting_guard.QUIET_SEC + 1), {})
+
+    def test_a_voice_note_found_to_follow_a_teams_meeting_becomes_one(self):
+        """The page says it again once the recording follows a Teams meeting: it holds from then on, its start kept."""
+        app_status.set_recording(True, meeting=False)
+        since = app_status._ui["since"]
+        app_status.set_recording(True, meeting=True)
+        self.assertEqual(app_status._ui["since"], since)
+        self.assertEqual(meeting_guard.busy(), "recording")
+
+    def test_an_older_page_saying_nothing_is_taken_for_a_meeting(self):
+        from app import main  # noqa: F401 - app/api/recording.py is loaded by it
+        from app.api.recording import UiStatePayload
+
+        payload = UiStatePayload(recording=True)
+        self.assertIsNone(payload.meeting)
+        app_status.set_recording(payload.recording, payload.meeting)
+        self.assertEqual(meeting_guard.busy(), "recording")
+
+    def test_a_call_and_the_calendar_still_hold_during_a_voice_note(self):
+        app_status.set_recording(True, meeting=False)
+        with mock.patch.object(meeting_guard, "_in_call", return_value=True):
+            self.assertEqual(meeting_guard.busy(), "call")
+        with mock.patch("app.calendar_ics.current_meeting", return_value={"title": "Планёрка"}):
+            self.assertEqual(meeting_guard.busy(), "calendar")
+
+    def test_the_pause_follows_a_call_but_not_recording_only(self):
+        with mock.patch.object(meeting_guard, "_in_call", return_value=True):
+            meeting_guard.check(now=1000.0)
+        meeting_guard.check(now=1100.0)  # the call is over
+        self.assertEqual(meeting_guard.hold_state(now=1110.0)["reason"], "call")
+        meeting_guard._state.update(busy="", ended=0.0, ended_kind="")
+        with mock.patch("app.economy.on", return_value=True):
+            meeting_guard.check(now=3000.0)
+        meeting_guard.check(now=3100.0)  # «Только запись» is off: no meeting was going on
+        self.assertIsNone(meeting_guard.hold_until(now=3101.0))

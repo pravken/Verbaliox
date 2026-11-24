@@ -13,6 +13,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **A call is a meeting too**: while a call app (Teams, Zoom, Telegram…) or a browser holds the microphone,
   transcriptions wait, recorded or not, in the calendar or not. During a meeting a transcription starts only on the
   user's «Transcribe» and «Yes, start now».
+- **A voice note is no meeting**: a recording made by hand, with no call and no meeting in the calendar, no longer
+  holds the transcriptions while it records nor for the 2 minutes after it. Only a recording of a meeting (one a call
+  or the calendar started, or one following a Teams meeting) holds them; the pause of 2 minutes comes only after a
+  meeting.
 - **Live captions with Teams no longer jump**: a line keeps the speaker it was given, and the room for the names stays.
 - **One row above the studio's text**: the tabs «Text · My notes · Questions» on the left, and on the right the chips
   «Captions» with its switch, the translation language (a menu), the memory of the caption models (a popover with the
@@ -1163,6 +1167,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Звонок — тоже встреча**: пока микрофон держит приложение звонка (Teams, Zoom, Telegram…) или браузер, расшифровки
   ждут, даже без записи и без встречи в календаре. Во время встречи расшифровка начинается только по «Расшифровать»
   и «Да, начать сейчас».
+- **Голосовая заметка — не встреча**: запись, сделанная вручную без звонка и без встречи в календаре, больше не
+  задерживает расшифровки ни во время записи, ни 2 минуты после неё. Задерживает только запись встречи (начатая
+  звонком или календарём либо следующая за встречей Teams); пауза в 2 минуты — только после встречи.
 - **Субтитры с Teams больше не дёргаются**: строка сохраняет найденного говорящего, а место под имена не пропадает.
 - **Одна строка над текстом студии**: слева вкладки «Текст · Мои заметки · Вопросы», справа «Субтитры» с переключателем,
   язык перевода (меню), память моделей субтитров (окно с моделями распознавания и перевода, их размером и состоянием)

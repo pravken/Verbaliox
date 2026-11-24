@@ -6,11 +6,13 @@ The job queue and live caption sessions live in this process. Recording happens 
 """
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.ui_lang import tr
 
-_ui: Dict[str, Any] = {"recording": False, "since": 0.0}
+# meeting: the recording is of a meeting (a call or the calendar's meeting started it, or the Teams meeting it
+# follows): only such a recording holds the queue (app/meeting_guard.busy); a voice note recorded by hand does not
+_ui: Dict[str, Any] = {"recording": False, "since": 0.0, "meeting": False}
 
 KIND_LABELS = {
     "transcribe": "Распознавание",
@@ -120,9 +122,12 @@ def take_notices() -> List[Dict[str, Any]]:
     return out
 
 
-def set_recording(active: bool) -> None:
+def set_recording(active: bool, meeting: Optional[bool] = None) -> None:
+    """meeting: whether this recording is of a meeting; None (a page of an older version says nothing) is taken
+    for one, as before. The page says it again while it records once it learns it (the Teams meeting it follows)."""
     was = bool(_ui.get("recording"))
-    _ui.update(recording=bool(active), since=time.time() if active else 0.0)
+    since = float(_ui.get("since") or 0) if was and active else (time.time() if active else 0.0)
+    _ui.update(recording=bool(active), since=since, meeting=bool(active) and (True if meeting is None else bool(meeting)))
     if was and not active:  # stopped during a calendar meeting: it holds the mix no longer once the call is over
         from app import meeting_guard
 

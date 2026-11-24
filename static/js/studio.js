@@ -640,6 +640,7 @@ async function meetingFollowTick() {
     mf.base = title;
     const input = document.getElementById('record-title-input');
     if (input && !input.value.trim()) input.value = title;  // named after the meeting
+    reportRecordingState(true);  // a recording of the meeting now: the queue waits for its end
     return;
   }
   if (!title) {
@@ -1563,12 +1564,19 @@ function stopLiveCaptions() {
   }
 }
 
+// Whether the recording is of a meeting: a call or the calendar's meeting started it, or it follows a Teams meeting.
+// Only such a recording holds the queue («Не мешать на встречах»): a voice note recorded by hand does not (reported
+// by the user: a recording of a minute waited «до конца встречи»)
+function recordingIsMeeting() {
+  return !!(state.callRecording || (typeof hmAutoRec !== 'undefined' && hmAutoRec) || meetingFollow.base || meetingFollow.busy);
+}
+
 // The tray icon shows "recording" while the page records (app/app_status.py)
 function reportRecordingState(active) {
   fetch('/api/ui/state', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recording: !!active }),
+    body: JSON.stringify({ recording: !!active, meeting: !!active && recordingIsMeeting() }),
   }).catch(() => {});
 }
 
