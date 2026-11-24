@@ -777,48 +777,82 @@
         <div data-stab="calendar" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavCalendar">Календарь</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescCalendar">Встречи для названий и участников записей, рабочий день и автозапись.</p>
           </div>
         <!-- The user's calendar (app/calendar_ics.py) -->
         <div class="settings-card">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="calendarTitle">Календарь</h4>
-              <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="calendarDesc">Outlook на этом компьютере (кнопка «Из Outlook»: Microsoft 365, Exchange, Outlook.com — там же встречи Teams), файл .ics или ссылка на календарь (Outlook в браузере: «Опубликовать календарь», Google: «Секретный адрес в формате iCal»). Запись во время встречи получит её название и участников, а в студии видны ближайшие встречи со справкой. Календарь только читается и никуда не отправляется.</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="calendarTitle">Подключение</h4>
+            <p class="sx-card-cap" data-i18n="calendarDesc">Outlook, файл .ics или ссылка. Запись получит название и участников встречи. Только чтение</p></div>
+          <div class="sx-field">
             <input id="set-calendar-ics" type="text" spellcheck="false" placeholder="outlook · C:\Users\…\calendar.ics · https://…/basic.ics"
-              class="flex-1 min-w-0 h-8 bg-apple-sidebar border apple-border rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:border-apple-blue" />
-            <button data-click="useOutlookCalendar" id="calendar-outlook-btn" class="hidden ui-btn ui-btn-subtle h-8 shrink-0" data-i18n-title="tipCalendarOutlook"
-              title="Читать календарь из Outlook на этом компьютере (Microsoft 365, Exchange, Outlook.com — там же встречи Teams). Без ссылок и входа" data-i18n="calendarOutlook">Из Outlook</button>
-            <button data-click="checkCalendar" class="ui-btn ui-btn-subtle h-8" data-i18n="calendarCheck">Проверить</button>
+              class="sx-input sx-mono flex-1" />
+            <button data-click="useOutlookCalendar" id="calendar-outlook-btn" class="hidden ui-btn ui-btn-subtle" data-i18n="calendarOutlook">Из Outlook</button>
+            <button data-click="checkCalendar" class="ui-btn ui-btn-subtle" data-i18n="calendarCheck">Проверить</button>
           </div>
           <div id="calendar-status" class="text-[11.5px] text-apple-tertiary"></div>
         </div>
 
+        <!-- The working hours of «Встречи сегодня» on the home page and the recording of every meeting; the reminders -->
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="rdSasWorkdayTitle">Рабочие часы и автозапись</h4></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasWorkdayHours">Рабочие часы</span>
+              <span id="workday-overnight" class="hidden sx-row-cap text-apple-amber" data-i18n="rdSasWorkdayOvernight">через полночь</span></span>
+            <div class="sx-row-ctl">
+              <label for="set-workday-start" class="sx-ctl-name" data-i18n="rdSasWorkdayFrom">С</label>
+              <select id="set-workday-start" class="sx-select sx-time-sel"><option value="09:00">09:00</option></select>
+              <label for="set-workday-end" class="sx-ctl-name" data-i18n="rdSasWorkdayTo">до</label>
+              <select id="set-workday-end" class="sx-select sx-time-sel"><option value="18:00">18:00</option></select>
+            </div>
+          </div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasAutorecordAll">Записывать все встречи из календаря</span>
+              <span class="sx-row-cap" data-i18n="rdSasAutorecordAllHint">Запись идёт с начала до конца встречи. Пропустить встречу можно в «Сегодня»</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-meetings-autorecord" />
+          </label>
+          <label class="sx-row sx-dep">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasAskInPerson">Перед очными встречами спрашивать</span>
+              <span class="sx-row-cap" data-i18n="rdSasAskInPersonHint">Встреча без ссылки на звонок: за минуту до начала придёт вопрос</span>
+              <span id="ask-inperson-off" class="hidden sx-row-cap text-apple-amber" data-i18n="rdSasAskInPersonOff">Действует, когда включена запись всех встреч</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-meetings-ask-inperson" checked />
+          </label>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-meet-notify-before" class="sx-row-label" data-i18n="rdSasNotify">Уведомления о встречах</label>
+              <span class="sx-row-cap" data-i18n="rdSasNotifyHint">Напоминание и подключение к звонку по ссылке из приглашения</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-meet-notify-before" class="sx-select">
+                <option value="off" data-i18n="rdSasNotifyOff">Выключены</option>
+                <option value="30" data-i18n="rdSasBefore30s">За 30 секунд</option>
+                <option value="60" data-i18n="rdSasBefore1m">За 1 минуту</option>
+                <option value="120" data-i18n="rdSasBefore2m">За 2 минуты</option>
+                <option value="300" data-i18n="rdSasBefore5m">За 5 минут</option>
+                <option value="600" data-i18n="rdSasBefore10m">За 10 минут</option>
+                <option value="900" data-i18n="rdSasBefore15m">За 15 минут</option>
+                <option value="0" data-i18n="rdSasBeforeOff">Только подключение к звонку</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <!-- Public holidays of a country and its region (app/holidays_cal.py): days off on «Главная» and in the calendar -->
         <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="holTitle">Праздники</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="holDesc">Государственные праздники выбранной страны — выходные дни: «Сегодня» и «Обзор» не считают их рабочими, неделя и календарь их отмечают. Работает без интернета.</p>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="holTitle">Праздники</h4>
+            <p class="sx-card-cap" data-i18n="holDesc">Праздничные дни не считаются рабочими в «Сегодня» и «Обзоре»</p></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-holiday-country" class="sx-row-label" data-i18n="holCountry">Страна</label>
+              <span class="sx-row-cap"><span id="holiday-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <label for="set-holiday-subdiv" id="holiday-subdiv-label" class="hidden sx-ctl-name" data-i18n="holRegion">Регион</label>
+              <select id="set-holiday-subdiv" class="hidden sx-select sx-narrow">
+                <option value="" data-i18n="holWholeCountry">Вся страна</option>
+              </select>
+              <select id="set-holiday-country" data-change="syncHolidaySubdivs" class="sx-select">
+                <option value="" data-i18n="holNone">Не учитывать</option>
+              </select>
+            </div>
           </div>
-          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
-            <label for="set-holiday-country" data-i18n="holCountry">Страна</label>
-            <select id="set-holiday-country" data-change="syncHolidaySubdivs"
-              class="h-7 max-w-[16rem] bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
-              <option value="" data-i18n="holNone">Не учитывать</option>
-            </select>
-            <label for="set-holiday-subdiv" id="holiday-subdiv-label" class="hidden" data-i18n="holRegion">Регион</label>
-            <select id="set-holiday-subdiv"
-              class="hidden h-7 max-w-[14rem] bg-apple-sidebar border apple-border rounded-lg px-2 text-xs text-white focus:outline-none">
-              <option value="" data-i18n="holWholeCountry">Вся страна</option>
-            </select>
-          </div>
-          <div id="holiday-status" class="text-[11.5px] text-apple-tertiary"></div>
           <!-- The user's own days off and vacations: counted as holidays (saved at once, days_off) -->
-          <div class="dayoff">
-            <div class="text-xs text-apple-label font-medium" data-i18n="dayOffTitle">Свои выходные и отпуск</div>
+          <div class="sx-block">
+            <div class="sx-row-label" data-i18n="dayOffTitle">Свои выходные и отпуск</div>
             <div id="dayoff-list" class="dayoff-list"></div>
             <div class="dayoff-add">
               <input id="dayoff-from" type="date" class="sx-time" data-i18n-title="dayOffFrom" title="С" data-i18n-aria="dayOffFrom" aria-label="С" />
@@ -830,69 +864,32 @@
           </div>
         </div>
 
-        <!-- The working day of «Встречи сегодня» on the home page and the recording of every meeting -->
+        <!-- How long the working day lasted (app/worktime.py), the reminder of the norm; «Мои программы»: the
+             program in front of each worked minute, off until turned on -->
         <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="rdSasWorkdayTitle">Рабочий день и автозапись</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="rdSasWorkdayDesc">Какие часы показывать в «Встречи сегодня» на странице «Сегодня». Конец раньше начала — день идёт через полночь.</p>
-          </div>
-          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
-            <label for="set-workday-start" data-i18n="rdSasWorkdayFrom">С</label>
-            <select id="set-workday-start" class="sx-time"><option value="09:00">09:00</option></select>
-            <label for="set-workday-end" data-i18n="rdSasWorkdayTo">до</label>
-            <select id="set-workday-end" class="sx-time"><option value="18:00">18:00</option></select>
-            <span id="workday-overnight" class="hidden text-[11.5px] text-apple-amber" data-i18n="rdSasWorkdayOvernight">через полночь</span>
-          </div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="rdSasAutorecordAll">Записывать все встречи из календаря</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasAutorecordAllHint">Запись начнётся в начале встречи и закончится вместе с ней. Отдельные встречи можно пропустить на странице «Сегодня».</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-meetings-autorecord" />
-          </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label ml-6">
-            <span><span data-i18n="rdSasAskInPerson">Перед очными встречами спрашивать</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasAskInPersonHint">Встреча без ссылки на видеозвонок: за минуту до начала придёт вопрос, записывать ли её.</span>
-              <span id="ask-inperson-off" class="hidden block text-[11.5px] text-apple-amber leading-snug mt-0.5" data-i18n="rdSasAskInPersonOff">Действует, когда включена запись всех встреч.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-meetings-ask-inperson" checked />
-          </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="rdSasNotify">Уведомления о встречах</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasNotifyHint">Уведомления Windows: напоминание заранее, а в начале встречи — подключение к звонку, если в приглашении есть ссылка на Teams, Zoom, Google Meet или Webex.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-meet-notify" checked />
-          </label>
-          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap ml-6">
-            <label for="set-meet-notify-before" data-i18n="rdSasNotifyBefore">Напоминать</label>
-            <select id="set-meet-notify-before" class="sx-time">
-              <option value="30" data-i18n="rdSasBefore30s">за 30 секунд</option>
-              <option value="60" data-i18n="rdSasBefore1m">за 1 минуту</option>
-              <option value="120" data-i18n="rdSasBefore2m">за 2 минуты</option>
-              <option value="300" data-i18n="rdSasBefore5m">за 5 минут</option>
-              <option value="600" data-i18n="rdSasBefore10m">за 10 минут</option>
-              <option value="900" data-i18n="rdSasBefore15m">за 15 минут</option>
-              <option value="0" data-i18n="rdSasBeforeOff">не напоминать, только подключение</option>
-            </select>
-          </div>
-          <!-- How long the working day lasted (app/worktime.py) and the reminder of the norm -->
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="rdSasWorktime">Считать отработанное время</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasWorktimeHint">Учитываются минуты, когда используются клавиатура и мышь, идёт запись или звонок, — как статус в Teams. Видно в «Обзоре» и в календаре. Только на этом компьютере.</span></span>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="rdSasWorktimeTitle">Учёт времени</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasWorktime">Считать отработанное время</span>
+              <span class="sx-row-cap" data-i18n="rdSasWorktimeHint">Минуты активности, записи и звонков. Видно в «Обзоре»</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-worktime-track" checked />
           </label>
-          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
-            <label for="set-work-remind" data-i18n="rdSasWorkRemind">Напомнить, когда отработано</label>
-            <select id="set-work-remind" class="sx-time">
-              <option value="0" data-i18n="rdSasWorkRemindOff">не напоминать</option>
-              <option value="6" data-i18n="rdSasRemind6">6 ч</option><option value="7" data-i18n="rdSasRemind7">7 ч</option><option value="8" data-i18n="rdSasRemind8">8 ч</option>
-              <option value="9" data-i18n="rdSasRemind9">9 ч</option><option value="10" data-i18n="rdSasRemind10">10 ч</option>
-            </select>
+          <div class="sx-row sx-dep">
+            <span class="sx-row-text"><label for="set-work-remind" class="sx-row-label" data-i18n="rdSasWorkRemind">Напомнить, когда отработано</label></span>
+            <div class="sx-row-ctl">
+              <select id="set-work-remind" class="sx-select sx-narrow">
+                <option value="0" data-i18n="rdSasWorkRemindOff">Не напоминать</option>
+                <option value="6" data-i18n="rdSasRemind6">6 ч</option><option value="7" data-i18n="rdSasRemind7">7 ч</option><option value="8" data-i18n="rdSasRemind8">8 ч</option>
+                <option value="9" data-i18n="rdSasRemind9">9 ч</option><option value="10" data-i18n="rdSasRemind10">10 ч</option>
+              </select>
+            </div>
           </div>
-          <!-- «Мои программы» (app/worktime.py): the program in front of each worked minute; off until turned on -->
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="rdSasApps">Учитывать время в программах</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasAppsHint">Сохраняется только название программы на переднем плане в рабочие минуты. Названия окон, документов, писем и сайтов, нажатия клавиш и снимки экрана не сохраняются. Время встреч учитывается отдельно. Данные остаются на этом компьютере.</span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-apps-track" />
-          </label>
-          <div class="flex items-center gap-2 text-xs text-apple-label flex-wrap">
-            <button type="button" class="ui-btn ui-btn-subtle h-7 px-3 text-[11.5px]" data-click="clearAppsHistory" data-i18n="rdSasAppsClear">Удалить историю программ</button>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-apps-track" class="sx-row-label" data-i18n="rdSasApps">Учёт времени по программам</label>
+              <span class="sx-row-cap" data-i18n="rdSasAppsHint">Сохраняется только название активной программы. Окна, тексты и снимки экрана — нет</span></span>
+            <div class="sx-row-ctl">
+              <button type="button" class="ui-btn ui-btn-subtle" data-click="clearAppsHistory" data-i18n="rdSasAppsClear">Удалить историю</button>
+              <input type="checkbox" role="switch" class="vs-switch" id="set-apps-track" />
+            </div>
           </div>
         </div>
         </div>

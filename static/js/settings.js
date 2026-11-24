@@ -2941,7 +2941,7 @@ const SETTINGS_RESET = {
     ['set-live-tr-fast', 'live_translate_model_fast', 'value']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
     ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check'],
-    ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
+    ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check']],
@@ -3033,10 +3033,10 @@ function fillWorkdaySettings(s) {
   if (a) a.checked = s.meet_auto_all === 'true';
   const b = document.getElementById('set-meetings-ask-inperson');
   if (b) b.checked = s.meet_ask_inperson !== 'false';
-  const nt = document.getElementById('set-meet-notify');
-  if (nt) nt.checked = s.meet_notify !== 'false';
+  // the notifications of meetings: one list, «Выключены» (meet_notify) or how long before (meet_notify_before)
   const nb = document.getElementById('set-meet-notify-before');
-  if (nb) nb.value = [...nb.options].some(o => o.value === String(s.meet_notify_before)) ? String(s.meet_notify_before) : '300';
+  if (nb) nb.value = s.meet_notify === 'false' ? 'off'
+    : [...nb.options].some(o => o.value === String(s.meet_notify_before)) ? String(s.meet_notify_before) : '300';
   const wt = document.getElementById('set-worktime-track');
   if (wt) wt.checked = s.worktime_track !== 'false';
   const at = document.getElementById('set-apps-track');
@@ -3402,6 +3402,11 @@ function holidayPayload() {
   return { holiday_country: sel.value || '', holiday_subdiv: keepSub ? HOLIDAYS.want.subdiv : (sub?.value || '') };
 }
 
+function meetNotifyBefore() {
+  const v = document.getElementById('set-meet-notify-before')?.value;
+  return v && v !== 'off' ? v : String((((state.system || {}).settings || {}).meet_notify_before) || '300');
+}
+
 function workdaySettingsPayload() {
   const v = (id, d) => document.getElementById(id)?.value || d;
   return {
@@ -3409,8 +3414,9 @@ function workdaySettingsPayload() {
     work_day_end: String(parseInt(v('set-workday-end', '18:00'), 10)),
     meet_auto_all: String(!!document.getElementById('set-meetings-autorecord')?.checked),
     meet_ask_inperson: String(document.getElementById('set-meetings-ask-inperson')?.checked !== false),
-    meet_notify: String(document.getElementById('set-meet-notify')?.checked !== false),
-    meet_notify_before: document.getElementById('set-meet-notify-before')?.value || '300',
+    meet_notify: String(document.getElementById('set-meet-notify-before')?.value !== 'off'),
+    // «Выключены» keeps the time chosen before
+    meet_notify_before: meetNotifyBefore(),
     worktime_track: String(document.getElementById('set-worktime-track')?.checked !== false),
     // only from the switch itself: turned on from «Главная», it is not turned off by a page without the switch
     ...(document.getElementById('set-apps-track') ? { apps_track: String(document.getElementById('set-apps-track').checked) } : {}),
