@@ -5492,9 +5492,9 @@ label.sx-row:has(.vs-switch:disabled) { cursor: default; }
 /* a block: a row whose content is wider than a control (a list, a code, a field across the card) */
 .sx-block { padding: 10px 0; display: flex; flex-direction: column; gap: 8px; }
 /* one size of list in every row, so the right edges line up from section to section */
-.sx-select { height: 30px; width: 240px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14));
+.sx-select { height: 30px; width: 260px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14));
   background: var(--bg); color: #F5F5F7; color-scheme: dark; font-size: var(--fs-caption); }
-.sx-select.sx-narrow { width: 140px; }
+.sx-select.sx-narrow { width: 170px; }
 .sx-select:focus { outline: none; border-color: rgb(var(--accent-rgb) / 0.7); }
 .sx-select:disabled { opacity: 0.5; }
 .sx-input { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); background: var(--bg);

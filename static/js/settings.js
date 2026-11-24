@@ -183,11 +183,12 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-whisper-model').value = s.whisper_model || 'large-v3-turbo';
     state.speechModelRu = s.speech_model_ru || '';
     document.getElementById('upload-model').value = speechRoutingOn() ? 'auto' : (s.whisper_model || 'large-v3-turbo');
-    document.getElementById('set-device').value = s.device || 'cuda';
     document.getElementById('set-compute-type').value = s.compute_type || 'float16';
-    // with no choice saved yet, «automatic» is on when the values are the recommended ones
-    document.getElementById('set-device-auto').checked = s.device_auto ? s.device_auto !== 'false'
+    // «Автоматически» is an option of the device list (device_auto); with no choice saved yet it is chosen when
+    // the values are the recommended ones
+    const devAuto = s.device_auto ? s.device_auto !== 'false'
       : (s.device || '') === (hw.recommended_device || '') && (s.compute_type || '') === (hw.recommended_compute_type || '');
+    document.getElementById('set-device').value = devAuto ? 'auto' : (s.device || 'cuda');
     syncDeviceAuto(false);
     document.getElementById('set-diarization').checked = s.diarization_enabled !== 'false';
     document.getElementById('set-voice-profiles').checked = s.voice_profiles !== 'false';
@@ -257,10 +258,10 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     if (state.lastOllama) renderTranslateChoices(state.lastOllama);
     document.getElementById('set-calendar-ics').value = s.calendar_ics || '';
     loadCalendarSource();
-    document.getElementById('set-onnx-gpu').checked = s.onnx_gpu !== 'false';
+    // GigaAM / Parakeet on the video card: a list each, «Всегда процессор» for both is the former switch off (onnx_gpu)
     for (const f of ['gigaam', 'parakeet']) {
       const sel = document.getElementById(`set-onnx-${f}-device`);
-      if (sel) sel.value = s[`onnx_${f}_device`] === 'cpu' ? 'cpu' : 'auto';
+      if (sel) sel.value = s.onnx_gpu === 'false' || s[`onnx_${f}_device`] === 'cpu' ? 'cpu' : 'auto';
     }
     loadBackupInfo();
     loadOrphans();
@@ -273,6 +274,9 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     loadHotkeyStatus();
     renderLiveModelSelect();
     _settingsBaseline = settingsFormValues();
+    // a model list shows «Всегда процессор» while onnx_gpu is off, whatever its own device: against the stored
+    // values, the next save writes what the lists show
+    for (const f of ['gigaam', 'parakeet']) _settingsBaseline[`onnx_${f}_device`] = s[`onnx_${f}_device`] || 'auto';
 
     const srcMode = s.record_source_mode || 'both';
     if (document.getElementById('set-record-source')) {
@@ -1696,6 +1700,17 @@ function renderOnnxGpu(st) {
   if (st.installing) _onnxGpuTimer = setTimeout(loadOnnxGpu, 2000);
 }
 
+function setOnnxDevices(value, onlyWhenAllCpu = false) {
+  const sels = ['gigaam', 'parakeet'].map(f => document.getElementById(`set-onnx-${f}-device`)).filter(Boolean);
+  if (onlyWhenAllCpu && sels.some(x => x.value !== 'cpu')) return;
+  sels.forEach(x => { x.value = value; });
+  scheduleSettingsSave();
+}
+
+function onnxGpuSetting() {
+  return ['gigaam', 'parakeet'].some(f => document.getElementById(`set-onnx-${f}-device`)?.value !== 'cpu') ? 'true' : 'false';
+}
+
 async function loadOnnxGpu() {
   const st = await fetch('/api/onnx-gpu').then(r => r.json()).catch(() => null);
   if (st) renderOnnxGpu(st);
@@ -1705,14 +1720,14 @@ async function installOnnxGpu() {
   const res = await fetch('/api/onnx-gpu/install', { method: 'POST' });
   const data = await readJson(res);
   if (!res.ok) { showError(data.detail); return; }
-  document.getElementById('set-onnx-gpu').checked = true;
+  setOnnxDevices('auto', true);  // installed to be used: on the video card, unless one of them was kept on the processor
   renderOnnxGpu(data);
 }
 
 async function removeOnnxGpu() {
   if (!await askConfirm(t('onnxGpuRemoveConfirm'), true, t('cfDeleteBuild'))) return;
   const data = await fetch('/api/onnx-gpu/remove', { method: 'POST' }).then(r => r.json()).catch(() => null);
-  document.getElementById('set-onnx-gpu').checked = false;
+  setOnnxDevices('cpu');  // the server turned onnx_gpu off with the build: both on the processor
   if (data) renderOnnxGpu(data);
 }
 
@@ -2398,17 +2413,24 @@ function syncStartupToggles(el) {
 // Audit 8.2. «Подбирать автоматически»: the device and precision the hardware calls for, shown in words;
 // off, the two lists of «Дополнительно» are yours
 function syncDeviceAuto(save = true) {
-  const auto = document.getElementById('set-device-auto').checked;
-  const hw = (state.system || {}).hardware || {};
   const dev = document.getElementById('set-device'), prec = document.getElementById('set-compute-type');
-  if (auto) {
-    if (hw.recommended_device) dev.value = hw.recommended_device;
-    if (hw.recommended_compute_type) prec.value = hw.recommended_compute_type;
-  }
-  dev.disabled = prec.disabled = auto;
-  const name = (sel) => sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
-  document.getElementById('device-auto-hint').textContent = auto ? t('deviceAutoNow').replace('{dev}', () => name(dev)).replace('{prec}', () => name(prec).split(' — ')[0].toLowerCase()) : t('deviceManualHint');
+  const auto = dev.value === 'auto';
+  const hw = (state.system || {}).hardware || {};
+  if (auto && hw.recommended_compute_type) prec.value = hw.recommended_compute_type;
+  prec.disabled = auto;
+  const devName = [...dev.options].find(o => o.value === (hw.recommended_device || 'cpu'))?.textContent || '';
+  const precName = prec.options[prec.selectedIndex] ? prec.options[prec.selectedIndex].textContent : '';
+  document.getElementById('device-auto-hint').textContent = auto
+    ? t('deviceAutoNow').replace('{dev}', () => devName).replace('{prec}', () => precName.split(' — ')[0].toLowerCase()) : '';
   if (save) { scheduleSettingsSave(); }
+}
+
+// The device the list stands for: «Автоматически» is the one the hardware calls for
+function deviceSettingValue() {
+  const v = document.getElementById('set-device').value;
+  if (v !== 'auto') return v;
+  const hw = (state.system || {}).hardware || {};
+  return hw.recommended_device || (((state.system || {}).settings || {}).device) || 'cpu';
 }
 
 let _settingsBaseline = null;
@@ -2421,8 +2443,8 @@ function economyForValue() {
 function settingsFormValues() {
   return {
     whisper_model: document.getElementById('set-whisper-model').value,
-    device_auto: String(document.getElementById('set-device-auto').checked),
-    device: document.getElementById('set-device').value,
+    device_auto: String(document.getElementById('set-device').value === 'auto'),
+    device: deviceSettingValue(),
     compute_type: document.getElementById('set-compute-type').value,
     diarization_enabled: String(document.getElementById('set-diarization').checked),
     voice_profiles: String(document.getElementById('set-voice-profiles').checked),
@@ -2480,7 +2502,7 @@ function settingsFormValues() {
     live_translate_model_fast: document.getElementById('set-live-tr-fast')?.value ?? '',
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
-    onnx_gpu: document.getElementById('set-onnx-gpu')?.checked ? 'true' : 'false',
+    onnx_gpu: onnxGpuSetting(),
     onnx_gigaam_device: document.getElementById('set-onnx-gigaam-device')?.value || 'auto',
     onnx_parakeet_device: document.getElementById('set-onnx-parakeet-device')?.value || 'auto',
     ...callSettingsPayload(),
@@ -2911,7 +2933,7 @@ const SETTINGS_RESET = {
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
-    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-onnx-gigaam-device', 'onnx_gigaam_device', 'value'],
+    ['set-onnx-gigaam-device', 'onnx_gigaam_device', 'value'],
     ['set-onnx-parakeet-device', 'onnx_parakeet_device', 'value'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
   analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-analysis-after-meetings', 'analysis_after_meetings', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],

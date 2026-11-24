@@ -434,41 +434,55 @@
         <div data-stab="recognition" class="sx-section space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavRecognition">Распознавание</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescRecognition">Устройство, обработка звука перед распознаванием, разделение по голосам и показ текста.</p>
           </div>
-        <!-- Compute Device & Precision -->
+        <!-- Where recognition runs: the device chosen by the hardware («Автоматически») or by hand, its precision;
+             the processor threads and the video card of GigaAM / Parakeet (app/asr_onnx.py, app/onnx_gpu.py) -->
         <div class="settings-card">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="deviceTitle">Устройство</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="deviceDesc">Где выполняется распознавание: видеокарта NVIDIA быстрее, процессор есть в любом компьютере.</p>
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="deviceTitle">Устройство</h4></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-device" class="sx-row-label" data-i18n="deviceLabel">Распознавание на</label>
+              <span id="device-auto-hint" class="sx-row-cap"></span></span>
+            <div class="sx-row-ctl">
+              <select id="set-device" data-change="syncDeviceAuto" class="sx-select">
+                <option value="auto" data-i18n="deviceAuto">Автоматически</option>
+                <option value="cuda" data-i18n="devGpu">Видеокарта NVIDIA</option>
+                <option value="cpu" data-i18n="devCpu">Процессор</option>
+              </select>
+            </div>
           </div>
-          <!-- Audit 8.2: chosen by the hardware unless you pick yourself; the device and the precision are one level deeper -->
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span class="min-w-0"><span data-i18n="deviceAuto">Подбирать автоматически</span>
-              <span id="device-auto-hint" class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5"></span></span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-device-auto" data-change="syncDeviceAuto" />
-          </label>
-          <details id="device-more" class="sx-more">
-            <summary data-i18n="sxMore">Дополнительно</summary>
-          <div class="grid grid-cols-2 gap-3.5">
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="deviceLabel">Устройство вычислений</label>
-            <select id="set-device" data-i18n-title="tipComputeDevice" title="Выберите видеокарту NVIDIA (CUDA) или процессор (CPU)" class="w-full bg-apple-sidebar border apple-border rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-              <option value="cuda" data-i18n="devGpu">Видеокарта NVIDIA (CUDA)</option>
-              <option value="cpu" data-i18n="devCpu">Процессор</option>
-            </select>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-compute-type" class="sx-row-label" data-i18n="precisionLabel">Точность</label></span>
+            <div class="sx-row-ctl">
+              <select id="set-compute-type" class="sx-select">
+                <option value="float16" data-i18n="precHigh">Высокая — нужна видеокарта от 8 ГБ</option>
+                <option value="int8_float16" data-i18n="precMid">Средняя — видеокарта от 4–6 ГБ</option>
+                <option value="int8" data-i18n="precLow">Компактная — процессор или мало видеопамяти</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label class="block text-[11.5px] text-apple-secondary mb-1" data-i18n="precisionLabel">Точность вычислений</label>
-            <select id="set-compute-type" data-i18n-title="tipComputePrecision" title="Выберите формат точности весов под объём видеопамяти" class="w-full bg-apple-sidebar border apple-border rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-              <option value="float16" data-i18n="precHigh">Высокая — нужна видеокарта от 8 ГБ</option>
-              <option value="int8_float16" data-i18n="precMid">Средняя — видеокарта от 4–6 ГБ</option>
-              <option value="int8" data-i18n="precLow">Компактная — процессор или мало видеопамяти</option>
-            </select>
+          <div id="onnx-gpu-box" class="hidden sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="onnxGpuToggle">Видеокарта для GigaAM и Parakeet</span>
+              <span class="sx-row-cap" data-i18n="onnxGpuHint">Ускоряет расшифровку в несколько раз · ONNX Runtime 300 МБ</span></span>
+            <div class="sx-row-ctl sx-col">
+              <div class="flex items-center gap-2">
+                <label class="sx-ctl-name" for="set-onnx-gigaam-device">GigaAM</label>
+                <select id="set-onnx-gigaam-device" class="sx-select sx-narrow">
+                  <option value="auto" data-i18n="onnxDevAuto">Если хватает памяти</option>
+                  <option value="cpu" data-i18n="onnxDevCpu">Всегда процессор</option>
+                </select>
+                <label class="sx-ctl-name" for="set-onnx-parakeet-device">Parakeet</label>
+                <select id="set-onnx-parakeet-device" class="sx-select sx-narrow">
+                  <option value="auto" data-i18n="onnxDevAuto">Если хватает памяти</option>
+                  <option value="cpu" data-i18n="onnxDevCpu">Всегда процессор</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="onnx-gpu-status" class="sx-status"></span>
+                <button data-click="installOnnxGpu" id="onnx-gpu-install" class="hidden ui-btn ui-btn-subtle" data-i18n="onnxGpuInstall">Установить</button>
+                <button data-click="removeOnnxGpu" id="onnx-gpu-remove" class="hidden ui-btn ui-btn-subtle" data-i18n="onnxGpuRemove">Удалить</button>
+              </div>
+            </div>
           </div>
-          </div>
-          </details>
-          <!-- The processor threads of GigaAM and Parakeet (app/asr_onnx.py) -->
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-cpu-threads" class="sx-row-label" data-i18n="cpuThreadsLabel">Нагрузка на процессор (GigaAM, Parakeet)</label>
               <span class="sx-row-cap" data-i18n="cpuThreadsHint">Меньше потоков — свободнее компьютер, но расшифровка дольше</span></span>
@@ -481,139 +495,105 @@
               </select>
             </div>
           </div>
-          <!-- GigaAM / Parakeet on the NVIDIA GPU (app/onnx_gpu.py) -->
-          <div id="onnx-gpu-box" class="hidden space-y-1.5">
-          <label class="vs-row cursor-pointer text-xs text-apple-label">
-            <span data-i18n="onnxGpuToggle">GigaAM и Parakeet на видеокарте</span>
-            <input type="checkbox" role="switch" class="vs-switch" id="set-onnx-gpu" checked />
-          </label>
-          <div class="grid grid-cols-2 gap-3 ml-6">
-            <div>
-              <label class="block text-[11.5px] text-apple-secondary mb-1" for="set-onnx-gigaam-device">GigaAM</label>
-              <select id="set-onnx-gigaam-device" class="w-full bg-apple-sidebar border apple-border rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-                <option value="auto" data-i18n="onnxDevAuto">Видеокарта, если хватает памяти</option>
-                <option value="cpu" data-i18n="onnxDevCpu">Всегда процессор</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-[11.5px] text-apple-secondary mb-1" for="set-onnx-parakeet-device">Parakeet</label>
-              <select id="set-onnx-parakeet-device" class="w-full bg-apple-sidebar border apple-border rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-                <option value="auto" data-i18n="onnxDevAuto">Видеокарта, если хватает памяти</option>
-                <option value="cpu" data-i18n="onnxDevCpu">Всегда процессор</option>
-              </select>
-            </div>
-          </div>
-          <p class="text-[11.5px] text-apple-tertiary leading-snug ml-6" data-i18n="onnxGpuHint">Расшифровка записей в несколько раз быстрее. Нужна сборка ONNX Runtime для видеокарты (около 300 МБ, скачивается один раз). Если видеопамяти не хватает, запись распознаётся на процессоре. Субтитры и диктовка всегда идут на процессоре, чтобы видеокарта оставалась свободной для расшифровки.</p>
-          <div class="flex items-center gap-2 ml-6">
-            <span id="onnx-gpu-status" class="text-[11.5px] text-apple-secondary"></span>
-            <button data-click="installOnnxGpu" id="onnx-gpu-install" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="onnxGpuInstall">Установить</button>
-            <button data-click="removeOnnxGpu" id="onnx-gpu-remove" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="onnxGpuRemove">Удалить</button>
-          </div>
-          </div>
         </div>
 
-        <!-- Processing options: one column, the same spacing everywhere; voice profiles belong to speaker separation -->
-        <div class="settings-card !space-y-0">
-          <div class="min-w-0 pb-1">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="processingTitle">Обработка</h4>
+        <!-- The speakers: separation by voice, Nemotron 3 (app/nemotron_diar.py, downloaded on request, ECAPA
+             otherwise) and the voices remembered (voice profiles) -->
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="processingTitle">Участники</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="diarizationToggle">Разделение участников по голосам</span></span>
+            <input type="checkbox" role="switch" class="vs-switch" id="set-diarization" checked data-change="syncVoiceProfilesToggle" />
+          </label>
+          <div id="nemotron-box" class="sx-row sx-dep">
+            <span class="sx-row-text"><label for="set-nemotron" class="sx-row-label" data-i18n="nemotronToggle">Улучшенное разделение по голосам (Nemotron 3)</label>
+              <span class="sx-row-cap" data-i18n="nemotronHint">Ошибается в участниках втрое реже. До 8 участников. Загружается отдельно</span>
+              <span class="sx-row-cap"><span id="nemotron-status"></span></span></span>
+            <div class="sx-row-ctl">
+              <button data-click="installNemotron" id="nemotron-install" class="hidden ui-btn ui-btn-subtle" data-i18n="nemotronInstall">Скачать</button>
+              <button data-click="removeNemotron" id="nemotron-remove" class="hidden ui-btn ui-btn-subtle" data-i18n="onnxGpuRemove">Удалить</button>
+              <input type="checkbox" role="switch" class="vs-switch" id="set-nemotron" data-change="toggleNemotron" />
+            </div>
           </div>
+          <div id="voice-profiles-box" class="sx-row sx-dep">
+            <span class="sx-row-text"><label for="set-voice-profiles" class="sx-row-label" data-i18n="voiceProfilesToggle">Запоминать голоса участников</label>
+              <span class="sx-row-cap" data-i18n="voiceProfilesHint">Названный участник узнаётся в новых записях. Голоса хранятся только на этом ПК</span></span>
+            <div class="sx-row-ctl">
+              <button data-click="applyVoiceProfilesToLibrary" class="ui-btn ui-btn-subtle" data-i18n="voiceApplyAll">Найти в старых записях</button>
+              <input type="checkbox" role="switch" class="vs-switch" id="set-voice-profiles" checked />
+            </div>
+          </div>
+          <div id="voice-profiles-list" class="sx-block sx-dep sx-tight"></div>
+        </div>
 
-          <div class="settings-toggle">
-            <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipDiarizationToggle" title="Автоматически разделять участников разговора по тембру голоса">
-              <span data-i18n="diarizationToggle">Разделение участников по голосам</span>
-              <input type="checkbox" role="switch" class="vs-switch" id="set-diarization" checked data-change="syncVoiceProfilesToggle" />
-            </label>
-            <!-- Nemotron 3 Diarization (app/nemotron_diar.py): downloaded on request, ECAPA otherwise -->
-            <div id="nemotron-box" class="mt-2 ml-6 rounded-lg border apple-border bg-white/[0.02] px-3 py-2.5 space-y-2">
-              <label class="vs-row cursor-pointer text-xs text-apple-label">
-                <span data-i18n="nemotronToggle">Точное разделение (Nemotron 3)</span>
-                <input type="checkbox" role="switch" class="vs-switch" id="set-nemotron" data-change="toggleNemotron" />
-              </label>
-              <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="nemotronHint">Модель NVIDIA размечает, кто когда говорит, по всей записи сразу: на тестовых совещаниях ошибалась в участниках втрое реже. До 8 участников. Скачивается отдельно; без неё работает обычное разделение.</p>
-              <div class="flex items-center gap-2">
-                <span id="nemotron-status" class="text-[11.5px] text-apple-secondary"></span>
-                <button data-click="installNemotron" id="nemotron-install" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="nemotronInstall">Скачать</button>
-                <button data-click="removeNemotron" id="nemotron-remove" class="hidden ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]" data-i18n="onnxGpuRemove">Удалить</button>
-              </div>
-            </div>
-            <div id="voice-profiles-box" class="mt-2 ml-6 rounded-lg border apple-border bg-white/[0.02] px-3 py-2.5 space-y-2">
-              <label class="vs-row cursor-pointer text-xs text-apple-label" data-i18n-title="tipVoiceProfilesToggle"
-                title="Когда вы называете участника по имени, его голос запоминается, и в новых записях он получает это имя автоматически">
-                <span data-i18n="voiceProfilesToggle">Запоминать голоса участников</span>
-                <input type="checkbox" role="switch" class="vs-switch" id="set-voice-profiles" checked />
-              </label>
-              <p class="text-[11.5px] text-apple-tertiary leading-snug" data-i18n="voiceProfilesHint">Голос запоминается, когда вы указываете имя участника. В новых записях похожий голос получает это имя автоматически. Отпечатки голосов хранятся только в базе на этом компьютере.</p>
-              <div id="voice-profiles-list" class="space-y-1"></div>
-              <button data-click="applyVoiceProfilesToLibrary" class="ui-btn ui-btn-subtle h-7 px-2.5 text-[11.5px]"
-                data-i18n-title="tipVoiceApplyAll" title="Подписать знакомые голоса в записях, сделанных до того, как голос был запомнен. Имена, заданные вручную, не меняются"
-                data-i18n="voiceApplyAll">Найти эти голоса в старых записях</button>
-            </div>
-          </div>
-          <!-- Sound before recognition: the same switches the import window starts from (proc_*, vad_filter) -->
-          <div class="text-[11.5px] font-semibold uppercase tracking-wider text-apple-tertiary pt-1"><span data-i18n="impSound">Звук перед распознаванием</span>
-            <span class="normal-case font-normal tracking-normal" data-i18n="impSoundNote">только для копии, которую слушает модель; исходные файлы не меняются</span></div>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="impDenoise"></span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="impDenoiseHint"></span></span>
+        <!-- Sound before recognition: the same switches the import window starts from (proc_*, vad_filter) -->
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="impSound">Подготовка звука</h4>
+            <p class="sx-card-cap" data-i18n="sxSoundCap">Только для распознавания; исходные файлы не меняются</p></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="impDenoise">Шумоподавление</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-proc-denoise" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="impLoudnorm"></span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="impLoudnormHint"></span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="impLoudnorm">Выравнивание громкости</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-proc-loudnorm" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="impLeveling"></span> <span class="text-apple-tertiary" data-i18n="rdSasOnlyOnnx"></span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="impLevelingHint"></span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="impLeveling">Усиление тихой речи</span>
+              <span class="sx-row-cap" data-i18n="sxForOnnx">Для GigaAM и Parakeet</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-proc-leveling" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="impVad"></span> <span class="text-apple-tertiary" data-i18n="rdSasOnlyWhisper"></span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="impVadHint"></span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="impVad">Пропуск тишины</span>
+              <span class="sx-row-cap" data-i18n="sxForWhisper">Для Whisper</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-vad" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="rdSasAskImport"></span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasAskImportHint"></span></span>
+        </div>
+
+        <!-- The transcript: the import window, how the text is shown -->
+        <div class="settings-card">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="sxTranscriptTitle">Расшифровка</h4></div>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasAskImport">Спрашивать параметры при импорте</span>
+              <span class="sx-row-cap" data-i18n="rdSasAskImportHint">Перед расшифровкой новых файлов — окно выбора модели и обработки звука</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-ask-import" checked />
           </label>
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label" data-i18n-title="rdSasTipFillersView" title="Скрывать «э-э», «ммм» и повторы слов при показе текста">
-            <span><span data-i18n="rdSasFillersView">Показывать текст без запинок</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="rdSasFillersViewHint">Только показ: запись и сам текст не меняются. На странице записи — кнопка «Без запинок».</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasFillersView">Показывать текст без запинок</span>
+              <span class="sx-row-cap" data-i18n="rdSasFillersViewHint">Только при показе; сам текст не меняется</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-clean-fillers" checked />
           </label>
           <!-- The dotted underline of the places the models heard differently (asked by the user: an option to turn it off) -->
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span data-i18n="disputedShow">Подчёркивать места, услышанные моделями по-разному</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="disputedShowHint">В сведённой расшифровке такие слова подчёркнуты пунктиром. Без подчёркивания варианты моделей по-прежнему открываются щелчком по слову.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="disputedShow">Подчёркивать спорные слова</span>
+              <span class="sx-row-cap" data-i18n="disputedShowHint">Слова, которые модели услышали по-разному</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-show-disputed" checked />
           </label>
         </div>
-        <!-- The precise mode: several models recognize every new recording, their versions are merged -->
+
+        <!-- Several models recognize every new recording, their versions are put together into one -->
         <div class="settings-card">
-          <label class="vs-row settings-toggle cursor-pointer text-xs text-apple-label">
-            <span><span class="font-semibold text-white" data-i18n="ensToggle">Точный режим: несколько моделей + сведение</span>
-              <span class="block text-[11.5px] text-apple-tertiary leading-snug mt-0.5" data-i18n="ensHint">Каждая новая запись распознаётся ещё и другими моделями, а расшифровки сводятся в одну: где модели услышали разное, модель анализа выбирает вариант по смыслу соседних слов (спорные места уходят ей порциями). Версия каждой модели остаётся в списке над текстом. Расшифровка идёт дольше — по проходу на каждую модель.</span></span>
+          <label class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="ensToggle">Распознавать несколькими моделями</span>
+              <span class="sx-row-cap" data-i18n="ensHint">Запись распознают несколько моделей, итог собирается из лучших вариантов. Дольше</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-asr-ensemble" />
           </label>
-          <div id="set-ensemble-box" class="space-y-1.5">
-            <div class="text-[11.5px] text-apple-secondary" data-i18n="ensModels">Модели для повторного распознавания и сведения:</div>
+          <div id="set-ensemble-box" class="sx-block sx-dep">
+            <div class="sx-row-label" data-i18n="ensModels">Дополнительные модели:</div>
             <div id="set-ensemble-models" class="ens-list"></div>
-            <div class="text-[11px] text-apple-tertiary leading-snug" data-i18n="ensModelsHint">Сначала запись распознаёт основная модель — та, что выбрана в «Модель распознавания» или при импорте. Отмеченные модели распознают её ещё раз, и расшифровки сводятся в одну; основную, если она тоже отмечена, второй раз не запускают. Каждая модель — ещё один проход по записи. Ничего не отмечено — берутся самые точные из скачанных, до трёх вместе с основной. Модель, которая не знает язык записи, пропускается.</div>
+            <div class="sx-row-cap" data-i18n="ensModelsHint">Ничего не отмечено — используются все скачанные</div>
           </div>
         </div>
         </div>
         <div data-stab="models" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavModels">Модели речи</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescModels">Модели распознавания речи на этом компьютере: скачать, выбрать основную, удалить.</p>
           </div>
-        <!-- Section 2: Whisper Speech Recognition Models -->
+        <!-- The speech models (Whisper, GigaAM, Parakeet) and the model of Russian speech -->
         <div class="settings-card">
           <div class="sx-card-head">
             <div>
-              <h4 class="text-[13px] font-semibold text-white" data-i18n="whisperSectionTitle">Распознавание речи и участников</h4>
-              <p class="text-[11.5px] text-apple-secondary" data-i18n="whisperSectionDesc">Выберите модель под вашу видеокарту или процессор</p>
+              <h4 class="sx-card-title" data-i18n="whisperSectionTitle">Модели распознавания</h4>
             </div>
             <span id="diarizer-status-pill" class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-white/5 text-apple-secondary shrink-0"></span>
           </div>
@@ -623,18 +603,15 @@
           <div id="whisper-catalog-list" class="space-y-2">
             <!-- Populated dynamically -->
           </div>
-          <!-- where models are downloaded: they go on in the background when the window is closed (the note stood under
-               every section, in the middle of the page with two columns: reported by the user) -->
-          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="bgDownloadNote">Скачивание моделей продолжается в фоне при закрытии окна</p>
-          <p class="text-[11px] text-apple-tertiary leading-snug" data-i18n="mmNote">Оценки — по замерам на начитанной речи (тест FLEURS, RTX 3090); на живых встречах ошибок больше у всех моделей, соотношение между ними то же.</p>
+          <p class="sx-card-cap" data-i18n="mmNote">Оценки — по тесту FLEURS на начитанной речи; на встречах ошибок больше у всех моделей</p>
 
           <!-- Russian speech: a model of its own, the main one for the rest (app/speech_route.py) -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <label for="set-speech-model-ru" class="block text-xs font-medium text-white" data-i18n="routeTitle">Модель для русской речи</label>
-              <p class="text-[11.5px] text-apple-secondary leading-snug" data-i18n="routeDesc">Записи на русском распознаёт эта модель, на других языках — основная. Если язык записи «Определить автоматически», он определяется по первой минуте.</p>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-speech-model-ru" class="sx-row-label" data-i18n="routeTitle">Модель для записей на русском</label>
+              <span class="sx-row-cap" data-i18n="routeDesc">Остальные языки распознаёт основная модель</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-speech-model-ru" data-change="setSpeechModelRu" class="sx-select"></select>
             </div>
-            <select id="set-speech-model-ru" data-change="setSpeechModelRu" class="imp-select shrink-0 max-w-[15rem]"></select>
           </div>
 
           <!-- Live Whisper & Diarizer Download Progress Window -->
@@ -661,15 +638,16 @@
         <div data-stab="dictionary" class="sx-section sx-sub space-y-3 hidden">
           <div class="sx-section-head">
             <h3 class="sx-section-title" data-i18n="rdSasNavDictionary">Словарь</h3>
-            <p class="sx-section-desc" data-i18n="rdSasDescDictionary">Как правильно пишутся слова и названия: распознанный текст исправляется по словарю.</p>
           </div>
         <!-- The dictionary is a section of its own (the rail, static/js/dictionary.js): this card leads there -->
-        <div class="settings-card flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <h4 class="text-[13px] font-semibold text-white" data-i18n="rdSasDictTitle">Слова и названия</h4>
-            <p class="text-[11.5px] text-apple-secondary leading-snug mt-0.5" data-i18n="dcMovedText">Слова, группы, исправление по звучанию и фичи — в разделе «Словарь» на полосе слева.</p>
+        <div class="settings-card">
+          <div class="sx-row">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasDictTitle">Слова и названия</span>
+              <span class="sx-row-cap" data-i18n="dcMovedText">Как пишутся слова и названия в расшифровках</span></span>
+            <div class="sx-row-ctl">
+              <button data-click="openDictionary" class="ui-btn ui-btn-primary" data-i18n="dcOpen">Открыть словарь</button>
+            </div>
           </div>
-          <button data-click="openDictionary" class="ui-btn ui-btn-primary h-8 px-3 text-[11.5px] shrink-0" data-i18n="dcOpen">Открыть словарь</button>
         </div>
         </div>
         <div data-stab="analysis" class="sx-section space-y-3 hidden">
