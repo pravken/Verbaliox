@@ -32,9 +32,19 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   video card, Hy-MT3 7B (4.9 GB) on a card of 10 GB and more, else Hy-MT3 1.8B (1.3 GB); in the app's measurements
   both translate English to Russian and back more accurately than the Gemma models used so far. It is downloaded
   only on «Download» (in the popover of the caption models or in Settings → AI analysis); «Quality» then translates
-  with Hy-MT3 7B (else 1.8B) and «Speed» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
-  Hy-MT3 only translates: it is not offered as the analysis model. The 1.8B is set up in Ollama with a working chat
-  template (the one in its file does not pass the text to the model).
+  with Hy-MT3 7B (else 1.8B) and «Fast» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
+  The 1.8B is set up in Ollama with a working chat template (the one in its file does not pass the text to the model).
+- **Translation models have their own block** in Settings → AI analysis, «Translation Models (Ollama)», under the
+  analysis models: both Hy-MT3 sizes (the one for this computer marked «Recommended for this computer», the other one
+  can be downloaded too), with the measured time of a phrase and the video memory beside speech recognition. Two
+  lists choose the model of «Quality» and «Fast» of the captions: «Auto · <the model it takes now>», the installed
+  translators and the analysis models; a chosen model that is deleted gives its place to «Auto», and a model chosen in
+  the studio still applies to its caption session. Dictation with translation now translates with the «Quality» model
+  (Hy-MT3 when installed, with the prompt of its model card), else with the analysis model as before.
+- **Translators are no longer listed as analysis models**: Hy-MT3 and a TranslateGemma installed in Ollama by hand
+  cannot write an analysis and are listed with the translation models only. TranslateGemma (Gemma Terms of Use) is
+  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «Check the license before
+  commercial use», and it translates with the prompt of its model card.
 
 ## 0.9.3 — English
 
@@ -1198,10 +1208,20 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Модель перевода для живых субтитров**: модели субтитров предлагают одну модель Tencent Hy-MT3 (Apache 2.0) по
   видеокарте — Hy-MT3 7B (4,9 ГБ) на картах от 10 ГБ, иначе Hy-MT3 1.8B (1,3 ГБ); в замерах программы обе переводят
   с английского на русский и обратно точнее прежних моделей Gemma. Скачивается только по «Скачать» (в окне моделей
-  субтитров или в «Настройки → ИИ-анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Скорость» —
-  Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Hy-MT3 только переводит: моделью анализа она
-  не предлагается. Модель 1.8B настраивается в Ollama с рабочим шаблоном чата (шаблон из её файла не передаёт
-  модели текст).
+  субтитров или в «Настройки → ИИ-анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Быстро» —
+  Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Модель 1.8B настраивается в Ollama с рабочим
+  шаблоном чата (шаблон из её файла не передаёт модели текст).
+- **Свой блок для моделей перевода** в «Настройки → ИИ-анализ» — «Модели перевода (Ollama)», под моделями анализа:
+  обе модели Hy-MT3 (подходящая этому компьютеру отмечена «Рекомендуется для этого компьютера», другую тоже можно
+  скачать), с измеренным временем перевода фразы и видеопамятью вместе с распознаванием. Два списка выбирают модель
+  «Качества» и «Быстро» для субтитров: «Авто · <модель, которую оно берёт сейчас>», установленные модели перевода и
+  модели анализа; выбранная модель, если её удалить, уступает место «Авто», а модель, выбранная в студии, по-прежнему
+  действует до конца сеанса субтитров. Диктовку с переводом теперь переводит модель «Качества» (Hy-MT3, если
+  установлена, — промптом со своей карточки), иначе модель анализа, как раньше.
+- **Модели перевода больше не в списке моделей анализа**: Hy-MT3 и TranslateGemma, установленная в Ollama вручную,
+  не пишут анализ и показываются только среди моделей перевода. TranslateGemma (Gemma Terms of Use) программа не
+  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Проверьте лицензию перед
+  коммерческим использованием» и переводит промптом со своей карточки.
 
 ## 0.9.3
 
