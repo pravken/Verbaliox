@@ -3797,12 +3797,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .sb-num.ld-high, .ld-v.ld-high { color: #FFB340; font-weight: 600; }
 .ld-row { display: grid; grid-template-columns: 44px 1fr 136px; gap: 10px; align-items: center; padding: 4px 0 0; }
 .ld-k { color: #8E9198; font-size: var(--fs-caption); }
-.ld-v { text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-caption); color: #E6E7EA; }
+.ld-v { text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-caption); color: #E6E7EA; font-variant-numeric: tabular-nums; }
 .ld-note { font-size: 11px; color: #8E9198; margin: 1px 0 4px 54px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ld-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: #8E9198; margin: 6px 0 0 54px; }
-.ld-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.ld-legend i { width: 10px; height: 4px; border-radius: 2px; background: #AEAEB2; opacity: 0.55; }
-.ld-legend i.ld-me { background: var(--accent); opacity: 1; }
 .vx-prow.ld-model { grid-template-columns: minmax(0, 1fr) 160px auto; }
 .ld-use { display: flex; flex-direction: column; gap: 1px; font-size: var(--fs-caption); white-space: nowrap; min-width: 0; }
 .ld-use b { font-weight: 500; color: #E6E7EA; font-variant-numeric: tabular-nums; }
@@ -4868,11 +4864,6 @@ button.sc-at:hover { color: var(--accent-text); }
 
 /* «Нагрузка»: the key of the bars once under the title; under each bar the hardware on the left and Verbaliox's own
    share on the right, in the value's column (asked by the user: everything was piled under the GPU) */
-.vx-panel-load .ld-legend { margin: 2px 0 6px 0; }
-.ld-sub { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; margin: 1px 0 6px 54px; }
-.ld-sub .ld-note { margin: 0; min-width: 0; }
-.ld-own { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #C7C9CE; font-family: var(--font-mono); white-space: nowrap; }
-.ld-own i { width: 10px; height: 4px; border-radius: 2px; background: var(--accent); }
 
 /* «Расшифровка» without a text (asked by the user: the old «РАСПОЗНАВАНИЕ» panel, its row of chips and a full-width
    band with two percents): one card of the content column (#tx-model-bar, renderTxModelBar in static/js/workspace.js)
@@ -5008,9 +4999,8 @@ button.sc-at:hover { color: var(--accent-text); }
 /* «Обзор» → «Нагрузка системы и моделей» (dbSysloadHtml in static/js/dashboard.js): the bars of the «Нагрузка» window,
    Verbaliox's share in the accent over the grey of the whole, its figure under each bar on the right (the line kept
    when there is none); M and L: the models in memory, each with «Выгрузить» at the same place */
-.db-sl-legend { margin: 0 0 6px; }
-.db-w-sysload .ld-row { grid-template-columns: 36px minmax(40px, 1fr) 120px; gap: 10px; padding: 2px 0 0; }  /* the bars end at one x */
-.db-sl-own { display: flex; justify-content: flex-end; min-height: 16px; margin: 2px 0 6px 46px; }
+.db-w-sysload .ld-row { gap: 8px; padding: 5px 0; }  /* the bars end at one x */
+.db-w-sysload .ld-head { padding: 0 0 2px; }
 .db-sl-cap { margin-top: 6px; padding: 10px 0 2px; border-top: 1px solid var(--line); font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #AEAEB2); }
 .db-sl-model { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 7px 0; }
 .db-sl-model + .db-sl-model { border-top: 1px solid var(--line); }
@@ -5071,10 +5061,16 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
    window and the widget of «Обзор»; the label column a step wider so the bars still start at one x */
 .hw-ic { width: 14px; height: 14px; flex: none; opacity: 0.8; }
 .sb-k, .ld-k { display: inline-flex; align-items: center; gap: 5px; }
-.ld-row { grid-template-columns: 58px 1fr 136px; }
-.ld-sub { margin-left: 68px; }
-.db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 120px; }
-.db-sl-own { margin-left: 64px; }
+.ld-row { grid-template-columns: 58px minmax(40px, 1fr) 116px 64px; }  /* «123,4 / 127,9 ГБ» fits */
+.db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 116px 60px; }
+
+/* The load in columns (asked by the user, «вариант A»): «Всего занято» and «Verbaliox» titled once over their columns,
+   Verbaliox's share in the accent of its part of the bar; the hardware in a grey line under the bar */
+.ld-head { padding: 6px 0 0; }
+.ld-head .ld-v { font-family: inherit; font-size: 11px; color: #8E9198; }
+.ld-head .ld-v.ld-mine { color: var(--accent-text); }
+.ld-v.ld-mine { color: var(--accent-text); }
+.ld-note { margin-left: 68px; }
 
 /* Settings in two columns: a section with a single card no longer leaves the right column empty (asked by the user:
    «Обновления» stood alone on the left) — that card spans both columns */

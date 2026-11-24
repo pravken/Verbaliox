@@ -510,7 +510,9 @@ function placePanel(pop, anchor, where) {
 // --- The load: the indicator of the status bar and its window ---
 const load = { open: false, html: '' };
 const GB_ = () => t('unitGB');
-const gbText = x => `${(Math.round(Number(x || 0) * 10) / 10).toLocaleString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU')} ${GB_()}`;
+const gbNum = x => (Math.round(Number(x || 0) * 10) / 10).toLocaleString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU');
+const gbText = x => `${gbNum(x)} ${GB_()}`;
+const gbPair = (used, total) => `${gbNum(used)} / ${gbNum(total)} ${GB_()}`;  // the unit once: «12,8 / 31,2 ГБ»
 const loadLevel = p => (p >= 85 ? ' ld-high' : '');  // amber only above the norm
 
 function loadModels() {
@@ -600,37 +602,52 @@ const HW_IC = {
   GPU: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 6.75h19.5v10.5H2.25V6.75zM4.5 17.25v2.25M9 13.875a1.875 1.875 0 100-3.75 1.875 1.875 0 000 3.75zM14.25 9.75h4.5m-4.5 2.25h4.5m-4.5 2.25h4.5"/></svg>',
 };
 
+// The column titles over the values of the load: «Всего занято» and «Verbaliox» (the load window and the widget)
+function ldHeadHtml() {
+  return `<div class="ld-row ld-head" aria-hidden="true"><span></span><span></span><span class="ld-v">${escapeHtml(t('ldColAll'))}</span>`
+    + `<span class="ld-v ld-mine">Verbaliox</span></div>`;
+}
+
+// The rows CPU, RAM, GPU: the bar (the whole in grey, Verbaliox's part in the accent), the whole computer and
+// Verbaliox's share in their columns; `notes` puts a grey line under the bar (the load window); `noGpu` (the widget)
+// keeps the RAM and GPU rows in place when they are not reported, the GPU with a word and its tooltip
+function ldRowsHtml(sys, own, gpu, ram, notes, noGpu) {
+  const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
+  const w = x => Math.max(0, Math.min(100, x || 0));
+  const row = (k, all, mine, value, ownText, tip) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>`
+    + `<span class="ld-bar ld-bar-lg"><b style="width:${w(all)}%"></b><i style="width:${w(mine)}%"></i></span>`
+    + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span><span class="ld-v ld-mine">${escapeHtml(ownText || '—')}</span></div>`
+    + (notes && notes[k] ? `<div class="ld-note">${escapeHtml(notes[k])}</div>` : '');
+  const cpu = sys.cpu_percent;
+  let html = row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`,
+    own.cpu_percent != null ? `${Math.round(own.cpu_percent)}%` : '', `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`);
+  if (ram) {
+    html += row('RAM', pct(ram.used_gb, ram.total_gb), pct(own.ram_gb, ram.total_gb), gbPair(ram.used_gb, ram.total_gb),
+      own.ram_gb != null ? gbText(own.ram_gb) : '', own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '');
+  } else if (noGpu) html += row('RAM', 0, 0, '—', '', '');
+  if (gpu) {
+    const approx = own.gpu_exact ? '' : '≈';
+    html += row('GPU', pct(gpu.used_gb, gpu.total_gb), pct(own.gpu_gb, gpu.total_gb), gbPair(gpu.used_gb, gpu.total_gb),
+      own.gpu_gb != null ? `${approx}${gbText(own.gpu_gb)}` : '',
+      own.gpu_gb != null ? `Verbaliox: ${approx}${gbText(own.gpu_gb)}${own.gpu_exact ? '' : `\n${t('ldGpuApprox')}`}` : '');
+  } else if (noGpu) html += row('GPU', 0, 0, noGpu[0], '', noGpu[1]);
+  return html;
+}
+
 function renderLoadPop() {
   const pop = document.getElementById('load-pop');
   const data = vram.data;
   if (!pop || !load.open || !data) return;
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
   const hw = (state.system && state.system.hardware) || {};
-  const bar = (all, mine) => `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`;
-  // each resource: its bar and value, under them the hardware on the left and Verbaliox's own share on the right
-  // (asked by the user: the shares of the program in one line under the GPU read as a part of the GPU)
-  const row = (k, all, mine, value, tip, note, own) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
-    + (note || own ? `<div class="ld-sub"><span class="ld-note">${escapeHtml(note || '')}</span>${own ? `<span class="ld-own"><i class="ld-me"></i>${escapeHtml(own)}</span>` : ''}</div>` : '');
-  const cpu = sys.cpu_percent;
-  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`
-    + `<div class="ld-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
-  html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`,
-    `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`, [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '),
-    own.cpu_percent != null ? `${Math.round(own.cpu_percent || 0)}%` : '');
-  if (ram) {
-    const rp = (100 * ram.used_gb) / Math.max(0.1, ram.total_gb);
-    html += row('RAM', rp, own.ram_gb != null ? (100 * own.ram_gb) / Math.max(0.1, ram.total_gb) : 0, `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
-      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)),
-      own.ram_gb != null ? gbText(own.ram_gb) : '');
-  }
-  if (gpu) {
-    const vp = (100 * gpu.used_gb) / Math.max(0.1, gpu.total_gb);
-    const mine = own.gpu_gb != null ? (100 * own.gpu_gb) / Math.max(0.1, gpu.total_gb) : 0;
-    html += row('GPU', vp, mine, `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
-      own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}${own.gpu_exact ? '' : `\n${t('ldGpuApprox')}`}` : '',
-      hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '',
-      own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '');
-  }
+  // one line per resource (asked by the user, «вариант A»): the label, the bar, the whole computer and Verbaliox's own
+  // share in the accent (the colour of its part of the bar) under the column titles; the hardware under the bar
+  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>` + ldHeadHtml();
+  html += ldRowsHtml(sys, own, gpu, ram, {
+    CPU: [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '),
+    RAM: ram ? t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)) : '',
+    GPU: hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '',
+  });
   const models = loadModels();
   const vramSum = models.reduce((s, { c }) => s + (c.kind === 'ollama' && c.where === 'gpu' ? Number(c.size_gb || 0) : 0), 0);
   const ramSum = models.reduce((s, { c }) => s + (c.ram_gb != null ? Number(c.ram_gb) : c.kind === 'ollama' && c.where !== 'gpu' ? Number(c.size_gb || 0) : 0), 0);
