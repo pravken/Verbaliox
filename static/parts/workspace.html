@@ -262,7 +262,7 @@
             <select id="live-translate-select" data-change="studioConfigure" tabindex="-1" data-i18n-title="tipLiveTranslate" title="Переводить субтитры на другой язык через локальную модель Ollama"></select>
           </div>
           <button id="st-cap-pill" data-click="studioCaptionsPill" class="st-pill" role="switch" aria-checked="false" data-i18n-title="tipLiveCaptions"
-            title="Показывать текст речи во время записи. После остановки запись, как обычно, расшифровывается полностью и точнее">
+            title="Показывать текст речи во время записи. Выбор сохраняется для следующих записей. После остановки запись, как обычно, расшифровывается полностью и точнее">
             <svg class="st-pill-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 10.2a2 2 0 1 0 0 3.6M17 10.2a2 2 0 1 0 0 3.6"/></svg>
             <span class="st-pill-txt" data-i18n="stCapPill">Субтитры</span>
             <span class="st-pill-sw" aria-hidden="true"></span>
@@ -285,14 +285,14 @@
               <div id="studio-models" class="st-mrows">
                 <div class="st-mrow">
                   <span class="st-mlabel" data-i18n="stModelAsr">Распознавание</span>
-                  <select id="studio-cap-model" data-change="studioSetCaptionModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioCapModel" title="Модель, которая пишет субтитры. «Авто» выбирает по языку речи"
+                  <select id="studio-cap-model" data-change="studioSetCaptionModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioCapModel" title="Модель, которая пишет субтитры. «Авто» выбирает по языку речи. Выбор сохраняется в настройках"
                     class="st-field st-msel"></select>
                   <span id="st-cap-model-gb" class="st-mgb"></span>
                   <span id="st-cap-model-state" class="st-mstate"></span>
                 </div>
                 <div id="studio-tr-model-wrap" class="st-mrow">
                   <span class="st-mlabel" data-i18n="studioModelTranslation">Перевод</span>
-                  <select id="studio-tr-model" data-change="studioSetTranslateModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioTrModel" title="Модель перевода. «Авто» — по переключателю «Качество / Скорость»"
+                  <select id="studio-tr-model" data-change="studioSetTranslateModel" data-change-args='[{"$": "value"}]' data-i18n-title="tipStudioTrModel" title="Модель перевода для выбранного режима: «Качество» или «Скорость». Выбор сохраняется в настройках"
                     class="st-field st-msel"></select>
                   <span id="st-tr-model-gb" class="st-mgb"></span>
                   <span id="st-tr-model-state" class="st-mstate"></span>

@@ -228,6 +228,10 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
         from app import semantic
 
         semantic.kick()
+    if any(k in values and values[k] != (before.get(k) or "") for k in ("live_translate_model_quality", "live_translate_model_fast")):
+        from app import live
+
+        live.translate_models_changed()  # the captions running now take the new choice too
     if "mem_reserve_ram" in values or "mem_reserve_vram" in values:
         from app import mem_reserve
 

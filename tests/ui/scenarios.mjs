@@ -1071,13 +1071,15 @@ await step('live captions as a chat', async () => {
 });
 
 await step('captions do not start by themselves', async () => {
+  // «Не мешать на встречах» holds them on a meeting only: a voice note recorded by hand starts with them
   const held = await page.evaluate(() => [
-    captionsHeldAtStart({}),
-    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }),
-    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'false' }),
-    captionsHeldAtStart({ live_captions_auto: 'false', analysis_after_meetings: 'false' }),
+    captionsHeldAtStart({}, false),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }, true),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }, false),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'false' }, true),
+    captionsHeldAtStart({ live_captions_auto: 'false', analysis_after_meetings: 'false' }, false),
   ]);
-  expect(JSON.stringify(held) === '[true,true,false,true]', `the captions rule: ${held}`);
+  expect(JSON.stringify(held) === '[true,true,false,false,true]', `the captions rule: ${held}`);
   await page.evaluate(() => openModal('settings', 'recording'));
   await sleep(600);
   expect(!(await page.isChecked('#set-live-captions-auto')), 'captions are on by default');
@@ -1135,10 +1137,109 @@ await step('studio captions row', async () => {
   expect(!(await page.isVisible('#st-cap-more')), 'Esc did not close the gear');
   await page.evaluate(() => {
     document.getElementById('live-captions-toggle').checked = false;
+    studioToggleCaptions(false);
     document.getElementById('live-translate-select').value = '';
     studioConfigure();
     switchAppView('library');
   });
+});
+
+// The studio's choices stay (asked by the user): «Субтитры», the language, «Качество / Скорость» and the models of the
+// popover are settings on the server, chosen before a recording too; a reload on an empty localStorage (another
+// port) shows them again, and Settings shows the same values
+await step('studio choices kept', async () => {
+  await page.route('**/api/live/models', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ installed: ['qwen3:8b', 'gemma4:e2b'], quality: 'qwen3:8b', fast: 'gemma4:e2b', auto: { quality: 'qwen3:8b', fast: 'gemma4:e2b' } }) }));
+  const parakeet = () => { state.onnxInstalled = ['parakeet-v3']; };  // no model is downloaded in the test data
+  await page.evaluate(() => switchAppView('studio'));
+  await sleep(600);
+  await page.evaluate(parakeet);
+  if (!(await page.evaluate(() => document.getElementById('live-captions-toggle').checked))) await page.click('#st-cap-pill');
+  await page.evaluate(() => {
+    document.getElementById('live-translate-select').value = 'en';
+    studioConfigure();
+    studioSetSpeed('fast');
+    studioTranslateModelsChanged();
+  });
+  const openModels = async () => {
+    if (!(await page.isVisible('#st-models-pop'))) await page.click('#st-models-pill');
+    await sleep(200);
+  };
+  await openModels();
+  let ready = false;
+  for (let i = 0; i < 30 && !ready; i++) {
+    await sleep(100);
+    ready = await page.evaluate(() => [...document.getElementById('studio-tr-model').options].some(o => o.value === 'gemma4:e2b'));
+  }
+  expect(ready, 'the translation models are not listed');
+  expect(await page.evaluate(() => !document.getElementById('studio-cap-model').disabled && !document.getElementById('studio-tr-model').disabled),
+    'the model lists are locked before a recording');
+  await page.evaluate(parakeet);
+  await openModels();
+  await page.selectOption('#studio-cap-model', 'parakeet-v3');
+  await page.selectOption('#studio-tr-model', 'gemma4:e2b');
+  const keys = ['live_captions_auto', 'live_translate_to', 'live_speed', 'live_whisper_model', 'live_translate_model_fast', 'live_translate_model_quality'];
+  const want = JSON.stringify(['true', 'en', 'fast', 'parakeet-v3', 'gemma4:e2b', '']);
+  let saved = '';
+  for (let i = 0; i < 30 && saved !== want; i++) {
+    await sleep(100);
+    saved = await page.evaluate((k) => fetch('/api/system').then(r => r.json()).then(d => JSON.stringify(k.map(x => d.settings[x] ?? null))), keys);
+  }
+  expect(saved === want, `the choices were not saved: ${saved}`);
+
+  await page.evaluate(() => localStorage.clear());  // a launch on another port
+  await page.reload();
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
+  await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); switchAppView('studio'); });
+  let shown = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(150);
+    shown = await page.evaluate(() => ({ on: document.getElementById('live-captions-toggle').checked,
+      pill: document.getElementById('st-cap-pill').getAttribute('aria-checked'),
+      lang: document.getElementById('live-translate-select').value, speed: studio.speed,
+      fast: document.getElementById('studio-speed-fast').classList.contains('tk-on') }));
+    if (shown.on && shown.lang === 'en' && shown.fast) break;
+  }
+  expect(shown.on && shown.pill === 'true' && shown.lang === 'en' && shown.speed === 'fast' && shown.fast,
+    `the studio did not show the saved choices after a reload: ${JSON.stringify(shown)}`);
+  await openModels();
+  let models = null;
+  for (let i = 0; i < 30; i++) {
+    await sleep(100);
+    models = await page.evaluate(() => {
+      state.onnxInstalled = ['parakeet-v3'];
+      renderStudioCapBar();
+      return [document.getElementById('studio-cap-model').value, document.getElementById('studio-tr-model').value];
+    });
+    if (models[0] === 'parakeet-v3' && models[1] === 'gemma4:e2b') break;
+  }
+  expect(models[0] === 'parakeet-v3' && models[1] === 'gemma4:e2b', `the models were not kept: ${models}`);
+  if (process.env.PERSIST_SHOT) await page.locator('#st-models-pop').screenshot({ path: process.env.PERSIST_SHOT });
+  await page.evaluate(() => closeStudioModelsPop());
+
+  await page.evaluate(() => openModal('settings', 'recording'));
+  await sleep(600);
+  const inSettings = await page.evaluate(() => {
+    state.onnxInstalled = ['parakeet-v3'];
+    renderLiveModelSelect();
+    return [document.getElementById('set-live-captions-auto').checked, document.getElementById('set-live-model').value];
+  });
+  expect(inSettings[0] === true && inSettings[1] === 'parakeet-v3', `Settings shows other values: ${inSettings}`);
+  // Settings → the studio: the switch turned off there is off in the studio
+  await page.evaluate(() => document.getElementById('set-live-captions-auto').click());  // the row may be folded
+  let off = false;
+  for (let i = 0; i < 30 && !off; i++) { await sleep(100); off = await page.evaluate(() => !document.getElementById('live-captions-toggle').checked); }
+  expect(off, 'the switch of Settings did not reach the studio');
+  await page.evaluate(() => closeModal('settings'));
+  await page.evaluate(() => {
+    studioSetModels({ caption_model: 'auto', translate_model: '' });
+    document.getElementById('live-translate-select').value = '';
+    studioConfigure();
+    studioSetSpeed('quality');
+    switchAppView('library');
+  });
+  await sleep(500);
+  await page.unroute('**/api/live/models');
 });
 
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers

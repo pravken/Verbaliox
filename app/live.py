@@ -191,6 +191,13 @@ def _caption_worker() -> _CaptionWorker:
         return _worker
 
 
+def _translate_choice(settings: Dict[str, Any], speed: str) -> str:
+    """The translation model saved for «Качество» or «Скорость»; "" is «Авто» (app/live_translate.choose_models)."""
+    from app.live_translate import CHOICE_KEYS
+
+    return str(settings.get(CHOICE_KEYS.get(speed, CHOICE_KEYS["quality"])) or "").strip()
+
+
 class LiveSession:
     def __init__(self, lang: Optional[str], translate_to: Optional[str], capture_id: Optional[str] = None,
                  speed: str = "quality", pair: Optional[List[str]] = None):
@@ -204,7 +211,10 @@ class LiveSession:
         self.caption_choice = settings.get("live_whisper_model") or "auto"
         self.onnx_model = caption_onnx_model(settings, self.speech_lang)
         self.draft = False  # the page shows the draft line: translate it too
-        self.translate_model: Optional[str] = None  # chosen by hand in the studio
+        # «Качество» or «Скорость»: the translation model is the one saved for it (Settings → «Модели перевода»,
+        # or chosen in the studio, which saves it there too); "" is «Авто»
+        self.speed = speed if speed in ("quality", "fast") else "quality"
+        self.translate_choice = _translate_choice(settings, self.speed)
         self.translate_to = translate_to or None
         self.pair = list(pair or ["ru", "en"])[:2]  # the two languages of translate_to="auto"
         self.audio = np.zeros(0, dtype=np.float32)
@@ -367,6 +377,9 @@ class LiveSession:
             if self.speech_lang:
                 self.lang = self.speech_lang
             self.onnx_model = caption_onnx_model(get_all_settings(), self.speech_lang)
+        if speed in ("quality", "fast") and speed != self.speed:
+            self.speed = speed
+            self.translate_choice = _translate_choice(get_all_settings(), speed)
         if not translate_to:
             if self.translator:
                 self.translator.stop()
@@ -377,8 +390,7 @@ class LiveSession:
         self.translate_to = translate_to
         self.pair = new_pair
         if self.translator is None:
-            self.translator = LiveTranslator(lambda: self.lang, translate_to, speed or "quality", self.pair)
-            self.translator.set_model(self.translate_model)
+            self.translator = LiveTranslator(lambda: self.lang, translate_to, self.speed, self.pair)
             self.translator.add_lines([ln for ln in self.lines[-20:]])
             from app import idle_unload
 
@@ -406,7 +418,7 @@ class LiveSession:
             "error": self.error or (self.translator.error if self.translator else ""),
             "caption_model": self.caption_label(),
             "caption_choice": self.caption_choice,
-            "translate_choice": self.translate_model or "",
+            "translate_choice": self.translate_choice,
             "translate_model": self.translate_label(),
         }
 
@@ -414,9 +426,11 @@ class LiveSession:
         """The caption model chosen in the studio ("auto", GigaAM / Parakeet or a Whisper model); it is
         the same setting as in Settings, so the next recording keeps it."""
         from app.database import update_settings
+        from app.settings_schema import clean
 
-        update_settings({"live_whisper_model": value or "auto"})
-        self.caption_choice = value or "auto"
+        value = clean("live_whisper_model", value or "auto") or "auto"  # ValueError for a model not in the catalog
+        update_settings({"live_whisper_model": value})
+        self.caption_choice = value
         settings = get_all_settings()
         self.onnx_model = caption_onnx_model(settings, self.speech_lang)
         if self.onnx_model:
@@ -430,10 +444,23 @@ class LiveSession:
                 with _worker.lock:
                     _worker._kill()  # started again with the new model on the next window
 
-    def set_translate_model(self, model: Optional[str]) -> None:
-        self.translate_model = model or None
+    def set_translate_model(self, model: Optional[str], speed: Optional[str] = None) -> None:
+        """The translation model chosen in the studio for «Качество» or «Скорость» (the mode in use, or `speed`);
+        "" is «Авто». It is the same setting as Settings → «Модели перевода», so the next recordings keep it."""
+        from app.database import update_settings
+        from app.live_translate import CHOICE_KEYS
+        from app.settings_schema import clean
+
+        mode = speed if speed in CHOICE_KEYS else self.speed
+        key = CHOICE_KEYS[mode]
+        value = clean(key, model or "")  # ValueError for a name Ollama cannot have
+        update_settings({key: value})
+        self.speed = mode
+        self.translate_choice = value
         if self.translator:
-            self.translator.set_model(self.translate_model)
+            if speed in CHOICE_KEYS:
+                self.translator.configure(speed=speed)
+            self.translator.reload_model()
 
     def caption_label(self) -> str:
         """The model writing the captions now, for the studio."""
@@ -515,6 +542,17 @@ def caption_model(settings: Dict[str, str], hw: Dict[str, Any]) -> str:
     if chosen != "auto":
         return chosen if is_whisper_model_installed(chosen) else main
     return "large-v3-turbo" if is_whisper_model_installed("large-v3-turbo") else main
+
+
+def translate_models_changed() -> None:
+    """Settings → «Модели перевода» changed: the running captions translate with the model now saved for their mode."""
+    with _sessions_lock:
+        sessions = list(_sessions.values())
+    settings = get_all_settings()
+    for s in sessions:
+        s.translate_choice = _translate_choice(settings, s.speed)
+        if s.translator:
+            s.translator.reload_model()
 
 
 def get_session(session_id: str) -> Optional[LiveSession]:

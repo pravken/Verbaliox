@@ -38,6 +38,8 @@ CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "economy_for": {"0", "30", "60", "120", "240", "day"},
            # how long before a calendar meeting its reminder comes, seconds (app/brief_notice.py)
            "meet_notify_before": {"0", "30", "60", "120", "300", "600", "900"},
+           # «Качество / Скорость» of the captions' translation (the studio)
+           "live_speed": {"quality", "fast"},
            "cpu_threads": {"auto", "2", "4", "6", "8", "12", "16", "all"},
            "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},
@@ -131,6 +133,12 @@ def clean(key: str, value: Any) -> str:
         return text_s
     if key in OLLAMA_MODELS:
         if text_s and not OLLAMA_NAME_RE.match(text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
+    if key == "live_translate_to":  # the language of the captions' translation: "" none, "auto" the pair
+        from app.translation import TEXT_LANGUAGES
+
+        if text_s and text_s != "auto" and text_s not in TEXT_LANGUAGES:
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
     if key == "dictation_translate_to":

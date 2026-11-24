@@ -278,9 +278,10 @@ class LiveSentenceLinesTest(unittest.TestCase):
         self.assertEqual(get_all_settings()["live_whisper_model"], "parakeet-v3")
         s.translator = mock.Mock()
         s.set_translate_model("qwen3:4b")
-        s.translator.set_model.assert_called_with("qwen3:4b")
+        s.translator.reload_model.assert_called_once_with()
         self.assertEqual(s.state()["translate_choice"], "qwen3:4b")
-        update_settings({"live_whisper_model": "auto"})
+        self.assertEqual(get_all_settings()["live_translate_model_quality"], "qwen3:4b")
+        update_settings({"live_whisper_model": "auto", "live_translate_model_quality": ""})
 
 
 class TitleCleanTest(unittest.TestCase):

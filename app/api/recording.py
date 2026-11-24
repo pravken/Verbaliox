@@ -1003,7 +1003,7 @@ class LiveConfigPayload(BaseModel):
     pair: Optional[List[str]] = None
     draft: Optional[bool] = None
     caption_model: Optional[str] = None    # "auto" or a model id; None keeps the current one
-    translate_model: Optional[str] = None  # "" for auto (by speed) or an Ollama model; None keeps it
+    translate_model: Optional[str] = None  # "" for auto or an Ollama model, saved for the speed in use; None keeps it
 
 class LiveEarlierLine(BaseModel):
     at: float = 0
@@ -1063,11 +1063,16 @@ def api_live_config(session_id: str, payload: LiveConfigPayload) -> Dict[str, An
     target, pair = _live_target(payload.translate_to, payload.pair)
     if payload.draft is not None:
         s.draft = payload.draft
-    if payload.caption_model is not None:
-        s.set_caption_model(payload.caption_model)
-    if payload.translate_model is not None:
-        s.set_translate_model(payload.translate_model)
-    s.configure(target, payload.speed if payload.speed in ("quality", "fast") else None, payload.speech_lang, pair)
+    speed = payload.speed if payload.speed in ("quality", "fast") else None
+    try:
+        # both choices are saved as settings: the next recordings and Settings have them too
+        if payload.caption_model is not None:
+            s.set_caption_model(payload.caption_model)
+        if payload.translate_model is not None:
+            s.set_translate_model(payload.translate_model, speed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    s.configure(target, speed, payload.speech_lang, pair)
     return s.state(0)
 
 @router.get("/api/live/models")

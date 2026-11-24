@@ -185,6 +185,8 @@ def init_db() -> None:
             "ollama_model": hw["recommended_ollama_model"],
             "live_translate_model_quality": "",  # the translation model of live captions; "" = «Авто» (app/live_translate.py)
             "live_translate_model_fast": "",
+            # live_translate_to and live_speed (the studio's translation and «Качество / Скорость») have no default:
+            # absent until chosen, so the page takes the choice an earlier version kept in its localStorage once
             "vad_filter": "true",
             "audio_enhance": "true",
             "clean_fillers": "true",

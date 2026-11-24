@@ -349,6 +349,13 @@ class LiveTranslator:
                 self.ready = False
             self._cond.notify()
 
+    def reload_model(self) -> None:
+        """The model saved for the mode changed (the studio, Settings): resolved again and loaded on the next request."""
+        with self._cond:
+            self._model = None
+            self.ready = False
+            self._cond.notify()
+
     def stop(self) -> None:
         with self._cond:
             self._stop = True

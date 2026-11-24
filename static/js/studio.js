@@ -394,9 +394,9 @@ function stopSettingsAudioTest() {
 // --- Recording presets (like scenes in OBS): one click records from the chosen sources ---
 // Built-in presets plus the user's own, kept in the settings (record_presets, record_default_preset)
 const BUILTIN_PRESETS = [
-  { id: 'call', builtin: true, source: 'both', mic: '', live: true, translate: '' },
-  { id: 'note', builtin: true, source: 'mic', mic: '', live: false, translate: '' },
-  { id: 'system', builtin: true, source: 'system', mic: '', live: false, translate: '' },
+  { id: 'call', builtin: true, source: 'both', mic: '' },
+  { id: 'note', builtin: true, source: 'mic', mic: '' },
+  { id: 'system', builtin: true, source: 'system', mic: '' },
 ];
 
 function recordPresets() {
@@ -442,10 +442,9 @@ function applyRecordPreset(id) {
   document.getElementById('record-source-select').value = p.source;
   const micSel = document.getElementById('record-mic-select');
   if (p.mic && [...micSel.options].some(o => o.value === p.mic)) micSel.value = p.mic;
-  document.getElementById('live-captions-toggle').checked = !!p.live;
+  // the captions and their translation are not a preset's: one setting each, as the studio's switch and language
+  // left them (asked by the user: a preset applied at every «Запись» turned them back)
   if (p.video !== undefined) document.getElementById('record-video-select').value = p.video || '';
-  document.getElementById('live-translate-select').value = p.translate || '';
-  saveLiveCaptionPrefs();
   renderRecordPresetSelect(p.id);
   renderStudioExtras();
 }
@@ -455,8 +454,6 @@ function presetFromForm(base) {
     ...base,
     source: document.getElementById('record-source-select').value,
     mic: document.getElementById('record-mic-select').value || '',
-    live: document.getElementById('live-captions-toggle').checked,
-    translate: document.getElementById('live-translate-select').value || '',
     video: document.getElementById('record-video-select').value || '',
   };
 }
@@ -515,7 +512,7 @@ function toggleRecordPresetMenu(e) {
   const sourceName = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') };
   menu.innerHTML = recordPresets().map(p => item(
     [['hideRecordPresetMenu'], ['quickRecord', p.id]], p.id === def ? '★' : '', presetLabel(p),
-    sourceName[p.source] + (p.live ? ` · ${t('presetWithCaptions')}` : ''))).join('')
+    sourceName[p.source])).join('')
     + '<div class="h-px bg-white/10 my-1"></div>'
     + item([['hideRecordPresetMenu'], ['openRecordModal']], '', t('presetOpenSettings'), '');
   menu.classList.toggle('hidden');
@@ -641,6 +638,7 @@ async function meetingFollowTick() {
     const input = document.getElementById('record-title-input');
     if (input && !input.value.trim()) input.value = title;  // named after the meeting
     reportRecordingState(true);  // a recording of the meeting now: the queue waits for its end
+    studioHoldCaptionsForMeeting();
     return;
   }
   if (!title) {
@@ -665,6 +663,17 @@ async function meetingFollowTick() {
   if (title !== mf.cand) { mf.cand = title; mf.candSince = now; return; }
   if (now - mf.candSince < MEETING_SWITCH_MS) return;
   await meetingSwitchTo(title);
+}
+
+// A recording found to be of a meeting after its start: captions that started by themselves stop, as they would have
+// been held at the start («Не мешать на встречах»); ones turned on by hand go on. The setting stays as it is
+function studioHoldCaptionsForMeeting() {
+  if (!liveCap.autoStarted || !captionsHeldAtStart(liveSettings(), true)) return;
+  liveCap.autoStarted = false;
+  stopLiveCaptions();
+  document.getElementById('live-captions-toggle').checked = false;
+  liveCap.autoOff = true;
+  syncStudioCaptions();
 }
 
 async function meetingSwitchTo(title) {
@@ -1037,6 +1046,63 @@ function liveCaptionPrefs() {
   try { return JSON.parse(localStorage.getItem('verbaliox_live_captions') || '{}'); } catch (e) { return {}; }
 }
 
+// The studio's choices are settings kept on the server (localStorage is per port, see syncUiPrefsFromServer):
+// «Субтитры» is «Включать субтитры при начале записи», the caption model is «Модель субтитров», the translation
+// model is the one of «Качество» or «Скорость» in «Модели перевода»; the language and the mode are live_translate_to
+// and live_speed. Settings shows the same values
+function liveSettings() {
+  return (state.system && state.system.settings) || {};
+}
+
+function studioTrSettingKey(speed) {
+  return speed === 'fast' ? 'live_translate_model_fast' : 'live_translate_model_quality';
+}
+
+function studioCapChoice() {
+  return (liveCap.session ? liveCap.captionChoice : (liveSettings().live_whisper_model || state.liveModelSetting)) || 'auto';
+}
+
+function studioTrChoice() {
+  return (liveCap.session ? liveCap.translateChoice : liveSettings()[studioTrSettingKey(studio.speed)]) || '';
+}
+
+const STUDIO_SETTING_CONTROLS = {
+  live_captions_auto: 'set-live-captions-auto', live_whisper_model: 'set-live-model',
+  live_translate_model_quality: 'set-live-tr-quality', live_translate_model_fast: 'set-live-tr-fast',
+};
+
+// A choice of the studio saved as its setting (`post`: by the page; else the captions' session saved it), and
+// shown by the control of the Settings window
+function studioKeepSetting(key, value, post = true) {
+  if (post) saveUiSetting(key, value);
+  else if (state.system && state.system.settings) state.system.settings[key] = value;
+  if (key === 'live_whisper_model') state.liveModelSetting = value;
+  const el = document.getElementById(STUDIO_SETTING_CONTROLS[key] || '');
+  if (!el) return;
+  if (el.type === 'checkbox') el.checked = value === 'true';
+  else if ([...el.options].some(o => o.value === value)) el.value = value;
+}
+
+// The settings arrived or were changed in Settings: the studio shows them (not while recording: the switch is the
+// recording's then). An earlier version kept the language and the mode in localStorage only: taken once
+function studioPrefsFromSettings() {
+  const s = liveSettings();
+  if (!state.system || isRecording()) return;
+  if (s.live_speed === 'quality' || s.live_speed === 'fast') studio.speed = s.live_speed;
+  else saveUiSetting('live_speed', studio.speed);
+  const sel = document.getElementById('live-translate-select');
+  if (s.live_translate_to === undefined) {
+    const old = liveCaptionPrefs().translate;
+    if (old) saveUiSetting('live_translate_to', old);
+  } else if (sel && sel.options.length && sel.value !== s.live_translate_to && [...sel.options].some(o => o.value === s.live_translate_to)) {
+    sel.value = s.live_translate_to;
+    studio.lastTarget = sel.value || null;
+  }
+  const box = document.getElementById('live-captions-toggle');
+  if (box) box.checked = s.live_captions_auto === 'true';
+  if (document.getElementById('studio-speed-quality')) renderStudioControls();
+}
+
 // The model pickers above the captions: "Auto · <model in use>" and the downloaded models
 function fillModelSelect(sel, options, value) {
   const html = options.map(([v, label]) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`).join('');
@@ -1050,7 +1116,7 @@ function studioLoadLlmModels() {
   studio.llmModels = [];
   fetch('/api/live/models').then(r => r.json()).then(d => {
     studio.llmModels = d.installed || [];
-    studio.llmChoices = { quality: d.quality || '', fast: d.fast || '' };
+    studio.llmChoices = d.auto || {};  // what «Авто» takes for each mode
     syncStudioCaptions();
   }).catch(() => {});
 }
@@ -1068,7 +1134,7 @@ function studioCapModelId() {
   const isOnnx = id => onnx.some(x => x.id === id);
   const lang = studio.speech && studio.speech !== 'auto' ? studio.speech.slice(0, 2) : '';
   const fits = x => !!x && x.installed && (!lang || (x.languages || []).includes(lang));
-  const chosen = (liveCap.session ? liveCap.captionChoice : state.liveModelSetting) || 'auto';
+  const chosen = studioCapChoice();
   if (isOnnx(chosen) && fits(onnx.find(x => x.id === chosen))) return chosen;
   if (chosen === 'auto') {
     const m = (lang === 'ru' ? ['gigaam-v3', 'parakeet-v3'] : ['parakeet-v3']).map(id => onnx.find(x => x.id === id)).find(fits);
@@ -1084,7 +1150,8 @@ function studioCapModelId() {
 
 // The translation model: the one chosen, the one at work, or the one «Качество / Скорость» takes
 function studioTrModelId() {
-  if (liveCap.translateChoice) return liveCap.translateChoice;
+  const choice = studioTrChoice();
+  if (choice) return choice;
   const llm = studio.llmModels || [];
   if (liveCap.session && liveCap.translateModel) {
     const m = llm.find(x => formatModelName(x) === liveCap.translateModel);
@@ -1157,14 +1224,13 @@ function renderStudioModels(target) {
   const auto = t('liveAutoShort');
   const capSel = document.getElementById('studio-cap-model');
   const capId = models[0].id;
-  const capChoice = (liveCap.session ? liveCap.captionChoice : state.liveModelSetting) || 'auto';
+  const capChoice = studioCapChoice();
   fillModelSelect(capSel, [
     ['auto', capChoice === 'auto' && capId ? `${auto} · ${formatModelName(capId)}` : auto],
     ...(state.onnxInstalled || []).map(id => [id, formatModelName(id)]),
     ...(state.whisperInstalled || []).map(id => [id, formatModelName(id)]),
   ], capChoice);
-  // a model is changed in the captions' session: before it starts the lists say what it will take
-  capSel.disabled = !liveCap.session;
+  // chosen before the captions start too: saved, they start with it
   const row = (kind, m) => {
     const info = m && m.info;
     const gb = document.getElementById(`st-${kind}-model-gb`);
@@ -1182,13 +1248,12 @@ function renderStudioModels(target) {
   document.getElementById('st-speed-row').classList.toggle('hidden', !target);
   if (target) {
     const trSel = document.getElementById('studio-tr-model');
-    const trChoice = liveCap.translateChoice || '';
+    const trChoice = studioTrChoice();
     const trId = models[1] && models[1].id;
     fillModelSelect(trSel, [
       ['', !trChoice && trId ? `${auto} · ${formatModelName(trId)}` : auto],
       ...(studio.llmModels || []).map(m => [m, formatModelName(m)]),
     ], trChoice);
-    trSel.disabled = !liveCap.session;
     row('tr', models[1]);
   }
   studioRenderTrOffer(target);
@@ -1200,7 +1265,7 @@ function renderStudioModels(target) {
     lines.push(t('stModelsVram').replace('{used}', () => studioGb(Math.min(gpu.total_gb, Number(gpu.used_gb || 0) + add)).replace(` ${t('unitGB')}`, ''))
       .replace('{total}', () => studioGb(gpu.total_gb)));
   }
-  if (!liveCap.session) lines.push(t('stModelsWhileOn'));
+  if (!liveCap.session) lines.push(t('stModelsSaved'));  // chosen before the captions start: kept for them
   const note = document.getElementById('st-models-note');
   const text = lines.join('\n');
   if (note.textContent !== text) note.textContent = text;
@@ -1322,14 +1387,25 @@ function closeStudioCapMore() {
 function studioSetCaptionModel(value) { return studioSetModels({ caption_model: value }); }
 function studioSetTranslateModel(value) { return studioSetModels({ translate_model: value }); }
 
+// The models chosen in the studio are the settings (Settings → «Модель субтитров», «Модели перевода» for the mode in
+// use): saved for the next captions, and applied to the running ones by their session, which saves them too
 async function studioSetModels(change) {
-  if (!liveCap.session) return;
-  if ('caption_model' in change) { liveCap.captionChoice = change.caption_model; state.liveModelSetting = change.caption_model; }
-  if ('translate_model' in change) liveCap.translateChoice = change.translate_model;
+  const session = !!liveCap.session;
+  if ('caption_model' in change) {
+    change.caption_model = change.caption_model || 'auto';
+    liveCap.captionChoice = change.caption_model;
+    studioKeepSetting('live_whisper_model', change.caption_model, !session);
+  }
+  if ('translate_model' in change) {
+    change.translate_model = change.translate_model || '';
+    liveCap.translateChoice = change.translate_model;
+    studioKeepSetting(studioTrSettingKey(studio.speed), change.translate_model, !session);
+  }
+  if (!session) { syncStudioCaptions(); return; }
   try {
     const res = await fetch(`/api/live/${liveCap.session}/config`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ translate_to: document.getElementById('live-translate-select').value || null, pair: quickLangs(), ...change }),
+      body: JSON.stringify({ translate_to: document.getElementById('live-translate-select').value || null, pair: quickLangs(), speed: studio.speed, ...change }),
     });
     if (!res.ok) showError((await res.json().catch(() => ({}))).detail);
   } catch (e) { console.error(e); }
@@ -1344,9 +1420,9 @@ function liveDraftTrOn() {
   return !!document.getElementById('live-draft-tr-toggle')?.checked;
 }
 
+// The draft switches of this window; the language is the setting live_translate_to, kept here as its cache
 function saveLiveCaptionPrefs() {
   const prefs = {
-    on: document.getElementById('live-captions-toggle').checked || !!liveCap.autoOff,
     translate: document.getElementById('live-translate-select').value,
     draft: document.getElementById('live-draft-toggle').checked,
     draftTr: document.getElementById('live-draft-tr-toggle').checked,
@@ -1358,12 +1434,14 @@ async function initLiveCaptionControls() {
   if (liveCap.session) return;
   const prefs = liveCaptionPrefs();
   const codes = await textLanguages();
-  fillTranslateSelect(codes, prefs.translate || '');
+  const s = liveSettings();
+  fillTranslateSelect(codes, (s.live_translate_to !== undefined ? s.live_translate_to : prefs.translate) || '');
+  studio.lastTarget = document.getElementById('live-translate-select').value || null;
   // Speech: Whisper language codes (no script variants)
   const speech = document.getElementById('studio-speech');
   speech.innerHTML = `<option value="auto">${escapeHtml(t('studioSpeechAuto'))}</option>` + textLangOptions(codes, true);
   speech.value = studio.speech;
-  document.getElementById('live-captions-toggle').checked = !!prefs.on;
+  document.getElementById('live-captions-toggle').checked = s.live_captions_auto === 'true';
   document.getElementById('live-draft-toggle').checked = !!prefs.draft;
   document.getElementById('live-draft-tr-toggle').checked = !!prefs.draftTr;
   renderStudioControls();
@@ -1726,7 +1804,15 @@ function renderStudioControls() {
 
 function studioSetView(v) { studio.view = v; saveStudioPrefs(); renderStudioControls(); syncStudioCaptions(); }
 function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
-function studioSetSpeed(s) { studio.speed = s; saveStudioPrefs(); renderStudioControls(); studioConfigure(); }
+function studioSetSpeed(s) {
+  studio.speed = s;
+  saveUiSetting('live_speed', s);
+  saveStudioPrefs();
+  // the translation model is the one saved for this mode
+  if (liveCap.session) liveCap.translateChoice = liveSettings()[studioTrSettingKey(s)] || '';
+  renderStudioControls();
+  studioConfigure();
+}
 
 // Language or model changed while recording: the session translates the last lines again
 async function studioConfigure(speechChanged) {
@@ -1736,6 +1822,7 @@ async function studioConfigure(speechChanged) {
   studio.speech = document.getElementById('studio-speech').value || 'auto';
   saveStudioPrefs();
   saveLiveCaptionPrefs();
+  saveUiSetting('live_translate_to', target || '');
   renderStudioControls();
   if (targetChanged) capResetTranslations();
   if (!liveCap.session) { syncStudioCaptions(); return; }
@@ -1749,8 +1836,9 @@ async function studioConfigure(speechChanged) {
 }
 
 async function studioToggleCaptions(on) {
-  liveCap.autoOff = false;  // the user's own choice now
-  saveLiveCaptionPrefs();
+  liveCap.autoOff = false;  // the user's own choice now: it is the setting, for this recording and the next ones
+  liveCap.autoStarted = false;
+  studioKeepSetting('live_captions_auto', String(!!on));
   if (on && !liveCap.session && _recAudioCtx && window._recMixedStream) {
     try { await startLiveCaptions(_recAudioCtx, window._recMixedStream); } catch (e) { renderLiveCaptionsError(e.message); }
   } else if (!on) {
@@ -2078,9 +2166,9 @@ function recordSound(kind) {
 
 // Whether captions wait for the user's switch as a recording starts: «Включать субтитры при начале записи» off
 // (the default), «Не мешать на встречах» on (a recording is a meeting), or «Только запись»
-function captionsHeldAtStart(settings) {
+function captionsHeldAtStart(settings, meeting) {
   const s = settings || {};
-  return s.live_captions_auto !== 'true' || s.analysis_after_meetings !== 'false' || economyOn();
+  return s.live_captions_auto !== 'true' || (!!meeting && s.analysis_after_meetings !== 'false') || economyOn();
 }
 
 async function startLiveRecording() {
@@ -2212,17 +2300,19 @@ async function startLiveRecording() {
     liveCap.partial = '';
     liveCap.error = '';
     capReset();
-    // «Включать субтитры при начале записи» off (the default), «Не мешать на встречах» on (asked by the user:
-    // nothing heavy starts by itself during a meeting, and a recording is one), or the economy mode: the
-    // recording starts without them. The switch turns them on; the Teams captions are read either way
-    // (stTeamsStart below). The switch shows them off for this recording; the user's choice is kept
-    // (liveCap.autoOff) for the next recordings and comes back when this one ends
-    const capSettings = (state.system && state.system.settings) || {};
+    // «Включать субтитры при начале записи» off (the default), a recording of a meeting with «Не мешать на встречах»
+    // on (asked by the user: nothing heavy starts by itself during a meeting; a voice note recorded by hand is no
+    // meeting), or the economy mode: the recording starts without them. The switch turns them on; the Teams
+    // captions are read either way (stTeamsStart below). The switch shows them off for this recording; the
+    // setting stays as it is (liveCap.autoOff) and the switch shows it again when this one ends
+    const capSettings = liveSettings();
     const capToggle = document.getElementById('live-captions-toggle');
-    if (capToggle.checked && captionsHeldAtStart(capSettings)) {
+    capToggle.checked = capSettings.live_captions_auto === 'true';
+    if (capToggle.checked && captionsHeldAtStart(capSettings, recordingIsMeeting())) {
       capToggle.checked = false;
       liveCap.autoOff = true;
     }
+    liveCap.autoStarted = capToggle.checked;
     if (capToggle.checked) {
       startLiveCaptions(ctx, mixedStream).catch(err => {
         console.error(err);
@@ -2408,10 +2498,10 @@ async function checkRecordingDisk() {
 }
 
 function _cleanupRecordingResources() {
-  if (liveCap.autoOff) {  // captions held off for the recording (settings, economy mode): the switch as it was
+  if (liveCap.autoOff) {  // captions held off for the recording (a meeting, economy mode): the switch shows the setting
     liveCap.autoOff = false;
     const capToggle = document.getElementById('live-captions-toggle');
-    if (capToggle) capToggle.checked = true;
+    if (capToggle) capToggle.checked = liveSettings().live_captions_auto === 'true';
   }
   if (_recScreenId) {  // a start that failed half way: the screen capture must not keep running
     fetch(`/api/record/screen/${_recScreenId}/cancel`, { method: 'POST' }).catch(() => {});

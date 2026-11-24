@@ -2564,6 +2564,7 @@ async function saveAllSettings() {
   _settingsBaseline = { ...(_settingsBaseline || values), ...changed };
   const saved = await readJson(res);
   if (saved?.settings && state.system) state.system.settings = { ...(state.system.settings || {}), ...saved.settings };
+  if ('live_captions_auto' in changed && typeof studioPrefsFromSettings === 'function') studioPrefsFromSettings();
 }
 
 function pullCustomOllamaModel() {

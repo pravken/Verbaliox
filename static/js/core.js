@@ -401,6 +401,7 @@ function syncUiPrefsFromServer(settings) {
     saveUiSetting('ui_lang', state.uiLang);  // chosen before the server kept it: it does from now on
   }
   if (typeof dbPrefsFromServer === 'function') dbPrefsFromServer(settings);
+  if (typeof studioPrefsFromSettings === 'function') studioPrefsFromSettings();
 }
 
 // A preference of the page kept on the server (and in state.system.settings, so it is not sent twice)

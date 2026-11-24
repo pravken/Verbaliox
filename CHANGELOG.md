@@ -55,6 +55,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   set in «Free the models from memory after». Live captions starting unload the analysis model they do not use (not
   during a running analysis), switching «Quality» ↔ «Fast» unloads the previous translation model, and the captions'
   models go a minute after the captions end. Each unload is written in the log with its reason.
+- **The studio's choices stay**: «Captions» switched on or off, the translation language, «Quality / Fast», the
+  caption model and the translation model are kept as settings and survive a new recording, a restart and a launch on
+  another port. «Captions» is «Turn captions on when a recording starts», the caption model is «Caption model», the
+  translation model is the one of the chosen mode in «Translation models»: Settings shows the same values. The models
+  can be chosen before a recording too. A recording preset no longer switches the captions or the translation. With
+  «Do not disturb in meetings» captions do not start by themselves on a meeting only; a voice note starts with them.
 
 ## 0.9.3 — English
 
@@ -1242,6 +1248,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   модели через». Запуск субтитров выгружает модель анализа, которую они не используют (кроме времени идущего
   анализа), переключение «Качество» ↔ «Быстро» выгружает предыдущую модель перевода, а модели субтитров выгружаются
   через минуту после их окончания. Каждая выгрузка записывается в журнал с причиной.
+- **Выбор в студии сохраняется**: включённые или выключенные «Субтитры», язык перевода, «Качество / Скорость», модель
+  субтитров и модель перевода хранятся в настройках и остаются после новой записи, перезапуска и запуска на другом
+  порту. «Субтитры» — это «Включать субтитры при начале записи», модель субтитров — «Модель субтитров», модель
+  перевода — модель выбранного режима в «Моделях перевода»: в настройках те же значения. Модели можно выбрать и до
+  записи. Шаблон записи больше не переключает субтитры и перевод. При «Не мешать на встречах» субтитры не включаются
+  сами только на встречах; голосовая заметка начинается с ними.
 
 ## 0.9.3
 
