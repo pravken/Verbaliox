@@ -3781,6 +3781,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .vx-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
 .vx-pbar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
 .vx-pbar b { display: block; height: 100%; background: var(--accent); transition: width var(--dur-slow) ease; }
+.vx-prow-go { grid-column: 1 / -1; display: flex; }
 .vx-foot { display: flex; gap: 8px; margin-top: 12px; }
 
 /* The load indicator of the status bar: the models, then CPU and RAM, each bar in two layers: the whole

@@ -931,6 +931,9 @@ def api_ui_lang(payload: UiLangPayload) -> Dict[str, Any]:
 # --- What the page is doing, for the tray icon (see app/app_status.py) ---
 class UiStatePayload(BaseModel):
     recording: bool = False
+    # the recording is of a meeting (a call or the calendar started it, or it follows a Teams meeting); a page of
+    # an older version sends nothing: taken for a meeting, as before
+    meeting: Optional[bool] = None
 
 class AutoRecordNoticePayload(BaseModel):
     started: bool
@@ -948,7 +951,7 @@ def api_auto_record_notice(payload: AutoRecordNoticePayload) -> Dict[str, Any]:
 def api_ui_state(payload: UiStatePayload) -> Dict[str, Any]:
     from app.app_status import set_recording, snapshot
 
-    set_recording(payload.recording)
+    set_recording(payload.recording, payload.meeting)
     from app import meeting_guard
 
     meeting_guard.kick()  # a recording began: an analysis running is broken off now, not at the next poll

@@ -2,8 +2,9 @@
 The analysis model waits for the end of a meeting (asked by the user: meeting after meeting, the analysis of
 the last one slowed the whole computer during the next).
 
-A meeting is going on while this app records, or while the calendar has one now or within 10 minutes
-(app/calendar_ics.current_meeting): the calendar alone is not always right, the recording is the sure sign.
+A meeting is going on while this app records one (a recording a call or the calendar started, or one following a
+Teams meeting — not a voice note recorded by hand), while a call app holds the microphone, or while the calendar has
+one now or within 10 minutes (app/calendar_ics.current_meeting).
 Then:
 - the automatic analysis after a transcription does not start: the recording is marked to be analysed later
   (the table deferred_analysis, so it survives a restart);
@@ -35,7 +36,7 @@ RECORDING_STALE_SEC = 10 * 3600  # «recording» reported this long ago: the pag
 _lock = threading.Lock()
 _running: Dict[int, int] = {}  # recording → the thread its automatic analysis runs on
 _interrupted: Set[int] = set()  # recordings whose analysis a meeting broke off
-_state = {"busy": "", "quiet_since": 0.0, "started": False, "ended": 0.0, "looked": False}
+_state = {"busy": "", "quiet_since": 0.0, "started": False, "ended": 0.0, "ended_kind": "", "looked": False}
 _sent: Set[int] = set()  # marked recordings sent to the queue since the last meeting: once each, not every poll
 
 
@@ -106,7 +107,10 @@ def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = Fals
         return ""
     from app.app_status import _ui
 
-    if _ui.get("recording") and time.time() - float(_ui.get("since") or 0) < RECORDING_STALE_SEC:
+    # only a recording of a meeting (reported by the user: a voice note of a minute, recorded by hand with no call
+    # and no meeting in the calendar, held the queue «до конца встречи» and 2 minutes after): a call or the
+    # calendar started it, or it follows a Teams meeting (the page says so, app/app_status.set_recording)
+    if _ui.get("recording") and _ui.get("meeting", True) and time.time() - float(_ui.get("since") or 0) < RECORDING_STALE_SEC:
         return "recording"
     # a call without a recording and without the calendar (asked by the user: a transcription began during a
     # meeting): a call app or a browser holds the microphone (Windows)
@@ -286,6 +290,24 @@ def hold_until(now: Optional[float] = None) -> Optional[float]:
     return None
 
 
+def hold_state(now: Optional[float] = None) -> Dict[str, Any]:
+    """What the queue's window says (asked by the user: «ждёт конца встречи» stood under a voice note while no
+    meeting went on): {"kind": "meeting", "reason": "recording"|"call"|"calendar", …} while a meeting goes on;
+    {"kind": "pause", "until": time, "left": seconds, "reason": what the meeting was} during the pause after
+    it; {} when nothing holds the queue."""
+    now = time.time() if now is None else now
+    until = hold_until(now)
+    if until is None:
+        return {}
+    if not until:
+        out: Dict[str, Any] = {"kind": "meeting"}
+        out.update({("reason" if k == "kind" else k): v for k, v in hold_reason().items()})
+        return out
+    with _lock:
+        was = _state["ended_kind"]
+    return {"kind": "pause", "until": until, "left": max(0, int(round(until - now))), "reason": was}
+
+
 def _release_speech() -> List[str]:
     """The speech models out of memory as a meeting begins, when no job uses them (one running finishes)."""
     try:
@@ -313,8 +335,11 @@ def check(now: Optional[float] = None) -> str:
             _sent.clear()  # after this meeting they are tried again
         elif was or not _state["quiet_since"]:
             _state["quiet_since"] = now
-        if was and not reason:
+        # the pause of QUIET_SEC only after a meeting: not after «Только запись» (nor after a voice note, which
+        # is no meeting at all, see busy())
+        if was and was != "economy" and not reason:
             _state["ended"] = now
+            _state["ended_kind"] = was
         quiet_for = now - _state["quiet_since"] if not reason else 0.0
     if reason and not was:
         broken = _break_off()

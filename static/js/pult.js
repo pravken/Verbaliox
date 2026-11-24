@@ -156,6 +156,7 @@ function stripState() {
     const mixing = m.status === 'mixing';
     const open = state.appView === 'library' && state.activeMeeting && state.activeMeeting.id === m.id;
     const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
+      : holdPause() ? t('stripWaitPause').replace('{time}', () => holdClock())
       : state.queueMeeting ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
     return { kind: 'after', pill: mixWaiting(m) ? mixWaitPill(m) : mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
@@ -280,6 +281,7 @@ const panelHead = (id, icon, title) => `<div class="vx-panel-h"><span class="vx-
 function jobsHoldShort() {
   if (typeof economyOn === 'function' && economyOn()) return t('islandHoldEconomy');
   if (state.queuePaused) return t('islandHoldPaused');
+  if (holdPause()) return t('islandHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('islandHoldMeeting');
   return '';
 }
@@ -287,8 +289,56 @@ function jobsHoldShort() {
 function jobsHold() {
   if (typeof economyOn === 'function' && economyOn()) return t('jobsHoldEconomy');
   if (state.queuePaused) return t('jobsHoldPaused');
+  if (holdPause()) return t('jobsHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('jobsHoldMeeting');
   return '';
+}
+
+// «Не мешать на встречах» holds the transcriptions: while a meeting goes on, or during the pause of 2 minutes after
+// it (asked by the user: the window said «ждёт конца встречи» with no meeting going on). The pause counts down
+function holdPause() {
+  return !!(state.queueMeeting && state.queueHold && state.queueHold.kind === 'pause');
+}
+function holdLeft() {
+  return holdPause() ? Math.max(0, Math.ceil((state.queueHold.end - Date.now()) / 1000)) : 0;
+}
+function holdClock() {
+  const s = holdLeft();
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+// The waiting text of a transcription held by a meeting, or '' (the item waits for something else)
+function holdItemText(q, meetingKey) {
+  if (!state.queueMeeting || q.kind !== 'transcribe' || q.state === 'running') return '';
+  return holdPause() ? t('jobsWaitPause').replace('{time}', () => holdClock()) : t(meetingKey);
+}
+// Each second of the pause: the island, the queue's window, the strip and the status bar show the time left; at
+// its end the queue is asked again (the transcriptions start)
+const holdTimer = { id: null, asked: false };
+function holdTick() {
+  if (!holdPause()) { clearInterval(holdTimer.id); holdTimer.id = null; holdTimer.asked = false; return; }
+  if (!holdTimer.id) holdTimer.id = setInterval(holdTick, 1000);
+  renderJobsIsland();
+  renderJobsPop();
+  if (typeof renderQueuePanel === 'function') renderQueuePanel();
+  if (typeof renderStatusbar === 'function') renderStatusbar();
+  if (typeof strip !== 'undefined' && strip.kind === 'after' && typeof renderStrip === 'function') renderStrip();
+  if (holdLeft()) holdTimer.asked = false;  // a new pause: asked again at its end
+  else if (!holdTimer.asked && typeof loadQueue === 'function') {
+    holdTimer.asked = true;
+    setTimeout(() => loadQueue().catch(() => {}), 1500);
+  }
+}
+
+// «Начать сейчас» of a transcription waiting for the end of a meeting: asked as «Расшифровать» asks during a meeting
+// (static/js/workspace.js transcribeWithPickedModel)
+async function jobsRunNow(id) {
+  const pause = holdPause();
+  if (!await confirmDialog(t(pause ? 'txPauseNowTitle' : 'txMeetingNowTitle'), t(pause ? 'txPauseNowText' : 'txMeetingNowText'),
+    t('txMeetingNowYes'), false)) return;
+  const res = await fetch(`/api/queue/${Number(id) || 0}/run-now`, { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showToast(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  showToast(t('txMeetingNowStarted'));
+  if (typeof loadQueue === 'function') loadQueue().catch(() => {});
 }
 
 // «Очередь» as an island in the top strip (asked by the user: the rail's button said «Очередь пуста» most of the
@@ -390,13 +440,16 @@ function renderJobsPop() {
     const val = q.cancelling ? t('queueCancelling')
       : running ? `${pct}%`
       : state.queuePaused ? t('queuePausedItem')
-      : state.queueMeeting && q.kind === 'transcribe' ? t('jobsWaitMeeting') : t('queueWaiting').replace('{n}', () => q.position);
+      : holdItemText(q, 'jobsWaitMeeting') || t('queueWaiting').replace('{n}', () => q.position);
+    // held by the meeting: «Начать сейчас» under it, after the user's «Да»
+    const held = !q.cancelling && !state.queuePaused && !(typeof economyOn === 'function' && economyOn()) && !!holdItemText(q, 'jobsWaitMeeting');
     const tip = t('jobsOpenTip').replace('{title}', () => q.title || '');
     return `<div class="vx-prow vx-link" ${pageCall('click', 'jobsOpen', [q.id])} role="button" tabindex="0" title="${escapeHtml(tip)}">`
       + `<span class="vx-prow-t"><b>${escapeHtml(queueKindLabel(q))}</b><small>${escapeHtml(q.title || '')}</small></span>`
       + `<span class="vx-val ${running ? 'vx-run' : 'vx-wait'}">${escapeHtml(val)}</span>`
       + `<button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'cancelProcessing', Number(q.id) || 0])} class="vx-x${q.cancelling ? ' invisible' : ''}" title="${escapeHtml(t('tipQueueCancel'))}" aria-label="${escapeHtml(t('tipQueueCancel'))}">✕</button>`
       + (running ? `<span class="vx-pbar"><b style="width:${Math.max(3, pct)}%"></b></span>` : '')
+      + (held ? `<span class="vx-prow-go"><button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'jobsRunNow', Number(q.id) || 0])} class="st-btn st-btn-sm" title="${escapeHtml(t('jobsRunNowTip'))}">${escapeHtml(t('jobsRunNow'))}</button></span>` : '')
       + '</div>';
   }).join('');
   const foot = items.length
