@@ -5513,3 +5513,5 @@ label.sx-row:has(.vs-switch:disabled) { cursor: default; }
 .sx-select.sx-time-sel { width: 84px; font-family: var(--font-mono); }
 .sx-row.hidden, .sx-row-cap.hidden, .sx-block.hidden, .sx-field.hidden { display: none; }
 .sx-input.sx-ctl-w { width: 260px; }
+.sx-row-ctl.sx-range { width: 260px; }
+.settings-card > :is(.sx-row, .sx-block):has(+ .hidden:last-child) { padding-bottom: 0; }

@@ -162,7 +162,7 @@ async function fillSystemInfo() {
     renderFfmpegStatus(data.ffmpeg);
     if (data.paths) {
       const dirEl = document.getElementById('settings-data-dir');
-      dirEl.textContent = `${t('dataFolder')}: ${data.paths.data}`;
+      dirEl.textContent = data.paths.data;  // the row's name says what it is
       dirEl.title = `${t('dataFolder')}: ${data.paths.data}
 ${t('modelsFolder')}: ${data.paths.models}`;
       const conflict = data.paths.legacy_conflict;
