@@ -3451,9 +3451,11 @@ function settingsCards(section) {
   return [...section.children].filter(el => !el.classList.contains('sx-section-head'));
 }
 
+// the card's text, its fields' hints and its search words (data-sx-keys: the former names of its options and words
+// in both languages, so «эхо», «CFG» or «vault» still find the card after the options were renamed)
 function settingsCardText(card) {
   const extra = [...card.querySelectorAll('[placeholder],[title]')].map(el => `${el.placeholder || ''} ${el.title || ''}`).join(' ');
-  return `${card.textContent} ${extra}`.toLowerCase().replace(/\s+/g, ' ');
+  return `${card.textContent} ${extra} ${card.dataset.sxKeys || ''}`.toLowerCase().replace(/\s+/g, ' ');
 }
 
 function settingsSearch(value) {

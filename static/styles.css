@@ -2515,13 +2515,6 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .sx-nav-cap { padding: 12px 10px 4px; font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8A8A90); }
 #sb-settings-btn.sb-on { background: rgba(255, 255, 255, 0.12); color: #FFFFFF; }
 
-/* Audit 8.1, 8.2. «Дополнительно»: what is rarely changed, one click deeper */
-.sx-more > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); padding: 2px 0; }
-.sx-more > summary::-webkit-details-marker { display: none; }
-.sx-more > summary::before { content: '▸'; font-size: 10px; transition: transform var(--dur-fast); }
-.sx-more[open] > summary::before { transform: rotate(90deg); }
-.sx-more[open] > summary { margin-bottom: 10px; color: #F5F5F7; }
-
 /* Audit 8.7: the working hours, only with a calendar */
 .hm-day-wrap.hidden { display: none; }
 

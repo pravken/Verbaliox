@@ -439,6 +439,54 @@ await step('settings sections', async () => {
   await sleep(300);
 });
 
+// Settings, one row in every section (asked by the user: the settings were overloaded): nothing folded away, the
+// name of every option at one left edge and its control at one right edge, measured in every section
+await step('settings rows line up', async () => {
+  await page.evaluate(() => openModal('settings', 'general'));
+  const tabs = ['general', 'record', 'recognition', 'analysis', 'calendar', 'export', 'privacy', 'advanced'];
+  const lefts = new Set(), rights = new Set(), bad = [];
+  let folded = 0, rows = 0;
+  for (const tab of tabs) {
+    await page.evaluate(t => selectSettingsTab(t), tab);
+    await sleep(500);
+    const r = await page.evaluate(() => {
+      const out = { lefts: [], rights: [], folded: document.querySelectorAll('#modal-settings .sx-more, #modal-settings details > summary[data-i18n]').length };
+      document.querySelectorAll('#modal-settings [data-stab]:not(.hidden) .sx-row:not(.sx-dep)').forEach(row => {
+        if (!row.offsetParent) return;
+        const label = row.querySelector('.sx-row-label');
+        const ctl = row.querySelector(':scope > .sx-row-ctl, :scope > .vs-switch');
+        const card = row.closest('.settings-card').getBoundingClientRect();
+        if (label) out.lefts.push(Math.round(label.getBoundingClientRect().left - card.left));
+        if (ctl) out.rights.push(Math.round(card.right - ctl.getBoundingClientRect().right));
+      });
+      return out;
+    });
+    folded += r.folded;
+    rows += r.lefts.length;
+    r.lefts.forEach(x => lefts.add(x));
+    r.rights.forEach(x => rights.add(x));
+    if (r.lefts.some(x => x !== r.lefts[0])) bad.push(tab);
+  }
+  await page.evaluate(() => closeModal('settings'));
+  expect(!folded && rows > 40 && lefts.size === 1 && rights.size === 1,
+    `settings rows: folded ${folded}, rows ${rows}, label edges ${[...lefts]}, control edges ${[...rights]} (${bad})`);
+});
+
+// The settings search finds an option by its new name and by its former one (the options were renamed)
+await step('settings search finds renamed options', async () => {
+  await page.evaluate(() => openModal('settings', 'general'));
+  const found = await page.evaluate(() => Object.fromEntries([['эхо', 'set-echo-cancel'], ['шум', 'set-voice-filter'],
+    ['MCP', 'set-mcp-local-only'], ['Obsidian', 'set-obsidian-auto'], ['CFG', 'set-dub-cfg'], ['vault', 'set-obsidian-auto'],
+    ['потоки', 'set-cpu-threads'], ['Резерв памяти', 'set-mem-reserve-ram'], ['Подготовка звука', 'set-proc-denoise'],
+    ['Эксперименты', 'set-dub-workers']].map(([q, id]) => {
+    settingsSearch(q);
+    const card = document.getElementById(id).closest('.settings-card');
+    return [q, !card.classList.contains('hidden') && !card.closest('[data-stab]').classList.contains('hidden')];
+  })));
+  await page.evaluate(() => { clearSettingsSearch(); closeModal('settings'); });
+  expect(Object.values(found).every(Boolean), `settings search: ${JSON.stringify(found)}`);
+});
+
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
 await step('dialog keeps a selection', async () => {
   await page.evaluate(() => { askText('Название', 'текст'); });
@@ -1368,6 +1416,9 @@ await step('language from the server', async () => {
   for (let i = 0; i < 40 && lang !== 'en'; i++) { await sleep(150); lang = await page.evaluate(() => state.uiLang); }
   expect(lang === 'en', 'the language of the server was not taken');
   expect(await page.evaluate(() => dbPrefs().period) === 'month', 'the dashboard layout of the server was not taken');
+  // the first-run wizard of the fresh data folder opens a moment after the language: waited for, then removed
+  // (removed before it opened, it covered the page for the steps after this one)
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
   await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ period: 'week' }); });
   await sleep(1200);
   const kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));

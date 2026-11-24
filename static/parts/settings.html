@@ -79,7 +79,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavGeneral">Общие</h3>
           </div>
         <!-- The interface: language, scale, highlight colour (applied at once: setUILanguage, applyUiScale, applyTheme) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="акцент тема accent theme язык language масштаб scale zoom">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="sxInterfaceTitle">Интерфейс</h4></div>
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="uiLangTitle">Язык интерфейса</span></span>
@@ -112,7 +112,7 @@
         </div>
 
         <!-- Start with Windows, in the tray (app/autostart.py, run.py --minimized); the notifications -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="автозапуск autostart трей tray уведомления notifications тихий quiet">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="startupTitle">Запуск и трей</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="startWithWindows">Запускать вместе с Windows</span>
@@ -132,7 +132,7 @@
 
         <!-- Memory: models unloaded when idle (app/idle_unload.py), the memory kept for other programs
              (app/mem_reserve.py), the «Только запись» mode (app/economy.py: off, or on for a time) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="оставлять системе ОЗУ RAM VRAM видеопамять выгрузить unload экономия economy recording only">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="idleUnloadTitle">Память</h4></div>
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-idle-unload" class="sx-row-label" data-i18n="idleUnloadLabel">Выгрузка неиспользуемых моделей</label>
@@ -179,7 +179,7 @@
         </div>
 
         <!-- FFmpeg availability (download only on explicit click) -->
-        <div id="ffmpeg-row" class="hidden settings-card">
+        <div id="ffmpeg-row" class="hidden settings-card" data-sx-keys="извлечение звука audio extraction">
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="ffmpegTitle">FFmpeg (звук из видео)</span>
               <span id="ffmpeg-status-text" class="sx-row-cap truncate"></span></span>
@@ -194,7 +194,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavUpdates">Обновления</h3>
           </div>
         <!-- Version and updates from GitHub Releases (app/updater.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="обновления updates бета beta GitHub">
           <div class="sx-row">
             <span class="sx-row-text"><span id="update-status-text" class="sx-row-label"></span></span>
             <div class="sx-row-ctl">
@@ -223,7 +223,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavAbout">О программе</h3>
           </div>
         <!-- The version and the computer; support of the project -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="версия version Ko-fi о программе about">
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label">Verbaliox <span id="settings-version" class="text-apple-secondary"></span></span>
               <span id="settings-hw-name" class="sx-row-cap"></span></span>
@@ -247,7 +247,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavRecord">Запись</h3>
           </div>
         <!-- Audio source and level -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="источник записи source микрофон microphone уровень сигнала level сигналы sounds">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="recSettingsTitle">Источник звука</h4></div>
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-record-source" class="sx-row-label" data-i18n="recSourceModeLabel">Записывать</label></span>
@@ -294,7 +294,7 @@
         </div>
 
         <!-- The microphone's sound: the speakers' echo taken out, the noise filter (app/voice_filter.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="эхо echo шум noise ИИ-очистка DeepFilterNet фильтр filter">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="micAutoTitle">Улучшение звука микрофона</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="echoToggle">Убирать эхо колонок</span>
@@ -313,7 +313,7 @@
         </div>
 
         <!-- Live captions in the studio -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="субтитры captions live модель субтитров">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="liveCapTitle">Субтитры во время записи</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="liveAutoToggle">Включать при начале записи</span>
@@ -332,7 +332,7 @@
         </div>
 
         <!-- Calls recorded by themselves (app/call_watch.py); the Teams captions read while recording (app/teams_captions.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="звонки calls Teams Zoom Telegram набор настроек записи preset автозапись">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="callsTitle">Звонки</h4></div>
           <label id="call-record-block" class="sx-row" data-call-row>
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="callRecordToggle">Записывать звонки автоматически</span>
@@ -363,7 +363,7 @@
         </div>
 
         <!-- Where recordings made in the app are kept; imported files copied or referred to -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="папка для записей folder импорт import копировать copy">
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="recDirTitle">Папка для записей</span>
               <span id="set-recordings-dir" class="sx-row-cap sx-path"></span>
@@ -386,7 +386,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavHotkeys">Горячие клавиши</h3>
           </div>
         <!-- System-wide hotkeys (app/tray.py, app/dictation.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="горячие клавиши hotkeys диктовка dictation перевод translation">
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-record-hotkey" class="sx-row-label" data-i18n="hotkeyLabel">Записать встречу</label>
               <span class="sx-row-cap" data-i18n="hotkeyHint">Старт и стоп записи из любой программы</span>
@@ -437,7 +437,7 @@
           </div>
         <!-- Where recognition runs: the device chosen by the hardware («Автоматически») or by hand, its precision;
              the processor threads and the video card of GigaAM / Parakeet (app/asr_onnx.py, app/onnx_gpu.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="устройство device CUDA CPU GPU видеокарта процессор потоки threads ONNX точность precision нагрузка">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="deviceTitle">Устройство</h4></div>
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-device" class="sx-row-label" data-i18n="deviceLabel">Распознавание на</label>
@@ -499,7 +499,7 @@
 
         <!-- The speakers: separation by voice, Nemotron 3 (app/nemotron_diar.py, downloaded on request, ECAPA
              otherwise) and the voices remembered (voice profiles) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="обработка диаризация diarization Nemotron точное разделение голоса voices участники speakers">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="processingTitle">Участники</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="diarizationToggle">Разделение участников по голосам</span></span>
@@ -527,7 +527,7 @@
         </div>
 
         <!-- Sound before recognition: the same switches the import window starts from (proc_*, vad_filter) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="звук перед распознаванием шумоподавление denoise громкость loudness VAD тишина silence подъём тихих мест">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="impSound">Подготовка звука</h4>
             <p class="sx-card-cap" data-i18n="sxSoundCap">Только для распознавания; исходные файлы не меняются</p></div>
           <label class="sx-row">
@@ -551,7 +551,7 @@
         </div>
 
         <!-- The transcript: the import window, how the text is shown -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="запинки fillers спорные disputed импорт import">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="sxTranscriptTitle">Расшифровка</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasAskImport">Спрашивать параметры при импорте</span>
@@ -572,7 +572,7 @@
         </div>
 
         <!-- Several models recognize every new recording, their versions are put together into one -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="точный режим сведение ensemble merge несколько моделей">
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="ensToggle">Распознавать несколькими моделями</span>
               <span class="sx-row-cap" data-i18n="ensHint">Запись распознают несколько моделей, итог собирается из лучших вариантов. Дольше</span></span>
@@ -590,7 +590,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavModels">Модели речи</h3>
           </div>
         <!-- The speech models (Whisper, GigaAM, Parakeet) and the model of Russian speech -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="модели речи Whisper GigaAM Parakeet русской речи speech models">
           <div class="sx-card-head">
             <div>
               <h4 class="sx-card-title" data-i18n="whisperSectionTitle">Модели распознавания</h4>
@@ -640,7 +640,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavDictionary">Словарь</h3>
           </div>
         <!-- The dictionary is a section of its own (the rail, static/js/dictionary.js): this card leads there -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="словарь dictionary">
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasDictTitle">Слова и названия</span>
               <span class="sx-row-cap" data-i18n="dcMovedText">Как пишутся слова и названия в расшифровках</span></span>
@@ -655,7 +655,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavAnalysis">Анализ</h3>
           </div>
         <!-- Section 3: Ollama Local AI Model Manager -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="Ollama LLM языковые модели ИИ AI">
           <div class="sx-card-head">
             <div>
               <h4 id="ollama-section-title" class="sx-card-title" data-i18n="ollamaSectionTitle">Модели анализа (Ollama)</h4>
@@ -704,7 +704,7 @@
         </div>
 
         <!-- What runs by itself after a transcription -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="обзор overview summary протокол minutes задачи tasks обещания не мешать на встречах по шагам пересказ названия">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="afterTitle">После расшифровки</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="autoSummaryToggle">Создавать обзор</span></span>
@@ -738,7 +738,7 @@
         </div>
 
         <!-- Search by meaning (app/semantic.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="семантический semantic поиск search BGE">
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="semanticToggle">Поиск по смыслу</span>
               <span class="sx-row-cap" data-i18n="semanticHint">Находит по смыслу, а не только по словам. Работает локально</span></span>
@@ -750,7 +750,7 @@
         </div>
         <!-- The translators (Hy-MT3, a TranslateGemma installed by hand): live captions and the dictation with
              translation; the analysis is done by the model above (static/js/settings.js translateModelCards) -->
-        <div class="settings-card" id="translate-models-card">
+        <div class="settings-card" id="translate-models-card" data-sx-keys="перевод translation Hy-MT TranslateGemma субтитры">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="trSectionTitle">Модели перевода (Ollama)</h4>
             <p class="sx-card-cap" data-i18n="trSectionDesc">Для субтитров и диктовки с переводом</p></div>
           <div id="translate-catalog-list" class="space-y-2"></div>
@@ -779,7 +779,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavCalendar">Календарь</h3>
           </div>
         <!-- The user's calendar (app/calendar_ics.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="календарь calendar ics Outlook Google">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="calendarTitle">Подключение</h4>
             <p class="sx-card-cap" data-i18n="calendarDesc">Outlook, файл .ics или ссылка. Запись получит название и участников встречи. Только чтение</p></div>
           <div class="sx-field">
@@ -792,7 +792,7 @@
         </div>
 
         <!-- The working hours of «Встречи сегодня» on the home page and the recording of every meeting; the reminders -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="рабочий день workday автозапись уведомления notifications очные">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="rdSasWorkdayTitle">Рабочие часы и автозапись</h4></div>
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasWorkdayHours">Рабочие часы</span>
@@ -834,7 +834,7 @@
         </div>
 
         <!-- Public holidays of a country and its region (app/holidays_cal.py): days off on «Главная» and in the calendar -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="праздники holidays выходные отпуск vacation">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="holTitle">Праздники</h4>
             <p class="sx-card-cap" data-i18n="holDesc">Праздничные дни не считаются рабочими в «Сегодня» и «Обзоре»</p></div>
           <div class="sx-row">
@@ -866,7 +866,7 @@
 
         <!-- How long the working day lasted (app/worktime.py), the reminder of the norm; «Мои программы»: the
              program in front of each worked minute, off until turned on -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="отработанное время worktime программы apps">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="rdSasWorktimeTitle">Учёт времени</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasWorktime">Считать отработанное время</span>
@@ -898,7 +898,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavExport">Экспорт и связи</h3>
           </div>
         <!-- File names of recordings and exports (app/naming.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="имена файлов file names шаблон template папки по дате">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="fileNameTitle">Имена файлов</h4>
             <p class="sx-card-cap" data-i18n="fileNameDesc">{date}, {time}, {title}, {lang} — дата, время, название, язык</p></div>
           <input id="set-file-name-template" type="text" spellcheck="false" placeholder="{date} {title}" data-input="updateFileNamePreview"
@@ -920,7 +920,7 @@
         </div>
 
         <!-- The folders: the one an export suggests first, the one watched for new files (app/watch_folder.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="экспорт export автоимпорт auto-import watch">
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="exportDirTitle">Папка для экспорта</span>
               <span class="sx-row-cap" data-i18n="exportDirDesc">Предлагается первой в окне «Сохранить как»</span>
@@ -943,7 +943,7 @@
         </div>
 
         <!-- Obsidian vault (app/obsidian.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="Obsidian vault Markdown реэкспорт заметки notes фичи">
           <div class="sx-card-head">
             <div>
               <h4 class="sx-card-title" data-i18n="obsTitle">Obsidian</h4>
@@ -1005,7 +1005,7 @@
           </div>
         </div>
         <!-- The library for an agent: Claude Desktop, Claude Code (app/mcp_server.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="MCP агент agent Claude диктовки">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="mcpTitle">Доступ для ИИ-агентов (MCP)</h4>
             <p class="sx-card-cap" data-i18n="mcpDesc">Claude и другие агенты ищут по встречам. Только чтение</p></div>
           <div class="sx-block">
@@ -1026,7 +1026,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavPrivacy">Приватность и хранение</h3>
           </div>
         <!-- Privacy: the sound of recordings -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="приватность privacy хранение retention удалять звук">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="privacyTitle">Звук записей</h4></div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="deleteMediaAfter">Удалять звук после расшифровки</span>
@@ -1048,7 +1048,7 @@
         </div>
 
         <!-- Backup of the library (app/backup.py); files no recording uses (app/database.orphan_files) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="резервная копия backup zip восстановить restore освободить место orphans">
           <div class="sx-head"><h4 class="sx-card-title" data-i18n="backupTitle">Резервная копия</h4>
             <p class="sx-card-cap" data-i18n="backupDesc">Всё в одном .zip — для переустановки или переезда</p></div>
           <label class="sx-row">
@@ -1073,7 +1073,7 @@
         </div>
 
         <!-- Where the library lives -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="папка данных data folder">
           <div class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="rdSasDataTitle">Папка данных</span>
               <span id="settings-data-dir" class="sx-row-cap sx-path"></span></span>
@@ -1094,7 +1094,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavBench">Сравнение моделей</h3>
           </div>
         <!-- Model comparison on the user's recordings (app/bench.py) -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="сравнение моделей benchmark WER эксперименты">
           <p class="sx-card-cap" data-i18n="benchDesc">Какая модель точнее и быстрее на ваших записях</p>
           <div class="flex items-center gap-2 flex-wrap">
             <div class="apple-segmented">
@@ -1124,7 +1124,7 @@
             <h3 class="sx-section-title" data-i18n="rdSasNavDub">Дубляж</h3>
           </div>
         <!-- Section 4: Speech synthesis for the AI dub (optional .venv-dub environment) -->
-        <div id="settings-dub-section" class="settings-card">
+        <div id="settings-dub-section" class="settings-card" data-sx-keys="дубляж dubbing VoxCPM Demucs окружение Python venv эксперименты">
           <div class="sx-card-head">
             <div>
               <h4 class="sx-card-title" data-i18n="sdubTitle">Синтез речи</h4>
@@ -1182,7 +1182,7 @@
         </div>
 
         <!-- Dub settings -->
-        <div class="settings-card">
+        <div class="settings-card" data-sx-keys="дубляж dubbing эксперименты процессы синтеза CFG следование образцу шумоподавление фон помещения room tone">
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-dub-workers" class="sx-row-label" data-i18n="sdubWorkersLabel">Параллельная озвучка</label>
               <span class="sx-row-cap" data-i18n="sdubWorkersHint">Каждый процесс — ~7 ГБ видеопамяти. Больше процессов — быстрее</span></span>
