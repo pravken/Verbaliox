@@ -912,9 +912,12 @@ class TrayController:
 
         st = self._status
         status = [(st["text"], None, self._mf_grayed)] if st.get("text") and st.get("state") != "idle" else []
+        # while recording, its studio with the captions and the text (asked by the user: the way there was not obvious)
+        studio = [(tr("Студия: субтитры и текст", "Studio: captions and text"), "studio", 0)] if st.get("recording") else []
         return [
             (tr("Открыть Verbaliox", "Open Verbaliox"), "open", self._mf_default),
             *status,
+            *studio,
             (None, None, 0),
             *self._quick_record_item(st),
             *self._record_items(st),
@@ -1016,6 +1019,8 @@ class TrayController:
             return
         if cmd == "open":
             self.show_window()
+        elif cmd == "studio":  # the window on the studio's text (static/js/home.js openFromNotice)
+            self.open_target("studio")
         elif cmd == "last":
             self.show_window()
             self.window.evaluate_js("window.openLastRecording && window.openLastRecording()")
