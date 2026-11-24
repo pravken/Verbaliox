@@ -20,7 +20,7 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -254,7 +254,7 @@ class LiveSession:
         self.touched = time.time()
         from app import idle_unload
 
-        idle_unload.touch()
+        idle_unload.touch(captions=True)
 
     # -------------------------------------------------------------- decoding
     def step(self) -> None:
@@ -380,6 +380,9 @@ class LiveSession:
             self.translator = LiveTranslator(lambda: self.lang, translate_to, speed or "quality", self.pair)
             self.translator.set_model(self.translate_model)
             self.translator.add_lines([ln for ln in self.lines[-20:]])
+            from app import idle_unload
+
+            idle_unload.captions_started()  # the translation turned on: the card is freed for its model
         else:
             self.translator.configure(translate_to, speed, retranslate=self.lines[-20:] if changed else None, pair=self.pair)
 
@@ -465,6 +468,9 @@ def start_session(lang: Optional[str], translate_to: Optional[str], capture_id: 
         asr_onnx.preload_async(s.onnx_model)
     else:
         threading.Thread(target=_caption_worker().preload, daemon=True).start()
+    from app import idle_unload
+
+    idle_unload.captions_started()  # what the captions do not use leaves the memory (app/idle_unload.py)
     return s
 
 
@@ -519,8 +525,21 @@ def get_session(session_id: str) -> Optional[LiveSession]:
 def stop_session(session_id: str) -> None:
     with _sessions_lock:
         s = _sessions.pop(session_id, None)
+        last = s is not None and not _sessions
     if s and s.translator:
         s.translator.stop()
+    if last:
+        _captions_ended()
+
+
+def _captions_ended() -> None:
+    """The last caption session ended: its models go a minute later unless the app is used (app/idle_unload.py)."""
+    try:
+        from app import idle_unload
+
+        idle_unload.work_done("live captions ended")
+    except Exception:
+        traceback.print_exc()
 
 
 def stop_all() -> int:
@@ -538,9 +557,12 @@ def _drop_idle() -> None:
     now = time.time()
     with _sessions_lock:
         dropped = [_sessions.pop(k) for k, s in list(_sessions.items()) if now - s.touched > SESSION_IDLE_SEC]
+        last = bool(dropped) and not _sessions
     for s in dropped:
         if s.translator:
             s.translator.stop()
+    if last:
+        _captions_ended()
 
 
 def has_sessions() -> bool:
@@ -554,3 +576,25 @@ def model_in_use(model_id: str) -> bool:
     _drop_idle()
     with _sessions_lock:
         return any(getattr(s, "onnx_model", None) == model_id for s in _sessions.values())
+
+
+def onnx_models_in_use() -> Set[str]:
+    """The GigaAM / Parakeet models the open caption sessions recognize with (on the processor)."""
+    with _sessions_lock:
+        return {s.onnx_model for s in _sessions.values() if getattr(s, "onnx_model", None)}
+
+
+def translator_models() -> Set[str]:
+    """The Ollama models the open caption sessions translate with, or are about to (app/idle_unload.py keeps them)."""
+    with _sessions_lock:
+        translators = [s.translator for s in _sessions.values() if s.translator]
+    out: Set[str] = set()
+    for tr in translators:
+        try:
+            model = tr.wanted_model()
+        except Exception:
+            traceback.print_exc()
+            model = None
+        if model:
+            out.add(model)
+    return out

@@ -146,13 +146,14 @@ def translator_payload(model: str, text: str, src: Optional[str], dst: str, long
 
 
 def translator_chat(model: str, text: str, src: Optional[str], dst: str, timeout: float = 30.0,
-                    long: bool = False) -> str:
-    """One answer of a translator (a retry samples another one)."""
+                    long: bool = False, captions: bool = False) -> str:
+    """One answer of a translator (a retry samples another one). captions: asked by the live captions
+    (app/idle_unload.touch)."""
     from app import idle_unload
     from app.llm_text import strip_think
     from app.ollama_client import raise_for_ollama
 
-    idle_unload.touch(model)
+    idle_unload.touch(model, captions=captions)
     payload = translator_payload(model, text, src, dst, long=long)
     payload["keep_alive"] = idle_unload.ollama_keep_alive() or KEEP_ALIVE
     with httpx.Client(timeout=timeout) as c:
@@ -287,6 +288,7 @@ class LiveTranslator:
         self._cond = threading.Condition()
         self._stop = False
         self._model: Optional[str] = None
+        self._loaded: Optional[str] = None  # the model last loaded: unloaded when another one replaces it
         self.model_override: Optional[str] = None  # chosen by hand in the studio; None: by speed
         self._context: List[str] = []  # last final lines, given to the model as context
         threading.Thread(target=self._run, daemon=True, name="live_translate").start()
@@ -384,7 +386,7 @@ class LiveTranslator:
         dst = TEXT_LANGUAGES.get(target, target)
         if _is_translator(model or self._model):
             return translator_chat(model or self._model, text, _base(src_lang or self._source_lang()) or None, target,
-                                   timeout)
+                                   timeout, captions=True)
         # Live speech arrives in fragments; Qwen models, left alone with a fragment, sometimes
         # answer in Chinese or ask for "the full sentence" instead of translating
         system = (
@@ -399,7 +401,7 @@ class LiveTranslator:
         user = text
         from app import idle_unload
 
-        idle_unload.touch(model or self._model)
+        idle_unload.touch(model or self._model, captions=True)
         payload = {
             "model": model or self._model, "stream": False, "keep_alive": idle_unload.ollama_keep_alive() or KEEP_ALIVE,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -440,10 +442,25 @@ class LiveTranslator:
             tr = serbian_to_latin(tr)
         return tr
 
+    def wanted_model(self) -> Optional[str]:
+        """The model this translator uses, or will load next (app/idle_unload.py leaves it in memory)."""
+        if self._model:
+            return self._model
+        if self.model_override:
+            return self.model_override
+        choices = model_choices()
+        return (choices["fast"] if self.speed == "fast" and choices["fast"] else choices["quality"]) or self._loaded
+
     def _ensure_ready(self) -> None:
         if self._model and self.ready:
             return
         self._model = self._resolve_model()
+        previous, self._loaded = self._loaded, self._model
+        if previous and previous != self._model:
+            # «Качество» ↔ «Быстро» or a model chosen in the studio: the previous one leaves the card first
+            from app import idle_unload
+
+            idle_unload.translator_switched(previous, self._model)
         self._chat("ok", timeout=180.0)  # loads the model with the live options
         self.ready = True
         self.error = ""

@@ -49,6 +49,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   only where the effect is not obvious, and its control at the right edge, in every section. A switch with a mode
   beside it is one list with «Off» in it (the «Recording only» mode, meeting notifications, GigaAM and Parakeet on the
   video card). The search also finds options by their former names.
+- **Models leave the memory a minute after the processing**: once the queue has nothing running or waiting (a
+  transcription with its automatic analysis counts as one job) and nothing uses the app for 60 seconds, the speech
+  models and the analysis model are unloaded; a model asked by hand (a question to the assistant) stays for the time
+  set in «Free the models from memory after». Live captions starting unload the analysis model they do not use (not
+  during a running analysis), switching «Quality» ↔ «Fast» unloads the previous translation model, and the captions'
+  models go a minute after the captions end. Each unload is written in the log with its reason.
 
 ## 0.9.3 — English
 
@@ -1230,6 +1236,12 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   пояснением только там, где последствие неочевидно, и переключателем у правого края, во всех разделах. Переключатель
   с режимом рядом — один список, где «Выключено» — один из вариантов (режим «Только запись», уведомления о встречах,
   GigaAM и Parakeet на видеокарте). Поиск находит настройки и по прежним названиям.
+- **Модели выгружаются через минуту после обработки**: когда в очереди ничего не выполняется и не ждёт (расшифровка
+  с автоматическим анализом — одна задача) и программой не пользуются 60 секунд, модели распознавания и модель
+  анализа выгружаются; модель, к которой обращались вручную (вопрос ассистенту), остаётся на время из «Выгружать
+  модели через». Запуск субтитров выгружает модель анализа, которую они не используют (кроме времени идущего
+  анализа), переключение «Качество» ↔ «Быстро» выгружает предыдущую модель перевода, а модели субтитров выгружаются
+  через минуту после их окончания. Каждая выгрузка записывается в журнал с причиной.
 
 ## 0.9.3
 
