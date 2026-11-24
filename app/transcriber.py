@@ -86,7 +86,7 @@ class _PriorityExecutor:
                     item = None
                     if self._heap and not _paused[0] and not economy.on():
                         hold = _meeting_holds()
-                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3]))]
+                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3], e[4]))]
                         if ready:
                             item = min(ready)  # (priority, order, …): the order is unique, nothing else is compared
                             self._heap.remove(item)
@@ -103,11 +103,30 @@ class _PriorityExecutor:
                 fut.set_exception(e)
 
 
-def _waits_for_meeting(fn: Callable) -> bool:
-    """A transcription (or the load of its model) waits for the end of a meeting; what the user asked for
-    by hand otherwise (a translation, a dub, a new split) does not."""
+# Recordings the user let go during a meeting («Расшифровать» and «Да», asked by the user): their transcription
+# does not wait. Dropped when the job ends
+_forced: Set[int] = set()
+
+
+def _waits_for_meeting(fn: Callable, args: tuple = ()) -> bool:
+    """A transcription (or the load of its model) waits for the end of a meeting, unless the user let it go
+    now; what the user asked for by hand otherwise (a translation, a dub, a new split) does not."""
     fn = getattr(fn, "func", fn)  # the queue holds its jobs as functools.partial(fn, token=…) (_queue_start)
+    if fn is _run_job and args and args[0] in _forced:
+        return False
     return fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper"
+
+
+def run_now(meeting_id: int) -> bool:
+    """The transcription of this recording starts without waiting for the end of the meeting. False when it is
+    neither queued nor running."""
+    with _jobs_lock:
+        if meeting_id not in _active_jobs:
+            return False
+        _forced.add(int(meeting_id))
+    print(f"[queue] meeting {meeting_id}: transcribed now during the meeting, as the user confirmed", flush=True)
+    _executor.wake()
+    return True
 
 
 _held_said = [False]
@@ -458,6 +477,7 @@ def _run_job(meeting_id: int, token: Optional[int] = None) -> None:
         with _jobs_lock:
             _active_jobs.discard(meeting_id)
             _cancel_requested.discard(meeting_id)
+            _forced.discard(meeting_id)
             queue_empty = not _active_jobs
         if queue_empty:
             try:  # a driver failing here (after sleep) must not skip the exports below

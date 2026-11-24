@@ -6,6 +6,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.4 — English
+
+- **«Captions and text»** in the meeting strip while recording: the studio with the live captions and the text from any
+  section.
+- **A call is a meeting too**: while a call app (Teams, Zoom, Telegram…) or a browser holds the microphone,
+  transcriptions wait, recorded or not, in the calendar or not. During a meeting a transcription starts only on the
+  user's «Transcribe» and «Yes, start now».
+
 ## 0.9.3 — English
 
 - **A wrong person's name is put right with a click**: in a recording's analysis a speaker's name is a quiet
@@ -1144,6 +1152,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.4
+
+- **«Субтитры и текст»** в полосе встречи во время записи: студия с живыми субтитрами и текстом из любого раздела.
+- **Звонок — тоже встреча**: пока микрофон держит приложение звонка (Teams, Zoom, Telegram…) или браузер, расшифровки
+  ждут, даже без записи и без встречи в календаре. Во время встречи расшифровка начинается только по «Расшифровать»
+  и «Да, начать сейчас».
 
 ## 0.9.3
 

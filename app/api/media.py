@@ -71,6 +71,16 @@ def api_queue_paused() -> Dict[str, Any]:
     return {"paused": queue_paused(), "meeting": meeting_holds()}
 
 
+@router.post("/api/queue/{meeting_id}/run-now")
+def api_queue_run_now(meeting_id: int) -> Dict[str, Any]:
+    """The transcription of a recording starts now, during a meeting: only after the user confirmed it."""
+    from app.transcriber import run_now
+
+    if not run_now(meeting_id):
+        raise HTTPException(status_code=409, detail="Запись не ждёт в очереди")
+    return {"ok": True}
+
+
 @router.post("/api/queue/pause")
 def api_queue_pause(payload: QueuePausePayload) -> Dict[str, Any]:
     """«Пауза» / «Продолжить» of the whole queue: the job running finishes, the next ones wait."""

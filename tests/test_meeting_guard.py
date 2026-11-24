@@ -260,7 +260,7 @@ class LeftEarlyTest(unittest.TestCase):
             with mock.patch.object(meeting_guard, "_in_call", return_value=False):
                 self.assertEqual(meeting_guard.busy(), "")  # left: nothing holds the mix
             with mock.patch.object(meeting_guard, "_in_call", return_value=True):
-                self.assertEqual(meeting_guard.busy(), "calendar")  # still in the call: it holds
+                self.assertEqual(meeting_guard.busy(), "call")  # still in the call: it holds
             other = dict(self.event, uid="u2")
             with mock.patch("app.calendar_ics.current_meeting", return_value=other), \
                     mock.patch.object(meeting_guard, "_in_call", return_value=False):
@@ -282,3 +282,35 @@ class LeftEarlyTest(unittest.TestCase):
         with mock.patch("app.calendar_ics.current_meeting", return_value=begun):
             meeting_guard.recording_ended(now=now.timestamp())
         self.assertEqual(len(meeting_guard._left), 1)
+
+
+class CallHoldsTest(unittest.TestCase):
+    """Asked by the user: a transcription began during a meeting that was neither recorded nor in the calendar."""
+
+    def test_a_call_app_on_the_microphone_is_a_meeting(self):
+        from app import meeting_guard
+
+        with mock.patch("app.calendar_ics.current_meeting", return_value=None), \
+                mock.patch.object(meeting_guard, "enabled", return_value=True), \
+                mock.patch("app.economy.on", return_value=False):
+            with mock.patch.object(meeting_guard, "_in_call", return_value=True):
+                self.assertEqual(meeting_guard.busy(), "call")
+            with mock.patch.object(meeting_guard, "_in_call", return_value=False):
+                self.assertEqual(meeting_guard.busy(), "")
+
+
+class RunNowTest(unittest.TestCase):
+    """Only the user's «Да» lets a transcription go during a meeting."""
+
+    def test_a_forced_transcription_does_not_wait(self):
+        from app import transcriber
+
+        self.assertTrue(transcriber._waits_for_meeting(transcriber._run_job, (77,)))
+        self.assertFalse(transcriber.run_now(77))  # not queued: nothing to let go
+        with transcriber._jobs_lock:
+            transcriber._active_jobs.add(77)
+        self.addCleanup(transcriber._active_jobs.discard, 77)
+        self.addCleanup(transcriber._forced.discard, 77)
+        self.assertTrue(transcriber.run_now(77))
+        self.assertFalse(transcriber._waits_for_meeting(transcriber._run_job, (77,)))
+        self.assertTrue(transcriber._waits_for_meeting(transcriber._run_job, (78,)))

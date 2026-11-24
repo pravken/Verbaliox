@@ -108,6 +108,10 @@ def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = Fals
 
     if _ui.get("recording") and time.time() - float(_ui.get("since") or 0) < RECORDING_STALE_SEC:
         return "recording"
+    # a call without a recording and without the calendar (asked by the user: a transcription began during a
+    # meeting): a call app or a browser holds the microphone (Windows)
+    if _in_call():
+        return "call"
     try:
         from app import calendar_ics
 
@@ -115,7 +119,7 @@ def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = Fals
         if e:
             with _lock:
                 left = _event_key(e) in _left
-            if not (left and not _in_call()):
+            if not left:  # left early: no call goes on (said above), it holds nothing
                 return "calendar"
     except Exception:
         pass
@@ -248,8 +252,8 @@ def hold_reason() -> Dict[str, str]:
     calendar's meeting with its title and end. {} when nothing, or not known."""
     with _lock:
         kind = _state["busy"]
-    if kind == "recording":
-        return {"kind": "recording"}
+    if kind in ("recording", "call"):
+        return {"kind": kind}
     if kind == "calendar":
         try:
             from app import calendar_ics

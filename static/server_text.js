@@ -131,6 +131,7 @@ const SERVER_TEXT_EN = {
   "Контрольная сумма архива не совпала — файл повреждён или подменён": "The archive checksum did not match — the file is damaged or replaced",
   "GitHub временно ограничил число проверок с этого адреса. Программа проверит снова позже.": "GitHub has limited the checks from this address for a while. The program will check again later.",
   "Сведение этой записи не ожидает": "The mix of this recording is not waiting",
+  "Запись не ждёт в очереди": "The recording is not waiting in the queue",
   "Контрольные суммы релиза не совпадают между собой — обновление отменено": "The release checksums do not match each other — the update was cancelled",
   "Копия не найдена": "The copy was not found",
   "Копия сделана более новой версией программы: обновите Verbaliox": "The backup was made by a newer version: update Verbaliox",

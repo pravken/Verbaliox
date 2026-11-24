@@ -157,6 +157,7 @@ function mixWaitLine(m) {
 function mixWaitWhy(m) {
   const w = m.mix_why || {};
   if (w.kind === 'recording') return t('mixWaitRecording');
+  if (w.kind === 'call') return t('mixWaitCall');
   if (w.kind === 'calendar' && w.title) return t('mixWaitCalendar').replace('{title}', () => w.title).replace('{end}', () => w.end || '');
   return '';
 }
@@ -718,6 +719,16 @@ async function transcribeWithPickedModel() {
   state.txModelPick = null;
   await loadMeetingsList();
   await selectMeeting(m.id, false);
+  // During a meeting a transcription waits for its end; it starts now only on the user's «Да» (asked by the user)
+  const held = await fetch('/api/queue/paused').then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+  if (held.meeting) {
+    if (await confirmDialog(t('txMeetingNowTitle'), t('txMeetingNowText'), t('txMeetingNowYes'), false)) {
+      const r = await fetch(`/api/queue/${m.id}/run-now`, { method: 'POST' }).catch(() => null);
+      if (r && r.ok) { showToast(t('txMeetingNowStarted')); return; }
+    }
+    showToast(t('txMeetingLater'));
+    return;
+  }
   showToast(precise ? t('txPreciseStarted') : t('txTranscribeStarted').replace('{model}', () => formatModelName(model)));
 }
 
