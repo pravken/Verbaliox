@@ -425,27 +425,73 @@ function updateRecordButtonState() {
   const starting = _quickRecBusy && !recording;
   btn.classList.toggle('tb-rec-busy', starting);
   btn.setAttribute('aria-busy', String(starting));
-  document.getElementById('tb-rec-label').textContent = recording ? t('tbRecStop') : starting ? t('tbRecStarting') : t('tbRecord');
+  document.getElementById('tb-rec-label').textContent = starting ? t('tbRecStarting') : t('tbRecord');
   const clock = document.getElementById('tb-rec-clock');
-  // the time is the way to the studio: its own click target inside the button (the button itself stops)
-  const clockText = document.getElementById('tb-rec-clock-t');
-  if (clockText) clockText.textContent = recording ? timer : ''; else clock.textContent = recording ? timer : '';
+  document.getElementById('tb-rec-clock-t').textContent = recording ? timer : '';
   clock.classList.toggle('hidden', !recording);
-  clock.classList.toggle('tb-rec-here', state.appView === 'studio');  // in the studio already: no way to it
   syncLibLiveRow();
   if (!recording && recSrc.mic.used + recSrc.sys.used) recSourcesStop();  // a recording that ended another way
-  // while recording the button opens the studio and its «Стоп» stops (recButtonClick)
-  btn.title = recording ? t('tbRecOpenStudio') : t('tipTbRecord');
-  btn.setAttribute('aria-label', btn.title);  // in its idle state the button is a dot without words
-  const stopLbl = document.getElementById('tb-rec-label');
-  if (recording) stopLbl.title = t('tipTbRecordStop'); else stopLbl.removeAttribute('title');
-  // The recording's screen opens from the strip of the meeting while it records (pult.js), its settings from ▾
+  // While recording the capsule is three buttons (asked by the user: the way to the studio was not obvious): the dot,
+  // the time and the sources open the studio, «Студия ›» says so, «Стоп» stops. In the studio itself the first two
+  // stay in place, inert, so the capsule keeps its width
+  const here = recording && state.appView === 'studio';
+  const wrap = document.getElementById('tb-rec-wrap');
+  wrap.classList.toggle('tb-rec-live', recording);
+  wrap.classList.toggle('tb-rec-here', here);
+  const tip = recording ? t('tbRecOpenStudio') : t('tipTbRecord');
+  btn.title = here ? '' : tip;
+  btn.setAttribute('aria-label', tip);  // in its idle state the button is a dot without words
+  const chip = document.getElementById('tb-rec-studio');
+  for (const el of [btn, chip]) { if (here) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled'); }
+  chip.classList.toggle('hidden', !recording);
+  chip.title = here ? '' : t('tbRecOpenStudio');
+  // the chip tells whether the captions are on: the accent when they are, a green outline that invites to them when not
+  const captions = !!document.getElementById('live-captions-toggle')?.checked;
+  chip.classList.toggle('is-on', recording && captions);
+  chip.classList.toggle('is-call', recording && !captions && !here);
+  document.getElementById('tb-rec-stop').classList.toggle('hidden', !recording);
+  // The recording's settings are in ▾ when it does not record
   document.getElementById('tb-rec-more').classList.toggle('hidden', recording || starting);
+  recStudioHintSync(recording && !here);
   // While it records, its screen is the text, the notes and the people: the presets and the sources fold away
   document.getElementById('studio-view')?.classList.toggle('st-live', recording);
   if (recording && typeof hmAskExpire === 'function') hmAskExpire();  // «Через минуту: …» has no point now
   // the strip says «Идёт запись» with «Субтитры и текст» at once, not at its next look (asked by the user)
   if (recording !== state._stripRec) { state._stripRec = recording; if (typeof renderStrip === 'function') renderStrip(); }
+}
+
+// The hint under «Студия ›», once, on the first recording (asked by the user: the way to the studio was not obvious).
+// Also in «Только запись»: the studio holds the notes and the marks, and the captions can be turned on there by hand.
+// A setting, not localStorage: the page on another port or after an update keeps it
+function recStudioHintSync(may) {
+  const hint = document.getElementById('tb-rec-hint');
+  const s = state.system && state.system.settings;
+  const show = may && !!s && s.hint_studio_entry_seen !== 'true';
+  hint.classList.toggle('hidden', !show);
+  if (!show) return;
+  // the arrow points at the chip's middle (narrower when the window is: the chip loses its word); the bubble keeps
+  // to the capsule's right end
+  const chip = document.getElementById('tb-rec-studio');
+  const wrap = document.getElementById('tb-rec-wrap');
+  const r = `${Math.round(wrap.clientWidth - chip.offsetLeft - chip.offsetWidth / 2)}px`;
+  if (hint.style.getPropertyValue('--arrow-r') !== r) hint.style.setProperty('--arrow-r', r);
+}
+
+function recStudioHintDone() {
+  saveUiSetting('hint_studio_entry_seen', 'true');
+  recStudioHintSync(false);
+}
+
+function recStudioHintClose(e) {
+  if (e) e.stopPropagation();
+  recStudioHintDone();
+}
+
+// «Студия ›» of the capsule: the studio of the running recording
+function recStudioChip() {
+  if (!isRecording() || state.appView === 'studio') return;
+  recStudioHintDone();
+  openRecordStudio();
 }
 
 // The red button's menu (asked by the user: one place for recording instead of a «Студия» tab, its card on
@@ -491,10 +537,12 @@ function openRecordStudio(e) {
   if (state.appView !== 'studio') switchAppView('studio');
 }
 
-// The red button: while recording only its «Стоп» stops; the dot, the time and the sources open the studio
-// (asked by the user: a click on the microphone stopped the recording). Not recording: the whole button starts.
-function recButtonClick(e) {
-  if (isRecording() && !(e && e.target && e.target.closest && e.target.closest('#tb-rec-label'))) {
+// The red button: while recording it opens the studio (its «Стоп» is a button of its own: asked by the user, a click on
+// the microphone stopped the recording). Not recording: it starts
+function recButtonClick() {
+  if (isRecording()) {
+    if (state.appView === 'studio') return;
+    recStudioHintDone();
     openRecordStudio();
     return;
   }

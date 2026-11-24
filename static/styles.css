@@ -899,8 +899,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-rec:hover { background: rgba(255, 69, 58, 0.24); }
 .tb-rec #tb-rec-label { display: none; }
 .tb-rec-on, .tb-rec-busy { width: auto; padding: 0 5px 0 12px; background: rgba(255, 69, 58, 0.16); border-color: rgba(255, 69, 58, 0.55); }
-.tb-rec-on #tb-rec-label { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 12px; background: #FF453A; color: #FFFFFF; font-size: var(--fs-label); font-weight: 600; }
-.tb-rec-on #tb-rec-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: #FFFFFF; }
 .tb-rec-busy #tb-rec-label { display: inline; padding-right: 8px; font-size: var(--fs-ui); color: #FF8A80; }
 .tb-rec-busy { opacity: 0.85; cursor: progress; }
 .tb-rec-busy .tb-rec-dot { animation: tb-blink 0.6s steps(2, start) infinite; }
@@ -1036,7 +1034,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .topbar.tb-c3 #nav-home, .topbar.tb-c3 #nav-studio, .topbar.tb-c3 #nav-ask { padding: 0 11px; }
 .topbar.tb-c4 .tb-subtab .tb-lbl { display: none; }
 .topbar.tb-c4 .tb-subtab .tb-ico { display: block; }
-.topbar.tb-c5 .tb-rec-on #tb-rec-label { padding: 0 7px; }
 .topbar.tb-c6 { overflow-x: auto; scrollbar-width: none; }
 
 .statusbar {
@@ -5202,14 +5199,48 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 /* «Сегодня», a week or a month: the cards under the calendar share its whole width (auto-fill left empty columns) */
 .td-body.td-row .td-cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
-/* While recording, the time on the red button leads to the studio (asked by the user): a light capsule with a wave
-   mark, lit under the pointer; in the studio itself only the time */
-#tb-rec-clock:not(.hidden) { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 6px; margin-right: 2px;
-  border-radius: 12px; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease; }
-#tb-rec-clock:hover { background: rgba(255, 255, 255, 0.1); }
-#tb-rec-clock .tb-rec-wave { width: 14px; height: 14px; opacity: 0.8; flex: none; }
-#tb-rec-clock.tb-rec-here { cursor: inherit; background: none; }
-#tb-rec-clock.tb-rec-here .tb-rec-wave { display: none; }
+/* While recording the capsule is three buttons (asked by the user: the way to the studio was not obvious): the dot, the
+   time and the sources open the studio and light up together under the pointer; «Студия ›» (.st-pill: the accent while
+   the captions are on, the green outline of .is-call while they are off) says where they lead; «Стоп» stops. In the
+   studio itself the first two stay in place, inert, so the capsule keeps its width */
+.tb-rec-wrap.tb-rec-live { height: 34px; box-sizing: border-box; gap: 4px; padding: 0 3px 0 0; border-radius: 17px;
+  border: 1px solid rgba(255, 69, 58, 0.55); background: rgba(255, 69, 58, 0.14); }
+.tb-rec-live .tb-rec { height: 32px; width: auto; gap: 8px; padding: 0 10px 0 13px; border: 0; border-radius: 16px 8px 8px 16px;
+  background: transparent; cursor: pointer; }
+.tb-rec-live .tb-rec:hover { background: rgba(255, 255, 255, 0.09); }
+.tb-rec-live .tb-rec:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tb-rec-clock:not(.hidden) { display: inline-flex; align-items: center; }
+.tb-rec-wrap .tb-rec-studio { height: 26px; gap: 5px; padding: 0 8px 0 9px; border-radius: 13px; font-size: var(--fs-label); font-weight: 600;
+  color: #F5F5F7; background: rgba(20, 21, 24, 0.55); border-color: rgba(255, 255, 255, 0.18); }
+.tb-rec-wrap .tb-rec-studio .st-pill-ic { width: 15px; height: 15px; }
+.tb-rec-stop { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border: 0; border-radius: 13px; flex: none;
+  background: #FF453A; color: #FFFFFF; font-family: inherit; font-size: var(--fs-label); font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-fast, 120ms) ease; }
+.tb-rec-stop::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: #FFFFFF; }
+.tb-rec-stop:hover { background: #E63B31; }
+.tb-rec-stop:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+.tb-rec-wrap .tb-rec-studio.hidden, .tb-rec-wrap .tb-rec-stop.hidden { display: none; }
+.tb-rec-here .tb-rec, .tb-rec-here .tb-rec-studio { pointer-events: none; cursor: default; }
+.tb-rec-here .tb-rec-studio { opacity: 0.5; }
+/* a narrow window: the chip keeps its icon and its › */
+@media (max-width: 1199px) {
+  .tb-rec-studio-t { display: none; }
+  .tb-rec-wrap .tb-rec-studio { padding: 0 6px 0 8px; gap: 3px; }
+}
+/* once, on the first recording: where the captions and the text are */
+.tb-rec-hint { position: absolute; top: calc(100% + 10px); right: 0; z-index: 40; display: flex; align-items: center; gap: 8px;
+  padding: 7px 6px 7px 12px; border-radius: 10px; background: var(--elevated); border: 1px solid rgb(var(--accent-rgb) / 0.6);
+  box-shadow: var(--shadow-menu); color: #F5F5F7; font-size: var(--fs-ui); white-space: nowrap; animation: tb-rec-hint-in 0.25s ease-out both; }
+.tb-rec-hint::before { content: ""; position: absolute; top: -6px; right: calc(var(--arrow-r, 40px) - 5px); width: 10px; height: 10px;
+  background: var(--elevated); border-left: 1px solid rgb(var(--accent-rgb) / 0.6); border-top: 1px solid rgb(var(--accent-rgb) / 0.6);
+  transform: rotate(45deg); }
+.tb-rec-hint.hidden { display: none; }
+.tb-rec-hint-x { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 0; border-radius: 6px;
+  background: none; color: var(--hc-dim, #AEAEB2); cursor: pointer; }
+.tb-rec-hint-x svg { width: 12px; height: 12px; }
+.tb-rec-hint-x:hover { background: rgba(255, 255, 255, 0.08); color: #FFFFFF; }
+@keyframes tb-rec-hint-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tb-rec-hint { animation: none; } }
 
 /* The studio in the look of the other sections (reported by the user: «в студии дизайн с прежними кнопками остался"):
    the ground --bg-deep, cards of --sec-card with the line and a 12px corner, each head an icon square and a title;
@@ -5299,6 +5330,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-pill.is-dim { opacity: 0.5; }
 .st-pill[aria-expanded="true"] { border-color: rgb(var(--accent-rgb) / 0.6); }
 .st-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.st-pill.is-call { border-color: rgba(48, 209, 88, 0.8); animation: st-pill-call 2.4s ease-in-out infinite; }
+@keyframes st-pill-call { 0%, 100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0); } 50% { box-shadow: 0 0 0 4px rgba(48, 209, 88, 0.22); } }
+@media (prefers-reduced-motion: reduce) { .st-pill.is-call { animation: none; box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.22); } }
 .st-pill-ic { width: 16px; height: 16px; flex: none; }
 .st-pill-chev { width: 10px; height: 10px; flex: none; opacity: 0.7; }
 .st-pill-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

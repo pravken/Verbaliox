@@ -30,11 +30,24 @@
         <button id="strip-import-more" type="button" class="imp-split-more" data-click="openImportMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu" aria-expanded="false"
           data-i18n-title="impMenuTip" title="Что импортировать: файлы, папку или ссылку · Ctrl+O" data-i18n-aria="impMenuTip" aria-label="Что импортировать: файлы, папку или ссылку · Ctrl+O"><svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
       </div>
-      <!-- Recording: a round button at the right end; while recording it shows the time and «Стоп» -->
-      <div class="relative tb-rec-wrap">
+      <!-- Recording: a button at the right end. While recording the capsule is three buttons (asked by the user: the way
+           to the studio was not obvious): the dot, the time and the sources open the studio, «Студия ›» says so and shows
+           whether the captions are on, «Стоп» stops (updateRecordButtonState in static/js/shell.js) -->
+      <div id="tb-rec-wrap" class="relative tb-rec-wrap">
         <button data-click="recButtonClick" data-click-args='[{"$": "event"}]' id="tb-rec" class="tb-rec" data-i18n-title="tipTbRecord" data-i18n-aria="tipTbRecord" aria-label="Начать запись с последними настройками (Ctrl+Alt+R)" title="Начать запись с последними настройками (Ctrl+Alt+R)">
-          <span id="tb-rec-dot" class="tb-rec-dot"></span><span id="tb-rec-clock" class="tb-rec-clock hidden" data-i18n-title="tbRecOpenStudio" title="Открыть студию записи"><span id="tb-rec-clock-t"></span><svg class="tb-rec-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></span><span class="rec-src rec-src-tb hidden" data-rec-src></span><span id="tb-rec-label" class="tb-lbl" data-i18n="tbRecord">Запись</span>
+          <span id="tb-rec-dot" class="tb-rec-dot"></span><span id="tb-rec-clock" class="tb-rec-clock hidden"><span id="tb-rec-clock-t"></span></span><span class="rec-src rec-src-tb hidden" data-rec-src></span><span id="tb-rec-label" class="tb-lbl" data-i18n="tbRecord">Запись</span>
         </button>
+        <button data-click="recStudioChip" id="tb-rec-studio" type="button" class="st-pill tb-rec-studio hidden" data-i18n-title="tbRecOpenStudio" title="Открыть студию: субтитры и текст записи" data-i18n-aria="tbRecOpenStudio" aria-label="Открыть студию: субтитры и текст записи">
+          <svg class="st-pill-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 10.2a2 2 0 1 0 0 3.6M17 10.2a2 2 0 1 0 0 3.6"/></svg>
+          <span class="tb-rec-studio-t" data-i18n="tbRecStudio">Студия</span>
+          <svg class="st-pill-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button data-click="shellQuickRecord" id="tb-rec-stop" type="button" class="tb-rec-stop hidden" data-i18n-title="tipTbRecordStop" title="Остановить запись" data-i18n="tbRecStop">Стоп</button>
+        <!-- Once, on the first recording: where the captions and the text are (the setting hint_studio_entry_seen) -->
+        <div id="tb-rec-hint" class="tb-rec-hint hidden" role="note">
+          <span data-i18n="tbRecHint">Субтитры и текст записи — здесь</span>
+          <button type="button" data-click="recStudioHintClose" class="tb-rec-hint-x" data-i18n-title="close" title="Закрыть" data-i18n-aria="close" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+        </div>
         <button data-click="openRecMenu" data-click-args='[{"$": "event"}]' id="tb-rec-more" class="tb-rec-more" aria-haspopup="menu"
           data-i18n-title="tipTbRecMenu2" title="Как записать: набор, субтитры, диктовка, настройки" data-i18n-aria="tipTbRecMenu2" aria-label="Как записать: набор, субтитры, диктовка, настройки"><svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         <div id="tb-rec-done" class="tb-pop hidden" role="status">
