@@ -114,9 +114,8 @@ function stripState() {
       meta: state.callRecording ? (strip.call || '') : live ? stripService(live) : '',
       grow: last && last.text ? `${last.speaker ? `${last.speaker}: ` : ''}«${last.text}»` : marks ? plural(marks, t('stripMarkForms')) : '',
       growCls: last ? 'live' : '', click: 'studio', tip: t('stripOpenLive'),
-      // the studio with the live captions and the text, one click away from any section (asked by the user)
-      acts: [state.appView !== 'studio' ? act('openRecordStudio', [], t('stripOpenStudio'), 'go', t('stripOpenLive')) : null,
-        act('studioMark', [], `★ ${t('stripMark')}`, '', t('stripMarkTip'))].filter(Boolean) };
+      // the way to the studio is the «Студия» chip of the recording button (asked by the user: the button here repeated it)
+      acts: [act('studioMark', [], `★ ${t('stripMark')}`, '', t('stripMarkTip'))] };
   }
   const liveMeeting = live && !strip.skip.has(live.key) ? live : null;
   if (liveMeeting || (strip.call && !strip.skip.has(`call:${strip.call}`))) {
