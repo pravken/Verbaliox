@@ -1043,28 +1043,237 @@ function fillModelSelect(sel, options, value) {
   if (document.activeElement !== sel) sel.value = options.some(o => o[0] === value) ? value : options[0][0];
 }
 
+// The Ollama models the translation can use, and the ones «Качество» and «Скорость» take (asked once)
+function studioLoadLlmModels() {
+  if (studio.llmModels) return;
+  studio.llmModels = [];
+  fetch('/api/live/models').then(r => r.json()).then(d => {
+    studio.llmModels = d.installed || [];
+    studio.llmChoices = { quality: d.quality || '', fast: d.fast || '' };
+    syncStudioCaptions();
+  }).catch(() => {});
+}
+
+// The caption model the captions use, or would use when they start: the one chosen, or the one «Авто» takes
+// (the same rule as app/live.py caption_onnx_model and caption_model). '' when it cannot be told
+function studioCapModelId() {
+  const cat = state.whisperCatalog || [];
+  if (liveCap.session && liveCap.captionModel) {
+    const m = cat.find(x => x.name === liveCap.captionModel || formatModelName(x.id) === liveCap.captionModel);
+    if (m) return m.id;
+  }
+  const installed = id => cat.some(x => x.id === id && x.installed);
+  const onnx = cat.filter(x => x.engine === 'onnx');
+  const isOnnx = id => onnx.some(x => x.id === id);
+  const lang = studio.speech && studio.speech !== 'auto' ? studio.speech.slice(0, 2) : '';
+  const fits = x => !!x && x.installed && (!lang || (x.languages || []).includes(lang));
+  const chosen = (liveCap.session ? liveCap.captionChoice : state.liveModelSetting) || 'auto';
+  if (isOnnx(chosen) && fits(onnx.find(x => x.id === chosen))) return chosen;
+  if (chosen === 'auto') {
+    const m = (lang === 'ru' ? ['gigaam-v3', 'parakeet-v3'] : ['parakeet-v3']).map(id => onnx.find(x => x.id === id)).find(fits);
+    if (m) return m.id;
+  }
+  if (!cat.length) return '';
+  let main = (((state.system || {}).models || {}).active_whisper) || 'large-v3-turbo';
+  if (isOnnx(main)) main = ['large-v3-turbo', 'large-v3'].find(installed) || 'large-v3-turbo';
+  const whisper = isOnnx(chosen) ? 'auto' : chosen;
+  if (whisper !== 'auto') return installed(whisper) ? whisper : main;
+  return installed('large-v3-turbo') ? 'large-v3-turbo' : main;
+}
+
+// The translation model: the one chosen, the one at work, or the one «Качество / Скорость» takes
+function studioTrModelId() {
+  if (liveCap.translateChoice) return liveCap.translateChoice;
+  const llm = studio.llmModels || [];
+  if (liveCap.session && liveCap.translateModel) {
+    const m = llm.find(x => formatModelName(x) === liveCap.translateModel);
+    if (m) return m;
+  }
+  const ch = studio.llmChoices || {};
+  return (studio.speed === 'fast' && ch.fast) || ch.quality || '';
+}
+
+// «1.5 GB», «900 MB» of a catalog → gigabytes; null for anything else («Локальная»)
+function studioSizeGb(text) {
+  const m = /([\d.,]+)\s*(GB|MB)/i.exec(String(text || ''));
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(',', '.'));
+  return Number.isFinite(n) ? (/MB/i.test(m[2]) ? n / 1024 : n) : null;
+}
+
+// What a caption model takes and where: {gb, where ('gpu' | 'cpu'), state ('loaded' | 'ready' | 'missing')}.
+// The size is the one /api/vram measured for a loaded Ollama model, else the catalog's; unknown stays null
+function studioModelInfo(kind, id) {
+  if (!id) return null;
+  const chips = (vram.data && vram.data.chips) || [];
+  const gpu = !!(vram.data && vram.data.gpu);
+  if (kind === 'cap') {
+    const item = (state.whisperCatalog || []).find(x => x.id === id);
+    if (item && item.engine === 'onnx') {
+      // the captions run GigaAM / Parakeet on the processor (app/live.py caption_onnx_model)
+      const chip = chips.find(c => c.kind === 'onnx' && c.name === id);
+      return { gb: item.size_mb ? item.size_mb / 1024 : null, where: 'cpu',
+        state: chip && chip.loaded ? 'loaded' : item.installed ? 'ready' : 'missing' };
+    }
+    const chip = chips.find(c => c.kind === 'live' && c.name === id && c.loaded);
+    const onGpu = gpu && ((state.system && state.system.settings && state.system.settings.device) || 'cuda') === 'cuda';
+    return { gb: item ? studioSizeGb(item.size) : null, where: chip && chip.where ? chip.where : onGpu ? 'gpu' : 'cpu',
+      state: chip ? 'loaded' : item && item.installed ? 'ready' : 'missing' };
+  }
+  const chip = chips.find(c => c.kind === 'ollama' && c.name === id);
+  const cat = (((state.system || {}).ollama || {}).catalog || []).find(x => x.id === id || x.installed_as === id);
+  const loaded = !!(chip && chip.loaded);
+  return { gb: loaded && chip.size_gb ? Number(chip.size_gb) : (cat ? studioSizeGb(cat.size) : null),
+    where: chip && chip.where ? chip.where : gpu ? 'gpu' : 'cpu',
+    state: loaded ? 'loaded' : (studio.llmModels || []).includes(id) || (chip && !chip.loaded) ? 'ready' : 'missing' };
+}
+
+// The models of the captions now: the recognition one, and the translation one while translating
+function studioCapModels() {
+  const target = document.getElementById('live-translate-select').value;
+  const out = [{ kind: 'cap', id: studioCapModelId() }];
+  if (target) out.push({ kind: 'tr', id: studioTrModelId() });
+  return out.map(m => ({ ...m, info: studioModelInfo(m.kind, m.id) }));
+}
+
+function studioGb(x) {
+  return `${(Math.round(Number(x || 0) * 10) / 10).toLocaleString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU')} ${t('unitGB')}`;
+}
+
+// The chip of the models: the memory the captions' models take (all of them known, else «—»), and its popover
 function renderStudioModels(target) {
-  const box = document.getElementById('studio-models');
-  box.classList.toggle('hidden', !liveCap.session);
-  if (!liveCap.session) return;
-  const auto = t('liveModelAuto');
-  const capChoice = liveCap.captionChoice || 'auto';
-  fillModelSelect(document.getElementById('studio-cap-model'), [
-    ['auto', capChoice === 'auto' && liveCap.captionModel ? `${auto} · ${liveCap.captionModel}` : auto],
+  const on = document.getElementById('live-captions-toggle').checked;
+  const models = studioCapModels();
+  const known = models.every(m => m.info && m.info.gb != null);
+  const pillText = on && known ? studioGb(models.reduce((s, m) => s + m.info.gb, 0)) : '—';
+  if (target) studioLoadLlmModels();
+  const pill = document.getElementById('st-models-gb');
+  if (pill.textContent !== pillText) pill.textContent = pillText;
+  const pop = document.getElementById('st-models-pop');
+  if (pop.classList.contains('hidden')) return;
+  const auto = t('liveAutoShort');
+  const capSel = document.getElementById('studio-cap-model');
+  const capId = models[0].id;
+  const capChoice = (liveCap.session ? liveCap.captionChoice : state.liveModelSetting) || 'auto';
+  fillModelSelect(capSel, [
+    ['auto', capChoice === 'auto' && capId ? `${auto} · ${formatModelName(capId)}` : auto],
     ...(state.onnxInstalled || []).map(id => [id, formatModelName(id)]),
     ...(state.whisperInstalled || []).map(id => [id, formatModelName(id)]),
   ], capChoice);
+  // a model is changed in the captions' session: before it starts the lists say what it will take
+  capSel.disabled = !liveCap.session;
+  const row = (kind, m) => {
+    const info = m && m.info;
+    const gb = document.getElementById(`st-${kind}-model-gb`);
+    const gbLabel = info && info.gb != null ? studioGb(info.gb) + (info.where === 'cpu' ? ` · ${t('stModelRam')}` : '') : '';
+    if (gb.textContent !== gbLabel) gb.textContent = gbLabel;
+    gb.title = info && info.gb != null && info.where === 'cpu' ? t('tipStModelRam') : '';
+    const st = document.getElementById(`st-${kind}-model-state`);
+    const s = info && m.id ? info.state : '';
+    const label = s ? t({ loaded: 'stModelInMemory', ready: 'stModelWillLoad', missing: 'stModelNotDownloaded' }[s]) : '';
+    if (st.textContent !== label) st.textContent = label;
+    st.className = `st-mstate${s ? ` is-${s}` : ''}`;
+  };
+  row('cap', models[0]);
   document.getElementById('studio-tr-model-wrap').classList.toggle('hidden', !target);
-  if (!target) return;
-  const trChoice = liveCap.translateChoice || '';
-  fillModelSelect(document.getElementById('studio-tr-model'), [
-    ['', !trChoice && liveCap.translateModel ? `${auto} · ${liveCap.translateModel}` : auto],
-    ...(studio.llmModels || []).map(m => [m, formatModelName(m)]),
-  ], trChoice);
-  if (!studio.llmModels) {
-    studio.llmModels = [];
-    fetch('/api/live/models').then(r => r.json()).then(d => { studio.llmModels = d.installed || []; syncStudioCaptions(); }).catch(() => {});
+  document.getElementById('st-speed-row').classList.toggle('hidden', !target);
+  if (target) {
+    const trSel = document.getElementById('studio-tr-model');
+    const trChoice = liveCap.translateChoice || '';
+    const trId = models[1] && models[1].id;
+    fillModelSelect(trSel, [
+      ['', !trChoice && trId ? `${auto} · ${formatModelName(trId)}` : auto],
+      ...(studio.llmModels || []).map(m => [m, formatModelName(m)]),
+    ], trChoice);
+    trSel.disabled = !liveCap.session;
+    row('tr', models[1]);
   }
+  // the video memory once the models not loaded yet are in it, when there is a video card
+  const gpu = vram.data && vram.data.gpu;
+  const lines = [];
+  if (gpu && known) {
+    const add = models.reduce((s, m) => s + (m.info.where === 'gpu' && m.info.state !== 'loaded' ? m.info.gb : 0), 0);
+    lines.push(t('stModelsVram').replace('{used}', () => studioGb(Math.min(gpu.total_gb, Number(gpu.used_gb || 0) + add)).replace(` ${t('unitGB')}`, ''))
+      .replace('{total}', () => studioGb(gpu.total_gb)));
+  }
+  if (!liveCap.session) lines.push(t('stModelsWhileOn'));
+  const note = document.getElementById('st-models-note');
+  const text = lines.join('\n');
+  if (note.textContent !== text) note.textContent = text;
+}
+
+// The chips of the captions follow the hidden switch and list: the recording, the ready-made settings and the
+// economy mode set those
+function renderStudioCapBar() {
+  const box = document.getElementById('live-captions-toggle');
+  const sel = document.getElementById('live-translate-select');
+  if (!box || !sel) return;
+  const on = box.checked;
+  const capPill = document.getElementById('st-cap-pill');
+  capPill.setAttribute('aria-checked', String(on));
+  capPill.classList.toggle('is-on', on);
+  const opt = sel.selectedOptions[0];
+  const label = opt ? opt.textContent : t('liveNoTranslation');
+  const lab = document.getElementById('st-tr-pill-label');
+  if (lab.textContent !== label) lab.textContent = label;
+  const trPill = document.getElementById('st-tr-pill');
+  trPill.classList.toggle('is-on', on && !!sel.value);
+  trPill.classList.toggle('is-dim', !on);
+  document.getElementById('st-models-pill').classList.toggle('is-dim', !on);
+  renderStudioModels(sel.value);
+}
+
+// «Субтитры»: the switch inside the chip turns the captions on or off
+function studioCaptionsPill() {
+  const box = document.getElementById('live-captions-toggle');
+  box.checked = !box.checked;
+  renderStudioCapBar();
+  studioToggleCaptions(box.checked);
+}
+
+// The language chip: the app's menu with «Без перевода» first, then what the list of languages offers
+function openStudioTranslateMenu(el) {
+  const sel = document.getElementById('live-translate-select');
+  const r = el.getBoundingClientRect();
+  const items = [...sel.options].map(o => ({ label: o.textContent, on: o.value === sel.value,
+    run: () => { sel.value = o.value; studioConfigure(); } }));
+  if (items.length > 1) items.splice(1, 0, { sep: true });
+  setTimeout(() => {
+    openTextMenuAt(items, r.right, r.bottom + 6, { owner: el, right: true, maxWidth: 320, maxHeight: 420 });
+    document.querySelector('#text-menu .tm-on')?.scrollIntoView({ block: 'nearest' });  // the language chosen now
+  }, 0);
+}
+
+// The popovers of the models and of the gear: one at a time, closed by Esc, a second click or a click elsewhere
+function studioPopToggle(popId, btnId) {
+  const pop = document.getElementById(popId);
+  const open = pop.classList.contains('hidden');
+  closeStudioModelsPop();
+  closeStudioCapMore();
+  pop.classList.toggle('hidden', !open);
+  document.getElementById(btnId).setAttribute('aria-expanded', String(open));
+  return open;
+}
+
+function toggleStudioModelsPop() {
+  if (studioPopToggle('st-models-pop', 'st-models-pill')) {
+    renderStudioCapBar();
+    if (typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);  // the memory of now
+  }
+}
+
+function closeStudioModelsPop() {
+  document.getElementById('st-models-pop')?.classList.add('hidden');
+  document.getElementById('st-models-pill')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleStudioCapMore() {
+  studioPopToggle('st-cap-more', 'st-cap-more-btn');
+}
+
+function closeStudioCapMore() {
+  document.getElementById('st-cap-more')?.classList.add('hidden');
+  document.getElementById('st-cap-more-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 function studioSetCaptionModel(value) { return studioSetModels({ caption_model: value }); }
@@ -1146,6 +1355,7 @@ function relabelStudioLanguages() {
   speech.innerHTML = `<option value="auto">${escapeHtml(t('studioSpeechAuto'))}</option>` + textLangOptions(codes, true);
   speech.value = value;
   renderQuickLangs();
+  renderStudioCapBar();
 }
 
 function fillTranslateSelect(codes, value) {
@@ -1461,6 +1671,7 @@ function renderStudioControls() {
     document.getElementById(`studio-view-${k}`).className = `tk-seg-btn${studio.view === k ? ' tk-on' : ''}`;
   });
   document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);
+  renderStudioCapBar();
 }
 
 function studioSetView(v) { studio.view = v; saveStudioPrefs(); renderStudioControls(); syncStudioCaptions(); }
@@ -1747,10 +1958,11 @@ function capDrawLines(lines, fresh, target, view) {
   capFollowBottom();
   renderStudioControls();
   const status = document.getElementById('studio-status');
-  renderStudioModels(target);
-  status.textContent = liveCap.error ? liveCap.error
+  const msg = liveCap.error ? liveCap.error
     : target && liveCap.session && !liveCap.translationReady ? t('studioLoadingTranslator') : '';
-  status.className = `text-[11.5px] ${liveCap.error ? 'text-apple-amber' : 'text-apple-tertiary'}`;
+  if (status.textContent !== msg) status.textContent = msg;
+  status.classList.toggle('hidden', !msg);
+  status.classList.toggle('is-warn', !!liveCap.error);
 }
 
 // The captions as a chat: the face and the name once for a run of one speaker's lines (a line of the same
@@ -2386,6 +2598,7 @@ function renderStudioExtras() {
     hk.parentElement.classList.toggle('hidden', !key);
   }
   renderStudioTab();
+  renderStudioCapBar();
 }
 
 // --- The tabs under the recording: the text, the user's notes, questions ---
@@ -2570,8 +2783,9 @@ async function studioMicTest() {
   }
 }
 
-// The gear of the captions closes on a click elsewhere, as a menu does
+// The popovers of the captions' chips close on a click elsewhere, as a menu does
 document.addEventListener('click', (e) => {
-  const more = document.getElementById('st-cap-more');
-  if (more && more.open && !more.contains(e.target)) more.removeAttribute('open');
+  const inside = e.target instanceof Element && e.target.closest('.st-pop-wrap');
+  if (!inside || !inside.querySelector('#st-models-pop')) closeStudioModelsPop();
+  if (!inside || !inside.querySelector('#st-cap-more')) closeStudioCapMore();
 });

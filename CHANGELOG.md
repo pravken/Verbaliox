@@ -14,6 +14,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   transcriptions wait, recorded or not, in the calendar or not. During a meeting a transcription starts only on the
   user's «Transcribe» and «Yes, start now».
 - **Live captions with Teams no longer jump**: a line keeps the speaker it was given, and the room for the names stays.
+- **One row above the studio's text**: the tabs «Text · My notes · Questions» on the left, and on the right the chips
+  «Captions» with its switch, the translation language (a menu), the memory of the caption models (a popover with the
+  recognition and translation models, their size and whether they are in memory) and the gear with the rest.
 
 ## 0.9.3 — English
 
@@ -1161,6 +1164,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   ждут, даже без записи и без встречи в календаре. Во время встречи расшифровка начинается только по «Расшифровать»
   и «Да, начать сейчас».
 - **Субтитры с Teams больше не дёргаются**: строка сохраняет найденного говорящего, а место под имена не пропадает.
+- **Одна строка над текстом студии**: слева вкладки «Текст · Мои заметки · Вопросы», справа «Субтитры» с переключателем,
+  язык перевода (меню), память моделей субтитров (окно с моделями распознавания и перевода, их размером и состоянием)
+  и шестерёнка с остальными настройками.
 
 ## 0.9.3
 

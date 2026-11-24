@@ -1036,6 +1036,63 @@ await step('captions do not start by themselves', async () => {
   await page.evaluate(() => closeModal('settings'));
 });
 
+// The studio's row (asked by the user: the tabs and the captions' choices were two rows of the same buttons): the
+// tabs and four chips of one height on one centre line; «Субтитры» switches, the language comes from a menu, the
+// models and the gear open their popovers, Esc and a second click close them
+await step('studio captions row', async () => {
+  await page.evaluate(() => switchAppView('studio'));
+  await sleep(600);  // the studio reads the saved choices of the captions as it opens
+  await page.evaluate(() => {
+    document.getElementById('live-captions-toggle').checked = false;
+    document.getElementById('live-translate-select').value = '';
+    studioConfigure();
+  });
+  await sleep(300);
+  const boxes = await page.evaluate(() => ['st-cap-pill', 'st-tr-pill', 'st-models-pill', 'st-cap-more-btn'].map(id => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return [Math.round(r.height), Math.round(r.top + r.height / 2)];
+  }));
+  expect(boxes.every(b => b[0] === boxes[0][0] && Math.abs(b[1] - boxes[0][1]) <= 1), `the chips are not in line: ${JSON.stringify(boxes)}`);
+  expect(await page.evaluate(() => document.querySelectorAll('#st-tab-text, #st-tab-notes, #st-tab-ask').length === 3
+    && !document.querySelector('.st-cap-bar:not(.st-focus-bar)')), 'the tabs are missing or the old row of the captions is back');
+  await page.click('#st-cap-pill');
+  expect(await page.evaluate(() => document.getElementById('live-captions-toggle').checked
+    && document.getElementById('st-cap-pill').getAttribute('aria-checked') === 'true'), '«Субтитры» did not turn the captions on');
+  await page.click('#st-tr-pill');
+  let item = -1;
+  for (let i = 0; i < 20 && item < 0; i++) {
+    await sleep(100);
+    item = await page.evaluate(() => [...document.querySelectorAll('#text-menu button[data-i]')]
+      .findIndex(b => b.textContent.trim() === langName('en')));
+  }
+  expect(item >= 0, 'the language menu did not open');
+  expect(await page.evaluate(() => document.querySelector('#text-menu button[data-i]').textContent.trim() === t('liveNoTranslation')),
+    '«Без перевода» is not first');
+  await page.evaluate((i) => document.querySelectorAll('#text-menu button[data-i]')[i].click(), item);
+  await sleep(200);
+  expect(await page.evaluate(() => document.getElementById('live-translate-select').value === 'en'
+    && document.getElementById('st-tr-pill-label').textContent === langName('en')), 'the language was not chosen');
+  await page.click('#st-models-pill');
+  await sleep(200);
+  expect(await page.isVisible('#st-models-pop') && await page.isVisible('#studio-cap-model') && await page.isVisible('#studio-tr-model'),
+    'the models popover did not open with its lists');
+  await page.click('#st-models-pill');
+  await sleep(200);
+  expect(!(await page.isVisible('#st-models-pop')), 'a second click did not close the models popover');
+  await page.click('#st-cap-more-btn');
+  await sleep(200);
+  expect(await page.isVisible('#studio-speech') && await page.isVisible('#live-draft-toggle'), 'the gear did not open its settings');
+  await page.keyboard.press('Escape');
+  await sleep(200);
+  expect(!(await page.isVisible('#st-cap-more')), 'Esc did not close the gear');
+  await page.evaluate(() => {
+    document.getElementById('live-captions-toggle').checked = false;
+    document.getElementById('live-translate-select').value = '';
+    studioConfigure();
+    switchAppView('library');
+  });
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => { resetDashboard(); switchAppView('dashboard'); });  // the default layout, whatever was arranged before

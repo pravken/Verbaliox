@@ -454,6 +454,7 @@ function renderVram(data) {
   renderIdleStatus(data.idle);
   if (typeof onVramData === 'function') onVramData();  // the load of the status bar (pult.js)
   if (typeof dbOnVramData === 'function') dbOnVramData();  // «Нагрузка системы и моделей» on «Обзор» (dashboard.js)
+  if (typeof renderStudioCapBar === 'function') renderStudioCapBar();  // the memory of the captions' models (studio.js)
 }
 
 const MODEL_TIMER_ICON = '<svg class="vr-timer-ico" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6.5" r="4.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 4.3v2.4l1.5 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';

@@ -3182,7 +3182,8 @@ function openTextMenuAt(items, x, y, opts) {
     clean[Number(b.dataset.i)].run();
   });
   if (opts && opts.maxWidth) menu.style.maxWidth = `${opts.maxWidth}px`;
-  menu.style.maxHeight = `${viewH() - 8}px`;  // a long list scrolls instead of leaving the window
+  // a long list scrolls instead of leaving the window (opts.maxHeight: a shorter one, the languages of a list)
+  menu.style.maxHeight = `${Math.min((opts && opts.maxHeight) || Infinity, viewH() - 8)}px`;
   menu.style.overflowY = 'auto';
   document.body.appendChild(menu);
   _menuOwner = owner && document.contains(owner) ? owner : null;
