@@ -10,7 +10,8 @@ dictation is also kept in the library (folder "Dictations"): the sound, the
 text and its translation; off in Settings ("dictation_save").
 
 Dictation with translation has a hotkey of its own (Ctrl+Alt+T by default): the recognized text is
-translated into the chosen language before it is typed. The local Ollama model translates. When the
+translated into the chosen language before it is typed. The local Ollama model of «Качество» of live captions
+translates (a translator such as Hy-MT3 when installed, else the analysis model). When the
 translation fails, the original is typed and the notice says so: nothing that was said is lost.
 """
 
@@ -157,23 +158,33 @@ _DICTATION_PROMPT = (
 
 def translate(text: str, target: str) -> "tuple[str, str]":
     """(text to type, note). The note is empty when the text was translated or already in `target`;
-    otherwise it says why the original is typed (in the UI language: it goes to the tray's notice)."""
+    otherwise it says why the original is typed (in the UI language: it goes to the tray's notice).
+    The model is the one of «Качество» of live captions (Settings → ИИ-анализ → «Модели перевода»): a translator
+    (Hy-MT, TranslateGemma) gets the prompt of its model card, a general model the dictation's prompt."""
     from app import llm
-    from app.live_translate import phrase_language
+    from app.live_translate import phrase_language, translation_model, translator_chat
+    from app.ollama_client import is_translate_only_model
     from app.translation import TEXT_LANGUAGES
 
-    if phrase_language(text) == target[:2]:
+    said = phrase_language(text)
+    if said == target[:2]:
         return text, ""
     name = TEXT_LANGUAGES.get(target, target)
-    try:
-        tgt = llm.target(None)
-    except Exception as e:
-        return text, tr("Перевод недоступен: ", "Translation unavailable: ") + str(e)[:100]
+    model = translation_model("quality", start_ollama=True)
+    if model and is_translate_only_model(model):
+        src = said or _language()
+        ask = lambda: translator_chat(model, text, src, target, timeout=TRANSLATE_TIMEOUT_SEC, long=True)  # noqa: E731
+    else:
+        try:
+            tgt = llm.target(model)
+        except Exception as e:
+            return text, tr("Перевод недоступен: ", "Translation unavailable: ") + str(e)[:100]
+        ask = lambda: tgt.chat(_DICTATION_PROMPT.format(tgt=name), text)  # noqa: E731
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
     pool = ThreadPoolExecutor(1)
     try:
-        answer = pool.submit(tgt.chat, _DICTATION_PROMPT.format(tgt=name), text).result(TRANSLATE_TIMEOUT_SEC)
+        answer = pool.submit(ask).result(TRANSLATE_TIMEOUT_SEC)
     except FutureTimeout:
         sec = int(TRANSLATE_TIMEOUT_SEC)
         return text, tr(f"модель не ответила за {sec} с", f"the model did not answer within {sec} s")

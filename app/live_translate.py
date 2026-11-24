@@ -222,6 +222,20 @@ def model_choices() -> Dict[str, Any]:
     return choose_models(installed_models(), get_all_settings())
 
 
+def translation_model(kind: str = "quality", start_ollama: bool = False) -> Optional[str]:
+    """The model of «Качество» (or «Скорость») for another translation than the captions (the dictation).
+    `start_ollama`: a stopped Ollama is started first, so its list of models is read (an explicit user action)."""
+    try:
+        if start_ollama:
+            from app.ollama_client import ensure_ollama_running
+
+            ensure_ollama_running(_base_url())
+        return model_choices().get(kind)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
 def small_chat_model() -> Optional[str]:
     """A small installed model that writes text (not a translator), for short checks; None: the analysis model."""
     return next((m for m in FAST_MODEL_HINTS if m in installed_models()), None)
