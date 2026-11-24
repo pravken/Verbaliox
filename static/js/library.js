@@ -184,7 +184,14 @@ async function loadQueue() {
     fetch('/api/queue/paused').then(r => (r.ok ? r.json() : null)).catch(() => null)]);
   if (!res.ok) return;
   state.queue = await readJson(res);
-  if (paused) { state.queuePaused = !!paused.paused; state.queueMeeting = !!paused.meeting; }
+  if (paused) {
+    state.queuePaused = !!paused.paused;
+    state.queueMeeting = !!paused.meeting;
+    // a meeting goes on, or the pause after it: its end counted on this clock (the window counts down to it)
+    const h = paused.hold || {};
+    state.queueHold = { kind: h.kind || '', end: h.kind === 'pause' ? Date.now() + Math.max(0, Number(h.left) || 0) * 1000 : 0 };
+    holdTick();
+  }
   renderQueuePanel();
   renderStatusbar();
 }
@@ -248,7 +255,7 @@ function renderQueuePanel() {
       ? t('queueCancelling')
       : running ? serverText(m.stage_text || q.stage_text || '')
       : paused ? t('queuePausedItem')
-      : state.queueMeeting && q.kind === 'transcribe' ? t('queueMeetingItem') : t('queueWaiting').replace('{n}', () => q.position);
+      : holdItemText(q, 'queueMeetingItem') || t('queueWaiting').replace('{n}', () => q.position);
     const timing = running && !q.cancelling ? formatTiming(jobTiming(q, pct)) : '';
     return `
       <div data-click="openMeeting" data-click-args='[${q.id}, true]' tabindex="0" role="button" title="${escapeHtml(detail)}"

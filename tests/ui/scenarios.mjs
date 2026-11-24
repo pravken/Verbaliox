@@ -1432,6 +1432,63 @@ await step('queue island', async () => {
   expect(!(await page.isVisible('#strip-island')), '«Готово» with nothing before');
 });
 
+// «Не мешать на встречах»: the queue's window tells a meeting going on from the pause after it, the pause counts
+// down; a held transcription starts now after the question «Расшифровать» asks during a meeting (reported by the
+// user: «ждёт конца встречи» under a voice note with no meeting going on)
+await step('queue window meeting states', async () => {
+  let hold = { kind: 'meeting', reason: 'recording' };
+  const ran = [];
+  const json = (r, body) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/queue', r => json(r, [{ id: 9911, state: 'waiting', kind: 'transcribe', title: 'Заметка к планёрке', progress: 0, position: 1 },
+    { id: 9912, state: 'waiting', kind: 'translate', lang: 'en', title: 'Обзор квартала', progress: 0, position: 2 }]));
+  await page.route('**/api/queue/paused', r => json(r, { paused: false, meeting: true, hold }));
+  await page.route('**/api/queue/*/run-now', r => { ran.push(r.request().url()); return json(r, { ok: true }); });
+  try {
+    await page.evaluate(() => { strip.kind = 'free'; return loadQueue(); });
+    expect((await page.textContent('#strip-island')).includes('Ждут конца встречи'), 'the island does not say a meeting goes on');
+    await page.click('#strip-island');
+    await sleep(300);
+    let sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(sub.startsWith('Идёт встреча'), `the window during a meeting: ${sub}`);
+    // only the transcription waits for the meeting: «Начать сейчас» under it alone
+    expect(await page.locator('#jobs-pop .vx-prow-go button').count() === 1, 'no «Начать сейчас» on the transcription alone');
+    expect((await page.textContent('#jobs-pop .vx-prow-go button')).trim() === 'Начать сейчас', 'the button text');
+    // the pause after the meeting: its time left, counting down
+    hold = { kind: 'pause', reason: 'recording', until: Date.now() / 1000 + 100, left: 100 };
+    await page.evaluate(() => loadQueue());
+    sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(/^Пауза после встречи · 1:(40|39)/.test(sub), `the window during the pause: ${sub}`);
+    expect(/^Пауза после встречи 1:(40|39)/.test((await page.textContent('#strip-island')).trim()), 'the island does not count the pause');
+    expect(/начнётся через 1:(40|39)/.test(await page.textContent('#jobs-pop .vx-prow')), 'the item does not count the pause');
+    await sleep(2100);
+    sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(/^Пауза после встречи · 1:3\d/.test(sub), `the pause does not count down: ${sub}`);
+    // «Начать сейчас»: the question first; «Отмена» starts nothing, «Да, начать сейчас» starts it
+    await page.click('#jobs-pop .vx-prow-go button');
+    await sleep(300);
+    expect((await page.textContent('[role="dialog"] .vx-dlg')).includes('Пауза после встречи'), 'no question before the start');
+    await page.click('[role="dialog"] button[data-a="no"]');
+    await sleep(300);
+    expect(ran.length === 0, 'started without «Да»');
+    hold = { kind: 'meeting', reason: 'call' };
+    await page.evaluate(() => loadQueue());
+    if (!(await page.isVisible('#jobs-pop'))) await page.click('#strip-island');  // a click in the question closes it, as «Отменить всё»
+    await sleep(300);
+    await page.click('#jobs-pop .vx-prow-go button');
+    await sleep(300);
+    expect((await page.textContent('[role="dialog"] .vx-dlg')).includes('Идёт встреча'), 'the question during a meeting');
+    await page.click('[role="dialog"] button[data-a="yes"]');
+    await sleep(400);
+    expect(ran.length === 1 && /\/api\/queue\/9911\/run-now$/.test(ran[0]), `run-now: ${ran}`);
+    await page.evaluate(() => closeJobsPop());
+  } finally {
+    await page.unroute('**/api/queue');
+    await page.unroute('**/api/queue/paused');
+    await page.unroute('**/api/queue/*/run-now');
+    await page.evaluate(() => loadQueue().catch(() => {}));
+  }
+});
+
 // Menus: one open at a time, a second press of the button closes its menu, Esc closes the menu on top only (one
 // Esc closed «Нагрузка» and left the settings; «Показатели» and the drawer at once)
 await step('one menu at a time', async () => {

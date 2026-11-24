@@ -398,3 +398,35 @@ class VoiceNoteIsNoMeetingTest(unittest.TestCase):
             meeting_guard.check(now=3000.0)
         meeting_guard.check(now=3100.0)  # «Только запись» is off: no meeting was going on
         self.assertIsNone(meeting_guard.hold_until(now=3101.0))
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class QueuePausedApiTest(unittest.TestCase):
+    """The queue's window says whether a meeting goes on or the pause after it, with the time left."""
+
+    def setUp(self):
+        from app import main  # noqa: F401 - app/api/media.py is loaded by it
+        from app.api import media
+
+        self.api = media.api_queue_paused
+        self.addCleanup(transcriber._held_said.__setitem__, 0, transcriber._held_said[0])
+
+    def test_nothing_held(self):
+        transcriber._held_said[0] = False
+        r = self.api()
+        self.assertEqual(r["hold"], {})
+        self.assertFalse(r["meeting"])
+
+    def test_a_meeting_and_the_pause_after_it(self):
+        transcriber._held_said[0] = True
+        with mock.patch("app.meeting_guard.hold_state", return_value={"kind": "meeting", "reason": "call"}):
+            r = self.api()
+        self.assertTrue(r["meeting"])
+        self.assertEqual(r["hold"], {"kind": "meeting", "reason": "call"})
+        meeting_guard._state.update(busy="", ended=time.time() - 20, ended_kind="calendar", looked=True)
+        self.addCleanup(meeting_guard._state.update, ended=0.0, ended_kind="")
+        r = self.api()
+        self.assertEqual(r["hold"]["kind"], "pause")
+        self.assertEqual(r["hold"]["reason"], "calendar")
+        self.assertTrue(meeting_guard.QUIET_SEC - 22 <= r["hold"]["left"] <= meeting_guard.QUIET_SEC - 19)
+        self.assertGreater(r["hold"]["until"], time.time())
