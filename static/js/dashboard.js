@@ -335,6 +335,7 @@ function dbRenderHead() {
   const fb = document.getElementById('db-feature-btn');
   // a filter by a feature says so in its button and gets its own ✕ (asked by the user: the filter went unnoticed)
   fb.innerHTML = `<span class="lt-ell">${escapeHtml(f ? t('dbFeatureOn').replace('{name}', () => f.name) : t('dbAllFeatures'))}</span>${VX_CARET}`;
+  if (f) fb.title = t('dbFeatureOn').replace('{name}', () => f.name); else fb.removeAttribute('title');  // its name when cut
   fb.classList.toggle('lt-btn-on', !!f);
   fb.classList.toggle('db-feature-on', !!f);
   document.getElementById('db-feature-clear').classList.toggle('hidden', !f);
