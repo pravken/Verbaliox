@@ -17,6 +17,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **One row above the studio's text**: the tabs «Text · My notes · Questions» on the left, and on the right the chips
   «Captions» with its switch, the translation language (a menu), the memory of the caption models (a popover with the
   recognition and translation models, their size and whether they are in memory) and the gear with the rest.
+- **A meeting moved or cancelled in the calendar is not reminded of at its old time**: the calendar is read afresh two
+  minutes before each reminder and each meeting's start, and the reminder follows that read (a moved meeting gets its
+  reminder at its new time). If the read fails, the reminder comes as before. While a meeting starts within the hour,
+  the calendar is read every 5 minutes instead of 15.
 
 ## 0.9.3 — English
 
@@ -1167,6 +1171,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Одна строка над текстом студии**: слева вкладки «Текст · Мои заметки · Вопросы», справа «Субтитры» с переключателем,
   язык перевода (меню), память моделей субтитров (окно с моделями распознавания и перевода, их размером и состоянием)
   и шестерёнка с остальными настройками.
+- **Перенесённая или отменённая в календаре встреча не напоминает о себе в прежнее время**: календарь читается заново
+  за две минуты до каждого напоминания и начала каждой встречи, и напоминание следует этому чтению (о перенесённой
+  встрече напомнит её новое время). Если чтение не удалось, напоминание приходит как раньше. Пока до встречи меньше
+  часа, календарь читается каждые 5 минут вместо 15.
 
 ## 0.9.3
 
