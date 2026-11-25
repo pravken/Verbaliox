@@ -110,7 +110,7 @@ Ollama 0.40.8 с моделями, скачанными кнопкой прог�
 | translategemma:4b / 12b | Gemma Terms of Use (`license: gemma`) | без решения автора не брать |
 | Opus-MT en-ru / ru-en | Apache-2.0 / CC-BY-4.0 | можно, но не нужен |
 | HY-MT1.5, Hunyuan-MT-7B | Tencent HY Community License | не мерились |
-| WMT24++ | Apache-2.0 | данные скачивает скрипт, в репозиторий не входят |
+| WMT24++ ([google/wmt24pp](https://huggingface.co/datasets/google/wmt24pp), en-ru_RU) | Apache-2.0 | весь набор скачивает скрипт; 100 строк выборки (исходник и эталон) лежат в `sample[]` файлов `translation-2026-11/results-*.json` — копия по Apache-2.0 с указанием источника |
 | Unbabel/wmt22-comet-da | Apache-2.0 | только для оценки |
 
 ## Оговорки
