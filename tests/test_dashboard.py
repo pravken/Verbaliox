@@ -246,6 +246,93 @@ class DashboardTest(unittest.TestCase):
         commitments.create("Прислать отчёт", "Мария", meeting_id=dull[-1])  # the newest one gave a task
         self.assertEqual(dashboard.build("week", today=self.TODAY)["dull_series"], [])
 
+    def test_the_year_its_months_and_its_years(self):
+        """Asked by the user: the year as a period — 1 January to 1 January, its hours by month, its trend over
+        the years there are data of (six at most)."""
+        from unittest import mock
+
+        self.assertEqual(dashboard._bounds("year", self.TODAY), (date(2026, 1, 1), date(2027, 1, 1), date(2025, 1, 1)))
+        self.assertEqual(dashboard._bounds("year", date(2026, 1, 1))[:2], (date(2026, 1, 1), date(2027, 1, 1)))
+        self.assertEqual(dashboard._periods_back("year", date(2026, 1, 1), 3),
+                         [(date(2024, 1, 1), date(2025, 1, 1)), (date(2025, 1, 1), date(2026, 1, 1)), (date(2026, 1, 1), date(2027, 1, 1))])
+        self._meeting("Весна", "2026-03-10")
+        self._meeting("Осень", "2026-11-17")
+        self._meeting("Год назад", "2025-11-12")
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("year", today=self.TODAY)
+        self.assertEqual((d["start"], d["end"], d["past"]), ("2026-01-01", "2027-01-01", False))
+        self.assertEqual([b["key"][:7] for b in d["buckets"]][:3], ["2026-01", "2026-02", "2026-03"])
+        self.assertEqual(len(d["buckets"]), 12)
+        self.assertEqual([b["hours"] for b in d["buckets"] if b["hours"]], [0.5, 0.5])
+        self.assertEqual(d["history"]["starts"], ["2025-01-01", "2026-01-01"])  # no year before the first recording
+        self.assertEqual(d["history"]["values"]["meetings"], [1, 2])
+        self.assertEqual(d["kpi"]["meetings_before"], 1)
+
+    def test_a_past_period_is_complete(self):
+        """Asked by the user: any past week, month, quarter or year. Its working days are all gone by, its
+        open tasks are those open at its end; the current period is today's; a later day means today."""
+        from unittest import mock
+
+        self._meeting("Октябрь", "2026-10-14")
+        t = commitments.create("Прислать смету", "Олег", due_date="2026-10-20")
+        with database._db_lock:
+            conn = database.get_connection()  # made in October, done in November
+            conn.execute("UPDATE commitments SET created_at = '2026-10-05T09:00:00', status = 'done', done_at = '2026-11-03T09:00:00' WHERE id = ?", (t["id"],))
+            conn.commit()
+            conn.close()
+        self.assertEqual(dashboard.anchor("month", date(2026, 10, 14), self.TODAY),
+                         (date(2026, 10, 1), date(2026, 11, 1), date(2026, 9, 1), date(2026, 10, 31), True))
+        self.assertEqual(dashboard.anchor("month", None, self.TODAY)[3:], (self.TODAY, False))
+        self.assertEqual(dashboard.anchor("week", date(2027, 5, 1), self.TODAY)[0], date(2026, 11, 16))  # not ahead of today
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("month", today=self.TODAY, at=date(2026, 10, 14))
+            now = dashboard.build("month", today=self.TODAY)
+        self.assertEqual((d["start"], d["end"], d["past"], d["asof"], d["today"]), ("2026-10-01", "2026-11-01", True, "2026-10-31", "2026-11-18"))
+        self.assertEqual(d["kpi"]["meetings"], 1)
+        # open at the end of October and overdue by then; done now
+        self.assertEqual((d["kpi"]["open"], d["kpi"]["overdue"]), (1, 1))
+        self.assertEqual((now["kpi"]["open"], now["kpi"]["overdue"]), (0, 0))
+        # every working day of October counted: 22 days of 8 hours, half an hour in meetings
+        self.assertEqual(d["history"]["values"]["focus"][-1], 22 * 8 - 0.5)
+        self.assertEqual(d["history"]["starts"][-1], "2026-10-01")
+        self.assertEqual([r["title"] for r in d["recent"]], ["Октябрь"])
+
+    def test_compared_with_the_same_days_a_year_earlier(self):
+        """Asked by the user: the figures against the period before or the same days a year earlier."""
+        from unittest import mock
+
+        self.assertEqual(dashboard._year_ago(date(2028, 2, 29)), date(2027, 2, 28))
+        self._meeting("Сейчас", "2026-11-17")
+        self._meeting("Неделю назад", "2026-11-10")
+        self._meeting("Год назад 1", "2025-11-17")
+        self._meeting("Год назад 2", "2025-11-21")
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            prev = dashboard.build("week", today=self.TODAY)
+            year = dashboard.build("week", today=self.TODAY, compare="year")
+            past = dashboard.build("month", today=self.TODAY, at=date(2026, 10, 2), compare="year")
+        self.assertEqual(prev["history"]["compare"], {"kind": "prev", "start": "2026-11-09", "end": "2026-11-16"})
+        self.assertEqual((prev["kpi"]["meetings_before"], prev["history"]["before"]["meetings"]), (1, 1))
+        # the same days: 16–22 November 2025
+        self.assertEqual(year["history"]["compare"], {"kind": "year", "start": "2025-11-16", "end": "2025-11-23"})
+        self.assertEqual((year["kpi"]["meetings_before"], year["history"]["before"]["meetings"]), (2, 2))
+        self.assertEqual(year["history"]["before"]["hours"], 1.0)
+        self.assertEqual(year["history"]["values"]["meetings"][-2:], [1, 1])  # the trend stays by period
+        self.assertEqual(past["history"]["compare"]["start"], "2025-10-01")
+
+    def test_the_route_takes_a_day_and_a_comparison(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        r = c.get("/api/dashboard", params={"period": "year", "at": "2025-06-01", "compare": "year"})
+        self.assertEqual((r.json()["start"], r.json()["past"], r.json()["compare"]), ("2025-01-01", True, "year"))
+        self.assertEqual(c.get("/api/dashboard", params={"at": "2025-13-01"}).status_code, 400)
+        self.assertEqual(c.get("/api/dashboard", params={"at": "1900-01-01"}).status_code, 400)
+        r = c.get("/api/dashboard/detail", params={"kind": "meetings", "period": "month", "at": "2025-06-10"})
+        self.assertEqual((r.json()["start"], r.json()["end"]), ("2025-06-01", "2025-07-01"))
+
 
 if __name__ == "__main__":
     unittest.main()

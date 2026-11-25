@@ -28,16 +28,32 @@ def _meetings(briefs: Dict[int, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
                        "participants": participants(m)} for mid, m in sorted(briefs.items())}
 
 
+def _dashboard_at(at: str):
+    """The day a past period of «Обзор» is found by (YYYY-MM-DD); none: today. A later day means today."""
+    from datetime import date
+
+    if not at:
+        return None
+    try:
+        day = date.fromisoformat(at)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверная дата")
+    if day.year < 2000:
+        raise HTTPException(status_code=400, detail="Неверная дата")
+    return day
+
+
 @router.get("/api/dashboard")
-def api_dashboard(period: str = "week", feature: int = 0, lang: str = "ru") -> Dict[str, Any]:
+def api_dashboard(period: str = "week", feature: int = 0, lang: str = "ru", at: str = "", compare: str = "prev") -> Dict[str, Any]:
     """Everything the widgets of «Главная» show for a period (app/dashboard.py), with the public holidays
-    of the period (they are no working days)."""
+    of the period (they are no working days). `at`: a day of a past period to show; `compare`: «prev» (the
+    period before) or «year» (the same days a year earlier)."""
     from datetime import date
 
     from app import holidays_cal
     from app.dashboard import build
 
-    out = build(period, feature or None)
+    out = build(period, feature or None, at=_dashboard_at(at), compare=compare)
     out["holidays"] = holidays_cal.between(date.fromisoformat(out["start"]), date.fromisoformat(out["end"]), "en" if lang == "en" else "ru")
     return out
 
@@ -115,12 +131,12 @@ def api_dashboard_people(start: str, end: str, feature: int = 0) -> Dict[str, An
 
 
 @router.get("/api/dashboard/detail")
-def api_dashboard_detail(kind: str = "meetings", period: str = "week", feature: int = 0, person: str = "") -> Dict[str, Any]:
+def api_dashboard_detail(kind: str = "meetings", period: str = "week", feature: int = 0, person: str = "", at: str = "") -> Dict[str, Any]:
     """A widget of «Дэшборд» in full: the meetings, those without an outcome, the decisions, the user's tasks,
-    what is promised to the user, a person (app/dashboard.detail)."""
+    what is promised to the user, a person (app/dashboard.detail); `at` as for /api/dashboard."""
     from app.dashboard import detail
 
-    return detail(kind, period, feature or None, person[:120])
+    return detail(kind, period, feature or None, person[:120], at=_dashboard_at(at))
 
 
 @router.get("/api/tasks")
