@@ -47,6 +47,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   only on «Download» (in the popover of the caption models or in Settings → AI analysis); «Quality» then translates
   with Hy-MT3 7B (else 1.8B) and «Fast» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
   The 1.8B is set up in Ollama with a working chat template (the one in its file does not pass the text to the model).
+- **The downloaded Hy-MT3 file is checked**: Ollama downloads the newest file of the model's repository, so the app
+  compares its checksum with the one checked for this version. A file that differs is still used; the translation
+  models block marks it «The model file differs from the checked one», and the log names both checksums.
 - **Translation models have their own block** in Settings → AI analysis, «Translation Models (Ollama)», under the
   analysis models: both Hy-MT3 sizes (the one for this computer marked «Recommended for this computer», the other one
   can be downloaded too), with the measured time of a phrase and the video memory beside speech recognition. Two
@@ -75,7 +78,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   can be chosen before a recording too. A recording preset no longer switches the captions or the translation. With
   «Do not disturb in meetings» captions do not start by themselves on a meeting only; a voice note starts with them.
 - **Captions follow the speech**: «Text as it is spoken» and «Translate as it is spoken» are on by default, and the
-  draft is translated as often as the model allows: about every half second with Hy-MT3 1.8B, every 1.2 s with a slower one.
+  draft is translated as often as the model allows: about every half second with Hy-MT3 1.8B, with a slower model three
+  times as seldom as one translation takes, so the translation model is busy a third of the time at most. A translation
+  model that Ollama runs without a video card takes 2 threads of the processor instead of one per core, and its
+  draft is not translated when one translation takes over 1.5 s: the final lines still are.
 - **No more freezes of the computer during live captions on a processor with few cores**: the threads of GigaAM,
   Parakeet and the voice detector no longer wait for work actively (ONNX Runtime's spinning). In the measurement on
   8 logical processors (captions, a transcription in the queue and a video call at once) the pauses of the system
@@ -1311,6 +1317,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   субтитров или в «Настройки → ИИ-анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Быстро» —
   Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Модель 1.8B настраивается в Ollama с рабочим
   шаблоном чата (шаблон из её файла не передаёт модели текст).
+- **Скачанный файл Hy-MT3 проверяется**: Ollama скачивает самый новый файл из репозитория модели, поэтому программа
+  сверяет его контрольную сумму с проверенной для этой версии. Файл с другой суммой используется, но в блоке моделей
+  перевода отмечен «Файл модели отличается от проверенного», а в журнале записаны обе суммы.
 - **Свой блок для моделей перевода** в «Настройки → ИИ-анализ» — «Модели перевода (Ollama)», под моделями анализа:
   обе модели Hy-MT3 (подходящая этому компьютеру отмечена «Рекомендуется для этого компьютера», другую тоже можно
   скачать), с измеренным временем перевода фразы и видеопамятью вместе с распознаванием. Два списка выбирают модель
@@ -1339,7 +1348,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   записи. Шаблон записи больше не переключает субтитры и перевод. При «Не мешать на встречах» субтитры не включаются
   сами только на встречах; голосовая заметка начинается с ними.
 - **Субтитры успевают за речью**: «Текст по ходу речи» и «Перевод по ходу речи» включены по умолчанию, а черновик
-  переводится так часто, как позволяет модель: с Hy-MT3 1.8B — примерно раз в полсекунды, с медленной — раз в 1,2 с.
+  переводится так часто, как позволяет модель: с Hy-MT3 1.8B — примерно раз в полсекунды, с более медленной моделью —
+  втрое реже, чем длится один перевод, так что модель перевода занята не больше трети времени. Модель перевода, которую
+  Ollama запускает без видеокарты, занимает 2 потока процессора, а не по одному на ядро, и черновик
+  с ней не переводится, если один перевод длится дольше 1,5 с: готовые строки переводятся по-прежнему.
 - **Компьютер больше не замирает во время субтитров на процессоре с небольшим числом ядер**: потоки GigaAM, Parakeet
   и детектора речи больше не ждут работу активно (spinning ONNX Runtime). В замере на 8 логических процессорах
   (субтитры, расшифровка в очереди и видеозвонок одновременно) задержки системы больше 50 мс сократились с 645 за

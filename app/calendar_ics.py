@@ -518,11 +518,16 @@ def _load_text(source: str) -> str:
     if re.match(r"^(https?|webcal)://", source, re.I):
         import httpx
 
+        from app.applog import hide_in_log
+
         url = re.sub(r"^webcal://", "https://", source, flags=re.I)
+        hide_in_log(source)  # an error of the request (a traceback) would write the link with its secret
+        hide_in_log(url)
         deadline = time.time() + 60
         data = bytearray()
         with httpx.Client(timeout=15.0, follow_redirects=True) as c:
             with c.stream("GET", url) as r:
+                hide_in_log(str(r.url))  # where a redirect led
                 r.raise_for_status()
                 for chunk in r.iter_bytes():
                     data += chunk

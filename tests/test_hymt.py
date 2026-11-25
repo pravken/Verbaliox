@@ -32,9 +32,14 @@ class _Resp:
 class _Ollama:
     """httpx.Client for /api/show, /api/create, /api/delete and /api/chat; records the requests."""
 
-    def __init__(self, template="", chat=""):
-        self.template, self.chat = template, chat
+    def __init__(self, template="", chat="", tags=None, create_status=200):
+        self.template, self.chat, self.tags, self.create_status = template, chat, tags, create_status
         self.posts, self.deleted = [], []
+
+    def get(self, url, **k):
+        if self.tags is None or not url.endswith("/api/tags"):
+            raise ConnectionError("no list")  # the list given to the repair is used
+        return _Resp(200, {"models": [{"name": n} for n in self.tags]})
 
     def __call__(self, *a, **k):
         return self
@@ -51,6 +56,8 @@ class _Ollama:
             return _Resp(200, {"template": self.template})
         if url.endswith("/api/chat"):
             return _Resp(200, {"message": {"content": self.chat}})
+        if url.endswith("/api/create") and self.create_status != 200:
+            return _Resp(self.create_status, {"error": "no space left"})
         return _Resp(200, {"status": "success"})
 
     def request(self, method, url, json=None, **k):
@@ -153,12 +160,69 @@ class RepairTemplateTest(unittest.TestCase):
 
     def setUp(self):
         ollama_client._hymt_checked.clear()
+        ollama_client._hymt_failed.clear()
+        self.addCleanup(ollama_client._hymt_failed.clear)
 
-    def _repair(self, models, template):
-        fake = _Ollama(template=template)
+    def _repair(self, models, template, strict=False, **kw):
+        fake = _Ollama(template=template, **kw)
         with mock.patch.object(ollama_client.httpx, "Client", fake):
-            out = ollama_client.repair_hymt_models("http://127.0.0.1:11434", models)
+            out = ollama_client.repair_hymt_models("http://127.0.0.1:11434", models, strict=strict)
         return fake, out
+
+    def test_a_failed_repair_waits_before_the_next_try(self):
+        """The list is read often (status, the captions' choice of model): a repair that failed is not tried
+        on every read, with its two requests, its 120 s timeout and a line in the log."""
+        now = [1000.0]
+        with mock.patch.object(ollama_client.time, "time", lambda: now[0]):
+            fake, out = self._repair([RAW_1_8B], self.BROKEN, create_status=500)
+            self.assertEqual([k for k, _ in fake.posts], ["show", "create"])
+            self.assertEqual(out, [RAW_1_8B])  # stays as it is
+            now[0] += 60
+            fake, out = self._repair([RAW_1_8B], self.BROKEN, create_status=500)
+            self.assertEqual((fake.posts, out), ([], [RAW_1_8B]))
+            now[0] += ollama_client.HYMT_REPAIR_RETRY_SEC
+            fake, out = self._repair([RAW_1_8B], self.BROKEN)
+            self.assertEqual([k for k, _ in fake.posts], ["show", "create"])
+            self.assertEqual(out, [LOCAL_1_8B])
+
+    def test_after_a_download_the_repair_is_tried_at_once(self):
+        with mock.patch.object(ollama_client.time, "time", return_value=1000.0):
+            self._repair([RAW_1_8B], self.BROKEN, create_status=500)
+            with self.assertRaises(RuntimeError):
+                self._repair([RAW_1_8B], self.BROKEN, strict=True, create_status=500)
+
+    def test_the_list_is_read_again_under_the_lock(self):
+        """A caller with a list read before another one's repair finds the work done: nothing is created or
+        deleted again, and the list it gets is Ollama's."""
+        fake, out = self._repair(["gemma4:e4b", RAW_1_8B], self.BROKEN, tags=["gemma4:e4b", LOCAL_1_8B])
+        self.assertEqual((fake.posts, fake.deleted), ([], []))
+        self.assertEqual(out, ["gemma4:e4b", LOCAL_1_8B])
+
+    def test_one_repair_at_a_time(self):
+        import threading
+
+        inside, peak = [0], [0]
+        gate = threading.Lock()
+
+        class Slow(_Ollama):
+            def post(self, url, json=None, **k):
+                with gate:
+                    inside[0] += 1
+                    peak[0] = max(peak[0], inside[0])
+                threading.Event().wait(0.05)
+                with gate:
+                    inside[0] -= 1
+                return super().post(url, json=json, **k)
+
+        fake = Slow(template=self.BROKEN)
+        with mock.patch.object(ollama_client.httpx, "Client", fake):
+            threads = [threading.Thread(target=ollama_client.repair_hymt_models,
+                                        args=("http://127.0.0.1:11434", [RAW_1_8B])) for _ in range(3)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(10)
+        self.assertEqual(peak[0], 1)
 
     def test_broken_template_is_detected(self):
         self.assertTrue(ollama_client.template_is_broken(self.BROKEN))
@@ -234,6 +298,94 @@ class HyMtPromptTest(unittest.TestCase):
         body = fake.posts[-1][1]
         self.assertEqual(body["messages"][0]["role"], "system")
         self.assertEqual(body["messages"][1], {"role": "user", "content": "Let's move the meeting to Friday"})
+
+
+class _Show(_Ollama):
+    """/api/show answering a modelfile; records the names asked."""
+
+    def __init__(self, modelfile="", status=200):
+        super().__init__()
+        self.modelfile, self.status, self.asked = modelfile, status, []
+
+    def post(self, url, json=None, **k):
+        self.asked.append(json["model"])
+        return _Resp(self.status, {"modelfile": self.modelfile})
+
+
+@unittest.skipIf(ollama_client is None, "app dependencies not installed")
+class ModelFileTest(unittest.TestCase):
+    """Ollama pulls Hy-MT3 from the repository's main branch: the file it got is compared with the one checked."""
+
+    BASE = "http://127.0.0.1:11434"
+
+    def setUp(self):
+        ollama_client._file_checks.clear()
+        self.addCleanup(ollama_client._file_checks.clear)
+
+    def _digest(self, modelfile, status=200, models_dir=None):
+        import tempfile
+
+        fake = _Show(modelfile, status)
+        with mock.patch.object(ollama_client.httpx, "Client", fake):
+            return ollama_client.model_file_digest(self.BASE, RAW_7B, models_dir=models_dir or tempfile.mkdtemp())
+
+    def test_the_checked_files(self):
+        self.assertEqual(set(ollama_client.HYMT_GGUF_SHA256), {RAW_7B, RAW_1_8B})
+        for digest in ollama_client.HYMT_GGUF_SHA256.values():
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+
+    def test_the_blob_of_the_from_line(self):
+        d = "ab" * 32
+        self.assertEqual(self._digest(f"# Modelfile\nFROM /home/u/.ollama/models/blobs/sha256-{d}\nTEMPLATE x"), d)
+        self.assertEqual(self._digest(f"FROM C:\\Users\\u\\.ollama\\models\\blobs\\sha256-{d.upper()}"), d)
+        self.assertIsNone(self._digest("FROM hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M"))  # no blob named
+        self.assertIsNone(self._digest("", status=404))
+
+    def test_else_the_manifest_on_the_disk(self):
+        import json
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        d = "cd" * 32
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        path = Path(root, "manifests", "hf.co", "tencent", "Hy-MT3-7B-GGUF", "Q4_K_M")
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"layers": [
+            {"mediaType": "application/vnd.ollama.image.template", "digest": "sha256:" + "ee" * 32},
+            {"mediaType": "application/vnd.ollama.image.model", "digest": "sha256:" + d}]}), encoding="utf-8")
+        self.assertEqual(self._digest("", status=500, models_dir=root), d)
+        self.assertEqual(ollama_client._manifest_path("hy-mt3-1.8b:latest", root),
+                         Path(root, "manifests", "registry.ollama.ai", "library", "hy-mt3-1.8b", "latest"))
+
+    def _check(self, models, digest):
+        with mock.patch.object(ollama_client, "model_file_digest", return_value=digest) as ask:
+            ollama_client.check_translator_files(self.BASE, models)
+        return ask
+
+    def test_another_file_is_marked_and_kept(self):
+        ask = self._check([RAW_7B, LOCAL_1_8B], "00" * 32)
+        self.assertEqual(sorted(c.args[1] for c in ask.call_args_list), sorted([RAW_7B, LOCAL_1_8B]))
+        with mock.patch("app.ollama_client.get_all_settings", return_value={}):
+            catalog = ollama_client.translate_catalog([RAW_7B, LOCAL_1_8B])
+        self.assertEqual([(c["installed"], c["file_differs"]) for c in catalog], [(True, True), (True, True)])
+
+    def test_the_checked_file_is_not_marked_and_asked_once(self):
+        expected = ollama_client.HYMT_GGUF_SHA256[RAW_7B]
+        self._check([RAW_7B], expected)
+        self.assertFalse(ollama_client.translator_file_differs(RAW_7B))
+        self.assertFalse(self._check([RAW_7B], expected).called)  # the status is read often: asked once
+
+    def test_unknown_is_no_warning(self):
+        self._check([RAW_7B], None)
+        self.assertFalse(ollama_client.translator_file_differs(RAW_7B))
+        self.assertFalse(self._check([RAW_7B], None).called)  # not asked again at once
+        with mock.patch.object(ollama_client.time, "time", return_value=ollama_client.time.time() + 601):
+            self.assertTrue(self._check([RAW_7B], None).called)
+
+    def test_a_model_not_installed_is_not_asked(self):
+        self.assertFalse(self._check(["gemma4:e4b"], "00" * 32).called)
 
 
 class TranslateRecommendationTest(unittest.TestCase):

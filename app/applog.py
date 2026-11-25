@@ -43,8 +43,11 @@ def _rotate() -> None:
 
 
 # What never goes into the log, whoever prints it (the log is sent with a problem report): the Windows
-# user's name in paths, e-mail addresses, the session token and the links of calls
+# user's name in paths, e-mail addresses, the session token, the links of calls and of calendars (a calendar
+# link holds its secret in the path: Google's /calendar/ical/<id>/private-<hash>/basic.ics)
 _SCRUB = [
+    (re.compile(r"(?i)\b(?:https?|webcal)://[^\s'\"<>]*?(?:\.ics\b|/private-|ical|/ics\b|[?&]private_token=)[^\s'\"<>]*"),
+     "<calendar link>"),
     (re.compile(r"(?i)([a-z]:[\\/]+(?:users|documents and settings)[\\/]+)[^\\/:*?\"<>|\r\n]+"), r"\1<user>"),
     (re.compile(r"(/(?:home|Users)/)[^/\s'\"]+"), r"\1<user>"),
     (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "<email>"),
@@ -54,7 +57,20 @@ _SCRUB = [
 ]
 
 
+_HIDDEN: set = set()  # strings never written as they are (the calendar link of the settings: hide_in_log)
+
+
+def hide_in_log(secret: str, label: str = "<calendar link>") -> None:
+    """`secret` (a link the user gave, of any form) is written as `label` from now on."""
+    secret = (secret or "").strip()
+    if len(secret) >= 12:  # a short value would cut ordinary words
+        _HIDDEN.add((secret, label))
+
+
 def scrub(text: str) -> str:
+    for secret, label in list(_HIDDEN):
+        if secret in text:
+            text = text.replace(secret, label)
     for rx, to in _SCRUB:
         text = rx.sub(to, text)
     return text
