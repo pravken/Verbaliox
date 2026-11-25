@@ -440,6 +440,27 @@ class PendingExportTest(unittest.TestCase):
         self.assertEqual(database.get_pending_exports(m["id"]), [])
         self.assertEqual(list(self.out.iterdir()), [])
 
+    def test_an_export_asked_while_others_are_written_is_kept(self):
+        """Found in an audit: process() wrote the list it read before writing the files back over one asked meanwhile."""
+        m = _done_meeting()
+        database.set_pending_exports(m["id"], [{"kind": "doc", "fmt": "txt"}])
+        asked = {"kind": "doc", "fmt": "srt", "lang": "en", "variant": "translated", "opts": {}, "tries": 1}
+        real = pending_exports.perform
+
+        def slow_perform(meeting, item):
+            database.set_pending_exports(m["id"], database.get_pending_exports(m["id"]) + [asked])  # the page asks now
+            return real(meeting, item)
+
+        with mock.patch.object(pending_exports, "perform", slow_perform):
+            pending_exports.process(m["id"])
+        self.assertEqual(len(list(self.out.iterdir())), 1)
+        self.assertEqual(database.get_pending_exports(m["id"]), [asked])
+
+    def test_a_bilingual_text_export_is_refused_before_the_translation(self):
+        with self.assertRaises(ValueError):
+            pending_exports.normalize({"kind": "doc", "fmt": "md", "lang": "en", "variant": "bilingual"})
+        self.assertEqual(pending_exports.normalize({"kind": "doc", "fmt": "srt", "lang": "en", "variant": "bilingual"})["fmt"], "srt")
+
     def test_dub_needs_the_dub_window(self):
         m = _done_meeting()
         self.assertEqual(pending_exports.request(m["id"], {"kind": "dub_media", "lang": "en"})["status"], "needs_dub")
