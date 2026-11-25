@@ -482,8 +482,11 @@ def launch_git_update() -> None:
     if not is_git_checkout() or not script.is_file():
         raise RuntimeError("Это не клон git с update.bat: обновите программу из «Настройки → Общие → Обновления»")
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(f'cmd.exe /c "timeout /t 3 /nobreak >nul & call "{script}""', cwd=str(APP_DIR),
-                     creationflags=flags, close_fds=True)
+    # The path goes through the environment: written into the command line, a "%" of a folder's name
+    # would be expanded by cmd
+    env = {**os.environ, "VERBALIOX_UPDATE_BAT": str(script)}
+    subprocess.Popen('cmd.exe /c "timeout /t 3 /nobreak >nul & call "%VERBALIOX_UPDATE_BAT%""', cwd=str(APP_DIR),
+                     creationflags=flags, close_fds=True, env=env)
 
 
 def launch_installer(restart: bool = True, minimized: bool = False) -> None:

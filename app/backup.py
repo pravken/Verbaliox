@@ -131,6 +131,10 @@ def _check(z: zipfile.ZipFile) -> Dict[str, Any]:
 
 
 def _inside(path: Path, roots: List[Path]) -> bool:
+    from app.paths import is_network_path
+
+    if is_network_path(path):  # resolving it would connect to that server, with the user's Windows login
+        return False
     try:
         p = path.resolve()
     except OSError:
@@ -203,8 +207,9 @@ def _clean_paths(conn: sqlite3.Connection, roots: List[Path], restored: Dict[int
 
 
 def _clean_dubs(raw: Any) -> Optional[str]:
-    """Dub files are stored relative to the data folder (database._dub_paths_to_storage): an entry with
-    an absolute path or one that leaves the folder is dropped. None: nothing to change."""
+    """Dub files are stored relative to the data folder (database._dub_paths_to_storage), in its dubs/: an
+    entry with any other path (absolute, leaving the folder, or another file of it such as meetings.db or
+    bin/ffmpeg.exe, which deleting the dub would delete) is dropped. None: nothing to change."""
     try:
         dubs = json.loads(raw or "[]")
     except (TypeError, ValueError):
@@ -216,10 +221,42 @@ def _clean_dubs(raw: Any) -> Optional[str]:
         if not p:
             return True
         q = Path(str(p).replace("\\", "/"))
-        return not q.is_absolute() and not q.drive and ".." not in q.parts
+        return (not q.is_absolute() and not q.drive and ".." not in q.parts and len(q.parts) > 1
+                and q.parts[0].lower() == "dubs")
 
     kept = [d for d in dubs if isinstance(d, dict) and all(fine(d.get(k)) for k in ("path", "srt_path"))]
     return None if len(kept) == len(dubs) else json.dumps(kept, ensure_ascii=False)
+
+
+def _clean_settings(conn: sqlite3.Connection) -> None:
+    """The copy's settings go through the checks a setting saved by the page goes through
+    (app/settings_schema.py): a value no page could have saved (a model that is no model of the catalog, a
+    number out of its range, a list of the wrong form) is corrected or dropped, and the default is used."""
+    from app.settings_schema import SERVER_KEYS, clean
+
+    for key, value in conn.execute("SELECT key, value FROM settings").fetchall():
+        if key in LOCAL_SETTINGS or key in SERVER_KEYS:  # this computer's (just below) and the program's own
+            continue
+        try:
+            fixed = clean(str(key), value)
+        except ValueError:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            continue
+        if fixed != value:
+            conn.execute("UPDATE settings SET value = ? WHERE key = ?", (fixed, key))
+
+
+ROOM_MARGIN = 512 * 2**20  # left free on the disk after a file of the copy is written
+
+
+def _check_room(size: int, folder: Path) -> None:
+    """A file of the copy is written only when the disk holds it: a small zip can unpack to any size."""
+    try:
+        free = shutil.disk_usage(folder).free
+    except OSError:
+        return
+    if size + ROOM_MARGIN > free:
+        raise ValueError("Недостаточно места на диске для восстановления копии")
 
 
 def _keep_local_settings(conn: sqlite3.Connection) -> None:
@@ -255,6 +292,7 @@ def _restore(src: Path) -> Dict[str, Any]:
         manifest = _check(z)
         names = set(z.namelist())
         with tempfile.TemporaryDirectory(prefix="vs_restore_") as tmp:
+            _check_room(z.getinfo("meetings.db").file_size * 2, Path(tmp))  # unpacked, then staged next to the database
             db = Path(z.extract("meetings.db", tmp))
             conn = sqlite3.connect(str(db))
             try:
@@ -291,6 +329,7 @@ def _restore(src: Path) -> Dict[str, Any]:
                             put_back[mid] = str(target)
                         continue
                     target.parent.mkdir(parents=True, exist_ok=True)
+                    _check_room(z.getinfo(name).file_size, target.parent)
                     # written aside and renamed: a restore cut off midway left a truncated file at the
                     # place, which the next restore skipped as already there (found in review)
                     part = target.with_name(target.name + ".partial")
@@ -304,6 +343,7 @@ def _restore(src: Path) -> Dict[str, Any]:
                     restored += 1
                 _clean_paths(conn, roots, put_back)
                 _restored_now(conn, here, cols)
+                _clean_settings(conn)
                 _keep_local_settings(conn)
                 conn.execute("DROP TABLE IF EXISTS secrets")  # the API keys of a copy of an earlier version
                 # the minutes worked and «Мои программы» (a copy of an older version may still have them)

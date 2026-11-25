@@ -338,7 +338,9 @@ def _stop_ollama_runners(names: List[str]) -> None:
         match = " -or ".join(f"$_.CommandLine -match '{b}'" for b in blobs)
         script = ("Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'ollama.exe' -or $_.Name -eq 'ollama_llama_server.exe') "
                   f"-and ({match}) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}")
-        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=30, creationflags=flags)
+        from app.paths import powershell_exe
+
+        subprocess.run([powershell_exe(), "-NoProfile", "-Command", script], capture_output=True, timeout=30, creationflags=flags)
     else:
         for b in blobs:
             subprocess.run(["pkill", "-f", f"ollama.*{b}"], capture_output=True, timeout=30)

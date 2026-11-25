@@ -9,6 +9,29 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 ## 0.9.5 — English
 
 
+### Security
+
+- **A backup from someone else cannot act on this computer**: the saved summary of «Overview» is cleaned again
+  when shown and an image of stored text can call no function of the page; a dub's entry deletes only files in
+  `dubs/` (not the database or `ffmpeg.exe`); the settings of a copy are checked as the settings page checks them;
+  a speaker's or a feature's colour is used only as a colour; network paths of a copy are not opened; a copy is
+  unpacked only when the disk holds it.
+- **Ollama over plain `http://` only on this computer or the local network**: an address on the internet needs
+  `https://` (the transcripts are sent there). The settings page can no longer write the program's own keys.
+- **Only models of the catalog**: Whisper loads only a model of the catalog at its checked commit, and the model
+  comparison takes only downloaded models. The microphone filter runs only the `deep-filter.exe` the program
+  downloaded and checked; pip itself is installed pinned with its hashes.
+- **A calendar or an invitation cannot slow or redirect the program**: a published calendar with a day repeated
+  thousands of times in one rule no longer fills the memory; a Zoom link that mentions Teams opens Zoom.
+- **Deleted tasks of a dictation stay out of the analysis of other recordings**, and their text cannot add
+  instructions to it.
+- **The logs leave out more**: the Windows user name in the first line and in `migration.log`, one-time sign-in
+  addresses, session cookies, and the names of notes and files (the recording's number instead).
+- **Smaller fixes**: network paths in any spelling of their slashes are refused by «Show in folder»; the browser
+  mode sends the session key only to a server that proves it is Verbaliox; the window grants the page only the
+  permissions it uses; the scripts never run a folder or branch name as a command, and removing the installed
+  program with its data deletes the install folder only when it is named Verbaliox.
+
 ### Live captions
 
 - **The caption models are offered whether downloaded or not**: the lists of the studio's «Caption models» and of
@@ -1348,6 +1371,30 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.9.5
 
+
+### Безопасность
+
+- **Чужая резервная копия ничего не делает на этом компьютере**: сохранённая сводка «Обзора» очищается заново при
+  показе, а картинка из сохранённого текста не может вызвать функцию страницы; запись дубляжа удаляет только файлы
+  в `dubs/` (не базу и не `ffmpeg.exe`); настройки копии проверяются так же, как на странице настроек; цвет
+  говорящего или фичи используется только как цвет; сетевые пути копии не открываются; копия распаковывается,
+  только если на диске хватает места.
+- **Ollama по открытому `http://` — только на этом компьютере или в локальной сети**: для адреса в интернете нужен
+  `https://` (туда уходят расшифровки). Страница настроек больше не записывает служебные ключи программы.
+- **Только модели из каталога**: Whisper загружает только модель каталога на проверенном коммите, а сравнение
+  моделей принимает только скачанные модели. Фильтр микрофона запускает только `deep-filter.exe`, скачанный и
+  проверенный программой; сам pip ставится закреплённой версии с хешами.
+- **Календарь или приглашение не замедляют программу и не подменяют ссылку**: опубликованный календарь с днём,
+  повторённым тысячи раз в одном правиле, больше не занимает всю память; ссылка Zoom, в которой упомянут Teams,
+  открывает Zoom.
+- **Удалённые задачи диктовок не попадают в анализ других записей**, а их текст не может добавить в него
+  указания.
+- **Журналы скрывают больше**: имя пользователя Windows в первой строке и в `migration.log`, одноразовые адреса
+  входа, cookie сессии, названия заметок и файлов (вместо них — номер записи).
+- **Мелкие исправления**: «Показать в папке» отклоняет сетевые пути при любом написании косых черт; режим браузера
+  отправляет ключ сессии только серверу, который подтвердил, что он Verbaliox; окно выдаёт странице только те
+  разрешения, которыми она пользуется; скрипты не выполняют название папки или ветки как команду, а удаление
+  установленной программы вместе с данными удаляет папку установки, только если она называется Verbaliox.
 
 ### Живые субтитры
 

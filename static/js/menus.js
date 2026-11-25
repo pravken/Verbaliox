@@ -56,8 +56,8 @@ function renderExportMenu() {
       + item({ kind: 'video_burn' }, t('exportVideoBurn'), t('exportTagVideo'), t('tipSubsBurn'));
   }
 
-  const trOptions = (have.length ? `<optgroup label="${escapeHtml(t('exportLangReady'))}">${have.map(c => `<option value="${c}" ${c === trLang ? 'selected' : ''}>✓ ${escapeHtml(langName(c))}</option>`).join('')}</optgroup>` : '')
-    + `<optgroup label="${escapeHtml(t('exportLangNew'))}">${others.map(o => `<option value="${o.c}" ${o.c === trLang ? 'selected' : ''}>${escapeHtml(o.n)}</option>`).join('')}</optgroup>`;
+  const trOptions = (have.length ? `<optgroup label="${escapeHtml(t('exportLangReady'))}">${have.map(c => `<option value="${escapeHtml(c)}" ${c === trLang ? 'selected' : ''}>✓ ${escapeHtml(langName(c))}</option>`).join('')}</optgroup>` : '')
+    + `<optgroup label="${escapeHtml(t('exportLangNew'))}">${others.map(o => `<option value="${escapeHtml(o.c)}" ${o.c === trLang ? 'selected' : ''}>${escapeHtml(o.n)}</option>`).join('')}</optgroup>`;
   html += sep + header(t('exportGroupTr'), langSelect('export-tr-lang', 'setExportLang', trOptions));
   if (!trReady) html += note(t('exportTrWillRun').replace('{lang}', () => langName(trLang)));
   const tr = (fmt, variant, label, tag) => item({ kind: 'doc', fmt, lang: trLang, variant }, label, tag);
@@ -70,7 +70,7 @@ function renderExportMenu() {
       + item({ kind: 'video_burn', lang: trLang, variant: 'translated' }, t('exportVideoBurnTr'), t('exportTagVideo'), t('tipSubsBurn'));
   }
 
-  const dubOptions = dubLangs.map(c => `<option value="${c}" ${c === dubLang ? 'selected' : ''}>${dubs.includes(c) ? '✓ ' : ''}${escapeHtml(dubLangName(c))}</option>`).join('');
+  const dubOptions = dubLangs.map(c => `<option value="${escapeHtml(c)}" ${c === dubLang ? 'selected' : ''}>${dubs.includes(c) ? '✓ ' : ''}${escapeHtml(dubLangName(c))}</option>`).join('');
   html += sep + header(t('exportGroupDub'), langSelect('export-dub-lang', 'setExportDubLang', dubOptions));
   if (!dubReady) html += note(t('exportDubWillRun'));
   const dubExt = dubReady ? String((availableDubs(m).find(d => d.lang === dubLang) || {}).path || '').split('.').pop().toUpperCase() : (isVideo ? 'MP4' : 'M4A');
@@ -285,7 +285,7 @@ function openBulkMenu(e) {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
     menu.remove();
-    window[b.dataset.fn]();
+    callPage(b.dataset.fn);
   });
   document.body.appendChild(menu);
   placeMenuAt(menu, e);

@@ -51,7 +51,8 @@ _SCRUB = [
     (re.compile(r"(?i)([a-z]:[\\/]+(?:users|documents and settings)[\\/]+)[^\\/:*?\"<>|\r\n]+"), r"\1<user>"),
     (re.compile(r"(/(?:home|Users)/)[^/\s'\"]+"), r"\1<user>"),
     (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "<email>"),
-    (re.compile(r"(?i)\b(token|access_token|key|password|pwd|sig|signature)=[^&\s'\"]+"), r"\1=<hidden>"),
+    (re.compile(r"(?i)\b(token|access_token|key|password|pwd|sig|signature|boot|vs_session(?:_\d+)?)=[^&;\s'\"]+"), r"\1=<hidden>"),
+    (re.compile(r"(?i)\b(Bearer)\s+[\w.~+/=-]+"), r"\1 <hidden>"),
     (re.compile(r"(?i)https?://(?:teams\.microsoft\.com|teams\.live\.com|[\w-]+\.zoom\.us|meet\.google\.com|[\w.-]*webex\.com|telemost\.yandex\.ru)/\S*"),
      "<call link>"),
 ]
@@ -167,7 +168,7 @@ def start_file_log() -> Path:
         else:
             _file = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
         _file.write(f"\n===== Verbaliox started {time.strftime('%Y-%m-%d %H:%M:%S')} "
-                    f"(Python {sys.version.split()[0]}, {sys.executable}) =====\n")
+                    f"(Python {sys.version.split()[0]}, {scrub(sys.executable)}) =====\n")
     sys.stdout = _Tee(sys.__stdout__, "OUT")
     sys.stderr = _Tee(sys.__stderr__, "ERR")
     # Hard crashes (access violation in a native library) still leave a Python stack in the log

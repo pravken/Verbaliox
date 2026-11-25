@@ -247,7 +247,10 @@ def api_nemotron_choose(payload: NemotronChoice) -> Dict[str, Any]:
 @router.post("/api/nemotron/remove")
 def api_nemotron_remove() -> Dict[str, Any]:
     from app import nemotron_diar
+    from app.transcriber import running_job_kind
 
+    if running_job_kind() == "transcribe":  # it may be marking the speakers of that recording now
+        raise HTTPException(status_code=409, detail="Модель сейчас используется — удалите её после задачи")
     nemotron_diar.remove()
     update_settings({"diarizer_engine": "ecapa"})
     return nemotron_diar.status()
@@ -514,7 +517,9 @@ def api_import_folder_files(payload: FolderFilesPayload) -> Dict[str, Any]:
     from itertools import islice
 
     raw_path = payload.path.strip().strip('"').strip("'")
-    if raw_path.startswith(("\\\\", "//")):
+    from app.paths import is_network_path
+
+    if is_network_path(raw_path):
         return {"is_dir": False, "count": 0, "files": [], "error": "Сетевые пути не открываются"}
     target = Path(raw_path) if raw_path else None
     try:
@@ -797,7 +802,7 @@ def api_relink_media(meeting_id: int, payload: RelinkPayload) -> Any:
     from app.database import relink_media
 
     relink_media(meeting_id, str(target.resolve()))
-    print(f"[relink] meeting {meeting_id}: {target}", flush=True)
+    print(f"[relink] meeting {meeting_id}: linked to a file of type {target.suffix.lower() or '-'}", flush=True)  # not its name: a title
     if not m.get("segments") and m.get("status") in ("failed", "cancelled", "cleared"):
         update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание",
                                 error_message="")

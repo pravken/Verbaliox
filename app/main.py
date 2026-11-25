@@ -77,6 +77,10 @@ def _cookie_name(request: Request) -> str:
     return f"{SESSION_COOKIE}_{request.url.port or 80}"
 SESSION_TOKEN = os.environ.get("VERBALIOX_TOKEN") or secrets.token_urlsafe(32)
 SESSION_TOKEN_FILE.write_text(SESSION_TOKEN, encoding="utf-8")
+try:  # readable by this user only (on Windows the data folder in the profile already is)
+    os.chmod(SESSION_TOKEN_FILE, 0o600)
+except OSError:
+    pass
 
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]"} | {
     h.strip().lower() for h in os.environ.get("VERBALIOX_ALLOWED_HOSTS", "").split(",") if h.strip()
@@ -493,6 +497,17 @@ async def slow_request_log(request: Request, call_next):
     took = _time.perf_counter() - t0
     if took >= SLOW_REQUEST_SEC and request.url.path.startswith("/api/"):
         print(f"[slow] {request.method} {request.url.path} {took:.1f} s", flush=True)
+    return response
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Registered last, so it wraps the others: every answer (the sign-in page, a refusal, the API, a
+    file) is never read as another type than it says, nor shown inside a frame of another page."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
     return response
 
 

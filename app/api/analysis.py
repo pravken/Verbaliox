@@ -1,5 +1,6 @@
 """Series, voices, segment edits, summaries, promises, notes and templates."""
 
+import math
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -575,9 +576,18 @@ def api_unmerge_segment(meeting_id: int, segment_id: int, payload: UnmergePayloa
     _ensure_not_transcribing(meeting_id)
     keys = ("start", "end", "text", "speaker", "words", "lang")
 
+    def num(v: Any) -> float:  # "abc" raised (HTTP 500), NaN was stored and broke every later answer
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            x = float("nan")
+        if not math.isfinite(x) or x < 0:
+            raise HTTPException(status_code=400, detail="Число вне допустимого диапазона")
+        return x
+
     def clean(seg: Dict[str, Any]) -> Dict[str, Any]:
         out = {k: seg[k] for k in keys if k in seg}
-        out["start"], out["end"] = float(out.get("start", 0.0)), float(out.get("end", 0.0))
+        out["start"], out["end"] = num(out.get("start", 0.0)), num(out.get("end", 0.0))
         out["text"] = str(out.get("text") or "").strip()
         if not isinstance(out.get("words"), list):
             out["words"] = []

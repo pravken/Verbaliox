@@ -42,6 +42,25 @@ class ScrubTest(unittest.TestCase):
         self.assertIn(r"C:\Users\<user>\AppData", out)
         self.assertEqual(scrub("3/4 done, 12 s"), "3/4 done, 12 s")
 
+    def test_one_time_addresses_cookies_and_bearer_tokens_are_cut(self):
+        from app.applog import scrub
+
+        out = scrub("GET /?boot=Zk3_-q9 Cookie: vs_session_8765=s3cr3t; Authorization: Bearer eyJhbGc.x-y_z")
+        for gone in ("Zk3_-q9", "s3cr3t", "eyJhbGc"):
+            self.assertNotIn(gone, out)
+
+    def test_the_head_of_the_log_hides_the_windows_user(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(applog, "LOG_DIR", Path(tmp)), mock.patch.object(applog, "LOG_FILE", Path(tmp) / "v.log"), \
+                mock.patch.object(applog.sys, "executable", r"C:\Users\Test User\Verbaliox\.venv\Scripts\python.exe"), \
+                mock.patch.object(applog, "_file", None), mock.patch.object(applog.faulthandler, "enable"), \
+                mock.patch.object(applog.sys, "stdout"), mock.patch.object(applog.sys, "stderr"):
+            applog.start_file_log()
+            applog._file.close()
+            head = (Path(tmp) / "v.log").read_text(encoding="utf-8")
+        self.assertNotIn("Test User", head)
+        self.assertIn(r"C:\Users\<user>", head)
+
     def test_calendar_links_are_cut(self):
         """A traceback of the calendar's reading prints its link; the secret is in the path or the query."""
         from app.applog import scrub

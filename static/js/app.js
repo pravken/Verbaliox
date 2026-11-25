@@ -1322,13 +1322,18 @@ function renderMyNotesEditor(box) {
 const MARKDOWN_TAGS = ['p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'del', 's', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'sup', 'sub'];
 function sanitizedMarkdown(md) {
-  const html = DOMPurify.sanitize(marked.parse(md || ''), {
+  return sanitizedHtml(marked.parse(md || ''));
+}
+
+// HTML kept from an earlier sanitizedMarkdown (a card's saved summary): sanitized again when shown, since
+// what is stored (the settings, a restored backup) may hold anything
+function sanitizedHtml(html) {
+  return DOMPurify.sanitize(String(html || ''), {
     ALLOWED_TAGS: MARKDOWN_TAGS, ALLOWED_ATTR: ['href', 'title', 'start', 'align', 'colspan', 'rowspan'],
     ALLOWED_URI_REGEXP: /^https?:\/\//i, ALLOW_DATA_ATTR: false,
     // not addresses: DOMPurify would hold them to the URI rule above and drop them («3.» shown as «1.»)
     ADD_URI_SAFE_ATTR: ['start', 'align', 'colspan', 'rowspan'],
   });
-  return html;
 }
 
 function renderMarkdownWithTimestamps(box, md, durationSec) {
@@ -1843,6 +1848,13 @@ function openExportDir() {
 // The language model the first-run wizard picks, downloaded from its card
 function pullFirstRunLlm() {
   pullOllamaModel(firstRunPicks(state.system || {}, state.uiLang).llm, true);
+}
+
+// A colour of stored data (a speaker's, a feature's) put into a style attribute: only #rgb / #rrggbb(aa).
+// Escaping keeps it inside the attribute but not inside the property: «red;background:url(…)» passed
+function cssColor(c, fallback = '') {
+  const s = String(c || '').trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ? s : fallback;
 }
 
 function escapeHtml(str) {

@@ -76,6 +76,15 @@ class PlaylistTest(unittest.TestCase):
         self.assertEqual(FakeYDL.downloaded, [VIDEOS[0][0]])
         self.assertEqual(enq.call_count, 1)
 
+    def test_a_file_named_outside_the_download_is_not_taken(self):
+        """The path in the site's answer is taken only for the file this download wrote in the uploads folder."""
+        stem = "url_9_abc"
+        own = UPLOADS_DIR / f"{stem}_v.m4a"
+        self.assertTrue(url_import._is_own_download(own, stem))
+        for other in (UPLOADS_DIR.parent / "meetings.db", UPLOADS_DIR / "url_8_x_v.m4a", UPLOADS_DIR / f"{stem}_v.exe",
+                      UPLOADS_DIR / ".." / f"{stem}_v.m4a"):
+            self.assertFalse(url_import._is_own_download(other, stem), other)
+
     def test_probe_says_how_long_it_is(self):
         with mock.patch.dict(sys.modules, {"yt_dlp": types.SimpleNamespace(YoutubeDL=FakeYDL)}), \
                 mock.patch.object(url_import, "ensure_package"):

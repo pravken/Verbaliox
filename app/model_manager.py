@@ -158,13 +158,21 @@ def is_whisper_model_installed(model_id: str) -> bool:
 
 
 def get_whisper_model_path(model_id: str) -> str:
-    """
-    Returns local folder path if model was downloaded via our manager,
-    otherwise returns model_id so faster-whisper can resolve it.
-    """
-    if model_id in _WHISPER_REPOS and _own_copy_complete(_whisper_model_dir(model_id)):
+    """The folder of a downloaded Whisper model of the catalog. faster-whisper took any other name as a
+    Hugging Face repository and downloaded it from its newest commit (a model nobody checked, under any
+    license), and a catalog model missing here at the newest commit of its repository: a model of the
+    catalog is downloaded first at its pinned commit (ensure_whisper_model), any other name is refused."""
+    if model_id not in _WHISPER_REPOS:
+        raise ValueError(f"Неизвестная модель Whisper: {model_id!r}")
+    if not is_whisper_model_installed(model_id):
+        ensure_whisper_model(model_id)
+    if _own_copy_complete(_whisper_model_dir(model_id)):
         return str(_whisper_model_dir(model_id))
-    return model_id
+    cache = _hf_cache_dir(model_id)  # a model in the Hugging Face cache layout: its local snapshot
+    snaps = sorted((p.parent for p in cache.glob("snapshots/*/model.bin")), key=lambda p: p.stat().st_mtime) if cache else []
+    if snaps:
+        return str(snaps[-1])
+    raise ValueError("Модель Whisper не скачана: скачайте её в «Настройки → Распознавание»")
 
 
 def is_diarizer_installed() -> bool:

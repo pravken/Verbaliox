@@ -93,6 +93,16 @@ class McpServerTest(unittest.TestCase):
         self.assertTrue(err)
         err, tasks = _call("list_tasks", scope="waiting")
         self.assertEqual([t["task"] for t in tasks["tasks"]], ["Прислать смету"])
+        # a section asked for alone: the meeting still says it has decisions
+        self.assertIn("decisions", _call("get_meeting", id=self.mid, sections=["summary"])[1]["available_sections"])
+        # the user's name merged with a variant in the directory: a task promised to the variant is «waiting» too
+        with mock.patch("app.people.canonical", side_effect=lambda n, rows=None: "Анна" if n.strip() in ("Аня", "Анна") else n):
+            with database._db_lock:
+                conn = database.get_connection()
+                conn.execute("UPDATE commitments SET to_whom = 'Аня'")
+                conn.commit()
+                conn.close()
+            self.assertEqual([t["task"] for t in _call("list_tasks", scope="waiting")[1]["tasks"]], ["Прислать смету"])
         # the list of dictations cannot be read: the call fails, nothing is handed out
         with mock.patch("app.database.dictation_ids", side_effect=RuntimeError("database is locked")):
             with self.assertRaises(RuntimeError):

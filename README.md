@@ -166,12 +166,12 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 
 | When | Where |
 | :--- | :--- |
-| First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); winget and astral.sh, if `uv` is missing, and for Ollama when it is ticked |
+| First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); if `uv` is missing, winget (package `astral-sh.uv`) or else github.com (the pinned `uv` release archive of `astral-sh/uv`, checked by SHA-256); Python 3.11: uv downloads it from github.com (`astral-sh/python-build-standalone` releases), or winget installs it from python.org (package `Python.Python.3.11`) when uv cannot be used or Smart App Control is on; winget for Ollama when it is ticked |
 | You download a speech model (Whisper, GigaAM, Parakeet with the Silero VAD) or a speaker model | Hugging Face (`huggingface.co`); for GigaAM and Parakeet the first time also PyPI (`onnx-asr`, checked by its hash) |
 | Russian live captions or a transcription on the processor with GigaAM downloaded before version 0.9.4, once | Hugging Face: the int8 files of GigaAM v3 from the same repository and commit (e2e-CTC for the captions, e2e-RNN-T for the processor; about 450 MB); until they are there, both work as before |
 | App start with an NVIDIA video card, once (Settings → Recognition, "GigaAM and Parakeet on the video card"; on by default) | PyPI: the GPU build of ONNX Runtime (`onnxruntime-gpu`, about 300 MB, checked by its hash) |
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
-| You set a calendar link (Settings → Recording → Calendar) | That link, at most every 15 minutes, to read the calendar |
+| You set a calendar link (Settings → Recording → Calendar) | That link, at most every 15 minutes, to read the calendar; within an hour before a meeting at most every 5 minutes, so a moved or cancelled meeting is seen in time |
 | You download an Ollama model | Ollama's model registry, via your local Ollama |
 | You download a translation model for live captions (Hy-MT3) | huggingface.co (`hf.co/tencent/Hy-MT3-*-GGUF`), via your local Ollama |
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
@@ -179,7 +179,8 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
 | First start without FFmpeg in `PATH` (or **Download FFmpeg** in Settings) | github.com (release `9.0.2` of `GyanD/codexffmpeg`) |
 | **Download the filter** in Settings → Recording (optional) | github.com (release `v0.5.6` of `Rikorose/DeepFilterNet`, checked by SHA-256) |
-| App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer |
+| App start, at most every 6 hours (can be turned off in Settings → General) | api.github.com: the number of the latest Verbaliox release, nothing about you or your computer; when api.github.com does not answer (its limit of requests), github.com (`releases.atom`, the list of releases, and the release's `SHA256SUMS.txt`) and raw.githubusercontent.com (`CHANGELOG.md` of that release) |
+| A newer release is found and automatic updates are on (Settings → General → Updates, on by default) | github.com: the release archive and `SHA256SUMS.txt` are downloaded in the background; the update is installed when you click **Restart** or when the app is closed |
 | You click **Install** for an update | github.com: the release archive and `SHA256SUMS.txt`; PyPI and download.pytorch.org if the new version needs other Python packages. The checksum proves the archive arrived complete and unchanged. Once the author's release key is set up, `SHA256SUMS.txt` is also signed (`SHA256SUMS.txt.minisig`, minisign format) and the app installs only releases signed with it ([docs/release-signing.md](docs/release-signing.md)) |
 
 The user interface, fonts and scripts are served locally. The built-in server listens only on `127.0.0.1`. Every launch creates a random session token, so other websites open in your browser cannot read or control the app.
@@ -223,6 +224,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | DOMPurify (in `static/vendor`) | Apache 2.0 or MPL 2.0 |
 | PyTorch, torchaudio | BSD-3 |
 | SoundCard (system audio recording) | BSD-3 |
+| soundfile (reads and writes sound files; its Windows build includes the libsndfile library as a separate DLL) | BSD-3 (soundfile) / LGPL 2.1 or later (libsndfile) |
 | tzdata (time zones of calendar events) | Apache 2.0 |
 | holidays (public holidays of a country and its regions, offline) | MIT |
 | python-dateutil (needed by holidays) | Apache 2.0 / BSD-3-Clause |
@@ -234,6 +236,8 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Perth watermark `resemble-perth` (optional dubbing) | MIT |
 | Demucs `htdemucs` (optional dubbing) | MIT |
 | num2words (optional dubbing: numbers as words) | LGPL 2.1 |
+| lameenc (needed by Demucs, optional dubbing: MP3 encoding) | LGPL 3.0 or later |
+| soxr (needed by librosa, optional dubbing: resampling) | LGPL 2.1 or later |
 | Inter, JetBrains Mono fonts | SIL Open Font License |
 | Inno Setup (builds `Verbaliox-Installer.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
@@ -413,12 +417,12 @@ start.bat
 
 | Когда | Куда |
 | :--- | :--- |
-| Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget и astral.sh, если нет `uv`, и для Ollama, если она отмечена |
+| Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); если нет `uv` — winget (пакет `astral-sh.uv`), а если он не помог — github.com (закреплённый архив релиза `uv` из `astral-sh/uv`, проверка SHA-256); Python 3.11: uv скачивает его с github.com (релизы `astral-sh/python-build-standalone`), а если uv не подходит или включено Smart App Control — winget ставит его с python.org (пакет `Python.Python.3.11`); winget для Ollama, если она отмечена |
 | Вы скачиваете модель распознавания (Whisper, GigaAM, Parakeet вместе с Silero VAD) или модель спикеров | Hugging Face (`huggingface.co`); для GigaAM и Parakeet в первый раз ещё PyPI (`onnx-asr`, проверяется по хешу) |
 | Русские субтитры или расшифровка на процессоре с GigaAM, скачанной до версии 0.9.4, один раз | Hugging Face: файлы int8 GigaAM v3 из того же репозитория и коммита (e2e-CTC для субтитров, e2e-RNN-T для процессора; около 450 МБ); пока их нет, всё работает как раньше |
 | Запуск приложения с видеокартой NVIDIA, один раз («Настройки → Распознавание», «GigaAM и Parakeet на видеокарте»; включено по умолчанию) | PyPI: сборка ONNX Runtime для видеокарты (`onnxruntime-gpu`, около 300 МБ, проверяется по хешу) |
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
-| Вы указали ссылку на календарь («Настройки → Запись → Календарь») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь |
+| Вы указали ссылку на календарь («Настройки → Запись → Календарь») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь; за час до встречи — не чаще раза в 5 минут, чтобы вовремя увидеть перенос или отмену |
 | Вы скачиваете модель Ollama | Реестр моделей Ollama, через вашу локальную Ollama |
 | Вы скачиваете модель перевода живых субтитров (Hy-MT3) | huggingface.co (`hf.co/tencent/Hy-MT3-*-GGUF`), через вашу локальную Ollama |
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
@@ -426,7 +430,8 @@ start.bat
 | Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |
 | Первый запуск без FFmpeg в `PATH` (или **Скачать FFmpeg** в настройках) | github.com (релиз `9.0.2` репозитория `GyanD/codexffmpeg`) |
 | **Скачать фильтр** в Настройки → Запись (по желанию) | github.com (релиз `v0.5.6` репозитория `Rikorose/DeepFilterNet`, проверка SHA-256) |
-| Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере |
+| Запуск приложения, не чаще раза в 6 часов (отключается в «Настройки → Общие») | api.github.com: номер последней версии Verbaliox, без каких-либо данных о вас или компьютере; если api.github.com не отвечает (лимит запросов) — github.com (`releases.atom`, список релизов, и `SHA256SUMS.txt` релиза) и raw.githubusercontent.com (`CHANGELOG.md` этого релиза) |
+| Найдена новая версия и включено автоматическое обновление («Настройки → Общие → Обновления», включено по умолчанию) | github.com: архив релиза и `SHA256SUMS.txt` скачиваются в фоне; обновление ставится по кнопке **Перезапустить** или при закрытии программы |
 | Вы нажимаете **Установить** для обновления | github.com: архив релиза и `SHA256SUMS.txt`; PyPI и download.pytorch.org, если новой версии нужны другие пакеты Python. Контрольная сумма подтверждает, что архив дошёл целым и неизменным. Когда настроен ключ автора, `SHA256SUMS.txt` ещё и подписан (`SHA256SUMS.txt.minisig`, формат minisign), и программа ставит только релизы с этой подписью ([docs/release-signing.md](docs/release-signing.md)) |
 
 Интерфейс, шрифты и скрипты загружаются локально. Встроенный сервер слушает только `127.0.0.1`. При каждом запуске создаётся случайный токен сессии, поэтому другие сайты, открытые в браузере, не могут читать данные приложения или управлять им.
@@ -446,7 +451,7 @@ start.bat
 
 ### Лицензии
 
-Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Под Apache 2.0 только Gemma 4: у прежних версий Gemma (Gemma 3 и старше) собственные условия Google. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
+Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Под Apache 2.0 только Gemma 4: у прежних версий Gemma (Gemma 3 и старше) собственные условия Google. В необязательном окружении дубляжа есть библиотеки под LGPL: num2words (LGPL 2.1, числа словами), lameenc (LGPL 3.0, кодирование MP3 для Demucs) и soxr (LGPL 2.1, передискретизация для librosa), см. [Перевод и дубляж](#дубляж). Библиотека soundfile (BSD-3) в сборке для Windows содержит libsndfile (LGPL 2.1) отдельной DLL. Библиотеки под LGPL подключаются динамически и не изменяются. Если скачиваете через Ollama другие модели, проверьте и их условия.
 
 ### Поддержать проект
 

@@ -517,7 +517,7 @@ def follow_now(meeting_id: int) -> Optional[Path]:
             shutil.move(str(old), str(target))
             update_meeting_fields(meeting_id, obsidian_path=str(target))
             _drop_empty(old.parent, root)
-            print(f"[obsidian] note of meeting {meeting_id} moved to {target}", flush=True)
+            print(f"[obsidian] note of meeting {meeting_id} moved to its folder", flush=True)  # its name is the meeting's title
     if _on(settings, "obsidian_auto", "false") and m.get("status") == "completed":
         export_meeting(meeting_id, explicit=False)  # its properties and title as they are now
     return target
@@ -616,7 +616,7 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
         ours, notes = split_user_notes(existing)
         if in_job is False and not explicit and existing and m.get("obsidian_hash") and _hash(ours) != m["obsidian_hash"]:
             # Changed in Obsidian above the user's section: an automatic update must not undo that
-            print(f"[obsidian] {target.name} was edited in Obsidian: not updated automatically", flush=True)
+            print(f"[obsidian] note of meeting {meeting_id} was edited in Obsidian: not updated automatically", flush=True)
             return target
         if moving:
             # A note of this recording is already at the new name (left by an earlier export): the old
@@ -628,9 +628,9 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
         if moving:
             try:
                 old.unlink()
-                print(f"[obsidian] {old.name}: its notes moved into {target.name}, the old note removed", flush=True)
+                print(f"[obsidian] meeting {meeting_id}: the user's notes moved into the renamed note, the old one removed", flush=True)
             except OSError as e:
-                print(f"[obsidian] {old.name} could not be removed after moving its notes: {e}", flush=True)
+                print(f"[obsidian] meeting {meeting_id}: the old note could not be removed after moving its notes: {e}", flush=True)
         return target
 
 

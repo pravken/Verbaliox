@@ -115,6 +115,19 @@ class TurnsOnTranscriptTest(unittest.TestCase):
 
 @unittest.skipIf(diarizer is None, "numpy/torch not installed")
 class NemotronChoiceTest(unittest.TestCase):
+    def test_not_removed_while_a_recording_is_transcribed(self):
+        from fastapi import HTTPException
+
+        from app import main  # noqa: F401 - the routes are loaded through the app
+        from app.api.library import api_nemotron_remove
+
+        with mock.patch("app.transcriber.running_job_kind", return_value="transcribe"), \
+                mock.patch.object(nemotron_diar, "remove") as remove:
+            with self.assertRaises(HTTPException) as e:
+                api_nemotron_remove()
+        self.assertEqual(e.exception.status_code, 409)
+        remove.assert_not_called()
+
     def test_used_only_when_chosen_downloaded_and_the_library_is_there(self):
         with mock.patch.object(nemotron_diar, "installed", return_value=True), \
                 mock.patch.object(nemotron_diar, "library_ready", return_value=True):

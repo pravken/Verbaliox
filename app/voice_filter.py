@@ -37,10 +37,10 @@ def exe_path() -> Path:
 
 
 def find_exe() -> Optional[str]:
+    """Only the file the app downloaded and checked (SHA256): a deep-filter found on PATH or in the current
+    folder is not run with the user's microphone."""
     p = exe_path()
-    if p.is_file():
-        return str(p)
-    return shutil.which("deep-filter")
+    return str(p) if p.is_file() else None
 
 
 def status() -> Dict[str, Any]:

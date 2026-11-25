@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from app.paths import explorer_command, reveal_in_explorer
+from app.paths import explorer_command, is_network_path, reveal_in_explorer
 
 
 class RevealTest(unittest.TestCase):
@@ -20,6 +20,29 @@ class RevealTest(unittest.TestCase):
         cmd = popen.call_args[0][0]
         self.assertIsInstance(cmd, str)
         self.assertNotIn("/select", cmd)
+
+    def test_a_network_path_in_any_spelling_is_refused(self):
+        """«/\\host\\share» passed a check for «\\\\» and «//»: Windows makes it \\\\host\\share all the same
+        and connects to that server, sending the user's Windows login."""
+        for p in ("\\\\host\\share", "//host/share", "/\\host\\share", "\\/host/share", ' "\\\\host\\x"'):
+            self.assertTrue(is_network_path(p), p)
+        for p in ("C:\\Users\\me\\a.m4a", "/home/me/a.m4a", "", "relative\\x"):
+            self.assertFalse(is_network_path(p), p)
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        with TestClient(main.app, base_url="http://127.0.0.1:8790") as c, mock.patch("app.paths.reveal_in_explorer") as rev:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            r = c.post("/api/reveal", json={"path": "/\\attacker\\share\\x"})
+        self.assertEqual(r.status_code, 400)
+        rev.assert_not_called()
+
+    def test_a_backup_never_resolves_a_network_path(self):
+        from app import backup
+
+        with mock.patch.object(Path, "resolve", side_effect=AssertionError("resolved")):
+            self.assertFalse(backup._inside(Path("/\\attacker\\share\\a.mp3"), [Path("/tmp")]))
 
 
 if __name__ == "__main__":

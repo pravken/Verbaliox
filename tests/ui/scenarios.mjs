@@ -2603,6 +2603,29 @@ await step('load of the week: plan', async () => {
   } finally { await p2.close(); }
 });
 
+// Stored markup (the dashboard's saved summary, a translation's language from a restored backup) cannot run
+// a page function: the summary is sanitized again when shown, and a failed image may only call its fallback;
+// a stored colour goes into a style only as a colour
+await step('stored markup runs nothing', async () => {
+  const r = await page.evaluate(async () => {
+    window.vxProbeHit = 0;
+    window.vxProbe = function vxProbe() { window.vxProbeHit += 1; };
+    const html = sanitizedHtml('<p>ok</p><img src="/nope.png" data-error="vxProbe"><button data-click="vxProbe">x</button>');
+    const box = document.createElement('div');
+    box.innerHTML = '<img src="/nope-2.png" data-error="vxProbe"><img class="vx-fb" src="/nope-3.png" data-error="removeElement" data-error-args=\'[{"$": "el"}]\'>';
+    document.body.appendChild(box);
+    await new Promise(res => setTimeout(res, 800));
+    const left = box.querySelectorAll('img').length, fallback = !box.querySelector('.vx-fb');
+    box.remove();
+    const colors = [cssColor('#0A84FF'), cssColor('red;background:url(//x)', '#8E8E93'), cssColor('#abc')];
+    return { html, hit: window.vxProbeHit, left, fallback, colors };
+  });
+  expect(JSON.stringify(r.colors) === '["#0A84FF","#8E8E93","#abc"]', `a stored colour went into a style as it was: ${r.colors}`);
+  expect(!/data-|<img|<button/.test(r.html) && r.html.includes('<p>ok</p>'), `the saved summary keeps markup: ${r.html}`);
+  expect(r.hit === 0, 'a failed image ran a page function that is no fallback');
+  expect(r.fallback && r.left === 1, 'the fallback of a failed image did not run');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

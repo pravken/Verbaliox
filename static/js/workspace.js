@@ -2167,7 +2167,7 @@ function transcriptGroupHtml(group) {
         <div class="flex items-center min-w-0 mb-0.5">
           <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
             title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
-            style="color: ${escapeHtml(spk.color)}"
+            style="color: ${cssColor(spk.color, '#0A84FF')}"
             class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">
             ${options}
           </select>
@@ -2668,7 +2668,7 @@ document.addEventListener('DOMContentLoaded', syncTxLayoutButtons);
 function txChatAvatar(spk) {
   const name = String(spk.name || '');
   const face = typeof personPhotoUrl === 'function' ? personPhotoUrl(name) : '';
-  const color = spk.color || '#0A84FF';
+  const color = cssColor(spk.color, '#0A84FF');
   return face
     ? `<span class="ch-av"><img class="sp-photo" src="${escapeHtml(face)}" alt=""></span>`
     : `<span class="ch-av" style="background:${escapeHtml(rpHexA(color, 0.22))};color:${escapeHtml(color)}">${escapeHtml(capInitials(name))}</span>`;
@@ -2697,13 +2697,13 @@ function transcriptChatGroupHtml(group) {
       + '</div>';
   };
   return `
-    <div class="segment-group ch-group" data-start="${Number(first.start) || 0}" style="--pc:${escapeHtml(spk.color || '#0A84FF')}">
+    <div class="segment-group ch-group" data-start="${Number(first.start) || 0}" style="--pc:${cssColor(spk.color, '#0A84FF')}">
       ${txChatAvatar(spk)}
       <div class="ch-body">
         <div class="ch-h">
           <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
             title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
-            style="color: ${escapeHtml(spk.color)}"
+            style="color: ${cssColor(spk.color, '#0A84FF')}"
             class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">${options}</select>
           ${speakers[first.speaker] ? `<button data-click="startInlineSpeakerRename" data-click-args='[${ids[0]}]' class="seg-icon-btn"
             title="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}" aria-label="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}">${SVG_ICONS.pencil}</button>` : ''}

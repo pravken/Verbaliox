@@ -1538,7 +1538,7 @@ def generate_meeting_summary(
         instruction += (
             "\n\nMFU — итоги встречи, которые написал её организатор и разослал участникам. Решения, задачи, сроки "
             "и ответственных бери из MFU: это согласованный людьми текст. Расшифровку используй для подробностей и "
-            "таймкодов; где она расходится с MFU, верь MFU:\n<mfu>\n" + mfu_text.replace("</mfu>", "") + "\n</mfu>"
+            "таймкодов; где она расходится с MFU, верь MFU:\n<mfu>\n" + re.sub(r"<\s*/?\s*mfu\s*>", "", mfu_text, flags=re.I) + "\n</mfu>"
         )
 
     roster = [p for p in (participants or []) if str(p).strip()][:40]

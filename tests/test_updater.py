@@ -594,12 +594,30 @@ class BrowserAddressTest(unittest.TestCase):
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
         port = srv.server_address[1]
-        with mock.patch.object(run, "read_session_token", return_value="secret-token"):
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"), \
+                mock.patch.object(run, "probe_server", return_value=False):
+            # not our server (it cannot prove it knows the token): the token is never sent there
+            self.assertEqual(run.app_url("127.0.0.1", port), f"http://127.0.0.1:{port}/")
+        self.assertEqual(seen, [])
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"), \
+                mock.patch.object(run, "probe_server", return_value=True):
             url = run.app_url("127.0.0.1", port)
         self.assertEqual(url, f"http://127.0.0.1:{port}/?boot=once")
         self.assertEqual(seen, [("/api/session/boot", {"token": "secret-token"})])
-        with mock.patch.object(run, "read_session_token", return_value="secret-token"):
+        with mock.patch.object(run, "read_session_token", return_value="secret-token"), \
+                mock.patch.object(run, "probe_server", return_value=True):
             self.assertNotIn("secret-token", run.app_url("127.0.0.1", 1))  # nothing answers: the plain address
+
+
+class WindowPermissionsTest(unittest.TestCase):
+    def test_the_page_is_given_only_what_it_uses(self):
+        import run
+
+        for kind in ("Microphone", "CoreWebView2PermissionKind.Microphone", "ClipboardRead", "Camera", "UnknownPermission"):
+            self.assertTrue(run._page_permission(kind), kind)
+        for kind in ("Geolocation", "Notifications", "OtherSensors", "MultipleAutomaticDownloads", "FileReadWrite",
+                     "LocalFonts", "MidiSystemExclusiveMessages", "WindowManagement"):
+            self.assertFalse(run._page_permission(kind), kind)
 
 
 class WindowBridgeTest(unittest.TestCase):

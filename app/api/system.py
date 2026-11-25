@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sys
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request
@@ -167,12 +168,13 @@ def api_mcp_config() -> Dict[str, Any]:
 @router.post("/api/settings")
 def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
     from app.database import _CLOUD_SETTINGS
-    from app.settings_schema import clean_all
+    from app.settings_schema import SERVER_KEYS, clean_all
 
     try:
-        # the cloud settings of earlier versions are not stored again (an older page may still send them)
+        # the cloud settings of earlier versions are not stored again (an older page may still send them),
+        # nor what the program writes itself
         values = clean_all({k: v for k, v in payload.settings.items()
-                            if not str(k).startswith("llm_") and k not in _CLOUD_SETTINGS})
+                            if not str(k).startswith("llm_") and k not in _CLOUD_SETTINGS and k not in SERVER_KEYS})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     before = get_all_settings()
@@ -399,6 +401,10 @@ def api_open_url(payload: OpenUrlPayload) -> Dict[str, Any]:
     if u.scheme == "mailto":  # a draft in the mail app (no address: the user picks the recipients)
         if len(payload.url) > 8000:
             raise HTTPException(status_code=400, detail="Слишком длинное письмо")
+        # The page encodes the text (encodeURIComponent): a raw line break or quote would reach the mail
+        # program's command line as it is
+        if re.search(r'[\x00-\x1f\x7f"<>]', payload.url):
+            raise HTTPException(status_code=400, detail="Ссылка на письмо записана неверно")
         if sys.platform == "win32":
             os.startfile(payload.url.strip())  # noqa: S606 - a mailto: link the user asked to open
         else:
