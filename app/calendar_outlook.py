@@ -167,8 +167,10 @@ def fetch() -> List[Dict[str, Any]]:
         raise RuntimeError(NO_PROFILE)
     before = _outlook_pids()
     script = _SCRIPT.replace("__BACK__", str(DAYS_BACK)).replace("__AHEAD__", str(DAYS_AHEAD))
+    from app.paths import powershell_exe
+
     try:
-        res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        res = subprocess.run([powershell_exe(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
                              creationflags=_NO_WINDOW)
     except subprocess.TimeoutExpired:

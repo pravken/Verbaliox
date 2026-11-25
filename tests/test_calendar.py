@@ -221,7 +221,7 @@ class OutlookNotSetUpTest(unittest.TestCase):
         kills = []
 
         def run(args, **kw):
-            if args[0] == "powershell":
+            if args[0].lower().endswith(("powershell", "powershell.exe")):  # by its full path on Windows
                 raise calendar_outlook.subprocess.TimeoutExpired(args, 90)
             if args[0] == "taskkill":
                 kills.append(args)

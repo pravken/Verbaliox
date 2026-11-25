@@ -66,8 +66,10 @@ def show(title: str, text: str, buttons: List[Tuple[str, str]], launch: str = ""
         return False
     try:
         _register(icon)
+        from app.paths import powershell_exe
+
         encoded = base64.b64encode(script(toast_xml(title, text, buttons, launch, stay)).encode("utf-16-le")).decode()
-        res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        res = subprocess.run([powershell_exe(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                               "-EncodedCommand", encoded], capture_output=True, timeout=20, creationflags=_NO_WINDOW)
         return res.returncode == 0
     except Exception:
