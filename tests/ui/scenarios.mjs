@@ -2603,6 +2603,33 @@ await step('load of the week: plan', async () => {
   } finally { await p2.close(); }
 });
 
+// --- The audit of the page (a review by another assistant): each finding fixed is held here ---
+
+// A brief or a digest is kept with its conversation: it was never saved and was gone after a reload
+await step('digest is saved with its conversation', async () => {
+  let saved = '';
+  const digest = /\/api\/library\/digest$/, chats = /\/api\/assistant\/chats$/;
+  await page.route(digest, r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ found: true, mode: 'digest', answer: 'Итог недели: решения приняты.', sources: [] }) }));
+  await page.route(chats, r => {
+    if (r.request().method() !== 'PUT') return r.continue();
+    saved = r.request().postData() || '';
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok": true}' });
+  });
+  try {
+    await page.evaluate(async () => {
+      switchAppView('ask');
+      await assistantLoad();
+      const off = window.assistantModelOff;
+      window.assistantModelOff = () => false;
+      try { await makeDigest(7); } finally { window.assistantModelOff = off; }
+    });
+    const end = Date.now() + 4000;
+    while (!saved.includes('Итог недели') && Date.now() < end) await sleep(100);
+  } finally { await page.unroute(digest); await page.unroute(chats); }
+  expect(saved.includes('Итог недели: решения приняты.'), 'the digest was not saved');
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

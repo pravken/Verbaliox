@@ -493,6 +493,13 @@ function askNeedsModel() {
   return true;
 }
 
+// A brief or a digest answered: shown, and kept with its conversation (it was lost on a reload: the save waited
+// for the item to come through askThread again, which it never does once it is in the conversation)
+function askItemDone(item) {
+  renderAskThread();
+  if (item.status === 'done' && !item._saved && typeof assistantSaveSoon === 'function') { item._saved = true; assistantSaveSoon(); }
+}
+
 async function makeBrief() {
   if (askNeedsModel()) return;
   const scope = { ...state.askScope };
@@ -513,7 +520,7 @@ async function makeBrief() {
     item.error = e.message;
     item.status = 'error';
   }
-  renderAskThread();
+  askItemDone(item);
 }
 
 async function makeDigest(days) {
@@ -537,7 +544,7 @@ async function makeDigest(days) {
     item.error = e.message;
     item.status = 'error';
   }
-  renderAskThread();
+  askItemDone(item);
 }
 
 // The citations of an answer: [2], [1, 3] and the ranges [1-3] / [11–12] / [2, 4-5] the models also write (read as
