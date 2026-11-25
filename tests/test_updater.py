@@ -195,6 +195,11 @@ class ApplyUpdateTest(unittest.TestCase):
         self.assertEqual(updater.archive_files(names, self.app),
                          [("Verbaliox-v9/app/main.py", "app/main.py"), ("Verbaliox-v9\\app\\new.py", "app/new.py")])
 
+    def test_the_python_uv_installed_for_the_program_is_never_written(self):
+        """Found in an audit: the folder is «python» (setup.bat UV_PYTHON_INSTALL_DIR), the list said «.python»."""
+        names = ["V/python/cpython-3.11-windows-x86_64-none/python.exe", "V/.uv-cache/x.whl", "V/app/z.py"]
+        self.assertEqual([rel for _n, rel in updater.archive_files(names, self.app)], ["app/z.py"])
+
     def test_failed_package_install_restores_the_old_version(self):
         _release_zip(self.zip, {"app/main.py": "new main", "app/new.py": "added", "requirements.txt": "changed"})
         failed = mock.Mock(returncode=1)
