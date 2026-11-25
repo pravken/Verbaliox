@@ -70,7 +70,11 @@ def list_features() -> List[Dict[str, Any]]:
             "LEFT JOIN meeting_features mf ON mf.feature_id = f.id LEFT JOIN meetings m ON m.id = mf.meeting_id "
             "GROUP BY f.id ORDER BY f.name COLLATE NOCASE").fetchall()
         conn.close()
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    for i, f in enumerate(out):  # the page puts it into a style: a restored backup's table may hold anything
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", f.get("color") or ""):
+            f["color"] = COLORS[i % len(COLORS)]
+    return out
 
 
 def create_feature(name: str, color: str = "") -> Dict[str, Any]:

@@ -24,6 +24,18 @@ class FeatureTagsTest(unittest.TestCase):
             {"id": 0, "start": 0, "end": 5, "speaker": "S1", "text": "Обсуждаем новый экран оплаты и возвраты"}])
         return m["id"]
 
+    def test_a_stored_colour_that_is_no_colour_is_not_given_to_the_page(self):
+        """The page puts a feature's colour into a style: a restored backup's table may hold «red;background:url(…)»."""
+        from app.database import get_connection
+
+        pay = features.create_feature("Платежи")
+        conn = get_connection()
+        conn.execute("UPDATE features SET color = ? WHERE id = ?", ("red;background:url(//x)", pay["id"]))
+        conn.commit()
+        conn.close()
+        color = next(f["color"] for f in features.list_features() if f["id"] == pay["id"])
+        self.assertRegex(color, r"^#[0-9A-Fa-f]{6}$")
+
     def test_features_are_made_once_by_name_and_tag_meetings(self):
         pay = features.create_feature("Платежи")
         self.assertEqual(features.create_feature("  платежи ")["id"], pay["id"])  # the same, any case

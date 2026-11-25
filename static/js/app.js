@@ -1850,6 +1850,13 @@ function pullFirstRunLlm() {
   pullOllamaModel(firstRunPicks(state.system || {}, state.uiLang).llm, true);
 }
 
+// A colour of stored data (a speaker's, a feature's) put into a style attribute: only #rgb / #rrggbb(aa).
+// Escaping keeps it inside the attribute but not inside the property: «red;background:url(…)» passed
+function cssColor(c, fallback = '') {
+  const s = String(c || '').trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ? s : fallback;
+}
+
 function escapeHtml(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')

@@ -285,7 +285,7 @@ function openBulkMenu(e) {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
     menu.remove();
-    window[b.dataset.fn]();
+    callPage(b.dataset.fn);
   });
   document.body.appendChild(menu);
   placeMenuAt(menu, e);

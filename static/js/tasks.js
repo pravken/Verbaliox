@@ -349,7 +349,7 @@ function renderTasksList() {
     const over = TK.by === 'due' && g.key === 'over';
     const icon = g.person ? tkAvatar(g.name, g.kind, 24)
       : `<span class="pcd-ic">${pultIcon(over ? 'over' : TK.by === 'due' ? 'meet' : TK.by === 'feature' ? 'tag' : 'rec')}</span>`;
-    const dot = TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
+    const dot = TK.by === 'feature' ? `<span class="tk-dot" style="background:${cssColor(g.color, '#8E8E93')}"></span>` : '';
     const title = g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>`
       : g.person && g.key ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openPersonCard', [g.name])} title="${escapeHtml(t('pcOpenTip'))}">${escapeHtml(g.title)}</button>`
       : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`;

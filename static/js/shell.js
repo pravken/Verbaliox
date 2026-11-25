@@ -523,7 +523,7 @@ function openRecMenu(e) {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
     menu.remove();
-    window[b.dataset.fn](...JSON.parse(b.dataset.args || '[]'));
+    callPage(b.dataset.fn, ...JSON.parse(b.dataset.args || '[]'));
   });
   document.body.appendChild(menu);
   const r = e.currentTarget.getBoundingClientRect();
