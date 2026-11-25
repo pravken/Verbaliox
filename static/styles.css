@@ -3947,26 +3947,50 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .dbc-l-line { fill: none; stroke: rgb(var(--accent-rgb)); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .dbc-l-area { fill: rgb(var(--accent-rgb) / 0.14); }
 .dbc-l-norm { stroke: rgba(255, 255, 255, 0.45); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
-/* «Нагрузка недели»: the hours ahead are a plan — the same hue hatched (a ring: lighter), the figure of a day all
-   ahead grey; above the norm only by the plan, the orange mark is hatched too. The hours passed of a day with hours
-   ahead are solid at the start of its mark (.dbc-done) */
+/* «Нагрузка недели»: the hours ahead are a plan — a neutral grey part continuing the day's mark (the hours passed
+   keep the day's colour, .dbc-done at the start of the mark), the figure of a day all ahead grey. The planned part
+   above the norm stays grey in an orange frame (.dbc-ovp); the ring marks it with its arc. The week before: a thin
+   light tick at its hours (.dbc-prev), ringed in the card's colour so it shows over a mark, and the difference in a
+   grey column of its own (.dbc-dx): more meetings are neither better nor worse */
+:root { --db-plan: #636366; --db-plan-line: #8E8E93; --db-prev: #E5E5EA; }
 .dbc-col i, .dbc-hb-t b, .dbc-lg-bar u { position: relative; overflow: hidden; }
-.dbc-col i.plan, .dbc-hb-t b.plan, .dbc-lg-bar u.plan, .dbc-lg i.plan {
-  background: repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px currentColor;
-}
-.dbc-col i.plan, .dbc-hb-t b.plan { color: rgb(var(--accent-rgb) / 0.75); }
-.dbc-col i.over.plan, .dbc-hb-t b.over.plan { color: rgb(255 159 10 / 0.75); }
+.dbc-col i.plan, .dbc-hb-t b.plan, .dbc-lg-bar u.plan, .dbc-lg i.plan { background: var(--db-plan); }
 .dbc-done { position: absolute; left: 0; bottom: 0; top: auto; display: block; width: 100%; height: 100%; text-decoration: none; background: linear-gradient(rgb(var(--accent-rgb) / 0.8), rgb(var(--accent-rgb) / 0.8)), var(--bg); }
 .dbc-done.over { background: #FF9F0A; }
 .dbc-hb-t .dbc-done, .dbc-lg-bar .dbc-done { top: 0; height: auto; }
+.dbc-ovp { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: block; text-decoration: none; border-radius: inherit; box-shadow: inset 0 0 0 1.5px #FF9F0A; }
+.dbc-col i .dbc-ovp { top: auto; }
+.dbc-hb-t .dbc-ovp, .dbc-lg-bar .dbc-ovp { right: auto; }
+.dbc-prev { position: absolute; display: block; text-decoration: none; background: var(--db-prev); border-radius: 1px; box-shadow: 0 0 0 1px var(--bg); pointer-events: none; z-index: 2; }
+.dbc-hb-t .dbc-prev, .dbc-lg-bar .dbc-prev { top: -3px; bottom: -3px; width: 2px; margin-left: -1px; }
+.dbc-col .dbc-prev { left: 50%; width: min(100%, 36px); height: 2px; margin-bottom: -1px; transform: translateX(-50%); }
+.dbc-dx { color: var(--hc-dim, #8E8E93); font-size: var(--fs-label); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dbc-bars.dx .dbc-hb { grid-template-columns: minmax(28px, auto) minmax(0, 1fr) 52px 30px; }
+.dbc-lg.dx > div { grid-template-columns: 10px minmax(24px, auto) minmax(24px, 1fr) 44px 28px 32px; gap: 6px; }
+.dbc-axis.dbc-dxs { padding-top: 1px; }
+.dbc-axis.dbc-dxs .dbc-dx, .dbc-days.dbc-dxs .dbc-dx { text-align: center; }
+.dbc-days.dbc-dxs { margin-top: 0; }
 .dbc-col span.pl, .dbc-hb-v.pl, .dbc-l-v.pl, .dbc-lg-h.pl { color: var(--hc-dim, #8E8E93); }
 .dbc-lg-h.over.pl { color: rgb(255 159 10 / 0.75); }
-.dbc-ring-plan { stroke-opacity: 0.4; }
-.dbc-ring-over.plan { stroke-opacity: 0.45; }
-.dbc-l-line.plan { stroke-dasharray: 4 3; stroke-opacity: 0.75; }
-.dbc-l-area.plan { fill: rgb(var(--accent-rgb) / 0.06); }
-.dbc-plot i.plan { background: var(--bg); box-shadow: inset 0 0 0 2px rgb(var(--accent-rgb)), 0 0 0 2px var(--bg); }
+.dbc-ring-plan { stroke: var(--db-plan); }
+.dbc-l-line.plan { stroke: var(--db-plan-line); stroke-dasharray: 4 3; }
+.dbc-l-area.plan { fill: rgb(255 255 255 / 0.04); }
+.dbc-l-prev { fill: none; stroke: rgb(255 255 255 / 0.28); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.dbc-plot i.plan { background: var(--bg); box-shadow: inset 0 0 0 2px var(--db-plan-line), 0 0 0 2px var(--bg); }
 .dbc-plot i.over.plan { box-shadow: inset 0 0 0 2px #FF9F0A, 0 0 0 2px var(--bg); }
+/* the key under the chart: a square of the passed and of the plan, the tick of the week before (in the line: lines) */
+.dbc-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.dbc-key span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dbc-key i { display: block; width: 9px; height: 9px; border-radius: 2px; }
+.dbc-key i.k-done { background: rgb(var(--accent-rgb) / 0.8); }
+.dbc-key i.k-plan { background: var(--db-plan); }
+.dbc-key i.k-prev { width: 2px; height: 12px; border-radius: 1px; background: var(--db-prev); }
+.dbc-key-col i.k-prev { width: 12px; height: 2px; }
+/* in the ring each day has its own hue: the swatch of the passed shows two of them */
+.dbc-key-ring i.k-done { background: linear-gradient(90deg, #4C7FD9 50%, #2EB6A6 50%); }
+.dbc-key-line i { width: 14px; height: 0; border-radius: 0; background: none; border-top: 2px solid rgb(var(--accent-rgb)); }
+.dbc-key-line i.k-plan { border-top: 2px dashed var(--db-plan-line); background: none; }
+.dbc-key-line i.k-prev { width: 14px; height: 0; background: none; border-top: 1.5px solid rgb(255 255 255 / 0.28); }
 
 /* «Мои программы»: a program's name wraps, it is never cut; the ring and the columns */
 .db-app { grid-template-columns: 22px minmax(0, 10em) minmax(24px, 1fr) 4.4em 2.8em 4.4em; }

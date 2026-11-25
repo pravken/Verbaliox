@@ -2186,8 +2186,9 @@ await step('caption names stay', async () => {
 });
 
 // «Нагрузка недели» on a Wednesday at noon: the hours passed and the hours ahead apart in the head, the days to
-// come and the rest of today drawn as planned, «по плану» in their hints, the days above the norm by fact and by plan
-// (reported by the user: the meetings still ahead of the week read as hours already spent)
+// come and the rest of today drawn as planned (grey, not hatched), «по плану» in their hints, the days above the
+// norm by fact and by plan (reported by the user: the meetings still ahead of the week read as hours already spent).
+// The week before: a tick at its hours of each day, in place, and the difference beside the day's hours
 await step('load of the week: plan', async () => {
   const p2 = await browser.newPage({ viewport: { width: 1300, height: 860 }, timezoneId: 'Europe/Berlin' });
   try {
@@ -2200,7 +2201,17 @@ await step('load of the week: plan', async () => {
       ev(26, '10:00', '11:00'),                            // Thursday: 1 h planned
       ev(27, '09:00', '14:00'),                            // Friday: 5 h planned, above the norm by plan
     ] };
-    await p2.route('**/api/calendar/range*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(week) }));
+    const last = { configured: true, recordings: [], holidays: {}, events: [
+      ev(16, '10:00', '12:00'),                            // Monday: 2 h
+      ev(17, '08:00', '11:00'), ev(17, '12:00', '15:00'),  // Tuesday: 6 h
+      ev(18, '10:00', '13:00'),                            // Wednesday: 3 h, as this one
+      ev(20, '09:00', '13:00'),                            // Friday: 4 h
+    ] };
+    // the answer by the range asked: this week, or the one before
+    await p2.route('**/api/calendar/range*', r => {
+      const start = new URL(r.request().url()).searchParams.get('start') || '';
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(start.startsWith('2026-11-16') ? last : week) });
+    });
     await p2.goto(`${base}/?token=${token}`);
     await p2.waitForTimeout(1500);
     await p2.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ norm: 4, charts: { ...(dbPrefs().charts || {}), load: 'col' } }); resetDashboard(); switchAppView('dashboard'); });
@@ -2222,7 +2233,35 @@ await step('load of the week: plan', async () => {
     expect(JSON.stringify(got.done) === '[false,false,true,false,false]', `today's hours passed are not solid: ${got.done}`);
     expect(/по плану/.test(got.tips[4]) && !/по плану/.test(got.tips[0]) && /впереди 2 ч/.test(got.tips[2]), `the hints: ${got.tips.join(' | ')}`);
     expect(got.note === 'Сверх нормы: вт; по плану: пт', `the note: «${got.note}»`);
-    // the other looks: the planned bars, the lighter parts of the ring, the dashed line
+    // the week before: in the hints, the differences beside the hours, the ticks at their hours (the scale is the
+    // largest of the norm, the days and the days before: 6 h), the plan a solid grey and Friday's part above the
+    // norm framed apart
+    const cmp = async () => {
+      for (let i = 0; i < 40; i++) {
+        const r = await p2.evaluate(() => {
+          const w = document.querySelector('#db-grid .db-w-load');
+          const cols = [...w.querySelectorAll('.dbc-col')];
+          const tick = c => { const s = c.querySelector('.dbc-prev'); if (!s) return null; const a = c.getBoundingClientRect(), b = s.getBoundingClientRect(); return (a.bottom - (b.top + b.bottom) / 2) / a.height; };
+          const plan = w.querySelector('.dbc-col i.plan'), cs = plan && getComputedStyle(plan);
+          return { tips: cols.map(c => c.title), dx: [...w.querySelectorAll('.dbc-dxs .dbc-dx')].map(x => x.textContent), ticks: cols.map(tick),
+            planBg: cs && cs.backgroundColor, planImg: cs && cs.backgroundImage, ovp: cols.map(c => !!c.querySelector('.dbc-ovp')),
+            key: [...w.querySelectorAll('.dbc-key span')].map(x => x.textContent) };
+        });
+        if (r.dx.length) return r;
+        await p2.waitForTimeout(150);
+      }
+      return null;
+    };
+    const c = await cmp();
+    expect(c && JSON.stringify(c.dx) === '["+1,5","−1","","+1","+1"]', `the differences: ${JSON.stringify(c && c.dx)}`);
+    expect(c.tips[1] === 'вт, 24 нояб.: 5 ч · прошлая неделя 6 ч (−1)', `the hint with the week before: «${c.tips[1]}»`);
+    const want = [2, 6, 3, null, 4].map(h => h && h / 6);
+    expect(c.ticks.every((v, i) => (want[i] == null ? v == null : Math.abs(v - want[i]) < 0.03)), `the ticks of the week before: ${JSON.stringify(c.ticks)}`);
+    expect(c.planBg === 'rgb(99, 99, 102)' && c.planImg === 'none', `the plan is not a solid grey: ${c.planBg} ${c.planImg}`);
+    expect(JSON.stringify(c.ovp) === '[false,false,false,false,true]', `the planned part above the norm: ${c.ovp}`);
+    expect(JSON.stringify(c.key) === '["прошло","по плану","прошлая неделя"]', `the key: ${c.key}`);
+    // the other looks: the planned bars, the grey parts of the ring, the dashed line; in the bars the ticks in place,
+    // the hours in one column and the differences in another
     const looks = {};
     for (const k of ['bar', 'ring', 'line']) {
       await p2.evaluate(kind => setDashChart('load', kind), k);
@@ -2230,6 +2269,18 @@ await step('load of the week: plan', async () => {
         const w = document.querySelector('#db-grid .db-w-load');
         return w.querySelectorAll('.dbc-hb-t b.plan, .dbc-ring-plan, .dbc-lg-bar u.plan, .dbc-plot i.plan, .dbc-l-line.plan').length;
       });
+      if (k === 'bar') {
+        const b = await p2.evaluate(() => {
+          const w = document.querySelector('#db-grid .db-w-load');
+          const rows = [...w.querySelectorAll('.dbc-hb')];
+          const right = sel => rows.map(r => Math.round(r.querySelector(sel).getBoundingClientRect().right));
+          const ticks = rows.map(r => { const t = r.querySelector('.dbc-hb-t'), s = t.querySelector('.dbc-prev'); if (!s) return null; const a = t.getBoundingClientRect(), x = s.getBoundingClientRect(); return ((x.left + x.right) / 2 - a.left) / a.width; });
+          return { v: right('.dbc-hb-v'), dx: right('.dbc-dx'), ticks, text: rows.map(r => r.querySelector('.dbc-dx').textContent) };
+        });
+        expect(new Set(b.v).size === 1 && new Set(b.dx).size === 1 && b.dx[0] > b.v[0], `the hours and the differences out of their columns: ${JSON.stringify(b)}`);
+        expect(b.ticks.every((v, i) => (want[i] == null ? v == null : Math.abs(v - want[i]) < 0.03)), `the ticks of the bars: ${JSON.stringify(b.ticks)}`);
+        expect(JSON.stringify(b.text) === '["+1,5","−1","","+1","+1"]', `the differences of the bars: ${b.text}`);
+      }
     }
     expect(looks.bar === 3 && looks.ring >= 6 && looks.line >= 4, `the other looks: ${JSON.stringify(looks)}`);
     await p2.evaluate(() => { setUILanguage('en'); dbRedrawWidget('load'); });

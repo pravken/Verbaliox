@@ -39,7 +39,7 @@ const DB_KPI_MAX = 8, DB_KPI_MIN = 2;
 // the period of one widget («Частые участники», «Мои программы»), apart from the page's own
 const DB_WPERIODS = ['day', 'week', 'month', 'year'];
 
-const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false, kpiCfg: false, people: null };
+const DB = { data: null, week: null, prevWeek: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false, kpiCfg: false, people: null };
 
 function dbPrefs() {
   if (DB.prefs) return DB.prefs;
@@ -115,6 +115,7 @@ async function loadDashboard() {
   const fresh = ids => { if (seq === DB.seq && state.appView === 'dashboard' && !DB.edit && !(DB.drag && DB.drag.on)) ids.forEach(dbRedrawWidget); };
   const side = [
     dbLoadWeek().then(w => { if (w) DB.week = w; fresh(['load']); }),
+    dbLoadPrevWeek().then(w => { if (w) DB.prevWeek = w; fresh(['load']); }),
     dbLoadWork().then(() => fresh(['worked'])),
     dbLoadApps().then(() => fresh(['apps'])),
     dbLoadPeople().then(() => fresh(['people'])),
@@ -202,6 +203,16 @@ async function dbLoadWeek() {
   b.setDate(a.getDate() + 7);
   return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
+}
+
+// The week before the one of «Нагрузка недели», for its comparison: the same request one week back. The answer
+// keeps the Monday it was asked for, so a week moved meanwhile is not compared with the wrong one
+async function dbLoadPrevWeek() {
+  const b = dbMonday(), a = new Date(b);
+  a.setDate(b.getDate() - 7);
+  const w = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
+    .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  return w && { ...w, monday: calKey(a) };
 }
 
 // --- Drawing ---
@@ -522,35 +533,50 @@ async function setDashWPeriod(id, p) {
   if (state.appView === 'dashboard') dbRedrawWidget(id);
 }
 
-// rows: [{ label, value (hours), plan (the hours of it still ahead), tip, cls }]; norm: hours of a day, or 0.
-// The hours ahead are a plan: the same hue, hatched or lighter, the figure of a day all ahead grey; a day above the
-// norm only by its plan gets its orange mark drawn as planned too. The line: its fill and the line in an SVG that
-// stretches with the card, the dots, figures and days in HTML at percent places, so the text never stretches
+// rows: [{ label, value (hours), plan (the hours of it still ahead), prev (the hours of the same day a week before,
+// or null), dx (the difference to it, «+1,5», or ''), tip, cls }]; norm: hours of a day, or 0.
+// The hours ahead are a plan: a neutral grey part that continues the day's mark (the hours passed keep the day's
+// colour), the figure of a day all ahead grey. A plan above the norm stays grey and gets an orange frame over the
+// part above the norm (CLAUDE.md: a part above the norm keeps its hue and gets a mark of its own). The week before:
+// a thin light tick at its hours of the same day, over the mark, and the difference in a column of its own.
+// The line: its fill and the line in an SVG that stretches with the card, the dots, figures and days in HTML at
+// percent places, so the text never stretches
 function dbChartHtml(id, rows, norm) {
-  const kind = dbChartKind(id), max = Math.max(norm || 0, ...rows.map(r => r.value)) || 1;
+  const kind = dbChartKind(id);
+  const max = Math.max(norm || 0, ...rows.map(r => Math.max(r.value, r.prev || 0))) || 1;
   const h1 = v => dbNum(Math.round(v * 10) / 10), hs = t('dbHoursShort');
   const pl = r => (r.plan || 0) > 1e-4, done = r => Math.max(0, r.value - (r.plan || 0));
   const allPl = r => pl(r) && done(r) < 1e-4;
   const overFact = r => norm && done(r) > norm, over = r => norm && r.value > norm;
+  const hasPrev = rows.some(r => r.prev != null);
   // the classes of a mark: «over» above the norm, «plan» with hours ahead
   const mk = r => [over(r) ? 'over' : '', pl(r) ? 'plan' : ''].filter(Boolean).join(' ');
-  // a mark with hours ahead is hatched as a whole; the hours already passed are solid at its start
-  const doneIn = (r, dim, extra = '') => (pl(r) && !allPl(r)
-    ? `<s class="dbc-done${overFact(r) ? ' over' : ''}" style="${dim}:${(done(r) / r.value * 100).toFixed(1)}%${extra}"></s>` : '');
+  // a mark with hours ahead is grey as a whole; the hours already passed are in the day's colour at its start,
+  // and the planned part above the norm is framed orange
+  const doneIn = (r, dim, extra = '') => {
+    if (!pl(r)) return '';
+    const from = (dim === 'width' ? 'left' : 'bottom'), pc = v => (v / r.value * 100).toFixed(1);
+    const top = Math.max(norm || 0, done(r));
+    return (allPl(r) ? '' : `<s class="dbc-done${overFact(r) ? ' over' : ''}" style="${dim}:${pc(done(r))}%${extra}"></s>`)
+      + (over(r) && r.value - top > 1e-4 ? `<s class="dbc-ovp" style="${from}:${pc(top)}%;${dim}:${pc(r.value - top)}%"></s>` : '');
+  };
+  const prevAt = r => (r.prev ? (r.prev / max * 100).toFixed(1) : '');
+  const dx = (r, tag = 'span', style = '') => (hasPrev ? `<${tag} class="dbc-dx"${style}>${escapeHtml(r.dx || '')}</${tag}>` : '');
   if (kind === 'bar') {
-    return `<div class="dbc-bars">${rows.map(r => `<div class="dbc-hb ${r.cls || ''}" title="${escapeHtml(r.tip)}"><span class="dbc-hb-d">${escapeHtml(r.label)}</span>`
-      + `<span class="dbc-hb-t"><b class="${mk(r)}" style="width:${(r.value / max * 100).toFixed(1)}%">${doneIn(r, 'width')}</b>${norm ? `<i style="left:${(norm / max * 100).toFixed(1)}%"></i>` : ''}</span>`
-      + `<span class="dbc-hb-v${allPl(r) ? ' pl' : ''}">${r.value ? `${h1(r.value)} ${hs}` : '—'}</span></div>`).join('')}</div>`;
+    return `<div class="dbc-bars${hasPrev ? ' dx' : ''}">${rows.map(r => `<div class="dbc-hb ${r.cls || ''}" title="${escapeHtml(r.tip)}"><span class="dbc-hb-d">${escapeHtml(r.label)}</span>`
+      + `<span class="dbc-hb-t"><b class="${mk(r)}" style="width:${(r.value / max * 100).toFixed(1)}%">${doneIn(r, 'width')}</b>${norm ? `<i style="left:${(norm / max * 100).toFixed(1)}%"></i>` : ''}`
+      + `${r.prev ? `<s class="dbc-prev" style="left:${prevAt(r)}%"></s>` : ''}</span>`
+      + `<span class="dbc-hb-v${allPl(r) ? ' pl' : ''}">${r.value ? `${h1(r.value)} ${hs}` : '—'}</span>${dx(r)}</div>`).join('')}</div>`;
   }
   if (kind === 'ring') {
     const xs = rows.filter(r => r.value).map((r, i) => ({ ...r, c: DB_SLICE[i % DB_SLICE.length] }));
     if (!xs.length) return `<div class="db-note">${escapeHtml(t('dbNoMeetingsYet'))}</div>`;
-    const sum = xs.reduce((s, r) => s + r.value, 0), top = Math.max(norm || 0, ...xs.map(r => r.value));
+    const sum = xs.reduce((s, r) => s + r.value, 0), top = Math.max(norm || 0, ...xs.map(r => Math.max(r.value, r.prev || 0)));
     const dash = (from, len) => `stroke-dasharray="${Math.max(0.1, len).toFixed(2)} ${(100 - Math.max(0.1, len)).toFixed(2)}" stroke-dashoffset="${(25 - from).toFixed(2)}"`;
     let at = 0;
     const segs = xs.map(r => {
       const len = r.value / sum * 100, d = done(r) / sum * 100, gap = 0.8;
-      // the hours passed in the day's hue, those ahead in the same hue, lighter
+      // the hours passed in the day's hue, those ahead grey
       const seg = (from, l, cls) => (l > 0.05 ? `<circle r="15.9155" cx="18" cy="18" fill="none" stroke="${r.c}" stroke-width="4.2"${cls ? ` class="${cls}"` : ''} ${dash(from, l)}/>` : '');
       const out = (pl(r) ? seg(at, d, '') + seg(at + d, len - d - gap, 'dbc-ring-plan') : seg(at, len - gap, ''))
         // above the norm: the day keeps its hue, a thin amber arc outside marks it (as planned when only the plan is over)
@@ -558,64 +584,85 @@ function dbChartHtml(id, rows, norm) {
       at += len;
       return out;
     }).join('');
-    const hue = r => `${pl(r) ? 'color' : 'background'}:${r.c}`;
     return `<div class="dbc-ring"><svg viewBox="${norm ? '-1.6 -1.6 39.2 39.2' : '0 0 36 36'}" class="dbc-ring-svg" role="img" aria-label="${escapeHtml(`${h1(sum)} ${hs}`)}">${segs}`
       + `<text x="18" y="18" text-anchor="middle" class="dbc-ring-n">${h1(sum)}</text><text x="18" y="22.6" text-anchor="middle" class="dbc-ring-l">${escapeHtml(hs)}</text></svg>`
-      + `<div class="dbc-lg">${xs.map(r => `<div title="${escapeHtml(r.tip)}"><i class="${allPl(r) ? 'plan' : ''}" style="${allPl(r) ? `color:${r.c}` : `background:${r.c}`}"></i><span class="dbc-lg-d">${escapeHtml(r.label)}</span>`
-        + `<b class="dbc-lg-bar"><u class="${pl(r) ? 'plan' : ''}" style="width:${(r.value / top * 100).toFixed(1)}%;${hue(r)}">${doneIn(r, 'width', `;background:${r.c}`)}</u>${norm ? `<em style="left:${(norm / top * 100).toFixed(1)}%"></em>` : ''}</b>`
+      + `<div class="dbc-lg${hasPrev ? ' dx' : ''}">${xs.map(r => `<div title="${escapeHtml(r.tip)}"><i class="${allPl(r) ? 'plan' : ''}" style="${allPl(r) ? '' : `background:${r.c}`}"></i><span class="dbc-lg-d">${escapeHtml(r.label)}</span>`
+        + `<b class="dbc-lg-bar"><u class="${mk(r)}" style="width:${(r.value / top * 100).toFixed(1)}%${pl(r) ? '' : `;background:${r.c}`}">${doneIn(r, 'width', `;background:${r.c}`)}</u>${norm ? `<em style="left:${(norm / top * 100).toFixed(1)}%"></em>` : ''}`
+        + `${r.prev ? `<s class="dbc-prev" style="left:${(r.prev / top * 100).toFixed(1)}%"></s>` : ''}</b>`
         + `<span class="dbc-lg-h${over(r) ? ' over' : ''}${allPl(r) ? ' pl' : ''}"${over(r) ? ` title="${escapeHtml(t('dbOverNorm'))}"` : ''}>${h1(r.value)} ${escapeHtml(hs)}</span>`
-        + `<span class="dbc-lg-p">${Math.round(r.value / sum * 100)}%</span></div>`).join('')}</div></div>`;
+        + `${dx(r)}<span class="dbc-lg-p">${Math.round(r.value / sum * 100)}%</span></div>`).join('')}</div></div>`;
   }
   if (kind === 'line') {
-    const n = rows.length, px = i => (n > 1 ? 3 + i * 94 / (n - 1) : 50), py = v => 100 - v / max * 82;
+    const n = rows.length, px = i => (n > 1 ? 3 + i * 94 / (n - 1) : 50);
+    const py = v => 100 - v / max * 82;
     const pt = i => `${px(i).toFixed(2)},${py(rows[i].value).toFixed(2)}`;
-    // solid up to the last day with nothing ahead, dashed from there on through the days of the plan
+    // solid up to the last day with nothing ahead, dashed grey from there on through the days of the plan
     const f = rows.findIndex(pl), cut = f < 0 ? n - 1 : Math.max(0, f - 1);
     const run = (a, b) => rows.slice(a, b + 1).map((r, k) => pt(a + k)).join(' ');
     const part = (a, b, cls) => `<polygon points="${px(a).toFixed(2)},100 ${run(a, b)} ${px(b).toFixed(2)},100" class="dbc-l-area${cls}"/><polyline points="${run(a, b)}" class="dbc-l-line${cls}"/>`;
+    // the week before: a faint grey line under the week's own
+    const prevPts = rows.map((r, i) => [px(i), py(r.prev || 0)].map(v => v.toFixed(2)).join(',')).join(' ');
+    const prev = hasPrev ? `<polyline points="${prevPts}" class="dbc-l-prev"/>` : '';
     return `<div class="dbc-line"><div class="dbc-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">`
       + (norm ? `<line x1="0" x2="100" y1="${py(norm).toFixed(2)}" y2="${py(norm).toFixed(2)}" class="dbc-l-norm"/>` : '')
-      + (f === 0 ? '' : part(0, cut, '')) + (f < 0 ? '' : part(cut, n - 1, ' plan')) + '</svg>'
+      + prev + (f === 0 ? '' : part(0, cut, '')) + (f < 0 ? '' : part(cut, n - 1, ' plan')) + '</svg>'
       + rows.map((r, i) => `<i class="${mk(r)}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%" title="${escapeHtml(r.tip)}"></i>`
         + (r.value ? `<span class="dbc-l-v${allPl(r) ? ' pl' : ''}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%">${h1(r.value)}</span>` : '')).join('')
-      + `</div><div class="dbc-days">${rows.map((r, i) => `<span class="${r.cls || ''}" style="left:${px(i).toFixed(2)}%">${escapeHtml(r.label)}</span>`).join('')}</div></div>`;
+      + `</div><div class="dbc-days">${rows.map((r, i) => `<span class="${r.cls || ''}" style="left:${px(i).toFixed(2)}%">${escapeHtml(r.label)}</span>`).join('')}</div>`
+      + (hasPrev ? `<div class="dbc-days dbc-dxs">${rows.map((r, i) => dx(r, 'span', ` style="left:${px(i).toFixed(2)}%"`)).join('')}</div>` : '') + '</div>';
   }
   return `<div class="dbc-cols">${norm ? `<i class="dbc-norm" style="bottom:${(norm / max * 100).toFixed(1)}%"></i>` : ''}${rows.map(r => {
     const pct = r.value / max * 100;
     return `<div class="dbc-col ${r.cls || ''}" title="${escapeHtml(r.tip)}"><i class="${mk(r)}" style="height:${r.value ? Math.max(2, pct).toFixed(1) : 0}%">${doneIn(r, 'height')}</i>`
+      + (r.prev ? `<s class="dbc-prev" style="bottom:${prevAt(r)}%"></s>` : '')
       + (r.value ? `<span class="${allPl(r) ? 'pl' : ''}" style="bottom:calc(${pct.toFixed(1)}% + 3px)">${h1(r.value)}</span>` : '') + '</div>';
-  }).join('')}</div><div class="dbc-axis">${rows.map(r => `<span class="${r.cls || ''}">${escapeHtml(r.label)}</span>`).join('')}</div>`;
+  }).join('')}</div><div class="dbc-axis">${rows.map(r => `<span class="${r.cls || ''}">${escapeHtml(r.label)}</span>`).join('')}</div>`
+    + (hasPrev ? `<div class="dbc-axis dbc-dxs">${rows.map(r => dx(r)).join('')}</div>` : '');
+}
+
+// The hours of meetings of a day (YYYY-MM-DD) in a week's answer of /api/calendar/range, and of them those passed
+// by `now`: the calendar's meetings (not those of a whole day, not those ignored, not a block of DB_BLOCK_MS or
+// longer — a night or a day off is not hours of meetings) and the recordings, overlaps counted once
+function dbDayHours(w, k, now) {
+  const spans = [...(w.events || []).filter(e => !e.all_day && !hmIsIgnored(e)).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
+      .filter(([s, e]) => e - s < DB_BLOCK_MS),
+    ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
+    .filter(([s]) => calKey(new Date(s)) === k);
+  const busy = dbMerge(spans);
+  return { hours: busy.reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3,
+    // what of each meeting lies before now has passed; the rest is the plan
+    done: busy.reduce((sum, [s, e]) => sum + Math.max(0, Math.min(e, now) - s), 0) / 3600e3 };
 }
 
 // «Нагрузка недели»: the hours of meetings of each day of the week against the user's norm (a click on
 // the norm changes it: 2–6 h). The calendar's meetings, or the recordings without one. The meetings still ahead
-// (the days to come, the rest of today) are a plan, drawn as planned and counted apart in the head (reported by
-// the user: the meetings ahead read as hours already spent)
+// (the days to come, the rest of today) are a plan, drawn grey and counted apart in the head (reported by
+// the user: the meetings ahead read as hours already spent). The week before is a tick at each day and the
+// difference beside its hours (the whole day, the plan too); grey, as more meetings are neither better nor worse
 function dbLoadHtml() {
   const w = DB.week;
   if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
   const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', now = Date.now(), today = calKey(new Date(now));
   const norm = dbPrefs().norm, hs = t('dbHoursShort'), h1 = v => dbNum(Math.round(v * 10) / 10);
   const ahead = h => t('dbLoadAhead').replace('{h}', () => h1(h));
+  const a0 = new Date(a); a0.setDate(a.getDate() - 7);
+  const pw = DB.prevWeek && DB.prevWeek.monday === calKey(a0) ? DB.prevWeek : null;
   const rows = [];
   for (let i = 0; i < 7; i++) {
     const x = new Date(a); x.setDate(a.getDate() + i);
-    const k = calKey(x);
-    const spans = [...(w.events || []).filter(e => !e.all_day && !hmIsIgnored(e)).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
-        .filter(([s, e]) => e - s < DB_BLOCK_MS),  // a night or a day off is not hours of meetings
-      ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
-      .filter(([s]) => calKey(new Date(s)) === k);
-    const busy = dbMerge(spans);
-    const hours = busy.reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
-    // what of each meeting lies before now has passed; the rest is the plan
-    const done = busy.reduce((sum, [s, e]) => sum + Math.max(0, Math.min(e, now) - s), 0) / 3600e3;
+    const x0 = new Date(a0); x0.setDate(a0.getDate() + i);
+    const k = calKey(x), { hours, done } = dbDayHours(w, k, now);
     const plan = Math.max(0, hours - done);
+    const prev = pw ? dbDayHours(pw, calKey(x0), now).hours : null;
     const hol = (w.holidays || {})[k] || '';
-    if (i < 5 || hours) {
-      const tip = plan && !done ? `${h1(hours)} ${hs} ${t('dbLoadPlanned')}` : `${h1(done)} ${hs}${plan ? ` · ${ahead(plan)}` : ''}`;
-      rows.push({ label: x.toLocaleDateString(lang, { weekday: 'short' }), value: hours, plan,
+    if (i < 5 || hours || prev) {
+      const d = prev == null ? 0 : Math.round(hours * 10) / 10 - Math.round(prev * 10) / 10;
+      const dx = Math.abs(d) < 0.05 ? '' : `${d > 0 ? '+' : '−'}${dbNum(Math.abs(d))}`;
+      const tip = (plan && !done ? `${h1(hours)} ${hs} ${t('dbLoadPlanned')}` : `${h1(done)} ${hs}${plan ? ` · ${ahead(plan)}` : ''}`)
+        + (prev == null ? '' : ` · ${t('dbLoadPrevTip').replace('{h}', () => h1(prev))}${dx ? ` (${dx})` : ''}`);
+      rows.push({ label: x.toLocaleDateString(lang, { weekday: 'short' }), value: hours, plan, prev, dx,
         cls: `${k === today ? 'today' : ''}${k < today ? ' past' : ''}${k > today ? ' ahead' : ''}${hol ? ' hol' : ''}`,
-        tip: `${x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${tip}${hol ? ` · ${hol}` : ''}` });
+        tip: `${x.toLocaleDateString(lang, { weekday: 'short', day: 'numeric', month: 'short' })}: ${tip}${hol ? ` · ${hol}` : ''}` });
     }
   }
   const sum = rows.reduce((s, d) => s + d.value - d.plan, 0), left = rows.reduce((s, d) => s + d.plan, 0);
@@ -626,9 +673,13 @@ function dbLoadHtml() {
     ? t('dbLoadOver').replace('{days}', () => days(byFact)) + (byPlan.length ? `; ${t('dbLoadOverPlan').replace('{days}', () => days(byPlan))}` : '')
     : (byPlan.length ? t('dbLoadOverPlanOnly').replace('{days}', () => days(byPlan)) : '');
   const head = t('dbLoadSum').replace('{h}', () => h1(sum)) + (left >= 0.05 ? ` · ${ahead(left)}` : '');
+  // the key under the chart: its marks drawn as in the look chosen
+  const key = [['done', 'dbLoadKeyDone'], ['plan', 'dbLoadKeyPlan'], ...(pw ? [['prev', 'dbLoadKeyPrev']] : [])]
+    .map(([c, k]) => `<span><i class="k-${c}"></i>${escapeHtml(t(k))}</span>`).join('');
   return `<div class="db-load-head"><span class="db-load-sum">${escapeHtml(head)}</span>`
     + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
     + dbChartHtml('load', rows, norm)
+    + `<div class="dbc-key dbc-key-${dbChartKind('load')}">${key}</div>`
     + (note ? `<div class="db-note db-load-over">${escapeHtml(note)}</div>` : '');
 }
 
