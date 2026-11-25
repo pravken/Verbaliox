@@ -482,6 +482,8 @@ _MEETING_EXTRA_COLUMNS = {
     # The status a job on a finished recording (dub, translation, cut, subtitles) gives back when it ends: kept
     # here too, so a start after a crash in the middle of it gives it back as well ('' — none running)
     "return_status": "TEXT DEFAULT ''",
+    # When a backup's restore put the sound back (app/backup.py): the retention counts its days from then too
+    "media_restored_at": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -2005,7 +2007,8 @@ def remove_media(meeting_id: int) -> bool:
 
 def expired_media_ids(days: int) -> List[int]:
     """Completed recordings that still keep their sound, older than `days` both by when they were made and
-    by when they came into the app: an old file imported today keeps its sound for `days` too."""
+    by when they came into the app: an old file imported today keeps its sound for `days` too, and so does
+    the sound a backup's restore put back today."""
     if days <= 0:
         return []
     from datetime import datetime, timedelta
@@ -2015,8 +2018,9 @@ def expired_media_ids(days: int) -> List[int]:
         conn = get_connection()
         rows = conn.execute(
             "SELECT id FROM meetings WHERE status = 'completed' AND owns_media = 1 AND COALESCE(media_removed, 0) = 0 "
-            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ? AND created_at < ?",
-            (cutoff, cutoff)).fetchall()
+            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ? AND created_at < ? "
+            "AND COALESCE(media_restored_at, '') < ?",
+            (cutoff, cutoff, cutoff)).fetchall()
         conn.close()
     return [int(r["id"]) for r in rows]
 

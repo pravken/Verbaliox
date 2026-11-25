@@ -264,8 +264,10 @@ def _restore(src: Path) -> Dict[str, Any]:
                 conn.commit()
                 n = conn.execute("SELECT COUNT(*) FROM meetings").fetchone()[0]
                 known = {int(r[0]): str(r[1] or "") for r in conn.execute("SELECT id, media_path FROM meetings")}
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(meetings)").fetchall()}
                 restored = skipped = 0
                 put_back: Dict[int, str] = {}
+                here: List[int] = []  # recordings whose sound the restore put back or found in place
                 for f in manifest.get("media") or []:
                     name = str(f.get("name") or "")
                     try:
@@ -280,6 +282,13 @@ def _restore(src: Path) -> Dict[str, Any]:
                         continue
                     if target.exists():
                         skipped += 1
+                        here.append(mid)
+                        if (target.parent == restored_dir and str(target) != original
+                                and target.stat().st_size == z.getinfo(name).file_size):
+                            # put there by an earlier restore of this copy: the recording points to it (it kept
+                            # the place it had on the other computer, found in an audit)
+                            _point_to(conn, mid, target, cols)
+                            put_back[mid] = str(target)
                         continue
                     target.parent.mkdir(parents=True, exist_ok=True)
                     # written aside and renamed: a restore cut off midway left a truncated file at the
@@ -289,10 +298,12 @@ def _restore(src: Path) -> Dict[str, Any]:
                         shutil.copyfileobj(fin, fout)
                     part.replace(target)
                     if str(target) != original:  # moved into the recordings folder: the app owns this copy
-                        conn.execute("UPDATE meetings SET media_path = ?, owns_media = 1 WHERE id = ?", (str(target), mid))
+                        _point_to(conn, mid, target, cols)
                     put_back[mid] = str(target)
+                    here.append(mid)
                     restored += 1
                 _clean_paths(conn, roots, put_back)
+                _restored_now(conn, here, cols)
                 _keep_local_settings(conn)
                 conn.execute("DROP TABLE IF EXISTS secrets")  # the API keys of a copy of an earlier version
                 # the minutes worked and «Мои программы» (a copy of an older version may still have them)
@@ -313,6 +324,28 @@ def _restore(src: Path) -> Dict[str, Any]:
             (DATA_DIR / "bench.json").write_bytes(z.read("bench.json"))
     return {"recordings": n, "media_restored": restored, "media_kept": skipped, "created": manifest.get("created", ""),
             "restart_needed": True}
+
+
+def _point_to(conn: sqlite3.Connection, mid: int, target: Path, cols: set) -> None:
+    """The recording's sound is the file put into the recordings folder, which the app owns (a copy made
+    before owns_media existed has no such column: the restore failed with «База в копии повреждена»)."""
+    if "owns_media" in cols:
+        conn.execute("UPDATE meetings SET media_path = ?, owns_media = 1 WHERE id = ?", (str(target), mid))
+    else:
+        conn.execute("UPDATE meetings SET media_path = ? WHERE id = ?", (str(target), mid))
+
+
+def _restored_now(conn: sqlite3.Connection, ids: List[int], cols: set) -> None:
+    """The sound of these recordings came back now: «keep the sound N days» counts from the restore, not from
+    when they were recorded (the retention deleted an old recording's sound right after the restart that put
+    the copy in place: found in an audit)."""
+    if not ids:
+        return
+    if "media_restored_at" not in cols:  # init_db adds it otherwise; the copy's database is older
+        conn.execute("ALTER TABLE meetings ADD COLUMN media_restored_at TEXT DEFAULT ''")
+        cols.add("media_restored_at")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.executemany("UPDATE meetings SET media_restored_at = ? WHERE id = ?", [(now, mid) for mid in ids])
 
 
 def _carry_local_tables(old_db: Path, new_db: Path) -> None:
