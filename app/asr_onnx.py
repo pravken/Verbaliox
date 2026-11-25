@@ -876,6 +876,9 @@ def delete_model(model_id: str) -> bool:
     import shutil
 
     release(model_id)  # only this one: the other model may be giving live captions right now
+    # its files are no longer «found on disk»: a variant of it read as present after the delete (found in an audit)
+    for key in [k for k in _present if k[0] == model_id]:
+        _present.discard(key)
     d = model_dir(model_id)
     if d.is_dir():
         shutil.rmtree(d, ignore_errors=True)

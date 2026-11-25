@@ -477,6 +477,22 @@ class OnnxDeleteTest(unittest.TestCase):
             asr_onnx.delete_model("gigaam-v3")
             self.assertEqual(list(asr_onnx._loaded), ["parakeet-v3"])
 
+    def test_its_files_are_no_longer_taken_for_present(self):
+        """Found in an audit: the files seen on disk were remembered past the delete, and a variant of the deleted
+        model read as there."""
+        from app import asr_onnx
+
+        d = tests.temp_dir(self)
+        (d / "model.onnx").write_bytes(b"x")
+        variant = {"files": ["model.onnx"]}
+        with mock.patch.object(asr_onnx, "model_dir", return_value=d), \
+                mock.patch.object(asr_onnx, "_present", {("parakeet-v3", "model.onnx")}) as present:
+            self.assertTrue(asr_onnx._has_files("gigaam-v3", variant))
+            asr_onnx.delete_model("gigaam-v3")
+            self.assertFalse(d.exists())
+            self.assertFalse(asr_onnx._has_files("gigaam-v3", variant))
+            self.assertEqual(present, {("parakeet-v3", "model.onnx")})  # the other model's stay
+
     def test_refused_while_live_captions_use_it(self):
         from fastapi import HTTPException
 
