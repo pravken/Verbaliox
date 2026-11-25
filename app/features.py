@@ -395,24 +395,16 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
 
 
 # --- The page of a feature: its meetings, the decisions written in their summaries, its tasks ---
-_DECISION_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s*|\*\*).*(решени|договор|decision|agreed)", re.I)
-_ANY_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s|\*\*[^*]+\*\*:?\s*$)")  # «## Решения» or a line «**Решения**»
-_BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
 DECISIONS_PER_MEETING = 12
 
 
 def decisions_of(summary_md: str) -> List[str]:
-    """The points under a «Решения» / «Договорённости» / «Decisions» heading of a summary."""
-    out: List[str] = []
-    inside = False
-    for line in str(summary_md or "").splitlines():
-        if _ANY_HEAD.match(line):
-            inside = bool(_DECISION_HEAD.match(line))
-            continue
-        m = _BULLET.match(line) if inside else None
-        if m:
-            out.append(m.group(1).strip())
-    return out[:DECISIONS_PER_MEETING]
+    """The points under a «Решения» / «Договорённости» / «Decisions» heading of a summary. Read as the analysis
+    reads its sections (app/analysis_chain.section_points): a topic «### Решение проблемы с кэшем» of the
+    discussion was taken for the decisions, and «## Решения / ### Бюджет / - Утвердили» gave none (found in an audit)."""
+    from app.analysis_chain import section_points
+
+    return section_points(str(summary_md or ""), "decisions")[:DECISIONS_PER_MEETING]
 
 
 def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:
