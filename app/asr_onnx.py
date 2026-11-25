@@ -732,10 +732,33 @@ LEVEL_WINDOW_SEC = 10.0
 NOISE_SHARE = 0.03   # a window this much quieter than the loudest one is a pause: not raised
 
 
+_PEAK_PART = 1 << 21  # samples read at a time by _peak (8 MB of float32)
+_PEAK_BINS = 1 << 16
+
+
 def _peak(a: Any) -> float:
+    """The 99.9th percentile of the loudness (not one click). A long recording is counted part by part into a
+    histogram of 65 536 steps (exact to 1/65 536 of the loudest sample): np.percentile of np.abs made two copies
+    of it, 1.4 GB for three hours (audit В21)."""
     import numpy as np
 
-    return float(np.percentile(np.abs(a), 99.9)) if a.size else 0.0  # not one click
+    if not a.size:
+        return 0.0
+    if a.size <= _PEAK_PART:
+        return float(np.percentile(np.abs(a), 99.9))
+    parts = range(0, a.size, _PEAK_PART)
+    top = max(float(np.max(np.abs(a[s:s + _PEAK_PART]))) for s in parts)
+    if top <= 0:
+        return 0.0
+    hist = np.zeros(_PEAK_BINS, dtype=np.int64)
+    for s in parts:
+        hist += np.histogram(np.abs(a[s:s + _PEAK_PART]), bins=_PEAK_BINS, range=(0.0, top))[0]
+    rank = 0.999 * (a.size - 1)  # as np.percentile ranks the samples
+    cum = np.cumsum(hist)
+    i = int(np.searchsorted(cum, rank, side="right"))
+    before = int(cum[i - 1]) if i else 0
+    step = top / _PEAK_BINS
+    return float(min(top, (i + (rank - before) / max(1, int(hist[i]))) * step))
 
 
 def level(audio: Any, sr: int = 16000) -> Any:
@@ -748,9 +771,12 @@ def level(audio: Any, sr: int = 16000) -> Any:
     a = np.asarray(audio, dtype=np.float32)
     if a.size == 0:
         return a
+    own = False  # a is a copy of this function's own: changed in place (the caller's array never is)
     peak = _peak(a)
     if SILENT_PEAK < peak < QUIET_PEAK:
-        a = np.clip(a * min(0.9 / peak, MAX_GAIN), -1.0, 1.0)
+        a = a * np.float32(min(0.9 / peak, MAX_GAIN))
+        np.clip(a, -1.0, 1.0, out=a)
+        own = True
         peak = _peak(a)
     win = int(LEVEL_WINDOW_SEC * sr)
     n = a.size // win
@@ -763,7 +789,7 @@ def level(audio: Any, sr: int = 16000) -> Any:
     if np.all(gains == 1.0):
         return a
     centers = (np.arange(n) + 0.5) * win
-    out = np.empty_like(a)
+    out = a if own else np.empty_like(a)
     step = 1 << 20
     for s in range(0, a.size, step):
         e = min(a.size, s + step)
@@ -1004,8 +1030,11 @@ def _transcribe_with(asr: Any, wav_path: Path, total_dur: float, on_progress: Ca
     audio, sr = sf.read(str(wav_path), dtype="float32")  # 16 kHz mono (app/audio_utils.py)
     if getattr(audio, "ndim", 1) > 1:
         audio = audio.mean(axis=1)
-    # leveling: quiet parts raised first (chosen per recording, on by default)
-    results: Iterator[Any] = asr.recognize(level(audio, sr) if leveling else audio, sample_rate=sr)
+    # leveling: quiet parts raised first (chosen per recording, on by default); the sound as read goes then, not
+    # kept beside the levelled copy for the whole recognition (two copies of a three-hour recording: 1.4 GB)
+    if leveling:
+        audio = level(audio, sr)
+    results: Iterator[Any] = asr.recognize(audio, sample_rate=sr)
     segments: List[Dict[str, Any]] = out if out is not None else []
     for res in results:
         check_cancel()

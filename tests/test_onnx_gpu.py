@@ -195,6 +195,32 @@ class OnnxTextTest(unittest.TestCase):
         self.assertLess(float(np.abs(out[sr * 50:]).max()), 0.01)  # the pause is not raised
         self.assertLessEqual(float(np.abs(out).max()), 1.0)
 
+    def test_a_long_recording_is_levelled_without_copies(self):
+        """Audit В21: the loudness of a long recording was found by np.percentile of np.abs (two copies of it), the
+        quiet one raised into two more: 2.8 GB for three hours. Part by part now, as exact for the gain."""
+        import tracemalloc
+
+        import numpy as np
+
+        sr = 16000
+        rng = np.random.default_rng(1)
+        a = (rng.standard_normal(sr * 600).astype(np.float32) * 0.02)  # ten quiet minutes
+        a[sr * 100: sr * 110] *= 0.1  # a quieter part
+        exact = float(np.percentile(np.abs(a), 99.9))
+        self.assertAlmostEqual(asr_onnx._peak(a), exact, delta=exact * 1e-3)
+        before = a.copy()
+        tracemalloc.start()
+        try:
+            out = asr_onnx.level(a, sr)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, a.nbytes * 2)  # one copy and its parts (four copies before)
+        self.assertGreater(float(np.abs(out).max()), 0.5)
+        self.assertLessEqual(float(np.abs(out).max()), 1.0)
+        self.assertTrue(np.array_equal(a, before))  # the caller's array is not changed
+        self.assertFalse(np.shares_memory(out, a))
+
     def test_word_ends_keep_pauses(self):
         # "да" at 0.0, a pause, "нет" at 3.0: the first word ends soon after its token, not at 3.0
         words = asr_onnx.words_from_text("да нет", ["▁да", "▁нет"], [0.0, 3.0], 0.0, 4.0)

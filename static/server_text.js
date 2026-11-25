@@ -36,6 +36,7 @@ const SERVER_TEXT_EN = {
   "файл не найден: возможно, он перемещён или удалён": "the file is not found: it may have been moved or deleted",
   "в файле нет звуковой дорожки": "the file has no sound track",
   "нет доступа к файлу": "no access to the file",
+  "на диске не осталось места": "there is no space left on the disk",
   "файл пустой": "the file is empty",
   "неизвестная ошибка FFmpeg": "an unknown FFmpeg error",
   "Неизвестная модель распознавания": "Unknown speech recognition model",

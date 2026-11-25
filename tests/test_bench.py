@@ -39,7 +39,10 @@ class BenchRunTest(unittest.TestCase):
         save_meeting_results(m["id"], segments=[{"start": 0.0, "end": 2.0, "text": "Привет, мир. Как дела?", "speaker": "S1"}])
         done = {**get_meeting(m["id"]), "status": "completed"}
 
-        def fake_extract(src, dst, enhance_audio=True):
+        cuts = []
+
+        def fake_extract(src, dst, enhance_audio=True, start=None, duration=None):
+            cuts.append((start, duration))  # only the fragment is decoded (audit В21), not the whole recording
             Path(dst).write_bytes(Path(src).read_bytes())
 
         def fake_one(mid, clip, audio, dur, lang):
@@ -61,6 +64,7 @@ class BenchRunTest(unittest.TestCase):
         self.assertEqual(by["good"]["wer"], 0.0)
         self.assertAlmostEqual(by["bad"]["wer"], 0.75)
         self.assertEqual(st["history"][0]["ref_words"], 4)
+        self.assertEqual(cuts, [(0.0, 2.5)])
 
     def test_rejects_unfinished_recording(self):
         from app.database import create_meeting, init_db
