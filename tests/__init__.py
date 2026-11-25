@@ -11,6 +11,9 @@ os.environ["VERBALIOX_NO_FFMPEG_AUTO"] = "1"  # the app start would download FFm
 # The Ollama of the computer the tests run on is never read nor changed: its models folder is an empty
 # folder of the tests (app/ollama_client.models_on_disk), and its port is refused below
 os.environ["OLLAMA_MODELS"] = os.path.join(_TMP, "ollama")
+# Nothing is downloaded: a model of Hugging Face reads as missing instead of being fetched
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 # No network in the tests: a connection to Ollama's port, or to any address outside this computer, is refused
 # (VERBALIOX_TESTS_NET=1 allows the outside for a manual check). Servers a test starts itself on this

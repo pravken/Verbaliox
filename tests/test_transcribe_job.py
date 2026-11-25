@@ -14,6 +14,26 @@ OLD = [{"id": 0, "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00", "text": "п�
 NEW = [{"start": 0.0, "end": 2.0, "text": "новый текст", "words": []}]
 
 
+# A model a test reports as installed never fetches the files of its variants in the background
+# (asr_onnx._variant -> _complete_async -> fetch: a real download of the model)
+_no_fetch = None
+
+
+def setUpModule():
+    global _no_fetch
+    try:
+        from app import asr_onnx
+    except ImportError:  # app dependencies are not installed
+        return
+    _no_fetch = mock.patch.object(asr_onnx, "_complete_async")
+    _no_fetch.start()
+
+
+def tearDownModule():
+    if _no_fetch is not None:
+        _no_fetch.stop()
+
+
 @unittest.skipIf(transcriber is None, "app dependencies not installed")
 class ProcessMeetingJobTest(unittest.TestCase):
     """The recognition job end to end with GigaAM on ONNX, the model and FFmpeg replaced by stand-ins."""
@@ -46,6 +66,8 @@ class ProcessMeetingJobTest(unittest.TestCase):
             mock.patch.object(transcriber, "_after_transcription", return_value=[]),
             mock.patch.object(asr_onnx, "supports_language", return_value=True),
             mock.patch.object(asr_onnx, "is_installed", return_value=True),
+            # the analysis models of the computer's Ollama are not asked to go before the speech model loads
+            mock.patch.object(transcriber, "_release_analysis_models"),
             mock.patch.object(semantic, "kick"),
             mock.patch("app.diarizer.diarize_and_merge_segments", side_effect=diarize),
             mock.patch("app.voice_profiles.apply_to_speakers", return_value=0),
