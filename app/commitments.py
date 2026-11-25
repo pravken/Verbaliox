@@ -478,7 +478,10 @@ def supported(item: Dict[str, Any], m: Dict[str, Any]) -> bool:
     """The promise is in the transcript (not made up by the model)."""
     from app.grounding import UNVERIFIED_MARK, ground_summary
 
-    ts = f" [{int(item['at'] // 60):02d}:{int(item['at'] % 60):02d}]" if item.get("at") is not None else ""
+    from app.grounding import _fmt
+
+    # «[1:45:30]» past an hour: «[105:30]» was read as 05:30 (found in an audit)
+    ts = f" {_fmt(item['at'])}" if item.get("at") is not None else ""
     line = f"- {item['who']} {item['what']}{ts}"
     return UNVERIFIED_MARK not in ground_summary(line, m.get("segments") or [], m.get("speakers") or {})
 
@@ -1043,12 +1046,18 @@ def delete_for_meeting(meeting_id: int) -> int:
     return n
 
 
+def _due(x: Dict[str, Any]) -> str:
+    """The task's due: the date set by hand (or read from the words) first, the words of the recording otherwise. A
+    task added or given a date by hand has no words: its date was left out of the exports (found in an audit)."""
+    return str(x.get("due_date") or x.get("due") or "")
+
+
 def as_text(items: List[Dict[str, Any]]) -> str:
     """For prompts: '- Анна → клиенту: презентация (к пятнице) — «Встреча», 2026-10-14'."""
     out = []
     for x in items:
         who = x["who"] + (f" → {x['to_whom']}" if x.get("to_whom") else "")
-        due = f" ({x['due']})" if x.get("due") else ""
+        due = f" ({_due(x)})" if _due(x) else ""
         out.append(f"- {who}: {x['what']}{due} — «{x.get('meeting_title', '')}», {x.get('meeting_date', '')}")
     return "\n".join(out)
 
@@ -1064,7 +1073,7 @@ def export_text(items: List[Dict[str, Any]], fmt: str, lang: str = "ru") -> str:
         for x in items:
             box = "[x]" if x.get("status") == "done" else "[ ]"
             who = x["who"] + (f" → {x['to_whom']}" if x.get("to_whom") else "")
-            due = f" 📅 {x['due']}" if x.get("due") else ""
+            due = f" 📅 {_due(x)}" if _due(x) else ""
             lines.append(f"- {box} {who}: {x['what']}{due} — {x.get('meeting_title', '')} ({x.get('meeting_date', '')})")
         return "\n".join(lines) + "\n"
     buf = io.StringIO()
@@ -1072,14 +1081,14 @@ def export_text(items: List[Dict[str, Any]], fmt: str, lang: str = "ru") -> str:
     if fmt == "todoist":
         w.writerow(["TYPE", "CONTENT", "DESCRIPTION", "PRIORITY", "INDENT", "AUTHOR", "RESPONSIBLE", "DATE", "DATE_LANG", "TIMEZONE"])
         for x in items:
-            w.writerow(["task", f"{x['what']} ({x['who']})", f"{x.get('meeting_title', '')}, {x.get('meeting_date', '')}",
-                        4, 1, "", "", x.get("due") or "", "ru" if lang == "ru" else "en", ""])
+            w.writerow(["task", _cell(f"{x['what']} ({x['who']})"), _cell(f"{x.get('meeting_title', '')}, {x.get('meeting_date', '')}"),
+                        4, 1, "", "", _cell(_due(x)), "ru" if lang == "ru" else "en", ""])
     else:
         w.writerow(["Задача" if lang == "ru" else "Task", "Кто" if lang == "ru" else "Who", "Кому" if lang == "ru" else "For",
                     "Срок" if lang == "ru" else "Due", "Встреча" if lang == "ru" else "Meeting",
                     "Дата" if lang == "ru" else "Date", "Выполнено" if lang == "ru" else "Done"])
         for x in items:
-            w.writerow([_cell(x["what"]), _cell(x["who"]), _cell(x.get("to_whom") or ""), x.get("due") or "",
+            w.writerow([_cell(x["what"]), _cell(x["who"]), _cell(x.get("to_whom") or ""), _cell(_due(x)),
                         _cell(x.get("meeting_title", "")), x.get("meeting_date", ""),
                         "да" if x.get("status") == "done" and lang == "ru" else "yes" if x.get("status") == "done" else ""])
     return buf.getvalue()
