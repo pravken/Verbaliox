@@ -41,3 +41,33 @@ class ScrubTest(unittest.TestCase):
             self.assertNotIn(gone, out)
         self.assertIn(r"C:\Users\<user>\AppData", out)
         self.assertEqual(scrub("3/4 done, 12 s"), "3/4 done, 12 s")
+
+    def test_calendar_links_are_cut(self):
+        """A traceback of the calendar's reading prints its link; the secret is in the path or the query."""
+        from app.applog import scrub
+
+        links = [
+            "https://calendar.google.com/calendar/ical/team%40example.com/private-0a1b2c3d4e5f/basic.ics",
+            "webcal://example.com/feeds/secret-feed-42.ics?v=2",
+            "https://outlook.office365.com/owa/calendar/abc/def0123/reachcalendar.ics",
+            "https://calendar.example.ru/export/ics.xml?private_token=f00ba4&tz_id=Europe/Moscow",
+            "https://cloud.example.com/remote.php/dav/public-calendars/Zx9Qk2?export",
+        ]
+        for link in links[:4]:
+            out = scrub(f"httpx.HTTPStatusError: Client error '404 Not Found' for url '{link}'")
+            self.assertIn("<calendar link>", out, link)
+            for gone in ("private-0a1b2c3d4e5f", "secret-feed-42", "def0123", "f00ba4"):
+                self.assertNotIn(gone, out)
+        self.assertEqual(scrub("see https://example.com/docs/page"), "see https://example.com/docs/page")
+
+    def test_the_calendar_link_of_the_settings_is_cut_whatever_its_form(self):
+        from app import applog
+
+        link = "https://cloud.example.com/remote.php/dav/public-calendars/Zx9Qk2?export"
+        self.addCleanup(applog._HIDDEN.clear)
+        applog.hide_in_log(link)
+        applog.hide_in_log("abc")  # too short: never hidden
+        out = applog.scrub(f"ConnectError for url '{link}' abc")
+        self.assertNotIn("Zx9Qk2", out)
+        self.assertIn("<calendar link>", out)
+        self.assertTrue(out.endswith(" abc"))
