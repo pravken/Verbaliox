@@ -26,12 +26,17 @@ ONNX_MODELS: Dict[str, Dict[str, Any]] = {
         # are downloaded (_complete_async: an installation made before they were added) the copy is the main one.
         # live: live captions by VAD phrases (app/live_phrases.py): the e2e-CTC int8 recognizes a phrase in
         # 0.1 s with the WER of the RNN-T (bench-report/asr-2026-11.md, item 3)
+        # cpu: a job on the processor takes the e2e-RNN-T int8: the same WER, 1.6 times faster, 0.46 GB of memory
+        # instead of 1.1 (item 5); the video card keeps the main fp32 model
         "variants": {
             "live": {"onnx_name": "gigaam-v3-e2e-ctc", "quantization": "int8", "phrases": True,
                      "files": ["v3_e2e_ctc.int8.onnx", "v3_e2e_ctc_vocab.txt"]},
+            "cpu": {"onnx_name": "gigaam-v3-e2e-rnnt", "quantization": "int8",
+                    "files": ["v3_e2e_rnnt_encoder.int8.onnx", "v3_e2e_rnnt_decoder.int8.onnx",
+                              "v3_e2e_rnnt_joint.int8.onnx", "v3_e2e_rnnt_vocab.txt"]},
         },
         "name": "GigaAM v3",
-        "size_mb": 1120,
+        "size_mb": 1350,
         "license": "MIT",
         "vram_gb": 1.5,  # on the GPU (app/onnx_gpu.py)
         "languages": ["ru"],

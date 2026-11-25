@@ -248,6 +248,30 @@ class PhraseVariantTest(unittest.TestCase):
             self.asr.release("gigaam-v3")
             self.assertEqual(self.asr._plain, {})
 
+    def test_a_job_on_the_processor_takes_the_rnnt_int8_and_the_card_fp32(self):
+        import sys
+        import types
+
+        fake = types.ModuleType("onnx_asr")
+        fake.load_model = mock.Mock(side_effect=lambda *a, **k: mock.Mock())
+        fake.load_vad = mock.Mock(return_value="vad")
+        from app import onnx_gpu
+
+        with mock.patch.dict(sys.modules, {"onnx_asr": fake}), mock.patch.object(self.asr, "ensure_package"), \
+                mock.patch.object(self.asr, "fetch"), mock.patch.object(self.asr, "_complete_async") as complete, \
+                mock.patch.object(onnx_gpu, "prepare_cuda"), mock.patch.object(self.asr, "queue_threads", return_value=4), \
+                mock.patch.dict(self.asr._loaded, {}, clear=True), mock.patch.dict(self.asr._made, {}, clear=True):
+            self.asr._load("gigaam-v3")  # not downloaded yet: fp32, its int8 fetched in the background
+            complete.assert_called_with("gigaam-v3")
+            for name in self.asr.ONNX_MODELS["gigaam-v3"]["variants"]["cpu"]["files"]:
+                (self.dir / "gigaam-v3" / name).write_bytes(b"x")
+            self.asr._load("gigaam-v3")  # the next job: int8
+            self.asr._load("gigaam-v3", gpu=True)
+            self.asr._load("parakeet-v3")
+        got = [(c.args[0], c.kwargs.get("quantization")) for c in fake.load_model.call_args_list]
+        self.assertEqual(got, [("gigaam-v3-e2e-rnnt", None), ("gigaam-v3-e2e-rnnt", "int8"),
+                               ("gigaam-v3-e2e-rnnt", None), ("nemo-parakeet-tdt-0.6b-v3", None)])
+
     def test_recognize_phrase_cuts_sentences_at_words(self):
         from types import SimpleNamespace
 

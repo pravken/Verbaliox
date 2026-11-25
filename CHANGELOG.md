@@ -92,6 +92,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   starts exactly there: no words are lost or repeated at the cut. The model file (about 214 MB, from the same
   repository) is downloaded once by itself; until then the captions go as before. English and other languages keep
   Parakeet in the window, which is more accurate for them.
+- **GigaAM transcribes faster on the processor**: a transcription without the video card takes GigaAM v3 e2e-RNN-T in
+  int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
+  the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
+  completed in the background on first use, and until then the processor uses the model as before.
 
 ## 0.9.3 — English
 
@@ -1315,6 +1319,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   на стыке слова не теряются и не повторяются. Файл модели (около 214 МБ, из того же репозитория) скачивается один
   раз сам; до этого субтитры идут как раньше. Английский и другие языки остаются на Parakeet с окном — для них оно
   точнее.
+- **GigaAM быстрее расшифровывает на процессоре**: расшифровка без видеокарты идёт на GigaAM v3 e2e-RNN-T в int8 с той
+  же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
+  как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
+  первом использовании, а до этого процессор работает с моделью как раньше.
 
 ## 0.9.3
 
