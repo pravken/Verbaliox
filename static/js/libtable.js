@@ -728,6 +728,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLibTa
     e.preventDefault();
     e.stopPropagation();
     const to = row.dataset.colrow;
+    // dropped on itself: it stays (it went one place before the last: audit)
+    if (to === dragCol) { dragCol = null; bar.querySelectorAll('.lt-colrow-over').forEach(x => x.classList.remove('lt-colrow-over')); return; }
     const order = ltPrefs().order.filter(c => c !== dragCol);
     order.splice(order.indexOf(to) + (ltPrefs().order.indexOf(dragCol) < ltPrefs().order.indexOf(to) ? 1 : 0), 0, dragCol);
     dragCol = null;
@@ -962,6 +964,17 @@ function ltExportName(res, m, fmt) {
   return `${(m.title || 'meeting').replace(/[^a-zA-Z0-9а-яА-ЯёЁ _-]/g, '_').trim() || 'meeting'}.${fmt}`;
 }
 
+// Recordings of the same name get «Name (2).docx», «Name (3).docx»… in one export (the second one wrote over the
+// first: audit)
+function ltUniqueName(name, used) {
+  const dot = name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+  let out = name;
+  for (let n = 2; used.has(out.toLocaleLowerCase()); n++) out = `${stem} (${n})${ext}`;
+  used.add(out.toLocaleLowerCase());
+  return out;
+}
+
 // The texts of the selected recordings: into one folder chosen once (the page's folder picker), or each
 // with its own «Сохранить как» where that picker is not there
 async function ltExportMany(fmt) {
@@ -974,12 +987,13 @@ async function ltExportMany(fmt) {
   let dir;
   try { dir = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (err) { return; }  // cancelled
   let saved = 0, failed = 0, why = '';
+  const used = new Set();
   for (const m of list) {
     try {
       const res = await fetch(`/api/meetings/${m.id}/export/${fmt}`);
       if (!res.ok) { failed++; why = why || await bulkWhy(res); continue; }
       const blob = await res.blob();
-      const file = await dir.getFileHandle(ltExportName(res, m, fmt), { create: true });
+      const file = await dir.getFileHandle(ltUniqueName(ltExportName(res, m, fmt), used), { create: true });
       const w = await file.createWritable();
       await w.write(blob);
       await w.close();

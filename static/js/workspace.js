@@ -2272,6 +2272,9 @@ function findActiveItem(items, t, pad, startOf = x => x.s, endOf = x => x.e) {
     if (startOf(items[mid]) <= t) { found = mid; lo = mid + 1; } else { hi = mid - 1; }
   }
   if (found >= 0 && t <= endOf(items[found]) + pad) return found;
+  // a short phrase said over a longer one (a «да» inside a long answer) ends before it: the longer one, a few
+  // phrases back, is still under the playhead (the highlight went off until the next phrase: audit)
+  for (let i = found - 1; i >= 0 && i >= found - 8; i--) if (t <= endOf(items[i]) + pad) return i;
   return -1;
 }
 

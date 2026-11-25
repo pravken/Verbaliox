@@ -696,7 +696,8 @@ function openTaskMenu(id, e) {
 }
 
 function editTaskText(id) {
-  const row = document.querySelector(`.tk-row[data-tid="${id}"] .tk-row-text`);
+  // a row of the list or a card of «Карточки» (only the rows were looked for: «Изменить текст» did nothing there)
+  const row = document.querySelector(`:is(.tk-row, .tk-tcard)[data-tid="${id}"] .tk-row-text`);
   const x = tkTask(id);
   if (!row || !x) return;
   const input = document.createElement('input');

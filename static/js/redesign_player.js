@@ -1125,7 +1125,8 @@ function rpPlayCopy(cid) {
   p.play().catch(() => {});
   showToast(t('rdPlyrPlayingCopy').replace('{name}', () => c.name), {
     label: t('rdPlyrBackToRecording'),
-    onClick: () => { p.src = `/api/meetings/${m.id}/media`; rpRender(); },
+    // only while the copy plays in this recording: another one opened meanwhile keeps its own sound
+    onClick: () => { if (state.activeMeeting?.id !== m.id || !p.src.includes('/copies/')) return; p.src = `/api/meetings/${m.id}/media`; rpRender(); },
   });
 }
 

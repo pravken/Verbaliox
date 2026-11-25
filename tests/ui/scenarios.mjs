@@ -2720,6 +2720,68 @@ await step('refusals are not shown as success', async () => {
   expect(r.kept && r.input, `the title: ${JSON.stringify(r)}`);
 });
 
+// The period of the assistant is read by the day of the meeting (it read a field that does not exist, then the import)
+await step('assistant period by the meeting day', async () => {
+  const r = await page.evaluate(() => {
+    const m0 = state.meetings[0], was = [m0.recorded_at, m0.created_at];
+    m0.recorded_at = '2020-01-02 10:00:00'; m0.created_at = '2026-11-20 10:00:00';
+    const found = assistantScopeIds({ type: 'period', from: '2020-01-01', to: '2020-01-03' }).includes(m0.id);
+    [m0.recorded_at, m0.created_at] = was;
+    return found;
+  });
+  expect(r, 'the period of the assistant reads the day of the import');
+});
+
+// The phrase under the playhead stays lit when a short one said inside it has ended
+await step('phrase under the playhead over a short one', async () => {
+  const r = await page.evaluate(() => {
+    const items = [{ s: 0, e: 10 }, { s: 5, e: 6 }, { s: 20, e: 25 }];
+    return [findActiveItem(items, 7, 0), findActiveItem(items, 5.5, 0), findActiveItem(items, 15, 0)];
+  });
+  expect(JSON.stringify(r) === '[0,1,-1]', `the phrase under the playhead: ${JSON.stringify(r)}`);
+});
+
+// Recordings of one name in one export do not write over each other
+await step('export names of one export', async () => {
+  const r = await page.evaluate(() => { const used = new Set(); return ['Итоги.docx', 'итоги.docx', 'Итоги.docx', 'План'].map(n => ltUniqueName(n, used)); });
+  expect(JSON.stringify(r) === '["Итоги.docx","итоги (2).docx","Итоги (3).docx","План"]', `the names: ${JSON.stringify(r)}`);
+});
+
+// «Изменить текст» of a task works in «Карточки» too (it looked for a row of the list only)
+await step('task text edited in the cards', async () => {
+  await page.evaluate(() => switchAppView('tasks'));
+  await until(() => (TK.data.tasks || []).length > 0, 'no tasks', 5000);
+  const r = await page.evaluate(() => {
+    const view = TK.view;
+    setTasksView('cards');
+    const id = TK.data.tasks[0].id;
+    editTaskText(id);
+    const input = document.querySelector(`.tk-tcard[data-tid="${id}"] input.tk-row-edit`);
+    const ok = !!input && document.activeElement === input;
+    if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    setTasksView(view);
+    return ok;
+  });
+  expect(r, 'no field to edit the text of a card');
+});
+
+// A column of «Записи» dropped on itself stays where it was (it went one place before the last)
+await step('column dropped on itself stays', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await page.click('[data-lt-cols]');
+  const r = await page.evaluate(() => {
+    const before = ltPrefs().order.join(',');
+    const row = document.querySelector('#lt-cols-pop [data-colrow]');
+    const dt = new DataTransfer();
+    row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+    return { before, after: ltPrefs().order.join(',') };
+  });
+  await page.evaluate(() => closeLibTableColumnsMenu());
+  expect(r.before === r.after, `the order changed: ${r.before} → ${r.after}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
