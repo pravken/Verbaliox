@@ -38,7 +38,7 @@ class CpuPriorityTest(unittest.TestCase):
         self.assertEqual(k.cls, cpu_priority.BELOW_NORMAL_PRIORITY_CLASS)
 
     def test_elsewhere_nice(self):
-        with mock.patch.object(cpu_priority, "_WINDOWS", False), mock.patch("os.nice") as nice:
+        with mock.patch.object(cpu_priority, "_WINDOWS", False), mock.patch("os.nice", create=True) as nice:
             self.assertTrue(cpu_priority.lower_process())
         nice.assert_called_once_with(cpu_priority.NICE)
 
