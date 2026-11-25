@@ -116,10 +116,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   completed in the background on first use, and until then the processor uses the model as before.
 - **Short replies in the captions are translated**: a line of one word («No.», «Yes?», «Да.») gets its translation; it
   was shown untranslated. Fillers («um», «эм») still are not translated.
-- **«Load of the week» tells the hours passed from the plan**: the meetings still ahead (the coming days of the week
-  and the rest of today) are drawn as planned — the same hue hatched (lighter in the ring), their figures grey, «planned»
-  in the hint. The head reads «In meetings: 4.6 h · ahead 4 h»; under the chart, which days are above the norm by fact
-  and which by plan («Above the norm: Tue; planned: Fri»).
+- **«Load of the week» tells the hours passed from the plan and compares with the week before**: the meetings still
+  ahead (the coming days of the week and the rest of today) continue the day's mark as a grey part, their figures grey,
+  «planned» in the hint; a plan above the norm stays grey with an orange frame over the part above the norm. A thin
+  light tick marks the hours of the same day last week, and beside each day's hours stands the difference to it
+  («+1.5», «−1», in grey); the hint reads «Tue, Nov 24: 5 h · last week 6 h (−1)». In all four looks: columns, bars,
+  ring (the ticks on its legend bars) and line (last week as a faint line). The head reads «In meetings: 4.6 h · ahead
+  4 h»; under the chart, the key («passed», «planned», «last week») and which days are above the norm by fact and which
+  by plan («Above the norm: Tue; planned: Fri»).
 - **Overview of a year and of any past period**: «Year» joins Week, Month and Quarter (its meeting hours by month,
   its «Statistics» trend over the years there are data for, six at most). ‹ › beside the period switch go back to any
   past week, month, quarter or year, named in the head («October 2026», «Q3 2026», «2025»); «Today» returns to the
@@ -1372,9 +1376,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   первом использовании, а до этого процессор работает с моделью как раньше.
 - **Короткие ответы в субтитрах переводятся**: строка из одного слова («No.», «Yes?», «Да.») получает перевод, раньше
   она оставалась без него. Слова-паразиты («um», «эм») по-прежнему не переводятся.
-- **«Нагрузка недели» отделяет прошедшее от запланированного**: встречи ещё впереди (следующие дни недели и
-  остаток сегодняшнего) показаны как план — тем же цветом со штриховкой (в кольце светлее), их числа серые, в подсказке
-  «по плану». В заголовке — «Во встречах: 4,6 ч · впереди 4 ч»; под диаграммой — какие дни сверх нормы по факту, а какие
+- **«Нагрузка недели» отделяет прошедшее от запланированного и сравнивает с прошлой неделей**: встречи ещё впереди
+  (следующие дни недели и остаток сегодняшнего) продолжают полосу дня серой частью, их числа серые, в подсказке
+  «по плану»; план сверх нормы остаётся серым, а часть выше нормы обведена оранжевым. Тонкая светлая отметка
+  показывает часы того же дня прошлой недели, рядом с часами дня — разница с ней («+1,5», «−1», серым); в подсказке —
+  «вт, 24 нояб.: 5 ч · прошлая неделя 6 ч (−1)». Во всех четырёх видах: столбцы, полосы, кольцо (отметки на полосах
+  легенды) и линия (прошлая неделя — бледной линией). В заголовке — «Во встречах: 4,6 ч · впереди 4 ч»; под
+  диаграммой — условные обозначения («прошло», «по плану», «прошлая неделя») и какие дни сверх нормы по факту, а какие
   по плану («Сверх нормы: вт; по плану: пт»).
 - **«Обзор» за год и за любой прошедший период**: к «Неделе», «Месяцу» и «Кварталу» добавлен «Год» (часы встреч по
   месяцам, тренд «Статистики» по годам, за которые есть данные, не больше шести). Кнопки ‹ › рядом с выбором периода
