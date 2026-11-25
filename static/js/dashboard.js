@@ -111,7 +111,9 @@ function dbSize(w) {
 }
 
 // --- Data ---
-async function loadDashboard() {
+// keepWeek: the period only moved (‹ ›, «Текущий период», another period or comparison): the week of «Нагрузка
+// недели» and «Рабочий день» is asked again only when it is another week
+async function loadDashboard({ keepWeek = false } = {}) {
   const p = dbPrefs();
   const seq = (DB.seq = (DB.seq || 0) + 1);  // a period switched quickly: only the last answer is shown
   DB.loading = true;
@@ -121,9 +123,7 @@ async function loadDashboard() {
   // is known; the widgets are not drawn anew, so they do not rise a second time)
   const fresh = ids => { if (seq === DB.seq && state.appView === 'dashboard' && !DB.edit && !(DB.drag && DB.drag.on)) ids.forEach(dbRedrawWidget); };
   const side = [
-    dbLoadWeek().then(w => { if (w) DB.week = w; fresh(['load']); }),
-    dbLoadPrevWeek().then(w => { if (w) DB.prevWeek = w; fresh(['load']); }),
-    dbLoadWork().then(() => fresh(['worked'])),
+    ...dbLoadWeekWidgets(keepWeek),
     dbLoadApps().then(() => fresh(['apps'])),
     dbLoadPeople().then(() => fresh(['people'])),
   ];
@@ -137,6 +137,48 @@ async function loadDashboard() {
     fresh(dbPrefs().layout.map(w => w.id).filter(id => !DB_LOCAL_WIDGETS.includes(id) || id === 'people'));
   }
   await Promise.all(side);
+}
+
+// The week of «Нагрузка недели» and «Рабочий день»: the current one, or for a past period (DB.at) the week of its
+// last day (a past week: that week; a month, a quarter, a year: its last week). Found in review: a past period
+// showed the current week in both
+function dbWeekMonday() {
+  if (!DB.at) return dbMonday();
+  const last = new Date(`${dbSpan()[1]}T12:00:00`);
+  last.setDate(last.getDate() - 1);
+  return dbMonday(last);
+}
+
+// What the two widgets draw: the current week (DB.week, DB.prevWeek, DB.work — «Главная» reads them too), or the
+// past one of DB.past, loaded for its Monday
+function dbWeekData() {
+  const monday = dbWeekMonday();
+  if (!DB.at) return { week: DB.week, prev: DB.prevWeek, work: DB.work, monday, past: false };
+  const P = DB.past && DB.past.monday === calKey(monday) ? DB.past : {};
+  return { week: P.week, prev: P.prev, work: P.work, monday, past: true };
+}
+
+// The requests of the week's widgets; none for a week already loaded when the period only moved (keep)
+function dbLoadWeekWidgets(keep) {
+  const monday = dbWeekMonday(), key = calKey(monday), before = new Date(monday);
+  before.setDate(monday.getDate() - 7);
+  const draw = (ids, ok) => { if (ok() && state.appView === 'dashboard' && !DB.edit && !(DB.drag && DB.drag.on)) ids.forEach(dbRedrawWidget); };
+  if (DB.at) {
+    if (keep && DB.past && DB.past.monday === key) return [];
+    const P = (DB.past = { monday: key }), mine = () => DB.past === P;  // a later week does not take this one's answers
+    return [
+      dbLoadWeek(monday).then(w => { if (w) P.week = w; draw(['load'], mine); }),
+      dbLoadPrevWeek(monday).then(w => { if (w) P.prev = w; draw(['load'], mine); }),
+      dbLoadWork(monday, P).then(() => draw(['worked'], mine)),
+    ];
+  }
+  const cur = () => !DB.at && calKey(dbMonday()) === key;
+  return [
+    keep && DB.week && DB.week.monday === key ? null : dbLoadWeek(monday).then(w => { if (w && cur()) DB.week = w; draw(['load'], cur); }),
+    keep && DB.prevWeek && DB.prevWeek.monday === calKey(before) ? null
+      : dbLoadPrevWeek(monday).then(w => { if (w && cur()) DB.prevWeek = w; draw(['load'], cur); }),
+    keep && DB.work && DB.work.monday === key ? null : dbLoadWork(monday).then(() => draw(['worked'], cur)),
+  ].filter(Boolean);
 }
 
 // The period around a day, as app/dashboard._bounds: [first day, the day after the last] as YYYY-MM-DD
@@ -164,9 +206,8 @@ function dbSetAt(day) {
 
 // The name of the period shown: «17–23 ноября», «Октябрь 2026», «III квартал 2026», «2025»
 function dbSpanName() {
-  const p = dbPrefs().period, [a, b] = dbSpan(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
-  const first = new Date(`${a}T12:00:00`), last = new Date(`${b}T12:00:00`);
-  last.setDate(last.getDate() - 1);
+  const p = dbPrefs().period, [a] = dbSpan(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  const first = new Date(`${a}T12:00:00`);
   const y = first.getFullYear();
   if (p === 'year') return String(y);
   if (p === 'quarter') {
@@ -177,6 +218,13 @@ function dbSpanName() {
     const name = first.toLocaleDateString(lang, { month: 'long' });
     return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
   }
+  return dbWeekName(first);
+}
+
+// A week by its days: «17–23 ноября», «27 октября – 2 ноября», with the year when it is not the current one
+function dbWeekName(first) {
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', last = new Date(first);
+  last.setDate(first.getDate() + 6);
   const other = last.getFullYear() !== new Date().getFullYear() ? ` ${last.getFullYear()}` : '';
   const day = x => x.toLocaleDateString(lang, { day: 'numeric' });
   if (first.getMonth() === last.getMonth()) {
@@ -187,7 +235,7 @@ function dbSpanName() {
   return `${dm(first)} – ${dm(last)}${other}`;
 }
 
-// ‹ the period before · its name · the next one › (none after the current one), «Сегодня» back to the current one
+// ‹ the period before · its name · the next one › (none after the current one), «Текущий период» back to it
 function dbRenderNav() {
   const el = document.getElementById('db-nav');
   if (!el) return;
@@ -214,7 +262,7 @@ function dbToCurrent() {
 }
 
 function dbReload() {
-  loadDashboard();
+  loadDashboard({ keepWeek: true });
   renderDashboard();
   dbRefreshDetail();
 }
@@ -264,11 +312,12 @@ async function dbLoadPeople() {
 }
 
 // The hours worked of this week (app/worktime.py): asked again at each tick, the minutes go on
-async function dbLoadWork() {
-  const a = dbMonday(), b = new Date(a);
+// (or of the week from Monday `a`, into `into`: a past week of «Обзор» goes to DB.past)
+async function dbLoadWork(a = dbMonday(), into = DB) {
+  const b = new Date(a);
   b.setDate(a.getDate() + 7);
   const w = await fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
-  if (w) DB.work = w;
+  if (w) into.work = { ...w, monday: calKey(a) };
 }
 
 // «Мои программы» of this week and the one before (app/worktime.py), only while the widget is on «Главная»
@@ -285,17 +334,19 @@ function dbWorkedShort(min) {
   return min ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}` : '';
 }
 
-async function dbLoadWeek() {
-  const a = dbMonday(), b = new Date(a);
+// The calendar and the recordings of the week from Monday `a` (this week by default), with that Monday
+async function dbLoadWeek(a = dbMonday()) {
+  const b = new Date(a);
   b.setDate(a.getDate() + 7);
-  return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
+  const w = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  return w && { ...w, monday: calKey(a) };
 }
 
 // The week before the one of «Нагрузка недели», for its comparison: the same request one week back. The answer
 // keeps the Monday it was asked for, so a week moved meanwhile is not compared with the wrong one
-async function dbLoadPrevWeek() {
-  const b = dbMonday(), a = new Date(b);
+async function dbLoadPrevWeek(b = dbMonday()) {
+  const a = new Date(b);
   a.setDate(b.getDate() - 7);
   const w = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
@@ -619,7 +670,7 @@ function setDashCompare(k) {
   if (!DB_COMPARE.includes(k) || dbPrefs().compare === k) return;
   dbSave({ compare: k });
   dbRedrawWidget('kpis');
-  loadDashboard();
+  loadDashboard({ keepWeek: true });
 }
 
 // День · Неделя · Месяц · Год of a widget
@@ -743,13 +794,13 @@ function dbDayHours(w, k, now) {
 // the user: the meetings ahead read as hours already spent). The week before is a tick at each day and the
 // difference beside its hours (the whole day, the plan too); grey, as more meetings are neither better nor worse
 function dbLoadHtml() {
-  const w = DB.week;
-  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
-  const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', now = Date.now(), today = calKey(new Date(now));
+  const { week: w, prev: pw0, monday: a, past } = dbWeekData();
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading || past ? 'dbLoading' : 'dbNoData'))}</div>`;
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', now = Date.now(), today = calKey(new Date(now));
   const norm = dbPrefs().norm, hs = t('dbHoursShort'), h1 = v => dbNum(Math.round(v * 10) / 10);
   const ahead = h => t('dbLoadAhead').replace('{h}', () => h1(h));
   const a0 = new Date(a); a0.setDate(a.getDate() - 7);
-  const pw = DB.prevWeek && DB.prevWeek.monday === calKey(a0) ? DB.prevWeek : null;
+  const pw = pw0 && pw0.monday === calKey(a0) ? pw0 : null;
   const rows = [];
   for (let i = 0; i < 7; i++) {
     const x = new Date(a); x.setDate(a.getDate() + i);
@@ -777,9 +828,10 @@ function dbLoadHtml() {
     : (byPlan.length ? t('dbLoadOverPlanOnly').replace('{days}', () => days(byPlan)) : '');
   const head = t('dbLoadSum').replace('{h}', () => h1(sum)) + (left >= 0.05 ? ` · ${ahead(left)}` : '');
   // the key under the chart: its marks drawn as in the look chosen
-  const key = [['done', 'dbLoadKeyDone'], ['plan', 'dbLoadKeyPlan'], ...(pw ? [['prev', 'dbLoadKeyPrev']] : [])]
+  // a past week has nothing ahead: no «план» in its key
+  const key = [['done', 'dbLoadKeyDone'], ...(past ? [] : [['plan', 'dbLoadKeyPlan']]), ...(pw ? [['prev', 'dbLoadKeyPrev']] : [])]
     .map(([c, k]) => `<span><i class="k-${c}"></i>${escapeHtml(t(k))}</span>`).join('');
-  return `<div class="db-load-head"><span class="db-load-sum">${escapeHtml(head)}</span>`
+  return (past ? `<div class="db-wk-sub db-week-name">${escapeHtml(dbWeekName(a))}</div>` : '') + `<div class="db-load-head"><span class="db-load-sum">${escapeHtml(head)}</span>`
     + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
     + dbChartHtml('load', rows, norm)
     + `<div class="dbc-key dbc-key-${dbChartKind('load')}">${key}</div>`
@@ -789,19 +841,20 @@ function dbLoadHtml() {
 // «Рабочий день»: the hours worked today against the norm (the reminder's hours), when it began, the breaks,
 // and the days of the week (app/worktime.py: the minutes this computer was in use)
 function dbWorkedHtml(size) {
-  const w = DB.work;
-  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  const { work: w, monday: a, past } = dbWeekData();
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading || past ? 'dbLoading' : 'dbNoData'))}</div>`;
   if (!w.supported) return `<div class="db-note">${escapeHtml(t('dbWorkedNoSupport'))}</div>`;
   if (!w.enabled) return `<div class="db-note">${escapeHtml(t('dbWorkedOff'))} <button class="db-more" data-click="openWorkSettings">${escapeHtml(t('newsOpenSettings'))}</button></div>`;
   const today = w.days[w.today] || { worked: 0, start: '', end: '', breaks: 0 };
   const norm = (w.norm || 8) * 60, pct = Math.min(100, today.worked / norm * 100);
   const over = today.worked >= norm;
-  let html = `<div class="db-wk-head"><b class="db-wk-big${over ? ' over' : ''}">${escapeHtml(dbHm(today.worked * 60))}</b>`
+  // a past week: its name and its days, no «today»
+  let html = past ? `<div class="db-wk-sub db-week-name">${escapeHtml(dbWeekName(a))}</div>` : `<div class="db-wk-head"><b class="db-wk-big${over ? ' over' : ''}">${escapeHtml(dbHm(today.worked * 60))}</b>`
     + `<span class="db-wk-of">${escapeHtml(t('dbWorkedOf').replace('{h}', () => dbNum(w.norm || 8)))}</span></div>`
     + `<div class="db-wk-bar${over ? ' over' : ''}"><i style="width:${pct.toFixed(1)}%"></i></div>`
     + `<div class="db-wk-sub">${escapeHtml(today.start ? [t('dbWorkedSince').replace('{t}', () => today.start), today.breaks >= 15 ? t('dbWorkedBreaks').replace('{t}', () => dbHm(today.breaks * 60)) : ''].filter(Boolean).join(' · ') : t('dbWorkedNone'))}</div>`;
-  if (size !== 'S') {
-    const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  if (size !== 'S' || past) {
+    const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
     const rows = [];
     for (let i = 0; i < 7; i++) {
       const x = new Date(a); x.setDate(a.getDate() + i);
@@ -813,7 +866,7 @@ function dbWorkedHtml(size) {
       }
     }
     const sum = rows.reduce((s, d) => s + d.value, 0);
-    html += `<div class="db-load-head">${escapeHtml(t('dbWorkedWeek').replace('{t}', () => dbHm(sum * 3600)))}</div>` + dbChartHtml('worked', rows, w.norm || 8);
+    html += `<div class="db-load-head">${escapeHtml(t('dbWorkedWeek').replace('{t}', () => dbHm(sum * 3600)))}</div>` + (size !== 'S' ? dbChartHtml('worked', rows, w.norm || 8) : '');
   }
   return html;
 }
@@ -997,7 +1050,8 @@ function dbKpiList(v) {
 }
 
 function dbSpark(v) {
-  if (!v || v.length < 2) return '';
+  v = (v || []).filter(x => x != null);  // the periods before the first data have no value
+  if (v.length < 2) return '';
   const lo = Math.min(...v), hi = Math.max(...v), k = hi - lo || 1;
   const pts = v.map((x, i) => `${(i * 56 / (v.length - 1)).toFixed(1)},${(hi === lo ? 12 : 20 - (x - lo) / k * 16).toFixed(1)}`);
   const [cx, cy] = pts[pts.length - 1].split(',');
@@ -1014,6 +1068,8 @@ function dbKpiFigure(key, d) {
   const before = cmp && key in cmp ? cmp[key] : h && h.length > 1 ? h[h.length - 2] : null;
   let line = '', tone = 'flat';
   if (def.me && d.needs_me) return { value: '—', spark: '', line: '', tone, needsMe: true };
+  // no data up to this period (the share, the time without meetings before the first recording): unknown, not zero
+  if (now == null) return { value: '—', now: null, spark: '', line: '', tone };
   if (key === 'mine' && k.overdue) { line = t('dbOverdueN').replace('{n}', () => k.overdue); tone = 'bad'; }
   else if (key === 'waiting' && k.waiting_overdue) { line = t('kpiWaitOverdue').replace('{n}', () => k.waiting_overdue); tone = 'warn'; }
   else if (before != null) {
@@ -1665,7 +1721,7 @@ function dbTickNow() {
   if (state.appView !== 'dashboard') return;
   const day = new Date().toDateString();
   if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
-  else if (dbPrefs().layout.some(w => w.id === 'worked')) dbLoadWork().then(() => { if (!DB.edit && !DB.drag && state.appView === 'dashboard') dbRedrawWidget('worked'); });
+  else if (!DB.at && dbPrefs().layout.some(w => w.id === 'worked')) dbLoadWork().then(() => { if (!DB.edit && !DB.drag && state.appView === 'dashboard') dbRedrawWidget('worked'); });
   if (!DB.edit && !DB.drag) {
     dbPrefs().layout.forEach((w, i) => {
       if (!DB_TIME_WIDGETS.includes(w.id)) return;

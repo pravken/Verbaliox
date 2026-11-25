@@ -297,6 +297,27 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(d["history"]["starts"][-1], "2026-10-01")
         self.assertEqual([r["title"] for r in d["recent"]], ["Октябрь"])
 
+    def test_no_working_time_is_made_up_before_the_first_data(self):
+        """Reported in review: a year with no recording showed «2088 ч рабочего времени без встреч». A period
+        that ends before the first day with data (or with no data at all) has no share and no time without
+        meetings: None, shown as «—»; the counts stay zero."""
+        from unittest import mock
+
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            empty = dashboard.build("year", today=self.TODAY, at=date(2025, 6, 1))
+            self._meeting("Первая", "2026-11-17")
+            before = dashboard.build("year", today=self.TODAY, at=date(2025, 6, 1))
+            week = dashboard.build("week", today=self.TODAY)
+            year_ago = dashboard.build("week", today=self.TODAY, compare="year")
+        for d in (empty, before):
+            v = d["history"]["values"]
+            self.assertEqual((v["focus"], v["share"], v["meetings"]), ([None], [None], [0]))
+        v = week["history"]["values"]
+        self.assertEqual(v["focus"][:5], [None] * 5)  # the weeks before 17 November
+        self.assertEqual((v["share"][-1], v["focus"][-1]), (2, 23.5))
+        self.assertIsNone(week["history"]["before"]["focus"])
+        self.assertIsNone(year_ago["history"]["before"]["focus"])
+
     def test_compared_with_the_same_days_a_year_earlier(self):
         """Asked by the user: the figures against the period before or the same days a year earlier."""
         from unittest import mock

@@ -122,12 +122,15 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   light tick marks the hours of the same day last week, and beside each day's hours stands the difference to it
   («+1.5», «−1», in grey); the hint reads «Tue, Nov 24: 5 h · last week 6 h (−1)». In all four looks: columns, bars,
   ring (the ticks on its legend bars) and line (last week as a faint line). The head reads «In meetings: 4.6 h · ahead
-  4 h»; under the chart, the key («passed», «planned», «last week») and which days are above the norm by fact and which
+  4 h»; under the chart, the key («so far», «planned», «last week») and which days are above the norm by fact and which
   by plan («Above the norm: Tue; planned: Fri»).
 - **Overview of a year and of any past period**: «Year» joins Week, Month and Quarter (its meeting hours by month,
   its «Statistics» trend over the years there are data for, six at most). ‹ › beside the period switch go back to any
-  past week, month, quarter or year, named in the head («October 2026», «Q3 2026», «2025»); «Today» returns to the
-  current one. A past period is counted whole: all its days gone by, the tasks open at its end.
+  past week, month, quarter or year, named in the head («October 2026», «Q3 2026», «2025»); «Current period» returns
+  to the current one. A past period is counted whole: all its days gone by, the tasks open at its end. «Load of the
+  week» and «Working day» of a past period show its last week, named under the title («17–23 November»), compared
+  with the week before it. A period before the first recording or task has no share of the working time and no time
+  without meetings: «—» instead of hours that were never recorded.
 - **Compare with a year ago**: the «Statistics» tiles compare each figure with the previous period or with the same
   period a year ago (the switch in the widget's head, kept with the layout).
 
@@ -1387,8 +1390,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **«Обзор» за год и за любой прошедший период**: к «Неделе», «Месяцу» и «Кварталу» добавлен «Год» (часы встреч по
   месяцам, тренд «Статистики» по годам, за которые есть данные, не больше шести). Кнопки ‹ › рядом с выбором периода
   открывают любую прошедшую неделю, месяц, квартал или год, а его название показано в заголовке («Октябрь 2026»,
-  «III квартал 2026», «2025»); «Сегодня» возвращает к текущему. Прошедший период считается целиком: все его дни прошли,
-  задачи — открытые на его конец.
+  «III квартал 2026», «2025»); «Текущий период» возвращает к текущему. Прошедший период считается целиком: все его дни
+  прошли, задачи — открытые на его конец. «Нагрузка недели» и «Рабочий день» прошедшего периода показывают его
+  последнюю неделю с её названием под заголовком («17–23 ноября») и сравнивают её с неделей перед ней. У периода до
+  первой записи или задачи нет доли рабочего времени и времени без встреч: вместо часов, которые не записывались, — «—».
 - **Сравнение с прошлым годом**: плитки «Статистики» сравнивают каждый показатель с предыдущим периодом или с тем же
   периодом год назад (переключатель в заголовке виджета, сохраняется вместе с раскладкой).
 
