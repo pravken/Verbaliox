@@ -33,6 +33,23 @@ def api_assistant_save_chats(payload: ChatsPayload) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class ChatsMergePayload(BaseModel):
+    chats: List[Dict[str, Any]] = []
+    deleted: List[str] = []
+
+
+@router.post("/api/assistant/chats/merge")
+def api_assistant_merge_chats(payload: ChatsMergePayload) -> Dict[str, Any]:
+    """The conversations changed since the last save, sent as the window closes (static/js/assistant.js
+    assistantFlush): put into the stored list by their id; the answer is how many are stored."""
+    from app.assistant_chats import merge_chats
+
+    try:
+        return {"count": len(merge_chats(payload.chats, payload.deleted))}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 class AnswerExportPayload(BaseModel):
     fmt: str  # docx | md | txt
     question: str

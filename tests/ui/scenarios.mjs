@@ -2937,6 +2937,33 @@ await step('esc over the settings closes the top window', async () => {
   expect(role === 'dialog|true', `the deletion question: «${role}»`);
 });
 
+// The assistant's conversations as the window closes (found in the audit: what changed in the last half-second was
+// lost): pagehide sends what changed since the last save at once, with keepalive, and the server has it
+await step('assistant chats saved on window close', async () => {
+  await page.evaluate(() => { switchAppView('ask'); return assistantLoad(); });
+  await until(() => ASSIST.ready, 'the conversations did not load');
+  const sent = [];
+  const seen = r => { if (r.url().includes('/api/assistant/chats')) sent.push(`${r.method()} ${r.url().replace(/^.*\/api/, '/api')}`); };
+  page.on('request', seen);
+  const id = await page.evaluate(() => {
+    const chat = newChatObject();
+    chat.title = 'Проверка при закрытии окна';
+    chat.items.push({ id: 1, question: 'Что решили?', status: 'done', data: { answer: 'План согласован.' } });
+    ASSIST.chats.unshift(chat);
+    assistantSaveSoon();  // the save of half a second later never comes: the window closes first
+    window.dispatchEvent(new Event('pagehide'));
+    return chat.id;
+  });
+  await sleep(900);
+  page.off('request', seen);
+  const stored = await page.evaluate(id => fetch('/api/assistant/chats').then(r => r.json()).then(d => d.chats.some(c => c.id === id && c.title === 'Проверка при закрытии окна')), id);
+  await page.evaluate(id => { ASSIST.chats = ASSIST.chats.filter(c => c.id !== id); window.dispatchEvent(new Event('pagehide')); }, id);
+  await sleep(300);
+  const gone = await page.evaluate(id => fetch('/api/assistant/chats').then(r => r.json()).then(d => !d.chats.some(c => c.id === id)), id);
+  expect(stored && gone && sent.includes('POST /api/assistant/chats/merge') && !sent.some(x => x.startsWith('PUT')),
+    `the conversation on closing: ${JSON.stringify({ stored, gone, sent })}`);
+});
+
 // The search of a section (found in the audit: 280px at four places, in «Люди» in the list on the left): the last control of
 // the head in «Записи», «Задачи», «Словарь» and «Люди», at one x, y and width, 32px high, at the window's minimum too
 await step('one place for the search', async () => {
