@@ -40,7 +40,8 @@ KEEP_REPEATS = {
 
 # Text-only fallback (segments without word timestamps)
 _TEXT_FILLER_PATTERNS = (
-    (re.compile(r"(?i)(?<!\w)(э+(?:[\-\s]+э+)*|э+м+|м{2,}|uh+|um+|er+m)(?!\w)[,.]?\s*"), ""),
+    # not after a number: «5 мм» is millimetres (found in an audit)
+    (re.compile(r"(?i)(?<!\w)(?<!\d\s)(э+(?:[\-\s]+э+)*|э+м+|м{2,}|uh+|um+|er+m)(?!\w)[,.]?\s*"), ""),
     (re.compile(r"(?i)(?<!\w)ну\s+типа(?!\w)[,]?\s*"), ""),
 )
 
@@ -93,8 +94,8 @@ def _clean_words(words: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int
 
         n = norms[i]
         drop_count = phrase_len
-        if not drop_count and is_filler_token(n):
-            drop_count = 1
+        if not drop_count and is_filler_token(n) and not (n == "мм" and kept and normalize_token(kept[-1].get("word", "")).isdigit()):
+            drop_count = 1  # (not «5 мм»: millimetres, found in an audit)
         if (
             not drop_count
             and kept
