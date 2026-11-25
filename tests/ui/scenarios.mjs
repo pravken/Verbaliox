@@ -1150,8 +1150,12 @@ await step('live captions as a chat', async () => {
 // replaced each second): the words it keeps stay the same nodes, the new ones come one by one, the bubble never
 // shrinks, the draft becomes the final line in place, and a draft has the metrics of a final line
 await step('live draft grows word by word without jumps', async () => {
+  // the studio fills the languages and reads the saved choices as it opens: a language set before that was undone
+  // in the middle of the phrase (the view went from «Под фразой» to the original only, and the held size with it)
+  await page.evaluate(() => switchAppView('studio'));
+  for (let i = 0; i < 50 && !(await page.evaluate(() => [...document.getElementById('live-translate-select').options].some(o => o.value === 'en'))); i++) await sleep(100);
+  await sleep(300);
   const run = () => page.evaluate(async () => {
-    switchAppView('studio');
     const box = (id) => document.getElementById(id);
     const was = { draft: box('live-draft-toggle').checked, tr: box('live-draft-tr-toggle').checked, lang: box('live-translate-select').value, view: studio.view };
     box('live-draft-toggle').checked = true;
@@ -1163,6 +1167,7 @@ await step('live draft grows word by word without jumps', async () => {
     capReset();
     const wait = (ms) => new Promise(r => setTimeout(r, ms));
     const rowEl = () => document.querySelector('#studio-cap-rows > .cap-row');
+    const view = () => document.getElementById('studio-cap-rows').className.replace(' cap-has-who', '');
     const metrics = (el) => { const cs = getComputedStyle(el); return [cs.fontSize, cs.lineHeight, cs.fontWeight, cs.fontStyle].join(' '); };
     const steps = [['Сегодня мы', 'Today we'], ['Сегодня мы обсудим', 'Today we will discuss'], ['Сегодня мы обсуждаем план', 'Today we discuss the plan']];
     const out = { firstAfterSet: [], sizes: [], same: true, row: true, text: [], tr: [] };
@@ -1175,11 +1180,11 @@ await step('live draft grows word by word without jumps', async () => {
       for (let i = 0; i < 40 && rowEl().querySelector('.cap-orig').textContent.trim() !== text; i++) {
         await wait(50);
         const r = rowEl().querySelector('.cap-bub').getBoundingClientRect();
-        out.sizes.push([r.width, r.height]);
+        out.sizes.push([r.width, r.height, view()]);
       }
       const el = rowEl();
       const r = el.querySelector('.cap-bub').getBoundingClientRect();
-      out.sizes.push([r.width, r.height]);
+      out.sizes.push([r.width, r.height, view()]);
       const w0 = el.querySelector('.cap-orig .cap-w');
       first = first || w0;
       out.same = out.same && w0 === first;
@@ -1196,7 +1201,7 @@ await step('live draft grows word by word without jumps', async () => {
     syncStudioCaptions();
     const fin = rowEl();
     const r = fin.querySelector('.cap-bub').getBoundingClientRect();
-    out.sizes.push([r.width, r.height]);
+    out.sizes.push([r.width, r.height, view()]);
     out.finalSame = fin === row && document.querySelectorAll('#studio-cap-rows > .cap-row').length === 1 && !fin.classList.contains('cap-draft');
     out.finalFirst = fin.querySelector('.cap-orig .cap-w') === first;
     out.finalText = fin.querySelector('.cap-orig').textContent.trim();
@@ -1220,6 +1225,8 @@ await step('live draft grows word by word without jumps', async () => {
   expect(out.text.join('|') === 'Сегодня мы|Сегодня мы обсудим|Сегодня мы обсуждаем план', `the draft text: ${out.text.join('|')}`);
   expect(out.same && out.row, 'the words kept by an update are new nodes, or the draft row was replaced');
   expect(out.finalSame && out.finalFirst && out.finalText === 'Сегодня мы обсуждаем план.', `the final line is not the draft in place: ${JSON.stringify(out)}`);
+  // a change of the view lets the held size go by design (capReleaseSizes): it is not expected here
+  expect(out.sizes.every(s => s[2] === out.sizes[0][2]), `the view changed during the phrase: ${JSON.stringify(out.sizes)}`);
   const shrunk = out.sizes.findIndex((s, i) => i && (s[0] < out.sizes[i - 1][0] - 0.5 || s[1] < out.sizes[i - 1][1] - 0.5));
   expect(shrunk < 0, `the bubble shrank: ${JSON.stringify(out.sizes)}`);
   expect(out.metrics[0] === out.metrics[1], `a draft and a final line differ in size: ${out.metrics.join(' / ')}`);
