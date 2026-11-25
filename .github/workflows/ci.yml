@@ -28,8 +28,9 @@ jobs:
         with:
           node-version: "20"
 
+      # Every package (transitive ones and uvicorn too) is pinned with its hashes (requirements-test.in)
       - name: Install test dependencies
-        run: python -m pip install -r requirements-test.txt uvicorn
+        run: python -m pip install --require-hashes -r requirements-test.txt
 
       # Every module compiles, including the ones no test imports (Windows-only code paths)
       - name: Compile check
