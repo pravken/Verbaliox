@@ -393,8 +393,9 @@ def _complete_async(model_id: str) -> None:
     def work() -> None:
         try:
             with _fetch_lock:
-                fetch(model_id)
-            print(f"[asr_onnx] {model_id}: the files of its variants are downloaded", flush=True)
+                ok = fetch(model_id)
+            if ok:
+                print(f"[asr_onnx] {model_id}: the files of its variants are downloaded", flush=True)
         except Exception as e:
             print(f"[asr_onnx] {model_id}: its variants were not downloaded: {e}", flush=True)
 
@@ -412,9 +413,12 @@ def _load(model_id: str, gpu: bool = False, live: bool = False):
 
     from app import onnx_gpu
 
-    if not _any_copy(model_id):
+    if not _any_copy(model_id) and not _main_on_disk(model_id):
+        # only the main model and the VAD: the files of the variants come in the background (_complete_async).
+        # Fetching them here failed the load of an installation made before they were added when there was no
+        # internet, and with it held the first job for a download of 0.45 GB without progress
         with _fetch_lock:  # the download (gigabytes) must not hold the lock live captions wait on
-            fetch(model_id)
+            fetch(model_id, variants=False)
     key = _key(model_id, gpu, live)
     variant = _variant(model_id, "gpu" if gpu else "live" if live else "cpu")
     threads = 0 if live else queue_threads()  # a job on the video card: its VAD on the processor
@@ -473,18 +477,42 @@ def _pinned(resolver: Any) -> Any:
     return resolver
 
 
-def fetch(model_id: str) -> None:
+def fetch(model_id: str, variants: bool = True) -> bool:
     """Downloads the missing model files into our models folder. onnx_asr.load_model with a path that
     already exists only looks there and never downloads, so the files are fetched with its resolver
-    (offline=False: look in the folder, download from Hugging Face what is not there)."""
+    (offline=False: look in the folder, download from Hugging Face what is not there). variants: the files of
+    its other copies (_variant) too; one that fails is left for later (the copy uses the main model meanwhile,
+    _complete_async tries again) and False is returned. The main model or the VAD failing raises."""
     from onnx_asr.loader import create_asr_resolver, create_vad_resolver
 
     m = ONNX_MODELS[model_id]
     _pinned(create_asr_resolver(m["onnx_name"], model_dir(model_id), offline=False)).resolve_model()
-    for v in (m.get("variants") or {}).values():  # the files of its other copies (_variant)
-        _pinned(create_asr_resolver(v["onnx_name"], model_dir(model_id), offline=False)).resolve_model(
-            quantization=v.get("quantization"))
     _pinned(create_vad_resolver(VAD_NAME, _vad_dir(), offline=False)).resolve_model()
+    ok = True
+    for kind, v in (m.get("variants") or {}).items() if variants else ():
+        try:
+            _pinned(create_asr_resolver(v["onnx_name"], model_dir(model_id), offline=False)).resolve_model(
+                quantization=v.get("quantization"))
+        except Exception as e:
+            print(f"[asr_onnx] {model_id}: the files of its «{kind}» copy were not downloaded: {e}", flush=True)
+            ok = False
+    return ok
+
+
+def _main_on_disk(model_id: str) -> bool:
+    """Every file of the main model and of the VAD is in the models folder: looked up there only (offline), so
+    loading needs neither the network nor _fetch_lock, which a download of the variants in the background holds."""
+    try:
+        from onnx_asr.loader import create_asr_resolver, create_vad_resolver
+
+        m = ONNX_MODELS[model_id]
+        if not model_dir(model_id).is_dir() or not _vad_dir().is_dir():
+            return False
+        create_asr_resolver(m["onnx_name"], model_dir(model_id), offline=True).resolve_model()
+        create_vad_resolver(VAD_NAME, _vad_dir(), offline=True).resolve_model()
+        return True
+    except Exception:
+        return False
 
 
 def release(model_id: Optional[str] = None, gpu: Optional[bool] = None, keep_live: bool = False) -> None:
@@ -751,6 +779,8 @@ def start_download(model_id: str) -> Dict[str, Any]:
 
     def work() -> None:
         try:
+            with _fetch_lock:  # every file, the variants too (_load fetches only the main model)
+                fetch(model_id)
             _load(model_id)
             _downloads[model_id] = {"active": False, "error": ""}
         except Exception as e:
