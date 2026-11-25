@@ -1238,6 +1238,26 @@ await step('live draft grows word by word without jumps', async () => {
   await page.evaluate(() => { liveCap.lines.clear(); capReset(); syncStudioCaptions(); switchAppView('library'); });
 });
 
+// Two hours of captions: the page keeps the last 300 lines (found in review: thousands, all sorted at each
+// update), the document shows 150, the text let go stays for «Спросить» of a restarted session
+await step('captions keep the last lines', async () => {
+  const got = await page.evaluate(() => {
+    liveCap.lines.clear();
+    capReset();
+    for (let id = 1; id <= 420; id++) liveCap.lines.set(id, { id, text: `Строка ${id}`, lang: 'ru', translation: '', at: id });
+    syncStudioCaptions();
+    const out = { kept: liveCap.lines.size, first: Math.min(...liveCap.lines.keys()), rows: document.querySelectorAll('#studio-cap-rows > .cap-row').length,
+      gone: (liveCap.gone || []).length, goneFirst: ((liveCap.gone || [])[0] || {}).text };
+    liveCap.lines.clear();
+    liveCap.gone = [];
+    capReset();
+    syncStudioCaptions();
+    return out;
+  });
+  expect(got.kept === 300 && got.first === 121 && got.rows === 150, `the lines kept: ${JSON.stringify(got)}`);
+  expect(got.gone === 120 && got.goneFirst === 'Строка 1', `the text let go is lost: ${JSON.stringify(got)}`);
+});
+
 await step('captions do not start by themselves', async () => {
   // «Не мешать на встречах» holds them on a meeting only: a voice note recorded by hand starts with them
   const held = await page.evaluate(() => [

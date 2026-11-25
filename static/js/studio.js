@@ -720,7 +720,7 @@ async function studioAsk() {
       // Lines of the sessions before a restart of the captions: the server has only the current one
       body: JSON.stringify({
         question: q, lang: state.uiLang === 'en' ? 'en' : 'ru', offset: liveCap.offset || 0,
-        earlier: [...liveCap.lines.values()].filter(ln => ln.id <= (liveCap.idBase || 0) && ln.text)
+        earlier: [...(liveCap.gone || []), ...liveCap.lines.values()].filter(ln => ln.id <= (liveCap.idBase || 0) && ln.text)
           .sort((a, b) => a.id - b.id).slice(-3000).map(ln => ({ at: ln.at || 0, text: ln.text })),
       }),
     });
@@ -1502,9 +1502,11 @@ function renderQuickLangs() {
   const btn = (value, label, title, menuIndex) =>
     `<button data-click="setQuickTranslate" data-click-args='[${jsArg(value)}]' ${menuIndex != null ? `data-contextmenu="openQuickLangMenu" data-contextmenu-args='[{"$": "event"}, ${Number(menuIndex) || 0}]'` : ''}
       class="quick-lang ${current === value ? 'on' : ''}" title="${escapeHtml(title)}">${escapeHtml(label)}</button>`;
-  box.innerHTML = btn(a, langCode(a), t('tipQuickLang').replace('{lang}', () => langName(a)), 0)
+  const html = btn(a, langCode(a), t('tipQuickLang').replace('{lang}', () => langName(a)), 0)
     + btn(b, langCode(b), t('tipQuickLang').replace('{lang}', () => langName(b)), 1)
     + btn('auto', `⇄ ${t('liveAutoShort')}`, t('tipQuickAuto').replace('{a}', () => langName(a)).replace('{b}', () => langName(b)), null);
+  // drawn on every caption update (renderStudioControls): written only when it changed
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
 }
 
 function setQuickTranslate(value) {
@@ -1865,6 +1867,7 @@ async function studioToggleCaptions(on) {
 // revised. A line shown at once (final, never a draft) fades in whole. Every line keeps its own
 // element while it is shown.
 const CAP_MAX_ROWS = 150;
+const CAP_KEEP_LINES = 300;     // the lines the page keeps (liveCap.lines): twice those shown
 const CAP_SPREAD_MAX_MS = 500;  // the new words of an update come within this time at most: no lag behind the speech
 const CAP_SPREAD_FAST_MS = 400; // updates this often or more: their words at once
 const CAP_WORD_FADE_MS = 120;
@@ -1977,22 +1980,43 @@ class CapTyper {
 }
 
 // The bubble of the phrase being spoken keeps the largest size it had: a revision that is shorter does not
-// pull it in and push it out again a second later. A new line that grows the captions scrolls them, if
-// the user is at the bottom
+// pull it in and push it out again a second later (only the draft's: a final line keeps the sizes it had as the
+// draft). A new line that grows the captions scrolls them, if the user is at the bottom.
+// The layout is read and written once a frame (capLayout), not at every word: a size read right after the
+// words were written made the browser lay the page out each time (found in review: up to 4 updates a second,
+// each with a reflow per word and per row)
+const capFrame = { id: 0, hold: new Set(), follow: false };
 function capHold(row) {
-  if (!row.hold) return capGrow();
-  const bub = row.el.querySelector('.cap-bub');
-  const r = bub.getBoundingClientRect();
-  if (!r.width) return capGrow();  // «Рядом»: no bubble of its own
-  if (r.width > (row.minW || 0)) { row.minW = r.width; bub.style.minWidth = `min(${Math.ceil(r.width)}px, 100%)`; }
-  if (r.height > (row.minH || 0)) { row.minH = r.height; bub.style.minHeight = `${Math.ceil(r.height)}px`; }
+  if (row.key === capView.draftKey) capFrame.hold.add(row);
   capGrow();
 }
 
 function capGrow() {
-  if (!capView.stick) return;
+  capFrame.follow = true;
+  if (!capFrame.id) capFrame.id = requestAnimationFrame(capLayout);
+}
+
+// The frame's work: the reads first (the held bubbles, the scroll of the box), then the writes. An update of the
+// captions runs a frame still waiting before it writes (capDrawLines), so a revision never measures a bubble
+// already pulled in by it
+function capLayout() {
+  if (capFrame.id) cancelAnimationFrame(capFrame.id);
+  capFrame.id = 0;
+  const held = [...capFrame.hold].map(row => [row, row.el.querySelector('.cap-bub')]).filter(([row, bub]) => bub && row.el.isConnected)
+    .map(([row, bub]) => [row, bub, bub.getBoundingClientRect()]);
+  capFrame.hold.clear();
+  const follow = capFrame.follow;
+  capFrame.follow = false;
   const box = document.getElementById('studio-captions');
-  if (box && box.scrollHeight - box.scrollTop - box.clientHeight > 1) box.scrollTop = box.scrollHeight;
+  const gap = follow && box ? box.scrollHeight - box.scrollTop - box.clientHeight : 0;
+  for (const [row, bub, r] of held) {
+    if (!r.width) continue;  // «Рядом»: no bubble of its own
+    if (r.width > (row.minW || 0)) { row.minW = r.width; bub.style.minWidth = `min(${Math.ceil(r.width)}px, 100%)`; }
+    if (r.height > (row.minH || 0)) { row.minH = r.height; bub.style.minHeight = `${Math.ceil(r.height)}px`; }
+  }
+  if (!follow || !box) return;
+  if (capView.stick) { if (gap > 1 || held.length) box.scrollTop = box.scrollHeight; }
+  else if (gap > 1) document.getElementById('studio-cap-jump')?.classList.remove('hidden');  // new lines below
 }
 
 // The size or the layout of the text changed (A−/A+, the view): the held sizes are measured anew
@@ -2006,11 +2030,7 @@ function capReleaseSizes() {
   }
 }
 
-function capFollowBottom() {
-  const box = document.getElementById('studio-captions');
-  if (capView.stick) box.scrollTop = box.scrollHeight;
-  else document.getElementById('studio-cap-jump')?.classList.remove('hidden');  // new lines below
-}
+
 
 // Scrolled up to read: the new lines no longer pull the text down (it jumped to the end at every
 // line); back at the bottom, or «К новым», it follows again
@@ -2035,6 +2055,7 @@ function capReset() {
   capView.partialAt = 0;
   capView.partialText = '';
   document.getElementById('studio-cap-rows').innerHTML = '';
+  capFrame.hold.clear();
   capView.stick = true;
   document.getElementById('studio-cap-jump')?.classList.add('hidden');
 }
@@ -2101,7 +2122,8 @@ function createCapRow(key) {
   el.innerHTML = '<span class="cap-av hidden" aria-hidden="true"></span><span class="cap-who hidden"></span><div class="cap-bub"><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
     + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div></div>';
   document.getElementById('studio-cap-rows').appendChild(el);
-  const row = { key, el };
+  const row = { key, el, who: '' };
+  el._capRow = row;  // capMarkRuns reads the row's state, not its elements
   row.orig = new CapTyper(el.querySelector('.cap-orig'), () => capHold(row));
   row.tr = new CapTyper(el.querySelector('.cap-tr'), () => capHold(row));
   capView.rows.set(key, row);
@@ -2125,7 +2147,22 @@ document.addEventListener('visibilitychange', () => {
   try { syncStudioCaptions(); } finally { capView.instant = false; }
 });
 
+// The page keeps the last CAP_KEEP_LINES lines (found in review: two hours made 2–3 thousand, all sorted at each
+// update; the document shows CAP_MAX_ROWS). The text of a line let go stays for «Спросить» (the lines of the
+// sessions before a restart of the captions, studioAsk), 3000 at most as before
+function capTrimLines() {
+  if (liveCap.lines.size <= CAP_KEEP_LINES) return;
+  const gone = liveCap.gone || (liveCap.gone = []);
+  for (const [id, ln] of liveCap.lines) {
+    if (liveCap.lines.size <= CAP_KEEP_LINES) break;
+    if (ln.text) gone.push({ id, at: ln.at || 0, text: ln.text });
+    liveCap.lines.delete(id);
+  }
+  if (gone.length > 3000) gone.splice(0, gone.length - 3000);
+}
+
 function syncStudioCaptions() {
+  capTrimLines();
   if (document.hidden) { capView.dirty = true; return; }
   syncStudioAsk();
   const target = document.getElementById('live-translate-select').value;
@@ -2147,6 +2184,7 @@ function syncStudioCaptions() {
 }
 
 function capDrawLines(lines, fresh, target, view) {
+  if (capFrame.id) capLayout();  // what the last words changed is measured before this update writes
   fresh.forEach((ln, i) => {
     const draftRow = i === 0 && capView.draftKey ? capView.rows.get(capView.draftKey) : null;
     if (draftRow) {
@@ -2170,6 +2208,7 @@ function capDrawLines(lines, fresh, target, view) {
     // who said it, on every line as in Teams: a round mark with the initials and the name above the
     // text, both in the speaker's colour (a long talk reads at a glance)
     const who = capSpeaker(ln);
+    row.who = who;
     anyWho = anyWho || !!who;
     const whoEl = row.el.querySelector('.cap-who');
     const avEl = row.el.querySelector('.cap-av');
@@ -2195,8 +2234,7 @@ function capDrawLines(lines, fresh, target, view) {
     if (!row) {
       capView.draftKey = `d${++capView.draftSeq}`;
       row = createCapRow(capView.draftKey);
-      row.el.classList.add('cap-draft');
-      row.hold = true;  // its bubble keeps its size while the phrase is revised, and as it becomes final
+      row.el.classList.add('cap-draft');  // its bubble keeps its size while the phrase is revised (capHold), and as it becomes final
     }
     // How often the phrase comes: its new words are spread over that time, no longer (unknown at first: the most)
     const draftText = liveCap.partial + '\n' + (liveCap.partialTranslation || '');
@@ -2246,7 +2284,7 @@ function capDrawLines(lines, fresh, target, view) {
   }
   capMarkRuns();
   renderUpcomingMeetings();
-  capFollowBottom();
+  capGrow();
   renderStudioControls();
   const status = document.getElementById('studio-status');
   const msg = liveCap.error ? liveCap.error
@@ -2260,12 +2298,13 @@ function capDrawLines(lines, fresh, target, view) {
 // speaker, or of nobody named, goes on the run), the last line with text lit as the one being said. The phrase
 // not shown yet (only «…») is no bubble of its own: it sits under the last one without a gap
 function capMarkRuns() {
-  const rows = [...document.querySelectorAll('#studio-cap-rows > .cap-row')];
-  const said = (el) => !!(el.querySelector('.cap-orig')?.textContent.trim() || el.querySelector('.cap-tr')?.textContent.trim());
+  // from the rows' own state (their words shown, their speaker), not by querying each row's elements
+  const rows = [...document.getElementById('studio-cap-rows').children].filter(el => el._capRow);
+  const said = (el) => el._capRow.orig.spans.length > 0 || el._capRow.tr.spans.length > 0;
   const now = rows.filter(said).pop();
   let prev = null;
   rows.forEach((el) => {
-    const who = el.querySelector('.cap-who')?.textContent || '';
+    const who = el._capRow.who || '';
     const waiting = el.classList.contains('cap-draft') && !said(el);
     el.classList.toggle('cap-cont', !!prev && (!who || who === prev));
     el.classList.toggle('cap-pending', waiting);
@@ -2450,6 +2489,7 @@ async function startLiveRecording() {
       }, 250);
     }
     liveCap.lines = new Map();
+    liveCap.gone = [];  // the text let go by capTrimLines: of this recording only
     liveCap.partial = '';
     liveCap.error = '';
     capReset();
