@@ -1826,6 +1826,16 @@ def meeting_briefs(ids: List[int]) -> Dict[int, Dict[str, Any]]:
     return {r["id"]: dict(r) for r in rows}
 
 
+def meeting_speech_choice(meeting_id: int) -> Dict[str, Any]:
+    """The model and the language chosen for a recording (the queue asks while live captions run): one short row."""
+    with _db_lock:
+        conn = get_connection()
+        row = conn.execute("SELECT model_name, language, language_choice FROM meetings WHERE id = ?",
+                           (int(meeting_id),)).fetchone()
+        conn.close()
+    return dict(row) if row else {}
+
+
 # The participants of each recording as the list shows them (names, colours: no voice prints), kept by
 # the text they were read from: a library of thousands parsed megabytes of voice prints at every list
 _LIST_SPEAKERS: Dict[int, Tuple[int, Dict[str, Any]]] = {}

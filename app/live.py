@@ -656,7 +656,14 @@ def stop_session(session_id: str) -> None:
 
 
 def _captions_ended() -> None:
-    """The last caption session ended: its models go a minute later unless the app is used (app/idle_unload.py)."""
+    """The last caption session ended: its models go a minute later unless the app is used (app/idle_unload.py),
+    and a transcription that waited for the captions starts now (transcriber.waits_for_captions)."""
+    try:
+        from app import transcriber
+
+        transcriber.wake_queue()
+    except Exception:
+        traceback.print_exc()
     try:
         from app import idle_unload
 

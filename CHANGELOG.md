@@ -81,6 +81,11 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   processors − caption threads − 2» (2 for the system and the call app), never more than «Processor load». Captions and transcription have
   copies of the model of their own: a transcription started before the captions keeps its threads, the next one
   takes the budget of its start.
+- **No second copy of Parakeet during live captions**: while English (or another non-Russian) captions recognize with
+  Parakeet, a transcription that would run Parakeet on the processor waits for the captions to end («waits for the
+  captions to end» in the queue) instead of loading a second copy of the model (about 3 GB more memory). With a video
+  card that has room for it, it runs there at once. «Start now» in the queue starts it anyway, with the threads left
+  by the captions; once the captions end it starts by itself, and the captions' copy leaves the memory.
 - **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
   live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
   one), and so does the separate process of the Whisper captions.
@@ -1308,6 +1313,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   (Parakeet) — 4; пока они идут, расшифровка на процессоре получает не больше «логические процессоры − потоки субтитров
   − 2» (2 — системе и программе звонков) и не больше значения «Нагрузка на процессор». У субтитров и расшифровки свои копии модели:
   расшифровка, начатая до субтитров, сохраняет свои потоки, следующая получает бюджет на момент своего начала.
+- **Без второй копии Parakeet во время субтитров**: пока английские (или другие нерусские) субтитры распознаёт
+  Parakeet, расшифровка, которой нужен Parakeet на процессоре, ждёт окончания субтитров («ждёт окончания субтитров» в
+  очереди) и не загружает вторую копию модели (ещё около 3 ГБ памяти). Если на видеокарте хватает места, расшифровка
+  сразу идёт на ней. «Начать сейчас» в очереди запускает её и так, с потоками, оставшимися от субтитров; после
+  окончания субтитров она начинается сама, а копия модели субтитров освобождает память.
 - **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
   распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
   процесс субтитров Whisper.

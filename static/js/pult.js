@@ -156,7 +156,8 @@ function stripState() {
     const open = state.appView === 'library' && state.activeMeeting && state.activeMeeting.id === m.id;
     const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
       : holdPause() ? t('stripWaitPause').replace('{time}', () => holdClock())
-      : state.queueMeeting ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
+      : state.queueMeeting && !(q && q.forced) ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
+      : q && q.hold === 'captions' ? t('stripWaitCaptions')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
     return { kind: 'after', pill: mixWaiting(m) ? mixWaitPill(m) : mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
       : running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running || mixing ? 'blue' : 'grey',
@@ -282,6 +283,7 @@ function jobsHoldShort() {
   if (state.queuePaused) return t('islandHoldPaused');
   if (holdPause()) return t('islandHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('islandHoldMeeting');
+  if (captionsHeld()) return t('islandHoldCaptions');
   return '';
 }
 
@@ -290,7 +292,14 @@ function jobsHold() {
   if (state.queuePaused) return t('jobsHoldPaused');
   if (holdPause()) return t('jobsHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('jobsHoldMeeting');
+  if (captionsHeld()) return t('jobsHoldCaptions');
   return '';
+}
+
+// A transcription waits for the end of the live captions (the server's queue: hold "captions"): it would load a
+// second copy of the model the captions use (app/transcriber.waits_for_captions)
+function captionsHeld() {
+  return (state.queue || []).some(q => q.hold === 'captions' && q.state !== 'running');
 }
 
 // «Не мешать на встречах» holds the transcriptions: while a meeting goes on, or during the pause of 2 minutes after
@@ -305,10 +314,12 @@ function holdClock() {
   const s = holdLeft();
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-// The waiting text of a transcription held by a meeting, or '' (the item waits for something else)
+// The waiting text of a transcription held by a meeting (not one the user let go during it) or by the live
+// captions, or '' (the item waits for something else)
 function holdItemText(q, meetingKey) {
-  if (!state.queueMeeting || q.kind !== 'transcribe' || q.state === 'running') return '';
-  return holdPause() ? t('jobsWaitPause').replace('{time}', () => holdClock()) : t(meetingKey);
+  if (q.kind !== 'transcribe' || q.state === 'running') return '';
+  if (state.queueMeeting && !q.forced) return holdPause() ? t('jobsWaitPause').replace('{time}', () => holdClock()) : t(meetingKey);
+  return q.hold === 'captions' ? t('jobsWaitCaptions') : '';
 }
 // Each second of the pause: the island, the queue's window, the strip and the status bar show the time left; at
 // its end the queue is asked again (the transcriptions start)
@@ -331,9 +342,13 @@ function holdTick() {
 // «Начать сейчас» of a transcription waiting for the end of a meeting: asked as «Расшифровать» asks during a meeting
 // (static/js/workspace.js transcribeWithPickedModel)
 async function jobsRunNow(id) {
+  const q = (state.queue || []).find(x => x.id === id) || {};
   const pause = holdPause();
-  if (!await confirmDialog(t(pause ? 'txPauseNowTitle' : 'txMeetingNowTitle'), t(pause ? 'txPauseNowText' : 'txMeetingNowText'),
-    t('txMeetingNowYes'), false)) return;
+  // what the item says it waits for: the meeting (or the pause after it), else the live captions
+  const captions = (!state.queueMeeting || q.forced) && q.hold === 'captions';
+  const [title, text] = captions ? ['txCaptionsNowTitle', 'txCaptionsNowText']
+    : pause ? ['txPauseNowTitle', 'txPauseNowText'] : ['txMeetingNowTitle', 'txMeetingNowText'];
+  if (!await confirmDialog(t(title), t(text), t('txMeetingNowYes'), false)) return;
   const res = await fetch(`/api/queue/${Number(id) || 0}/run-now`, { method: 'POST' }).catch(() => null);
   if (!res || !res.ok) { showToast(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
   showToast(t('txMeetingNowStarted'));
@@ -448,7 +463,7 @@ function renderJobsPop() {
       + `<span class="vx-val ${running ? 'vx-run' : 'vx-wait'}">${escapeHtml(val)}</span>`
       + `<button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'cancelProcessing', Number(q.id) || 0])} class="vx-x${q.cancelling ? ' invisible' : ''}" title="${escapeHtml(t('tipQueueCancel'))}" aria-label="${escapeHtml(t('tipQueueCancel'))}">✕</button>`
       + (running ? `<span class="vx-pbar"><b style="width:${Math.max(3, pct)}%"></b></span>` : '')
-      + (held ? `<span class="vx-prow-go"><button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'jobsRunNow', Number(q.id) || 0])} class="st-btn st-btn-sm" title="${escapeHtml(t('jobsRunNowTip'))}">${escapeHtml(t('jobsRunNow'))}</button></span>` : '')
+      + (held ? `<span class="vx-prow-go"><button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'jobsRunNow', Number(q.id) || 0])} class="st-btn st-btn-sm" title="${escapeHtml(t(state.queueMeeting && !q.forced ? 'jobsRunNowTip' : 'jobsRunNowCaptionsTip'))}">${escapeHtml(t('jobsRunNow'))}</button></span>` : '')
       + '</div>';
   }).join('');
   const foot = items.length

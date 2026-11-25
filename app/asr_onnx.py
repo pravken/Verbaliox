@@ -502,6 +502,26 @@ def release(model_id: Optional[str] = None, gpu: Optional[bool] = None, keep_liv
             _drop(key)
 
 
+def shares_live_copy(model_id: str) -> bool:
+    """A job on the processor would load the same files as the copy of live captions: Parakeet (both fp32, about
+    3 GB each; 6 GB with the two at once, bench-report/asr-2026-11-check.md). GigaAM takes different files for
+    each (CTC int8 by phrases, RNN-T int8 in the queue) and shares nothing once they are downloaded."""
+    if model_id not in ONNX_MODELS:
+        return False
+    live, cpu = _variant(model_id, "live"), _variant(model_id, "cpu")
+    return (live["onnx_name"], live.get("quantization")) == (cpu["onnx_name"], cpu.get("quantization"))
+
+
+def release_live(model_id: str) -> bool:
+    """The copy of live captions of this model out of memory (the captions ended and a job on the processor loads
+    its own): True when it was there. Loaded again when captions or dictation next need it."""
+    with _lock:
+        key = _key(model_id, False, live=True)
+        there = key in _loaded
+        _drop(key)
+    return there
+
+
 def copies() -> List[str]:
     """The copies in memory, as keys of _key ("gigaam-v3", "gigaam-v3@gpu", "gigaam-v3@live")."""
     with _lock:
