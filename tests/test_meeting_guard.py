@@ -232,10 +232,13 @@ class TranscriptionWaitsForTheMeetingTest(unittest.TestCase):
         from app.api import recording
 
         answers = iter([0.0, 0.0, None])
+        me = threading.get_ident()
+        mine = []  # time.sleep is global: background threads of other tests sleep through the same mock
         with mock.patch("app.meeting_guard.hold_until", side_effect=lambda: next(answers)), \
-                mock.patch("time.sleep") as slept, mock.patch("app.database.update_meeting_progress") as progress:
+                mock.patch("time.sleep", side_effect=lambda s: threading.get_ident() == me and mine.append(s)), \
+                mock.patch("app.database.update_meeting_progress") as progress:
             self.assertTrue(recording._wait_for_meeting_end(7))
-        self.assertEqual(slept.call_count, 2)
+        self.assertEqual(len(mine), 2)
         self.assertEqual(progress.call_args_list[0].kwargs["stage_text"], "Сведение дорожек: начнётся после встречи")
 
 
