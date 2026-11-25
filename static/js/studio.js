@@ -2910,7 +2910,9 @@ function studioRailToggle(key) {
   fly.classList.remove('hidden');
   document.getElementById(`st-rail-${key}`).setAttribute('aria-expanded', 'true');
   studioRailPlace(key);
-  const first = fly.querySelector('button:not([disabled]):not(.hidden), select:not([disabled]):not(.hidden), input:not([disabled])');
+  // the first control seen: one inside a hidden block has no offsetParent (:not(.hidden) sees only its own class)
+  const first = [...fly.querySelectorAll('button:not([disabled]), select:not([disabled]), input:not([disabled])')]
+    .find(el => el.offsetParent !== null);
   if (first) first.focus({ preventScroll: true });
   else { fly.tabIndex = -1; fly.focus({ preventScroll: true }); }
 }
