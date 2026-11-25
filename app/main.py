@@ -256,6 +256,17 @@ def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
     return resume
 
 
+def _status_before_side_job(meeting_id: int) -> str:
+    """The status a dub, translation, cut or subtitles job cut off by a crash gives back: the one the recording had
+    before it (app/transcriber._status_to_return). Set «completed» unasked, a cancelled or not yet transcribed
+    recording looked finished, and the retention setting deleted its sound (found in an audit)."""
+    from app.database import get_meeting
+    from app.transcriber import FINISHED_STATUSES
+
+    back = str((get_meeting(meeting_id) or {}).get("return_status") or "")
+    return back if back in FINISHED_STATUSES else "completed"
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _quiet_windows_connection_resets()
@@ -327,7 +338,8 @@ async def lifespan(_app: FastAPI):
                 enqueue_meeting_job(int(m["id"]))
         elif m.get("status") == "dubbing":
             # A dub interrupted by a restart is simply dropped; the transcript itself is complete
-            update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Дубляж прерван перезапуском")
+            update_meeting_progress(int(m["id"]), status=_status_before_side_job(int(m["id"])), progress=100,
+                                    stage_text="Дубляж прерван перезапуском")
         elif m.get("status") == "downloading":
             update_meeting_progress(int(m["id"]), status="failed", progress=0, stage_text="",
                                     error_message="Скачивание по ссылке прервано перезапуском — нажмите «Повторить»")
@@ -347,7 +359,8 @@ async def lifespan(_app: FastAPI):
                 delete_meeting(int(m["id"]))
         elif m.get("status") in ("translating", "rendering", "merging", "splitting"):
             # Partial translations are kept and can be completed with "Update translation"
-            update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Задача прервана перезапуском")
+            update_meeting_progress(int(m["id"]), status=_status_before_side_job(int(m["id"])), progress=100,
+                                    stage_text="Задача прервана перезапуском")
     yield
     # the server stops by itself (the window's process ends with os._exit after run.py _stop_work, which marks
     # the clean end; this covers a server started on its own): the next start counts no crash

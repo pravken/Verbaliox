@@ -655,7 +655,7 @@ def enqueue_dub_job(meeting_id: int, target_lang: str) -> bool:
         _cancel_requested.discard(meeting_id)
         token = _queue_add(meeting_id, "dub", target_lang, back)
     update_meeting_progress(
-        meeting_id, status="dubbing", progress=0, stage_text="Дубляж в очереди...", error_message=""
+        meeting_id, status="dubbing", progress=0, stage_text="Дубляж в очереди...", error_message="", return_status=back
     )
     _submit_job(token, _run_dub_job, meeting_id, target_lang, back)
     _publish_queue_changed()
@@ -720,7 +720,7 @@ def _enqueue_side_job(meeting_id: int, kind: str, lang: str, status: str, queued
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
         token = _queue_add(meeting_id, kind, lang, back)
-    update_meeting_progress(meeting_id, status=status, progress=0, stage_text=queued_text, error_message="")
+    update_meeting_progress(meeting_id, status=status, progress=0, stage_text=queued_text, error_message="", return_status=back)
     _submit_job(token, _run_side_job, meeting_id, back, runner, *args)
     _publish_queue_changed()
     return True

@@ -479,6 +479,9 @@ _MEETING_EXTRA_COLUMNS = {
     # How the transcript shown was made (language, sound processing, speakers): a precise run reuses it
     # only when nothing of that changed since ('' — made before this was kept, or a version switched in)
     "transcript_made_with": "TEXT DEFAULT ''",
+    # The status a job on a finished recording (dub, translation, cut, subtitles) gives back when it ends: kept
+    # here too, so a start after a crash in the middle of it gives it back as well ('' — none running)
+    "return_status": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -918,9 +921,13 @@ def update_meeting_progress(
     error_message: Optional[str] = None,
     duration: Optional[float] = None,
     audio_path: Optional[str] = None,
+    return_status: Optional[str] = None,
 ) -> None:
     fields = []
     values = []
+    if return_status is not None:
+        fields.append("return_status = ?")
+        values.append(return_status)
     if status is not None:
         fields.append("status = ?")
         values.append(status)
