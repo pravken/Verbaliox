@@ -465,3 +465,103 @@ class PhraseVariantTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowPhraseDraftTest(unittest.TestCase):
+    """English with Parakeet: the final lines from the window as before, and between its runs the draft of the phrase
+    being spoken alone, every ~0.3 s."""
+
+    def setUp(self):
+        from app.database import init_db
+
+        init_db()
+
+    def _session(self, window_sec=0.0):
+        from app import asr_onnx, live
+
+        with mock.patch.object(live, "caption_onnx_model", return_value="parakeet-v3"):
+            s = live.LiveSession("en", None)
+        self.windows, self.phrases, self.at_window = [], [], []
+        clock = [0.0]
+
+        def window(model, audio):
+            clock[0] += window_sec
+            self.windows.append(audio.size)
+            self.at_window.append(len(self.phrases))
+            out, loud = [], np.abs(audio) > 0.1
+            k = 0
+            while k < audio.size:
+                if not loud[k]:
+                    k += 1
+                    continue
+                e = k
+                while e < audio.size and loud[e]:
+                    e += 1
+                out.append((k / SR, e / SR, "Alpha." if abs(float(audio[k]) - 0.5) < 0.01 else "beta"))
+                k = e
+            return out
+
+        def phrase(model, audio):
+            self.phrases.append(audio.size)
+            return [(0.0, audio.size / SR, f"beta {len(self.phrases)}")]
+
+        patches = [mock.patch.object(asr_onnx, "live_phrases", return_value=False),
+                   mock.patch.object(asr_onnx, "is_loaded", return_value=True),
+                   mock.patch.object(lp, "SileroStream", _FakeVad),
+                   mock.patch.object(asr_onnx, "recognize_array", side_effect=window),
+                   mock.patch.object(asr_onnx, "recognize_phrase", side_effect=phrase),
+                   mock.patch.object(live, "_clock", lambda: clock[0])]
+        for p in patches:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in reversed(patches)])
+        return s
+
+    def _feed(self, s, sig, piece=0.25):
+        n = int(piece * SR)
+        drafts = []
+        for i in range(0, sig.size, n):
+            s.add_pcm16(_pcm(sig[i:i + n]))
+            s.step()
+            if s.partial and (not drafts or drafts[-1] != s.partial):
+                drafts.append(s.partial)
+        return drafts
+
+    def _speech(self):
+        quiet = np.zeros(SR, dtype=np.float32)
+        first = np.full(SR, 0.5, dtype=np.float32)
+        pause = np.zeros(int(0.7 * SR), dtype=np.float32)
+        second = np.full(int(2.8 * SR), 0.3, dtype=np.float32)
+        return np.concatenate([quiet, first, pause, second])  # 5.5 s: speech 1–2 s and 2.7–5.5 s
+
+    def test_the_draft_follows_the_phrase_between_the_window_runs(self):
+        s = self._session()
+        drafts = self._feed(s, self._speech())
+        self.assertLessEqual(len(self.windows), 5.5 / 2.0 + 1)  # the window as often as before (every 2 s)
+        self.assertGreaterEqual(len(self.phrases), 4)
+        self.assertLessEqual(len(self.phrases), 5.5 / lp.DRAFT_MIN_SEC)
+        # the second phrase alone: none of the first one's audio is recognized again for the draft
+        self.assertLessEqual(max(self.phrases), int((5.5 - 2.7 + lp.PAD_SEC) * SR))
+        # the window's draft of the first phrase stays before the draft of the phrase being spoken
+        phrase_drafts = [d for d in drafts if d.startswith("Alpha. beta ")]
+        self.assertTrue(phrase_drafts, drafts)
+        self.assertEqual([x["text"] for x in s.lines], ["Alpha."])  # final from the window, never from a draft
+
+    def test_the_finals_stay_the_windows(self):
+        s = self._session()
+        self._feed(s, np.concatenate([self._speech(), np.zeros(3 * SR, dtype=np.float32)]))
+        self.assertEqual([x["text"] for x in s.lines], ["Alpha.", "beta"])
+
+    def test_a_slow_window_keeps_its_own_draft(self):
+        s = self._session(window_sec=1.0)  # a run of the window takes 1 s: the window does not keep up
+        self._feed(s, self._speech())
+        self.assertGreaterEqual(len(self.windows), 2)
+        self.assertEqual(len(self.phrases), self.at_window[0])  # no phrase draft after the first slow run
+        self.assertTrue(s.partial)
+
+    def test_without_the_vad_the_window_as_before(self):
+        s = self._session()
+        with mock.patch.object(lp, "SileroStream", side_effect=RuntimeError("no VAD")):
+            self._feed(s, self._speech())
+        self.assertIs(s._follow, False)
+        self.assertEqual(self.phrases, [])
+        self.assertTrue(self.windows)

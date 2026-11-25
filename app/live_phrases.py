@@ -256,3 +256,43 @@ class PhraseState:
         """The first sample still needed: the start of the phrase going on, or a little before the next one."""
         c = self.cutter
         return c.start if c.start is not None else max(c.floor, c.pos - int(PAD_SEC * SR))
+
+
+class SpeechFollow:
+    """The VAD over the audio of the window scheme (English and the other languages, Parakeet: app/live.py), only for
+    the draft: where the phrase being spoken starts, so that between the window's runs it is recognized alone and the
+    words reach the draft line within a fraction of a second. The final lines stay the window's (its context keeps
+    them more accurate than phrases alone: bench-report/asr-2026-11.md). The stream is levelled for the VAD in a copy:
+    the window levels its audio itself."""
+
+    def __init__(self, start_at: int, vad: Any):
+        self.cutter = PhraseCutter(start_at)
+        self.vad = vad
+        self.level = StreamLevel()
+        self.pace = DraftPace()
+        self.last: Optional[Tuple[int, int]] = None  # the last phrase that ended (start, end) in samples
+        self.drafted_to = start_at  # the draft line holds the speech up to here (the window's or a phrase draft)
+
+    def follow(self, audio: np.ndarray, base: int) -> None:
+        """The VAD over the audio not heard yet: `audio` starts at sample `base` of the stream."""
+        c = self.cutter
+        frames = (base + audio.size - c.pos) // FRAME
+        if frames <= 0:
+            return
+        piece = self.level(audio[c.pos - base:c.pos - base + frames * FRAME])
+        for k in range(0, piece.size, FRAME):
+            cut = c.push(self.vad.prob(piece[k:k + FRAME]))
+            if cut:
+                self.last = (cut[0], cut[1])
+                self.pace.restart()
+
+    def target(self) -> Optional[Tuple[int, int]]:
+        """The speech the next draft is for: the phrase being spoken (once it has MIN_DRAFT_SEC), else the phrase that
+        ended last if the draft line does not hold its end yet; None when nothing new was said."""
+        c = self.cutter
+        if c.start is not None:
+            # (in the pause that may end it no new word: the draft stays)
+            ok = c.pos - c.start >= MIN_DRAFT_SEC * SR and c.last_speech > self.drafted_to
+            return (c.start, c.pos) if ok else None
+        return self.last if self.last and self.last[1] > self.drafted_to else None
+
