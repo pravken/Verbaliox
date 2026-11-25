@@ -77,6 +77,35 @@ class MoveTest(_Dirs):
         self.assertEqual((self.app / ".venv" / "old.txt").read_text(), "3.10")
         self.assertFalse((self.app / ".venv-old").exists())
 
+    def test_the_environment_gets_its_name_back_when_the_first_try_fails(self):
+        """Found in an audit: the check renamed .venv and back once; an antivirus holding the folder for a moment
+        left the program without its environment."""
+        real = Path.rename
+        tries = {"back": 0}
+
+        def rename(self_path, target):
+            if self_path.name == ".venv-move-probe" and tries["back"] < 2:
+                tries["back"] += 1
+                raise PermissionError("held by an antivirus")
+            return real(self_path, target)
+
+        with mock.patch.object(Path, "rename", rename), mock.patch.object(envmove.time, "sleep"):
+            self._move(0)
+        self.assertEqual(tries["back"], 2)
+        self.assertTrue((self.app / ".venv" / "Scripts" / "python.exe").exists())
+        self.assertFalse((self.app / ".venv-move-probe").exists())
+
+    def test_winget_is_given_a_time_limit(self):
+        import subprocess
+
+        with mock.patch.object(envmove, "smart_app_control_on", return_value=True), \
+                mock.patch.object(envmove, "signed_python", return_value=None), \
+                mock.patch("app.pyenv.find_uv", return_value="uv"), \
+                mock.patch.object(envmove.subprocess, "run", side_effect=subprocess.TimeoutExpired("winget", 900)) as run:
+            with self.assertRaises(RuntimeError):  # not found and not installed: said, not hung
+                envmove.prepare(self.app, self.data)
+        self.assertEqual(run.call_args.kwargs["timeout"], envmove.WINGET_TIMEOUT_SEC)
+
     def test_cleanup_removes_the_old_environment_on_311(self):
         (self.app / ".venv-old").mkdir()
         with mock.patch.object(sys, "version_info", (3, 11)), \
