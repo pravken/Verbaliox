@@ -1427,6 +1427,41 @@ await step('studio choices kept', async () => {
   await page.unroute('**/api/live/models');
 });
 
+// A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
+// fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
+await step('a choice in flight survives a settings read', async () => {
+  const cur = await page.evaluate(() => liveSettings().live_speed || 'quality');
+  const other = cur === 'fast' ? 'quality' : 'fast';
+  let release, held = 0, passed = 0;
+  const gate = new Promise(r => { release = r; });
+  await page.route('**/api/settings', async route => {
+    if (route.request().method() === 'POST' && /live_speed/.test(route.request().postData() || '')) { held++; await gate; }
+    await route.continue().catch(() => {});  // the held one may be reported handled already: it reaches the server all the same
+    passed++;
+  });
+  try {
+    await page.evaluate(s => studioSetSpeed(s), other);
+    for (let i = 0; i < 30 && !held; i++) await sleep(100);
+    expect(held === 1, 'the save was not held');
+    await page.evaluate(() => fillSystemInfo());
+    const mid = await page.evaluate(() => [liveSettings().live_speed, studio.speed]);
+    expect(mid.every(v => v === other), `the settings read put the old choice back: ${mid}`);
+  } finally {
+    release();
+    for (let i = 0; i < 30 && passed < held; i++) await sleep(100);
+    await page.unroute('**/api/settings');
+  }
+  let saved = '';
+  for (let i = 0; i < 30 && saved !== other; i++) {
+    await sleep(100);
+    saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.live_speed));
+  }
+  expect(saved === other, `the choice did not reach the server: ${saved}`);
+  await page.evaluate(() => fillSystemInfo());
+  expect(await page.evaluate(() => liveSettings().live_speed) === other, 'a later read lost the choice');
+  await page.evaluate(s => studioSetSpeed(s), cur);
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => { resetDashboard(); switchAppView('dashboard'); });  // the default layout, whatever was arranged before

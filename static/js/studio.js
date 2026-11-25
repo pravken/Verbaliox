@@ -421,7 +421,7 @@ async function saveRecordPresetSettings(own, defaultId) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }),
   });
   const data = await res.json().catch(() => ({}));
-  if (res.ok && data.settings && state.system) state.system.settings = data.settings;
+  if (res.ok && data.settings && state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 function renderRecordPresetSelect(selectedId) {
@@ -3074,7 +3074,7 @@ async function studioSetAuto(key, on) {
     return;
   }
   const data = await readJson(res);
-  if (data?.settings && state.system) state.system.settings = data.settings;
+  if (data?.settings && state.system) state.system.settings = uiSettingsOverlay(data.settings);
   // the same switch on the settings page
   const mirror = { auto_summary: 'set-auto-summary', call_auto_record: 'set-call-record', rec_voice_filter: 'set-voice-filter' }[key];
   const el = mirror && document.getElementById(mirror);

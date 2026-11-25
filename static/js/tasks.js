@@ -48,7 +48,7 @@ async function tkSaveMyName(value) {
   const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: { my_name: value } }) });
   const data = await readJson(res);
   if (!res.ok) { showError(serverText(data.detail)); return false; }
-  if (state.system) state.system.settings = data.settings;
+  if (state.system) state.system.settings = uiSettingsOverlay(data.settings);
   return true;
 }
 
