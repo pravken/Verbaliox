@@ -1,7 +1,8 @@
 """
 The conversations of the assistant (questions about the library): kept in one JSON file of the
 data folder, on this computer only. The page sends the whole list after each change; it is checked
-and trimmed here, so a bad or huge list cannot fill the disk or break the next start.
+and trimmed here, so a bad or huge list cannot fill the disk or break the next start. As the window closes it
+sends only the conversations changed since (merge_chats): a request that outlives the page carries 64 KB at most.
 
 An answer can also be saved as a document (Word, Markdown, plain text) with its sources.
 """
@@ -20,6 +21,7 @@ MAX_CHATS = 200  # the oldest are dropped
 MAX_ITEMS = 100  # questions in one conversation
 MAX_BYTES = 4 * 1024 * 1024  # the whole file
 _lock = threading.Lock()
+_merge_lock = threading.Lock()  # one read-change-write of the list at a time
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ITEM_KEYS = {"id", "question", "scope", "scopeLabel", "status", "data", "error", "at"}
@@ -104,6 +106,17 @@ def save_chats(chats: Any) -> List[Dict[str, Any]]:
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, CHATS_FILE)  # a crash while writing leaves the old file, never half of one
     return clean
+
+
+def merge_chats(chats: Any, deleted: Any = None) -> List[Dict[str, Any]]:
+    """Some conversations changed and some removed since the last save (the window closing): each one given
+    replaces the stored one of its id or joins the list, those of `deleted` go; the others stay as stored."""
+    fresh = clean_chats(chats)
+    if deleted is not None and not isinstance(deleted, list):
+        raise ValueError("Неверный формат разговора")
+    gone = {str(x)[:64] for x in deleted or [] if isinstance(x, (str, int))} | {c["id"] for c in fresh}
+    with _merge_lock:
+        return save_chats(fresh + [c for c in load_chats() if c["id"] not in gone])
 
 
 def _sources_lines(sources: List[Dict[str, Any]]) -> List[str]:

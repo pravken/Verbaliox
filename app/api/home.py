@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-from app.database import get_connection, list_meetings
+from app.database import fill_durations, get_connection, list_meetings
 
 router = APIRouter()
 
@@ -94,11 +94,15 @@ def api_calendar_range(start: str, end: str, refresh: bool = False, lang: str = 
         calendar_ics.events(force=True, user=user)
     items = calendar_ics.day(a, b)
     made = sorted(((t, m) for m in list_meetings() if (t := _recorded_local(m)) and a <= t < b), key=lambda x: x[0])
+    fill_durations([m for _t, m in made])  # a recording still in the queue has a length too, as «Обзор» counts it
     used = set()
     for it in items:
         s, e = datetime.fromisoformat(it["start"]), datetime.fromisoformat(it["end"])
-        hit = next((m for t, m in made if s.replace(second=0) - EARLY <= t < e and m["id"] not in used), None)
-        it["recording"] = {"id": hit["id"], "title": hit.get("title") or "", "status": hit.get("status")} if hit else None
+        found = next(((t, m) for t, m in made if s.replace(second=0) - EARLY <= t < e and m["id"] not in used), None)
+        hit = found[1] if found else None
+        # its start and length too: «Нагрузка недели» counts what of it lies outside the meeting (app/dashboard.busy_days)
+        it["recording"] = {"id": hit["id"], "title": hit.get("title") or "", "status": hit.get("status"),
+                           "at": found[0].isoformat(timespec="seconds"), "duration": hit.get("duration") or 0} if hit else None
         if hit:
             used.add(hit["id"])
     recordings = [{"id": m["id"], "title": m.get("title") or "", "at": t.isoformat(timespec="minutes"),

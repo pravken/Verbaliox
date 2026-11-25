@@ -1582,6 +1582,10 @@ async function requestVideoSubtitles(lang, variant, mode, askPath) {
   return true;
 }
 
+// The translation icon of the studio's chip («Перевод» of the captions): on the quick buttons of the transcript too,
+// so «EN» reads as a translation, not as the language of the program (found in the audit)
+const TX_TR_IC = '<svg class="quick-lang-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802"/></svg>';
+
 // Transcript view: original / translation / both
 function renderTxQuickLangs() {
   const m = state.activeMeeting;
@@ -1596,7 +1600,7 @@ function renderTxQuickLangs() {
     const on = ready && showing === c;
     return `<button ${on ? pageCall('click', 'setTranscriptView', ['orig']) : pageCall('click', 'quickTranslate', [c])}
       title="${escapeHtml(on ? t('subsLangOriginal') : ready ? t('translateQuickShow').replace('{lang}', () => langName(c)) : t('translateQuickMake').replace('{lang}', () => langName(c)))}"
-      class="quick-lang ${on ? 'on' : ''}">${ready && !on ? '✓ ' : ''}${escapeHtml(langCode(c))}</button>`;
+      class="quick-lang quick-lang-tr ${on ? 'on' : ''}">${TX_TR_IC}${ready && !on ? '✓ ' : ''}${escapeHtml(langCode(c))}</button>`;
   }).join('');
 }
 

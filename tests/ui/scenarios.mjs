@@ -656,9 +656,16 @@ await step('first run wizard', async () => {
   await page.evaluate(() => { document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()); openFirstRunWizard(state.system); });
   await sleep(300);
   // One topic a step: the AI analysis, the sound, (calls: Windows only), the calendar, then what downloads (the language is not asked:
-  // the recommended set)
+  // the recommended set). The head says which step of how many (found in the audit: the dots alone did not)
+  const stepOf = () => page.evaluate(() => {
+    const m = document.querySelector('#first-run-wizard .frw-step')?.textContent.match(/(\d+)\D+(\d+)/);
+    return m ? [+m[1], +m[2], document.querySelectorAll('#first-run-wizard .frw-dot').length] : null;
+  });
+  const s1 = await stepOf();
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
+  const s2 = await stepOf();
+  expect(s1 && s2 && s1[0] === 1 && s2[0] === 2 && s1[1] === s1[2] && s2[1] === s1[1], `the step in the head: ${JSON.stringify([s1, s2])}`);
   // Where the sound comes from: the microphone only
   await page.click('#first-run-wizard button[data-src="mic"]');
   await page.click('#first-run-wizard button[data-a="next"]');
@@ -3023,6 +3030,61 @@ await step('esc over the settings closes the top window', async () => {
     return out;
   });
   expect(role === 'dialog|true', `the deletion question: «${role}»`);
+});
+
+// The assistant's conversations as the window closes (found in the audit: what changed in the last half-second was
+// lost): pagehide sends what changed since the last save at once, with keepalive, and the server has it
+await step('assistant chats saved on window close', async () => {
+  await page.evaluate(() => { switchAppView('ask'); return assistantLoad(); });
+  await until(() => ASSIST.ready, 'the conversations did not load');
+  const sent = [];
+  const seen = r => { if (r.url().includes('/api/assistant/chats')) sent.push(`${r.method()} ${r.url().replace(/^.*\/api/, '/api')}`); };
+  page.on('request', seen);
+  const id = await page.evaluate(() => {
+    const chat = newChatObject();
+    chat.title = 'Проверка при закрытии окна';
+    chat.items.push({ id: 1, question: 'Что решили?', status: 'done', data: { answer: 'План согласован.' } });
+    ASSIST.chats.unshift(chat);
+    assistantSaveSoon();  // the save of half a second later never comes: the window closes first
+    window.dispatchEvent(new Event('pagehide'));
+    return chat.id;
+  });
+  await sleep(900);
+  page.off('request', seen);
+  const stored = await page.evaluate(id => fetch('/api/assistant/chats').then(r => r.json()).then(d => d.chats.some(c => c.id === id && c.title === 'Проверка при закрытии окна')), id);
+  await page.evaluate(id => { ASSIST.chats = ASSIST.chats.filter(c => c.id !== id); window.dispatchEvent(new Event('pagehide')); }, id);
+  await sleep(300);
+  const gone = await page.evaluate(id => fetch('/api/assistant/chats').then(r => r.json()).then(d => !d.chats.some(c => c.id === id)), id);
+  expect(stored && gone && sent.includes('POST /api/assistant/chats/merge') && !sent.some(x => x.startsWith('PUT')),
+    `the conversation on closing: ${JSON.stringify({ stored, gone, sent })}`);
+});
+
+// The search of a section (found in the audit: 280px at four places, in «Люди» in the list on the left): the last control of
+// the head in «Записи», «Задачи», «Словарь» and «Люди», at one x, y and width, 32px high, at the window's minimum too
+await step('one place for the search', async () => {
+  const boxes = {};
+  for (const [w, h] of [[1300, 860], [1100, 700]]) {
+    await page.setViewportSize({ width: w, height: h });
+    for (const v of ['libtable', 'tasks', 'dict', 'people']) {
+      await page.evaluate(x => switchAppView(x), v);
+      await until(x => !document.getElementById(`${x}-view`).classList.contains('hidden'), `${v} did not open`, 5000, v);
+      await sleep(400);  // the section fades in
+      boxes[`${v}@${w}`] = await page.evaluate(x => {
+        const head = document.querySelector(`#${x}-view .vx-shead`);
+        const s = head && head.querySelector('.tk-search');
+        if (!s) return null;
+        const b = s.getBoundingClientRect(), view = document.getElementById(`${x}-view`).getBoundingClientRect();
+        const last = [...head.querySelectorAll('button, label, input')].filter(e => e.offsetParent && !s.contains(e))
+          .every(e => e.getBoundingClientRect().right <= b.left + 1 || e.getBoundingClientRect().bottom <= b.top + 1);
+        return { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), gap: Math.round(view.right - b.right), last };
+      }, v);
+    }
+    const list = Object.entries(boxes).filter(([k]) => k.endsWith(`@${w}`));
+    const bad = list.filter(([, b]) => !b || Math.abs(b.w - 236) > 1 || Math.abs(b.h - 32) > 1 || Math.abs(b.gap - 24) > 1 || !b.last
+      || Math.abs(b.x - list[0][1].x) > 1 || Math.abs(b.y - list[0][1].y) > 1);
+    expect(!bad.length, `the search is not in one place at ${w}px: ${JSON.stringify(Object.fromEntries(list))}`);
+  }
+  await page.setViewportSize({ width: 1300, height: 860 });
 });
 
 await browser.close();

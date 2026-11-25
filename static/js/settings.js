@@ -1225,7 +1225,7 @@ function openFirstRunWizard(data) {
     const dots = list.map((_, i) => `<span class="frw-dot${i === at ? ' is-on' : ''}"></span>`).join('');
     vxRedraw(wrap);
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><span class="vx-head-ic" aria-hidden="true">${pultIcon(FRW_IC[st.page] || 'set')}</span><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
+      <div class="frw-head"><span class="vx-head-ic" aria-hidden="true">${pultIcon(FRW_IC[st.page] || 'set')}</span><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots"><span class="frw-step">${escapeHtml(t('frwStepOf').replace('{n}', () => at + 1).replace('{m}', () => list.length))}</span><span class="frw-dots-row" aria-hidden="true">${dots}</span></span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
@@ -2060,7 +2060,7 @@ function modelMetersLine(id) {
   const cell = html => html.replace(/^<td/, '<span').replace(/<\/td>$/, '</span>');
   const part = (label, html) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${cell(html)}</span>`;
   const quality = !m.quality
-    ? part(`${t('mmAccuracy')} ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
+    ? part(`${t('mmAccuracy')}: ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
     : part(t('mmQuality'), meterQualityCell(m));
   return `<div class="mm-line">${quality}${part(t('mmSpeed'), meterSpeedCell(m))}${part(t('mmLoad'), meterLoadCell(m))}</div>`;
 }
