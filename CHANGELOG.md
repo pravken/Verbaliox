@@ -8,6 +8,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.9.4 — English
 
+- **The phrase being spoken no longer flickers** («Text as spoken», «Translate as spoken»): the words
+  already shown stay in place, a revised word changes in place with a short fade, and new words appear one by one
+  right after they are recognized. The bubble does not shrink or jump while the phrase is revised, and it becomes the
+  final line in place, with the same font and size. With reduced motion in the system the words appear without fades.
 - **«Captions and text»** in the meeting strip while recording: the studio with the live captions and the text from any
   section.
 - **The way to the studio is in the recording button**: while recording, a click on the dot, the time or the sources
@@ -1252,6 +1256,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.9.4
 
+- **Фраза, которая сейчас звучит, больше не мерцает** («Текст по ходу речи», «Перевод по ходу речи»): показанные
+  слова остаются на месте, исправленное слово меняется на месте с коротким переходом, новые слова появляются по одному
+  сразу после распознавания. Пузырь фразы не сжимается и не прыгает, пока фраза уточняется, и становится итоговой
+  строкой на том же месте, тем же шрифтом и размером. При уменьшении движения в системе слова появляются без переходов.
 - **«Субтитры и текст»** в полосе встречи во время записи: студия с живыми субтитрами и текстом из любого раздела.
 - **Путь в студию — в кнопке записи**: во время записи нажатие на точку, время или источники открывает студию; «Студия ›»
   между ними и «Стоп» показывает, включены ли субтитры (зелёная рамка, пока они выключены). При первой записи под ней

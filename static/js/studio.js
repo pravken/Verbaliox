@@ -1807,7 +1807,7 @@ function renderStudioControls() {
 }
 
 function studioSetView(v) { studio.view = v; saveStudioPrefs(); renderStudioControls(); syncStudioCaptions(); }
-function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
+function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); capReleaseSizes(); }
 function studioSetSpeed(s) {
   studio.speed = s;
   saveUiSetting('live_speed', s);
@@ -1852,29 +1852,155 @@ async function studioToggleCaptions(on) {
 }
 
 // --- Studio captions without flicker ---
-// Only final text is shown: the server revises the phrase being spoken two or three times, and
-// showing each revision looked like the same line appearing again and again. The phrase being
-// spoken is a quiet "…" row; when it becomes final its text fades in once, and its translation
-// fades in under it when it is ready. Every line keeps its own element while it is shown.
+// The phrase being spoken («Текст по ходу речи») comes again and again, revised. Replacing its whole
+// text made it flicker, jump and change size (reported by the user). A line is a row of word spans
+// instead: on each update the words it shares with the shown text from the start stay the same nodes,
+// a word the model revised changes in place with a short cross-fade, and the new words come one by one,
+// spread over the time the last update took to come (at most half a second, so the text does not lag
+// behind the speech; updates every 0.4 s or sooner show their words at once, with a short fade only).
+// The draft row becomes the final row in place, and its bubble does not shrink while the phrase is
+// revised. A line shown at once (final, never a draft) fades in whole. Every line keeps its own
+// element while it is shown.
 const CAP_MAX_ROWS = 150;
+const CAP_SPREAD_MAX_MS = 500;  // the new words of an update come within this time at most: no lag behind the speech
+const CAP_SPREAD_FAST_MS = 400; // updates this often or more: their words at once
+const CAP_WORD_FADE_MS = 120;
+const CAP_QUEUE_MAX = 6;        // more words waiting than this: shown at once (the text keeps up with the speech)
 const capView = { rows: new Map(), draftKey: null, draftSeq: 0, stick: true };
 
-class CapTyper {
-  constructor(el) { this.el = el; this.target = ''; }
+// No fades and no pace: catching up after the window was hidden, or motion reduced in the system
+function capCalm() {
+  return !!capView.instant || !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
 
-  set(text) {
-    text = text || '';
-    if (text === this.target) return;
-    this.target = text;
-    this.el.textContent = text;
-    if (text && !capView.instant) {  // catching up after the window was hidden: no fade for each line
-      this.el.classList.remove('cap-in');
-      void this.el.offsetWidth;  // restarts the fade
-      this.el.classList.add('cap-in');
-    }
+function capSplit(text) { return String(text || '').split(/\s+/).filter(Boolean); }
+
+function capFade(el, from, ms) {
+  if (el.animate) el.animate([{ opacity: from }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+}
+
+class CapTyper {
+  constructor(el, onChange) {
+    this.el = el;
+    this.target = '';
+    this.words = [];   // the words of the target
+    this.spans = [];   // the words shown: a prefix of this.words, one span each ({ w, el })
+    this.timer = null;
+    this.onChange = onChange || (() => {});
   }
 
-  jump() { this.el.textContent = this.target; }
+  // live: the phrase being spoken (its new words come one by one, within spreadMs); else the text is shown at once
+  set(text, live = false, spreadMs = CAP_SPREAD_MAX_MS) {
+    text = text || '';
+    if (text === this.target) { if (!live && this.spans.length < this.words.length) this.flush(capCalm()); return; }
+    this.target = text;
+    const words = capSplit(text);
+    const calm = capCalm();
+    if (!this.spans.length && !live) {  // a line shown at once: it fades in whole
+      this.words = words;
+      this.flush(true);
+      if (text && !calm) {
+        this.el.classList.remove('cap-in');
+        void this.el.offsetWidth;  // restarts the fade
+        this.el.classList.add('cap-in');
+      }
+      return;
+    }
+    this.diff(words, calm);
+    const waiting = this.words.length - this.spans.length;
+    if (!live || calm || spreadMs <= CAP_SPREAD_FAST_MS || waiting > CAP_QUEUE_MAX) { this.flush(calm); return; }
+    this.stepMs = Math.min(CAP_SPREAD_MAX_MS, spreadMs) / Math.max(1, waiting);  // the last word within that time
+    this.pace();
+  }
+
+  // The shown words against the new ones: the same from the start stay untouched, the revised ones
+  // change in place, the ones no longer said go
+  diff(words, calm) {
+    let k = 0;
+    while (k < this.spans.length && k < words.length && this.spans[k].w === words[k]) k++;
+    const keep = Math.min(this.spans.length, words.length);
+    for (let i = k; i < keep; i++) {
+      const sp = this.spans[i];
+      const grown = words[i].startsWith(sp.w);  // «план» → «план.»: the word goes on, no fade
+      sp.w = words[i];
+      sp.el.textContent = (i ? ' ' : '') + words[i];
+      if (!calm && !grown) capFade(sp.el, 0.25, 180);
+    }
+    let gone = false;
+    while (this.spans.length > words.length) { this.spans.pop().el.remove(); gone = true; }
+    this.words = words;
+    if (k < keep || gone) this.onChange();
+  }
+
+  reveal(fade) {
+    const i = this.spans.length;
+    const el = document.createElement('span');
+    el.className = 'cap-w';
+    el.textContent = (i ? ' ' : '') + this.words[i];
+    this.el.appendChild(el);
+    this.spans.push({ w: this.words[i], el });
+    if (fade) capFade(el, 0, CAP_WORD_FADE_MS);
+  }
+
+  flush(calm) {
+    clearTimeout(this.timer);
+    this.timer = null;
+    if (this.spans.length >= this.words.length) return;
+    while (this.spans.length < this.words.length) this.reveal(!calm);
+    this.onChange();
+  }
+
+  // the words waiting come one by one, spread over the time the last update took to come
+  pace() {
+    if (this.timer || this.spans.length >= this.words.length) return;
+    const step = () => {
+      this.timer = null;
+      if (this.spans.length >= this.words.length) return;
+      this.reveal(true);
+      this.onChange();
+      const left = this.words.length - this.spans.length;
+      if (left) this.timer = setTimeout(step, this.stepMs);
+    };
+    step();  // the first word at once: the line is never empty while its words wait
+  }
+
+  stop() { clearTimeout(this.timer); this.timer = null; }
+
+  // the target at once, without fades (the stable start still kept)
+  jump() {
+    this.diff(capSplit(this.target), true);
+    this.flush(true);
+  }
+}
+
+// The bubble of the phrase being spoken keeps the largest size it had: a revision that is shorter does not
+// pull it in and push it out again a second later. A new line that grows the captions scrolls them, if
+// the user is at the bottom
+function capHold(row) {
+  if (!row.hold) return capGrow();
+  const bub = row.el.querySelector('.cap-bub');
+  const r = bub.getBoundingClientRect();
+  if (!r.width) return capGrow();  // «Рядом»: no bubble of its own
+  if (r.width > (row.minW || 0)) { row.minW = r.width; bub.style.minWidth = `min(${Math.ceil(r.width)}px, 100%)`; }
+  if (r.height > (row.minH || 0)) { row.minH = r.height; bub.style.minHeight = `${Math.ceil(r.height)}px`; }
+  capGrow();
+}
+
+function capGrow() {
+  if (!capView.stick) return;
+  const box = document.getElementById('studio-captions');
+  if (box && box.scrollHeight - box.scrollTop - box.clientHeight > 1) box.scrollTop = box.scrollHeight;
+}
+
+// The size or the layout of the text changed (A−/A+, the view): the held sizes are measured anew
+function capReleaseSizes() {
+  for (const row of capView.rows.values()) {
+    row.minW = 0;
+    row.minH = 0;
+    const bub = row.el.querySelector('.cap-bub');
+    bub.style.minWidth = '';
+    bub.style.minHeight = '';
+  }
 }
 
 function capFollowBottom() {
@@ -1899,9 +2025,12 @@ function capJumpToNew() {
 }
 
 function capReset() {
+  for (const row of capView.rows.values()) { row.orig.stop(); row.tr.stop(); }
   capView.rows.clear();
   capView.hadWho = false;
   capView.draftKey = null;
+  capView.partialAt = 0;
+  capView.partialText = '';
   document.getElementById('studio-cap-rows').innerHTML = '';
   capView.stick = true;
   document.getElementById('studio-cap-jump')?.classList.add('hidden');
@@ -1969,7 +2098,9 @@ function createCapRow(key) {
   el.innerHTML = '<span class="cap-av hidden" aria-hidden="true"></span><span class="cap-who hidden"></span><div class="cap-bub"><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
     + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div></div>';
   document.getElementById('studio-cap-rows').appendChild(el);
-  const row = { key, el, orig: new CapTyper(el.querySelector('.cap-orig')), tr: new CapTyper(el.querySelector('.cap-tr')) };
+  const row = { key, el };
+  row.orig = new CapTyper(el.querySelector('.cap-orig'), () => capHold(row));
+  row.tr = new CapTyper(el.querySelector('.cap-tr'), () => capHold(row));
   capView.rows.set(key, row);
   return row;
 }
@@ -1998,7 +2129,10 @@ function syncStudioCaptions() {
   const view = target ? studio.view : 'orig';
   const rowsBox = document.getElementById('studio-cap-rows');
   const viewCls = `cap-rows cap-view-${view}`;
-  if (rowsBox.className !== viewCls) rowsBox.className = viewCls;
+  if (rowsBox.className.replace(' cap-has-who', '') !== viewCls) {
+    rowsBox.className = viewCls + (capView.hadWho ? ' cap-has-who' : '');
+    capReleaseSizes();
+  }
 
   const lines = [...liveCap.lines.values()].sort((a, b) => a.id - b.id);
   const fresh = lines.filter(ln => !capView.rows.has(ln.id));
@@ -2059,15 +2193,25 @@ function capDrawLines(lines, fresh, target, view) {
       capView.draftKey = `d${++capView.draftSeq}`;
       row = createCapRow(capView.draftKey);
       row.el.classList.add('cap-draft');
+      row.hold = true;  // its bubble keeps its size while the phrase is revised, and as it becomes final
+    }
+    // How often the phrase comes: its new words are spread over that time, no longer (unknown at first: the most)
+    const draftText = liveCap.partial + '\n' + (liveCap.partialTranslation || '');
+    if (draftText !== capView.partialText) {
+      const now = performance.now();
+      capView.spread = capView.partialAt ? now - capView.partialAt : CAP_SPREAD_MAX_MS;
+      capView.partialAt = now;
+      capView.partialText = draftText;
     }
     // Optional: the phrase as it is spoken (otherwise only "…" until it is final)
-    row.orig.set(liveDraftOn() ? liveCap.partial : '');
-    row.tr.set(liveDraftTrOn() ? (liveCap.partialTranslation || '') : '');
+    row.orig.set(liveDraftOn() ? liveCap.partial : '', true, capView.spread);
+    row.tr.set(liveDraftTrOn() ? (liveCap.partialTranslation || '') : '', true, capView.spread);
     row.el.classList.toggle('cap-draft-live', liveDraftTrOn());
     setCapTags(row, liveCap.lang, liveCap.partialTarget || (target === 'auto' ? '' : target));
   } else if (capView.draftKey) {
     // The draft ended without becoming a line (noise taken for speech)
-    capView.rows.get(capView.draftKey)?.el.remove();
+    const gone = capView.rows.get(capView.draftKey);
+    if (gone) { gone.orig.stop(); gone.tr.stop(); gone.el.remove(); }
     capView.rows.delete(capView.draftKey);
     capView.draftKey = null;
   }
@@ -2076,6 +2220,8 @@ function capDrawLines(lines, fresh, target, view) {
   for (const [key, row] of capView.rows) {
     if (capView.rows.size <= CAP_MAX_ROWS) break;
     if (key === capView.draftKey) continue;
+    row.orig.stop();
+    row.tr.stop();
     row.el.remove();
     capView.rows.delete(key);
   }

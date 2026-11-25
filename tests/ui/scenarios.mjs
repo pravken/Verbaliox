@@ -1146,6 +1146,91 @@ await step('live captions as a chat', async () => {
   await page.evaluate(() => switchAppView('library'));
 });
 
+// «Текст по ходу речи» (asked by the user: the phrase being spoken flickered, jumped and changed size as it was
+// replaced each second): the words it keeps stay the same nodes, the new ones come one by one, the bubble never
+// shrinks, the draft becomes the final line in place, and a draft has the metrics of a final line
+await step('live draft grows word by word without jumps', async () => {
+  const run = () => page.evaluate(async () => {
+    switchAppView('studio');
+    const box = (id) => document.getElementById(id);
+    const was = { draft: box('live-draft-toggle').checked, tr: box('live-draft-tr-toggle').checked, lang: box('live-translate-select').value, view: studio.view };
+    box('live-draft-toggle').checked = true;
+    box('live-draft-tr-toggle').checked = true;
+    const hasEn = [...box('live-translate-select').options].some(o => o.value === 'en');
+    if (hasEn) box('live-translate-select').value = 'en';
+    studio.view = 'under';
+    liveCap.lines.clear();
+    capReset();
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+    const rowEl = () => document.querySelector('#studio-cap-rows > .cap-row');
+    const metrics = (el) => { const cs = getComputedStyle(el); return [cs.fontSize, cs.lineHeight, cs.fontWeight, cs.fontStyle].join(' '); };
+    const steps = [['Сегодня мы', 'Today we'], ['Сегодня мы обсудим', 'Today we will discuss'], ['Сегодня мы обсуждаем план', 'Today we discuss the plan']];
+    const out = { firstAfterSet: [], sizes: [], same: true, row: true, text: [], tr: [] };
+    let first = null, row = null, draftMetrics = '', trFirst = null;
+    for (const [text, tr] of steps) {
+      liveCap.partial = text;
+      liveCap.partialTranslation = tr;
+      syncStudioCaptions();
+      out.firstAfterSet.push(rowEl().querySelectorAll('.cap-orig .cap-w').length);
+      for (let i = 0; i < 40 && rowEl().querySelector('.cap-orig').textContent.trim() !== text; i++) {
+        await wait(50);
+        const r = rowEl().querySelector('.cap-bub').getBoundingClientRect();
+        out.sizes.push([r.width, r.height]);
+      }
+      const el = rowEl();
+      const r = el.querySelector('.cap-bub').getBoundingClientRect();
+      out.sizes.push([r.width, r.height]);
+      const w0 = el.querySelector('.cap-orig .cap-w');
+      first = first || w0;
+      out.same = out.same && w0 === first;
+      row = row || el;
+      out.row = out.row && el === row;
+      if (hasEn) { const t0 = el.querySelector('.cap-tr .cap-w'); trFirst = trFirst || t0; out.same = out.same && t0 === trFirst; }
+      out.text.push(el.querySelector('.cap-orig').textContent.trim());
+      draftMetrics = metrics(el.querySelector('.cap-o'));
+    }
+    // final: the line comes and the phrase ends
+    liveCap.lines.set(1, { id: 1, text: 'Сегодня мы обсуждаем план.', lang: 'ru', translation: hasEn ? 'Today we discuss the plan.' : '' });
+    liveCap.partial = '';
+    liveCap.partialTranslation = '';
+    syncStudioCaptions();
+    const fin = rowEl();
+    const r = fin.querySelector('.cap-bub').getBoundingClientRect();
+    out.sizes.push([r.width, r.height]);
+    out.finalSame = fin === row && document.querySelectorAll('#studio-cap-rows > .cap-row').length === 1 && !fin.classList.contains('cap-draft');
+    out.finalFirst = fin.querySelector('.cap-orig .cap-w') === first;
+    out.finalText = fin.querySelector('.cap-orig').textContent.trim();
+    out.metrics = [draftMetrics, metrics(fin.querySelector('.cap-o'))];
+    // with motion reduced the words come at once (the stable start still kept)
+    liveCap.lines.clear();
+    capReset();
+    liveCap.partial = 'Один два три четыре';
+    syncStudioCaptions();
+    out.calm = rowEl().querySelectorAll('.cap-orig .cap-w').length;
+    liveCap.partial = '';
+    capReset();
+    box('live-draft-toggle').checked = was.draft;
+    box('live-draft-tr-toggle').checked = was.tr;
+    box('live-translate-select').value = was.lang;
+    studio.view = was.view;
+    return out;
+  });
+  const out = await run();
+  expect(JSON.stringify(out.firstAfterSet) === '[1,3,4]', `the new words did not come one by one: ${JSON.stringify(out.firstAfterSet)}`);
+  expect(out.text.join('|') === 'Сегодня мы|Сегодня мы обсудим|Сегодня мы обсуждаем план', `the draft text: ${out.text.join('|')}`);
+  expect(out.same && out.row, 'the words kept by an update are new nodes, or the draft row was replaced');
+  expect(out.finalSame && out.finalFirst && out.finalText === 'Сегодня мы обсуждаем план.', `the final line is not the draft in place: ${JSON.stringify(out)}`);
+  const shrunk = out.sizes.findIndex((s, i) => i && (s[0] < out.sizes[i - 1][0] - 0.5 || s[1] < out.sizes[i - 1][1] - 0.5));
+  expect(shrunk < 0, `the bubble shrank: ${JSON.stringify(out.sizes)}`);
+  expect(out.metrics[0] === out.metrics[1], `a draft and a final line differ in size: ${out.metrics.join(' / ')}`);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  try {
+    const calm = await run();
+    expect(calm.calm === 4 && JSON.stringify(calm.firstAfterSet) === '[2,3,4]', `with motion reduced the words still wait: ${JSON.stringify(calm)}`);
+  } finally { await page.emulateMedia({ reducedMotion: null }); }
+  await page.evaluate(() => { liveCap.lines.clear(); capReset(); syncStudioCaptions(); switchAppView('library'); });
+});
+
 await step('captions do not start by themselves', async () => {
   // «Не мешать на встречах» holds them on a meeting only: a voice note recorded by hand starts with them
   const held = await page.evaluate(() => [
