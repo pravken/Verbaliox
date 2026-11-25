@@ -3087,7 +3087,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
        border-radius: 18px; box-shadow: var(--shadow-dialog); overflow: hidden; }
 .frw-head { display: flex; align-items: center; gap: 12px; padding: 22px 24px 0; }
 .frw-title { font-size: 18px; font-weight: 600; color: #F5F5F7; margin: 0; }
-.frw-dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.frw-dots { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+/* «Шаг 2 из 5» beside the dots (found in the audit: the dots alone did not say how many steps are left) */
+.frw-step { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.frw-dots-row { display: flex; gap: 6px; align-items: center; }
 .frw-dot { width: 7px; height: 7px; border-radius: 4px; background: #3A3A3C; transition: width var(--dur) var(--ease-out); }
 .frw-dot.is-on { width: 20px; background: var(--accent); }
 .frw-sub { margin: 6px 24px 14px; font-size: 13px; line-height: 1.45; color: #A1A1A6; }

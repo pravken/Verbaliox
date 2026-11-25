@@ -613,9 +613,16 @@ await step('first run wizard', async () => {
   await page.evaluate(() => { document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()); openFirstRunWizard(state.system); });
   await sleep(300);
   // One topic a step: the AI analysis, the sound, (calls: Windows only), the calendar, then what downloads (the language is not asked:
-  // the recommended set)
+  // the recommended set). The head says which step of how many (found in the audit: the dots alone did not)
+  const stepOf = () => page.evaluate(() => {
+    const m = document.querySelector('#first-run-wizard .frw-step')?.textContent.match(/(\d+)\D+(\d+)/);
+    return m ? [+m[1], +m[2], document.querySelectorAll('#first-run-wizard .frw-dot').length] : null;
+  });
+  const s1 = await stepOf();
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
+  const s2 = await stepOf();
+  expect(s1 && s2 && s1[0] === 1 && s2[0] === 2 && s1[1] === s1[2] && s2[1] === s1[1], `the step in the head: ${JSON.stringify([s1, s2])}`);
   // Where the sound comes from: the microphone only
   await page.click('#first-run-wizard button[data-src="mic"]');
   await page.click('#first-run-wizard button[data-a="next"]');
