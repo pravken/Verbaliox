@@ -23,6 +23,39 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   model they use instead.
 
 
+### Fixes
+
+- **No sound deleted by mistake**: after a restore from a backup, «Keep the sound N days» counts from the restore
+  (the sound of old recordings just put back was deleted at the next start); a dub, translation, cut or subtitles
+  job cut off by a crash gives the recording back its own status instead of «completed», so the retention no longer
+  takes the sound of a cancelled or not transcribed recording.
+- **No other file deleted with a recording's copies**: a cut or a video with subtitles is listed with its recording
+  once written; a job refused or failed left the path of a file already there.
+- **The settings page no longer hangs** on a second «Install» of the GPU build of ONNX Runtime or of Nemotron while
+  the first install runs.
+- **Dictation**: no crash and no memory leak when the clipboard is busy or memory runs out; two quick presses of the
+  hotkey stop it once.
+- **Obsidian**: a note edited in Obsidian and moved after a rename keeps its link (the next export wrote a second
+  note), also when the vault moved to another drive.
+- **Exports**: one asked while others are written is kept; a bilingual MD or TXT export is refused at once instead
+  of after the translation. Tasks keep a date set by hand in the MD, CSV and Todoist exports, and the Todoist CSV
+  cells open as text in Excel.
+- **Search by meaning** goes on after Ollama did not answer for a moment (the whole library waited for a restart).
+- **Decisions** in «Обзор», a feature's card and the agent's list are those of the protocol's «Решения» section: a
+  discussion topic «### Решение …» no longer counts, decisions under their own sub-headings do.
+- A recording deleted while transcribed or analysed leaves no lines in the search and no tasks behind.
+- An edit of a line of a transcript stored by an older version is no longer lost after a gap in its lines.
+- The system sound recorded across a change of the system clock (after sleep) no longer gets hours of silence or
+  fails; a cancelled cut no longer reports a Windows file error instead of the cancel.
+- Update: a program file is written whole or not at all, a rollback that could not put the Python libraries back
+  says so, the Python the program installs for itself is never written by an update; a backup made by an older
+  version restores, a second restore of one copy points to the file it put back.
+- Classic Outlook: recurring meetings are read in the order Outlook asks, and one unreadable appointment no longer
+  fails the calendar. The idle unload waits for a dictation and a model comparison; a Whisper load asked on a
+  paused queue is refused instead of blocking unloads. Voice prints learnt twice at once, «5 мм» in «Без запинок»,
+  a zone changing on «-2SU», control characters in a meeting toast and an empty path in «Add by path» are handled.
+
+
 ## 0.9.4 — English
 
 
@@ -1327,6 +1360,40 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Hy-MT3 1.8B» (для режима «Качество» — модель перевода для этого компьютера) с размером и кнопкой «Скачать», в цвете
   внимания. Пока модели нет, на кнопке моделей — оранжевый «!», под ней — подсказка со скачиванием до закрытия, а
   субтитры с переводом без модели режима один раз за запуск сообщают, какая модель используется вместо неё.
+
+
+### Исправления
+
+- **Звук не удаляется по ошибке**: после восстановления из резервной копии «Хранить звук N дней» считается от
+  восстановления (звук только что возвращённых старых записей удалялся при следующем запуске); дубляж, перевод,
+  нарезка или субтитры, прерванные сбоем, возвращают записи её прежнее состояние, а не «готово», поэтому хранение больше
+  не удаляет звук отменённой или не расшифрованной записи.
+- **Вместе с копиями записи не удаляется чужой файл**: нарезка и видео с субтитрами вносятся в список копий записи
+  после того, как файл записан; задача, которую не приняли или которая не удалась, оставляла путь уже существующего файла.
+- **Страница настроек не зависает** при повторном нажатии «Установить» для GPU-сборки ONNX Runtime или Nemotron, пока
+  идёт первая установка.
+- **Диктовка**: нет падения и утечки памяти при занятом буфере обмена или нехватке памяти; два быстрых нажатия
+  сочетания клавиш останавливают её один раз.
+- **Obsidian**: заметка, изменённая в Obsidian и перенесённая после переименования, сохраняет связь с записью
+  (следующий экспорт создавал вторую заметку), в том числе когда хранилище перенесено на другой диск.
+- **Экспорт**: экспорт, запрошенный во время записи других, сохраняется; двуязычный экспорт в MD или TXT отклоняется
+  сразу, а не после перевода. Задачи сохраняют дату, заданную вручную, в экспорте MD, CSV и Todoist, а ячейки CSV для
+  Todoist открываются в Excel как текст.
+- **Поиск по смыслу** продолжается после кратковременной недоступности Ollama (вся библиотека ждала перезапуска).
+- **Решения** в «Обзоре», карточке фичи и списке для агента — это пункты раздела «Решения» протокола: тема обсуждения
+  «### Решение …» больше не считается решением, решения под собственными подзаголовками учитываются.
+- Запись, удалённая во время расшифровки или анализа, не оставляет строк в поиске и задач.
+- Правка строки в расшифровке, сохранённой старой версией, больше не теряется после пропуска в строках.
+- Системный звук при смене системного времени (после сна) больше не получает часы тишины и не прерывается с ошибкой;
+  отменённая нарезка больше не сообщает об ошибке файла Windows вместо отмены.
+- Обновление: файл программы записывается целиком или не записывается вовсе, неудачный возврат библиотек Python
+  сообщается как неудачный, Python, который программа устанавливает для себя, не перезаписывается обновлением;
+  резервная копия старой версии восстанавливается, повторное восстановление той же копии указывает на возвращённый файл.
+- Классический Outlook: повторяющиеся встречи читаются в порядке, который требует Outlook, а одна нечитаемая встреча
+  больше не прерывает чтение календаря. Выгрузка после простоя ждёт диктовку и сравнение моделей; загрузка Whisper при
+  приостановленной очереди отклоняется и больше не мешает выгрузке. Обработаны одновременное обучение голосового
+  профиля, «5 мм» в режиме «Без запинок», смена часового пояса по правилу «-2SU», управляющие символы в уведомлении о
+  встрече и пустой путь в «Добавить по пути».
 
 
 ## 0.9.4
