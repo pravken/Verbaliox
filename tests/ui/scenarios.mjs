@@ -1422,6 +1422,45 @@ await step('dashboard', async () => {
   await sleep(300);
 });
 
+// «Обзор» of a year and of any past period (asked by the user): ‹ goes back, the name says which one, «Сегодня»
+// returns; the figures compared with the period before or the same days a year earlier
+await step('dashboard: a past year, the comparison', async () => {
+  const until = async (fn, what) => {
+    for (let k = 0; k < 50; k++) { if (await page.evaluate(fn)) return; await sleep(100); }
+    throw new Error(what);
+  };
+  const year = new Date().getFullYear();
+  const name = () => page.evaluate(() => document.querySelector('#db-nav .db-nav-name').textContent);
+  await page.click('#db-periods button >> nth=3');
+  await until(() => DB.data && DB.data.period === 'year', 'the year did not come');
+  expect(await name() === String(year), `the current year is not named: ${await name()}`);
+  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Сегодня» on the current period');
+  expect(await page.isDisabled('#db-nav button[data-click="dbShiftPeriod"] >> nth=1'), '› is open on the current period');
+  expect(await page.evaluate(() => DB.data.buckets.length === 12 && DB.data.buckets[0].kind === 'month'), 'the year is not by month');
+  await page.click('#db-nav button[data-click="dbShiftPeriod"] >> nth=0');
+  await until(() => DB.data && DB.data.past && DB.data.start.endsWith('-01-01'), 'the year before did not come');
+  expect(await name() === String(year - 1), `the year before is not named: ${await name()}`);
+  expect(await page.evaluate(() => DB.data.start) === `${year - 1}-01-01`, 'not the year before');
+  expect(!(await page.isDisabled('#db-nav button[data-click="dbShiftPeriod"] >> nth=1')), '› is shut on a past period');
+  if (shots) await page.screenshot({ path: `${shots}/db-year-before.png` });
+  await page.click('#db-nav button[data-click="dbToCurrent"]');
+  await until(() => DB.data && !DB.data.past && DB.data.period === 'year', '«Сегодня» did not return');
+  expect(await name() === String(year), '«Сегодня» did not name the current year');
+  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Сегодня» stayed');
+  // the week: «год назад» says so under the figures, «С предыдущим» back to the week before
+  await page.click('#db-periods button >> nth=0');
+  await until(() => DB.data && DB.data.period === 'week', 'the week did not come');
+  const lines = () => page.evaluate(() => [...document.querySelectorAll('#db-grid .db-kt-d')].map(x => x.textContent).join(' | '));
+  await page.click('#db-grid .db-w-kpis button[data-click="setDashCompare"] >> nth=1');
+  await until(() => DB.data && DB.data.compare === 'year' && [...document.querySelectorAll('#db-grid .db-kt-d')].some(x => /год назад/.test(x.textContent)),
+    'the figures are not compared with a year ago');
+  expect(await page.evaluate(() => dbPrefs().compare) === 'year', 'the comparison was not kept');
+  await page.click('#db-grid .db-w-kpis button[data-click="setDashCompare"] >> nth=0');
+  await until(() => DB.data && DB.data.compare === 'prev', 'the comparison did not return');
+  await sleep(200);
+  expect(!/год назад/.test(await lines()), `still a year ago: ${await lines()}`);
+});
+
 // The templates editor: a click beside it asks before dropping unsaved edits, and closes at once when
 // nothing changed (audit: edits were lost to a stray click)
 await step('templates editor keeps edits', async () => {
