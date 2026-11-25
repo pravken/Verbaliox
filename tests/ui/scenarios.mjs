@@ -2856,6 +2856,18 @@ await step('the chosen tab shows the focus', async () => {
   expect(r.id !== 'nav-transcript' || (r.outline !== 'none' && r.w !== '0px'), `no ring: ${JSON.stringify(r)}`);
 });
 
+// «Выбрать своё имя» is one button in one place on the cards of «Сегодня» (a link in one, a button in the other)
+await step('set my name: one button on the cards', async () => {
+  await page.evaluate(() => switchAppView('home'));
+  await sleep(1200);
+  const r = await page.evaluate(() => [...document.querySelectorAll('#home-view [data-click="hmSetMyName"]')].filter(b => b.getClientRects().length).map(b => {
+    const r = b.getBoundingClientRect(), card = b.closest('.db-w, .td-card, section, [class*="card"]')?.getBoundingClientRect();
+    return { cls: b.className, h: Math.round(r.height), w: Math.round(r.width), dx: card ? Math.round(r.left - card.left) : null };
+  }));
+  if (r.length < 2) return;  // the name is set in the data: nothing to compare
+  expect(new Set(r.map(x => `${x.cls}|${x.h}|${x.w}|${x.dx}`)).size === 1, `the buttons differ: ${JSON.stringify(r)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
