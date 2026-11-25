@@ -69,6 +69,7 @@
 | call-nemotron-560-stream-ru-t2-spin-off-below-q-parakeet-int8-idle-cpus8 | 15.86 | 1.0 / 1.24 | 1.79 | 1.4 / 4.3 | 835.0 | 20.9 | 7.07 / 16.7 | 0 / 0 | 30.0 / 26.5 | 13.85 | 0.2 / 1.1 | 9386.7 |
 | call-parakeet-fp32-window-en-tapp-spin-on-normal-cpus8-v094 | 8.0 | 4.28 / 6.4 | 0.9 | 3.5 / 6.3 | 2921.0 | 13.4 | 6.03 / 7.7 | 0 / 0 | 30.0 / 27.2 | — | 0.1 / 0.7 | 45171.0 |
 | call-parakeet-fp32-window-en-tapp-spin-on-normal-q-inproc-normal-cpus8-v094-live4 | 5.57 | 3.24 / 5.54 | 1.23 | 8.1 / 17.7 | 6047.0 | 18.4 | 6.16 / 10.5 | 0 / 0 | 30.0 / 26.9 | 2.48 | 0.1 / 0.7 | 48164.8 |
+| call-parakeet-fp32-window-en-tapp-spin-on-normal-q-inproc-normal-cpus8-v094-window4 | 4.7 | 3.54 / 4.85 | 0.98 | 7.8 / 16.7 | 5938.0 | 18.7 | 6.13 / 9.7 | 0 / 0 | 30.0 / 26.5 | 2.44 | 0.1 / 0.6 | 15696.4 |
 | call-parakeet-fp32-window-en-tapp-spin-on-normal-q-inproc-normal-cpus8-v094 | 9.04 | 4.19 / 7.5 | 1.79 | 10.8 / 16.8 | 5971.0 | 22.2 | 6.9 / 13.4 | 0 / 0 | 30.0 / 27.0 | 3.84 | 0.2 / 0.6 | 153275.4 |
 | call-parakeet-fp32-window-ru-tapp-spin-off-normal-q-inproc-normal-cpus8 | 8.67 | 4.0 / 5.2 | 1.62 | 15.7 / 21.5 | 4281.0 | 24.6 | 4.45 / 6.9 | 0 / 0 | 30.0 / 27.1 | 4.68 | 0.1 / 0.5 | 172488.5 |
 | call-parakeet-fp32-window-ru-tapp-spin-on-normal-cpus8 | 8.46 | 3.15 / 4.71 | 1.57 | 6.3 / 21.9 | 2858.0 | 14.4 | 37.55 / 101.1 | 110 / 0 | 30.0 / 26.2 | — | 0.0 / 0.4 | 1726.8 |

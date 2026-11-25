@@ -51,6 +51,31 @@ class ThreadBudgetTest(unittest.TestCase):
             self.assertEqual(asr_onnx.live_threads({"cpu_threads": "auto"}), 2)
             self.assertEqual(asr_onnx.live_threads({"cpu_threads": "1"}), 1)
 
+    def test_the_window_takes_four_threads_and_phrases_two(self):
+        # by the window a step on 2 threads took 1 s and the WER rose to 8-9 % (bench-report/asr-2026-11-check.md)
+        with mock.patch("os.cpu_count", return_value=8), \
+                mock.patch.object(asr_onnx, "live_phrases", side_effect=lambda m: m == "gigaam-v3"):
+            self.assertEqual(asr_onnx.live_threads({"cpu_threads": "auto"}, "parakeet-v3"), 4)
+            self.assertEqual(asr_onnx.live_threads({"cpu_threads": "auto"}, "gigaam-v3"), 2)
+            self.assertEqual(asr_onnx.live_threads({"cpu_threads": "2"}, "parakeet-v3"), 2)  # the setting caps it
+        with mock.patch("os.cpu_count", return_value=4), mock.patch.object(asr_onnx, "live_phrases", return_value=False):
+            self.assertEqual(asr_onnx.live_threads({"cpu_threads": "auto"}, "parakeet-v3"), 2)  # auto: half of 4
+
+    def test_the_queue_leaves_the_window_its_four_threads(self):
+        from app import live
+
+        def queue(models, cores=8, setting="auto"):
+            with mock.patch("os.cpu_count", return_value=cores), \
+                    mock.patch.object(live, "onnx_models_in_use", return_value=set(models)), \
+                    mock.patch.object(asr_onnx, "live_phrases", side_effect=lambda m: m == "gigaam-v3"):
+                return asr_onnx.queue_threads({"cpu_threads": setting}, captions=True)
+
+        self.assertEqual(queue({"parakeet-v3"}), 2)  # 8 − 4 − 2
+        self.assertEqual(queue({"gigaam-v3"}), 4)  # 8 − 2 − 2
+        self.assertEqual(queue({"gigaam-v3", "parakeet-v3"}), 2)
+        self.assertEqual(queue(set()), 4)  # Whisper captions in their own process
+        self.assertEqual(queue({"parakeet-v3"}, 16, "all"), 10)
+
 
 class CopiesTest(unittest.TestCase):
     def _fake(self):

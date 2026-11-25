@@ -201,7 +201,7 @@ def gpu_tuning() -> Tuple[int, bool]:
 
 # Each model has up to three copies in memory, each a session of its own (ONNX Runtime fixes the threads of a
 # session when it is made): "<id>@gpu" for a job on the video card, "<id>" for a job on the processor (its threads
-# from the budget below) and "<id>@live" for live captions and dictation (LIVE_THREADS)
+# from the budget below) and "<id>@live" for live captions and dictation (live_threads)
 def _key(model_id: str, gpu: bool, live: bool = False) -> str:
     return f"{model_id}@gpu" if gpu else f"{model_id}@live" if live else model_id
 
@@ -232,16 +232,22 @@ def cpu_threads(settings: Optional[Dict[str, str]] = None) -> int:
     return max(2, min(8, cores // 2))
 
 
-# One budget of threads for the whole program (bench-report/asr-2026-11.md, item 2): live captions recognize one
-# phrase or one short window at a time and need 2 threads; while they run, a transcription job on the processor
-# takes at most what is left once they and RESERVED_THREADS (the call app, the video, the page) have theirs.
+# One budget of threads for the whole program (bench-report/asr-2026-11.md, item 2): live captions by VAD phrases
+# recognize one phrase of a few seconds at a time and need 2 threads; by the sliding window (Parakeet) they
+# recognize up to 20 s again every 1.2 s and need 4: on 2 a step took 1 s in the median, the window fell behind
+# and the WER rose from 5.6 % to 8-9 % (bench-report/asr-2026-11-check.md). While captions run, a transcription
+# job on the processor takes at most what is left once they and RESERVED_THREADS (the call app, the video, the
+# page) have theirs.
 LIVE_THREADS = 2
+WINDOW_THREADS = 4
 RESERVED_THREADS = 2
 
 
-def live_threads(settings: Optional[Dict[str, str]] = None) -> int:
-    """Threads of the copy for live captions and dictation (never more than the user's setting allows)."""
-    return max(1, min(LIVE_THREADS, cpu_threads(settings)))
+def live_threads(settings: Optional[Dict[str, str]] = None, model_id: Optional[str] = None) -> int:
+    """Threads of the copy for live captions and dictation of this model: by VAD phrases LIVE_THREADS, by the
+    window WINDOW_THREADS (never more than the user's setting allows)."""
+    want = WINDOW_THREADS if model_id in ONNX_MODELS and not live_phrases(model_id) else LIVE_THREADS
+    return max(1, min(want, cpu_threads(settings)))
 
 
 def _captions_running() -> bool:
@@ -251,6 +257,17 @@ def _captions_running() -> bool:
         return live.has_sessions()
     except Exception:
         return False
+
+
+def _captions_threads(settings: Dict[str, str]) -> int:
+    """Threads the running captions take: the most of their models' copies (the Whisper captions: LIVE_THREADS)."""
+    try:
+        from app import live
+
+        models = live.onnx_models_in_use()
+    except Exception:
+        models = set()
+    return max([live_threads(settings, m) for m in models] or [live_threads(settings)])
 
 
 def queue_threads(settings: Optional[Dict[str, str]] = None, captions: Optional[bool] = None) -> int:
@@ -267,7 +284,7 @@ def queue_threads(settings: Optional[Dict[str, str]] = None, captions: Optional[
         captions = _captions_running()
     if captions:
         cores = os.cpu_count() or 4
-        limit = min(limit, max(1, cores - live_threads(settings) - RESERVED_THREADS))
+        limit = min(limit, max(1, cores - _captions_threads(settings) - RESERVED_THREADS))
     return limit
 
 
@@ -386,7 +403,7 @@ def _complete_async(model_id: str) -> None:
 
 def _load(model_id: str, gpu: bool = False, live: bool = False):
     """The model and the VAD, loaded once (installing the library and downloading what is missing).
-    gpu: on the video card (app/onnx_gpu.py); live: the copy for live captions and dictation (LIVE_THREADS);
+    gpu: on the video card (app/onnx_gpu.py); live: the copy for live captions and dictation (live_threads);
     otherwise the copy of a job on the processor, made again when the thread budget (queue_threads) has
     changed since it was made. Each copy is made from its variant (_variant), and again once a variant
     downloaded later is there. The VAD stays on the CPU: it is tiny, and the GPU would only add copies."""
@@ -401,7 +418,7 @@ def _load(model_id: str, gpu: bool = False, live: bool = False):
     key = _key(model_id, gpu, live)
     variant = _variant(model_id, "gpu" if gpu else "live" if live else "cpu")
     threads = 0 if live else queue_threads()  # a job on the video card: its VAD on the processor
-    cpu_n = live_threads() if live else threads
+    cpu_n = live_threads(model_id=model_id) if live else threads
     made = (variant["onnx_name"], variant.get("quantization"), 0 if gpu else cpu_n)
     with _lock:
         if key in _loaded and key in _made and _made[key] != made:

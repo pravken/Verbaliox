@@ -76,9 +76,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   Parakeet and the voice detector no longer wait for work actively (ONNX Runtime's spinning). In the measurement on
   8 logical processors (captions, a transcription in the queue and a video call at once) the pauses of the system
   over 50 ms went from 645 in 5 minutes to none, with the same accuracy, and the queue transcribes 1.5 times faster.
-- **One thread budget for speech recognition**: live captions with GigaAM or Parakeet take 2 threads of the
-  processor, and while they run a transcription on the processor takes at most «logical processors − 4» (2 for the
-  captions, 2 for the system and the call app), never more than «Processor load». Captions and transcription have
+- **One thread budget for speech recognition**: live captions by phrases (GigaAM) take 2 threads of the
+  processor, by the window (Parakeet) 4; while they run a transcription on the processor takes at most «logical
+  processors − caption threads − 2» (2 for the system and the call app), never more than «Processor load». Captions and transcription have
   copies of the model of their own: a transcription started before the captions keeps its threads, the next one
   takes the budget of its start.
 - **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
@@ -1304,9 +1304,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   и детектора речи больше не ждут работу активно (spinning ONNX Runtime). В замере на 8 логических процессорах
   (субтитры, расшифровка в очереди и видеозвонок одновременно) задержки системы больше 50 мс сократились с 645 за
   5 минут до нуля при той же точности, а очередь расшифровывает в полтора раза быстрее.
-- **Общий бюджет потоков для распознавания речи**: субтитры с GigaAM или Parakeet занимают 2 потока процессора, а
-  пока они идут, расшифровка на процессоре получает не больше «логические процессоры − 4» (2 — субтитрам, 2 — системе
-  и программе звонков) и не больше значения «Нагрузка на процессор». У субтитров и расшифровки свои копии модели:
+- **Общий бюджет потоков для распознавания речи**: субтитры по фразам (GigaAM) занимают 2 потока процессора, по окну
+  (Parakeet) — 4; пока они идут, расшифровка на процессоре получает не больше «логические процессоры − потоки субтитров
+  − 2» (2 — системе и программе звонков) и не больше значения «Нагрузка на процессор». У субтитров и расшифровки свои копии модели:
   расшифровка, начатая до субтитров, сохраняет свои потоки, следующая получает бюджет на момент своего начала.
 - **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
   распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
