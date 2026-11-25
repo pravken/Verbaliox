@@ -91,6 +91,25 @@ class SessionAndSearchApiTest(unittest.TestCase):
             self.assertEqual(c.get("/api/meetings").status_code, 200)
             self.assertEqual(c.get("/static/js/app.js", headers={"Sec-Fetch-Site": "cross-site"}).status_code, 200)
 
+    def test_every_answer_says_its_type_and_is_never_framed(self):
+        with self._client(8790) as c:
+            locked = c.get("/")  # the sign-in page, before the session
+            self.assertEqual(locked.status_code, 401)
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            for r in (locked, c.get("/api/meetings"), c.get("/static/js/app.js")):
+                self.assertEqual(r.headers.get("x-content-type-options"), "nosniff")
+                self.assertEqual(r.headers.get("x-frame-options"), "DENY")
+
+    def test_a_mail_link_with_raw_line_breaks_or_quotes_is_refused(self):
+        from unittest import mock
+
+        with self._client(8790) as c, mock.patch("webbrowser.open") as web, mock.patch("os.startfile", create=True) as start:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            for bad in ('mailto:?subject=a"b', "mailto:?subject=a\r\nbcc:x@example.com", "mailto:?body=<x>"):
+                self.assertEqual(c.post("/api/open-url", json={"url": bad}).status_code, 400, bad)
+            self.assertEqual(c.post("/api/open-url", json={"url": "mailto:?subject=%D0%90&body=a%0Ab"}).status_code, 200)
+        self.assertEqual(web.call_count + start.call_count, 1)
+
     def test_settings_the_program_writes_itself_are_not_taken_from_the_page(self):
         from app.database import get_all_settings
 

@@ -568,6 +568,17 @@ class BrowserAddressTest(unittest.TestCase):
             self.assertNotIn("secret-token", run.app_url("127.0.0.1", 1))  # nothing answers: the plain address
 
 
+class WindowPermissionsTest(unittest.TestCase):
+    def test_the_page_is_given_only_what_it_uses(self):
+        import run
+
+        for kind in ("Microphone", "CoreWebView2PermissionKind.Microphone", "ClipboardRead", "Camera", "UnknownPermission"):
+            self.assertTrue(run._page_permission(kind), kind)
+        for kind in ("Geolocation", "Notifications", "OtherSensors", "MultipleAutomaticDownloads", "FileReadWrite",
+                     "LocalFonts", "MidiSystemExclusiveMessages", "WindowManagement"):
+            self.assertFalse(run._page_permission(kind), kind)
+
+
 class WindowBridgeTest(unittest.TestCase):
     def test_the_token_goes_only_to_the_app_own_page(self):
         """Found in the audit: window.pywebview.api.session_token() answered any document in the window."""

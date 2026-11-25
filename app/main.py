@@ -487,6 +487,17 @@ async def slow_request_log(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Registered last, so it wraps the others: every answer (the sign-in page, a refusal, the API, a
+    file) is never read as another type than it says, nor shown inside a frame of another page."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

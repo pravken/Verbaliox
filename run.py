@@ -1143,6 +1143,16 @@ class TrayController:
         time.sleep(0.3)  # lets the tray thread remove the icon before the process ends
 
 
+PAGE_PERMISSIONS = ("Microphone", "Camera", "ClipboardRead")
+
+
+def _page_permission(kind: str) -> bool:
+    """A permission the page is given without a question. Screen capture has no kind of its own in older
+    WebView2 versions (UnknownPermission there)."""
+    kind = kind.rsplit(".", 1)[-1]
+    return kind in PAGE_PERMISSIONS or kind == "UnknownPermission" or "Screen" in kind or "Display" in kind
+
+
 def grant_media_to_app(window, host: str, port: int) -> None:
     """
     The app's own page may use the microphone (and screen capture as a fallback) without asking
@@ -1157,7 +1167,9 @@ def grant_media_to_app(window, host: str, port: int) -> None:
 
         def _on_permission(sender, args) -> None:
             try:
-                if str(args.Uri).startswith(origin):
+                # What the page uses (the microphone, the screen for a video, reading a copied text); any
+                # other permission (location, files, sensors…) gets WebView2's own question
+                if str(args.Uri).startswith(origin) and _page_permission(str(args.PermissionKind)):
                     args.State = CoreWebView2PermissionState.Allow
             except Exception as e:
                 print(f"[permissions] {e}", file=sys.stderr)

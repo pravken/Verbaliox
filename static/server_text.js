@@ -176,6 +176,7 @@ const SERVER_TEXT_EN = {
   "Неверный формат разговора": "Wrong conversation format",
   "Недостаточно места на диске для записи": "Not enough disk space to record",
   "Недостаточно места на диске для восстановления копии": "Not enough disk space to restore the backup",
+  "Ссылка на письмо записана неверно": "The mail link is not written correctly",
   "Неизвестная модель": "Unknown model",
   "Неизвестное состояние": "Unknown state",
   "Неизвестный вариант субтитров": "Unknown subtitle variant",
