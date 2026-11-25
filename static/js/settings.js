@@ -24,7 +24,10 @@ function renderFfmpegStatus(st) {
 }
 
 async function installFfmpeg() {
-  let st = await (await fetch('/api/ffmpeg/install', { method: 'POST' })).json();
+  // a refused download is said (the button looked pressed and nothing happened: audit)
+  const res = await fetch('/api/ffmpeg/install', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  let st = await readJson(res);
   renderFfmpegStatus(st);
   while (st.download && st.download.active) {
     await new Promise(r => setTimeout(r, 1000));
@@ -52,7 +55,9 @@ async function refreshVoiceFilterStatus() {
 }
 
 async function installVoiceFilter() {
-  let st = await fetch('/api/voice-filter/install', { method: 'POST' }).then(r => r.json()).catch(() => null);
+  const res = await fetch('/api/voice-filter/install', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  let st = await readJson(res);
   renderVoiceFilterStatus(st);
   while (st && st.download && st.download.active) {
     await new Promise(r => setTimeout(r, 1000));
@@ -606,7 +611,7 @@ function renderModelsPop() {
         <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
       ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
     <div class="mp-idle"><span>${escapeHtml(t('mpIdleLabel'))}</span>
-      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? idle.minutes ?? 10))}</button></div>`;
+      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? vram.data?.idle?.minutes ?? 10))}</button></div>`;
   placeModelsPop();
 }
 
@@ -1374,12 +1379,13 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
 async function selectActiveWhisperModel(modelId) {
   document.getElementById('set-whisper-model').value = modelId;
   document.getElementById('upload-model').value = modelId;
-  await fetch('/api/settings', {
+  const res = await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { whisper_model: modelId } })
-  });
-  await loadSystemInfo();
+  }).catch(() => null);
+  await loadSystemInfo();  // the lists show the model kept either way
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
   const pretty = formatModelName(modelId);
   showToast(t('modelSpeechPicked').replace('{name}', () => pretty));
 }
@@ -1466,7 +1472,7 @@ async function startWhisperModelDownload(modelId, keepMain = false) {
   document.getElementById('whisper-pull-pct').textContent = '1%';
   document.getElementById('whisper-pull-bar').style.width = '2%';
 
-  await fetch('/api/models/setup', {
+  const res = await fetch('/api/models/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1474,7 +1480,16 @@ async function startWhisperModelDownload(modelId, keepMain = false) {
       install_diarizer: true,
       select: !keepMain
     })
-  });
+  }).catch(() => null);
+  // refused (another download runs, no space): said, and the panel of the download goes (it showed 1 % for ever)
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    state.whisperPullState = { active: false, logs: [] };
+    syncSidebarDownloadWidget();
+    if (dlPanel) dlPanel.classList.add('hidden');
+    await loadSystemInfo();
+    return;
+  }
 
   if (!keepMain) {
     fetch('/api/settings', {
@@ -2565,12 +2580,13 @@ async function selectActiveOllamaModel(modelId) {
   const summarySelect = document.getElementById('summary-llm-select');
   if (summarySelect) summarySelect.value = modelId;
 
-  await fetch('/api/settings', {
+  const res = await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { ollama_model: modelId } })
-  });
+  }).catch(() => null);
   await loadSystemInfo();
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
   const pretty = formatModelName(modelId);
   showToast(t('llmPickedToast').replace('{name}', () => pretty));
 }
@@ -2803,11 +2819,18 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   document.getElementById('ollama-pull-pct').textContent = '1%';
   document.getElementById('ollama-pull-bar').style.width = '2%';
 
-  await fetch('/api/ollama/pull', {
+  const res = await fetch('/api/ollama/pull', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, allow_install: allowInstall })
-  });
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    state.ollamaPullState = { active: false, logs: [] };
+    syncSidebarDownloadWidget();
+    if (dlPanel) dlPanel.classList.add('hidden');
+    return false;
+  }
 
   startOllamaPollingLoop(model);
   return true;  // started (false: Ollama is not installed and its install was declined)

@@ -269,6 +269,8 @@ function renderTxModelBar() {
   const redo = document.getElementById('tx-redo-btn');
   redo.disabled = busy || !!m.media_removed || shown === 'teams' || shown === 'merged';
   redo.classList.toggle('hidden', shown === 'teams' || shown === 'merged');
+  // one «Расшифровать заново» in the toolbar: the one with the choices stays when the short row has none
+  document.getElementById('tx-reconfig-btn')?.classList.toggle('hidden', !!shown && !redo.classList.contains('hidden'));
   const qs = document.getElementById('tx-quick-status');
   qs.textContent = busy ? '' : m.transcript_at ? `✓ ${txShortDate(m.transcript_at)}` : '';
   qs.title = m.transcript_at ? `${t('txModelDone')} · ${formatDateTime(m.transcript_at)}` : '';
@@ -468,7 +470,7 @@ function openTxMoreMenu(el) {
   const shown = m.transcript_model || '';
   const busy = !DONE_STATUSES.includes(m.status);
   const pickShown = () => { document.getElementById('tx-model-select').value = shown; state.txModelPick = shown; };
-  const items = [];
+  const items = [{ label: t('recRedo'), disabled: busy || !!m.media_removed, run: () => recReconfigure() }];
   if (shown && shown !== 'teams' && !m.media_removed && (m.segments || []).length) items.push({ label: t('txResplit'), disabled: busy, run: () => openResplitDialog() });
   items.push({ label: t('txProcBtnLong'), disabled: busy || shown === 'merged' || shown === 'teams',
     run: () => { pickShown(); toggleTxModelBar(true); setTimeout(() => document.getElementById('tx-proc-btn')?.click(), 0); } });
@@ -1729,13 +1731,19 @@ async function saveMeetingTitle() {
   if (!state.activeMeeting) return;
   const newTitle = document.getElementById('meeting-title-input').value.trim();
   if (!newTitle || newTitle === state.activeMeeting.title) return;
-
-  await fetch(`/api/meetings/${state.activeMeeting.id}/title`, {
+  const m = state.activeMeeting;
+  const res = await fetch(`/api/meetings/${m.id}/title`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: newTitle })
-  });
-  state.activeMeeting.title = newTitle;
+  }).catch(() => null);
+  // refused: said, and the title shown is the one kept (it took the new one whatever the answer: audit)
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    if (state.activeMeeting === m) document.getElementById('meeting-title-input').value = m.title || '';
+    return;
+  }
+  m.title = newTitle;
   await loadMeetingsList();
 }
 
@@ -2266,6 +2274,9 @@ function findActiveItem(items, t, pad, startOf = x => x.s, endOf = x => x.e) {
     if (startOf(items[mid]) <= t) { found = mid; lo = mid + 1; } else { hi = mid - 1; }
   }
   if (found >= 0 && t <= endOf(items[found]) + pad) return found;
+  // a short phrase said over a longer one (a «да» inside a long answer) ends before it: the longer one, a few
+  // phrases back, is still under the playhead (the highlight went off until the next phrase: audit)
+  for (let i = found - 1; i >= 0 && i >= found - 8; i--) if (t <= endOf(items[i]) + pad) return i;
   return -1;
 }
 

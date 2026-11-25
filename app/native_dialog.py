@@ -19,7 +19,7 @@ def run(args: List[str], timeout: float = 300) -> Optional[str]:
     from app.paths import APP_DIR
 
     try:
-        proc = subprocess.run([sys.executable, "-m", "app.native_dialog", *args], cwd=str(APP_DIR),
+        proc = subprocess.run([sys.executable, "-m", "app.native_dialog", *_argv(args)], cwd=str(APP_DIR),
                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception as e:
@@ -28,6 +28,22 @@ def run(args: List[str], timeout: float = 300) -> Optional[str]:
     if proc.returncode != 0:
         print(f"[dialog] ended with {proc.returncode}: {(proc.stderr or '').strip()[-500:]}", flush=True)
     return (proc.stdout or "").strip() or None
+
+
+def _argv(args: List[str]) -> List[str]:
+    """The options as «--name=value»: a value that begins with «-» (a recording named «-итоги») was read as an
+    option of its own, and the dialog did not open (argparse ended the child with code 2)."""
+    out: List[str] = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--") and "=" not in a and i + 1 < len(args):
+            out.append(f"{a}={args[i + 1]}")
+            i += 2
+        else:
+            out.append(a)
+            i += 1
+    return out
 
 
 def pick_save(
@@ -144,13 +160,7 @@ def pick_folder(initial_dir: str = "", title: str = "Выбор папки") -> 
             pass
 
 
-def main() -> None:
-    if sys.platform == "win32":
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
-
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verbaliox Native File Dialog")
     parser.add_argument("--mode", choices=["save", "folder", "open", "open-many"], required=True)
     parser.add_argument("--dir", default="")
@@ -158,8 +168,17 @@ def main() -> None:
     parser.add_argument("--filter", default="")
     parser.add_argument("--ext", default="")
     parser.add_argument("--title", default="")
+    return parser
 
-    args = parser.parse_args()
+
+def main() -> None:
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
+    args = _parser().parse_args()
     if args.mode == "save":
         result = pick_save(
             initial_dir=args.dir,

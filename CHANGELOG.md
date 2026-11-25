@@ -45,6 +45,30 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   the download until it is closed, and captions translating without the mode's model say once per mode and run which
   model they use instead.
 
+### Fixes of the page
+
+- **The Assistant keeps briefs and digests**: a brief or a digest is saved with its conversation (it was gone after a
+  restart of the program).
+- **Bulk actions say what failed**: renaming, titles, features, export and transcription of the selected recordings
+  report «Not done for N recordings» with the reason (they said «Recordings not deleted»).
+- **No false success**: «Transcribe again…», a new title of a recording, the choice and download of a model and the
+  downloads of FFmpeg and of the voice filter say the server's refusal (they reported success whatever the answer).
+- **Captions switched off while they start** stop at once: the session of the captions on the server, the sound
+  capture and the timer no longer go on to the end of the recording.
+- **The models panel** opens before the settings are read (it stopped with an error).
+- **Notices** stand above the player's controls and the Assistant's question, which they covered.
+- **One «Transcribe again» in the toolbar of the text**; the one with the choice of the model, the language and the
+  speakers is in its «⋯».
+- **«Overview»: the working time without meetings** is compared with the same days of the period before (on a
+  Wednesday it was set against the whole week before and showed «−16 h» in red).
+- Also: the Assistant's period counts the day of the meeting, not of the import; «Edit text» of a task works in
+  «Cards»; a column dropped on itself stays in place; recordings of the same name are exported as «Name (2)»; a short
+  phrase inside a longer one no longer takes the highlight off it; «Save as» opens for a title that begins with «-»;
+  the toast of a saved recording says when transcription waits for «Recording only» or a paused queue; Esc in the
+  window of an update closes that window only; the hint of the strip without a calendar ends with «…»; the tab chosen
+  shows the keyboard focus; «Choose your name» is one button on both cards of «Today»; the search of tasks no longer
+  finds «null»; tooltips name the real speed range (0.25× to 3×) and the queue in the status bar.
+
 
 ### Fixes
 
@@ -1407,6 +1431,31 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Hy-MT3 1.8B» (для режима «Качество» — модель перевода для этого компьютера) с размером и кнопкой «Скачать», в цвете
   внимания. Пока модели нет, на кнопке моделей — оранжевый «!», под ней — подсказка со скачиванием до закрытия, а
   субтитры с переводом без модели режима один раз за запуск сообщают, какая модель используется вместо неё.
+
+### Исправления страницы
+
+- **Ассистент сохраняет брифинги и дайджесты**: брифинг или дайджест сохраняется вместе с беседой (после перезапуска
+  программы он пропадал).
+- **Массовые действия называют, что не выполнено**: переименование, названия, фичи, экспорт и расшифровка выбранных
+  записей сообщают «Не выполнено для записей: N» с причиной (раньше — «Не удалось удалить записей»).
+- **Без ложного успеха**: «Расшифровать заново…», новое название записи, выбор и скачивание модели, скачивание FFmpeg и
+  фильтра голоса сообщают об отказе сервера (раньше сообщали об успехе при любом ответе).
+- **Субтитры, выключенные во время запуска**, останавливаются сразу: сеанс субтитров на сервере, захват звука и таймер
+  больше не работают до конца записи.
+- **Панель моделей** открывается и до чтения настроек (раньше останавливалась с ошибкой).
+- **Уведомления** располагаются над элементами плеера и полем вопроса Ассистента (раньше закрывали их).
+- **Одна кнопка «Расшифровать заново» на панели текста**; вариант с выбором модели, языка и числа говорящих — в её
+  меню «⋯».
+- **«Обзор»: рабочее время без встреч** сравнивается с теми же днями прошлого периода (в среду сравнивалось со всей
+  прошлой неделей и показывало «−16 ч» красным).
+- Также: период Ассистента считается по дате встречи, а не импорта; «Изменить текст» задачи работает в режиме
+  «Карточки»; колонка, перетащенная на своё место, остаётся на месте; записи с одинаковыми названиями экспортируются
+  как «Название (2)»; короткая реплика внутри длинной больше не снимает с неё подсветку; «Сохранить как» открывается
+  для названия, начинающегося с «-»; уведомление о сохранённой записи сообщает, что распознавание ждёт выключения
+  режима «Только запись» или продолжения очереди; Esc в окне обновления закрывает только это окно; подсказка полосы
+  без календаря заканчивается многоточием; выбранная вкладка показывает фокус клавиатуры; «Выбрать своё имя» — одна и
+  та же кнопка на обеих карточках «Сегодня»; поиск задач больше не находит «null»; подсказки называют настоящий
+  диапазон скорости (от 0,25× до 3×) и очередь в строке состояния.
 
 
 ### Исправления

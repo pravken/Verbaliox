@@ -728,6 +728,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLibTa
     e.preventDefault();
     e.stopPropagation();
     const to = row.dataset.colrow;
+    // dropped on itself: it stays (it went one place before the last: audit)
+    if (to === dragCol) { dragCol = null; bar.querySelectorAll('.lt-colrow-over').forEach(x => x.classList.remove('lt-colrow-over')); return; }
     const order = ltPrefs().order.filter(c => c !== dragCol);
     order.splice(order.indexOf(to) + (ltPrefs().order.indexOf(dragCol) < ltPrefs().order.indexOf(to) ? 1 : 0), 0, dragCol);
     dragCol = null;
@@ -910,20 +912,20 @@ function ltBulkFolder(e) {
 
 // mode: "add" or "remove" the feature fid, or "clear" all of them
 async function ltSetFeatures(list, mode, fid) {
-  let failed = 0;
+  let failed = 0, why = '';
   for (const m of list) {
     const had = m.features || [];
     const ids = mode === 'clear' ? [] : mode === 'remove' ? had.filter(x => x !== fid) : [...new Set([...had, fid])];
     const res = await fetch(`/api/meetings/${m.id}/features`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, for_series: false }) }).catch(() => null);
     const data = res ? await readJson(res) : {};
-    if (!res || !res.ok) { failed++; continue; }
+    if (!res || !res.ok) { failed++; why = why || (res ? errorText(data, res) : t('errorGeneric')); continue; }
     m.features = data.features || [];
     m.feature_suggestions = data.feature_suggestions || [];
     if (state.activeMeeting && state.activeMeeting.id === m.id) applyMeetingFeatures(state.activeMeeting, data);
   }
   scheduleSidebarRender();
   renderLibTable();
-  if (failed) showError(t('bulkSomeFailed').replace('{n}', () => failed));
+  if (failed) showError(bulkFailedText(failed, why));
 }
 
 // A feature on all of them, or off all of them when they all have it already
@@ -962,6 +964,17 @@ function ltExportName(res, m, fmt) {
   return `${(m.title || 'meeting').replace(/[^a-zA-Z0-9а-яА-ЯёЁ _-]/g, '_').trim() || 'meeting'}.${fmt}`;
 }
 
+// Recordings of the same name get «Name (2).docx», «Name (3).docx»… in one export (the second one wrote over the
+// first: audit)
+function ltUniqueName(name, used) {
+  const dot = name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+  let out = name;
+  for (let n = 2; used.has(out.toLocaleLowerCase()); n++) out = `${stem} (${n})${ext}`;
+  used.add(out.toLocaleLowerCase());
+  return out;
+}
+
 // The texts of the selected recordings: into one folder chosen once (the page's folder picker), or each
 // with its own «Сохранить как» where that picker is not there
 async function ltExportMany(fmt) {
@@ -973,22 +986,24 @@ async function ltExportMany(fmt) {
   }
   let dir;
   try { dir = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (err) { return; }  // cancelled
-  let saved = 0, failed = 0;
+  let saved = 0, failed = 0, why = '';
+  const used = new Set();
   for (const m of list) {
     try {
       const res = await fetch(`/api/meetings/${m.id}/export/${fmt}`);
-      if (!res.ok) { failed++; continue; }
+      if (!res.ok) { failed++; why = why || await bulkWhy(res); continue; }
       const blob = await res.blob();
-      const file = await dir.getFileHandle(ltExportName(res, m, fmt), { create: true });
+      const file = await dir.getFileHandle(ltUniqueName(ltExportName(res, m, fmt), used), { create: true });
       const w = await file.createWritable();
       await w.write(blob);
       await w.close();
       saved++;
     } catch (err) {
       failed++;
+      why = why || err.message || t('errorGeneric');
     }
   }
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('ltExported').replace('{n}', () => saved).replace('{dir}', () => dir.name), null, failed ? 'warning' : 'success');
+  showToast(failed ? bulkFailedText(failed, why) : t('ltExported').replace('{n}', () => saved).replace('{dir}', () => dir.name), null, failed ? 'warning' : 'success');
 }
 
 // Recognition again for the selected ones that have no text (added only, failed, cancelled, cleared)
@@ -996,13 +1011,13 @@ async function ltBulkTranscribe() {
   const list = ltSelected().filter(m => LT_UNTRANSCRIBED.includes(m.status));
   if (!list.length) { showWarning(t('ltNothingToTranscribe')); return; }
   if (!requireRecognitionModel()) return;
-  let queued = 0, failed = 0;
+  let queued = 0, failed = 0, why = '';
   for (const m of list) {
     const res = await fetch(`/api/meetings/${m.id}/retry`, { method: 'POST' }).catch(() => null);
-    if (res && res.ok) queued++; else failed++;
+    if (res && res.ok) queued++; else { failed++; why = why || await bulkWhy(res); }
   }
   await loadMeetingsList();
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('ltQueuedN').replace('{n}', () => plural(queued, t('ltCountForms'))), null, failed ? 'warning' : 'success');
+  showToast(failed ? bulkFailedText(failed, why) : t('ltQueuedN').replace('{n}', () => plural(queued, t('ltCountForms'))), null, failed ? 'warning' : 'success');
 }
 
 // The rest of what the old bar of the selection did: one name for all, titles from the texts, delete

@@ -46,7 +46,7 @@
         <!-- Once, on the first recording: where the captions and the text are (the setting hint_studio_entry_seen) -->
         <div id="tb-rec-hint" class="tb-rec-hint hidden" role="note">
           <span data-i18n="tbRecHint">Субтитры и текст записи — здесь</span>
-          <button type="button" data-click="recStudioHintClose" class="tb-rec-hint-x" data-i18n-title="close" title="Закрыть" data-i18n-aria="close" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+          <button type="button" data-click="recStudioHintClose" data-click-args='[{"$": "event"}]' class="tb-rec-hint-x" data-i18n-title="close" title="Закрыть" data-i18n-aria="close" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
         </div>
         <button data-click="openRecMenu" data-click-args='[{"$": "event"}]' id="tb-rec-more" class="tb-rec-more" aria-haspopup="menu"
           data-i18n-title="tipTbRecMenu2" title="Как записать: набор, субтитры, диктовка, настройки" data-i18n-aria="tipTbRecMenu2" aria-label="Как записать: набор, субтитры, диктовка, настройки"><svg class="vx-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -708,8 +708,9 @@
 
             <!-- Right: Transcript Editing, Auto-Scroll & Search Tools -->
             <div id="tx-tools" class="flex items-center gap-1.5 shrink-0 ml-auto">
-              <!-- Again, with the choice of the model, the language and the number of speakers (the dialog of the recording's menu) -->
-              <button data-click="recReconfigure" class="ui-btn ui-btn-subtle shrink-0" data-i18n-title="recRedoTip" title="Расшифровать заново с выбором модели, языка и числа говорящих">
+              <!-- Again, with the choice of the model, the language and the number of speakers (the dialog of the recording's menu);
+                   hidden while «Расшифровать заново» of the short row is there (two buttons of one name: audit), its «⋯» has it -->
+              <button data-click="recReconfigure" id="tx-reconfig-btn" class="ui-btn ui-btn-subtle shrink-0" data-i18n-title="recRedoTip" title="Расшифровать заново с выбором модели, языка и числа говорящих">
                 <span aria-hidden="true">↻</span><span class="tx-tool-label" data-i18n="recRedo">Расшифровать заново…</span></button>
               <!-- The look of the text: a chat (a bubble for each phrase) or the text as before (setTxLayout in workspace.js) -->
               <div class="tx-layout" role="radiogroup" data-i18n-aria="txLayoutAria" aria-label="Вид расшифровки">
@@ -1051,7 +1052,7 @@
               </div>
               <div class="rp-anchor">
                 <button id="speed-cycle-btn" class="rp-chip rp-mono" data-click="rpTogglePop" data-click-args='["speed"]' aria-expanded="false"
-                  data-i18n-title="tipSpeedBtn" title="Изменить скорость воспроизведения">1×</button>
+                  data-i18n-title="tipSpeedBtn" title="Скорость воспроизведения: от 0,25× до 3×">1×</button>
                 <div id="rp-pop-speed" class="rp-pop rp-pop-speed hidden" role="dialog" data-i18n-aria="rdPlyrSpeed" aria-label="Скорость"></div>
               </div>
               <span class="rp-vol">

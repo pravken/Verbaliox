@@ -5032,6 +5032,9 @@ button.sc-at:hover { color: var(--accent-text); }
   background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); outline: none; border-color: transparent; }
 #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active, #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active:hover { background: transparent; box-shadow: none; }
 #workspace-header .tb-rec-tabs .tb-ind { border-radius: 6px; background: rgba(255, 255, 255, 0.14); outline: none; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+/* The tab chosen keeps the keyboard's ring: its «outline: none» above hid it (found in the audit: «Расшифровка» under Tab) */
+#workspace-header .tb-rec-tabs .tb-subtab.tb-active:focus-visible, .tb-group.has-ind .tb-tab.tb-active:focus-visible,
+.tb-group.has-ind .tb-subtab.tb-active:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 #workspace-header .tb-rec-tabs .tb-active .tb-ai { fill: url(#vs-ai-grad); }
 #workspace-header .tb-rec-tabs .tb-badge, #workspace-header .tb-rec-tabs .tb-active .tb-badge { background: rgba(255, 255, 255, 0.1); color: var(--hc-dim, #AEAEB2); font-weight: 500; }
 #workspace-header .tb-rec-tabs .tb-active .tb-badge { color: #FFFFFF; }

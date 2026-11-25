@@ -694,7 +694,7 @@ async function openPersonCard(name) {
       const newName = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
       if (newName === null || !newName.trim()) return;
       const role = await askText(t('spDirRole').replace('{name}', () => newName.trim()), p.role || '');
-      await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) });
+      if (!(await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) }))) return;
       openPersonCard(newName.trim());
       return;
     }
@@ -747,10 +747,11 @@ async function dirAdd(name) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, kind: dir.tab }),
   });
   const data = await readJson(res);
-  if (!res.ok) { showError(serverText(data.detail)); return; }
+  if (!res.ok) { showError(serverText(data.detail)); return false; }
   dir.adding = false;
   await loadDirectory();
   spCtx.data = null;
+  return true;
 }
 
 async function dirUpdate(body) {
@@ -758,10 +759,11 @@ async function dirUpdate(body) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await readJson(res);
-  if (!res.ok) { showError(serverText(data.detail)); return; }
+  if (!res.ok) { showError(serverText(data.detail)); return false; }
   if (body.is_me !== undefined || body.new_name) await spRefreshSettings();
   await loadDirectory();
   spCtx.data = null;
+  return true;
 }
 
 // «Это я» writes the setting my_name on the server (the home page and the tasks read it): fetch it back
@@ -909,7 +911,7 @@ async function openPersonRecord(id, at) { switchAppView('library'); await select
 async function peopleAdd() {
   const name = await askText(t(dir.tab === 'dept' ? 'spNewDeptPh' : 'spNamePh'), '');
   if (!name || !name.trim()) return;
-  await dirAdd(name.trim());
+  if (!(await dirAdd(name.trim()))) return;  // refused: the selection stays where it was
   PV.sel = name.trim();
   renderPeopleView();
 }
@@ -932,7 +934,7 @@ async function peopleCardEdit() {
   const newName = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
   if (newName === null || !newName.trim()) return;
   const role = await askText(t('spDirRole').replace('{name}', () => newName.trim()), p.role || '');
-  await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) });
+  if (!(await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) }))) return;
   PV.sel = newName.trim();
   renderPeopleView();
 }

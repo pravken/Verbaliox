@@ -2626,6 +2626,310 @@ await step('stored markup runs nothing', async () => {
   expect(r.fallback && r.left === 1, 'the fallback of a failed image did not run');
 });
 
+// --- The audit of the page (a review by another assistant): each finding fixed is held here ---
+
+// A brief or a digest is kept with its conversation: it was never saved and was gone after a reload
+await step('digest is saved with its conversation', async () => {
+  let saved = '';
+  const digest = /\/api\/library\/digest$/, chats = /\/api\/assistant\/chats$/;
+  await page.route(digest, r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ found: true, mode: 'digest', answer: 'Итог недели: решения приняты.', sources: [] }) }));
+  await page.route(chats, r => {
+    if (r.request().method() !== 'PUT') return r.continue();
+    saved = r.request().postData() || '';
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok": true}' });
+  });
+  try {
+    await page.evaluate(async () => {
+      switchAppView('ask');
+      await assistantLoad();
+      const off = window.assistantModelOff;
+      window.assistantModelOff = () => false;
+      try { await makeDigest(7); } finally { window.assistantModelOff = off; }
+    });
+    const end = Date.now() + 4000;
+    while (!saved.includes('Итог недели') && Date.now() < end) await sleep(100);
+  } finally { await page.unroute(digest); await page.unroute(chats); }
+  expect(saved.includes('Итог недели: решения приняты.'), 'the digest was not saved');
+});
+
+// A bulk action that is not a deletion says what failed, not «Не удалось удалить записей»
+await step('bulk action errors name no deletion', async () => {
+  const route = /\/api\/meetings\/1\/title$/;
+  await page.route(route, r => r.request().method() === 'PATCH'
+    ? r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ detail: 'Название слишком длинное' }) }) : r.continue());
+  let toast = '';
+  try {
+    toast = await page.evaluate(async () => {
+      const ask = window.askText, sel = window.libSelectedInOrder;
+      window.askText = async () => 'Итоги {n}';
+      window.libSelectedInOrder = () => state.meetings.filter(m => m.id === 1);
+      document.getElementById('toast').innerHTML = '';
+      try { await bulkRename(); } finally { window.askText = ask; window.libSelectedInOrder = sel; }
+      return document.getElementById('toast').textContent;
+    });
+  } finally { await page.unroute(route); }
+  expect(toast.includes('Не выполнено для записей: 1. Название слишком длинное') && !toast.includes('удалить'), `the message: «${toast}»`);
+});
+
+// The models popover before the setting of unloading is read: it threw «idle is not defined»
+await step('models popover without the unload setting', async () => {
+  const r = await page.evaluate(() => {
+    const s = (state.system && state.system.settings) || {};
+    const had = s.idle_unload_minutes;
+    delete s.idle_unload_minutes;
+    let err = '';
+    try { toggleModelsPop(); } catch (e) { err = e.message; } finally { s.idle_unload_minutes = had; }
+    const text = document.querySelector('#models-pop .mp-idle-btn')?.textContent || '';
+    closeModelsPop();
+    return { err, text };
+  });
+  expect(!r.err && r.text, `the popover: ${JSON.stringify(r)}`);
+});
+
+// Captions switched off while they start: what the start gets is stopped (a server session, a worklet and a timer
+// went on for the rest of the recording)
+await step('captions stopped while they start', async () => {
+  const calls = [];
+  const start = /\/api\/live\/start$/, sess = /\/api\/live\/audit-race\//;
+  await page.route(start, async r => {
+    await new Promise(res => setTimeout(res, 700));
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session: 'audit-race' }) });
+  });
+  await page.route(sess, r => { calls.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+  let r;
+  try {
+    r = await page.evaluate(async () => {
+      const ctx = new AudioContext();
+      const stream = ctx.createMediaStreamDestination().stream;
+      const run = startLiveCaptions(ctx, stream).catch(e => e.message);
+      stopLiveCaptions();
+      const err = await run;
+      await new Promise(res => setTimeout(res, 300));
+      const out = { err: err || '', session: liveCap.session, timer: liveCap.timer, node: !!liveCap.node, starting: !!liveCap.starting };
+      ctx.close();
+      return out;
+    });
+  } finally { await page.unroute(start); await page.unroute(sess); }
+  expect(!r.session && !r.timer && !r.node && !r.starting && !r.err, `the captions after the stop: ${JSON.stringify(r)}`);
+  expect(calls.some(u => u.endsWith('/audit-race/stop')), `the server session was not stopped: ${calls.join(', ')}`);
+});
+
+// A refusal is said: «Расшифровать заново…» and a new title showed success whatever the server answered
+await step('refusals are not shown as success', async () => {
+  const re = /\/api\/meetings\/1\/(reconfigure|title)$/;
+  await page.route(re, r => ['POST', 'PATCH'].includes(r.request().method())
+    ? r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Запись обрабатывается' }) }) : r.continue());
+  let r;
+  try {
+    r = await page.evaluate(async () => {
+      switchAppView('library');
+      await openMeeting(1);
+      document.getElementById('toast').innerHTML = '';
+      state.contextMeetingId = 1;
+      ctxOpenReconfigureModal();
+      await submitReconfigure();
+      const open = !document.getElementById('modal-reconfigure').classList.contains('hidden');
+      const toast1 = document.getElementById('toast').textContent;
+      closeModal('reconfigure');
+      const before = state.activeMeeting.title;
+      document.getElementById('meeting-title-input').value = `${before} (правка)`;
+      await saveMeetingTitle();
+      return { open, toast1, kept: state.activeMeeting.title === before, input: document.getElementById('meeting-title-input').value === before,
+        toast2: document.getElementById('toast').textContent };
+    });
+  } finally { await page.unroute(re); }
+  expect(r.open && r.toast1.includes('Запись обрабатывается') && !r.toast1.includes('Запущена'), `reprocessing: ${JSON.stringify(r)}`);
+  expect(r.kept && r.input, `the title: ${JSON.stringify(r)}`);
+});
+
+// The period of the assistant is read by the day of the meeting (it read a field that does not exist, then the import)
+await step('assistant period by the meeting day', async () => {
+  const r = await page.evaluate(() => {
+    const m0 = state.meetings[0], was = [m0.recorded_at, m0.created_at];
+    m0.recorded_at = '2020-01-02 10:00:00'; m0.created_at = '2026-11-20 10:00:00';
+    const found = assistantScopeIds({ type: 'period', from: '2020-01-01', to: '2020-01-03' }).includes(m0.id);
+    [m0.recorded_at, m0.created_at] = was;
+    return found;
+  });
+  expect(r, 'the period of the assistant reads the day of the import');
+});
+
+// The phrase under the playhead stays lit when a short one said inside it has ended
+await step('phrase under the playhead over a short one', async () => {
+  const r = await page.evaluate(() => {
+    const items = [{ s: 0, e: 10 }, { s: 5, e: 6 }, { s: 20, e: 25 }];
+    return [findActiveItem(items, 7, 0), findActiveItem(items, 5.5, 0), findActiveItem(items, 15, 0)];
+  });
+  expect(JSON.stringify(r) === '[0,1,-1]', `the phrase under the playhead: ${JSON.stringify(r)}`);
+});
+
+// Recordings of one name in one export do not write over each other
+await step('export names of one export', async () => {
+  const r = await page.evaluate(() => { const used = new Set(); return ['Итоги.docx', 'итоги.docx', 'Итоги.docx', 'План'].map(n => ltUniqueName(n, used)); });
+  expect(JSON.stringify(r) === '["Итоги.docx","итоги (2).docx","Итоги (3).docx","План"]', `the names: ${JSON.stringify(r)}`);
+});
+
+// The toast of a saved recording says what waits: «Только запись» or the paused queue
+await step('saved recording says what waits', async () => {
+  const r = await page.evaluate(() => {
+    const out = {};
+    const eco = window.economyOn, paused = state.queuePaused;
+    window.economyOn = () => true; out.eco = recordSavedKey();
+    window.economyOn = () => false; state.queuePaused = true; out.paused = recordSavedKey();
+    state.queuePaused = false; out.queued = recordSavedKey();
+    window.economyOn = eco; state.queuePaused = paused;
+    return out;
+  });
+  expect(r.eco === 'recordSavedEconomy' && r.paused === 'recordSavedPaused' && r.queued === 'recordSavedQueued', `the saved toast: ${JSON.stringify(r)}`);
+});
+
+// The search of the tasks does not find the empty fields («null»); the names of people have no Latin letter in a
+// Russian one
+await step('task search and given names', async () => {
+  const r = await page.evaluate(() => {
+    const q = TK.q;
+    TK.q = 'null';
+    const nullFound = tkMatchesPeopleAndSearch({ what: 'Прислать смету', who: null, meeting_title: null, quote: undefined });
+    TK.q = q;
+    return { nullFound, mixed: [...GIVEN_NAMES].filter(n => /[а-яё]/.test(n) && /[a-z]/.test(n)) };
+  });
+  expect(!r.nullFound, '«null» finds a task with empty fields');
+  expect(!r.mixed.length, `names with Latin letters: ${r.mixed}`);
+});
+
+// «Изменить текст» of a task works in «Карточки» too (it looked for a row of the list only)
+await step('task text edited in the cards', async () => {
+  await page.evaluate(() => switchAppView('tasks'));
+  await until(() => (TK.data.tasks || []).length > 0, 'no tasks', 5000);
+  const r = await page.evaluate(() => {
+    const view = TK.view;
+    setTasksView('cards');
+    const id = TK.data.tasks[0].id;
+    editTaskText(id);
+    const input = document.querySelector(`.tk-tcard[data-tid="${id}"] input.tk-row-edit`);
+    const ok = !!input && document.activeElement === input;
+    if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    setTasksView(view);
+    return ok;
+  });
+  expect(r, 'no field to edit the text of a card');
+});
+
+// A column of «Записи» dropped on itself stays where it was (it went one place before the last)
+await step('column dropped on itself stays', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await page.click('[data-lt-cols]');
+  const r = await page.evaluate(() => {
+    const before = ltPrefs().order.join(',');
+    const row = document.querySelector('#lt-cols-pop [data-colrow]');
+    const dt = new DataTransfer();
+    row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+    return { before, after: ltPrefs().order.join(',') };
+  });
+  await page.evaluate(() => closeLibTableColumnsMenu());
+  expect(r.before === r.after, `the order changed: ${r.before} → ${r.after}`);
+});
+
+// One «Расшифровать заново» in the toolbar of the text; the one with the choices is in «⋯»
+await step('one transcribe-again button', async () => {
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); switchWorkspaceTab('transcript'); });
+  await sleep(500);
+  const r = await page.evaluate(() => {
+    const shown = [...document.querySelectorAll('#tx-subbar button')].filter(b => b.getClientRects().length && /txRedo|recReconfigure/.test(b.dataset.click || ''));
+    return shown.map(b => b.dataset.click);
+  });
+  expect(r.length === 1, `the buttons: ${r}`);
+  await page.click('#tx-more-btn');
+  await sleep(300);
+  const menu = (await page.$$eval('#text-menu button', els => els.map(e => e.textContent))).join(' | ');
+  await page.keyboard.press('Escape');
+  expect(menu.includes('Расшифровать заново…'), `«Расшифровать заново…» is not in «⋯»: ${menu}`);
+});
+
+// The notices stand clear of the player's controls and the assistant's question (the notice of an update covered them)
+await step('notices clear of the player and the question', async () => {
+  const covered = async (sel) => page.evaluate((sel) => [...document.querySelectorAll(sel)].filter(b => b.getClientRects().length).filter(b => {
+    const r = b.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('#toast');
+  }).map(b => b.id || b.className), sel);
+  const notice = () => page.evaluate(() => { document.getElementById('toast').innerHTML = ''; showToast('Доступна версия 9.9.9', { label: 'Подробнее', onClick: () => {} }); });
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); });
+  await sleep(600);
+  await notice();
+  await sleep(400);
+  const player = await covered('.rp-right button, .rp-right input');
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(400);
+  const ask = await covered('#library-ask-btn, #library-question');
+  await page.evaluate(() => { document.getElementById('toast').innerHTML = ''; switchAppView('library'); });
+  expect(!player.length && !ask.length, `covered by a notice: ${[...player, ...ask]}`);
+});
+
+// The hint of the strip without a calendar gives way with «…» (it was cut mid-word at 1100 px)
+await step('strip hint ends with an ellipsis', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await sleep(500);
+  const r = await page.evaluate(() => {
+    const g = document.getElementById('strip-grow'), meta = document.getElementById('strip-meta');
+    return { text: g.textContent, cut: g.scrollWidth > g.clientWidth, ell: getComputedStyle(g).textOverflow, meta: meta.textContent,
+      kind: strip.kind };
+  });
+  await page.setViewportSize({ width: 1300, height: 860 });
+  if (r.kind !== 'free') return;  // a calendar in the data: no hint
+  expect(r.text.includes('календар') && !r.meta && r.ell === 'ellipsis', `the hint: ${JSON.stringify(r)}`);
+});
+
+// The tab chosen shows the keyboard's ring
+await step('the chosen tab shows the focus', async () => {
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); switchWorkspaceTab('transcript'); });
+  await sleep(300);
+  await page.focus('#nav-transcript');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const r = await page.evaluate(() => { const e = document.activeElement; const s = getComputedStyle(e); return { id: e.id, outline: s.outlineStyle, w: s.outlineWidth }; });
+  expect(r.id !== 'nav-transcript' || (r.outline !== 'none' && r.w !== '0px'), `no ring: ${JSON.stringify(r)}`);
+});
+
+// «Выбрать своё имя» is one button in one place on the cards of «Сегодня» (a link in one, a button in the other)
+await step('set my name: one button on the cards', async () => {
+  await page.evaluate(() => switchAppView('home'));
+  await sleep(1200);
+  const r = await page.evaluate(() => [...document.querySelectorAll('#home-view [data-click="hmSetMyName"]')].filter(b => b.getClientRects().length).map(b => {
+    const r = b.getBoundingClientRect(), card = b.closest('.db-w, .td-card, section, [class*="card"]')?.getBoundingClientRect();
+    return { cls: b.className, h: Math.round(r.height), w: Math.round(r.width), dx: card ? Math.round(r.left - card.left) : null };
+  }));
+  if (r.length < 2) return;  // the name is set in the data: nothing to compare
+  expect(new Set(r.map(x => `${x.cls}|${x.h}|${x.w}|${x.dx}`)).size === 1, `the buttons differ: ${JSON.stringify(r)}`);
+});
+
+// Esc in the window of an update over the settings closes that window only; the deletion question is a dialog
+await step('esc over the settings closes the top window', async () => {
+  await page.evaluate(async () => {
+    openModal('settings', 'general');
+    updateState.info = updateState.info || { current: '0.0.0', latest: { version: '0.0.1', notes: '' }, download: {} };
+    await openUpdateDialog();
+  });
+  await sleep(300);
+  await page.evaluate(() => document.body.focus());
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  const r = await page.evaluate(() => ({ dlg: !!document.getElementById('upd-dlg'), settings: !document.getElementById('modal-settings').classList.contains('hidden') }));
+  await page.evaluate(() => { document.getElementById('upd-dlg')?.remove(); closeModal('settings'); });
+  expect(!r.dlg && r.settings, `after Esc: ${JSON.stringify(r)}`);
+  const role = await page.evaluate(async () => {
+    const ask = confirmDeleteDialog(state.meetings[0]);
+    const w = document.querySelector('[aria-labelledby="del-dlg-title"]');
+    const out = w ? `${w.getAttribute('role')}|${w.getAttribute('aria-modal')}` : '';
+    w?.querySelector('button[data-a="no"]')?.click();
+    await ask;
+    return out;
+  });
+  expect(role === 'dialog|true', `the deletion question: «${role}»`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

@@ -314,6 +314,23 @@ class DashboardTest(unittest.TestCase):
         self.assertIsNone(week["history"]["before"]["focus"])
         self.assertIsNone(year_ago["history"]["before"]["focus"])
 
+    def test_time_without_meetings_against_the_same_days(self):
+        """Found in the audit: on a Wednesday the 24 working hours gone by were set against the whole week before (40 h),
+        and «рабочего времени без встреч» said «−16 ч» in red. The period before counts the same days (Monday to
+        Wednesday); a past period is complete and is set against the whole one."""
+        from unittest import mock
+
+        self._meeting("Сейчас", "2026-11-17")
+        self._meeting("Вторник до", "2026-11-10")
+        self._meeting("Четверг до", "2026-11-12")  # after the same days: not in the comparison
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("week", today=self.TODAY)
+            past = dashboard.build("week", today=self.TODAY, at=date(2026, 11, 11))
+        self.assertEqual(d["history"]["values"]["focus"][-1], 23.5)
+        self.assertEqual(d["history"]["before"]["focus"], 23.5)  # 24 h of 9–11 November, half an hour in a meeting
+        self.assertEqual(d["history"]["values"]["focus"][-2], 39.0)  # the trend keeps the whole week
+        self.assertEqual(past["history"]["values"]["focus"][-1], 39.0)
+
     def test_compared_with_the_same_days_a_year_earlier(self):
         """Asked by the user: the figures against the period before or the same days a year earlier."""
         from unittest import mock

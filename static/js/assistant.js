@@ -296,8 +296,10 @@ async function assistantSaveChat() {
 }
 
 // --- Where to look: the scopes of library.js and two more, a period and chosen recordings ---
+// The day of the meeting (recorded_at, as everywhere else: the field read before does not exist, so the period
+// took the day a file was imported, not the day of the meeting: audit)
 function assistantMeetingDate(m) {
-  return String(m.meeting_at || m.created_at || '').slice(0, 10);
+  return String(m.recorded_at || m.created_at || '').slice(0, 10);
 }
 
 function assistantScopeIds(scope) {

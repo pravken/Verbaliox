@@ -173,7 +173,8 @@ function stripState() {
   }
   const nextText = next ? t('stripNext').replace('{when}', () => stripWhenNext(next)).replace('{title}', () => next.title || t('hmUntitled')) : '';
   if (!strip.configured) {
-    return { kind: 'free', pill: t('stripNoCalendar'), cls: 'grey', lead: '', meta: t('stripNoCalendarSub'), grow: '',
+    // the hint in the part that gives way with «…» (as a fixed part it was cut off mid-word at 1100 px: audit)
+    return { kind: 'free', pill: t('stripNoCalendar'), cls: 'grey', lead: '', meta: '', grow: t('stripNoCalendarSub'),
       acts: [act('stripOpenCalendarSettings', [], t('stripConnect'), 'ghost')] };
   }
   const today = next && stripDayStart(next.s).getTime() === stripDayStart(new Date()).getTime();

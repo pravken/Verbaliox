@@ -1723,7 +1723,11 @@ async function startLiveCaptions(ctx, stream) {
   liveCap.pcmLen = 0;
   liveCap.error = '';
   liveCap.starting = true;
+  // A stop while this start waits (the captions switched off, the recording stopped) ends this run: what it
+  // started after that is stopped at once (it left a server session, its worklet and its timer running: audit)
+  const run = liveCap.run = (liveCap.run || 0) + 1;
   syncStudioCaptions();
+  let session = null;
   try {
     const res = await fetch('/api/live/start', {
       method: 'POST',
@@ -1739,11 +1743,17 @@ async function startLiveCaptions(ctx, stream) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
-    liveCap.session = data.session;
+    session = data.session;
+  } catch (e) {
+    if (run !== liveCap.run) return;  // stopped meanwhile: nothing to report
+    throw e;
   } finally {
-    liveCap.starting = false;
+    if (run === liveCap.run) liveCap.starting = false;
   }
+  if (run !== liveCap.run) { liveStopSession(session); return; }
+  liveCap.session = session;
   await ctx.audioWorklet.addModule('/static/live-capture-worklet.js');
+  if (run !== liveCap.run) return;  // stopped meanwhile: stopLiveCaptions has ended the session
   liveCap.node = new AudioWorkletNode(ctx, 'pcm-capture');
   ctx.createMediaStreamSource(stream).connect(liveCap.node);
   // The worklet must be pulled by the graph; a silent gain keeps it out of the speakers
@@ -1828,14 +1838,18 @@ function renderLiveCaptionsError(msg) {
 }
 
 function stopLiveCaptions() {
+  liveCap.run = (liveCap.run || 0) + 1;  // a start still waiting stops what it gets
+  liveCap.starting = false;
   clearInterval(liveCap.timer);
   liveCap.timer = null;
   try { liveCap.node && liveCap.node.disconnect(); } catch (e) {}
   liveCap.node = null;
-  if (liveCap.session) {
-    fetch(`/api/live/${liveCap.session}/stop`, { method: 'POST' }).catch(() => {});
-    liveCap.session = null;
-  }
+  liveStopSession(liveCap.session);
+  liveCap.session = null;
+}
+
+function liveStopSession(session) {
+  if (session) fetch(`/api/live/${session}/stop`, { method: 'POST' }).catch(() => {});
 }
 
 // Whether the recording is of a meeting: a call or the calendar's meeting started it, or it follows a Teams meeting.
@@ -1992,7 +2006,7 @@ async function studioToggleCaptions(on) {
   liveCap.autoOff = false;  // the user's own choice now: it is the setting, for this recording and the next ones
   liveCap.autoStarted = false;
   studioKeepSetting('live_captions_auto', String(!!on));
-  if (on && !liveCap.session && _recAudioCtx && window._recMixedStream) {
+  if (on && !liveCap.session && !liveCap.starting && _recAudioCtx && window._recMixedStream) {
     try { await startLiveCaptions(_recAudioCtx, window._recMixedStream); } catch (e) { renderLiveCaptionsError(e.message); }
   } else if (!on) {
     stopLiveCaptions();
@@ -2995,6 +3009,14 @@ async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, st
   return afterSaved(data, quiet);
 }
 
+// What happens to a saved recording now: recognized, or waiting for «Только запись» to end or the queue to go on
+// (it said «отправлена на распознавание» in both: audit)
+function recordSavedKey() {
+  if (typeof economyOn === 'function' && economyOn()) return 'recordSavedEconomy';
+  if (state.queuePaused) return 'recordSavedPaused';
+  return 'recordSavedQueued';
+}
+
 async function afterSaved(data, quiet = false) {
   const created = data.created;
   await loadMeetingsList();
@@ -3002,7 +3024,7 @@ async function afterSaved(data, quiet = false) {
   const first = created && created[0];
   if (quiet) return first || null;
   showToast(
-    t('recordSavedQueued'),
+    t(recordSavedKey()),
     first ? { label: t('recordOpen'), title: first.media_path || '', onClick: () => { switchAppView('library'); selectMeeting(first.id, true); } } : undefined
   );
   return first || null;

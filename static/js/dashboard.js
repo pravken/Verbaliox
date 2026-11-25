@@ -578,7 +578,8 @@ function dbPrepHtml(size) {
 
 // «Срочные задачи»: the tasks due today or overdue, mine and those promised to me, overdue first
 function dbDueHtml(d, size) {
-  if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))} <button class="db-more" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button></div>`;
+  // the same note and button as «Ожидаю от других» and «Мои задачи» (here it was a link in the text: audit)
+  if (d.needs_me) return `<div class="db-note">${escapeHtml(t('dbNeedsMe'))}</div><button class="tk-btn tk-btn-sm" data-click="hmSetMyName">${escapeHtml(t('dbSetMe'))}</button>`;
   const today = d.today;
   const hot = x => x.due_date && x.due_date <= today;
   const list = [...(d.tasks || []).filter(hot).map(x => ({ ...x, mine: true })), ...(d.waiting || []).filter(hot).map(x => ({ ...x, mine: false }))]
@@ -1364,13 +1365,14 @@ async function dashTaskDone(id) {
 }
 
 function dashOpenTask(id, meetingId) {
-  if (meetingId) { openMeeting(meetingId); setTimeout(() => openRecordTab('summary'), 300); }
+  if (meetingId) dashOpenSummary(meetingId);
   else switchAppView('tasks');
 }
 
-function dashOpenSummary(meetingId) {
-  openMeeting(meetingId);
-  setTimeout(() => openRecordTab('summary'), 300);
+// the analysis once the recording is open (a fixed pause showed the transcript of a slow one: audit)
+async function dashOpenSummary(meetingId) {
+  await openMeeting(meetingId);
+  if (state.activeMeeting && state.activeMeeting.id === meetingId) openRecordTab('summary');
 }
 
 // --- «Ожидаю от других»: what others promised the user (asked by the user) ---
