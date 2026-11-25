@@ -68,7 +68,7 @@ class CopiesTest(unittest.TestCase):
         with mods, mock.patch.object(asr_onnx, "ensure_package"), mock.patch.object(asr_onnx, "fetch"), \
                 mock.patch.object(asr_onnx, "queue_threads", side_effect=lambda: budget[0]), \
                 mock.patch.object(asr_onnx, "live_threads", return_value=2), \
-                mock.patch.dict(asr_onnx._loaded, {}, clear=True), mock.patch.dict(asr_onnx._threads, {}, clear=True):
+                mock.patch.dict(asr_onnx._loaded, {}, clear=True), mock.patch.dict(asr_onnx._made, {}, clear=True):
             job = asr_onnx._load("parakeet-v3")
             self.assertIs(asr_onnx._load("parakeet-v3"), job)  # the same budget: the same copy
             live = asr_onnx._load("parakeet-v3", live=True)

@@ -168,6 +168,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | :--- | :--- |
 | First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); winget and astral.sh, if `uv` is missing, and for Ollama when it is ticked |
 | You download a speech model (Whisper, GigaAM, Parakeet with the Silero VAD) or a speaker model | Hugging Face (`huggingface.co`); for GigaAM and Parakeet the first time also PyPI (`onnx-asr`, checked by its hash) |
+| Russian live captions with GigaAM downloaded before version 0.9.4, once | Hugging Face: the GigaAM v3 e2e-CTC int8 file of the same repository and commit (about 214 MB); until it is there, the captions go as before |
 | App start with an NVIDIA video card, once (Settings → Recognition, "GigaAM and Parakeet on the video card"; on by default) | PyPI: the GPU build of ONNX Runtime (`onnxruntime-gpu`, about 300 MB, checked by its hash) |
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
 | You set a calendar link (Settings → Recording → Calendar) | That link, at most every 15 minutes, to read the calendar |
@@ -413,6 +414,7 @@ start.bat
 | :--- | :--- |
 | Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget и astral.sh, если нет `uv`, и для Ollama, если она отмечена |
 | Вы скачиваете модель распознавания (Whisper, GigaAM, Parakeet вместе с Silero VAD) или модель спикеров | Hugging Face (`huggingface.co`); для GigaAM и Parakeet в первый раз ещё PyPI (`onnx-asr`, проверяется по хешу) |
+| Русские субтитры с GigaAM, скачанной до версии 0.9.4, один раз | Hugging Face: файл GigaAM v3 e2e-CTC int8 из того же репозитория и коммита (около 214 МБ); пока его нет, субтитры идут как раньше |
 | Запуск приложения с видеокартой NVIDIA, один раз («Настройки → Распознавание», «GigaAM и Parakeet на видеокарте»; включено по умолчанию) | PyPI: сборка ONNX Runtime для видеокарты (`onnxruntime-gpu`, около 300 МБ, проверяется по хешу) |
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
 | Вы указали ссылку на календарь («Настройки → Запись → Календарь») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь |

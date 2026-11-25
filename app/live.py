@@ -7,6 +7,10 @@ keeps the audio that is not yet final and, at most every LIVE_STEP_SEC, transcri
 the end of the window are final: they are kept, their audio is dropped and, if asked, they are
 translated by Ollama in the background. The rest of the window is shown as a draft line.
 
+Russian speech with GigaAM goes by VAD phrases instead (app/live_phrases.py): only the phrase being spoken is
+recognized, by the GigaAM v3 e2e-CTC int8, and it is final once after a pause. English and the other languages
+keep the window (Parakeet: the phrases without context lose 6–9 points of WER, bench-report/asr-2026-11.md).
+
 After recording stops the usual full transcription of the saved file runs; live captions are only
 for following along, so they favour speed (greedy decoding, short window) over accuracy.
 """
@@ -31,6 +35,7 @@ _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDO
 
 SR = 16000
 LIVE_STEP_SEC = 1.2       # transcribe the window at most this often
+PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about once a second)
 LIVE_WINDOW_SEC = 20.0    # longest audio kept undecided (forced to final beyond it)
 FINAL_MARGIN_SEC = 1.6    # a phrase ending this long before the window end is final
 SESSION_IDLE_SEC = 120.0  # sessions without audio for this long are dropped
@@ -219,6 +224,8 @@ class LiveSession:
         self.pair = list(pair or ["ru", "en"])[:2]  # the two languages of translate_to="auto"
         self.audio = np.zeros(0, dtype=np.float32)
         self.offset = 0.0           # recording time (s) of self.audio[0]
+        self.base = 0               # the same in samples (exact: the VAD phrases count in samples)
+        self._ph = None             # app/live_phrases.PhraseState while captions go by VAD phrases
         self.received = 0.0         # seconds of audio received in total
         self.last_run_at = 0.0      # self.received when the window was last transcribed
         self.lines: List[Dict[str, Any]] = []
@@ -267,13 +274,28 @@ class LiveSession:
         idle_unload.touch(captions=True)
 
     # -------------------------------------------------------------- decoding
+    def phrases(self) -> bool:
+        """Captions by VAD phrases (Russian with GigaAM: app/live_phrases.py), not by the sliding window."""
+        if not self.onnx_model:
+            return False
+        from app import asr_onnx
+
+        return asr_onnx.live_phrases(self.onnx_model)
+
     def step(self) -> None:
-        """Transcribes the undecided window if enough new audio arrived and nothing else is running."""
-        if self.received - self.last_run_at < LIVE_STEP_SEC or not self._busy.acquire(blocking=False):
+        """Transcribes the undecided window (or the phrase being spoken) if enough new audio arrived and
+        nothing else is running."""
+        phrases = self.phrases()
+        every = PHRASE_STEP_SEC if phrases else LIVE_STEP_SEC
+        if self.received - self.last_run_at < every or not self._busy.acquire(blocking=False):
             return
         try:
             self.last_run_at = self.received
-            self._transcribe_window()
+            if phrases:
+                self._transcribe_phrases()
+            else:
+                self._ph = None
+                self._transcribe_window()
         except Exception as e:  # a failed step must not end the recording
             if str(e)[:200] != self.error:
                 traceback.print_exc()
@@ -293,7 +315,8 @@ class LiveSession:
     def _cut(self, cut: int) -> None:
         """Drops the first `cut` samples (call with _audio_lock held): what was appended meanwhile stays."""
         self.audio = self.audio[cut:]
-        self.offset += cut / SR
+        self.base += cut
+        self.offset = self.base / SR
 
     def _transcribe_window(self) -> None:
         window = self.audio
@@ -364,6 +387,68 @@ class LiveSession:
                 self.translator.reset_draft()
             # The draft (revised several times while spoken) is translated only when the page shows
             # it; otherwise the model is left free for the final lines
+            self.translator.set_draft(self.partial if self.draft else "")
+
+    def _transcribe_phrases(self) -> None:
+        """Russian captions by VAD phrases (app/live_phrases.py): the VAD goes over the new audio; a phrase that
+        ended (a pause of 0.5 s, or 20 s of speech without one) is recognized once and its sentences are final;
+        the phrase still being spoken is the draft, recognized again at most every 1.2 s."""
+        from app import asr_onnx, live_phrases as lp, vocab
+
+        onnx_id = self.onnx_model
+        if not asr_onnx.is_loaded(onnx_id):
+            self.error = asr_onnx.preload_async(onnx_id)  # the audio waits in the buffer, bounded by add_pcm16
+            return
+        ph = self._ph
+        if ph is None or min(ph.keep_from(), ph.levelled_to) < self.base:
+            # the first step, or the audio waited for the model so long that its start was dropped
+            ph = self._ph = lp.PhraseState(self.base, lp.SileroStream(asr_onnx._vad_dir()))
+        with self._audio_lock:  # the new audio levelled in place: the VAD and the model hear the same
+            i = ph.levelled_to - self.base
+            new = ph.level(self.audio[i:])
+            self.audio[i:i + new.size] = new
+            ph.levelled_to += new.size
+            audio, base = self.audio, self.base  # only this step cuts it: the indices below stay valid
+        ended = []
+        c = ph.cutter
+        while c.pos + lp.FRAME <= ph.levelled_to:
+            frame = audio[c.pos - base:c.pos - base + lp.FRAME]
+            cut = c.push(ph.vad.prob(frame))
+            if cut:
+                ended.append(cut)
+        if self.speech_lang:
+            self.lang = self.speech_lang
+        self.error = ""
+        rules = vocab.current()
+        new_lines = []
+        for a, b, _forced in ended:
+            for s, e, t in asr_onnx.recognize_phrase(onnx_id, audio[a - base:b - base]):
+                text = vocab.fix_text(t, rules).strip()
+                if not text:
+                    continue
+                if not self.speech_lang:
+                    self.lang = asr_onnx.guess_language(text)
+                new_lines.append({
+                    "id": self._next_id, "text": text, "lang": self.lang,
+                    "start": round(a / SR + s, 2), "end": round(a / SR + e, 2), "translation": None,
+                })
+                self._next_id += 1
+        if ended:
+            ph.last_draft = self.received  # the draft starts again with the next phrase
+            self.partial = ""
+        if c.start is None:
+            self.partial = ""
+        elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and self.received - ph.last_draft >= lp.DRAFT_SEC:
+            ph.last_draft = self.received
+            parts = asr_onnx.recognize_phrase(onnx_id, audio[c.start - base:c.pos - base])
+            self.partial = vocab.fix_text(" ".join(t for _, _, t in parts), rules).strip()
+        with self._audio_lock:
+            self._cut(max(0, ph.keep_from() - self.base))
+        self.lines.extend(new_lines)
+        if self.translator:
+            if new_lines:
+                self.translator.add_lines(new_lines)
+                self.translator.reset_draft()
             self.translator.set_draft(self.partial if self.draft else "")
 
     def configure(self, translate_to: Optional[str], speed: Optional[str], speech_lang: Optional[str] = None,

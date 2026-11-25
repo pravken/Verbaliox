@@ -84,6 +84,14 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
   live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
   one), and so does the separate process of the Whisper captions.
+- **Russian live captions by phrases**: with GigaAM the captions no longer recognize a window of up to 20 s again
+  and again. The voice detector follows the speech, only the phrase being spoken is recognized (a draft at most every
+  1.2 s), and it becomes final once, after a pause of half a second, by GigaAM v3 e2e-CTC int8. In the measurement:
+  the final line in about 1 s instead of 3–4 s, fewer errors (WER 5.9 % instead of 8.5 %), a seventh of the processor load
+  and 0.44 GB of memory instead of 2.9. Speech without pauses is cut at 20 s where it is weakest, and the next line
+  starts exactly there: no words are lost or repeated at the cut. The model file (about 214 MB, from the same
+  repository) is downloaded once by itself; until then the captions go as before. English and other languages keep
+  Parakeet in the window, which is more accurate for them.
 
 ## 0.9.3 — English
 
@@ -1299,6 +1307,14 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
   распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
   процесс субтитров Whisper.
+- **Русские субтитры по фразам**: с GigaAM субтитры больше не распознают раз за разом окно до 20 с. Детектор речи
+  следит за речью, распознаётся только текущая фраза (черновик — не чаще раза в 1,2 с), а финальной она становится
+  один раз, после паузы в полсекунды, моделью GigaAM v3 e2e-CTC int8. В замере: финальная строка примерно через 1 с
+  вместо 3–4 с, меньше ошибок (WER 5,9 % вместо 8,5 %), в семь раз меньше нагрузки на процессор и 0,44 ГБ
+  памяти вместо 2,9. Речь без пауз режется на 20 с в самом тихом месте, и следующая строка начинается ровно там же:
+  на стыке слова не теряются и не повторяются. Файл модели (около 214 МБ, из того же репозитория) скачивается один
+  раз сам; до этого субтитры идут как раньше. Английский и другие языки остаются на Parakeet с окном — для них оно
+  точнее.
 
 ## 0.9.3
 

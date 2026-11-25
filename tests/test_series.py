@@ -71,8 +71,8 @@ class OnnxEnsurePackageTest(unittest.TestCase):
                 calls.append((repo_id, revision, local_files_only))
                 Path(local_dir).mkdir(parents=True, exist_ok=True)
                 for f in allow_patterns:
-                    if not f.startswith("**/") and "?" not in f:
-                        Path(local_dir, f).write_text("x")
+                    if not f.startswith("**/") and not f.endswith("?data"):
+                        Path(local_dir, f.replace("?", ".")).write_text("x")  # "v3_e2e_ctc?int8.onnx" too
                 return local_dir
 
             with mock.patch.object(asr_onnx, "model_dir", return_value=d), \

@@ -139,6 +139,7 @@ const SERVER_TEXT_EN = {
   "Медиафайл не найден": "Media file not found",
   "Модель Ollama не вернула перевод ни для одной фразы": "The Ollama model returned no translation for any phrase",
   "Модель Ollama не выбрана в настройках": "No Ollama model is chosen in the settings",
+  "Модель обнаружения речи Silero не найдена": "The Silero speech detection model was not found",
   "Модель не дала названия": "The model gave no title",
   "Модель не нашла ключевых моментов": "The model found no key moments",
   "Модель распознавания участников сейчас используется": "The speaker model is in use now",
