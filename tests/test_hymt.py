@@ -32,9 +32,14 @@ class _Resp:
 class _Ollama:
     """httpx.Client for /api/show, /api/create, /api/delete and /api/chat; records the requests."""
 
-    def __init__(self, template="", chat=""):
-        self.template, self.chat = template, chat
+    def __init__(self, template="", chat="", tags=None, create_status=200):
+        self.template, self.chat, self.tags, self.create_status = template, chat, tags, create_status
         self.posts, self.deleted = [], []
+
+    def get(self, url, **k):
+        if self.tags is None or not url.endswith("/api/tags"):
+            raise ConnectionError("no list")  # the list given to the repair is used
+        return _Resp(200, {"models": [{"name": n} for n in self.tags]})
 
     def __call__(self, *a, **k):
         return self
@@ -51,6 +56,8 @@ class _Ollama:
             return _Resp(200, {"template": self.template})
         if url.endswith("/api/chat"):
             return _Resp(200, {"message": {"content": self.chat}})
+        if url.endswith("/api/create") and self.create_status != 200:
+            return _Resp(self.create_status, {"error": "no space left"})
         return _Resp(200, {"status": "success"})
 
     def request(self, method, url, json=None, **k):
@@ -153,12 +160,69 @@ class RepairTemplateTest(unittest.TestCase):
 
     def setUp(self):
         ollama_client._hymt_checked.clear()
+        ollama_client._hymt_failed.clear()
+        self.addCleanup(ollama_client._hymt_failed.clear)
 
-    def _repair(self, models, template):
-        fake = _Ollama(template=template)
+    def _repair(self, models, template, strict=False, **kw):
+        fake = _Ollama(template=template, **kw)
         with mock.patch.object(ollama_client.httpx, "Client", fake):
-            out = ollama_client.repair_hymt_models("http://127.0.0.1:11434", models)
+            out = ollama_client.repair_hymt_models("http://127.0.0.1:11434", models, strict=strict)
         return fake, out
+
+    def test_a_failed_repair_waits_before_the_next_try(self):
+        """The list is read often (status, the captions' choice of model): a repair that failed is not tried
+        on every read, with its two requests, its 120 s timeout and a line in the log."""
+        now = [1000.0]
+        with mock.patch.object(ollama_client.time, "time", lambda: now[0]):
+            fake, out = self._repair([RAW_1_8B], self.BROKEN, create_status=500)
+            self.assertEqual([k for k, _ in fake.posts], ["show", "create"])
+            self.assertEqual(out, [RAW_1_8B])  # stays as it is
+            now[0] += 60
+            fake, out = self._repair([RAW_1_8B], self.BROKEN, create_status=500)
+            self.assertEqual((fake.posts, out), ([], [RAW_1_8B]))
+            now[0] += ollama_client.HYMT_REPAIR_RETRY_SEC
+            fake, out = self._repair([RAW_1_8B], self.BROKEN)
+            self.assertEqual([k for k, _ in fake.posts], ["show", "create"])
+            self.assertEqual(out, [LOCAL_1_8B])
+
+    def test_after_a_download_the_repair_is_tried_at_once(self):
+        with mock.patch.object(ollama_client.time, "time", return_value=1000.0):
+            self._repair([RAW_1_8B], self.BROKEN, create_status=500)
+            with self.assertRaises(RuntimeError):
+                self._repair([RAW_1_8B], self.BROKEN, strict=True, create_status=500)
+
+    def test_the_list_is_read_again_under_the_lock(self):
+        """A caller with a list read before another one's repair finds the work done: nothing is created or
+        deleted again, and the list it gets is Ollama's."""
+        fake, out = self._repair(["gemma4:e4b", RAW_1_8B], self.BROKEN, tags=["gemma4:e4b", LOCAL_1_8B])
+        self.assertEqual((fake.posts, fake.deleted), ([], []))
+        self.assertEqual(out, ["gemma4:e4b", LOCAL_1_8B])
+
+    def test_one_repair_at_a_time(self):
+        import threading
+
+        inside, peak = [0], [0]
+        gate = threading.Lock()
+
+        class Slow(_Ollama):
+            def post(self, url, json=None, **k):
+                with gate:
+                    inside[0] += 1
+                    peak[0] = max(peak[0], inside[0])
+                threading.Event().wait(0.05)
+                with gate:
+                    inside[0] -= 1
+                return super().post(url, json=json, **k)
+
+        fake = Slow(template=self.BROKEN)
+        with mock.patch.object(ollama_client.httpx, "Client", fake):
+            threads = [threading.Thread(target=ollama_client.repair_hymt_models,
+                                        args=("http://127.0.0.1:11434", [RAW_1_8B])) for _ in range(3)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(10)
+        self.assertEqual(peak[0], 1)
 
     def test_broken_template_is_detected(self):
         self.assertTrue(ollama_client.template_is_broken(self.BROKEN))

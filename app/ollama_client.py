@@ -485,6 +485,9 @@ def translate_catalog(models: List[str]) -> List[Dict[str, Any]]:
 
 _PROMPT_IN_TEMPLATE = re.compile(r"\{\{-?\s*\.Prompt\s*-?\}\}")
 _hymt_checked: set = set()  # downloaded 1.8B names whose template was found right (asked once)
+_hymt_failed: Dict[str, float] = {}  # downloaded 1.8B name -> when its repair failed (tried again after a pause)
+_hymt_lock = threading.Lock()  # one repair at a time: another one would use a list the first one changes
+HYMT_REPAIR_RETRY_SEC = 600.0
 
 
 def template_is_broken(template: str) -> bool:
@@ -497,38 +500,63 @@ def _raw_hymt_1_8b(models: List[str]) -> List[str]:
     return [m for m in models if m.lower().split(":")[0] == stem]
 
 
+def _hymt_to_repair(models: List[str], strict: bool) -> List[str]:
+    now = time.time()
+    return [m for m in _raw_hymt_1_8b(models) if m not in _hymt_checked
+            and (strict or now - _hymt_failed.get(m, -HYMT_REPAIR_RETRY_SEC) >= HYMT_REPAIR_RETRY_SEC)]
+
+
 def repair_hymt_models(base_url: str, models: List[str], strict: bool = False) -> List[str]:
     """The downloaded Hy-MT3 1.8B with its broken template is made again as HYMT_1_8B_LOCAL (the same file,
     the template of its model card) and the downloaded name is removed, so one copy is listed. Returns
-    Ollama's list of models after it; a model it could not repair stays as it is (logged; `strict`: raised)."""
-    raws = [m for m in _raw_hymt_1_8b(models) if m not in _hymt_checked]
-    if not raws:
+    Ollama's list of models after it; a model it could not repair stays as it is (logged; `strict`: raised) and
+    is tried again HYMT_REPAIR_RETRY_SEC later (the list is read often: status, the captions' choice of model).
+    One repair at a time, on Ollama's list read afresh: a second caller waits and finds the work done."""
+    if not _hymt_to_repair(models, strict):
         return models
     base = base_url.rstrip("/")
-    out = list(models)
-    with httpx.Client(timeout=120.0) as client:
-        for raw in raws:
+    if not _hymt_lock.acquire(timeout=150.0):
+        return models
+    try:
+        with httpx.Client(timeout=120.0) as client:
             try:
-                if not _listed(HYMT_1_8B_LOCAL, out):
-                    show = client.post(f"{base}/api/show", json={"model": raw})
-                    raise_for_ollama(show)
-                    if not template_is_broken(str(show.json().get("template") or "")):
-                        _hymt_checked.add(raw)  # a template fixed upstream: the model is used as it is
-                        continue
-                    r = client.post(f"{base}/api/create", json={
-                        "model": HYMT_1_8B_LOCAL, "from": raw, "template": HYMT_1_8B_TEMPLATE,
-                        "parameters": {"stop": HYMT_1_8B_STOP}, "stream": False})
-                    raise_for_ollama(r)
-                    out.append(f"{HYMT_1_8B_LOCAL}:latest")
-                    print(f"[ollama] {raw}: chat template repaired, now {HYMT_1_8B_LOCAL}", flush=True)
-                d = client.request("DELETE", f"{base}/api/delete", json={"model": raw})
-                if d.status_code != 404:
-                    raise_for_ollama(d)
-                out = [m for m in out if m != raw]
-            except Exception as e:
-                print(f"[ollama] {raw}: the chat template is not repaired: {e}", flush=True)
-                if strict:
-                    raise
+                tags = client.get(f"{base}/api/tags", timeout=5.0)
+                fresh = [m.get("name") or m.get("model") for m in tags.json().get("models") or []]
+                models = [m for m in fresh if m] if tags.status_code == 200 else models
+            except Exception:
+                pass  # the list given is used
+            return _repair_hymt(client, base, models, _hymt_to_repair(models, strict), strict)
+    finally:
+        _hymt_lock.release()
+
+
+def _repair_hymt(client: "httpx.Client", base: str, models: List[str], raws: List[str], strict: bool) -> List[str]:
+    out = list(models)
+    for raw in raws:
+        try:
+            if not _listed(HYMT_1_8B_LOCAL, out):
+                show = client.post(f"{base}/api/show", json={"model": raw})
+                raise_for_ollama(show)
+                if not template_is_broken(str(show.json().get("template") or "")):
+                    _hymt_checked.add(raw)  # a template fixed upstream: the model is used as it is
+                    continue
+                r = client.post(f"{base}/api/create", json={
+                    "model": HYMT_1_8B_LOCAL, "from": raw, "template": HYMT_1_8B_TEMPLATE,
+                    "parameters": {"stop": HYMT_1_8B_STOP}, "stream": False})
+                raise_for_ollama(r)
+                out.append(f"{HYMT_1_8B_LOCAL}:latest")
+                print(f"[ollama] {raw}: chat template repaired, now {HYMT_1_8B_LOCAL}", flush=True)
+            d = client.request("DELETE", f"{base}/api/delete", json={"model": raw})
+            if d.status_code != 404:
+                raise_for_ollama(d)
+            out = [m for m in out if m != raw]
+            _hymt_failed.pop(raw, None)
+        except Exception as e:
+            _hymt_failed[raw] = time.time()
+            print(f"[ollama] {raw}: the chat template is not repaired (tried again in "
+                  f"{int(HYMT_REPAIR_RETRY_SEC // 60)} min): {e}", flush=True)
+            if strict:
+                raise
     return out
 
 
