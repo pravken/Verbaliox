@@ -351,7 +351,7 @@
           </div>
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-teams-captions" class="sx-row-label" data-i18n="teamsToggle">Субтитры и участники из Teams</label>
-              <span class="sx-row-cap" data-i18n="teamsHint">Имена говорящих и текст субтитров Teams попадают в запись. Включите субтитры в Teams</span>
+              <span class="sx-row-cap" data-i18n="teamsHint">Имена говорящих и текст субтитров Teams попадают в запись. Нужны включённые субтитры Teams</span>
               <span class="flex flex-wrap gap-x-4 mt-0.5 text-[11.5px]">
                 <button type="button" class="vs-link text-apple-blue hover:underline" data-click="showTeamsHelp" data-i18n="teamsHelpLink">Как включить субтитры в Teams</button>
                 <button type="button" id="teams-check-btn" class="vs-link text-apple-blue hover:underline" data-click="teamsCheck" data-i18n="teamsCheck">Проверить</button>
@@ -376,7 +376,7 @@
           </div>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="importCopyTitle">Копировать импортированные файлы в папку программы</span>
-              <span class="sx-row-cap" data-i18n="importCopyHint">Выключено — запись ссылается на файл: не перемещайте и не удаляйте его</span></span>
+              <span class="sx-row-cap" data-i18n="importCopyHint">Выключено — запись ссылается на файл: его нельзя перемещать и удалять</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-import-copy" />
           </label>
         </div>
@@ -399,7 +399,7 @@
           </div>
           <div class="sx-row">
             <span class="sx-row-text"><label for="set-dictation-hotkey" class="sx-row-label" data-i18n="dictationLabel">Надиктовать текст</label>
-              <span class="sx-row-cap" data-i18n="dictationHint">Нажмите, говорите, нажмите снова — текст появится у курсора</span>
+              <span class="sx-row-cap" data-i18n="dictationHint">Сочетание клавиш включает запись; повторное нажатие вставляет текст у курсора</span>
               <span class="sx-row-cap"><span id="dictation-hotkey-status"></span></span></span>
             <div class="sx-row-ctl">
               <select id="set-dictation-language" data-i18n-title="a11yDictationLang" title="Язык диктовки" class="sx-select sx-narrow">
@@ -659,7 +659,7 @@
           <div class="sx-card-head">
             <div>
               <h4 id="ollama-section-title" class="sx-card-title" data-i18n="ollamaSectionTitle">Модели анализа (Ollama)</h4>
-              <p id="ollama-section-desc" class="sx-card-cap" data-i18n="ollamaSectionDesc">Перед коммерческим использованием проверьте лицензию модели</p>
+              <p id="ollama-section-desc" class="sx-card-cap" data-i18n="ollamaSectionDesc">Лицензию модели нужно проверить перед коммерческим использованием</p>
             </div>
             <span id="settings-ollama-pill" class="text-[11.5px] font-mono px-2.5 py-0.5 rounded-full bg-white/5 text-apple-secondary shrink-0"></span>
           </div>
@@ -717,7 +717,7 @@
           </label>
           <label class="sx-row">
             <span class="sx-row-text"><span class="sx-row-label" data-i18n="autoTitleToggle">Называть записи по содержанию</span>
-              <span class="sx-row-cap" data-i18n="autoTitleHint">Записи с типовым названием получают название по тексту. Ваши названия не меняются</span></span>
+              <span class="sx-row-cap" data-i18n="autoTitleHint">Записи с типовым названием получают название по тексту. Названия, заданные вручную, не меняются</span></span>
             <input type="checkbox" role="switch" class="vs-switch" id="set-auto-title" checked />
           </label>
           <label class="sx-row">
@@ -1095,7 +1095,7 @@
           </div>
         <!-- Model comparison on the user's recordings (app/bench.py) -->
         <div class="settings-card" data-sx-keys="сравнение моделей benchmark WER эксперименты">
-          <p class="sx-card-cap" data-i18n="benchDesc">Какая модель точнее и быстрее на ваших записях</p>
+          <p class="sx-card-cap" data-i18n="benchDesc">Какая модель точнее и быстрее на записях этого ПК</p>
           <div class="flex items-center gap-2 flex-wrap">
             <div class="apple-segmented">
               <button data-click="benchSetKind" data-click-args='["asr"]' id="bench-kind-asr" class="apple-segment-btn text-[11.5px]" data-i18n="benchKindAsr">Распознавание</button>

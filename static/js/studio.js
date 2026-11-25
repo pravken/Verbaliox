@@ -1052,7 +1052,7 @@ function liveCaptionPrefs() {
 
 // The studio's choices are settings kept on the server (localStorage is per port, see syncUiPrefsFromServer):
 // «Субтитры» is «Включать субтитры при начале записи», the caption model is «Модель субтитров», the translation
-// model is the one of «Качество» or «Скорость» in «Модели перевода»; the language and the mode are live_translate_to
+// model is the one of «Качество» or «Быстро» in «Модели перевода»; the language and the mode are live_translate_to
 // and live_speed. Settings shows the same values
 function liveSettings() {
   return (state.system && state.system.settings) || {};
@@ -1114,7 +1114,7 @@ function fillModelSelect(sel, options, value) {
   if (document.activeElement !== sel) sel.value = options.some(o => o[0] === value) ? value : options[0][0];
 }
 
-// The Ollama models the translation can use, and the ones «Качество» and «Скорость» take (asked once)
+// The Ollama models the translation can use, and the ones «Качество» and «Быстро» take (asked once)
 function studioLoadLlmModels() {
   if (studio.llmModels) return;
   studio.llmModels = [];

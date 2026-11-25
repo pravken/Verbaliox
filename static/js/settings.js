@@ -2291,7 +2291,7 @@ function translateMetersLine(item) {
   return `<div class="mm-line">${parts.join('')}</div>`;
 }
 
-// The lists «Качество» and «Скорость» of the captions: «Авто · <the model it takes now>», the installed
+// The lists «Качество» and «Быстро» of the captions: «Авто · <the model it takes now>», the installed
 // translators, the installed analysis models. A chosen model that is not installed (deleted) stays in its list
 // marked so; the server takes «Авто» for it (app/live_translate.choose_models)
 function renderTranslateChoices(ollama) {
@@ -2315,7 +2315,7 @@ function renderTranslateChoices(ollama) {
   }
 }
 
-// A choice of «Качество» / «Скорость» saved: the studio asks for its models again («Авто · …» follows it)
+// A choice of «Качество» / «Быстро» saved: the studio asks for its models again («Авто · …» follows it)
 document.addEventListener('change', (e) => {
   if (!/^set-live-tr-(quality|fast)$/.test(e.target?.id || '')) return;
   if (typeof studioTranslateModelsChanged === 'function') setTimeout(studioTranslateModelsChanged, 600);

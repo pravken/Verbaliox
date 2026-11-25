@@ -56,8 +56,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   (Hy-MT3 when installed, with the prompt of its model card), else with the analysis model as before.
 - **Translators are no longer listed as analysis models**: Hy-MT3 and a TranslateGemma installed in Ollama by hand
   cannot write an analysis and are listed with the translation models only. TranslateGemma (Gemma Terms of Use) is
-  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «Check the license before
-  commercial use», and it translates with the prompt of its model card.
+  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «The license needs checking
+  before commercial use», and it translates with the prompt of its model card.
 - **Simpler settings, nothing hidden**: no «More» to unfold; every option is a row with a short name, a line under it
   only where the effect is not obvious, and its control at the right edge, in every section. A switch with a mode
   beside it is one list with «Off» in it (the «Recording only» mode, meeting notifications, GigaAM and Parakeet on the
@@ -1321,8 +1321,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   установлена, — промптом со своей карточки), иначе модель анализа, как раньше.
 - **Модели перевода больше не в списке моделей анализа**: Hy-MT3 и TranslateGemma, установленная в Ollama вручную,
   не пишут анализ и показываются только среди моделей перевода. TranslateGemma (Gemma Terms of Use) программа не
-  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Проверьте лицензию перед
-  коммерческим использованием» и переводит промптом со своей карточки.
+  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Лицензию модели нужно
+  проверить перед коммерческим использованием» и переводит промптом со своей карточки.
 - **Настройки проще, ничего не спрятано**: нет «Дополнительно»; каждая настройка — строка с коротким названием,
   пояснением только там, где последствие неочевидно, и переключателем у правого края, во всех разделах. Переключатель
   с режимом рядом — один список, где «Выключено» — один из вариантов (режим «Только запись», уведомления о встречах,
