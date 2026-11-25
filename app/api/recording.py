@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.paths import UPLOADS_DIR
 from app import speech_route
@@ -980,8 +981,10 @@ def api_live_start(payload: LiveStartPayload) -> Dict[str, Any]:
     return s.state()
 
 @router.post("/api/live/{session_id}/audio")
-async def api_live_audio(session_id: str, request: Request, since: int = 0) -> Dict[str, Any]:
-    """Body: 16 kHz mono 16-bit little-endian PCM. Returns new final lines, translations and the draft."""
+async def api_live_audio(session_id: str, request: Request, since: int = 0, v: Optional[int] = None) -> JSONResponse:
+    """Body: 16 kHz mono 16-bit little-endian PCM. Returns new final lines, translations and the draft; with `v` (the
+    version of the page's last answer) only the lines changed since. The answer is made in the thread pool, ready to
+    send: nothing of it is encoded on the event loop."""
     from starlette.concurrency import run_in_threadpool
 
     from app.live import get_session
@@ -993,8 +996,12 @@ async def api_live_audio(session_id: str, request: Request, since: int = 0) -> D
     if len(data) > 4 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Слишком большой фрагмент звука")
     s.add_pcm16(data)
-    await run_in_threadpool(s.step)
-    return s.state(since)
+
+    def answer() -> JSONResponse:
+        s.step()
+        return JSONResponse(s.state(since, v))
+
+    return await run_in_threadpool(answer)
 
 class LiveConfigPayload(BaseModel):
     translate_to: Optional[str] = None

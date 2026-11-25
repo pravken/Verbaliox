@@ -1634,8 +1634,10 @@ async function sendLiveAudio() {
   liveCap.inFlight = true;
   liveCap.sentAt = Date.now();
   const session = liveCap.session;
+  // the version of the last answer of this session: the server sends only the lines changed since
+  const version = liveCap.versionOf === session ? liveCap.version : 0;
   try {
-    const res = await fetch(`/api/live/${session}/audio?since=${liveCap.lastId}`, {
+    const res = await fetch(`/api/live/${session}/audio?since=${liveCap.lastId}&v=${version}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: buf.buffer,
@@ -1668,6 +1670,7 @@ async function sendLiveAudio() {
     liveCap.translationReady = !!data.translation_ready;
     liveCap.lang = data.lang || liveCap.lang;
     liveCap.error = data.error || '';
+    if (Number.isInteger(data.version)) Object.assign(liveCap, { version: data.version, versionOf: session });
     syncStudioCaptions();
   } catch (e) {
     renderLiveCaptionsError(e.message);

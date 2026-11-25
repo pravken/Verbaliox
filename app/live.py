@@ -56,6 +56,10 @@ MIN_DRAFT_SHARE = 0.05
 DRAFTS_OFF_SEC = 0.6
 DRAFTS_ON_SEC = 0.4
 SESSION_IDLE_SEC = 120.0  # sessions without audio for this long are dropped
+# Final lines a session keeps (the page has its own copy of all of them): the question about the meeting so far
+# (/api/live/{id}/ask) takes the latest part of them, and translations reach only the recent ones
+LINES_KEPT = 3000
+RECENT_LINES = 200  # the lines whose translation or target language the answers still follow
 
 WORKER_IDLE_SEC = 120.0   # the caption worker is closed (VRAM freed) after this long unused
 WORKER_START_SEC = 900.0  # the worker loads (and on first use downloads) its model before it answers
@@ -252,6 +256,12 @@ class LiveSession:
         self.received = 0.0         # seconds of audio received in total
         self.last_run_at = 0.0      # self.received when the last step ran
         self.lines: List[Dict[str, Any]] = []
+        # What the answers have reported: the version grows with each change of a line (new, translated, its target
+        # language set), and the page sends the version it has, so an answer carries only what changed since
+        self._version = 0
+        self._seen: Dict[int, Tuple[Any, Any]] = {}  # line id -> (translation, target) as last reported
+        self._changed: Dict[int, int] = {}            # line id -> the version of its last change
+        self._state_lock = threading.Lock()
         self.partial = ""
         self.error = ""
         self.touched = time.time()
@@ -454,7 +464,7 @@ class LiveSession:
             # Nothing ended in a long window (one endless phrase): keep only its last part
             with self._audio_lock:
                 self._cut(int((win_sec - LIVE_WINDOW_SEC / 2) * SR))
-        self.lines.extend(new_lines)
+        self._add_lines(new_lines)
         # Everything after the final phrases is the draft line
         self.partial = " ".join(s.text.strip() for s in segs[len(new_lines):]).strip()
         # kept for the drafts of the phrase being spoken until the next run (_draft_phrase), in samples of the stream
@@ -603,7 +613,7 @@ class LiveSession:
             self.partial = lp.drop_seam_repeat(ph.seam, draft) if ph.seam and c.continued else draft
         with self._audio_lock:
             self._cut(max(0, ph.keep_from() - self.base))
-        self.lines.extend(new_lines)
+        self._add_lines(new_lines)
         tr = self.translator  # once: configure() in another request may set it to None meanwhile
         if tr:
             if new_lines:
@@ -643,20 +653,58 @@ class LiveSession:
         else:
             self.translator.configure(translate_to, speed, retranslate=self.lines[-20:] if changed else None, pair=self.pair)
 
+    def _add_lines(self, new_lines: List[Dict[str, Any]]) -> None:
+        """Final lines at the end; the oldest beyond LINES_KEPT go (in steps of 500, not on every line)."""
+        if not new_lines:
+            return
+        self.lines.extend(new_lines)
+        if len(self.lines) > LINES_KEPT + 500:
+            del self.lines[:-LINES_KEPT]
+
+    def _note_changes(self) -> None:
+        """The recent lines that are new or got a translation or a target language since the last look take the next
+        version (call with _state_lock held)."""
+        recent = self.lines[-RECENT_LINES:]
+        for ln in recent:
+            mark = (ln.get("translation"), ln.get("target"))
+            if ln["id"] not in self._seen or self._seen[ln["id"]] != mark:
+                self._seen[ln["id"]] = mark
+                self._version += 1
+                self._changed[ln["id"]] = self._version
+        if len(self._seen) > 2 * RECENT_LINES and recent:
+            first = recent[0]["id"]
+            self._seen = {k: v for k, v in self._seen.items() if k >= first}
+            self._changed = {k: v for k, v in self._changed.items() if k >= first}
+
     # -------------------------------------------------------------- out
-    def state(self, since_id: int = 0) -> Dict[str, Any]:
+    def state(self, since_id: int = 0, version: Optional[int] = None) -> Dict[str, Any]:
+        """The answer to the page. version: the one the page has (from its last answer): only the lines changed since
+        (new, translated, with their target language) — this answer goes out about four times a second. Without it
+        (the start, a change of settings, an older page): the new lines, the recent ones waiting for a translation
+        and the recent translations, as before."""
         tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        with self._state_lock:
+            self._note_changes()
+            now = self._version
+            if version is not None:
+                lines = [ln for ln in self.lines[-RECENT_LINES:] if self._changed.get(ln["id"], 0) > version]
+                translations = {ln["id"]: ln["translation"] for ln in lines if ln["translation"]}
+                targets = {ln["id"]: ln.get("target") for ln in lines if ln.get("target")}
+            else:
+                recent = self.lines[-RECENT_LINES:]
+                lines = [ln for ln in recent if ln["id"] > since_id or (tr and ln["translation"] is None)]
+                translations = {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]}
+                targets = {ln["id"]: ln.get("target") for ln in recent if ln.get("target")}
+            lines = [dict(ln) for ln in lines]  # a copy: the translator fills the line in another thread
         return {
             "session": self.id,
+            "version": now,
             "lang": self.lang,
             "speech_lang": self.speech_lang or "auto",
-            # New lines, and recent ones still waiting for a translation (not the whole meeting:
-            # this answer goes out about four times a second)
-            "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (tr and ln["translation"] is None)],
-            "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
+            "lines": lines,
+            "translations": translations,
             # The language each line went into (differs per line with translate_to="auto")
-            # the recent lines, like the two above: every line of the recording was gone through each second
-            "targets": {ln["id"]: ln.get("target") for ln in self.lines[-200:] if ln.get("target")},
+            "targets": targets,
             "partial_target": tr.draft_target if tr else "",
             "partial": self.partial,
             "partial_translation": tr.draft_translation if tr else "",
