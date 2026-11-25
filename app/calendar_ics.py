@@ -16,6 +16,7 @@ rules (DAILY / WEEKLY / MONTHLY with INTERVAL, BYDAY, COUNT, UNTIL, EXDATE).
 import re
 import threading
 import time
+import traceback
 from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,7 +28,14 @@ CACHE_SEC = 15 * 60
 # than the timeout (OUTLOOK_TIMEOUT), too.
 OUTLOOK_RETRY_SEC = 6 * 60 * 60
 OUTLOOK_TIMEOUT = "Outlook не ответил за"
-_cache: Dict[str, Any] = {"source": "", "at": 0.0, "events": [], "error": ""}
+# While a meeting starts within the hour, the calendar is read again this often (refresh_async, by the loop of
+# app/brief_notice.py): a meeting moved or cancelled in Outlook leaves the strip and «Сегодня» sooner
+# (reported by the user: a moved meeting stayed in place and its reminder still came)
+SOON_CACHE_SEC = 5 * 60
+SOON_HOURS = 1
+# at: the last read tried, ok_at: the last read that succeeded (time.time())
+_cache: Dict[str, Any] = {"source": "", "at": 0.0, "ok_at": 0.0, "events": [], "error": ""}
+_reading = threading.Event()  # a read of refresh_async is running
 _lock = threading.Lock()
 _fetch_lock = threading.Lock()
 _DAYS = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
@@ -510,11 +518,16 @@ def _load_text(source: str) -> str:
     if re.match(r"^(https?|webcal)://", source, re.I):
         import httpx
 
+        from app.applog import hide_in_log
+
         url = re.sub(r"^webcal://", "https://", source, flags=re.I)
+        hide_in_log(source)  # an error of the request (a traceback) would write the link with its secret
+        hide_in_log(url)
         deadline = time.time() + 60
         data = bytearray()
         with httpx.Client(timeout=15.0, follow_redirects=True) as c:
             with c.stream("GET", url) as r:
+                hide_in_log(str(r.url))  # where a redirect led
                 r.raise_for_status()
                 for chunk in r.iter_bytes():
                     data += chunk
@@ -529,19 +542,21 @@ def _load_text(source: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace")
 
 
-def events(force: bool = False, cached: bool = False, user: bool = False) -> List[Dict[str, Any]]:
+def events(force: bool = False, cached: bool = False, user: bool = False,
+           max_age: Optional[float] = None) -> List[Dict[str, Any]]:
     """force: read again now (a page refreshing its calendar). user: the user asked for it by an action of
     their own, so a failed Outlook is tried again at once (OUTLOOK_RETRY_SEC). cached: only what was read
     already, never a read now (Outlook through PowerShell takes up to 90 s, a link up to 60 s): for callers
-    holding a lock others wait on."""
+    holding a lock others wait on. max_age: read again when the last read is older (CACHE_SEC by default)."""
     force = force or user
+    age = CACHE_SEC if max_age is None else max(0.0, max_age)
     source = _source()
     if not source:
         return []
     with _lock:
         if cached:
             return list(_cache["events"]) if _cache["source"] == source else []
-        fresh = _cache["source"] == source and time.time() - _cache["at"] < CACHE_SEC
+        fresh = _cache["source"] == source and time.time() - _cache["at"] < age
         if fresh and not force:
             return list(_cache["events"])
         if (source.lower() == "outlook" and _cache["source"] == source and _cache["error"]
@@ -552,7 +567,7 @@ def events(force: bool = False, cached: bool = False, user: bool = False) -> Lis
     try:
         with _fetch_lock:  # Outlook (PowerShell) and links take seconds: one read at a time
             with _lock:
-                if _cache["source"] == source and time.time() - _cache["at"] < CACHE_SEC and not force:
+                if _cache["source"] == source and time.time() - _cache["at"] < age and not force:
                     return list(_cache["events"])
             if source.lower() == "outlook":  # the classic Outlook of this computer (app/calendar_outlook.py)
                 from app import calendar_outlook
@@ -561,7 +576,8 @@ def events(force: bool = False, cached: bool = False, user: bool = False) -> Lis
             else:
                 parsed = parse(_load_text(source))
         with _lock:
-            _cache.update(source=source, at=time.time(), events=parsed, error="")
+            now = time.time()
+            _cache.update(source=source, at=now, ok_at=now, events=parsed, error="")
         return parsed
     except Exception as e:
         with _lock:
@@ -569,8 +585,37 @@ def events(force: bool = False, cached: bool = False, user: bool = False) -> Lis
                 # another calendar's events are not this one's: after switching to a link that fails,
                 # the previous calendar went on showing until the next read
                 _cache["events"] = []
+                _cache["ok_at"] = 0.0
             _cache.update(source=source, at=time.time(), error=str(e)[:200])
             return list(_cache["events"])
+
+
+def refresh_async(max_age: float) -> bool:
+    """Reads the calendar in a thread of its own when the last read is older than max_age seconds: no caller
+    waits for Outlook (up to 90 s). False when a read of this kind is running already."""
+    if _reading.is_set():
+        return False
+    _reading.set()
+
+    def run() -> None:
+        try:
+            events(max_age=max_age)
+        except Exception:
+            traceback.print_exc()
+        finally:
+            _reading.clear()
+
+    threading.Thread(target=run, daemon=True, name="calendar_read").start()
+    return True
+
+
+def read_state() -> Dict[str, Any]:
+    """When the calendar was read last (tried, succeeded: time.time()) and whether a read is running."""
+    source = _source()
+    with _lock:
+        same = bool(source) and _cache["source"] == source
+        return {"at": _cache["at"] if same else 0.0, "ok_at": _cache["ok_at"] if same else 0.0,
+                "reading": _reading.is_set() or _fetch_lock.locked()}
 
 
 def status() -> Dict[str, Any]:

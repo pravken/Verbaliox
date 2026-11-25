@@ -147,5 +147,121 @@ class JoinTest(unittest.TestCase):
         self.assertEqual(brief_notice._ahead_text(61), "Через 1 минуту")
 
 
+@unittest.skipIf(series is None, "app dependencies not installed")
+class FreshCalendarTest(unittest.TestCase):
+    """Reported by the user: a meeting moved in Outlook stayed in place and its reminder still came. The calendar
+    is read afresh before a reminder (brief_notice.keep_fresh) and the reminder follows that read."""
+
+    START = _at(14, 0)
+    SETTINGS = {"calendar_ics": "outlook", "meet_notify_before": "300"}
+
+    def _event(self, start, uid="m1"):
+        return {"uid": uid, "title": "Встреча по проекту Альфа", "start": start, "end": start + timedelta(minutes=30),
+                "all_day": False, "attendees": [], "location": "", "online": False, "join": "", "rrule": None, "exdates": []}
+
+    def _run(self, after, end_minutes=1):
+        """The calendar read 15 minutes before the meeting held it at 14:00; the reads from then on give `after`
+        (an exception: the read fails). The loop's ticks every 5 s until `end_minutes` past 14:00: the notices."""
+        from app import calendar_ics
+
+        clock = {"t": (self.START - timedelta(minutes=15)).timestamp()}
+        fake_time = mock.Mock(time=lambda: clock["t"])
+        calendar_ics._cache.update(source="outlook", at=clock["t"], ok_at=clock["t"], events=[self._event(self.START)], error="")
+        brief_notice._told.clear()
+        brief_notice._tried["at"] = 0.0
+        reads = []
+
+        def fetch():
+            reads.append(clock["t"])
+            if isinstance(after, Exception):
+                raise after
+            return after
+
+        init_db()
+        app_status.take_notices()
+        sync = lambda age: (calendar_ics.events(max_age=age), True)[1]  # noqa: E731 - the read at once, in the test
+        with mock.patch.object(calendar_ics, "time", fake_time), mock.patch.object(brief_notice, "time", fake_time), \
+                mock.patch("app.calendar_outlook.fetch", side_effect=fetch), \
+                mock.patch("app.calendar_ics.refresh_async", side_effect=sync), \
+                mock.patch("app.database.get_all_settings", return_value=dict(self.SETTINGS)), \
+                mock.patch("builtins.print") as log:
+            now = self.START - timedelta(minutes=8)
+            while now <= self.START + timedelta(minutes=end_minutes):
+                clock["t"] = now.timestamp()
+                brief_notice.keep_fresh(now)
+                brief_notice.check(now)
+                now += timedelta(seconds=5)
+        lines = [" ".join(str(a) for a in c.args) for c in log.call_args_list]
+        return app_status.take_notices(), reads, lines
+
+    def tearDown(self):
+        from app import calendar_ics
+
+        calendar_ics._cache.update(source="", at=0.0, ok_at=0.0, events=[], error="")
+
+    def test_an_unchanged_meeting_is_reminded_of_after_a_fresh_read(self):
+        notes, reads, lines = self._run([self._event(self.START)])
+        self.assertEqual(len(notes), 1)
+        self.assertIn("14:00", notes[0]["title"])
+        # a read within PREFETCH_SEC before the reminder (13:55), not only the periodic one
+        reminder = (self.START - timedelta(minutes=5)).timestamp()
+        self.assertTrue(any(reminder - brief_notice.FRESH_SEC <= t <= reminder for t in reads), reads)
+        self.assertFalse(lines)
+
+    def test_a_moved_meeting_is_not_reminded_of_at_its_old_time_but_at_its_new_one(self):
+        moved = [self._event(self.START + timedelta(minutes=30))]
+        notes, _, _ = self._run(moved)
+        self.assertEqual(notes, [])
+        notes, _, _ = self._run(moved, end_minutes=31)
+        self.assertEqual(len(notes), 1)
+        self.assertIn("14:30", notes[0]["title"])
+
+    def test_a_cancelled_meeting_is_not_reminded_of(self):
+        notes, _, _ = self._run([])
+        self.assertEqual(notes, [])
+
+    def test_a_failed_read_reminds_by_the_calendar_read_before_and_logs_it_without_the_title(self):
+        notes, reads, lines = self._run(RuntimeError("Outlook не ответил за 90 с"))
+        self.assertEqual(len(notes), 1)
+        self.assertIn("14:00", notes[0]["title"])
+        self.assertTrue(reads)
+        said = [x for x in lines if "[brief_notice]" in x]
+        self.assertEqual(len(said), 1)
+        self.assertNotIn("Альфа", said[0])
+
+    def test_a_notice_waits_for_a_read_still_running(self):
+        """The read is running at the reminder's time: the reminder waits (up to WAIT_SEC), then comes."""
+        at = self.START - timedelta(minutes=5)
+        ev = self._event(self.START)
+        brief_notice._told.clear()
+        app_status.take_notices()
+        old = {"at": 0.0, "ok_at": 0.0, "reading": True}
+        with mock.patch("app.calendar_ics.window", return_value=[ev]), \
+                mock.patch("app.calendar_ics.read_state", return_value=old), \
+                mock.patch("app.database.get_all_settings", return_value=dict(self.SETTINGS)), mock.patch("builtins.print"):
+            self.assertEqual(brief_notice.check(at + timedelta(seconds=2)), 0)
+            self.assertEqual(brief_notice.check(at + timedelta(seconds=brief_notice.WAIT_SEC + 1)), 1)
+
+    def test_the_calendar_is_read_more_often_while_a_meeting_is_near(self):
+        from app import calendar_ics
+
+        far = self.START - timedelta(hours=3)
+        clock = {"t": far.timestamp()}
+        fake_time = mock.Mock(time=lambda: clock["t"])
+        asked = []
+        brief_notice._tried["at"] = 0.0
+        for gap, meeting_at, expect in ((6 * 60, self.START - timedelta(hours=2), False),
+                                        (6 * 60, far + timedelta(minutes=40), True),
+                                        (16 * 60, self.START - timedelta(hours=2), True)):
+            calendar_ics._cache.update(source="outlook", at=clock["t"] - gap, ok_at=clock["t"] - gap,
+                                       events=[self._event(meeting_at)], error="")
+            brief_notice._tried["at"] = 0.0
+            asked.clear()
+            with mock.patch.object(calendar_ics, "time", fake_time), mock.patch.object(brief_notice, "time", fake_time), \
+                    mock.patch("app.calendar_ics.refresh_async", side_effect=lambda age: asked.append(age) or True), \
+                    mock.patch("app.database.get_all_settings", return_value=dict(self.SETTINGS)):
+                self.assertEqual(brief_notice.keep_fresh(far), expect, (gap, meeting_at))
+
+
 if __name__ == "__main__":
     unittest.main()

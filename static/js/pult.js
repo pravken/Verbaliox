@@ -22,8 +22,10 @@ function stripClock(d) { return `${hmPad(d.getHours())}:${hmPad(d.getMinutes())}
 function stripDayStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 // The meetings of today and of the week ahead (the next one after a free day), and the public holidays
+// (every 5 minutes; every minute while a meeting starts within the hour: a meeting moved or cancelled in the calendar
+// leaves the strip sooner, the server reads the calendar more often then, app/brief_notice.py keep_fresh)
 async function stripLoad(force) {
-  if (!force && Date.now() - strip.at < 300000) return;
+  if (!force && Date.now() - strip.at < (hmSoonMeeting(strip.events) ? HM_EVENTS_SOON_MS : 300000)) return;
   // a failed answer redraws the strip, which asks again: without this pause, a request loop
   if (!force && Date.now() - strip.failAt < STRIP_RETRY_MS) return;
   if (strip.loading) return strip.loading;
@@ -112,6 +114,7 @@ function stripState() {
       meta: state.callRecording ? (strip.call || '') : live ? stripService(live) : '',
       grow: last && last.text ? `${last.speaker ? `${last.speaker}: ` : ''}«${last.text}»` : marks ? plural(marks, t('stripMarkForms')) : '',
       growCls: last ? 'live' : '', click: 'studio', tip: t('stripOpenLive'),
+      // the way to the studio is the «Студия» chip of the recording button (asked by the user: the button here repeated it)
       acts: [act('studioMark', [], `★ ${t('stripMark')}`, '', t('stripMarkTip'))] };
   }
   const liveMeeting = live && !strip.skip.has(live.key) ? live : null;
@@ -152,7 +155,9 @@ function stripState() {
     const mixing = m.status === 'mixing';
     const open = state.appView === 'library' && state.activeMeeting && state.activeMeeting.id === m.id;
     const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
-      : state.queueMeeting ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
+      : holdPause() ? t('stripWaitPause').replace('{time}', () => holdClock())
+      : state.queueMeeting && !(q && q.forced) ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
+      : q && q.hold === 'captions' ? t('stripWaitCaptions')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
     return { kind: 'after', pill: mixWaiting(m) ? mixWaitPill(m) : mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
       : running ? t('stripProcessing').replace('{pct}', () => m.progress || 0) : t('stripWaiting'), cls: running || mixing ? 'blue' : 'grey',
@@ -276,15 +281,80 @@ const panelHead = (id, icon, title) => `<div class="vx-panel-h"><span class="vx-
 function jobsHoldShort() {
   if (typeof economyOn === 'function' && economyOn()) return t('islandHoldEconomy');
   if (state.queuePaused) return t('islandHoldPaused');
+  if (holdPause()) return t('islandHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('islandHoldMeeting');
+  if (captionsHeld()) return t('islandHoldCaptions');
   return '';
 }
 
 function jobsHold() {
   if (typeof economyOn === 'function' && economyOn()) return t('jobsHoldEconomy');
   if (state.queuePaused) return t('jobsHoldPaused');
+  if (holdPause()) return t('jobsHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('jobsHoldMeeting');
+  if (captionsHeld()) return t('jobsHoldCaptions');
   return '';
+}
+
+// A transcription waits for the end of the live captions (the server's queue: hold "captions"): it would load a
+// second copy of the model the captions use (app/transcriber.waits_for_captions)
+function captionsHeld() {
+  return (state.queue || []).some(q => q.hold === 'captions' && q.state !== 'running');
+}
+
+// «Не мешать на встречах» holds the transcriptions: while a meeting goes on, or during the pause of 2 minutes after
+// it (asked by the user: the window said «ждёт конца встречи» with no meeting going on). The pause counts down
+function holdPause() {
+  return !!(state.queueMeeting && state.queueHold && state.queueHold.kind === 'pause');
+}
+function holdLeft() {
+  return holdPause() ? Math.max(0, Math.ceil((state.queueHold.end - Date.now()) / 1000)) : 0;
+}
+function holdClock() {
+  const s = holdLeft();
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+// The waiting text of a transcription held by a meeting (not one the user let go during it) or by the live
+// captions, or '' (the item waits for something else)
+function holdItemText(q, meetingKey) {
+  if (q.kind !== 'transcribe' || q.state === 'running') return '';
+  if (state.queueMeeting && !q.forced) return holdPause() ? t('jobsWaitPause').replace('{time}', () => holdClock()) : t(meetingKey);
+  return q.hold === 'captions' ? t('jobsWaitCaptions') : '';
+}
+// Each second of the pause: the island, the queue's window, the strip and the status bar show the time left; at
+// its end the queue is asked again (the transcriptions start), and every 5 s while the server still holds them
+// (found in review: «0:00» stayed until the next poll). asked: when it was last asked, 0 during the pause
+const holdTimer = { id: null, asked: 0 };
+function holdTick() {
+  if (!holdPause()) { clearInterval(holdTimer.id); holdTimer.id = null; holdTimer.asked = 0; return; }
+  if (!holdTimer.id) holdTimer.id = setInterval(holdTick, 1000);
+  renderJobsIsland();
+  renderJobsPop();
+  if (typeof renderQueuePanel === 'function') renderQueuePanel();
+  if (typeof renderStatusbar === 'function') renderStatusbar();
+  if (typeof strip !== 'undefined' && strip.kind === 'after' && typeof renderStrip === 'function') renderStrip();
+  if (holdLeft()) holdTimer.asked = 0;  // a new pause: asked again at its end
+  else if (Date.now() - holdTimer.asked >= 5000 && typeof loadQueue === 'function') {
+    const first = !holdTimer.asked;
+    holdTimer.asked = Date.now();
+    setTimeout(() => loadQueue().catch(() => {}), first ? 1500 : 0);
+  }
+}
+
+// «Начать сейчас» of a transcription waiting for the end of a meeting: asked as «Расшифровать» asks during a meeting
+// (static/js/workspace.js transcribeWithPickedModel)
+async function jobsRunNow(id) {
+  const q = (state.queue || []).find(x => x.id === id) || {};
+  const pause = holdPause();
+  // what the item says it waits for: the meeting (or the pause after it), else the live captions
+  const captions = (!state.queueMeeting || q.forced) && q.hold === 'captions';
+  const [title, text] = captions ? ['txCaptionsNowTitle', 'txCaptionsNowText']
+    : pause ? ['txPauseNowTitle', 'txPauseNowText'] : ['txMeetingNowTitle', 'txMeetingNowText'];
+  if (!await confirmDialog(t(title), t(text), t('txMeetingNowYes'), false)) return;
+  const res = await fetch(`/api/queue/${Number(id) || 0}/run-now`, { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showToast(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  showToast(t('txMeetingNowStarted'));
+  if (typeof loadQueue === 'function') loadQueue().catch(() => {});
 }
 
 // «Очередь» as an island in the top strip (asked by the user: the rail's button said «Очередь пуста» most of the
@@ -386,13 +456,16 @@ function renderJobsPop() {
     const val = q.cancelling ? t('queueCancelling')
       : running ? `${pct}%`
       : state.queuePaused ? t('queuePausedItem')
-      : state.queueMeeting && q.kind === 'transcribe' ? t('jobsWaitMeeting') : t('queueWaiting').replace('{n}', () => q.position);
+      : holdItemText(q, 'jobsWaitMeeting') || t('queueWaiting').replace('{n}', () => q.position);
+    // held by the meeting: «Начать сейчас» under it, after the user's «Да»
+    const held = !q.cancelling && !state.queuePaused && !(typeof economyOn === 'function' && economyOn()) && !!holdItemText(q, 'jobsWaitMeeting');
     const tip = t('jobsOpenTip').replace('{title}', () => q.title || '');
     return `<div class="vx-prow vx-link" ${pageCall('click', 'jobsOpen', [q.id])} role="button" tabindex="0" title="${escapeHtml(tip)}">`
       + `<span class="vx-prow-t"><b>${escapeHtml(queueKindLabel(q))}</b><small>${escapeHtml(q.title || '')}</small></span>`
       + `<span class="vx-val ${running ? 'vx-run' : 'vx-wait'}">${escapeHtml(val)}</span>`
       + `<button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'cancelProcessing', Number(q.id) || 0])} class="vx-x${q.cancelling ? ' invisible' : ''}" title="${escapeHtml(t('tipQueueCancel'))}" aria-label="${escapeHtml(t('tipQueueCancel'))}">✕</button>`
       + (running ? `<span class="vx-pbar"><b style="width:${Math.max(3, pct)}%"></b></span>` : '')
+      + (held ? `<span class="vx-prow-go"><button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'jobsRunNow', Number(q.id) || 0])} class="st-btn st-btn-sm" title="${escapeHtml(t(state.queueMeeting && !q.forced ? 'jobsRunNowTip' : 'jobsRunNowCaptionsTip'))}">${escapeHtml(t('jobsRunNow'))}</button></span>` : '')
       + '</div>';
   }).join('');
   const foot = items.length
@@ -453,7 +526,9 @@ function placePanel(pop, anchor, where) {
 // --- The load: the indicator of the status bar and its window ---
 const load = { open: false, html: '' };
 const GB_ = () => t('unitGB');
-const gbText = x => `${(Math.round(Number(x || 0) * 10) / 10).toLocaleString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU')} ${GB_()}`;
+const gbNum = x => (Math.round(Number(x || 0) * 10) / 10).toLocaleString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU');
+const gbText = x => `${gbNum(x)} ${GB_()}`;
+const gbPair = (used, total) => `${gbNum(used)} / ${gbNum(total)} ${GB_()}`;  // the unit once: «12,8 / 31,2 ГБ»
 const loadLevel = p => (p >= 85 ? ' ld-high' : '');  // amber only above the norm
 
 function loadModels() {
@@ -543,37 +618,52 @@ const HW_IC = {
   GPU: '<svg class="hw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 6.75h19.5v10.5H2.25V6.75zM4.5 17.25v2.25M9 13.875a1.875 1.875 0 100-3.75 1.875 1.875 0 000 3.75zM14.25 9.75h4.5m-4.5 2.25h4.5m-4.5 2.25h4.5"/></svg>',
 };
 
+// The column titles over the values of the load: «Всего занято» and «Verbaliox» (the load window and the widget)
+function ldHeadHtml() {
+  return `<div class="ld-row ld-head" aria-hidden="true"><span></span><span></span><span class="ld-v">${escapeHtml(t('ldColAll'))}</span>`
+    + `<span class="ld-v ld-mine">Verbaliox</span></div>`;
+}
+
+// The rows CPU, RAM, GPU: the bar (the whole in grey, Verbaliox's part in the accent), the whole computer and
+// Verbaliox's share in their columns; `notes` puts a grey line under the bar (the load window); `noGpu` (the widget)
+// keeps the RAM and GPU rows in place when they are not reported, the GPU with a word and its tooltip
+function ldRowsHtml(sys, own, gpu, ram, notes, noGpu) {
+  const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
+  const w = x => Math.max(0, Math.min(100, x || 0));
+  const row = (k, all, mine, value, ownText, tip) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>`
+    + `<span class="ld-bar ld-bar-lg"><b style="width:${w(all)}%"></b><i style="width:${w(mine)}%"></i></span>`
+    + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span><span class="ld-v ld-mine">${escapeHtml(ownText || '—')}</span></div>`
+    + (notes && notes[k] ? `<div class="ld-note">${escapeHtml(notes[k])}</div>` : '');
+  const cpu = sys.cpu_percent;
+  let html = row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`,
+    own.cpu_percent != null ? `${Math.round(own.cpu_percent)}%` : '', `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`);
+  if (ram) {
+    html += row('RAM', pct(ram.used_gb, ram.total_gb), pct(own.ram_gb, ram.total_gb), gbPair(ram.used_gb, ram.total_gb),
+      own.ram_gb != null ? gbText(own.ram_gb) : '', own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '');
+  } else if (noGpu) html += row('RAM', 0, 0, '—', '', '');
+  if (gpu) {
+    const approx = own.gpu_exact ? '' : '≈';
+    html += row('GPU', pct(gpu.used_gb, gpu.total_gb), pct(own.gpu_gb, gpu.total_gb), gbPair(gpu.used_gb, gpu.total_gb),
+      own.gpu_gb != null ? `${approx}${gbText(own.gpu_gb)}` : '',
+      own.gpu_gb != null ? `Verbaliox: ${approx}${gbText(own.gpu_gb)}${own.gpu_exact ? '' : `\n${t('ldGpuApprox')}`}` : '');
+  } else if (noGpu) html += row('GPU', 0, 0, noGpu[0], '', noGpu[1]);
+  return html;
+}
+
 function renderLoadPop() {
   const pop = document.getElementById('load-pop');
   const data = vram.data;
   if (!pop || !load.open || !data) return;
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
   const hw = (state.system && state.system.hardware) || {};
-  const bar = (all, mine) => `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`;
-  // each resource: its bar and value, under them the hardware on the left and Verbaliox's own share on the right
-  // (asked by the user: the shares of the program in one line under the GPU read as a part of the GPU)
-  const row = (k, all, mine, value, tip, note, own) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>${bar(all, mine)}<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
-    + (note || own ? `<div class="ld-sub"><span class="ld-note">${escapeHtml(note || '')}</span>${own ? `<span class="ld-own"><i class="ld-me"></i>${escapeHtml(own)}</span>` : ''}</div>` : '');
-  const cpu = sys.cpu_percent;
-  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>`
-    + `<div class="ld-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
-  html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`,
-    `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`, [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '),
-    own.cpu_percent != null ? `${Math.round(own.cpu_percent || 0)}%` : '');
-  if (ram) {
-    const rp = (100 * ram.used_gb) / Math.max(0.1, ram.total_gb);
-    html += row('RAM', rp, own.ram_gb != null ? (100 * own.ram_gb) / Math.max(0.1, ram.total_gb) : 0, `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
-      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)),
-      own.ram_gb != null ? gbText(own.ram_gb) : '');
-  }
-  if (gpu) {
-    const vp = (100 * gpu.used_gb) / Math.max(0.1, gpu.total_gb);
-    const mine = own.gpu_gb != null ? (100 * own.gpu_gb) / Math.max(0.1, gpu.total_gb) : 0;
-    html += row('GPU', vp, mine, `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
-      own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}${own.gpu_exact ? '' : `\n${t('ldGpuApprox')}`}` : '',
-      hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '',
-      own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '');
-  }
+  // one line per resource (asked by the user, «вариант A»): the label, the bar, the whole computer and Verbaliox's own
+  // share in the accent (the colour of its part of the bar) under the column titles; the hardware under the bar
+  let html = panelHead('load-pop-title', 'chart', t('ldTitle')) + `<div class="vx-sub">${escapeHtml(t('ldSub'))}</div>` + ldHeadHtml();
+  html += ldRowsHtml(sys, own, gpu, ram, {
+    CPU: [sys.cpu_name, sys.cores ? t('hwThreads').replace('{n}', () => sys.cores) : ''].filter(Boolean).join(' · '),
+    RAM: ram ? t('ldRamNote').replace('{gb}', () => Math.round(ram.total_gb)) : '',
+    GPU: hw.cuda_available && hw.device_name ? `${hw.device_name}${hw.vram_total_gb ? ` · ${t('ldVramNote').replace('{gb}', () => hw.vram_total_gb)}` : ''}` : '',
+  });
   const models = loadModels();
   const vramSum = models.reduce((s, { c }) => s + (c.kind === 'ollama' && c.where === 'gpu' ? Number(c.size_gb || 0) : 0), 0);
   const ramSum = models.reduce((s, { c }) => s + (c.ram_gb != null ? Number(c.ram_gb) : c.kind === 'ollama' && c.where !== 'gpu' ? Number(c.size_gb || 0) : 0), 0);

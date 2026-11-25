@@ -157,6 +157,7 @@ function mixWaitLine(m) {
 function mixWaitWhy(m) {
   const w = m.mix_why || {};
   if (w.kind === 'recording') return t('mixWaitRecording');
+  if (w.kind === 'call') return t('mixWaitCall');
   if (w.kind === 'calendar' && w.title) return t('mixWaitCalendar').replace('{title}', () => w.title).replace('{end}', () => w.end || '');
   return '';
 }
@@ -391,6 +392,11 @@ async function mixNowActive() {
   const r = await fetch(`/api/meetings/${m.id}/mix-now`, { method: 'POST' }).catch(() => null);
   if (!r) { showError(t('errNoNetwork')); return; }
   if (!r.ok) { showError(serverText((await readJson(r)).detail)); return; }
+  // the mix starts now: the page's copy no longer waits either, else a redraw before the next poll offered it again
+  m.mix_wait = null;
+  m.mix_why = null;
+  const row = (state.meetings || []).find(x => x.id === m.id);
+  if (row) row.mix_wait = null;
   document.getElementById('tx-rc-mixnow').classList.add('hidden');
   showToast(t('mixNowStarted'), null, 'status');
 }
@@ -718,6 +724,19 @@ async function transcribeWithPickedModel() {
   state.txModelPick = null;
   await loadMeetingsList();
   await selectMeeting(m.id, false);
+  // During a meeting a transcription waits for its end; it starts now only on the user's «Да» (asked by the user)
+  const held = await fetch('/api/queue/paused').then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+  if (held.meeting) {
+    if (await confirmDialog(t('txMeetingNowTitle'), t('txMeetingNowText'), t('txMeetingNowYes'), false)) {
+      const r = await fetch(`/api/queue/${m.id}/run-now`, { method: 'POST' }).catch(() => null);
+      if (r && r.ok) { showToast(t('txMeetingNowStarted')); return; }
+      // refused: why, as «Начать сейчас» of the queue says it (not «начнётся после встречи»)
+      showToast(r ? errorText(await readJson(r), r) : t('errorGeneric'));
+      return;
+    }
+    showToast(t('txMeetingLater'));
+    return;
+  }
   showToast(precise ? t('txPreciseStarted') : t('txTranscribeStarted').replace('{model}', () => formatModelName(model)));
 }
 
@@ -1371,7 +1390,8 @@ async function openTranslateModal() {
     .sort((a, b) => (a.c === preferred ? -1 : b.c === preferred ? 1 : a.n.localeCompare(b.n)))
     .map(({ c, n }) => `<option value="${c}">${escapeHtml(n)} (${c.toUpperCase()})${have.includes(c) ? ' ✓' : ''}</option>`).join('');
 
-  const models = ollama.models || [];
+  // the models that write text: not the search model, not a caption translator (Hy-MT)
+  const models = ollama.chat_models || ollama.models || [];
   const active = (state.system && state.system.settings && state.system.settings.ollama_model) || ollama.active_model || '';
   document.getElementById('translate-model').innerHTML = models.length
     ? models.map(x => `<option value="${escapeHtml(x)}" ${x === active ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('')

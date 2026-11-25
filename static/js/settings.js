@@ -61,7 +61,7 @@ async function installVoiceFilter() {
   }
 }
 
-// Settings → General → «Акцент»: the colour of the picked-out buttons and marks, applied at once and saved
+// Settings → General → «Цвет выделения»: the colour of the picked-out buttons and marks, applied at once and saved
 // (ui_accent); the background stays one
 function renderAccentChoices() {
   const el = document.getElementById('theme-accents');
@@ -72,8 +72,6 @@ function renderAccentChoices() {
     return `<button role="radio" aria-checked="${k === on}" class="theme-sw${k === on ? ' on' : ''}" data-click="setAccent" `
       + `data-click-args='["${k}"]' title="${name}" aria-label="${name}"><i style="background:${THEME_ACCENTS[k]}"></i></button>`;
   }).join('');
-  const label = document.getElementById('theme-accent-name');
-  if (label) label.textContent = t(`theme_accent_${on}`);
 }
 
 async function setAccent(key) {
@@ -85,7 +83,7 @@ async function setAccent(key) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { showError(data.detail); return; }
-  if (state.system) state.system.settings = data.settings;
+  if (state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 // Settings → General: the interface scale, applied at once and saved (ui_scale)
@@ -107,7 +105,7 @@ async function setUiScale(v) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { showError(data.detail); return; }
-  if (state.system) state.system.settings = data.settings;
+  if (state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 // The computer's device in the interface language: the server names the processor in Russian
@@ -135,8 +133,10 @@ async function fillSystemInfo() {
   // a change of the last 450 ms is saved before the form is filled again from the server
   if (_settingsSaveTimer) { clearTimeout(_settingsSaveTimer); _settingsSaveTimer = null; await saveAllSettings(); }
   try {
+    const mark = uiSettingsMark();
     const res = await fetch('/api/system');
     const data = await readJson(res);
+    uiSettingsOverlay(data.settings, mark);  // a choice of the page still on its way to the server stays
     state.system = data;
     syncUiPrefsFromServer(data.settings);
     // Audit 5.5: with no scale chosen yet, the first one follows «Text size» of Windows
@@ -162,7 +162,7 @@ async function fillSystemInfo() {
     renderFfmpegStatus(data.ffmpeg);
     if (data.paths) {
       const dirEl = document.getElementById('settings-data-dir');
-      dirEl.textContent = `${t('dataFolder')}: ${data.paths.data}`;
+      dirEl.textContent = data.paths.data;  // the row's name says what it is
       dirEl.title = `${t('dataFolder')}: ${data.paths.data}
 ${t('modelsFolder')}: ${data.paths.models}`;
       const conflict = data.paths.legacy_conflict;
@@ -183,11 +183,12 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-whisper-model').value = s.whisper_model || 'large-v3-turbo';
     state.speechModelRu = s.speech_model_ru || '';
     document.getElementById('upload-model').value = speechRoutingOn() ? 'auto' : (s.whisper_model || 'large-v3-turbo');
-    document.getElementById('set-device').value = s.device || 'cuda';
     document.getElementById('set-compute-type').value = s.compute_type || 'float16';
-    // with no choice saved yet, «automatic» is on when the values are the recommended ones
-    document.getElementById('set-device-auto').checked = s.device_auto ? s.device_auto !== 'false'
+    // «Автоматически» is an option of the device list (device_auto); with no choice saved yet it is chosen when
+    // the values are the recommended ones
+    const devAuto = s.device_auto ? s.device_auto !== 'false'
       : (s.device || '') === (hw.recommended_device || '') && (s.compute_type || '') === (hw.recommended_compute_type || '');
+    document.getElementById('set-device').value = devAuto ? 'auto' : (s.device || 'cuda');
     syncDeviceAuto(false);
     document.getElementById('set-diarization').checked = s.diarization_enabled !== 'false';
     document.getElementById('set-voice-profiles').checked = s.voice_profiles !== 'false';
@@ -224,8 +225,8 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-dict-fuzzy').checked = s.dictionary_fuzzy !== 'false';
     document.getElementById('set-feature-suggest').checked = s.feature_suggest !== 'false';
     document.getElementById('set-quiet-mode').checked = s.quiet_mode === 'true';
-    document.getElementById('set-economy-mode').checked = s.economy_mode === 'true';
-    document.getElementById('set-economy-for').value = s.economy_for || '0';
+    // «Только запись»: one list, «Выключен» or for how long it is on (economy_mode + economy_for)
+    document.getElementById('set-economy-for').value = s.economy_mode === 'true' ? (s.economy_for || '0') : 'off';
     document.getElementById('set-live-captions-auto').checked = s.live_captions_auto === 'true';
     document.getElementById('set-cpu-threads').value = s.cpu_threads || 'auto';
     loadWatchFolder();
@@ -249,12 +250,18 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     document.getElementById('set-translate-hotkey').value = s.dictation_translate_hotkey ?? 'Ctrl+Alt+T';
     document.getElementById('set-dictation-save').checked = s.dictation_save !== 'false';
     fillDictationTranslateLangs(s.dictation_translate_to || 'en');
+    // the translation models of the captions: read again from the settings
+    for (const kind of ['quality', 'fast']) {
+      const sel = document.getElementById(`set-live-tr-${kind}`);
+      if (sel) delete sel.dataset.ready;
+    }
+    if (state.lastOllama) renderTranslateChoices(state.lastOllama);
     document.getElementById('set-calendar-ics').value = s.calendar_ics || '';
     loadCalendarSource();
-    document.getElementById('set-onnx-gpu').checked = s.onnx_gpu !== 'false';
+    // GigaAM / Parakeet on the video card: a list each, «Всегда процессор» for both is the former switch off (onnx_gpu)
     for (const f of ['gigaam', 'parakeet']) {
       const sel = document.getElementById(`set-onnx-${f}-device`);
-      if (sel) sel.value = s[`onnx_${f}_device`] === 'cpu' ? 'cpu' : 'auto';
+      if (sel) sel.value = s.onnx_gpu === 'false' || s[`onnx_${f}_device`] === 'cpu' ? 'cpu' : 'auto';
     }
     loadBackupInfo();
     loadOrphans();
@@ -267,6 +274,9 @@ ${t('modelsFolder')}: ${data.paths.models}`;
     loadHotkeyStatus();
     renderLiveModelSelect();
     _settingsBaseline = settingsFormValues();
+    // a model list shows «Всегда процессор» while onnx_gpu is off, whatever its own device: against the stored
+    // values, the next save writes what the lists show
+    for (const f of ['gigaam', 'parakeet']) _settingsBaseline[`onnx_${f}_device`] = s[`onnx_${f}_device`] || 'auto';
 
     const srcMode = s.record_source_mode || 'both';
     if (document.getElementById('set-record-source')) {
@@ -454,6 +464,7 @@ function renderVram(data) {
   renderIdleStatus(data.idle);
   if (typeof onVramData === 'function') onVramData();  // the load of the status bar (pult.js)
   if (typeof dbOnVramData === 'function') dbOnVramData();  // «Нагрузка системы и моделей» on «Обзор» (dashboard.js)
+  if (typeof renderStudioCapBar === 'function') renderStudioCapBar();  // the memory of the captions' models (studio.js)
 }
 
 const MODEL_TIMER_ICON = '<svg class="vr-timer-ico" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6.5" r="4.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 4.3v2.4l1.5 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
@@ -681,6 +692,11 @@ const MODEL_DISPLAY_NAMES = {
   'qwen2.5:14b': 'Qwen 14B Pro',
   'mistral:7b': 'Mistral 7B',
   'qwen2.5:1.5b': 'Qwen Lite',
+  // the translators of live captions (app/ollama_client.TRANSLATE_MODELS): any tag; the 1.8B by its downloaded
+  // name and by the one the program re-creates it under
+  'hf.co/tencent/hy-mt3-7b-gguf': 'Hy-MT3 7B',
+  'hf.co/tencent/hy-mt3-1.8b-gguf': 'Hy-MT3 1.8B',
+  'hy-mt3-1.8b': 'Hy-MT3 1.8B',
       };
 
 // GigaAM / Parakeet (app/asr_onnx.py): downloaded by the server, progress shown as a pulsing label
@@ -1546,6 +1562,9 @@ function updateOllamaUI(ollama) {
       `;
     }).join('');
   }
+  const trBox = document.getElementById('translate-catalog-list');
+  if (trBox && ollama.translate_catalog) trBox.innerHTML = translateModelCards(ollama, ps);
+  renderTranslateChoices(ollama);
 
   const dlPanel = document.getElementById('ollama-download-panel');
   if (dlPanel && ps && (ps.active || (ps.logs && ps.logs.length > 0))) {
@@ -1681,6 +1700,17 @@ function renderOnnxGpu(st) {
   if (st.installing) _onnxGpuTimer = setTimeout(loadOnnxGpu, 2000);
 }
 
+function setOnnxDevices(value, onlyWhenAllCpu = false) {
+  const sels = ['gigaam', 'parakeet'].map(f => document.getElementById(`set-onnx-${f}-device`)).filter(Boolean);
+  if (onlyWhenAllCpu && sels.some(x => x.value !== 'cpu')) return;
+  sels.forEach(x => { x.value = value; });
+  scheduleSettingsSave();
+}
+
+function onnxGpuSetting() {
+  return ['gigaam', 'parakeet'].some(f => document.getElementById(`set-onnx-${f}-device`)?.value !== 'cpu') ? 'true' : 'false';
+}
+
 async function loadOnnxGpu() {
   const st = await fetch('/api/onnx-gpu').then(r => r.json()).catch(() => null);
   if (st) renderOnnxGpu(st);
@@ -1690,14 +1720,14 @@ async function installOnnxGpu() {
   const res = await fetch('/api/onnx-gpu/install', { method: 'POST' });
   const data = await readJson(res);
   if (!res.ok) { showError(data.detail); return; }
-  document.getElementById('set-onnx-gpu').checked = true;
+  setOnnxDevices('auto', true);  // installed to be used: on the video card, unless one of them was kept on the processor
   renderOnnxGpu(data);
 }
 
 async function removeOnnxGpu() {
   if (!await askConfirm(t('onnxGpuRemoveConfirm'), true, t('cfDeleteBuild'))) return;
   const data = await fetch('/api/onnx-gpu/remove', { method: 'POST' }).then(r => r.json()).catch(() => null);
-  document.getElementById('set-onnx-gpu').checked = false;
+  setOnnxDevices('cpu');  // the server turned onnx_gpu off with the build: both on the processor
   if (data) renderOnnxGpu(data);
 }
 
@@ -1780,9 +1810,8 @@ const CALL_APP_NAMES = { zoom: 'Zoom', teams: 'Microsoft Teams', telegram: 'Tele
 
 async function fillCallSettings(s) {
   const st = await fetch('/api/calls/status').then(r => r.json()).catch(() => ({ supported: false }));
-  const callBlock = document.getElementById('call-record-block');
-  callBlock.classList.toggle('hidden', !st.supported);
-  callBlock.closest('.settings-card')?.classList.toggle('hidden', !st.supported);  // no empty «Звонки» card
+  // the automatic recording of calls only where it works; the Teams captions of the same card stay
+  document.querySelectorAll('#modal-settings [data-call-row]').forEach(el => el.classList.toggle('hidden', !st.supported));
   document.getElementById('set-call-record').checked = s.call_auto_record === 'true';
   document.getElementById('set-import-copy').checked = s.import_copy === 'true';
   document.getElementById('set-voice-filter').checked = s.rec_voice_filter !== 'false';
@@ -1817,7 +1846,8 @@ async function refreshCallMicNow() {
 setInterval(refreshCallMicNow, 3000);
 
 function renderCallSettings() {
-  document.getElementById('call-record-options').classList.toggle('opacity-50', !document.getElementById('set-call-record').checked);
+  const off = !document.getElementById('set-call-record').checked;
+  for (const id of ['call-record-options', 'call-preset-row']) document.getElementById(id)?.classList.toggle('opacity-50', off);
 }
 
 function callSettingsPayload() {
@@ -2195,6 +2225,109 @@ async function buildSemanticIndex() {
   setTimeout(loadSemanticStatus, 800);
 }
 
+// The translator of live captions the computer is offered (app/hardware.py by the card), with its catalog entry
+function recommendedTranslateModel(ollama) {
+  const id = ((state.system || {}).hardware || {}).recommended_translate_model;
+  return ((ollama || state.lastOllama || (state.system || {}).ollama || {}).translate_catalog || []).find(m => m.id === id) || null;
+}
+
+// «Модели перевода»: the card of its own under the analysis models, the same row as theirs (name, badge, video
+// memory, info; the action on the right). Every Hy-MT3 (the one for this computer marked, the other size can be
+// downloaded too), and any other translator installed by hand (TranslateGemma: never offered, its license to check)
+function translateModelCards(ollama, ps) {
+  const rec = recommendedTranslateModel(ollama);
+  return (ollama.translate_catalog || []).filter(m => m.offered !== false || m.installed).map(item => {
+    const desc = state.uiLang === 'en' ? item.desc_en : item.desc_ru;
+    let action;
+    if (ps && ps.active && ps.model === item.id) {
+      action = `<span class="ui-btn bg-apple-blue/20 text-apple-blue font-mono animate-pulse">${ps.progress || 1}%</span>`;
+    } else if (item.installed) {
+      // the trash at the place of the analysis models' one; the choice is the lists under the card
+      action = `<div class="flex items-center gap-1.5">
+        <button data-id="${escapeHtml(item.installed_as || item.id)}" data-click="deleteOllamaModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipDeleteModel'))}"
+          class="ui-btn ui-btn-subtle ui-btn-sq hover:text-apple-red" aria-label="${escapeHtml(t('tipDeleteModel'))}">${SVG_ICONS.trash}</button></div>`;
+    } else {
+      action = `<button data-id="${escapeHtml(item.id)}" data-click="pullTranslateModel" data-click-args='[{"$": "data", "k": "id"}]' title="${escapeHtml(t('tipStTrOffer'))}"
+        class="ui-btn ${item === rec ? 'ui-btn-primary' : 'ui-btn-subtle text-white'}">${SVG_ICONS.download}<span>${t('uiDownload')} (${escapeHtml(item.size)})</span></button>`;
+    }
+    // a model installed by hand: «Локальная» and its license in orange (to check before commercial use)
+    const badge = item.offered === false
+      ? `<span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-apple-amber/15 text-apple-amber" title="${escapeHtml(t('trLicenseCheck'))}">${escapeHtml(t('trLocal'))}${item.license ? ` · ${escapeHtml(item.license)}` : ''} ⚠</span>`
+      : `<span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-apple-secondary">${escapeHtml(item.badge)}</span>`;
+    const recChip = item === rec
+      ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-apple-blue/15 text-apple-blue" title="${escapeHtml(t('tipTrRecommended'))}">${escapeHtml(t('trRecommended'))}</span>` : '';
+    return `
+      <div class="mc-card p-3 rounded-xl border transition bg-apple-sidebar border-white/10" data-tr-model="${escapeHtml(item.id)}">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center flex-wrap gap-2">
+              <span class="text-xs font-semibold text-white">${escapeHtml(formatModelName(item.id))}</span>
+              ${badge}
+              <span class="text-[11px] text-apple-tertiary">${escapeHtml(item.vram)}</span>
+              ${modelInfoButton(item.id)}
+              ${recChip}
+            </div>
+            ${translateMetersLine(item)}
+          </div>
+          <div class="shrink-0">${action}</div>
+        </div>
+        ${modelInfoBlock(item.id, `<p class="text-[11.5px] text-apple-secondary leading-snug">${escapeHtml(desc)}</p>
+          ${item.installed ? modelLocationHtml(ollama.models_dir, 0, t('modelLocationOllama')) : ''}`)}
+      </div>`;
+  }).join('');
+}
+
+// The line under the name, at the place of the analysis models' measures: the measured time of a phrase and the
+// video memory beside speech recognition; a model installed by hand has its license to check there instead
+function translateMetersLine(item) {
+  const part = (label, value) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${meterVal(value)}</span>`;
+  if (item.offered === false) {
+    return `<div class="mm-line"><span class="mm-part"><span class="mm-lbl mm-warn">${escapeHtml(t('trLicenseCheck'))}</span></span></div>`;
+  }
+  const sec = item.phrase_sec || [];
+  const parts = [];
+  if (sec.length === 2) parts.push(part(t('trMmPhrase'), `${meterNum(sec[0])}–${meterNum(sec[1])} ${t('unitSec')}`));
+  if (item.card_gb) parts.push(part(t('trMmCard'), `${meterNum(item.card_gb)} ${t('unitGB')}`));
+  // the downloaded file is not the one the program checked (app/ollama_client.check_translator_files)
+  if (item.file_differs) parts.push(`<span class="mm-part"><span class="mm-lbl mm-warn" data-tr-file-differs title="${escapeHtml(t('tipTrFileDiffers'))}">${escapeHtml(t('trFileDiffers'))}</span></span>`);
+  return `<div class="mm-line">${parts.join('')}</div>`;
+}
+
+// The lists «Качество» and «Быстро» of the captions: «Авто · <the model it takes now>», the installed
+// translators, the installed analysis models. A chosen model that is not installed (deleted) stays in its list
+// marked so; the server takes «Авто» for it (app/live_translate.choose_models)
+function renderTranslateChoices(ollama) {
+  const s = (state.system && state.system.settings) || {};
+  const trs = (ollama.translate_catalog || []).filter(m => m.installed).map(m => m.installed_as || m.id);
+  const general = ollama.chat_models || [];
+  const auto = (ollama.live_translate || {}).auto || {};
+  for (const [kind, key] of [['quality', 'live_translate_model_quality'], ['fast', 'live_translate_model_fast']]) {
+    const sel = document.getElementById(`set-live-tr-${kind}`);
+    if (!sel) continue;
+    const value = sel.dataset.ready ? sel.value : (s[key] || '');
+    const opt = (v, label) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`;
+    const group = (label, list) => list.length ? `<optgroup label="${escapeHtml(label)}">${list.map(m => opt(m, formatModelName(m))).join('')}</optgroup>` : '';
+    const known = [...trs, ...general];
+    const html = opt('', auto[kind] ? `${t('liveAutoShort')} · ${formatModelName(auto[kind])}` : t('liveAutoShort'))
+      + group(t('trGroupTranslators'), trs) + group(t('trGroupGeneral'), general)
+      + (value && !known.includes(value) ? opt(value, t('trNotInstalled').replace('{name}', () => formatModelName(value))) : '');
+    if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
+    sel.value = value;
+    sel.dataset.ready = '1';
+  }
+}
+
+// A choice of «Качество» / «Быстро» saved: the studio asks for its models again («Авто · …» follows it)
+document.addEventListener('change', (e) => {
+  if (!/^set-live-tr-(quality|fast)$/.test(e.target?.id || '')) return;
+  if (typeof studioTranslateModelsChanged === 'function') setTimeout(studioTranslateModelsChanged, 600);
+});
+
+// A translator is downloaded without becoming the analysis model (the server does not select it either)
+function pullTranslateModel(id) {
+  return pullOllamaModel(id, false);
+}
+
 // Can this local model answer: 'ready', 'missing' (not downloaded) or 'off' (Ollama is not installed).
 // A stopped Ollama is ready: analysis starts it, and its models are read from its folder. Before the
 // first status arrives it is taken as ready.
@@ -2282,26 +2415,38 @@ function syncStartupToggles(el) {
 // Audit 8.2. «Подбирать автоматически»: the device and precision the hardware calls for, shown in words;
 // off, the two lists of «Дополнительно» are yours
 function syncDeviceAuto(save = true) {
-  const auto = document.getElementById('set-device-auto').checked;
-  const hw = (state.system || {}).hardware || {};
   const dev = document.getElementById('set-device'), prec = document.getElementById('set-compute-type');
-  if (auto) {
-    if (hw.recommended_device) dev.value = hw.recommended_device;
-    if (hw.recommended_compute_type) prec.value = hw.recommended_compute_type;
-  }
-  dev.disabled = prec.disabled = auto;
-  const name = (sel) => sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
-  document.getElementById('device-auto-hint').textContent = auto ? t('deviceAutoNow').replace('{dev}', () => name(dev)).replace('{prec}', () => name(prec).split(' — ')[0].toLowerCase()) : t('deviceManualHint');
+  const auto = dev.value === 'auto';
+  const hw = (state.system || {}).hardware || {};
+  if (auto && hw.recommended_compute_type) prec.value = hw.recommended_compute_type;
+  prec.disabled = auto;
+  const devName = [...dev.options].find(o => o.value === (hw.recommended_device || 'cpu'))?.textContent || '';
+  const precName = prec.options[prec.selectedIndex] ? prec.options[prec.selectedIndex].textContent : '';
+  document.getElementById('device-auto-hint').textContent = auto
+    ? t('deviceAutoNow').replace('{dev}', () => devName).replace('{prec}', () => precName.split(' — ')[0].toLowerCase()) : '';
   if (save) { scheduleSettingsSave(); }
+}
+
+// The device the list stands for: «Автоматически» is the one the hardware calls for
+function deviceSettingValue() {
+  const v = document.getElementById('set-device').value;
+  if (v !== 'auto') return v;
+  const hw = (state.system || {}).hardware || {};
+  return hw.recommended_device || (((state.system || {}).settings || {}).device) || 'cpu';
 }
 
 let _settingsBaseline = null;
 
+function economyForValue() {
+  const v = document.getElementById('set-economy-for').value;
+  return v && v !== 'off' ? v : (((state.system || {}).settings || {}).economy_for || '0');
+}
+
 function settingsFormValues() {
   return {
     whisper_model: document.getElementById('set-whisper-model').value,
-    device_auto: String(document.getElementById('set-device-auto').checked),
-    device: document.getElementById('set-device').value,
+    device_auto: String(document.getElementById('set-device').value === 'auto'),
+    device: deviceSettingValue(),
     compute_type: document.getElementById('set-compute-type').value,
     diarization_enabled: String(document.getElementById('set-diarization').checked),
     voice_profiles: String(document.getElementById('set-voice-profiles').checked),
@@ -2313,10 +2458,11 @@ function settingsFormValues() {
     start_with_windows: String(document.getElementById('set-start-with-windows').checked),
     close_to_tray: String(document.getElementById('set-close-to-tray').checked),
     quiet_mode: String(document.getElementById('set-quiet-mode').checked),
-    economy_mode: String(document.getElementById('set-economy-mode').checked),
+    economy_mode: String(document.getElementById('set-economy-for').value !== 'off'),
     mcp_local_only: String(document.getElementById('set-mcp-local-only').checked),
     show_disputed: String(document.getElementById('set-show-disputed').checked),
-    economy_for: document.getElementById('set-economy-for').value || '0',
+    // «Выключен» keeps the duration chosen before: the tray menu turns the mode on for it
+    economy_for: economyForValue(),
     live_captions_auto: String(document.getElementById('set-live-captions-auto').checked),
     cpu_threads: document.getElementById('set-cpu-threads').value || 'auto',
     vad_filter: String(document.getElementById('set-vad').checked),
@@ -2354,9 +2500,11 @@ function settingsFormValues() {
     dictation_language: document.getElementById('set-dictation-language')?.value || 'auto',
     dictation_translate_hotkey: document.getElementById('set-translate-hotkey')?.value.trim() || '',
     dictation_translate_to: document.getElementById('set-dictation-translate-to')?.value || 'en',
+    live_translate_model_quality: document.getElementById('set-live-tr-quality')?.value ?? '',
+    live_translate_model_fast: document.getElementById('set-live-tr-fast')?.value ?? '',
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
-    onnx_gpu: document.getElementById('set-onnx-gpu')?.checked ? 'true' : 'false',
+    onnx_gpu: onnxGpuSetting(),
     onnx_gigaam_device: document.getElementById('set-onnx-gigaam-device')?.value || 'auto',
     onnx_parakeet_device: document.getElementById('set-onnx-parakeet-device')?.value || 'auto',
     ...callSettingsPayload(),
@@ -2419,7 +2567,8 @@ async function saveAllSettings() {
   setSettingsSaveState('saved');
   _settingsBaseline = { ...(_settingsBaseline || values), ...changed };
   const saved = await readJson(res);
-  if (saved?.settings && state.system) state.system.settings = { ...(state.system.settings || {}), ...saved.settings };
+  if (saved?.settings && state.system) state.system.settings = uiSettingsOverlay({ ...(state.system.settings || {}), ...saved.settings });
+  if ('live_captions_auto' in changed && typeof studioPrefsFromSettings === 'function') studioPrefsFromSettings();
 }
 
 function pullCustomOllamaModel() {
@@ -2443,10 +2592,12 @@ function startOllamaPollingLoop(model) {
       const data = await readJson(res);
       if (window._ollamaPollTimer !== timer) return;
       updateOllamaUI(data);
+      if (typeof studioPullProgress === 'function') studioPullProgress();  // «Скачать» of the captions' models
       if (!data.pull_state || !data.pull_state.active) {
         clearInterval(timer);
         window._ollamaPollTimer = null;
         await loadSystemInfo();
+        if (typeof studioTranslateModelsChanged === 'function') studioTranslateModelsChanged();  // a translator downloaded
         if (data.pull_state && data.pull_state.progress === 100) {
           const pretty = formatModelName(model);
           showToast(t('llmReadyToast').replace('{name}', () => pretty));
@@ -2778,21 +2929,22 @@ const SETTINGS_RESET = {
   general: [['set-start-with-windows', 'start_with_windows', 'check'], ['set-close-to-tray', 'close_to_tray', 'check'],
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
     ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check'],
-    ['set-economy-mode', 'economy_mode', 'check'], ['set-economy-for', 'economy_for', 'value']],
+    ['set-economy-for', 'economy_for', 'value']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
     ['set-import-copy', 'import_copy', 'check'], ['set-voice-filter', 'rec_voice_filter', 'check']],
   recognition: [['set-diarization', 'diarization_enabled', 'check'], ['set-voice-profiles', 'voice_profiles', 'check'],
     ['set-vad', 'vad_filter', 'check'], ['set-proc-denoise', 'proc_denoise', 'check'], ['set-proc-loudnorm', 'proc_loudnorm', 'check'],
     ['set-proc-leveling', 'proc_leveling', 'check'], ['set-ask-import', 'ask_import_params', 'check'], ['set-clean-fillers', 'clean_fillers', 'check'],
-    ['set-onnx-gpu', 'onnx_gpu', 'check'], ['set-onnx-gigaam-device', 'onnx_gigaam_device', 'value'],
+    ['set-onnx-gigaam-device', 'onnx_gigaam_device', 'value'],
     ['set-onnx-parakeet-device', 'onnx_parakeet_device', 'value'], ['set-asr-ensemble', 'asr_ensemble', 'check']],
   analysis: [['set-auto-summary', 'auto_summary', 'check'], ['set-analysis-after-meetings', 'analysis_after_meetings', 'check'], ['set-auto-title', 'auto_title', 'check'],
     ['set-summary-grounding', 'summary_grounding', 'check'], ['set-analysis-chain', 'analysis_chain', 'check'], ['set-auto-commitments', 'auto_commitments', 'check'],
-    ['set-semantic', 'semantic_search', 'check']],
+    ['set-semantic', 'semantic_search', 'check'], ['set-live-tr-quality', 'live_translate_model_quality', 'value'],
+    ['set-live-tr-fast', 'live_translate_model_fast', 'value']],
   calendar: [['set-workday-start', 'work_day_start', 'value'], ['set-workday-end', 'work_day_end', 'value'],
     ['set-meetings-autorecord', 'meet_auto_all', 'check'], ['set-meetings-ask-inperson', 'meet_ask_inperson', 'check'],
-    ['set-meet-notify', 'meet_notify', 'check'], ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
+    ['set-meet-notify-before', 'meet_notify_before', 'value'], ['set-worktime-track', 'worktime_track', 'check'], ['set-apps-track', 'apps_track', 'check'], ['set-work-remind', 'work_remind_hours', 'value'], ['set-holiday-country', 'holiday_country', 'value'], ['set-holiday-subdiv', 'holiday_subdiv', 'value']],
   hotkeys: [['set-record-hotkey', 'record_hotkey', 'value'], ['set-dictation-hotkey', 'dictation_hotkey', 'value'],
     ['set-translate-hotkey', 'dictation_translate_hotkey', 'value'], ['set-dictation-language', 'dictation_language', 'value'],
     ['set-dictation-save', 'dictation_save', 'check']],
@@ -2806,6 +2958,7 @@ const SETTINGS_DEFAULTS = {
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
+  live_translate_model_quality: '', live_translate_model_fast: '',
   work_day_start: '09:00', work_day_end: '18:00', meet_auto_all: 'false', meet_ask_inperson: 'true',  // as the controls show them
   holiday_country: '', holiday_subdiv: '', meet_notify: 'true', meet_notify_before: '300', worktime_track: 'true', apps_track: 'false', work_remind_hours: '8',
   record_hotkey: 'Ctrl+Alt+R', dictation_hotkey: 'Ctrl+Alt+D', dictation_translate_hotkey: 'Ctrl+Alt+T', dictation_language: 'auto',
@@ -2883,10 +3036,10 @@ function fillWorkdaySettings(s) {
   if (a) a.checked = s.meet_auto_all === 'true';
   const b = document.getElementById('set-meetings-ask-inperson');
   if (b) b.checked = s.meet_ask_inperson !== 'false';
-  const nt = document.getElementById('set-meet-notify');
-  if (nt) nt.checked = s.meet_notify !== 'false';
+  // the notifications of meetings: one list, «Выключены» (meet_notify) or how long before (meet_notify_before)
   const nb = document.getElementById('set-meet-notify-before');
-  if (nb) nb.value = [...nb.options].some(o => o.value === String(s.meet_notify_before)) ? String(s.meet_notify_before) : '300';
+  if (nb) nb.value = s.meet_notify === 'false' ? 'off'
+    : [...nb.options].some(o => o.value === String(s.meet_notify_before)) ? String(s.meet_notify_before) : '300';
   const wt = document.getElementById('set-worktime-track');
   if (wt) wt.checked = s.worktime_track !== 'false';
   const at = document.getElementById('set-apps-track');
@@ -3252,6 +3405,11 @@ function holidayPayload() {
   return { holiday_country: sel.value || '', holiday_subdiv: keepSub ? HOLIDAYS.want.subdiv : (sub?.value || '') };
 }
 
+function meetNotifyBefore() {
+  const v = document.getElementById('set-meet-notify-before')?.value;
+  return v && v !== 'off' ? v : String((((state.system || {}).settings || {}).meet_notify_before) || '300');
+}
+
 function workdaySettingsPayload() {
   const v = (id, d) => document.getElementById(id)?.value || d;
   return {
@@ -3259,8 +3417,9 @@ function workdaySettingsPayload() {
     work_day_end: String(parseInt(v('set-workday-end', '18:00'), 10)),
     meet_auto_all: String(!!document.getElementById('set-meetings-autorecord')?.checked),
     meet_ask_inperson: String(document.getElementById('set-meetings-ask-inperson')?.checked !== false),
-    meet_notify: String(document.getElementById('set-meet-notify')?.checked !== false),
-    meet_notify_before: document.getElementById('set-meet-notify-before')?.value || '300',
+    meet_notify: String(document.getElementById('set-meet-notify-before')?.value !== 'off'),
+    // «Выключены» keeps the time chosen before
+    meet_notify_before: meetNotifyBefore(),
     worktime_track: String(document.getElementById('set-worktime-track')?.checked !== false),
     // only from the switch itself: turned on from «Главная», it is not turned off by a page without the switch
     ...(document.getElementById('set-apps-track') ? { apps_track: String(document.getElementById('set-apps-track').checked) } : {}),
@@ -3295,9 +3454,11 @@ function settingsCards(section) {
   return [...section.children].filter(el => !el.classList.contains('sx-section-head'));
 }
 
+// the card's text, its fields' hints and its search words (data-sx-keys: the former names of its options and words
+// in both languages, so «эхо», «CFG» or «vault» still find the card after the options were renamed)
 function settingsCardText(card) {
   const extra = [...card.querySelectorAll('[placeholder],[title]')].map(el => `${el.placeholder || ''} ${el.title || ''}`).join(' ');
-  return `${card.textContent} ${extra}`.toLowerCase().replace(/\s+/g, ' ');
+  return `${card.textContent} ${extra} ${card.dataset.sxKeys || ''}`.toLowerCase().replace(/\s+/g, ' ');
 }
 
 function settingsSearch(value) {

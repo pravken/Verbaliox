@@ -394,9 +394,9 @@ function stopSettingsAudioTest() {
 // --- Recording presets (like scenes in OBS): one click records from the chosen sources ---
 // Built-in presets plus the user's own, kept in the settings (record_presets, record_default_preset)
 const BUILTIN_PRESETS = [
-  { id: 'call', builtin: true, source: 'both', mic: '', live: true, translate: '' },
-  { id: 'note', builtin: true, source: 'mic', mic: '', live: false, translate: '' },
-  { id: 'system', builtin: true, source: 'system', mic: '', live: false, translate: '' },
+  { id: 'call', builtin: true, source: 'both', mic: '' },
+  { id: 'note', builtin: true, source: 'mic', mic: '' },
+  { id: 'system', builtin: true, source: 'system', mic: '' },
 ];
 
 function recordPresets() {
@@ -421,7 +421,7 @@ async function saveRecordPresetSettings(own, defaultId) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }),
   });
   const data = await res.json().catch(() => ({}));
-  if (res.ok && data.settings && state.system) state.system.settings = data.settings;
+  if (res.ok && data.settings && state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 function renderRecordPresetSelect(selectedId) {
@@ -442,10 +442,9 @@ function applyRecordPreset(id) {
   document.getElementById('record-source-select').value = p.source;
   const micSel = document.getElementById('record-mic-select');
   if (p.mic && [...micSel.options].some(o => o.value === p.mic)) micSel.value = p.mic;
-  document.getElementById('live-captions-toggle').checked = !!p.live;
+  // the captions and their translation are not a preset's: one setting each, as the studio's switch and language
+  // left them (asked by the user: a preset applied at every «Запись» turned them back)
   if (p.video !== undefined) document.getElementById('record-video-select').value = p.video || '';
-  document.getElementById('live-translate-select').value = p.translate || '';
-  saveLiveCaptionPrefs();
   renderRecordPresetSelect(p.id);
   renderStudioExtras();
 }
@@ -455,8 +454,6 @@ function presetFromForm(base) {
     ...base,
     source: document.getElementById('record-source-select').value,
     mic: document.getElementById('record-mic-select').value || '',
-    live: document.getElementById('live-captions-toggle').checked,
-    translate: document.getElementById('live-translate-select').value || '',
     video: document.getElementById('record-video-select').value || '',
   };
 }
@@ -515,7 +512,7 @@ function toggleRecordPresetMenu(e) {
   const sourceName = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') };
   menu.innerHTML = recordPresets().map(p => item(
     [['hideRecordPresetMenu'], ['quickRecord', p.id]], p.id === def ? '★' : '', presetLabel(p),
-    sourceName[p.source] + (p.live ? ` · ${t('presetWithCaptions')}` : ''))).join('')
+    sourceName[p.source])).join('')
     + '<div class="h-px bg-white/10 my-1"></div>'
     + item([['hideRecordPresetMenu'], ['openRecordModal']], '', t('presetOpenSettings'), '');
   menu.classList.toggle('hidden');
@@ -640,6 +637,8 @@ async function meetingFollowTick() {
     mf.base = title;
     const input = document.getElementById('record-title-input');
     if (input && !input.value.trim()) input.value = title;  // named after the meeting
+    reportRecordingState(true);  // a recording of the meeting now: the queue waits for its end
+    studioHoldCaptionsForMeeting();
     return;
   }
   if (!title) {
@@ -664,6 +663,17 @@ async function meetingFollowTick() {
   if (title !== mf.cand) { mf.cand = title; mf.candSince = now; return; }
   if (now - mf.candSince < MEETING_SWITCH_MS) return;
   await meetingSwitchTo(title);
+}
+
+// A recording found to be of a meeting after its start: captions that started by themselves stop, as they would have
+// been held at the start («Не мешать на встречах»); ones turned on by hand go on. The setting stays as it is
+function studioHoldCaptionsForMeeting() {
+  if (!liveCap.autoStarted || !captionsHeldAtStart(liveSettings(), true)) return;
+  liveCap.autoStarted = false;
+  stopLiveCaptions();
+  document.getElementById('live-captions-toggle').checked = false;
+  liveCap.autoOff = true;
+  syncStudioCaptions();
 }
 
 async function meetingSwitchTo(title) {
@@ -710,7 +720,7 @@ async function studioAsk() {
       // Lines of the sessions before a restart of the captions: the server has only the current one
       body: JSON.stringify({
         question: q, lang: state.uiLang === 'en' ? 'en' : 'ru', offset: liveCap.offset || 0,
-        earlier: [...liveCap.lines.values()].filter(ln => ln.id <= (liveCap.idBase || 0) && ln.text)
+        earlier: [...(liveCap.gone || []), ...liveCap.lines.values()].filter(ln => ln.id <= (liveCap.idBase || 0) && ln.text)
           .sort((a, b) => a.id - b.id).slice(-3000).map(ln => ({ at: ln.at || 0, text: ln.text })),
       }),
     });
@@ -896,16 +906,17 @@ function renderStudioPeople() {
   stPeople.marks.forEach(m => { counts[m.name] = (counts[m.name] || 0) + 1; });
   const options = [`<option value="0">${escapeHtml(t('stPeopleAuto'))}</option>`,
     ...Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)].join('');
-  const html = `<div class="st-people-head"><span class="st-sub-title">${escapeHtml(t('stPeopleTitle'))}</span>
+  const html = `<div class="st-people-head"><span class="st-sub-title" title="${escapeHtml(t('stPeopleHint'))}">${escapeHtml(t('stPeopleTitle'))}</span>
       <label class="st-people-count">${escapeHtml(t('stPeopleCount'))}
         <select class="st-field" data-change="stPeopleSetCount" data-change-args='[{"$": "value"}]' title="${escapeHtml(t('tipStPeopleCount'))}">${options}</select></label></div>
     <div class="st-people-chips">${stPeople.names.map((n, i) => `<button type="button" class="lt-chip st-person${counts[n] ? ' is-marked' : ''}"
         ${rec ? '' : 'disabled'} data-click="stPeopleMark" data-click-args='[${i}]'
         title="${escapeHtml(rec ? t('tipStPersonMark') : t('tipStPersonIdle'))}">${escapeHtml(n)}${counts[n] ? `<span class="st-person-n">${counts[n]}</span>` : ''}</button>`).join('')}
       <button type="button" class="lt-chip st-person-add" data-click="stPeopleAdd">${VX_PLUS}${escapeHtml(t('stPeopleAdd'))}</button></div>
-    <p class="st-people-hint">${escapeHtml(t(rec ? 'stPeopleHintRec' : 'stPeopleHint'))}</p>
+    ${rec ? `<p class="st-people-hint">${escapeHtml(t('stPeopleHintRec'))}</p>` : ''}
     ${stTeamsOn() ? `<p class="st-people-teams">${escapeHtml(stTeamsLine())}
       <button type="button" class="st-link" data-click="showTeamsHelp">${escapeHtml(t('teamsHelpLink'))}</button></p>` : ''}`;
+  renderStudioRail();
   // Drawn again only when something changed: the captions call this every second, and a list being
   // opened (how many) closed under the pointer
   if (box._html === html) return;
@@ -978,6 +989,7 @@ function showTeamsHelp() {
 function stPeopleSetCount(v) {
   stPeople.count = Number(v) || 0;
   stPeople.manual = true;
+  renderStudioRail();
 }
 
 async function stPeopleAdd() {
@@ -1019,21 +1031,80 @@ function saveRecordVideoPref() {
   renderStudioState();
 }
 
+// «Папка записей…» of the panel «Встреча»: the folder itself in its tooltip, changed in Settings → Recording
 function renderRecordSaveHint() {
   const dir = state.system && state.system.paths && state.system.paths.recordings;
-  // only the path may break anywhere, not the words around it
-  document.getElementById('record-save-hint').innerHTML = dir
-    ? escapeHtml(t('recordSaveHint')).replace('{dir}', () => `<span class="break-all">${escapeHtml(dir)}</span>`) : '';
+  const link = document.getElementById('st-folder-link');
+  if (link) link.title = dir ? t('recordSaveHint').replace('{dir}', () => dir) : '';
 }
 
 // --- Live captions while recording ---
 // The same mixed stream that is recorded is tapped by an AudioWorklet, resampled to 16 kHz mono
-// 16-bit PCM and posted about once a second; each answer carries new final lines, their
+// 16-bit PCM and posted every LIVE_SEND_MS (each block of the worklet, about 0.25 s): the draft line then follows
+// the speech within a fraction of a second. One post at a time; each answer carries new final lines, their
 // translations and the current draft line.
+const LIVE_SEND_MS = 250;
 const liveCap = { session: null, node: null, pcm: [], pcmLen: 0, inFlight: false, timer: null, lines: new Map(), partial: '', lastId: 0 };
 
 function liveCaptionPrefs() {
   try { return JSON.parse(localStorage.getItem('verbaliox_live_captions') || '{}'); } catch (e) { return {}; }
+}
+
+// The studio's choices are settings kept on the server (localStorage is per port, see syncUiPrefsFromServer):
+// «Субтитры» is «Включать субтитры при начале записи», the caption model is «Модель субтитров», the translation
+// model is the one of «Качество» or «Быстро» in «Модели перевода»; the language and the mode are live_translate_to
+// and live_speed. Settings shows the same values
+function liveSettings() {
+  return (state.system && state.system.settings) || {};
+}
+
+function studioTrSettingKey(speed) {
+  return speed === 'fast' ? 'live_translate_model_fast' : 'live_translate_model_quality';
+}
+
+function studioCapChoice() {
+  return (liveCap.session ? liveCap.captionChoice : (liveSettings().live_whisper_model || state.liveModelSetting)) || 'auto';
+}
+
+function studioTrChoice() {
+  return (liveCap.session ? liveCap.translateChoice : liveSettings()[studioTrSettingKey(studio.speed)]) || '';
+}
+
+const STUDIO_SETTING_CONTROLS = {
+  live_captions_auto: 'set-live-captions-auto', live_whisper_model: 'set-live-model',
+  live_translate_model_quality: 'set-live-tr-quality', live_translate_model_fast: 'set-live-tr-fast',
+};
+
+// A choice of the studio saved as its setting (`post`: by the page; else the captions' session saved it), and
+// shown by the control of the Settings window
+function studioKeepSetting(key, value, post = true) {
+  if (post) saveUiSetting(key, value);
+  else if (state.system && state.system.settings) state.system.settings[key] = value;
+  if (key === 'live_whisper_model') state.liveModelSetting = value;
+  const el = document.getElementById(STUDIO_SETTING_CONTROLS[key] || '');
+  if (!el) return;
+  if (el.type === 'checkbox') el.checked = value === 'true';
+  else if ([...el.options].some(o => o.value === value)) el.value = value;
+}
+
+// The settings arrived or were changed in Settings: the studio shows them (not while recording: the switch is the
+// recording's then). An earlier version kept the language and the mode in localStorage only: taken once
+function studioPrefsFromSettings() {
+  const s = liveSettings();
+  if (!state.system || isRecording()) return;
+  if (s.live_speed === 'quality' || s.live_speed === 'fast') studio.speed = s.live_speed;
+  else saveUiSetting('live_speed', studio.speed);
+  const sel = document.getElementById('live-translate-select');
+  if (s.live_translate_to === undefined) {
+    const old = liveCaptionPrefs().translate;
+    if (old) saveUiSetting('live_translate_to', old);
+  } else if (sel && sel.options.length && sel.value !== s.live_translate_to && [...sel.options].some(o => o.value === s.live_translate_to)) {
+    sel.value = s.live_translate_to;
+    studio.lastTarget = sel.value || null;
+  }
+  const box = document.getElementById('live-captions-toggle');
+  if (box) box.checked = s.live_captions_auto === 'true';
+  if (document.getElementById('studio-speed-quality')) renderStudioControls();
 }
 
 // The model pickers above the captions: "Auto · <model in use>" and the downloaded models
@@ -1043,41 +1114,304 @@ function fillModelSelect(sel, options, value) {
   if (document.activeElement !== sel) sel.value = options.some(o => o[0] === value) ? value : options[0][0];
 }
 
+// The Ollama models the translation can use, and the ones «Качество» and «Быстро» take (asked once)
+function studioLoadLlmModels() {
+  if (studio.llmModels) return;
+  studio.llmModels = [];
+  fetch('/api/live/models').then(r => r.json()).then(d => {
+    studio.llmModels = d.installed || [];
+    studio.llmChoices = d.auto || {};  // what «Авто» takes for each mode
+    syncStudioCaptions();
+  }).catch(() => {});
+}
+
+// The caption model the captions use, or would use when they start: the one chosen, or the one «Авто» takes
+// (the same rule as app/live.py caption_onnx_model and caption_model). '' when it cannot be told
+function studioCapModelId() {
+  const cat = state.whisperCatalog || [];
+  if (liveCap.session && liveCap.captionModel) {
+    const m = cat.find(x => x.name === liveCap.captionModel || formatModelName(x.id) === liveCap.captionModel);
+    if (m) return m.id;
+  }
+  const installed = id => cat.some(x => x.id === id && x.installed);
+  const onnx = cat.filter(x => x.engine === 'onnx');
+  const isOnnx = id => onnx.some(x => x.id === id);
+  const lang = studio.speech && studio.speech !== 'auto' ? studio.speech.slice(0, 2) : '';
+  const fits = x => !!x && x.installed && (!lang || (x.languages || []).includes(lang));
+  const chosen = studioCapChoice();
+  if (isOnnx(chosen) && fits(onnx.find(x => x.id === chosen))) return chosen;
+  if (chosen === 'auto') {
+    const m = (lang === 'ru' ? ['gigaam-v3', 'parakeet-v3'] : ['parakeet-v3']).map(id => onnx.find(x => x.id === id)).find(fits);
+    if (m) return m.id;
+  }
+  if (!cat.length) return '';
+  let main = (((state.system || {}).models || {}).active_whisper) || 'large-v3-turbo';
+  if (isOnnx(main)) main = ['large-v3-turbo', 'large-v3'].find(installed) || 'large-v3-turbo';
+  const whisper = isOnnx(chosen) ? 'auto' : chosen;
+  if (whisper !== 'auto') return installed(whisper) ? whisper : main;
+  return installed('large-v3-turbo') ? 'large-v3-turbo' : main;
+}
+
+// The translation model: the one chosen, the one at work, or the one «Качество / Скорость» takes
+function studioTrModelId() {
+  const choice = studioTrChoice();
+  if (choice) return choice;
+  const llm = studio.llmModels || [];
+  if (liveCap.session && liveCap.translateModel) {
+    const m = llm.find(x => formatModelName(x) === liveCap.translateModel);
+    if (m) return m;
+  }
+  const ch = studio.llmChoices || {};
+  return (studio.speed === 'fast' && ch.fast) || ch.quality || '';
+}
+
+// «1.5 GB», «900 MB» of a catalog → gigabytes; null for anything else («Локальная»)
+function studioSizeGb(text) {
+  const m = /([\d.,]+)\s*(GB|MB)/i.exec(String(text || ''));
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(',', '.'));
+  return Number.isFinite(n) ? (/MB/i.test(m[2]) ? n / 1024 : n) : null;
+}
+
+// What a caption model takes and where: {gb, where ('gpu' | 'cpu'), state ('loaded' | 'ready' | 'missing')}.
+// The size is the one /api/vram measured for a loaded Ollama model, else the catalog's; unknown stays null
+function studioModelInfo(kind, id) {
+  if (!id) return null;
+  const chips = (vram.data && vram.data.chips) || [];
+  const gpu = !!(vram.data && vram.data.gpu);
+  if (kind === 'cap') {
+    const item = (state.whisperCatalog || []).find(x => x.id === id);
+    if (item && item.engine === 'onnx') {
+      // the captions run GigaAM / Parakeet on the processor (app/live.py caption_onnx_model)
+      const chip = chips.find(c => c.kind === 'onnx' && c.name === id);
+      return { gb: item.size_mb ? item.size_mb / 1024 : null, where: 'cpu',
+        state: chip && chip.loaded ? 'loaded' : item.installed ? 'ready' : 'missing' };
+    }
+    const chip = chips.find(c => c.kind === 'live' && c.name === id && c.loaded);
+    const onGpu = gpu && ((state.system && state.system.settings && state.system.settings.device) || 'cuda') === 'cuda';
+    return { gb: item ? studioSizeGb(item.size) : null, where: chip && chip.where ? chip.where : onGpu ? 'gpu' : 'cpu',
+      state: chip ? 'loaded' : item && item.installed ? 'ready' : 'missing' };
+  }
+  const chip = chips.find(c => c.kind === 'ollama' && c.name === id);
+  const ollama = state.lastOllama || (state.system || {}).ollama || {};
+  // the analysis models and the translators (Hy-MT3) have their sizes in the catalogs
+  const cat = [...(ollama.catalog || []), ...(ollama.translate_catalog || [])].find(x => x.id === id || x.installed_as === id);
+  const loaded = !!(chip && chip.loaded);
+  return { gb: loaded && chip.size_gb ? Number(chip.size_gb) : (cat ? studioSizeGb(cat.size) : null),
+    where: chip && chip.where ? chip.where : gpu ? 'gpu' : 'cpu',
+    state: loaded ? 'loaded' : (studio.llmModels || []).includes(id) || (chip && !chip.loaded) ? 'ready' : 'missing' };
+}
+
+// The models of the captions now: the recognition one, and the translation one while translating
+function studioCapModels() {
+  const target = document.getElementById('live-translate-select').value;
+  const out = [{ kind: 'cap', id: studioCapModelId() }];
+  if (target) out.push({ kind: 'tr', id: studioTrModelId() });
+  return out.map(m => ({ ...m, info: studioModelInfo(m.kind, m.id) }));
+}
+
+function studioGb(x) {
+  return `${(Math.round(Number(x || 0) * 10) / 10).toLocaleString(state.uiLang === 'en' ? 'en-GB' : 'ru-RU')} ${t('unitGB')}`;
+}
+
+// The chip of the models: the memory the captions' models take (all of them known, else «—»), and its popover
 function renderStudioModels(target) {
-  const box = document.getElementById('studio-models');
-  box.classList.toggle('hidden', !liveCap.session);
-  if (!liveCap.session) return;
-  const auto = t('liveModelAuto');
-  const capChoice = liveCap.captionChoice || 'auto';
-  fillModelSelect(document.getElementById('studio-cap-model'), [
-    ['auto', capChoice === 'auto' && liveCap.captionModel ? `${auto} · ${liveCap.captionModel}` : auto],
+  const on = document.getElementById('live-captions-toggle').checked;
+  const models = studioCapModels();
+  const known = models.every(m => m.info && m.info.gb != null);
+  const pillText = on && known ? studioGb(models.reduce((s, m) => s + m.info.gb, 0)) : '—';
+  if (target) studioLoadLlmModels();
+  const pill = document.getElementById('st-models-gb');
+  if (pill.textContent !== pillText) pill.textContent = pillText;
+  const pop = document.getElementById('st-models-pop');
+  if (pop.classList.contains('hidden')) return;
+  const auto = t('liveAutoShort');
+  const capSel = document.getElementById('studio-cap-model');
+  const capId = models[0].id;
+  const capChoice = studioCapChoice();
+  fillModelSelect(capSel, [
+    ['auto', capChoice === 'auto' && capId ? `${auto} · ${formatModelName(capId)}` : auto],
     ...(state.onnxInstalled || []).map(id => [id, formatModelName(id)]),
     ...(state.whisperInstalled || []).map(id => [id, formatModelName(id)]),
   ], capChoice);
+  // chosen before the captions start too: saved, they start with it
+  const row = (kind, m) => {
+    const info = m && m.info;
+    const gb = document.getElementById(`st-${kind}-model-gb`);
+    const gbLabel = info && info.gb != null ? studioGb(info.gb) + (info.where === 'cpu' ? ` · ${t('stModelRam')}` : '') : '';
+    if (gb.textContent !== gbLabel) gb.textContent = gbLabel;
+    gb.title = info && info.gb != null && info.where === 'cpu' ? t('tipStModelRam') : '';
+    const st = document.getElementById(`st-${kind}-model-state`);
+    const s = info && m.id ? info.state : '';
+    const label = s ? t({ loaded: 'stModelInMemory', ready: 'stModelWillLoad', missing: 'stModelNotDownloaded' }[s]) : '';
+    if (st.textContent !== label) st.textContent = label;
+    st.className = `st-mstate${s ? ` is-${s}` : ''}`;
+  };
+  row('cap', models[0]);
   document.getElementById('studio-tr-model-wrap').classList.toggle('hidden', !target);
-  if (!target) return;
-  const trChoice = liveCap.translateChoice || '';
-  fillModelSelect(document.getElementById('studio-tr-model'), [
-    ['', !trChoice && liveCap.translateModel ? `${auto} · ${liveCap.translateModel}` : auto],
-    ...(studio.llmModels || []).map(m => [m, formatModelName(m)]),
-  ], trChoice);
-  if (!studio.llmModels) {
-    studio.llmModels = [];
-    fetch('/api/live/models').then(r => r.json()).then(d => { studio.llmModels = d.installed || []; syncStudioCaptions(); }).catch(() => {});
+  document.getElementById('st-speed-row').classList.toggle('hidden', !target);
+  if (target) {
+    const trSel = document.getElementById('studio-tr-model');
+    const trChoice = studioTrChoice();
+    const trId = models[1] && models[1].id;
+    fillModelSelect(trSel, [
+      ['', !trChoice && trId ? `${auto} · ${formatModelName(trId)}` : auto],
+      ...(studio.llmModels || []).map(m => [m, formatModelName(m)]),
+    ], trChoice);
+    row('tr', models[1]);
   }
+  studioRenderTrOffer(target);
+  // the video memory once the models not loaded yet are in it, when there is a video card
+  const gpu = vram.data && vram.data.gpu;
+  const lines = [];
+  if (gpu && known) {
+    const add = models.reduce((s, m) => s + (m.info.where === 'gpu' && m.info.state !== 'loaded' ? m.info.gb : 0), 0);
+    lines.push(t('stModelsVram').replace('{used}', () => studioGb(Math.min(gpu.total_gb, Number(gpu.used_gb || 0) + add)).replace(` ${t('unitGB')}`, ''))
+      .replace('{total}', () => studioGb(gpu.total_gb)));
+  }
+  if (!liveCap.session) lines.push(t('stModelsSaved'));  // chosen before the captions start: kept for them
+  const note = document.getElementById('st-models-note');
+  const text = lines.join('\n');
+  if (note.textContent !== text) note.textContent = text;
+}
+
+// The translator offered for this computer (app/hardware.py by the card) while it is not downloaded: its name,
+// its size in the size column and «Скачать» in the state column, like the rows above
+function studioRenderTrOffer(target) {
+  const rec = target && typeof recommendedTranslateModel === 'function' ? recommendedTranslateModel() : null;
+  const show = !!rec && !rec.installed;
+  document.getElementById('st-tr-offer').classList.toggle('hidden', !show);
+  if (!show) return;
+  const text = t('stTrOffer').replace('{name}', () => formatModelName(rec.id));
+  const el = document.getElementById('st-tr-offer-text');
+  if (el.textContent !== text) el.textContent = text;
+  const gb = studioSizeGb(rec.size);
+  document.getElementById('st-tr-offer-gb').textContent = gb != null ? studioGb(gb) : '';
+  const pull = state.ollamaPullState || {};
+  const busy = !!pull.active;
+  const btn = document.getElementById('st-tr-offer-btn');
+  const label = busy && pull.model === rec.id ? `${pull.progress || 1}%` : t('uiDownload');
+  if (btn.textContent !== label) btn.textContent = label;
+  btn.disabled = busy;  // one Ollama download at a time
+}
+
+async function studioPullTranslateModel() {
+  const rec = typeof recommendedTranslateModel === 'function' ? recommendedTranslateModel() : null;
+  if (!rec || rec.installed) return;
+  await pullTranslateModel(rec.id);
+  studioPullProgress();
+}
+
+// The percent of the download on «Скачать» while the popover is open (the settings' download loop calls it)
+function studioPullProgress() {
+  if (document.getElementById('st-models-pop')?.classList.contains('hidden')) return;
+  studioRenderTrOffer(document.getElementById('live-translate-select')?.value);
+}
+
+// A model downloaded into Ollama: the captions' list of translation models is asked again
+function studioTranslateModelsChanged() {
+  studio.llmModels = null;
+  renderStudioCapBar();
+}
+
+// The chips of the captions follow the hidden switch and list: the recording, the ready-made settings and the
+// economy mode set those
+function renderStudioCapBar() {
+  const box = document.getElementById('live-captions-toggle');
+  const sel = document.getElementById('live-translate-select');
+  if (!box || !sel) return;
+  const on = box.checked;
+  const capPill = document.getElementById('st-cap-pill');
+  capPill.setAttribute('aria-checked', String(on));
+  capPill.classList.toggle('is-on', on);
+  // off: the chip is outlined and glows softly, so the captions are easy to find and turn on
+  capPill.classList.toggle('is-call', !on);
+  const opt = sel.selectedOptions[0];
+  const label = opt ? opt.textContent : t('liveNoTranslation');
+  const lab = document.getElementById('st-tr-pill-label');
+  if (lab.textContent !== label) lab.textContent = label;
+  const trPill = document.getElementById('st-tr-pill');
+  trPill.classList.toggle('is-on', on && !!sel.value);
+  trPill.classList.toggle('is-dim', !on);
+  document.getElementById('st-models-pill').classList.toggle('is-dim', !on);
+  renderStudioModels(sel.value);
+}
+
+// «Субтитры»: the switch inside the chip turns the captions on or off
+function studioCaptionsPill() {
+  const box = document.getElementById('live-captions-toggle');
+  box.checked = !box.checked;
+  renderStudioCapBar();
+  studioToggleCaptions(box.checked);
+}
+
+// The language chip: the app's menu with «Без перевода» first, then what the list of languages offers
+function openStudioTranslateMenu(el) {
+  const sel = document.getElementById('live-translate-select');
+  const r = el.getBoundingClientRect();
+  const items = [...sel.options].map(o => ({ label: o.textContent, on: o.value === sel.value,
+    run: () => { sel.value = o.value; studioConfigure(); } }));
+  if (items.length > 1) items.splice(1, 0, { sep: true });
+  setTimeout(() => {
+    openTextMenuAt(items, r.right, r.bottom + 6, { owner: el, right: true, maxWidth: 320, maxHeight: 420 });
+    document.querySelector('#text-menu .tm-on')?.scrollIntoView({ block: 'nearest' });  // the language chosen now
+  }, 0);
+}
+
+// The popovers of the models and of the gear: one at a time, closed by Esc, a second click or a click elsewhere
+function studioPopToggle(popId, btnId) {
+  const pop = document.getElementById(popId);
+  const open = pop.classList.contains('hidden');
+  closeStudioModelsPop();
+  closeStudioCapMore();
+  pop.classList.toggle('hidden', !open);
+  document.getElementById(btnId).setAttribute('aria-expanded', String(open));
+  return open;
+}
+
+function toggleStudioModelsPop() {
+  if (studioPopToggle('st-models-pop', 'st-models-pill')) {
+    renderStudioCapBar();
+    if (typeof scheduleVramRefresh === 'function') scheduleVramRefresh(50);  // the memory of now
+  }
+}
+
+function closeStudioModelsPop() {
+  document.getElementById('st-models-pop')?.classList.add('hidden');
+  document.getElementById('st-models-pill')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleStudioCapMore() {
+  studioPopToggle('st-cap-more', 'st-cap-more-btn');
+}
+
+function closeStudioCapMore() {
+  document.getElementById('st-cap-more')?.classList.add('hidden');
+  document.getElementById('st-cap-more-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 function studioSetCaptionModel(value) { return studioSetModels({ caption_model: value }); }
 function studioSetTranslateModel(value) { return studioSetModels({ translate_model: value }); }
 
+// The models chosen in the studio are the settings (Settings → «Модель субтитров», «Модели перевода» for the mode in
+// use): saved for the next captions, and applied to the running ones by their session, which saves them too
 async function studioSetModels(change) {
-  if (!liveCap.session) return;
-  if ('caption_model' in change) { liveCap.captionChoice = change.caption_model; state.liveModelSetting = change.caption_model; }
-  if ('translate_model' in change) liveCap.translateChoice = change.translate_model;
+  const session = !!liveCap.session;
+  if ('caption_model' in change) {
+    change.caption_model = change.caption_model || 'auto';
+    liveCap.captionChoice = change.caption_model;
+    studioKeepSetting('live_whisper_model', change.caption_model, !session);
+  }
+  if ('translate_model' in change) {
+    change.translate_model = change.translate_model || '';
+    liveCap.translateChoice = change.translate_model;
+    studioKeepSetting(studioTrSettingKey(studio.speed), change.translate_model, !session);
+  }
+  if (!session) { syncStudioCaptions(); return; }
   try {
     const res = await fetch(`/api/live/${liveCap.session}/config`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ translate_to: document.getElementById('live-translate-select').value || null, pair: quickLangs(), ...change }),
+      body: JSON.stringify({ translate_to: document.getElementById('live-translate-select').value || null, pair: quickLangs(), speed: studio.speed, ...change }),
     });
     if (!res.ok) showError((await res.json().catch(() => ({}))).detail);
   } catch (e) { console.error(e); }
@@ -1092,9 +1426,9 @@ function liveDraftTrOn() {
   return !!document.getElementById('live-draft-tr-toggle')?.checked;
 }
 
+// The draft switches of this window; the language is the setting live_translate_to, kept here as its cache
 function saveLiveCaptionPrefs() {
   const prefs = {
-    on: document.getElementById('live-captions-toggle').checked || !!liveCap.autoOff,
     translate: document.getElementById('live-translate-select').value,
     draft: document.getElementById('live-draft-toggle').checked,
     draftTr: document.getElementById('live-draft-tr-toggle').checked,
@@ -1106,14 +1440,17 @@ async function initLiveCaptionControls() {
   if (liveCap.session) return;
   const prefs = liveCaptionPrefs();
   const codes = await textLanguages();
-  fillTranslateSelect(codes, prefs.translate || '');
+  const s = liveSettings();
+  fillTranslateSelect(codes, (s.live_translate_to !== undefined ? s.live_translate_to : prefs.translate) || '');
+  studio.lastTarget = document.getElementById('live-translate-select').value || null;
   // Speech: Whisper language codes (no script variants)
   const speech = document.getElementById('studio-speech');
   speech.innerHTML = `<option value="auto">${escapeHtml(t('studioSpeechAuto'))}</option>` + textLangOptions(codes, true);
   speech.value = studio.speech;
-  document.getElementById('live-captions-toggle').checked = !!prefs.on;
-  document.getElementById('live-draft-toggle').checked = !!prefs.draft;
-  document.getElementById('live-draft-tr-toggle').checked = !!prefs.draftTr;
+  document.getElementById('live-captions-toggle').checked = s.live_captions_auto === 'true';
+  // on unless turned off: the text and its translation follow the speech, not the end of the phrase
+  document.getElementById('live-draft-toggle').checked = prefs.draft !== false;
+  document.getElementById('live-draft-tr-toggle').checked = prefs.draftTr !== false;
   renderStudioControls();
 }
 
@@ -1146,6 +1483,7 @@ function relabelStudioLanguages() {
   speech.innerHTML = `<option value="auto">${escapeHtml(t('studioSpeechAuto'))}</option>` + textLangOptions(codes, true);
   speech.value = value;
   renderQuickLangs();
+  renderStudioCapBar();
 }
 
 function fillTranslateSelect(codes, value) {
@@ -1164,9 +1502,11 @@ function renderQuickLangs() {
   const btn = (value, label, title, menuIndex) =>
     `<button data-click="setQuickTranslate" data-click-args='[${jsArg(value)}]' ${menuIndex != null ? `data-contextmenu="openQuickLangMenu" data-contextmenu-args='[{"$": "event"}, ${Number(menuIndex) || 0}]'` : ''}
       class="quick-lang ${current === value ? 'on' : ''}" title="${escapeHtml(title)}">${escapeHtml(label)}</button>`;
-  box.innerHTML = btn(a, langCode(a), t('tipQuickLang').replace('{lang}', () => langName(a)), 0)
+  const html = btn(a, langCode(a), t('tipQuickLang').replace('{lang}', () => langName(a)), 0)
     + btn(b, langCode(b), t('tipQuickLang').replace('{lang}', () => langName(b)), 1)
     + btn('auto', `⇄ ${t('liveAutoShort')}`, t('tipQuickAuto').replace('{a}', () => langName(a)).replace('{b}', () => langName(b)), null);
+  // drawn on every caption update (renderStudioControls): written only when it changed
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
 }
 
 function setQuickTranslate(value) {
@@ -1276,9 +1616,10 @@ async function startLiveCaptions(ctx, stream) {
     // Sent from here too: with the window minimized the page's timers fire about once a minute, the
     // audio then reached the server in minute-long lumps and the captions came in batches. The audio
     // thread keeps its pace in the background
-    if (Date.now() - (liveCap.sentAt || 0) >= 1000) sendLiveAudio();
+    // (a little under the block's length, so a block that comes early is not left for the next one)
+    if (Date.now() - (liveCap.sentAt || 0) >= LIVE_SEND_MS - 50) sendLiveAudio();
   };
-  liveCap.timer = setInterval(sendLiveAudio, 1000);
+  liveCap.timer = setInterval(sendLiveAudio, LIVE_SEND_MS);
   liveCap.wall0 = Date.now();  // the session's times count from here: its lines are put on the clock
   syncStudioCaptions();
 }
@@ -1295,8 +1636,10 @@ async function sendLiveAudio() {
   liveCap.inFlight = true;
   liveCap.sentAt = Date.now();
   const session = liveCap.session;
+  // the version of the last answer of this session: the server sends only the lines changed since
+  const version = liveCap.versionOf === session ? liveCap.version : 0;
   try {
-    const res = await fetch(`/api/live/${session}/audio?since=${liveCap.lastId}`, {
+    const res = await fetch(`/api/live/${session}/audio?since=${liveCap.lastId}&v=${version}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: buf.buffer,
@@ -1329,6 +1672,7 @@ async function sendLiveAudio() {
     liveCap.translationReady = !!data.translation_ready;
     liveCap.lang = data.lang || liveCap.lang;
     liveCap.error = data.error || '';
+    if (Number.isInteger(data.version)) Object.assign(liveCap, { version: data.version, versionOf: session });
     syncStudioCaptions();
   } catch (e) {
     renderLiveCaptionsError(e.message);
@@ -1353,12 +1697,19 @@ function stopLiveCaptions() {
   }
 }
 
+// Whether the recording is of a meeting: a call or the calendar's meeting started it, or it follows a Teams meeting.
+// Only such a recording holds the queue («Не мешать на встречах»): a voice note recorded by hand does not (reported
+// by the user: a recording of a minute waited «до конца встречи»)
+function recordingIsMeeting() {
+  return !!(state.callRecording || (typeof hmAutoRec !== 'undefined' && hmAutoRec) || meetingFollow.base || meetingFollow.busy);
+}
+
 // The tray icon shows "recording" while the page records (app/app_status.py)
 function reportRecordingState(active) {
   fetch('/api/ui/state', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recording: !!active }),
+    body: JSON.stringify({ recording: !!active, meeting: !!active && recordingIsMeeting() }),
   }).catch(() => {});
 }
 
@@ -1422,13 +1773,12 @@ function renderStudioState() {
       .filter(Boolean).join(' · ');
   document.getElementById('studio-heading').textContent = t(rec ? 'studioRecording' : 'studioIdle');
   document.getElementById('studio-rec-dot').classList.toggle('studio-idle', !rec);
-  for (const id of ['studio-start-btn', 'btn-start-rec']) document.getElementById(id).classList.toggle('hidden', rec);
-  for (const id of ['studio-stop-btn', 'studio-cancel-btn', 'btn-stop-rec', 'btn-cancel-rec']) document.getElementById(id).classList.toggle('hidden', !rec);
+  document.getElementById('studio-start-btn').classList.toggle('hidden', rec);
+  for (const id of ['studio-stop-btn', 'studio-cancel-btn']) document.getElementById(id).classList.toggle('hidden', !rec);
   // What is recorded cannot change mid-recording; how captions look can
   for (const id of ['record-preset-select', 'record-source-select', 'record-mic-select', 'record-video-select', 'record-window-select', 'record-title-input']) {
     document.getElementById(id).disabled = rec;
   }
-  document.getElementById('rec-dot-indicator').classList.toggle('animate-ping', rec);
   updateRecordButtonState();
   renderStudioExtras();
 }
@@ -1461,11 +1811,20 @@ function renderStudioControls() {
     document.getElementById(`studio-view-${k}`).className = `tk-seg-btn${studio.view === k ? ' tk-on' : ''}`;
   });
   document.documentElement.style.setProperty('--cap-size', `${studio.font}px`);
+  renderStudioCapBar();
 }
 
 function studioSetView(v) { studio.view = v; saveStudioPrefs(); renderStudioControls(); syncStudioCaptions(); }
-function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); }
-function studioSetSpeed(s) { studio.speed = s; saveStudioPrefs(); renderStudioControls(); studioConfigure(); }
+function studioFont(d) { studio.font = Math.max(12, Math.min(40, studio.font + d)); saveStudioPrefs(); renderStudioControls(); capReleaseSizes(); }
+function studioSetSpeed(s) {
+  studio.speed = s;
+  saveUiSetting('live_speed', s);
+  saveStudioPrefs();
+  // the translation model is the one saved for this mode
+  if (liveCap.session) liveCap.translateChoice = liveSettings()[studioTrSettingKey(s)] || '';
+  renderStudioControls();
+  studioConfigure();
+}
 
 // Language or model changed while recording: the session translates the last lines again
 async function studioConfigure(speechChanged) {
@@ -1475,6 +1834,7 @@ async function studioConfigure(speechChanged) {
   studio.speech = document.getElementById('studio-speech').value || 'auto';
   saveStudioPrefs();
   saveLiveCaptionPrefs();
+  saveUiSetting('live_translate_to', target || '');
   renderStudioControls();
   if (targetChanged) capResetTranslations();
   if (!liveCap.session) { syncStudioCaptions(); return; }
@@ -1488,8 +1848,9 @@ async function studioConfigure(speechChanged) {
 }
 
 async function studioToggleCaptions(on) {
-  liveCap.autoOff = false;  // the user's own choice now
-  saveLiveCaptionPrefs();
+  liveCap.autoOff = false;  // the user's own choice now: it is the setting, for this recording and the next ones
+  liveCap.autoStarted = false;
+  studioKeepSetting('live_captions_auto', String(!!on));
   if (on && !liveCap.session && _recAudioCtx && window._recMixedStream) {
     try { await startLiveCaptions(_recAudioCtx, window._recMixedStream); } catch (e) { renderLiveCaptionsError(e.message); }
   } else if (!on) {
@@ -1499,36 +1860,180 @@ async function studioToggleCaptions(on) {
 }
 
 // --- Studio captions without flicker ---
-// Only final text is shown: the server revises the phrase being spoken two or three times, and
-// showing each revision looked like the same line appearing again and again. The phrase being
-// spoken is a quiet "…" row; when it becomes final its text fades in once, and its translation
-// fades in under it when it is ready. Every line keeps its own element while it is shown.
+// The phrase being spoken («Текст по ходу речи») comes again and again, revised. Replacing its whole
+// text made it flicker, jump and change size (reported by the user). A line is a row of word spans
+// instead: on each update the words it shares with the shown text from the start stay the same nodes,
+// a word the model revised changes in place with a short cross-fade, and the new words come one by one,
+// spread over the time the last update took to come (at most half a second, so the text does not lag
+// behind the speech; updates every 0.4 s or sooner show their words at once, with a short fade only).
+// The draft row becomes the final row in place, and its bubble does not shrink while the phrase is
+// revised. A line shown at once (final, never a draft) fades in whole. Every line keeps its own
+// element while it is shown.
 const CAP_MAX_ROWS = 150;
+const CAP_KEEP_LINES = 300;     // the lines the page keeps (liveCap.lines): twice those shown
+const CAP_SPREAD_MAX_MS = 500;  // the new words of an update come within this time at most: no lag behind the speech
+const CAP_SPREAD_FAST_MS = 400; // updates this often or more: their words at once
+const CAP_WORD_FADE_MS = 120;
+const CAP_QUEUE_MAX = 6;        // more words waiting than this: shown at once (the text keeps up with the speech)
 const capView = { rows: new Map(), draftKey: null, draftSeq: 0, stick: true };
 
-class CapTyper {
-  constructor(el) { this.el = el; this.target = ''; }
+// No fades and no pace: catching up after the window was hidden, or motion reduced in the system
+function capCalm() {
+  return !!capView.instant || !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
 
-  set(text) {
-    text = text || '';
-    if (text === this.target) return;
-    this.target = text;
-    this.el.textContent = text;
-    if (text && !capView.instant) {  // catching up after the window was hidden: no fade for each line
-      this.el.classList.remove('cap-in');
-      void this.el.offsetWidth;  // restarts the fade
-      this.el.classList.add('cap-in');
-    }
+function capSplit(text) { return String(text || '').split(/\s+/).filter(Boolean); }
+
+function capFade(el, from, ms) {
+  if (el.animate) el.animate([{ opacity: from }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+}
+
+class CapTyper {
+  constructor(el, onChange) {
+    this.el = el;
+    this.target = '';
+    this.words = [];   // the words of the target
+    this.spans = [];   // the words shown: a prefix of this.words, one span each ({ w, el })
+    this.timer = null;
+    this.onChange = onChange || (() => {});
   }
 
-  jump() { this.el.textContent = this.target; }
+  // live: the phrase being spoken (its new words come one by one, within spreadMs); else the text is shown at once
+  set(text, live = false, spreadMs = CAP_SPREAD_MAX_MS) {
+    text = text || '';
+    if (text === this.target) { if (!live && this.spans.length < this.words.length) this.flush(capCalm()); return; }
+    this.target = text;
+    const words = capSplit(text);
+    const calm = capCalm();
+    if (!this.spans.length && !live) {  // a line shown at once: it fades in whole
+      this.words = words;
+      this.flush(true);
+      if (text && !calm) {
+        this.el.classList.remove('cap-in');
+        void this.el.offsetWidth;  // restarts the fade
+        this.el.classList.add('cap-in');
+      }
+      return;
+    }
+    this.diff(words, calm);
+    const waiting = this.words.length - this.spans.length;
+    if (!live || calm || spreadMs <= CAP_SPREAD_FAST_MS || waiting > CAP_QUEUE_MAX) { this.flush(calm); return; }
+    this.stepMs = Math.min(CAP_SPREAD_MAX_MS, spreadMs) / Math.max(1, waiting);  // the last word within that time
+    this.pace();
+  }
+
+  // The shown words against the new ones: the same from the start stay untouched, the revised ones
+  // change in place, the ones no longer said go
+  diff(words, calm) {
+    let k = 0;
+    while (k < this.spans.length && k < words.length && this.spans[k].w === words[k]) k++;
+    const keep = Math.min(this.spans.length, words.length);
+    for (let i = k; i < keep; i++) {
+      const sp = this.spans[i];
+      const grown = words[i].startsWith(sp.w);  // «план» → «план.»: the word goes on, no fade
+      sp.w = words[i];
+      sp.el.textContent = (i ? ' ' : '') + words[i];
+      if (!calm && !grown) capFade(sp.el, 0.25, 180);
+    }
+    let gone = false;
+    while (this.spans.length > words.length) { this.spans.pop().el.remove(); gone = true; }
+    this.words = words;
+    if (k < keep || gone) this.onChange();
+  }
+
+  reveal(fade) {
+    const i = this.spans.length;
+    const el = document.createElement('span');
+    el.className = 'cap-w';
+    el.textContent = (i ? ' ' : '') + this.words[i];
+    this.el.appendChild(el);
+    this.spans.push({ w: this.words[i], el });
+    if (fade) capFade(el, 0, CAP_WORD_FADE_MS);
+  }
+
+  flush(calm) {
+    clearTimeout(this.timer);
+    this.timer = null;
+    if (this.spans.length >= this.words.length) return;
+    while (this.spans.length < this.words.length) this.reveal(!calm);
+    this.onChange();
+  }
+
+  // the words waiting come one by one, spread over the time the last update took to come
+  pace() {
+    if (this.timer || this.spans.length >= this.words.length) return;
+    const step = () => {
+      this.timer = null;
+      if (this.spans.length >= this.words.length) return;
+      this.reveal(true);
+      this.onChange();
+      const left = this.words.length - this.spans.length;
+      if (left) this.timer = setTimeout(step, this.stepMs);
+    };
+    step();  // the first word at once: the line is never empty while its words wait
+  }
+
+  stop() { clearTimeout(this.timer); this.timer = null; }
+
+  // the target at once, without fades (the stable start still kept)
+  jump() {
+    this.diff(capSplit(this.target), true);
+    this.flush(true);
+  }
 }
 
-function capFollowBottom() {
-  const box = document.getElementById('studio-captions');
-  if (capView.stick) box.scrollTop = box.scrollHeight;
-  else document.getElementById('studio-cap-jump')?.classList.remove('hidden');  // new lines below
+// The bubble of the phrase being spoken keeps the largest size it had: a revision that is shorter does not
+// pull it in and push it out again a second later (only the draft's: a final line keeps the sizes it had as the
+// draft). A new line that grows the captions scrolls them, if the user is at the bottom.
+// The layout is read and written once a frame (capLayout), not at every word: a size read right after the
+// words were written made the browser lay the page out each time (found in review: up to 4 updates a second,
+// each with a reflow per word and per row)
+const capFrame = { id: 0, hold: new Set(), follow: false };
+function capHold(row) {
+  if (row.key === capView.draftKey) capFrame.hold.add(row);
+  capGrow();
 }
+
+function capGrow() {
+  capFrame.follow = true;
+  if (!capFrame.id) capFrame.id = requestAnimationFrame(capLayout);
+}
+
+// The frame's work: the reads first (the held bubbles, the scroll of the box), then the writes. An update of the
+// captions runs a frame still waiting before it writes (capDrawLines), so a revision never measures a bubble
+// already pulled in by it
+function capLayout() {
+  if (capFrame.id) cancelAnimationFrame(capFrame.id);
+  capFrame.id = 0;
+  const held = [...capFrame.hold].map(row => [row, row.el.querySelector('.cap-bub')]).filter(([row, bub]) => bub && row.el.isConnected)
+    .map(([row, bub]) => [row, bub, bub.getBoundingClientRect()]);
+  capFrame.hold.clear();
+  const follow = capFrame.follow;
+  capFrame.follow = false;
+  const box = document.getElementById('studio-captions');
+  const gap = follow && box ? box.scrollHeight - box.scrollTop - box.clientHeight : 0;
+  for (const [row, bub, r] of held) {
+    if (!r.width) continue;  // «Рядом»: no bubble of its own
+    if (r.width > (row.minW || 0)) { row.minW = r.width; bub.style.minWidth = `min(${Math.ceil(r.width)}px, 100%)`; }
+    if (r.height > (row.minH || 0)) { row.minH = r.height; bub.style.minHeight = `${Math.ceil(r.height)}px`; }
+  }
+  if (!follow || !box) return;
+  if (capView.stick) { if (gap > 1 || held.length) box.scrollTop = box.scrollHeight; }
+  else if (gap > 1) document.getElementById('studio-cap-jump')?.classList.remove('hidden');  // new lines below
+}
+
+// The size or the layout of the text changed (A−/A+, the view): the held sizes are measured anew
+function capReleaseSizes() {
+  for (const row of capView.rows.values()) {
+    row.minW = 0;
+    row.minH = 0;
+    const bub = row.el.querySelector('.cap-bub');
+    bub.style.minWidth = '';
+    bub.style.minHeight = '';
+  }
+}
+
+
 
 // Scrolled up to read: the new lines no longer pull the text down (it jumped to the end at every
 // line); back at the bottom, or «К новым», it follows again
@@ -1546,9 +2051,14 @@ function capJumpToNew() {
 }
 
 function capReset() {
+  for (const row of capView.rows.values()) { row.orig.stop(); row.tr.stop(); }
   capView.rows.clear();
+  capView.hadWho = false;
   capView.draftKey = null;
+  capView.partialAt = 0;
+  capView.partialText = '';
   document.getElementById('studio-cap-rows').innerHTML = '';
+  capFrame.hold.clear();
   capView.stick = true;
   document.getElementById('studio-cap-jump')?.classList.add('hidden');
 }
@@ -1589,6 +2099,10 @@ function capSpeaker(ln) {
     const last = before[before.length - 1];
     if (last && end - (_recStartTime + last.at * 1000) < 60e3) best = last.name;
   }
+  // a name once found stays while the line is not settled (reported by the user: the names came and went and the
+  // lines jumped — Teams' recent lines slide on, and the one a line matched drops out of them)
+  if (best) ln.whoSeen = best;
+  else if (ln.whoSeen) best = ln.whoSeen;
   if (Date.now() - end > (best ? 30e3 : 90e3)) ln.who = best;
   return best;
 }
@@ -1611,7 +2125,10 @@ function createCapRow(key) {
   el.innerHTML = '<span class="cap-av hidden" aria-hidden="true"></span><span class="cap-who hidden"></span><div class="cap-bub"><div class="cap-o"><span class="lang-tag cap-o-tag"></span><span class="cap-orig"></span></div>'
     + '<div class="cap-t"><span class="lang-tag cap-t-tag"></span><span class="cap-tr"></span></div></div>';
   document.getElementById('studio-cap-rows').appendChild(el);
-  const row = { key, el, orig: new CapTyper(el.querySelector('.cap-orig')), tr: new CapTyper(el.querySelector('.cap-tr')) };
+  const row = { key, el, who: '' };
+  el._capRow = row;  // capMarkRuns reads the row's state, not its elements
+  row.orig = new CapTyper(el.querySelector('.cap-orig'), () => capHold(row));
+  row.tr = new CapTyper(el.querySelector('.cap-tr'), () => capHold(row));
   capView.rows.set(key, row);
   return row;
 }
@@ -1633,14 +2150,32 @@ document.addEventListener('visibilitychange', () => {
   try { syncStudioCaptions(); } finally { capView.instant = false; }
 });
 
+// The page keeps the last CAP_KEEP_LINES lines (found in review: two hours made 2–3 thousand, all sorted at each
+// update; the document shows CAP_MAX_ROWS). The text of a line let go stays for «Спросить» (the lines of the
+// sessions before a restart of the captions, studioAsk), 3000 at most as before
+function capTrimLines() {
+  if (liveCap.lines.size <= CAP_KEEP_LINES) return;
+  const gone = liveCap.gone || (liveCap.gone = []);
+  for (const [id, ln] of liveCap.lines) {
+    if (liveCap.lines.size <= CAP_KEEP_LINES) break;
+    if (ln.text) gone.push({ id, at: ln.at || 0, text: ln.text });
+    liveCap.lines.delete(id);
+  }
+  if (gone.length > 3000) gone.splice(0, gone.length - 3000);
+}
+
 function syncStudioCaptions() {
+  capTrimLines();
   if (document.hidden) { capView.dirty = true; return; }
   syncStudioAsk();
   const target = document.getElementById('live-translate-select').value;
   const view = target ? studio.view : 'orig';
   const rowsBox = document.getElementById('studio-cap-rows');
   const viewCls = `cap-rows cap-view-${view}`;
-  if (rowsBox.className !== viewCls) rowsBox.className = viewCls;
+  if (rowsBox.className.replace(' cap-has-who', '') !== viewCls) {
+    rowsBox.className = viewCls + (capView.hadWho ? ' cap-has-who' : '');
+    capReleaseSizes();
+  }
 
   const lines = [...liveCap.lines.values()].sort((a, b) => a.id - b.id);
   const fresh = lines.filter(ln => !capView.rows.has(ln.id));
@@ -1652,6 +2187,7 @@ function syncStudioCaptions() {
 }
 
 function capDrawLines(lines, fresh, target, view) {
+  if (capFrame.id) capLayout();  // what the last words changed is measured before this update writes
   fresh.forEach((ln, i) => {
     const draftRow = i === 0 && capView.draftKey ? capView.rows.get(capView.draftKey) : null;
     if (draftRow) {
@@ -1675,6 +2211,7 @@ function capDrawLines(lines, fresh, target, view) {
     // who said it, on every line as in Teams: a round mark with the initials and the name above the
     // text, both in the speaker's colour (a long talk reads at a glance)
     const who = capSpeaker(ln);
+    row.who = who;
     anyWho = anyWho || !!who;
     const whoEl = row.el.querySelector('.cap-who');
     const avEl = row.el.querySelector('.cap-av');
@@ -1691,23 +2228,34 @@ function capDrawLines(lines, fresh, target, view) {
     avEl.classList.toggle('hidden', !who);
   }
   // the lines make room for the marks once someone is named (the text of all lines starts at one place)
-  document.getElementById('studio-cap-rows').classList.toggle('cap-has-who', anyWho);
+  // once on, the room stays: the whole list does not shift back and forth with the names
+  capView.hadWho = capView.hadWho || anyWho;
+  document.getElementById('studio-cap-rows').classList.toggle('cap-has-who', capView.hadWho);
 
   if (liveCap.partial) {
     let row = capView.draftKey ? capView.rows.get(capView.draftKey) : null;
     if (!row) {
       capView.draftKey = `d${++capView.draftSeq}`;
       row = createCapRow(capView.draftKey);
-      row.el.classList.add('cap-draft');
+      row.el.classList.add('cap-draft');  // its bubble keeps its size while the phrase is revised (capHold), and as it becomes final
+    }
+    // How often the phrase comes: its new words are spread over that time, no longer (unknown at first: the most)
+    const draftText = liveCap.partial + '\n' + (liveCap.partialTranslation || '');
+    if (draftText !== capView.partialText) {
+      const now = performance.now();
+      capView.spread = capView.partialAt ? now - capView.partialAt : CAP_SPREAD_MAX_MS;
+      capView.partialAt = now;
+      capView.partialText = draftText;
     }
     // Optional: the phrase as it is spoken (otherwise only "…" until it is final)
-    row.orig.set(liveDraftOn() ? liveCap.partial : '');
-    row.tr.set(liveDraftTrOn() ? (liveCap.partialTranslation || '') : '');
+    row.orig.set(liveDraftOn() ? liveCap.partial : '', true, capView.spread);
+    row.tr.set(liveDraftTrOn() ? (liveCap.partialTranslation || '') : '', true, capView.spread);
     row.el.classList.toggle('cap-draft-live', liveDraftTrOn());
     setCapTags(row, liveCap.lang, liveCap.partialTarget || (target === 'auto' ? '' : target));
   } else if (capView.draftKey) {
     // The draft ended without becoming a line (noise taken for speech)
-    capView.rows.get(capView.draftKey)?.el.remove();
+    const gone = capView.rows.get(capView.draftKey);
+    if (gone) { gone.orig.stop(); gone.tr.stop(); gone.el.remove(); }
     capView.rows.delete(capView.draftKey);
     capView.draftKey = null;
   }
@@ -1716,6 +2264,8 @@ function capDrawLines(lines, fresh, target, view) {
   for (const [key, row] of capView.rows) {
     if (capView.rows.size <= CAP_MAX_ROWS) break;
     if (key === capView.draftKey) continue;
+    row.orig.stop();
+    row.tr.stop();
     row.el.remove();
     capView.rows.delete(key);
   }
@@ -1737,25 +2287,27 @@ function capDrawLines(lines, fresh, target, view) {
   }
   capMarkRuns();
   renderUpcomingMeetings();
-  capFollowBottom();
+  capGrow();
   renderStudioControls();
   const status = document.getElementById('studio-status');
-  renderStudioModels(target);
-  status.textContent = liveCap.error ? liveCap.error
+  const msg = liveCap.error ? liveCap.error
     : target && liveCap.session && !liveCap.translationReady ? t('studioLoadingTranslator') : '';
-  status.className = `text-[11.5px] ${liveCap.error ? 'text-apple-amber' : 'text-apple-tertiary'}`;
+  if (status.textContent !== msg) status.textContent = msg;
+  status.classList.toggle('hidden', !msg);
+  status.classList.toggle('is-warn', !!liveCap.error);
 }
 
 // The captions as a chat: the face and the name once for a run of one speaker's lines (a line of the same
 // speaker, or of nobody named, goes on the run), the last line with text lit as the one being said. The phrase
 // not shown yet (only «…») is no bubble of its own: it sits under the last one without a gap
 function capMarkRuns() {
-  const rows = [...document.querySelectorAll('#studio-cap-rows > .cap-row')];
-  const said = (el) => !!(el.querySelector('.cap-orig')?.textContent.trim() || el.querySelector('.cap-tr')?.textContent.trim());
+  // from the rows' own state (their words shown, their speaker), not by querying each row's elements
+  const rows = [...document.getElementById('studio-cap-rows').children].filter(el => el._capRow);
+  const said = (el) => el._capRow.orig.spans.length > 0 || el._capRow.tr.spans.length > 0;
   const now = rows.filter(said).pop();
   let prev = null;
   rows.forEach((el) => {
-    const who = el.querySelector('.cap-who')?.textContent || '';
+    const who = el._capRow.who || '';
     const waiting = el.classList.contains('cap-draft') && !said(el);
     el.classList.toggle('cap-cont', !!prev && (!who || who === prev));
     el.classList.toggle('cap-pending', waiting);
@@ -1809,9 +2361,9 @@ function recordSound(kind) {
 
 // Whether captions wait for the user's switch as a recording starts: «Включать субтитры при начале записи» off
 // (the default), «Не мешать на встречах» on (a recording is a meeting), or «Только запись»
-function captionsHeldAtStart(settings) {
+function captionsHeldAtStart(settings, meeting) {
   const s = settings || {};
-  return s.live_captions_auto !== 'true' || s.analysis_after_meetings !== 'false' || economyOn();
+  return s.live_captions_auto !== 'true' || (!!meeting && s.analysis_after_meetings !== 'false') || economyOn();
 }
 
 async function startLiveRecording() {
@@ -1940,20 +2492,23 @@ async function startLiveRecording() {
       }, 250);
     }
     liveCap.lines = new Map();
+    liveCap.gone = [];  // the text let go by capTrimLines: of this recording only
     liveCap.partial = '';
     liveCap.error = '';
     capReset();
-    // «Включать субтитры при начале записи» off (the default), «Не мешать на встречах» on (asked by the user:
-    // nothing heavy starts by itself during a meeting, and a recording is one), or the economy mode: the
-    // recording starts without them. The switch turns them on; the Teams captions are read either way
-    // (stTeamsStart below). The switch shows them off for this recording; the user's choice is kept
-    // (liveCap.autoOff) for the next recordings and comes back when this one ends
-    const capSettings = (state.system && state.system.settings) || {};
+    // «Включать субтитры при начале записи» off (the default), a recording of a meeting with «Не мешать на встречах»
+    // on (asked by the user: nothing heavy starts by itself during a meeting; a voice note recorded by hand is no
+    // meeting), or the economy mode: the recording starts without them. The switch turns them on; the Teams
+    // captions are read either way (stTeamsStart below). The switch shows them off for this recording; the
+    // setting stays as it is (liveCap.autoOff) and the switch shows it again when this one ends
+    const capSettings = liveSettings();
     const capToggle = document.getElementById('live-captions-toggle');
-    if (capToggle.checked && captionsHeldAtStart(capSettings)) {
+    capToggle.checked = capSettings.live_captions_auto === 'true';
+    if (capToggle.checked && captionsHeldAtStart(capSettings, recordingIsMeeting())) {
       capToggle.checked = false;
       liveCap.autoOff = true;
     }
+    liveCap.autoStarted = capToggle.checked;
     if (capToggle.checked) {
       startLiveCaptions(ctx, mixedStream).catch(err => {
         console.error(err);
@@ -2139,10 +2694,10 @@ async function checkRecordingDisk() {
 }
 
 function _cleanupRecordingResources() {
-  if (liveCap.autoOff) {  // captions held off for the recording (settings, economy mode): the switch as it was
+  if (liveCap.autoOff) {  // captions held off for the recording (a meeting, economy mode): the switch shows the setting
     liveCap.autoOff = false;
     const capToggle = document.getElementById('live-captions-toggle');
-    if (capToggle) capToggle.checked = true;
+    if (capToggle) capToggle.checked = liveSettings().live_captions_auto === 'true';
   }
   if (_recScreenId) {  // a start that failed half way: the screen capture must not keep running
     fetch(`/api/record/screen/${_recScreenId}/cancel`, { method: 'POST' }).catch(() => {});
@@ -2379,6 +2934,82 @@ function renderStudioExtras() {
     hk.parentElement.classList.toggle('hidden', !key);
   }
   renderStudioTab();
+  renderStudioCapBar();
+  renderStudioRail();
+}
+
+// --- The rail of the recording's options: four buttons that show their state, each opening its panel beside the
+// rail (asked by the user: the column of cards was hardly used and scrolled). One panel at a time; Esc, a second click
+// or a click elsewhere closes it (the layers of static/js/core.js), the focus goes into it and back to its button ---
+const ST_RAIL = ['source', 'video', 'meet', 'after'];
+
+function studioRailToggle(key) {
+  const fly = document.getElementById(`st-fly-${key}`);
+  if (!fly) return;
+  const open = fly.classList.contains('hidden');
+  closeStudioRail();
+  if (!open) return;
+  if (key === 'meet') renderUpcomingMeetings();
+  fly.classList.remove('hidden');
+  document.getElementById(`st-rail-${key}`).setAttribute('aria-expanded', 'true');
+  studioRailPlace(key);
+  // the first control seen: one inside a hidden block has no offsetParent (:not(.hidden) sees only its own class)
+  const first = [...fly.querySelectorAll('button:not([disabled]), select:not([disabled]), input:not([disabled])')]
+    .find(el => el.offsetParent !== null);
+  if (first) first.focus({ preventScroll: true });
+  else { fly.tabIndex = -1; fly.focus({ preventScroll: true }); }
+}
+
+// level with its button, kept inside the rail's height (the panel never scrolls)
+function studioRailPlace(key) {
+  const rail = document.getElementById('side-studio');
+  const fly = document.getElementById(`st-fly-${key}`);
+  const btn = document.getElementById(`st-rail-${key}`);
+  if (!rail || !fly || !btn || fly.classList.contains('hidden')) return;
+  const max = rail.clientHeight - fly.offsetHeight - 8;
+  fly.style.top = `${Math.max(8, Math.min(btn.offsetTop, max))}px`;
+}
+
+function closeStudioRail() {
+  for (const k of ST_RAIL) {
+    document.getElementById(`st-fly-${k}`)?.classList.add('hidden');
+    document.getElementById(`st-rail-${k}`)?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+// What each button shows without opening: a short state under its name, the whole of it in the tooltip, a dot for
+// the video being recorded (red) and for anything on after the recording (blue). Called each second with the captions:
+// it writes only what changed (a write of a class, even the same one, has the page look over its menus)
+function renderStudioRail() {
+  const put = (el, prop, value) => { if (el && el[prop] !== value) el[prop] = value; };
+  const set = (key, text, tip, dot) => {
+    const btn = document.getElementById(`st-rail-${key}`);
+    if (!btn) return;
+    put(document.getElementById(`st-rail-${key}-state`), 'textContent', text);
+    const label = `${btn.querySelector('.st-rail-name').textContent}: ${tip}`;
+    put(btn, 'title', label);
+    if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+    put(btn.querySelector('.st-rail-dot'), 'className', `st-rail-dot${dot ? ` ${dot}` : ''}`);
+  };
+  const src = document.getElementById('record-source-select')?.value || 'both';
+  const micSel = document.getElementById('record-mic-select');
+  const mic = src !== 'system' && micSel && micSel.selectedIndex >= 0 ? micSel.options[micSel.selectedIndex].textContent.trim() : '';
+  const srcFull = { mic: t('sourceMic'), system: t('sourceSystem'), both: t('sourceBoth') }[src] || '';
+  set('source', t({ mic: 'rdSasSrcMic', system: 'rdSasSrcSystem' }[src] || 'rdSasSrcBoth'), mic ? `${srcFull} (${mic})` : srcFull, '');
+  const vSel = document.getElementById('record-video-select');
+  const v = vSel?.value || '';
+  const vShort = { screen: 'stRailVideoScreen', app_desktop: 'rdSasVideoDesktop', app_window: 'stRailVideoWindow' }[v] || 'rdSasVideoNone';
+  const vFull = vSel && vSel.selectedIndex >= 0 ? vSel.options[vSel.selectedIndex].textContent.trim() : t('rdSasVideoNone');
+  set('video', t(vShort), vFull, v ? 'is-rec' : '');
+  const n = stPeople.count || stPeople.names.length;
+  const people = n ? t('stRailPeopleN').replace('{n}', () => String(n)) : t('stRailPeopleAuto');
+  set('meet', people, people, '');
+  const s = state.system?.settings || {};
+  const on = [
+    s.auto_summary !== 'false' && 'rdSasAutoAnalysis', s.call_auto_record === 'true' && 'rdSasAutoCall', s.meeting_follow !== 'false' && 'rdSasMeetingFollow',
+  ].filter(Boolean).map(k => t(k).replace(/^✦\s*/, ''));
+  set('after', on.length ? t('stRailOnN').replace('{n}', () => String(on.length)) : t('stRailOff'),
+    on.length ? on.join('; ') : t('stRailOff'), on.length ? 'is-on' : '');
 }
 
 // --- The tabs under the recording: the text, the user's notes, questions ---
@@ -2450,6 +3081,7 @@ function studioFillAuto() {
   const v = document.getElementById('st-voice-filter');
   if (v) v.checked = s.rec_voice_filter !== 'false';
   studioVoiceFilterState();
+  renderStudioRail();
 }
 
 // The voice filter (app/voice_filter.py): not downloaded yet, the switch says so and offers the download
@@ -2487,12 +3119,13 @@ async function studioSetAuto(key, on) {
     return;
   }
   const data = await readJson(res);
-  if (data?.settings && state.system) state.system.settings = data.settings;
+  if (data?.settings && state.system) state.system.settings = uiSettingsOverlay(data.settings);
   // the same switch on the settings page
   const mirror = { auto_summary: 'set-auto-summary', call_auto_record: 'set-call-record', rec_voice_filter: 'set-voice-filter' }[key];
   const el = mirror && document.getElementById(mirror);
   if (el) el.checked = on;
   if (key === 'call_auto_record' && typeof renderCallSettings === 'function') renderCallSettings();
+  renderStudioRail();
 }
 
 // --- A test of the microphone: three seconds recorded, then played back ---
@@ -2563,8 +3196,18 @@ async function studioMicTest() {
   }
 }
 
-// The gear of the captions closes on a click elsewhere, as a menu does
+// The popovers of the captions' chips close on a click elsewhere, as a menu does
 document.addEventListener('click', (e) => {
-  const more = document.getElementById('st-cap-more');
-  if (more && more.open && !more.contains(e.target)) more.removeAttribute('open');
+  const inside = e.target instanceof Element && e.target.closest('.st-pop-wrap');
+  // a click on something drawn again under it (no longer in the page: the model lists are refilled every second
+  // while the popover is open) is not a click elsewhere
+  const gone = e.target instanceof Element && !e.target.isConnected;
+  if (!gone && (!inside || !inside.querySelector('#st-models-pop'))) closeStudioModelsPop();
+  if (!gone && (!inside || !inside.querySelector('#st-cap-more'))) closeStudioCapMore();
+  // the rail's panels: not by a click in a panel, on a rail button (its own toggle), in a window opened from a panel,
+  // or on a chip drawn again under the click (it is no longer in the page)
+  const el = e.target instanceof Element ? e.target : null;
+  if (el && (!el.isConnected || el.closest('.st-fly, .st-rail-btn, .modal-backdrop, [id^="modal-"]'))) return;
+  closeStudioRail();
 });
+document.getElementById('record-mic-select')?.addEventListener('change', renderStudioRail);

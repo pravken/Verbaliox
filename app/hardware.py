@@ -163,6 +163,18 @@ def torch_cuda_problem() -> str:
     return _torch_cuda["why"]
 
 
+# The translator of live captions offered by the card (bench-report/translation-2026-11.md; the names of
+# app/ollama_client.TRANSLATE_MODELS): Hy-MT3-7B with speech recognition fits a 10 GB card (it reports a
+# little under 10); a smaller card and the processor get Hy-MT3-1.8B
+TRANSLATE_LARGE = "hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M"
+TRANSLATE_SMALL = "hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M"
+TRANSLATE_LARGE_MIN_VRAM_GB = 9.5
+
+
+def recommended_translate_model(vram_total_gb: float) -> str:
+    return TRANSLATE_LARGE if vram_total_gb >= TRANSLATE_LARGE_MIN_VRAM_GB else TRANSLATE_SMALL
+
+
 def get_hardware_info() -> Dict[str, Any]:
     """
     Detects available GPU/CPU resources and recommends optimal Whisper model and compute_type
@@ -177,6 +189,7 @@ def get_hardware_info() -> Dict[str, Any]:
         "recommended_compute_type": "int8",
         "recommended_whisper_model": "large-v3-turbo",
         "recommended_ollama_model": "gemma4:e2b",
+        "recommended_translate_model": TRANSLATE_SMALL,
         "tier": "cpu",
         "tier_description": "Работа на процессоре: быстрее всего GigaAM v3 (русский) и Parakeet; Whisper Turbo — в режиме int8",
     }
@@ -194,6 +207,7 @@ def get_hardware_info() -> Dict[str, Any]:
             # The analysis model by the card (bench-report/llm-profiles.md): gemma4:e4b with GigaAM fits
             # an 8 GB card (it reports a little under 8); below that, and without a GPU, gemma4:e2b
             info["recommended_ollama_model"] = "gemma4:e4b" if total_gb >= 7.5 else "gemma4:e2b"
+            info["recommended_translate_model"] = recommended_translate_model(total_gb)
             if total_gb >= 10.0:
                 info["tier"] = "high_vram"
                 info["recommended_compute_type"] = "float16"

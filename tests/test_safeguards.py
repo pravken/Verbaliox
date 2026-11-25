@@ -143,14 +143,12 @@ class ScreenCaptureTest(unittest.TestCase):
     def test_screen_is_joined_with_both_sounds(self):
         import json
         import subprocess
-        import tempfile
-        from pathlib import Path
 
         try:
             from app.main import screen_mix_command
         except ImportError:
             self.skipTest("fastapi not installed")
-        d = Path(tempfile.mkdtemp())
+        d = tests.temp_dir(self)
         run = lambda *a: subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *a], check=True)
         run("-f", "lavfi", "-i", "testsrc=size=320x240:rate=10", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(d / "s.mkv"))
         run("-f", "lavfi", "-i", "sine=frequency=440", "-t", "2", str(d / "mic.webm"))

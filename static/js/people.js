@@ -768,7 +768,7 @@ async function dirUpdate(body) {
 async function spRefreshSettings() {
   const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: {} }) });
   const data = await readJson(res);
-  if (res.ok && state.system) state.system.settings = data.settings;
+  if (res.ok && state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 async function dirMerge() {

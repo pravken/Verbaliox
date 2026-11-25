@@ -1,9 +1,7 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import shutil
-import tempfile
 import time
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from app import app_status
@@ -23,7 +21,7 @@ class UntranscribedTest(unittest.TestCase):
         init_db()
         for m in list_meetings():
             delete_meeting(m["id"])
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = tests.temp_dir(self)
         untranscribed._state.update(checked=0.0, noticed=0.0)
 
     def tearDown(self):

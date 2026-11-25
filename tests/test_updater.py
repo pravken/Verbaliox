@@ -813,13 +813,11 @@ class FailedUpdateTest(unittest.TestCase):
 
     def test_an_archive_whose_install_failed_is_not_installed_by_itself_again(self):
         import json
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
         from app import updater
 
-        d = Path(tempfile.mkdtemp())
+        d = tests.temp_dir(self)
         zipf = d / "Verbaliox.zip"
         zipf.write_bytes(b"zip")
         state = {"download": {"done": True, "path": str(zipf), "version": "9.9.9", "sha256": "ab" * 32}, "latest": {"version": "9.9.9"}}
@@ -837,12 +835,9 @@ class FailedUpdateTest(unittest.TestCase):
 
 class CaseRenameTest(unittest.TestCase):
     def test_a_file_renamed_only_in_letter_case_is_not_stale(self):
-        import tempfile
-        from pathlib import Path
-
         from app import updater
 
-        app = Path(tempfile.mkdtemp())
+        app = tests.temp_dir(self)
         (app / "app").mkdir()
         (app / "app" / "Foo.py").write_text("old")
         (app / "app" / "gone.py").write_text("old")

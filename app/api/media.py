@@ -65,10 +65,28 @@ class QueuePausePayload(BaseModel):
 
 @router.get("/api/queue/paused")
 def api_queue_paused() -> Dict[str, Any]:
+    from app import meeting_guard
     from app.transcriber import meeting_holds, queue_paused
 
-    # meeting: the transcriptions wait for the end of a meeting («Не мешать на встречах», app/meeting_guard)
-    return {"paused": queue_paused(), "meeting": meeting_holds()}
+    # meeting: the transcriptions wait for the end of a meeting («Не мешать на встречах», app/meeting_guard);
+    # hold: whether a meeting goes on ({"kind": "meeting"}) or the pause after it ({"kind": "pause", "until",
+    # "left": seconds}), for the queue's window and its countdown
+    meeting = meeting_holds()
+    try:
+        hold = meeting_guard.hold_state() if meeting else {}
+    except Exception:
+        hold = {}
+    return {"paused": queue_paused(), "meeting": meeting, "hold": hold}
+
+
+@router.post("/api/queue/{meeting_id}/run-now")
+def api_queue_run_now(meeting_id: int) -> Dict[str, Any]:
+    """The transcription of a recording starts now, during a meeting: only after the user confirmed it."""
+    from app.transcriber import run_now
+
+    if not run_now(meeting_id):
+        raise HTTPException(status_code=409, detail="Запись не ждёт в очереди")
+    return {"ok": True}
 
 
 @router.post("/api/queue/pause")

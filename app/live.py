@@ -1,11 +1,18 @@
 """
 Live captions while recording, optionally translated.
 
-The page sends the recording's audio as 16 kHz mono 16-bit PCM about once a second. The server
+The page sends the recording's audio as 16 kHz mono 16-bit PCM about every 0.25 s. The server
 keeps the audio that is not yet final and, at most every LIVE_STEP_SEC, transcribes that window
 (at most LIVE_WINDOW_SEC) with the Whisper model already in memory. Phrases that end well before
 the end of the window are final: they are kept, their audio is dropped and, if asked, they are
 translated by Ollama in the background. The rest of the window is shown as a draft line.
+
+Russian speech with GigaAM goes by VAD phrases instead (app/live_phrases.py): only the phrase being spoken is
+recognized, by the GigaAM v3 e2e-CTC int8, and it is final once after a pause. English and the other languages
+keep the window for the final lines (Parakeet: the phrases without context lose 6–9 points of WER,
+bench-report/asr-2026-11.md); between the window's runs the VAD follows the speech too and only the phrase being
+spoken is recognized for the draft line, every 0.3 s or more (live_phrases.SpeechFollow, DraftPace). The window and
+these drafts share one budget of the caption copy's time (CAPTION_BUSY_SHARE).
 
 After recording stops the usual full transcription of the saved file runs; live captions are only
 for following along, so they favour speed (greedy decoding, short window) over accuracy.
@@ -20,20 +27,39 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
 from app.database import get_all_settings
 from app.paths import APP_DIR
 
+_clock = time.perf_counter  # times a run of the window (_window_ran)
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
 SR = 16000
-LIVE_STEP_SEC = 1.2       # transcribe the window at most this often
+# transcribe the window at most this often: every 2 s, as when the page sent the audio once a second (the window ran
+# on every second piece; its final lines and its load were measured so, bench-report/asr-2026-11-check.md)
+LIVE_STEP_SEC = 2.0
+PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about every 0.25 s)
 LIVE_WINDOW_SEC = 20.0    # longest audio kept undecided (forced to final beyond it)
 FINAL_MARGIN_SEC = 1.6    # a phrase ending this long before the window end is final
+# The window and the drafts of the phrase being spoken between its runs take together at most this share of the time of
+# the caption copy (its WINDOW_THREADS threads): with the drafts at a third of it on their own besides the window,
+# English captions took up to 63 % of a 4-thread copy. The drafts get what the window leaves (live_phrases.DraftPace,
+# share), at least MIN_DRAFT_SHARE. They run on the same copy as the window: a copy of their own on 2 threads would hold
+# Parakeet fp32 twice (3 GB more), and ONNX Runtime fixes the threads of a session when it is made.
+CAPTION_BUSY_SHARE = 0.35
+MIN_DRAFT_SHARE = 0.05
+# The drafts go off when a run of the window takes over DRAFTS_OFF_SEC (the window keeps the draft line alone) and on
+# again only under DRAFTS_ON_SEC: a run near the limit turned them off and on at every run. The VAD listens either way.
+DRAFTS_OFF_SEC = 0.6
+DRAFTS_ON_SEC = 0.4
 SESSION_IDLE_SEC = 120.0  # sessions without audio for this long are dropped
+# Final lines a session keeps (the page has its own copy of all of them): the question about the meeting so far
+# (/api/live/{id}/ask) takes the latest part of them, and translations reach only the recent ones
+LINES_KEPT = 3000
+RECENT_LINES = 200  # the lines whose translation or target language the answers still follow
 
 WORKER_IDLE_SEC = 120.0   # the caption worker is closed (VRAM freed) after this long unused
 WORKER_START_SEC = 900.0  # the worker loads (and on first use downloads) its model before it answers
@@ -191,6 +217,13 @@ def _caption_worker() -> _CaptionWorker:
         return _worker
 
 
+def _translate_choice(settings: Dict[str, Any], speed: str) -> str:
+    """The translation model saved for «Качество» or «Скорость»; "" is «Авто» (app/live_translate.choose_models)."""
+    from app.live_translate import CHOICE_KEYS
+
+    return str(settings.get(CHOICE_KEYS.get(speed, CHOICE_KEYS["quality"])) or "").strip()
+
+
 class LiveSession:
     def __init__(self, lang: Optional[str], translate_to: Optional[str], capture_id: Optional[str] = None,
                  speed: str = "quality", pair: Optional[List[str]] = None):
@@ -204,14 +237,31 @@ class LiveSession:
         self.caption_choice = settings.get("live_whisper_model") or "auto"
         self.onnx_model = caption_onnx_model(settings, self.speech_lang)
         self.draft = False  # the page shows the draft line: translate it too
-        self.translate_model: Optional[str] = None  # chosen by hand in the studio
+        # «Качество» or «Скорость»: the translation model is the one saved for it (Settings → «Модели перевода»,
+        # or chosen in the studio, which saves it there too); "" is «Авто»
+        self.speed = speed if speed in ("quality", "fast") else "quality"
+        self.translate_choice = _translate_choice(settings, self.speed)
         self.translate_to = translate_to or None
         self.pair = list(pair or ["ru", "en"])[:2]  # the two languages of translate_to="auto"
-        self.audio = np.zeros(0, dtype=np.float32)
+        self._buf = np.zeros(0, dtype=np.float32)  # self.audio is its start (room for the next pieces after it)
+        self._n = 0
         self.offset = 0.0           # recording time (s) of self.audio[0]
+        self.base = 0               # the same in samples (exact: the VAD phrases count in samples)
+        self._ph = None             # app/live_phrases.PhraseState while captions go by VAD phrases
+        self._follow = None         # app/live_phrases.SpeechFollow: drafts of the phrase in the window scheme (False: off)
+        self._win_draft: List[Tuple[int, int, str]] = []  # the window's draft sentences at its last run (samples)
+        self._window_cost = 0.0     # seconds the last run of the window took
+        self._drafts_on = True      # the drafts of the phrase in the window scheme (off while the window is slow)
+        self.last_window_at = 0.0   # self.received when the window was last transcribed
         self.received = 0.0         # seconds of audio received in total
-        self.last_run_at = 0.0      # self.received when the window was last transcribed
+        self.last_run_at = 0.0      # self.received when the last step ran
         self.lines: List[Dict[str, Any]] = []
+        # What the answers have reported: the version grows with each change of a line (new, translated, its target
+        # language set), and the page sends the version it has, so an answer carries only what changed since
+        self._version = 0
+        self._seen: Dict[int, Tuple[Any, Any]] = {}  # line id -> (translation, target) as last reported
+        self._changed: Dict[int, int] = {}            # line id -> the version of its last change
+        self._state_lock = threading.Lock()
         self.partial = ""
         self.error = ""
         self.touched = time.time()
@@ -228,10 +278,33 @@ class LiveSession:
         self._next_id = 1
 
     # -------------------------------------------------------------- audio in
+    @property
+    def audio(self) -> np.ndarray:
+        """The audio kept (not final yet), from self.offset: a view of the buffer, valid while this step holds it
+        (the pieces received meanwhile go after its end, a cut only moves the start)."""
+        return self._buf[:self._n]
+
+    @audio.setter
+    def audio(self, value: np.ndarray) -> None:
+        self._buf = np.asarray(value, dtype=np.float32)
+        self._n = self._buf.size
+
+    def _append(self, chunk: np.ndarray) -> None:
+        """A piece after the audio kept (call with _audio_lock held): into the room after it, so a piece every 0.25 s
+        does not copy the whole window each time; the buffer grows by doubling."""
+        need = self._n + chunk.size
+        if need > self._buf.size:
+            grown = np.empty(max(need, 2 * self._n, 4 * SR), dtype=np.float32)
+            grown[:self._n] = self._buf[:self._n]
+            self._buf = grown
+        self._buf[self._n:need] = chunk
+        self._n = need
+
     def add_pcm16(self, data: bytes) -> None:
         if len(data) % 2:
             data = data[:-1]
-        chunk = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+        chunk = np.frombuffer(data, dtype="<i2").astype(np.float32)
+        chunk *= 1.0 / 32768.0
         if self.capture_id:
             # System audio captured by the app (app/system_audio.py) joins the page's microphone
             from app.system_audio import get_capture
@@ -239,10 +312,9 @@ class LiveSession:
             cap = get_capture(self.capture_id)
             if cap is not None:
                 sys_part = cap.take_live(chunk.size)
-                chunk = chunk.copy()
                 chunk[: sys_part.size] += sys_part
         with self._audio_lock:
-            self.audio = np.concatenate([self.audio, chunk])
+            self._append(chunk)
             self.received += chunk.size / SR
         # Nothing decoded for long (steps fail or one hangs): only the last part is kept. Not while a
         # step runs: it cuts the buffer from its start when it ends
@@ -254,16 +326,68 @@ class LiveSession:
         self.touched = time.time()
         from app import idle_unload
 
-        idle_unload.touch()
+        idle_unload.touch(captions=True)
 
     # -------------------------------------------------------------- decoding
+    def phrases(self) -> bool:
+        """Captions by VAD phrases (Russian with GigaAM: app/live_phrases.py), not by the sliding window."""
+        if not self.onnx_model:
+            return False
+        from app import asr_onnx
+
+        return asr_onnx.live_phrases(self.onnx_model)
+
+    def follows_speech(self) -> bool:
+        """In the window scheme with GigaAM / Parakeet the VAD follows the speech (live_phrases.SpeechFollow) at every
+        step, whether the drafts of the phrase are on or not: about 0.2 ms a frame. Not for the Whisper captions
+        (their own process)."""
+        if not self.onnx_model or self._follow is False:
+            return False
+        from app import asr_onnx
+
+        return asr_onnx.is_loaded(self.onnx_model)
+
+    def _window_ran(self, cost: float) -> None:
+        """A run of the window took `cost` seconds: the drafts off above DRAFTS_OFF_SEC, on again under DRAFTS_ON_SEC,
+        and their share of the budget is what the window leaves of CAPTION_BUSY_SHARE."""
+        self._window_cost = cost
+        was = self._drafts_on
+        if cost > DRAFTS_OFF_SEC:
+            self._drafts_on = False
+        elif cost < DRAFTS_ON_SEC:
+            self._drafts_on = True
+        if self._drafts_on != was:
+            print(f"[live] phrase drafts {'on' if self._drafts_on else 'off'}: a run of the window took {cost:.2f} s",
+                  flush=True)
+        if self._follow:
+            self._follow.pace.share = max(MIN_DRAFT_SHARE, CAPTION_BUSY_SHARE - cost / LIVE_STEP_SEC)
+
     def step(self) -> None:
-        """Transcribes the undecided window if enough new audio arrived and nothing else is running."""
-        if self.received - self.last_run_at < LIVE_STEP_SEC or not self._busy.acquire(blocking=False):
+        """Transcribes the undecided window (or the phrase being spoken) if enough new audio arrived and
+        nothing else is running."""
+        phrases = self.phrases()
+        follow = not phrases and self.follows_speech()
+        drafts = follow and self._drafts_on
+        every = PHRASE_STEP_SEC if phrases or drafts else LIVE_STEP_SEC
+        if self.received - self.last_run_at < every or not self._busy.acquire(blocking=False):
             return
         try:
             self.last_run_at = self.received
-            self._transcribe_window()
+            if phrases:
+                self._follow = None
+                self._transcribe_phrases()
+            else:
+                self._ph = None
+                if follow:
+                    self._follow_speech()  # before the window cuts what is final: the VAD must have heard it
+                # a slow window (a slow PC, on battery) runs less often: it never takes more than the budget
+                if self.received - self.last_window_at >= max(LIVE_STEP_SEC, self._window_cost / CAPTION_BUSY_SHARE):
+                    self.last_window_at = self.received
+                    t = _clock()
+                    self._transcribe_window()
+                    self._window_ran(_clock() - t)
+                elif drafts:
+                    self._draft_phrase()
         except Exception as e:  # a failed step must not end the recording
             if str(e)[:200] != self.error:
                 traceback.print_exc()
@@ -282,11 +406,14 @@ class LiveSession:
 
     def _cut(self, cut: int) -> None:
         """Drops the first `cut` samples (call with _audio_lock held): what was appended meanwhile stays."""
-        self.audio = self.audio[cut:]
-        self.offset += cut / SR
+        cut = min(cut, self._n)
+        self._buf = self._buf[cut:]
+        self._n -= cut
+        self.base += cut
+        self.offset = self.base / SR
 
     def _transcribe_window(self) -> None:
-        window = self.audio
+        window, base0 = self.audio, self.base
         win_sec = window.size / SR
         if win_sec < 0.8:
             return
@@ -342,19 +469,162 @@ class LiveSession:
             # Nothing ended in a long window (one endless phrase): keep only its last part
             with self._audio_lock:
                 self._cut(int((win_sec - LIVE_WINDOW_SEC / 2) * SR))
-        self.lines.extend(new_lines)
+        self._add_lines(new_lines)
         # Everything after the final phrases is the draft line
         self.partial = " ".join(s.text.strip() for s in segs[len(new_lines):]).strip()
-        if self.translator:
+        # kept for the drafts of the phrase being spoken until the next run (_draft_phrase), in samples of the stream
+        self._win_draft = [(base0 + int(s.start * SR), base0 + int(s.end * SR), s.text.strip())
+                           for s in segs[len(new_lines):] if s.text.strip()]
+        if self._follow:
+            self._follow.drafted_to = base0 + window.size
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        if tr:
             if new_lines:
-                self.translator.add_lines(new_lines)
+                tr.add_lines(new_lines)
                 # The draft translation belonged to the phrase that is final now: the next draft
                 # must not be shown with it (the page keeps it on the final line until its own
                 # translation arrives)
-                self.translator.reset_draft()
+                tr.reset_draft()
             # The draft (revised several times while spoken) is translated only when the page shows
             # it; otherwise the model is left free for the final lines
-            self.translator.set_draft(self.partial if self.draft else "")
+            tr.set_draft(self.partial if self.draft else "")
+
+    def _follow_speech(self) -> None:
+        """The VAD over the new audio in the window scheme (live_phrases.SpeechFollow); its model is the Silero VAD
+        of the phrases. If it cannot start, the window's draft goes on as before."""
+        from app import asr_onnx, live_phrases as lp
+
+        f = self._follow
+        if f and f.cutter.pos < self.base:  # audio dropped before the VAD heard it: its state reset, its session kept
+            f.vad.reset()
+            share = f.pace.share
+            f = self._follow = lp.SpeechFollow(self.base, f.vad)
+            f.pace.share = share
+        elif f is None:  # the first step
+            try:
+                f = self._follow = lp.SpeechFollow(self.base, lp.SileroStream(asr_onnx._vad_dir()))
+            except Exception as e:
+                print(f"[live] the drafts of the phrase are off: {e}", flush=True)
+                self._follow = False
+                return
+        with self._audio_lock:
+            audio, base = self.audio, self.base
+        f.follow(audio, base)
+
+    def _draft_phrase(self) -> None:
+        """The draft line between the window's runs: the window's draft sentences that end before the phrase being
+        spoken stay, and the phrase (from the start of a sentence of the window that reaches into it) is recognized
+        alone, at the pace of live_phrases.DraftPace. The final lines come from the window as before."""
+        from app import asr_onnx, live_phrases as lp, vocab
+
+        f = self._follow
+        span = f.target() if f else None
+        if not span or not f.pace.due(self.received):
+            return
+        with self._audio_lock:
+            audio, base = self.audio, self.base
+        start, end = max(span[0], base), min(span[1], base + audio.size)
+        keep = []
+        for a, b, text in self._win_draft:
+            if b <= base:
+                continue
+            if b <= start + int(lp.PAD_SEC * SR):
+                keep.append(text)
+                continue
+            start = max(base, min(start, a))  # a sentence of the window reaching into the phrase: heard with it
+            break
+        if end - start < lp.MIN_SPEECH_SEC * SR:
+            return
+        phrase = asr_onnx.level(audio[start - base:end - base])
+        parts = f.pace.run(self.received, lambda: asr_onnx.recognize_phrase(self.onnx_model, phrase))
+        f.drafted_to = end
+        text = vocab.fix_text(" ".join(t for _, _, t in parts), vocab.current()).strip()
+        if not text:
+            return  # nothing heard: the window's draft stays
+        self.partial = " ".join(keep + [text])
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        if tr:
+            tr.set_draft(self.partial if self.draft else "")
+
+    def _transcribe_phrases(self) -> None:
+        """Russian captions by VAD phrases (app/live_phrases.py): the VAD goes over the new audio; a phrase that
+        ended (a pause of 0.5 s, or 20 s of speech without one) is recognized once and its sentences are final;
+        the phrase still being spoken is the draft, recognized again every 0.3 s or more (live_phrases.DraftPace)."""
+        from app import asr_onnx, live_phrases as lp, vocab
+
+        onnx_id = self.onnx_model
+        if not asr_onnx.is_loaded(onnx_id):
+            self.error = asr_onnx.preload_async(onnx_id)  # the audio waits in the buffer, bounded by add_pcm16
+            return
+        ph = self._ph
+        if ph is None or min(ph.keep_from(), ph.levelled_to) < self.base:
+            # the first step, or the audio waited for the model so long that its start was dropped: the VAD made
+            # once (an InferenceSession), its state reset for the new start
+            vad = ph.vad if ph is not None else lp.SileroStream(asr_onnx._vad_dir())
+            if ph is not None:
+                vad.reset()
+            ph = self._ph = lp.PhraseState(self.base, vad)
+        with self._audio_lock:  # the new audio levelled in place: the VAD and the model hear the same
+            i = ph.levelled_to - self.base
+            new = ph.level(self.audio[i:])
+            self.audio[i:i + new.size] = new
+            ph.levelled_to += new.size
+            audio, base = self.audio, self.base  # only this step cuts it: the indices below stay valid
+        ended = []
+        c = ph.cutter
+        while c.pos + lp.FRAME <= ph.levelled_to:
+            frame = audio[c.pos - base:c.pos - base + lp.FRAME]
+            cut = c.push(ph.vad.prob(frame))
+            if cut:
+                ended.append(cut)
+        if self.speech_lang:
+            self.lang = self.speech_lang
+        self.error = ""
+        rules = vocab.current()
+        new_lines = []
+        for a, b, forced in ended:
+            parts = []
+            # the tail of a forced cut shorter than a word: not recognized at all
+            heard = [] if ph.after_cut and b - a < lp.MIN_SPEECH_SEC * SR else \
+                asr_onnx.recognize_phrase(onnx_id, audio[a - base:b - base])
+            for k, (s, e, t) in enumerate(heard):
+                text = vocab.fix_text(t, rules).strip()
+                if ph.seam and k == 0:  # the seam of a forced cut: the word cut in half is not heard twice
+                    text = lp.drop_seam_repeat(ph.seam, text)
+                if text:
+                    parts.append((s, e, text))
+            if ph.after_cut and parts and lp.tail_fragment(b - a, " ".join(t for _, _, t in parts)):
+                parts = []  # only the tail of the cut word: no line of one letter
+            ph.after_cut = forced
+            ph.seam = lp.last_word(parts[-1][2]) if forced and parts else ""
+            for s, e, text in parts:
+                if not self.speech_lang:
+                    self.lang = asr_onnx.guess_language(text)
+                new_lines.append({
+                    "id": self._next_id, "text": text, "lang": self.lang,
+                    "start": round(a / SR + s, 2), "end": round(a / SR + e, 2), "translation": None,
+                })
+                self._next_id += 1
+        if ended:
+            ph.pace.restart()  # the first draft of the next phrase as soon as it has enough speech
+            self.partial = ""
+        if c.start is None:
+            self.partial = ""
+        elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and c.last_speech > ph.drafted_to and ph.pace.due(self.received):
+            phrase = audio[c.start - base:c.pos - base]
+            ph.drafted_to = c.pos
+            parts = ph.pace.run(self.received, lambda: asr_onnx.recognize_phrase(onnx_id, phrase))
+            draft = vocab.fix_text(" ".join(t for _, _, t in parts), rules).strip()
+            self.partial = lp.drop_seam_repeat(ph.seam, draft) if ph.seam and c.continued else draft
+        with self._audio_lock:
+            self._cut(max(0, ph.keep_from() - self.base))
+        self._add_lines(new_lines)
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        if tr:
+            if new_lines:
+                tr.add_lines(new_lines)
+                tr.reset_draft()
+            tr.set_draft(self.partial if self.draft else "")
 
     def configure(self, translate_to: Optional[str], speed: Optional[str], speech_lang: Optional[str] = None,
                   pair: Optional[List[str]] = None) -> None:
@@ -367,6 +637,9 @@ class LiveSession:
             if self.speech_lang:
                 self.lang = self.speech_lang
             self.onnx_model = caption_onnx_model(get_all_settings(), self.speech_lang)
+        if speed in ("quality", "fast") and speed != self.speed:
+            self.speed = speed
+            self.translate_choice = _translate_choice(get_all_settings(), speed)
         if not translate_to:
             if self.translator:
                 self.translator.stop()
@@ -377,33 +650,74 @@ class LiveSession:
         self.translate_to = translate_to
         self.pair = new_pair
         if self.translator is None:
-            self.translator = LiveTranslator(lambda: self.lang, translate_to, speed or "quality", self.pair)
-            self.translator.set_model(self.translate_model)
+            self.translator = LiveTranslator(lambda: self.lang, translate_to, self.speed, self.pair)
             self.translator.add_lines([ln for ln in self.lines[-20:]])
+            from app import idle_unload
+
+            idle_unload.captions_started()  # the translation turned on: the card is freed for its model
         else:
             self.translator.configure(translate_to, speed, retranslate=self.lines[-20:] if changed else None, pair=self.pair)
 
+    def _add_lines(self, new_lines: List[Dict[str, Any]]) -> None:
+        """Final lines at the end; the oldest beyond LINES_KEPT go (in steps of 500, not on every line)."""
+        if not new_lines:
+            return
+        self.lines.extend(new_lines)
+        if len(self.lines) > LINES_KEPT + 500:
+            del self.lines[:-LINES_KEPT]
+
+    def _note_changes(self) -> None:
+        """The recent lines that are new or got a translation or a target language since the last look take the next
+        version (call with _state_lock held)."""
+        recent = self.lines[-RECENT_LINES:]
+        for ln in recent:
+            mark = (ln.get("translation"), ln.get("target"))
+            if ln["id"] not in self._seen or self._seen[ln["id"]] != mark:
+                self._seen[ln["id"]] = mark
+                self._version += 1
+                self._changed[ln["id"]] = self._version
+        if len(self._seen) > 2 * RECENT_LINES and recent:
+            first = recent[0]["id"]
+            self._seen = {k: v for k, v in self._seen.items() if k >= first}
+            self._changed = {k: v for k, v in self._changed.items() if k >= first}
+
     # -------------------------------------------------------------- out
-    def state(self, since_id: int = 0) -> Dict[str, Any]:
+    def state(self, since_id: int = 0, version: Optional[int] = None) -> Dict[str, Any]:
+        """The answer to the page. version: the one the page has (from its last answer): only the lines changed since
+        (new, translated, with their target language) — this answer goes out about four times a second. Without it
+        (the start, a change of settings, an older page): the new lines, the recent ones waiting for a translation
+        and the recent translations, as before."""
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        with self._state_lock:
+            self._note_changes()
+            now = self._version
+            if version is not None:
+                lines = [ln for ln in self.lines[-RECENT_LINES:] if self._changed.get(ln["id"], 0) > version]
+                translations = {ln["id"]: ln["translation"] for ln in lines if ln["translation"]}
+                targets = {ln["id"]: ln.get("target") for ln in lines if ln.get("target")}
+            else:
+                recent = self.lines[-RECENT_LINES:]
+                lines = [ln for ln in recent if ln["id"] > since_id or (tr and ln["translation"] is None)]
+                translations = {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]}
+                targets = {ln["id"]: ln.get("target") for ln in recent if ln.get("target")}
+            lines = [dict(ln) for ln in lines]  # a copy: the translator fills the line in another thread
         return {
             "session": self.id,
+            "version": now,
             "lang": self.lang,
             "speech_lang": self.speech_lang or "auto",
-            # New lines, and recent ones still waiting for a translation (not the whole meeting:
-            # this answer goes out about once a second)
-            "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (self.translator and ln["translation"] is None)],
-            "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
+            "lines": lines,
+            "translations": translations,
             # The language each line went into (differs per line with translate_to="auto")
-            # the recent lines, like the two above: every line of the recording was gone through each second
-            "targets": {ln["id"]: ln.get("target") for ln in self.lines[-200:] if ln.get("target")},
-            "partial_target": self.translator.draft_target if self.translator else "",
+            "targets": targets,
+            "partial_target": tr.draft_target if tr else "",
             "partial": self.partial,
-            "partial_translation": self.translator.draft_translation if self.translator else "",
-            "translation_ready": bool(self.translator and self.translator.ready),
-            "error": self.error or (self.translator.error if self.translator else ""),
+            "partial_translation": tr.draft_translation if tr else "",
+            "translation_ready": bool(tr and tr.ready),
+            "error": self.error or (tr.error if tr else ""),
             "caption_model": self.caption_label(),
             "caption_choice": self.caption_choice,
-            "translate_choice": self.translate_model or "",
+            "translate_choice": self.translate_choice,
             "translate_model": self.translate_label(),
         }
 
@@ -411,9 +725,11 @@ class LiveSession:
         """The caption model chosen in the studio ("auto", GigaAM / Parakeet or a Whisper model); it is
         the same setting as in Settings, so the next recording keeps it."""
         from app.database import update_settings
+        from app.settings_schema import clean
 
-        update_settings({"live_whisper_model": value or "auto"})
-        self.caption_choice = value or "auto"
+        value = clean("live_whisper_model", value or "auto") or "auto"  # ValueError for a model not in the catalog
+        update_settings({"live_whisper_model": value})
+        self.caption_choice = value
         settings = get_all_settings()
         self.onnx_model = caption_onnx_model(settings, self.speech_lang)
         if self.onnx_model:
@@ -427,10 +743,23 @@ class LiveSession:
                 with _worker.lock:
                     _worker._kill()  # started again with the new model on the next window
 
-    def set_translate_model(self, model: Optional[str]) -> None:
-        self.translate_model = model or None
+    def set_translate_model(self, model: Optional[str], speed: Optional[str] = None) -> None:
+        """The translation model chosen in the studio for «Качество» or «Скорость» (the mode in use, or `speed`);
+        "" is «Авто». It is the same setting as Settings → «Модели перевода», so the next recordings keep it."""
+        from app.database import update_settings
+        from app.live_translate import CHOICE_KEYS
+        from app.settings_schema import clean
+
+        mode = speed if speed in CHOICE_KEYS else self.speed
+        key = CHOICE_KEYS[mode]
+        value = clean(key, model or "")  # ValueError for a name Ollama cannot have
+        update_settings({key: value})
+        self.speed = mode
+        self.translate_choice = value
         if self.translator:
-            self.translator.set_model(self.translate_model)
+            if speed in CHOICE_KEYS:
+                self.translator.configure(speed=speed)
+            self.translator.reload_model()
 
     def caption_label(self) -> str:
         """The model writing the captions now, for the studio."""
@@ -444,7 +773,7 @@ class LiveSession:
         return format_whisper_model_name(name) if name else "Whisper"
 
     def translate_label(self) -> str:
-        model = getattr(self.translator, "_model", None) if self.translator else None
+        model = getattr(self.translator, "_model", None)  # None without a translator (read once)
         if not model:
             return ""
         from app.ollama_client import format_llm_model_name
@@ -465,6 +794,9 @@ def start_session(lang: Optional[str], translate_to: Optional[str], capture_id: 
         asr_onnx.preload_async(s.onnx_model)
     else:
         threading.Thread(target=_caption_worker().preload, daemon=True).start()
+    from app import idle_unload
+
+    idle_unload.captions_started()  # what the captions do not use leaves the memory (app/idle_unload.py)
     return s
 
 
@@ -511,6 +843,17 @@ def caption_model(settings: Dict[str, str], hw: Dict[str, Any]) -> str:
     return "large-v3-turbo" if is_whisper_model_installed("large-v3-turbo") else main
 
 
+def translate_models_changed() -> None:
+    """Settings → «Модели перевода» changed: the running captions translate with the model now saved for their mode."""
+    with _sessions_lock:
+        sessions = list(_sessions.values())
+    settings = get_all_settings()
+    for s in sessions:
+        s.translate_choice = _translate_choice(settings, s.speed)
+        if s.translator:
+            s.translator.reload_model()
+
+
 def get_session(session_id: str) -> Optional[LiveSession]:
     with _sessions_lock:
         return _sessions.get(session_id)
@@ -519,8 +862,28 @@ def get_session(session_id: str) -> Optional[LiveSession]:
 def stop_session(session_id: str) -> None:
     with _sessions_lock:
         s = _sessions.pop(session_id, None)
+        last = s is not None and not _sessions
     if s and s.translator:
         s.translator.stop()
+    if last:
+        _captions_ended()
+
+
+def _captions_ended() -> None:
+    """The last caption session ended: its models go a minute later unless the app is used (app/idle_unload.py),
+    and a transcription that waited for the captions starts now (transcriber.waits_for_captions)."""
+    try:
+        from app import transcriber
+
+        transcriber.wake_queue()
+    except Exception:
+        traceback.print_exc()
+    try:
+        from app import idle_unload
+
+        idle_unload.work_done("live captions ended")
+    except Exception:
+        traceback.print_exc()
 
 
 def stop_all() -> int:
@@ -538,9 +901,12 @@ def _drop_idle() -> None:
     now = time.time()
     with _sessions_lock:
         dropped = [_sessions.pop(k) for k, s in list(_sessions.items()) if now - s.touched > SESSION_IDLE_SEC]
+        last = bool(dropped) and not _sessions
     for s in dropped:
         if s.translator:
             s.translator.stop()
+    if last:
+        _captions_ended()
 
 
 def has_sessions() -> bool:
@@ -554,3 +920,25 @@ def model_in_use(model_id: str) -> bool:
     _drop_idle()
     with _sessions_lock:
         return any(getattr(s, "onnx_model", None) == model_id for s in _sessions.values())
+
+
+def onnx_models_in_use() -> Set[str]:
+    """The GigaAM / Parakeet models the open caption sessions recognize with (on the processor)."""
+    with _sessions_lock:
+        return {s.onnx_model for s in _sessions.values() if getattr(s, "onnx_model", None)}
+
+
+def translator_models() -> Set[str]:
+    """The Ollama models the open caption sessions translate with, or are about to (app/idle_unload.py keeps them)."""
+    with _sessions_lock:
+        translators = [s.translator for s in _sessions.values() if s.translator]
+    out: Set[str] = set()
+    for tr in translators:
+        try:
+            model = tr.wanted_model()
+        except Exception:
+            traceback.print_exc()
+            model = None
+        if model:
+            out.add(model)
+    return out

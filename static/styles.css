@@ -655,7 +655,8 @@ label.settings-toggle { display: flex; }
 #studio-rec-dot.studio-idle .studio-ping { display: none; }
 #studio-rec-dot.studio-idle > span:last-child { background: #636366; }
 
-/* Studio captions: rows keep their elements; text is typed in (see CapTyper in app.js) */
+/* Studio captions: rows keep their elements; the phrase being spoken is drawn word by word (CapTyper in studio.js):
+   a draft line has the metrics of a final one, only its colour differs */
 .cap-rows { display: flex; flex-direction: column; gap: 1rem; }
 .cap-row .cap-o { font-size: var(--cap-size, 14px); line-height: 1.35; color: #fff; transition: color var(--dur-slow) ease; overflow-wrap: anywhere; }
 .cap-row.cap-draft .cap-o { color: var(--hc-dim, #AEAEB2); }
@@ -730,8 +731,8 @@ label.settings-toggle { display: flex; }
 
 /* Parts of the app: tabs along the top of the main area */
 #studio-view.studio-focus .studio-settings { display: none; }
-/* recording: the presets and the sources fold away; the meeting card stays (its people are clicked while they speak) */
-#studio-view.st-live .st-presets, #studio-view.st-live #side-studio .st-card:not(.st-card-meet) { display: none; }
+/* recording: the presets fold away; the rail stays (its «Встреча» holds the people clicked while they speak) */
+#studio-view.st-live .st-presets { display: none; }
 
 /* Signal on the input: one dot of a fixed size, so nothing jumps when it changes */
 .signal-dot {
@@ -899,8 +900,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .tb-rec:hover { background: rgba(255, 69, 58, 0.24); }
 .tb-rec #tb-rec-label { display: none; }
 .tb-rec-on, .tb-rec-busy { width: auto; padding: 0 5px 0 12px; background: rgba(255, 69, 58, 0.16); border-color: rgba(255, 69, 58, 0.55); }
-.tb-rec-on #tb-rec-label { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 12px; background: #FF453A; color: #FFFFFF; font-size: var(--fs-label); font-weight: 600; }
-.tb-rec-on #tb-rec-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: #FFFFFF; }
 .tb-rec-busy #tb-rec-label { display: inline; padding-right: 8px; font-size: var(--fs-ui); color: #FF8A80; }
 .tb-rec-busy { opacity: 0.85; cursor: progress; }
 .tb-rec-busy .tb-rec-dot { animation: tb-blink 0.6s steps(2, start) infinite; }
@@ -1036,7 +1035,6 @@ label:has(> .vs-switch.vs-sm) { min-height: 24px; }
 .topbar.tb-c3 #nav-home, .topbar.tb-c3 #nav-studio, .topbar.tb-c3 #nav-ask { padding: 0 11px; }
 .topbar.tb-c4 .tb-subtab .tb-lbl { display: none; }
 .topbar.tb-c4 .tb-subtab .tb-ico { display: block; }
-.topbar.tb-c5 .tb-rec-on #tb-rec-label { padding: 0 7px; }
 .topbar.tb-c6 { overflow-x: auto; scrollbar-width: none; }
 
 .statusbar {
@@ -2278,19 +2276,9 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   padding: 1px 6px; border-radius: 5px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.16)); background: rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.35; color: #C7C7CC;
 }
-.st-side {
-  width: 340px; flex-shrink: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
-  border-right: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); background: rgba(255, 255, 255, 0.015);
-}
-.st-card {
-  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px;
-  border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); background: rgba(255, 255, 255, 0.03);
-}
 .st-sub { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.18); }
 .st-sub.st-dim { opacity: 0.45; }
 .st-sub-title { font-size: var(--fs-caption); line-height: 1.35; font-weight: 600; color: #E5E5EA; }
-.st-meter { display: flex; flex-direction: column; gap: 6px; }
-.st-meter #record-timer-display { display: none; }
 .st-toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 2px 0; }
 .st-meet { display: flex; align-items: flex-start; gap: 6px; border-radius: 10px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); padding: 2px 8px 2px 2px; }
 .st-meet.is-on { border-color: rgb(var(--accent-rgb) / 0.6); background: rgb(var(--accent-rgb) / 0.08); }
@@ -2323,15 +2311,12 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
   .st-rec .st-stop-label { display: none; }  /* the square and the button's title say it */
 }
 .st-rec-info { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 6px 26px 0; font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8E8E93); flex-shrink: 0; }
-.st-tabs {
-  display: flex; align-items: center; gap: 4px; margin: 6px 20px 0; padding: 4px; border-radius: 12px; flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.035);
-}
-.st-keys { display: inline-flex; align-items: center; gap: 5px; padding-right: 8px; font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8A8A90); }
+.st-keys { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; flex: none; font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #8A8A90); }
 .st-pane-idle { margin: 0; padding: 18px 26px 0; font-size: var(--fs-ui); line-height: 1.5; color: var(--hc-dim, #8E8E93); }
 .st-pane-idle.hidden { display: none; }
-#studio-view.studio-focus .st-rec, #studio-view.studio-focus .st-rec-info, #studio-view.studio-focus .st-tabs { display: none; }
-@media (max-width: 1250px) { .st-side { width: 320px; } .st-keys { display: none; } }
+/* on the whole window the row keeps the captions' chips; the tabs go (only the text is shown there) */
+#studio-view.studio-focus .st-rec, #studio-view.studio-focus .st-rec-info, #studio-view.studio-focus .st-utabs, #studio-view.studio-focus .st-keys { display: none; }
+@media (max-width: 1250px) { .st-keys { display: none; } }
 
 /* The first-run banner: its one action, under the text */
 .first-run-btn { margin-top: 6px; }
@@ -2517,13 +2502,6 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
    marks its button in the sidebar */
 .sx-nav-cap { padding: 12px 10px 4px; font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--hc-dim, #8A8A90); }
 #sb-settings-btn.sb-on { background: rgba(255, 255, 255, 0.12); color: #FFFFFF; }
-
-/* Audit 8.1, 8.2. «Дополнительно»: what is rarely changed, one click deeper */
-.sx-more > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-caption); color: var(--hc-dim, #AEAEB2); padding: 2px 0; }
-.sx-more > summary::-webkit-details-marker { display: none; }
-.sx-more > summary::before { content: '▸'; font-size: 10px; transition: transform var(--dur-fast); }
-.sx-more[open] > summary::before { transform: rotate(90deg); }
-.sx-more[open] > summary { margin-bottom: 10px; color: #F5F5F7; }
 
 /* Audit 8.7: the working hours, only with a calendar */
 .hm-day-wrap.hidden { display: none; }
@@ -2767,10 +2745,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .sp-mav { position: relative; overflow: hidden; }
 .cap-av { overflow: hidden; }
 
-/* Studio: the captions' row keeps «Субтитры» and «Перевод»; the rest opens under the gear */
-.st-cap-more { position: relative; }
-.st-cap-more > summary { list-style: none; cursor: pointer; }
-.st-cap-more > summary::-webkit-details-marker { display: none; }
+/* Studio: the popovers of the captions' chips (the models, the gear), under their chip at its right edge */
 .st-cap-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: max-content; max-width: min(560px, 80vw);
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px;
   background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
@@ -3205,9 +3180,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .ens-dl.is-busy { color: #8E8E93; background: none; border-color: transparent; padding: 0; }
 
 /* A model card (Settings): name, badges, the measures in dots on one line; what it is under «i» */
-.mm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; }
+.mm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; min-height: 24px; }  /* a line of text only (the translators) as high as one of dots */
 .mm-part { display: inline-flex; align-items: center; gap: 6px; }
 .mm-lbl { font-size: 11px; color: var(--hc-dim, #8E8E93); }
+.mm-lbl.mm-warn { color: #FFB340; }  /* a license to check (a translator installed by hand) */
 .mm-line .mc-sub { display: inline; margin: 0 0 0 4px; font-size: 10.5px; color: var(--hc-dim, #8E8E93); }
 .mm-val { font-variant-numeric: tabular-nums; }
 /* A card that opens on a click says so under the cursor: a lighter edge and tint, the «i» lights up */
@@ -3240,6 +3216,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-feature-grp .db-feature-on { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .db-feature-x { width: var(--ctl-h, 32px); padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; color: var(--hc-dim, #AEAEB2); }
 .db-feature-x:hover { color: #FFFFFF; }
+/* «Обзор»: «Сегодня» back to the current period, ‹ the period's name › (a year's name no narrower than the arrows' gap) */
+.db-nav { display: inline-flex; align-items: center; gap: 4px; }
+.db-nav-name { min-width: 64px; padding: 0 6px; text-align: center; font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .db-kts-note { margin: 10px 2px 0; }
 .db-note { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); line-height: 1.45; margin: 4px 0 8px; }
 /* the reminder of recordings whose transcription was cancelled (app/untranscribed.py) */
@@ -3487,6 +3466,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-free-t { font-family: var(--font-mono); font-size: var(--fs-ui); color: #F5F5F7; }
 .db-free-len { font-size: var(--fs-label); color: #7EE787; }
 .db-load-head { display: flex; align-items: center; gap: 8px; font-size: var(--fs-ui); color: #E5E5EA; margin-bottom: 8px; }
+.db-load-sum { min-width: 0; }
+.db-load-over { margin-top: 6px; }
 .db-load { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 120px; padding-top: 14px; }
 .db-load-norm { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgba(255, 159, 10, 0.6); margin-bottom: 18px; pointer-events: none; }
 .db-load-day { position: relative; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; padding-bottom: 18px; }
@@ -3576,6 +3557,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-app-h, .db-app-p, .db-app-d { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .db-app-p, .db-app-d { opacity: .6; }
 .db-wk-sub { color: var(--hc-dim, #A1A1A6); font-size: var(--fs-caption); margin-bottom: 10px; }
+/* «Нагрузка недели», «Рабочий день» of a past period: the week shown, under the title */
+.db-week-name { margin-top: -2px; }
 .db-wk-week { height: 96px; }
 /* the hours worked of a day in its head: the week and the calendar */
 .db-dn-wk, .cal-wk { margin-left: auto; padding: 0 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); color: #A1A1A6;
@@ -3787,6 +3770,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .vx-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
 .vx-pbar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
 .vx-pbar b { display: block; height: 100%; background: var(--accent); transition: width var(--dur-slow) ease; }
+.vx-prow-go { grid-column: 1 / -1; display: flex; }
 .vx-foot { display: flex; gap: 8px; margin-top: 12px; }
 
 /* The load indicator of the status bar: the models, then CPU and RAM, each bar in two layers: the whole
@@ -3808,12 +3792,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .sb-num.ld-high, .ld-v.ld-high { color: #FFB340; font-weight: 600; }
 .ld-row { display: grid; grid-template-columns: 44px 1fr 136px; gap: 10px; align-items: center; padding: 4px 0 0; }
 .ld-k { color: #8E9198; font-size: var(--fs-caption); }
-.ld-v { text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-caption); color: #E6E7EA; }
+.ld-v { text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-caption); color: #E6E7EA; font-variant-numeric: tabular-nums; }
 .ld-note { font-size: 11px; color: #8E9198; margin: 1px 0 4px 54px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ld-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: #8E9198; margin: 6px 0 0 54px; }
-.ld-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.ld-legend i { width: 10px; height: 4px; border-radius: 2px; background: #AEAEB2; opacity: 0.55; }
-.ld-legend i.ld-me { background: var(--accent); opacity: 1; }
 .vx-prow.ld-model { grid-template-columns: minmax(0, 1fr) 160px auto; }
 .ld-use { display: flex; flex-direction: column; gap: 1px; font-size: var(--fs-caption); white-space: nowrap; min-width: 0; }
 .ld-use b { font-weight: 500; color: #E6E7EA; font-variant-numeric: tabular-nums; }
@@ -3972,6 +3952,50 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .dbc-l-line { fill: none; stroke: rgb(var(--accent-rgb)); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .dbc-l-area { fill: rgb(var(--accent-rgb) / 0.14); }
 .dbc-l-norm { stroke: rgba(255, 255, 255, 0.45); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* «Нагрузка недели»: the hours ahead are a plan — a neutral grey part continuing the day's mark (the hours passed
+   keep the day's colour, .dbc-done at the start of the mark), the figure of a day all ahead grey. The planned part
+   above the norm stays grey in an orange frame (.dbc-ovp); the ring marks it with its arc. The week before: a thin
+   light tick at its hours (.dbc-prev), ringed in the card's colour so it shows over a mark, and the difference in a
+   grey column of its own (.dbc-dx): more meetings are neither better nor worse */
+:root { --db-plan: #636366; --db-plan-line: #8E8E93; --db-prev: #E5E5EA; }
+.dbc-col i, .dbc-hb-t b, .dbc-lg-bar u { position: relative; overflow: hidden; }
+.dbc-col i.plan, .dbc-hb-t b.plan, .dbc-lg-bar u.plan, .dbc-lg i.plan { background: var(--db-plan); }
+.dbc-done { position: absolute; left: 0; bottom: 0; top: auto; display: block; width: 100%; height: 100%; text-decoration: none; background: linear-gradient(rgb(var(--accent-rgb) / 0.8), rgb(var(--accent-rgb) / 0.8)), var(--bg); }
+.dbc-done.over { background: #FF9F0A; }
+.dbc-hb-t .dbc-done, .dbc-lg-bar .dbc-done { top: 0; height: auto; }
+.dbc-ovp { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: block; text-decoration: none; border-radius: inherit; box-shadow: inset 0 0 0 1.5px #FF9F0A; }
+.dbc-col i .dbc-ovp { top: auto; }
+.dbc-hb-t .dbc-ovp, .dbc-lg-bar .dbc-ovp { right: auto; }
+.dbc-prev { position: absolute; display: block; text-decoration: none; background: var(--db-prev); border-radius: 1px; box-shadow: 0 0 0 1px var(--bg); pointer-events: none; z-index: 2; }
+.dbc-hb-t .dbc-prev, .dbc-lg-bar .dbc-prev { top: -3px; bottom: -3px; width: 2px; margin-left: -1px; }
+.dbc-col .dbc-prev { left: 50%; width: min(100%, 36px); height: 2px; margin-bottom: -1px; transform: translateX(-50%); }
+.dbc-dx { color: var(--hc-dim, #8E8E93); font-size: var(--fs-label); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dbc-bars.dx .dbc-hb { grid-template-columns: minmax(28px, auto) minmax(0, 1fr) 52px 30px; }
+.dbc-lg.dx > div { grid-template-columns: 10px minmax(24px, auto) minmax(24px, 1fr) 44px 28px 32px; gap: 6px; }
+.dbc-axis.dbc-dxs { padding-top: 1px; }
+.dbc-axis.dbc-dxs .dbc-dx, .dbc-days.dbc-dxs .dbc-dx { text-align: center; }
+.dbc-days.dbc-dxs { margin-top: 0; }
+.dbc-col span.pl, .dbc-hb-v.pl, .dbc-l-v.pl, .dbc-lg-h.pl { color: var(--hc-dim, #8E8E93); }
+.dbc-lg-h.over.pl { color: rgb(255 159 10 / 0.75); }
+.dbc-ring-plan { stroke: var(--db-plan); }
+.dbc-l-line.plan { stroke: var(--db-plan-line); stroke-dasharray: 4 3; }
+.dbc-l-area.plan { fill: rgb(255 255 255 / 0.04); }
+.dbc-l-prev { fill: none; stroke: rgb(255 255 255 / 0.28); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.dbc-plot i.plan { background: var(--bg); box-shadow: inset 0 0 0 2px var(--db-plan-line), 0 0 0 2px var(--bg); }
+.dbc-plot i.over.plan { box-shadow: inset 0 0 0 2px #FF9F0A, 0 0 0 2px var(--bg); }
+/* the key under the chart: a square of the passed and of the plan, the tick of the week before (in the line: lines) */
+.dbc-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.dbc-key span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dbc-key i { display: block; width: 9px; height: 9px; border-radius: 2px; }
+.dbc-key i.k-done { background: rgb(var(--accent-rgb) / 0.8); }
+.dbc-key i.k-plan { background: var(--db-plan); }
+.dbc-key i.k-prev { width: 2px; height: 12px; border-radius: 1px; background: var(--db-prev); }
+.dbc-key-col i.k-prev { width: 12px; height: 2px; }
+/* in the ring each day has its own hue: the swatch of the passed shows two of them */
+.dbc-key-ring i.k-done { background: linear-gradient(90deg, #4C7FD9 50%, #2EB6A6 50%); }
+.dbc-key-line i { width: 14px; height: 0; border-radius: 0; background: none; border-top: 2px solid rgb(var(--accent-rgb)); }
+.dbc-key-line i.k-plan { border-top: 2px dashed var(--db-plan-line); background: none; }
+.dbc-key-line i.k-prev { width: 14px; height: 0; background: none; border-top: 1.5px solid rgb(255 255 255 / 0.28); }
 
 /* «Мои программы»: a program's name wraps, it is never cut; the ring and the columns */
 .db-app { grid-template-columns: 22px minmax(0, 10em) minmax(24px, 1fr) 4.4em 2.8em 4.4em; }
@@ -4450,8 +4474,9 @@ button.sc-at:hover { color: var(--accent-text); }
 .cap-cont .cap-bub { border-radius: 16px; }
 .cap-row.cap-now .cap-bub { background: rgb(var(--accent-rgb) / 0.1); border-color: rgb(var(--accent-rgb) / 0.45); }
 /* the line being said: a caret after its text (the quiet «…» while no text is shown yet) */
-.cap-row.cap-now.cap-draft .cap-orig:not(:empty)::after { content: ""; display: inline-block; width: 2px; height: 0.95em; margin-left: 3px; vertical-align: -0.1em;
-  background: currentColor; animation: cap-caret 1s steps(1) infinite; }
+/* its room is kept on every line: the line that becomes final keeps its width and its wrap (studio.js CapTyper) */
+.cap-row .cap-orig:not(:empty)::after { content: ""; display: inline-block; width: 2px; height: 0.95em; margin-left: 3px; vertical-align: -0.1em; }
+.cap-row.cap-now.cap-draft .cap-orig:not(:empty)::after { background: currentColor; animation: cap-caret 1s steps(1) infinite; }
 @keyframes cap-caret { 50% { opacity: 0; } }
 /* original and translation side by side: the two columns stay the row's own, no bubble around both */
 .cap-view-side .cap-bub { display: contents; }
@@ -4879,11 +4904,6 @@ button.sc-at:hover { color: var(--accent-text); }
 
 /* «Нагрузка»: the key of the bars once under the title; under each bar the hardware on the left and Verbaliox's own
    share on the right, in the value's column (asked by the user: everything was piled under the GPU) */
-.vx-panel-load .ld-legend { margin: 2px 0 6px 0; }
-.ld-sub { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; margin: 1px 0 6px 54px; }
-.ld-sub .ld-note { margin: 0; min-width: 0; }
-.ld-own { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #C7C9CE; font-family: var(--font-mono); white-space: nowrap; }
-.ld-own i { width: 10px; height: 4px; border-radius: 2px; background: var(--accent); }
 
 /* «Расшифровка» without a text (asked by the user: the old «РАСПОЗНАВАНИЕ» panel, its row of chips and a full-width
    band with two percents): one card of the content column (#tx-model-bar, renderTxModelBar in static/js/workspace.js)
@@ -5019,9 +5039,8 @@ button.sc-at:hover { color: var(--accent-text); }
 /* «Обзор» → «Нагрузка системы и моделей» (dbSysloadHtml in static/js/dashboard.js): the bars of the «Нагрузка» window,
    Verbaliox's share in the accent over the grey of the whole, its figure under each bar on the right (the line kept
    when there is none); M and L: the models in memory, each with «Выгрузить» at the same place */
-.db-sl-legend { margin: 0 0 6px; }
-.db-w-sysload .ld-row { grid-template-columns: 36px minmax(40px, 1fr) 120px; gap: 10px; padding: 2px 0 0; }  /* the bars end at one x */
-.db-sl-own { display: flex; justify-content: flex-end; min-height: 16px; margin: 2px 0 6px 46px; }
+.db-w-sysload .ld-row { gap: 8px; padding: 5px 0; }  /* the bars end at one x */
+.db-w-sysload .ld-head { padding: 0 0 2px; }
 .db-sl-cap { margin-top: 6px; padding: 10px 0 2px; border-top: 1px solid var(--line); font-size: var(--fs-label); font-weight: 600; color: var(--hc-dim, #AEAEB2); }
 .db-sl-model { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 7px 0; }
 .db-sl-model + .db-sl-model { border-top: 1px solid var(--line); }
@@ -5082,10 +5101,16 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
    window and the widget of «Обзор»; the label column a step wider so the bars still start at one x */
 .hw-ic { width: 14px; height: 14px; flex: none; opacity: 0.8; }
 .sb-k, .ld-k { display: inline-flex; align-items: center; gap: 5px; }
-.ld-row { grid-template-columns: 58px 1fr 136px; }
-.ld-sub { margin-left: 68px; }
-.db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 120px; }
-.db-sl-own { margin-left: 64px; }
+.ld-row { grid-template-columns: 58px minmax(40px, 1fr) 116px 64px; }  /* «123,4 / 127,9 ГБ» fits */
+.db-w-sysload .ld-row { grid-template-columns: 54px minmax(40px, 1fr) 116px 60px; }
+
+/* The load in columns (asked by the user, «вариант A»): «Всего занято» and «Verbaliox» titled once over their columns,
+   Verbaliox's share in the accent of its part of the bar; the hardware in a grey line under the bar */
+.ld-head { padding: 6px 0 0; }
+.ld-head .ld-v { font-family: inherit; font-size: 11px; color: #8E9198; }
+.ld-head .ld-v.ld-mine { color: var(--accent-text); }
+.ld-v.ld-mine { color: var(--accent-text); }
+.ld-note { margin-left: 68px; }
 
 /* Settings in two columns: a section with a single card no longer leaves the right column empty (asked by the user:
    «Обновления» stood alone on the left) — that card spans both columns */
@@ -5213,14 +5238,48 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 /* «Сегодня», a week or a month: the cards under the calendar share its whole width (auto-fill left empty columns) */
 .td-body.td-row .td-cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
-/* While recording, the time on the red button leads to the studio (asked by the user): a light capsule with a wave
-   mark, lit under the pointer; in the studio itself only the time */
-#tb-rec-clock:not(.hidden) { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 6px; margin-right: 2px;
-  border-radius: 12px; cursor: pointer; transition: background-color var(--dur-fast, 120ms) ease; }
-#tb-rec-clock:hover { background: rgba(255, 255, 255, 0.1); }
-#tb-rec-clock .tb-rec-wave { width: 14px; height: 14px; opacity: 0.8; flex: none; }
-#tb-rec-clock.tb-rec-here { cursor: inherit; background: none; }
-#tb-rec-clock.tb-rec-here .tb-rec-wave { display: none; }
+/* While recording the capsule is three buttons (asked by the user: the way to the studio was not obvious): the dot, the
+   time and the sources open the studio and light up together under the pointer; «Студия ›» (.st-pill: the accent while
+   the captions are on, the green outline of .is-call while they are off) says where they lead; «Стоп» stops. In the
+   studio itself the first two stay in place, inert, so the capsule keeps its width */
+.tb-rec-wrap.tb-rec-live { height: 34px; box-sizing: border-box; gap: 4px; padding: 0 3px 0 0; border-radius: 17px;
+  border: 1px solid rgba(255, 69, 58, 0.55); background: rgba(255, 69, 58, 0.14); }
+.tb-rec-live .tb-rec { height: 32px; width: auto; gap: 8px; padding: 0 10px 0 13px; border: 0; border-radius: 16px 8px 8px 16px;
+  background: transparent; cursor: pointer; }
+.tb-rec-live .tb-rec:hover { background: rgba(255, 255, 255, 0.09); }
+.tb-rec-live .tb-rec:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tb-rec-clock:not(.hidden) { display: inline-flex; align-items: center; }
+.tb-rec-wrap .tb-rec-studio { height: 26px; gap: 5px; padding: 0 8px 0 9px; border-radius: 13px; font-size: var(--fs-label); font-weight: 600;
+  color: #F5F5F7; background: rgba(20, 21, 24, 0.55); border-color: rgba(255, 255, 255, 0.18); }
+.tb-rec-wrap .tb-rec-studio .st-pill-ic { width: 15px; height: 15px; }
+.tb-rec-stop { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border: 0; border-radius: 13px; flex: none;
+  background: #FF453A; color: #FFFFFF; font-family: inherit; font-size: var(--fs-label); font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-fast, 120ms) ease; }
+.tb-rec-stop::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: #FFFFFF; }
+.tb-rec-stop:hover { background: #E63B31; }
+.tb-rec-stop:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+.tb-rec-wrap .tb-rec-studio.hidden, .tb-rec-wrap .tb-rec-stop.hidden { display: none; }
+.tb-rec-here .tb-rec, .tb-rec-here .tb-rec-studio { pointer-events: none; cursor: default; }
+.tb-rec-here .tb-rec-studio { opacity: 0.5; }
+/* a narrow window: the chip keeps its icon and its › */
+@media (max-width: 1199px) {
+  .tb-rec-studio-t { display: none; }
+  .tb-rec-wrap .tb-rec-studio { padding: 0 6px 0 8px; gap: 3px; }
+}
+/* once, on the first recording: where the captions and the text are */
+.tb-rec-hint { position: absolute; top: calc(100% + 10px); right: 0; z-index: 40; display: flex; align-items: center; gap: 8px;
+  padding: 7px 6px 7px 12px; border-radius: 10px; background: var(--elevated); border: 1px solid rgb(var(--accent-rgb) / 0.6);
+  box-shadow: var(--shadow-menu); color: #F5F5F7; font-size: var(--fs-ui); white-space: nowrap; animation: tb-rec-hint-in 0.25s ease-out both; }
+.tb-rec-hint::before { content: ""; position: absolute; top: -6px; right: calc(var(--arrow-r, 40px) - 5px); width: 10px; height: 10px;
+  background: var(--elevated); border-left: 1px solid rgb(var(--accent-rgb) / 0.6); border-top: 1px solid rgb(var(--accent-rgb) / 0.6);
+  transform: rotate(45deg); }
+.tb-rec-hint.hidden { display: none; }
+.tb-rec-hint-x { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 0; border-radius: 6px;
+  background: none; color: var(--hc-dim, #AEAEB2); cursor: pointer; }
+.tb-rec-hint-x svg { width: 12px; height: 12px; }
+.tb-rec-hint-x:hover { background: rgba(255, 255, 255, 0.08); color: #FFFFFF; }
+@keyframes tb-rec-hint-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tb-rec-hint { animation: none; } }
 
 /* The studio in the look of the other sections (reported by the user: «в студии дизайн с прежними кнопками остался"):
    the ground --bg-deep, cards of --sec-card with the line and a 12px corner, each head an icon square and a title;
@@ -5239,23 +5298,51 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-btn-rec:hover:not(:disabled) { background: rgba(255, 69, 58, 0.26); }
 .st-btn-rec svg { width: 12px; height: 12px; flex: none; color: #FF453A; }
 :is(.st-btn, .lt-chip, .tk-seg-btn).hidden { display: none; }
-/* the column of the cards: 24px from the edge as the heads of the sections, 16px to the recording */
-.st-side { width: 340px; padding: 16px 0 16px 24px; gap: 12px; border-right: 0; background: none; box-sizing: border-box; }
-.st-card { gap: 12px; padding: 12px 16px 16px; background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
-.st-card > .st-card-h { margin: 0; }
+/* The rail of the recording's options (asked by the user: the column of cards was hardly used and scrolled): a card of
+   four buttons of one size, 24px from the edge as the heads of the sections, level with the recording's card; under
+   each icon its name and its state, a dot in the icon's corner. Its panels open beside it, in the look of the
+   captions' popovers (studioRail* in static/js/studio.js) */
+.st-side { position: relative; flex: none; padding: 16px 0 16px 24px; box-sizing: border-box; }
+.st-rail { display: flex; flex-direction: column; gap: 4px; width: 112px; padding: 6px; box-sizing: border-box;
+  background: var(--sec-card); border: 1px solid var(--line); border-radius: 12px; }
+.st-rail-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  width: 100%; height: 74px; padding: 8px 2px 6px; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px;
+  background: none; color: #E5E5EA; font-family: inherit; cursor: pointer;
+  transition: background-color var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease; }
+.st-rail-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.st-rail-btn[aria-expanded="true"] { background: rgb(var(--accent-rgb) / 0.14); border-color: rgb(var(--accent-rgb) / 0.55); color: var(--accent-text); }
+.st-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.st-rail-ic { position: relative; display: flex; width: 20px; height: 20px; margin-bottom: 4px; flex: none; }
+.st-rail-ic svg { width: 20px; height: 20px; }
+.st-rail-dot { position: absolute; top: -2px; right: -4px; width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; display: none; }
+.st-rail-dot.is-rec { display: block; background: #FF453A; box-shadow: 0 0 0 2px var(--sec-card); }
+.st-rail-dot.is-on { display: block; background: var(--accent); box-shadow: 0 0 0 2px var(--sec-card); }
+.st-rail-name, .st-rail-state { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.st-rail-name { font-size: var(--fs-label); line-height: 1.3; font-weight: 500; }
+.st-rail-state { font-size: 11px; line-height: 1.3; color: var(--hc-dim, #8E8E93); }
+.st-rail-btn[aria-expanded="true"] .st-rail-state { color: var(--accent-text); opacity: 0.8; }
+.st-cap-pop.st-fly { left: calc(100% + 8px); right: auto; top: 16px; width: 340px; max-width: 340px; max-height: calc(100% - 16px); overflow-y: auto;
+  align-items: stretch; box-sizing: border-box;
+  /* a short soft shadow: the wide one of the caption popovers read as a dark box around the panel */
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.25); }
+.st-fly > .st-sub-title { margin-bottom: -6px; }
+.st-fly .st-sub { padding-top: 12px; }
+.st-fly-link { align-self: flex-start; padding-top: 0; }
+.st-fly-upcoming { display: flex; flex-direction: column; gap: 6px; }
+.st-fly-upcoming.hidden { display: none; }
+.st-lvl { display: flex; align-items: center; gap: 8px; }
+.st-lvl-db { width: 48px; flex: none; text-align: right; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.st-toggle-t { flex: 1; min-width: 0; font-size: var(--fs-ui); line-height: 1.35; color: #F5F5F7; }
+.st-toggle.st-toggle-col { flex-direction: column; align-items: flex-start; gap: 4px; cursor: default; }
 .st-seg { display: flex; width: 100%; }
 .st-seg .tk-seg-btn { flex: 1 1 auto; justify-content: center; padding: 0 6px; min-width: 0; }
 .st-seg .tk-seg-btn:disabled { cursor: default; opacity: 0.6; }
-/* the groups of a card apart by a line, as the rows of the settings */
-.st-sub, .st-group { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line); }
-.st-group { gap: 0; }
+/* the groups of a panel apart by a line, as the rows of the settings */
+.st-sub { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line); }
 .st-sub-title { font-size: var(--fs-ui); line-height: 1.35; font-weight: 500; color: #E5E5EA; }
 .st-hint { margin: 0; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
-/* the level of the input: a panel of the card's line, the track the grey of the bars elsewhere */
-.st-meter { gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, 0.02); }
+/* the level of the input: the track the grey of the bars elsewhere */
 .st-meter-track { height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
-.st-meter .st-meter-track { width: 100%; }
-.st-meter .st-hint { text-align: left; }
 .st-field { height: var(--ctl-h); box-sizing: border-box; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--ctl-r); background: var(--elevated);
   color: #F5F5F7; color-scheme: dark; font-family: inherit; font-size: var(--fs-ui); outline: none; }
 .st-field::placeholder { color: var(--hc-dim, #8E8E93); }
@@ -5275,7 +5362,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .lt-chip.st-person-add { border-style: solid; color: var(--accent-text); background: transparent; }
 .lt-chip .vx-plus { width: 14px; height: 14px; flex: none; }
 .st-people-hint, .st-people-teams { font-size: var(--fs-label); }
-.st-save { display: flex; flex-direction: column; gap: 8px; }
 .st-toggle { padding: 0; }
 .st-toggle + .st-toggle { padding-top: 12px; border-top: 1px solid var(--line); }
 .st-meet { border-color: var(--line); border-radius: 8px; }
@@ -5283,18 +5369,92 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-rec { margin: 16px 24px 0 16px; padding: 12px 16px; min-height: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--sec-card); }
 .st-rec .st-meter-track { border: 0; }
 .st-rec-info { padding: 8px 24px 0 16px; min-height: 40px; }
-.st-tabs { margin: 8px 24px 0 16px; padding: 0; gap: 8px; background: none; border-radius: 0; }
 .st-pane-idle { padding: 16px 24px 0 16px; }
 .st-cap-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 12px 24px 12px 16px; flex-shrink: 0; border-bottom: 1px solid var(--line); }
 .st-cap-bar.st-focus-bar { padding-top: 8px; padding-bottom: 8px; }
-.st-cap-more > summary.st-btn { display: inline-flex; }
 .st-cap-pop { background: var(--card); border-color: var(--line); }
+.st-cap-pop.hidden { display: none; }
+/* One row under the recording (asked by the user: the tabs and the captions' choices were two rows of the same
+   segmented buttons): the tabs as underlined text on the left, the captions' chips on the right, all 30px high on
+   one centre line; the row's line is the tabs' base */
+.st-tabrow { display: flex; align-items: stretch; gap: 12px; min-height: 48px; margin: 4px 24px 0 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.st-utabs { display: flex; align-items: stretch; gap: 22px; flex: none; }
+.st-utab { position: relative; display: inline-flex; align-items: center; padding: 0 2px; border: 0; background: none; cursor: pointer;
+  color: var(--hc-dim, #AEAEB2); font-family: inherit; font-size: var(--fs-ui); white-space: nowrap; transition: color var(--dur) ease; }
+.st-utab:hover { color: #F5F5F7; }
+/* bold by a stroke, not by the weight: the tabs beside it keep their places */
+.st-utab.tk-on { color: #FFFFFF; -webkit-text-stroke: 0.45px currentColor; }
+.st-utab.tk-on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 1px; background: var(--accent); }
+.st-utab:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 6px; }
+.st-capctl { display: flex; align-items: center; gap: 8px; min-width: 0; margin-left: auto; }
+.st-pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; box-sizing: border-box; padding: 0 12px; border-radius: 15px; flex: none; font-weight: 400;
+  border: 1px solid var(--line); background: var(--elevated); color: #E5E5EA; font-family: inherit; font-size: var(--fs-ui); white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease, opacity var(--dur) ease; }
+.st-pill:hover { background: #34373B; }
+.st-pill.is-on { border-color: rgb(var(--accent-rgb) / 0.55); background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); }
+.st-pill.is-on:hover { background: rgb(var(--accent-rgb) / 0.22); }
+.st-pill.is-dim { opacity: 0.5; }
+.st-pill[aria-expanded="true"] { border-color: rgb(var(--accent-rgb) / 0.6); }
+.st-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.st-pill.is-call { border-color: rgba(48, 209, 88, 0.8); animation: st-pill-call 2.4s ease-in-out infinite; }
+@keyframes st-pill-call { 0%, 100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0); } 50% { box-shadow: 0 0 0 4px rgba(48, 209, 88, 0.22); } }
+@media (prefers-reduced-motion: reduce) { .st-pill.is-call { animation: none; box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.22); } }
+.st-pill-ic { width: 16px; height: 16px; flex: none; }
+.st-pill-chev { width: 10px; height: 10px; flex: none; opacity: 0.7; }
+.st-pill-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.st-pill-lang { max-width: 150px; }
+#st-tr-pill { flex: 0 1 auto; min-width: 0; }
+#st-models-gb { font-variant-numeric: tabular-nums; }
+.st-pill-sq { width: 30px; padding: 0; justify-content: center; }
+.st-pill-sq .st-pill-ic { width: 17px; height: 17px; }
+/* the switch inside «Субтитры»: the page's toggle, smaller */
+.st-pill-sw { position: relative; width: 26px; height: 16px; margin-right: -5px; border-radius: 8px; flex: none; background: rgba(255, 255, 255, 0.2); transition: background-color var(--dur) ease; }
+.st-pill-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px; background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); transition: left var(--dur) ease; }
+.st-pill[aria-checked="true"] .st-pill-sw { background: var(--accent); }
+.st-pill[aria-checked="true"] .st-pill-sw::after { left: 12px; }
+.st-pop-wrap { position: relative; display: flex; flex: none; }
+.st-pop-h { font-size: var(--fs-ui); line-height: 1.35; font-weight: 600; color: #F5F5F7; }
+.st-pop-group { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
+.st-pop-group + .st-pop-group { padding-top: 12px; border-top: 1px solid var(--line); }
+.st-pop-group > .st-pop-h { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+/* «Модели субтитров»: a row per model (what for, the list, the size, in memory or not), the columns in line */
+.st-models-pop { width: 540px; max-width: min(540px, 86vw); gap: 12px; }
+.st-mrows { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.st-mrow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 100px 96px; align-items: center; column-gap: 10px; }
+.st-mrow.hidden { display: none; }
+.st-mlabel { font-size: var(--fs-ui); color: var(--hc-dim, #AEAEB2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-msel { width: 100%; min-width: 0; }
+.st-mgb { font-size: var(--fs-ui); color: var(--hc-dim, #AEAEB2); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.st-mstate { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-label); white-space: nowrap; color: var(--hc-dim, #8E8E93); }
+.st-mstate::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex: none; box-sizing: border-box; }
+.st-mstate:empty::before { display: none; }
+.st-mstate.is-loaded { color: #30D158; }
+.st-mstate.is-loaded::before { background: #30D158; }
+.st-mstate.is-ready { color: #FF9F0A; }
+.st-mstate.is-ready::before { border: 1.5px solid #FF9F0A; }
+.st-mstate.is-missing { color: #FF6961; }
+.st-mstate.is-missing::before { border: 1.5px solid #FF6961; }
+/* the translator offered for this computer: its name under the lists, the size in line, «Скачать» in the state column */
+.st-moffer { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
+.st-moffer-btn { justify-self: start; }
+.st-pop-note { margin: 0; width: 100%; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-label); line-height: 1.45; color: var(--hc-dim, #8E8E93); white-space: pre-line; }
+.st-pop-note:empty { display: none; }
+/* what the captions are doing when it needs saying (the translation model loading, an error), under the row */
+.st-cap-status { padding: 8px 24px 0 16px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); flex-shrink: 0; }
+.st-cap-status.is-warn { color: #FFC56B; }
+.st-cap-status.hidden { display: none; }
+/* a narrow studio: «Субтитры» keeps its icon and switch, the language a shorter name */
+@container (max-width: 700px) {
+  .st-utabs { gap: 16px; }
+  #st-cap-pill .st-pill-txt { display: none; }
+  .st-pill-lang { max-width: 96px; }
+}
 #studio-quick-langs .quick-lang { height: var(--ctl-h); min-width: var(--ctl-h); box-sizing: border-box; border-radius: var(--ctl-r); }
 #studio-cap-head { background: linear-gradient(var(--bg-deep) 75%, transparent); }
 .studio-cap-head::after { background: linear-gradient(var(--bg-deep), transparent); }
 #studio-notes { padding: 16px 24px 16px 16px; }
 #studio-ask { padding: 16px 24px 16px 16px; }
-@media (max-width: 1250px) { .st-side { width: 320px; } }
 .st-cap-bar.studio-focus-only { display: none; }
 @container (max-width: 860px) { .st-rec #studio-focus-btn { width: var(--ctl-h); padding: 0; } }
 /* a narrow studio: the bar keeps its level as a short track without the figure, so the heading keeps its words */
@@ -5304,6 +5464,8 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
   .st-rec #studio-db { display: none; }
 }
 #studio-view.studio-focus .st-cap-bar { padding-left: 24px; }
+#studio-view.studio-focus .st-tabrow { margin-left: 24px; }
+#studio-view.studio-focus .st-cap-status { padding-left: 24px; }
 
 /* One size of the captions' text in every window (asked by the user): the studio, «На всё окно» and the chat of a
    recording's transcript read --cap-size, set by A−/A+ of the studio (14 px by default) */
@@ -5394,3 +5556,54 @@ textarea.ft-dr-in { height: auto; min-height: var(--ctl-h, 32px); padding: 6px 1
 .dc-add > .tk-input { flex: 1 1 220px; min-width: 0; }
 .dc-add > #settings-dict-cat { flex-basis: 250px; }
 .dc-add > .tk-btn { flex: none; }
+
+/* Settings, one row for every option in every section (asked by the user: the settings were overloaded and every
+   card laid its options out its own way): the name and at most one line under it on the left, the control at the
+   right edge of the card; rows of a card are divided by a line. A card's title sits above its rows. */
+.sx-card-title { margin: 0; font-size: var(--fs-ui); font-weight: 600; color: #FFFFFF; line-height: 1.35; }
+.sx-card-cap { margin: 2px 0 0; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
+.sx-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 30px; padding: 10px 0; }
+label.sx-row { cursor: pointer; }
+label.sx-row:has(.vs-switch:disabled) { cursor: default; }
+.settings-card > .sx-row, .settings-card > .sx-block { margin-top: 0; }
+.settings-card > .sx-row:first-child, .settings-card > .sx-block:first-child { padding-top: 0; }
+.settings-card > .sx-row:last-child, .settings-card > .sx-block:last-child { padding-bottom: 0; }
+.settings-card > .sx-head + .sx-row, .settings-card > .sx-head + .sx-block { margin-top: 6px; }
+.sx-row + .sx-row, .sx-row + .sx-block, .sx-block + .sx-row, .sx-block + .sx-block { border-top: 1px solid var(--hc-line, rgba(255, 255, 255, 0.06)); }
+.sx-row.hidden + .sx-row, .sx-row.hidden + .sx-block { border-top: 0; }
+.sx-row-text { flex: 1; min-width: 0; }
+.sx-row-label { display: block; font-size: var(--fs-ui); line-height: 1.35; color: #F5F5F7; }
+.sx-row-cap { display: block; margin-top: 2px; font-size: var(--fs-label); line-height: 1.4; color: var(--hc-dim, #8E8E93); }
+.sx-row-cap:empty { display: none; }
+.sx-path { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.sx-row-ctl { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.sx-row-ctl.sx-col { flex-direction: column; align-items: flex-end; gap: 6px; }
+.sx-row-ctl .ui-btn { height: 30px; padding: 0 12px; font-size: var(--fs-label); }
+/* an option that only matters while the one above is on: indented under it */
+.sx-row.sx-dep { padding-left: 24px; }
+/* a block: a row whose content is wider than a control (a list, a code, a field across the card) */
+.sx-block { padding: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+/* one size of list in every row, so the right edges line up from section to section */
+.sx-select { height: 30px; width: 260px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14));
+  background: var(--bg); color: #F5F5F7; color-scheme: dark; font-size: var(--fs-caption); }
+.sx-select.sx-narrow { width: 170px; }
+.sx-select:focus { outline: none; border-color: rgb(var(--accent-rgb) / 0.7); }
+.sx-select:disabled { opacity: 0.5; }
+.sx-input { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.14)); background: var(--bg);
+  color: #F5F5F7; font-size: var(--fs-caption); min-width: 0; }
+.sx-input:focus { outline: none; border-color: rgb(var(--accent-rgb) / 0.7); }
+.sx-input.sx-mono { font-family: var(--font-mono); }
+.sx-ctl-name { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.sx-status { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); }
+.sx-head { min-width: 0; }
+/* the part of an option that follows it at once (the programs of «Записывать звонки»): no line between them */
+.sx-block.sx-dep { padding-left: 24px; }
+.sx-row + .sx-tight, .sx-block + .sx-tight { border-top: 0; padding-top: 0; }
+/* a field across the card with its button (a model by name) */
+.sx-field { display: flex; align-items: center; gap: 8px; }
+.sx-field .ui-btn { height: 30px; padding: 0 12px; font-size: var(--fs-label); flex-shrink: 0; }
+.sx-select.sx-time-sel { width: 84px; font-family: var(--font-mono); }
+.sx-row.hidden, .sx-row-cap.hidden, .sx-block.hidden, .sx-field.hidden { display: none; }
+.sx-input.sx-ctl-w { width: 260px; }
+.sx-row-ctl.sx-range { width: 260px; }
+.settings-card > :is(.sx-row, .sx-block):has(+ .hidden:last-child) { padding-bottom: 0; }

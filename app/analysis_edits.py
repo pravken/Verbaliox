@@ -399,17 +399,17 @@ def _parse_check(answer: str, text: str) -> List[Dict[str, str]]:
 
 
 def check_with_model(meeting: Dict[str, Any]) -> List[Dict[str, str]]:
-    """A small model reads the analysis for words heard wrong. Uses the small installed model of live
-    translation (seconds instead of a minute), else the analysis model."""
+    """A small model reads the analysis for words heard wrong. Uses the small installed general model of live
+    translation (seconds instead of a minute; a translator such as Hy-MT cannot do it), else the analysis model."""
     from app import llm
 
     text = analysis_text(meeting)[:CHECK_TEXT_MAX]
     if not text.strip():
         return []
     try:
-        from app.live_translate import model_choices
+        from app.live_translate import small_chat_model
 
-        model = model_choices().get("fast")
+        model = small_chat_model()
     except Exception:
         model = None
     tgt = llm.target(model)

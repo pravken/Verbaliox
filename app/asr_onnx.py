@@ -22,8 +22,21 @@ from app.paths import MODELS_DIR
 ONNX_MODELS: Dict[str, Dict[str, Any]] = {
     "gigaam-v3": {
         "onnx_name": "gigaam-v3-e2e-rnnt",
+        # Other files of the same repository for some copies (_key), each with the files it needs; until they
+        # are downloaded (_complete_async: an installation made before they were added) the copy is the main one.
+        # live: live captions by VAD phrases (app/live_phrases.py): the e2e-CTC int8 recognizes a phrase in
+        # 0.1 s with the WER of the RNN-T (bench-report/asr-2026-11.md, item 3)
+        # cpu: a job on the processor takes the e2e-RNN-T int8: the same WER, 1.6 times faster, 0.46 GB of memory
+        # instead of 1.1 (item 5); the video card keeps the main fp32 model
+        "variants": {
+            "live": {"onnx_name": "gigaam-v3-e2e-ctc", "quantization": "int8", "phrases": True,
+                     "files": ["v3_e2e_ctc.int8.onnx", "v3_e2e_ctc_vocab.txt"]},
+            "cpu": {"onnx_name": "gigaam-v3-e2e-rnnt", "quantization": "int8",
+                    "files": ["v3_e2e_rnnt_encoder.int8.onnx", "v3_e2e_rnnt_decoder.int8.onnx",
+                              "v3_e2e_rnnt_joint.int8.onnx", "v3_e2e_rnnt_vocab.txt"]},
+        },
         "name": "GigaAM v3",
-        "size_mb": 900,
+        "size_mb": 1285,  # MiB as _dir_mb counts them: 1281 for the model folder downloaded on 2026-11-25
         "license": "MIT",
         "vram_gb": 1.5,  # on the GPU (app/onnx_gpu.py)
         "languages": ["ru"],
@@ -45,6 +58,8 @@ ONNX_MODELS: Dict[str, Dict[str, Any]] = {
 VAD_NAME = "silero"
 MAX_PHRASE_SEC = 20.0
 
+# _lock guards the dictionaries of the copies and is held only for a moment: a copy is loaded (tens of seconds for
+# Parakeet fp32) under its own lock (_copy_lock), so the captions' step never waits for a job loading another copy
 _lock = threading.Lock()
 _fetch_lock = threading.Lock()
 _loaded: Dict[str, Any] = {}
@@ -186,8 +201,20 @@ def gpu_tuning() -> Tuple[int, bool]:
         return GPU_BATCH, False
 
 
-def _key(model_id: str, gpu: bool) -> str:
-    return f"{model_id}@gpu" if gpu else model_id
+# Each model has up to three copies in memory, each a session of its own (ONNX Runtime fixes the threads of a
+# session when it is made): "<id>@gpu" for a job on the video card, "<id>" for a job on the processor (its threads
+# from the budget below) and "<id>@live" for live captions and dictation (live_threads)
+def _key(model_id: str, gpu: bool, live: bool = False) -> str:
+    return f"{model_id}@gpu" if gpu else f"{model_id}@live" if live else model_id
+
+
+def _settings() -> Dict[str, str]:
+    try:
+        from app.database import get_all_settings
+
+        return get_all_settings()
+    except Exception:
+        return {}
 
 
 def cpu_threads(settings: Optional[Dict[str, str]] = None) -> int:
@@ -197,12 +224,7 @@ def cpu_threads(settings: Optional[Dict[str, str]] = None) -> int:
     import os
 
     if settings is None:
-        try:
-            from app.database import get_all_settings
-
-            settings = get_all_settings()
-        except Exception:
-            settings = {}
+        settings = _settings()
     cores = os.cpu_count() or 4
     value = str(settings.get("cpu_threads") or "auto").lower()
     if value == "all":
@@ -212,51 +234,276 @@ def cpu_threads(settings: Optional[Dict[str, str]] = None) -> int:
     return max(2, min(8, cores // 2))
 
 
-def _cpu_options():
-    """Session options of a model on the processor: its threads limited (cpu_threads)."""
+# One budget of threads for the whole program (bench-report/asr-2026-11.md, item 2): live captions by VAD phrases
+# recognize one phrase of a few seconds at a time and need 2 threads; by the sliding window (Parakeet) they
+# recognize up to 20 s again every 1.2 s and need 4: on 2 a step took 1 s in the median, the window fell behind
+# and the WER rose from 5.6 % to 8-9 % (bench-report/asr-2026-11-check.md). While captions run, a transcription
+# job on the processor takes at most what is left once they and RESERVED_THREADS (the call app, the video, the
+# page) have theirs.
+LIVE_THREADS = 2
+WINDOW_THREADS = 4
+RESERVED_THREADS = 2
+
+
+def live_threads(settings: Optional[Dict[str, str]] = None, model_id: Optional[str] = None) -> int:
+    """Threads of the copy for live captions and dictation of this model: by VAD phrases LIVE_THREADS, by the
+    window WINDOW_THREADS (never more than the user's setting allows)."""
+    want = WINDOW_THREADS if model_id in ONNX_MODELS and not live_phrases(model_id) else LIVE_THREADS
+    return max(1, min(want, cpu_threads(settings)))
+
+
+def _captions_running() -> bool:
+    try:
+        from app import live
+
+        return live.has_sessions()
+    except Exception:
+        return False
+
+
+def _captions_threads(settings: Dict[str, str]) -> int:
+    """Threads the running captions take: the most of their models' copies (the Whisper captions: LIVE_THREADS)."""
+    try:
+        from app import live
+
+        models = live.onnx_models_in_use()
+    except Exception:
+        models = set()
+    return max([live_threads(settings, m) for m in models] or [live_threads(settings)])
+
+
+def queue_threads(settings: Optional[Dict[str, str]] = None, captions: Optional[bool] = None) -> int:
+    """Threads of a transcription job on the processor: the user's setting (cpu_threads) and, while live captions
+    run, at most «logical processors − caption threads − RESERVED_THREADS» (at least 1). A session keeps its
+    threads to its end: a job that started before the captions finishes with what it had, the next job's session
+    is made with the budget of its start (_load)."""
+    import os
+
+    if settings is None:
+        settings = _settings()
+    limit = cpu_threads(settings)
+    if captions is None:
+        captions = _captions_running()
+    if captions:
+        cores = os.cpu_count() or 4
+        try:  # Ollama translating the captions on the processor takes its threads too
+            from app.live_translate import cpu_threads_in_use
+            ollama = cpu_threads_in_use()
+        except Exception:
+            ollama = 0
+        limit = min(limit, max(1, cores - _captions_threads(settings) - RESERVED_THREADS - ollama))
+    return limit
+
+
+# ONNX Runtime's threads wait for work actively by default (spinning): two such pools on a 4-core / 8-thread
+# laptop (live captions and the queue) froze the whole PC for up to 0.1 s hundreds of times in five minutes,
+# with no gain in speed (bench-report/asr-2026-11.md, «созвон»). Without it the queue is even faster.
+NO_SPINNING = {"session.intra_op.allow_spinning": "0", "session.inter_op.allow_spinning": "0"}
+
+
+def _no_spinning(so: Any) -> Any:
+    for key, value in NO_SPINNING.items():
+        so.add_session_config_entry(key, value)
+    return so
+
+
+def _cpu_options(threads: Optional[int] = None):
+    """Session options of a model on the processor: its threads limited (cpu_threads by default), not spinning."""
     try:
         import onnxruntime as ort
     except ImportError:
         return None
     so = ort.SessionOptions()
-    so.intra_op_num_threads = cpu_threads()
+    so.intra_op_num_threads = threads or cpu_threads()
     so.inter_op_num_threads = 1
-    return so
+    return _no_spinning(so)
+
+
+def _gpu_options():
+    """Session options of a model on the video card: the operators left on the processor do not spin either."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return None
+    return _no_spinning(ort.SessionOptions())
 
 
 def release_cpu() -> None:
     """The copies on the processor go (the number of threads changed): loaded again when next needed."""
+    _settings_seen[:] = [0.0, None]
+    _release_where(lambda key: not key.endswith("@gpu"))
+
+
+_made: Dict[str, Tuple[str, Optional[str], int]] = {}  # copy -> (onnx-asr model, quantization, threads) it was made with
+_plain: Dict[str, Any] = {}  # copy of live captions -> the same model without the VAD (app/live_phrases.py)
+
+
+_copy_locks: Dict[str, threading.Lock] = {}  # copy -> held while it is loaded or released
+
+
+def _copy_lock(key: str) -> threading.Lock:
     with _lock:
-        for key in [k for k in _loaded if not k.endswith("@gpu")]:
-            _loaded.pop(key, None)
+        return _copy_locks.setdefault(key, threading.Lock())
 
 
-def _load(model_id: str, gpu: bool = False):
+def _drop(key: str) -> None:
+    """A copy out of memory (call with _lock held)."""
+    _loaded.pop(key, None)
+    _plain.pop(key, None)
+    _made.pop(key, None)
+
+
+def _release_where(match: Callable[[str], bool]) -> List[str]:
+    """The copies whose key matches go; returns those that were in memory. A copy being loaded right now goes once
+    its load ends (as when the load held the one lock): it is not left in memory after a release."""
+    with _lock:
+        keys = sorted(k for k in set(_loaded) | set(_copy_locks) if match(k))
+    dropped = []
+    for key in keys:
+        with _copy_lock(key):
+            with _lock:
+                if key in _loaded:
+                    dropped.append(key)
+                _drop(key)
+    return dropped
+
+
+def _fits(key: str, made: Tuple[str, Optional[str], int]) -> bool:
+    """The copy is in memory and was made as it should be now (one put there without its record is taken as is)."""
+    return key in _loaded and _made.get(key, made) == made
+
+
+def _any_copy(model_id: str) -> bool:
+    return any(k.split("@")[0] == model_id for k in list(_loaded))
+
+
+def _variant(model_id: str, kind: str) -> Dict[str, Any]:
+    """What the copy of this kind ("gpu", "cpu" or "live") is made from: {"onnx_name", "quantization", "phrases"}.
+    A variant whose files are not downloaded yet gives way to the main model, and its files are fetched in the
+    background (an installation made before the variant was added): the next copy made uses it."""
+    m = ONNX_MODELS[model_id]
+    v = (m.get("variants") or {}).get(kind)
+    if v and _has_files(model_id, v):
+        return v
+    if v:
+        _complete_async(model_id)
+    return {"onnx_name": m["onnx_name"], "quantization": None, "phrases": False}
+
+
+_present: set = set()  # (model, file) found on disk
+
+
+def _has_files(model_id: str, variant: Dict[str, Any]) -> bool:
+    d = model_dir(model_id)
+    for name in variant.get("files") or []:
+        if (model_id, name) not in _present:
+            if not (d / name).is_file():
+                return False
+            _present.add((model_id, name))
+    return True
+
+
+def live_phrases(model_id: Optional[str]) -> bool:
+    """Live captions with this model go by VAD phrases (app/live_phrases.py), not by the sliding window."""
+    return bool(model_id) and model_id in ONNX_MODELS and bool(_variant(model_id, "live").get("phrases"))
+
+
+_completing: Dict[str, float] = {}  # model -> when its missing files were last fetched in the background
+# its own lock: _variant (and so is_loaded) calls _complete_async, and preload_async held _lock around is_loaded —
+# the captions' preload hung for good when their copy was loaded and the files of a variant were missing
+_completing_lock = threading.Lock()
+COMPLETE_RETRY_SEC = 600.0
+
+
+def _complete_async(model_id: str) -> None:
+    """The files of the variants of an installed model, downloaded in the background (once; again after
+    COMPLETE_RETRY_SEC when it failed)."""
+    import time
+
+    with _completing_lock:
+        if time.time() - _completing.get(model_id, 0.0) < COMPLETE_RETRY_SEC:
+            return  # (before is_installed: it looks at the disk, and this is asked on every step of the captions)
+        if not is_installed(model_id):
+            return  # not installed: «Download» fetches everything
+        _completing[model_id] = time.time()
+
+    def work() -> None:
+        try:
+            with _fetch_lock:
+                ok = fetch(model_id)
+            if ok:
+                print(f"[asr_onnx] {model_id}: the files of its variants are downloaded", flush=True)
+        except Exception as e:
+            print(f"[asr_onnx] {model_id}: its variants were not downloaded: {e}", flush=True)
+
+    threading.Thread(target=work, daemon=True, name=f"onnx_complete_{model_id}").start()
+
+
+SETTINGS_TTL_SEC = 5.0
+_settings_seen: List[Any] = [0.0, None]  # (when, settings) for the captions' steps
+
+
+def _settings_now() -> Dict[str, str]:
+    """The settings, read again at most every SETTINGS_TTL_SEC: every step of the captions (about every 0.25 s) works
+    out the threads of its copy from them, and they change rarely (release_cpu forgets them when the threads do)."""
+    import time
+
+    now = time.monotonic()
+    when, cached = _settings_seen
+    if cached is None or now - when >= SETTINGS_TTL_SEC:
+        cached = _settings()
+        _settings_seen[:] = [now, cached]
+    return cached
+
+
+def _load(model_id: str, gpu: bool = False, live: bool = False):
     """The model and the VAD, loaded once (installing the library and downloading what is missing).
-    gpu: on the video card (app/onnx_gpu.py; a copy apart from the CPU one live captions use). The VAD
-    stays on the CPU: it is tiny, and the GPU would only add copies."""
+    gpu: on the video card (app/onnx_gpu.py); live: the copy for live captions and dictation (live_threads);
+    otherwise the copy of a job on the processor, made again when the thread budget (queue_threads) has
+    changed since it was made. Each copy is made from its variant (_variant), and again once a variant
+    downloaded later is there. The VAD stays on the CPU: it is tiny, and the GPU would only add copies.
+    A copy in memory as it should be is returned without any lock: a job loading another copy (under that copy's
+    lock) does not stop the captions."""
+    key = _key(model_id, gpu, live)
+    variant = _variant(model_id, "gpu" if gpu else "live" if live else "cpu")
+    threads = 0 if live else queue_threads()  # a job on the video card: its VAD on the processor
+    cpu_n = live_threads(_settings_now(), model_id) if live else threads
+    made = (variant["onnx_name"], variant.get("quantization"), 0 if gpu else cpu_n)
+    ready = _loaded.get(key)
+    if ready is not None and _made.get(key, made) == made:
+        return ready
     ensure_package()
     import onnx_asr
 
     from app import onnx_gpu
 
-    if model_id not in _loaded and _key(model_id, True) not in _loaded:
+    if not _any_copy(model_id) and not _main_on_disk(model_id):
+        # only the main model and the VAD: the files of the variants come in the background (_complete_async).
+        # Fetching them here failed the load of an installation made before they were added when there was no
+        # internet, and with it held the first job for a download of 0.45 GB without progress
         with _fetch_lock:  # the download (gigabytes) must not hold the lock live captions wait on
-            fetch(model_id)
-    key = _key(model_id, gpu)
-    with _lock:
-        if key not in _loaded:
-            if gpu:
-                onnx_gpu.prepare_cuda()
-            batch, vad_gpu = gpu_tuning() if gpu else (CPU_BATCH, False)
-            cpu = None if gpu else _cpu_options()
-            asr = onnx_asr.load_model(ONNX_MODELS[model_id]["onnx_name"], model_dir(model_id),
-                                      providers=onnx_gpu.providers(gpu), sess_options=cpu)
-            vad = onnx_asr.load_vad(VAD_NAME, _vad_dir(), providers=onnx_gpu.providers(vad_gpu),
-                                    sess_options=None if vad_gpu else _cpu_options())
-            _loaded[key] = asr.with_vad(vad, max_speech_duration_s=MAX_PHRASE_SEC, min_silence_duration_ms=300,
-                                        speech_pad_ms=120, batch_size=batch).with_timestamps()
-        return _loaded[key]
+            fetch(model_id, variants=False)
+    with _copy_lock(key):
+        with _lock:
+            if _fits(key, made):
+                return _loaded[key]  # loaded by another thread meanwhile
+            _drop(key)  # the budget changed (captions started or ended) or a variant was downloaded
+        if gpu:
+            onnx_gpu.prepare_cuda()
+        batch, vad_gpu = gpu_tuning() if gpu else (CPU_BATCH, False)
+        opts = _gpu_options() if gpu else _cpu_options(cpu_n)
+        asr = onnx_asr.load_model(variant["onnx_name"], model_dir(model_id), quantization=variant.get("quantization"),
+                                  providers=onnx_gpu.providers(gpu), sess_options=opts)
+        vad = onnx_asr.load_vad(VAD_NAME, _vad_dir(), providers=onnx_gpu.providers(vad_gpu),
+                                sess_options=_gpu_options() if vad_gpu else _cpu_options(cpu_n))
+        with_vad = asr.with_vad(vad, max_speech_duration_s=MAX_PHRASE_SEC, min_silence_duration_ms=300,
+                                speech_pad_ms=120, batch_size=batch).with_timestamps()
+        with _lock:
+            if live:
+                _plain[key] = asr.with_timestamps()  # before _loaded: recognize_phrase finds it once the copy is there
+            _made[key] = made
+            _loaded[key] = with_vad
+            return with_vad
 
 
 # The commit each repository is downloaded from (onnx-asr itself always takes main): a rewritten or
@@ -292,24 +539,76 @@ def _pinned(resolver: Any) -> Any:
     return resolver
 
 
-def fetch(model_id: str) -> None:
+def fetch(model_id: str, variants: bool = True) -> bool:
     """Downloads the missing model files into our models folder. onnx_asr.load_model with a path that
     already exists only looks there and never downloads, so the files are fetched with its resolver
-    (offline=False: look in the folder, download from Hugging Face what is not there)."""
+    (offline=False: look in the folder, download from Hugging Face what is not there). variants: the files of
+    its other copies (_variant) too; one that fails is left for later (the copy uses the main model meanwhile,
+    _complete_async tries again) and False is returned. The main model or the VAD failing raises."""
     from onnx_asr.loader import create_asr_resolver, create_vad_resolver
 
-    _pinned(create_asr_resolver(ONNX_MODELS[model_id]["onnx_name"], model_dir(model_id), offline=False)).resolve_model()
+    m = ONNX_MODELS[model_id]
+    _pinned(create_asr_resolver(m["onnx_name"], model_dir(model_id), offline=False)).resolve_model()
     _pinned(create_vad_resolver(VAD_NAME, _vad_dir(), offline=False)).resolve_model()
+    ok = True
+    for kind, v in (m.get("variants") or {}).items() if variants else ():
+        try:
+            _pinned(create_asr_resolver(v["onnx_name"], model_dir(model_id), offline=False)).resolve_model(
+                quantization=v.get("quantization"))
+        except Exception as e:
+            print(f"[asr_onnx] {model_id}: the files of its «{kind}» copy were not downloaded: {e}", flush=True)
+            ok = False
+    return ok
 
 
-def release(model_id: Optional[str] = None, gpu: Optional[bool] = None) -> None:
-    """gpu None: both copies of the model."""
+def _main_on_disk(model_id: str) -> bool:
+    """Every file of the main model and of the VAD is in the models folder: looked up there only (offline), so
+    loading needs neither the network nor _fetch_lock, which a download of the variants in the background holds."""
+    try:
+        from onnx_asr.loader import create_asr_resolver, create_vad_resolver
+
+        m = ONNX_MODELS[model_id]
+        if not model_dir(model_id).is_dir() or not _vad_dir().is_dir():
+            return False
+        create_asr_resolver(m["onnx_name"], model_dir(model_id), offline=True).resolve_model()
+        create_vad_resolver(VAD_NAME, _vad_dir(), offline=True).resolve_model()
+        return True
+    except Exception:
+        return False
+
+
+def release(model_id: Optional[str] = None, gpu: Optional[bool] = None, keep_live: bool = False) -> None:
+    """The copies of a model (of every model without model_id): gpu None — all of them, True — the one on the
+    video card, False — those on the processor. keep_live: the copy of live captions stays."""
+    def match(key: str) -> bool:
+        mid, _, kind = key.partition("@")
+        return not (model_id and mid != model_id or gpu is not None and (kind == "gpu") != gpu
+                    or keep_live and kind == "live")
+
+    _release_where(match)
+
+
+def shares_live_copy(model_id: str) -> bool:
+    """A job on the processor would load the same files as the copy of live captions: Parakeet (both fp32, about
+    3 GB each; 6 GB with the two at once, bench-report/asr-2026-11-check.md). GigaAM takes different files for
+    each (CTC int8 by phrases, RNN-T int8 in the queue) and shares nothing once they are downloaded."""
+    if model_id not in ONNX_MODELS:
+        return False
+    live, cpu = _variant(model_id, "live"), _variant(model_id, "cpu")
+    return (live["onnx_name"], live.get("quantization")) == (cpu["onnx_name"], cpu.get("quantization"))
+
+
+def release_live(model_id: str) -> bool:
+    """The copy of live captions of this model out of memory (the captions ended and a job on the processor loads
+    its own): True when it was there. Loaded again when captions or dictation next need it."""
+    key = _key(model_id, False, live=True)
+    return bool(_release_where(lambda k: k == key))
+
+
+def copies() -> List[str]:
+    """The copies in memory, as keys of _key ("gigaam-v3", "gigaam-v3@gpu", "gigaam-v3@live")."""
     with _lock:
-        if model_id:
-            for g in ((False, True) if gpu is None else (gpu,)):
-                _loaded.pop(_key(model_id, g), None)
-        else:
-            _loaded.clear()
+        return sorted(_loaded)
 
 
 def on_gpu(model_id: str) -> bool:
@@ -318,9 +617,7 @@ def on_gpu(model_id: str) -> bool:
 
 def release_gpu() -> None:
     """Frees the video memory of the models a transcription job loaded there."""
-    with _lock:
-        for k in [k for k in _loaded if k.endswith("@gpu")]:
-            _loaded.pop(k, None)
+    _release_where(lambda k: k.endswith("@gpu"))
 
 
 def preload(model_id: str) -> None:
@@ -332,23 +629,31 @@ def preload(model_id: str) -> None:
 
 _preloading: Dict[str, threading.Thread] = {}
 _preload_errors: Dict[str, Tuple[float, str]] = {}  # model -> (when, why) of the last failed load
+_preload_lock = threading.Lock()  # not _lock: is_loaded under it reached _complete_async (a deadlock)
 PRELOAD_RETRY_SEC = 60.0
 
 
 def is_loaded(model_id: str) -> bool:
-    """The CPU copy (live captions) is in memory: recognizing with it starts at once."""
-    return _key(model_id, False) in _loaded
+    """The copy of live captions is in memory, made from the variant it should be (a variant downloaded since
+    is loaded in the background too): recognizing with it starts at once."""
+    key = _key(model_id, False, live=True)
+    if key not in _loaded:
+        return False
+    made, v = _made.get(key), _variant(model_id, "live")
+    return made is None or made[:2] == (v["onnx_name"], v.get("quantization"))
 
 
 def preload_async(model_id: str) -> str:
-    """Loads the CPU copy in the background (installing onnx-asr or downloading missing files can take
+    """Loads the copy of live captions in the background (installing onnx-asr or downloading missing files can take
     minutes: never in a request). Returns why the last try failed, '' while none did; a failed load
     is tried again after PRELOAD_RETRY_SEC."""
     import time
 
-    with _lock:
+    if is_loaded(model_id):
+        return ""
+    with _preload_lock:
         running = _preloading.get(model_id)
-        if running and running.is_alive() or is_loaded(model_id):
+        if running and running.is_alive():
             return ""
         failed = _preload_errors.get(model_id)
         if failed and time.time() - failed[0] < PRELOAD_RETRY_SEC:
@@ -356,7 +661,7 @@ def preload_async(model_id: str) -> str:
 
         def _run() -> None:
             try:
-                _load(model_id)
+                _load(model_id, live=True)
                 _preload_errors.pop(model_id, None)
             except Exception as e:
                 traceback.print_exc()
@@ -469,10 +774,14 @@ def level(audio: Any, sr: int = 16000) -> Any:
 
 def recognize_array(model_id: str, audio: Any) -> List[Tuple[float, float, str]]:
     """Sentences of a short 16 kHz float32 window (live captions): [(start, end, text)], cut at the
-    word timings, so a sentence ends exactly where the next one starts."""
-    asr = _load(model_id)
+    word timings, so a sentence ends exactly where the next one starts. The copy of live captions does it."""
+    from app.cpu_priority import below_normal_thread
+
+    asr = _load(model_id, live=True)
     out = []
-    for res in asr.recognize(level(audio), sample_rate=16000):
+    with below_normal_thread():  # the call app and the page first (app/cpu_priority.py)
+        results = list(asr.recognize(level(audio), sample_rate=16000))
+    for res in results:
         text = clean_text(" ".join((res.text or "").split()))
         if not text:
             continue
@@ -487,6 +796,35 @@ def recognize_array(model_id: str, audio: Any) -> List[Tuple[float, float, str]]
     return out
 
 
+def recognize_phrase(model_id: str, audio: Any) -> List[Tuple[float, float, str]]:
+    """Sentences of one phrase the live captions cut by the VAD themselves (app/live_phrases.py), already
+    levelled: [(start, end, text)] from the phrase's start, cut at the word timings. No VAD inside."""
+    import numpy as np
+
+    from app.cpu_priority import below_normal_thread
+
+    _load(model_id, live=True)
+    plain = _plain.get(_key(model_id, False, live=True))
+    if plain is None:  # unloaded meanwhile
+        return []
+    a = np.asarray(audio, dtype=np.float32)
+    if a.size < 1600:  # under 0.1 s: nothing to hear
+        return []
+    with below_normal_thread():  # the call app and the page first (app/cpu_priority.py)
+        res = plain.recognize(a, sample_rate=16000)
+    raw = " ".join((getattr(res, "text", "") or "").split())
+    text = clean_text(raw)
+    if not text:
+        return []
+    end = a.size / 16000
+    if getattr(res, "tokens", None) and getattr(res, "timestamps", None):
+        words = _clean_words(words_from_text(raw, res.tokens, res.timestamps, 0.0, end))
+        if words:
+            seg = {"start": words[0]["start"], "end": end, "text": text, "words": words}
+            return [(p["start"], p["end"], p["text"]) for p in split_sentences_words(seg)]
+    return split_sentences_text(0.0, end, text)
+
+
 def start_download(model_id: str) -> Dict[str, Any]:
     """Downloads the model in the background (loading it once fetches every file it needs)."""
     if model_id not in ONNX_MODELS:
@@ -497,6 +835,8 @@ def start_download(model_id: str) -> Dict[str, Any]:
 
     def work() -> None:
         try:
+            with _fetch_lock:  # every file, the variants too (_load fetches only the main model)
+                fetch(model_id)
             _load(model_id)
             _downloads[model_id] = {"active": False, "error": ""}
         except Exception as e:
@@ -646,9 +986,21 @@ def transcribe(model_id: str, wav_path: Path, total_dur: float, on_progress: Cal
                gpu: bool = False, leveling: bool = True) -> List[Dict[str, Any]]:
     """Segments like faster-whisper's: [{start, end, text, words: [{word, start, end, prob}]}].
     `out` (optional) receives them as they come, for showing the text while it is recognized."""
-    import soundfile as sf
+    import contextlib
+
+    from app.cpu_priority import below_normal_thread
 
     asr = _load(model_id, gpu)
+    # on the processor the job's thread runs «below normal»: the call app and the page first (app/cpu_priority.py)
+    with contextlib.nullcontext() if gpu else below_normal_thread():
+        return _transcribe_with(asr, wav_path, total_dur, on_progress, check_cancel, out, leveling)
+
+
+def _transcribe_with(asr: Any, wav_path: Path, total_dur: float, on_progress: Callable[[float], None],
+                     check_cancel: Callable[[], None], out: Optional[List[Dict[str, Any]]],
+                     leveling: bool) -> List[Dict[str, Any]]:
+    import soundfile as sf
+
     audio, sr = sf.read(str(wav_path), dtype="float32")  # 16 kHz mono (app/audio_utils.py)
     if getattr(audio, "ndim", 1) > 1:
         audio = audio.mean(axis=1)

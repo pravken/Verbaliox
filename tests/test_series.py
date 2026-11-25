@@ -1,8 +1,29 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from app.series import matching_meeting, people, title_key
+
+
+# A model a test reports as installed never fetches the files of its variants in the background
+# (asr_onnx._variant -> _complete_async -> fetch: a real download of the model)
+_no_fetch = None
+
+
+def setUpModule():
+    global _no_fetch
+    try:
+        from app import asr_onnx
+    except ImportError:  # app dependencies are not installed
+        return
+    _no_fetch = mock.patch.object(asr_onnx, "_complete_async")
+    _no_fetch.start()
+
+
+def tearDownModule():
+    if _no_fetch is not None:
+        _no_fetch.stop()
 
 
 def _m(id, title, when, names=()):
@@ -71,8 +92,8 @@ class OnnxEnsurePackageTest(unittest.TestCase):
                 calls.append((repo_id, revision, local_files_only))
                 Path(local_dir).mkdir(parents=True, exist_ok=True)
                 for f in allow_patterns:
-                    if not f.startswith("**/") and "?" not in f:
-                        Path(local_dir, f).write_text("x")
+                    if not f.startswith("**/") and not f.endswith("?data"):
+                        Path(local_dir, f.replace("?", ".")).write_text("x")  # "v3_e2e_ctc?int8.onnx" too
                 return local_dir
 
             with mock.patch.object(asr_onnx, "model_dir", return_value=d), \
@@ -148,7 +169,7 @@ class LiveOnnxLoadingTest(unittest.TestCase):
 
         calls = []
 
-        def failing(model_id, gpu=False):
+        def failing(model_id, gpu=False, live=False):
             calls.append(model_id)
             raise RuntimeError("onnx-asr could not be installed")
 
@@ -278,9 +299,10 @@ class LiveSentenceLinesTest(unittest.TestCase):
         self.assertEqual(get_all_settings()["live_whisper_model"], "parakeet-v3")
         s.translator = mock.Mock()
         s.set_translate_model("qwen3:4b")
-        s.translator.set_model.assert_called_with("qwen3:4b")
+        s.translator.reload_model.assert_called_once_with()
         self.assertEqual(s.state()["translate_choice"], "qwen3:4b")
-        update_settings({"live_whisper_model": "auto"})
+        self.assertEqual(get_all_settings()["live_translate_model_quality"], "qwen3:4b")
+        update_settings({"live_whisper_model": "auto", "live_translate_model_quality": ""})
 
 
 class TitleCleanTest(unittest.TestCase):

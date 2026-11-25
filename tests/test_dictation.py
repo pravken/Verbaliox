@@ -42,14 +42,38 @@ class DictationTranslateTest(unittest.TestCase):
     def setUp(self):
         init_db()
         update_settings({"dictation_translate_to": "en"})
+        # the model of «Качество» of live captions: here the analysis model (no translator installed)
+        patcher = mock.patch("app.live_translate.translation_model", return_value="gemma4:e4b")
+        self.chosen = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_text_is_translated_by_the_local_model(self):
         tgt = _Target(answer="<think>x</think> «Hello, I will send the report tomorrow.»")
         with mock.patch.object(llm, "target", return_value=tgt) as pick:
             out, note = dictation.translate("Привет, завтра пришлю отчёт.", "en")
         self.assertEqual((out, note), ("Hello, I will send the report tomorrow.", ""))
-        self.assertEqual(pick.call_args.args, (None,))
+        self.assertEqual(pick.call_args.args, ("gemma4:e4b",))
+        self.assertEqual(self.chosen.call_args.args, ("quality",))
         self.assertIn("English", tgt.asked[0][0])
+
+    def test_a_translator_of_the_captions_translates_with_its_card_prompt(self):
+        from app import live_translate
+
+        asked = []
+        self.chosen.return_value = "hy-mt3-1.8b:latest"
+        with mock.patch.object(live_translate, "translator_chat",
+                               side_effect=lambda *a, **k: asked.append((a, k)) or "Hello, I will send the report tomorrow."), \
+                mock.patch.object(llm, "target") as pick:
+            out, note = dictation.translate("Привет, завтра пришлю отчёт.", "en")
+        self.assertEqual((out, note), ("Hello, I will send the report tomorrow.", ""))
+        pick.assert_not_called()  # no general model is asked
+        (args, kw), = asked
+        self.assertEqual(args, ("hy-mt3-1.8b:latest", "Привет, завтра пришлю отчёт.", "ru", "en"))
+        self.assertTrue(kw["long"])
+        # the request itself: the Hy-MT card prompt, a context and a length for paragraphs
+        body = live_translate.translator_payload("hy-mt3-1.8b:latest", "Привет", "ru", "en", long=True)
+        self.assertTrue(body["messages"][0]["content"].startswith("Translate the following text into English."))
+        self.assertEqual((body["options"]["num_ctx"], body["options"]["num_predict"]), (4096, 1024))
 
     def test_text_already_in_the_language_is_typed_as_it_is(self):
         with mock.patch.object(llm, "target") as pick:

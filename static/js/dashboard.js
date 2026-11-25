@@ -1,8 +1,10 @@
 // Verbaliox page script: «Обзор» (static/parts/dashboard.html; docs/pult-plan.md, stage 3), the analytics of a
 // period: widgets the user arranges («Настроить»: dragged, sized S · M · L · W, removed, added from the list), kept
 // with the settings. The data widgets read /api/dashboard (app/dashboard.py) for the period and the feature chosen;
-// «Частые участники» and «Мои программы» have a period of their own. The day (its meetings and its cards) is
-// «Сегодня» (static/js/today.js), which draws its cards with the functions of this file.
+// «Частые участники» and «Мои программы» have a period of their own. ‹ › go back to any past period (DB.at, not
+// kept with the settings: the app opens on the current one), its figures compared with the period before or the
+// same days a year earlier (dbPrefs().compare). The day (its meetings and its cards) is «Сегодня»
+// (static/js/today.js), which draws its cards with the functions of this file.
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 const DB_KEY = 'vx-dashboard';
@@ -29,7 +31,9 @@ const DB_WIDGETS = {
 };
 // rows that add up to 12: W · M+M · L+S · M+M · W
 const DB_DEFAULT = [['kpis', 'W'], ['time', 'M'], ['load', 'M'], ['features', 'L'], ['people', 'S'], ['decisions', 'M'], ['dull', 'M'], ['summary', 'W']];
-const DB_PERIODS = ['week', 'month', 'quarter'];
+const DB_PERIODS = ['week', 'month', 'quarter', 'year'];
+// what the figures of «Статистика» are compared with: the period before, or the same days a year earlier
+const DB_COMPARE = ['prev', 'year'];
 // added after the first dashboard: offered once to an existing layout, after the widget named (removed by
 // the user, it stays out)
 const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['load', 'time'], ['dull', 'decisions'], ['worked', 'kpis']];
@@ -39,7 +43,8 @@ const DB_KPI_MAX = 8, DB_KPI_MIN = 2;
 // the period of one widget («Частые участники», «Мои программы»), apart from the page's own
 const DB_WPERIODS = ['day', 'week', 'month', 'year'];
 
-const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false, kpiCfg: false, people: null };
+// at: the first day of the past period shown (YYYY-MM-DD), '' for the current one
+const DB = { data: null, week: null, prevWeek: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false, kpiCfg: false, people: null, at: '' };
 
 function dbPrefs() {
   if (DB.prefs) return DB.prefs;
@@ -62,6 +67,7 @@ function dbPrefs() {
     days: p.days === 'work' ? 'work' : 'cal',
     layout: layout && layout.length ? layout : DB_DEFAULT.map(([id, size]) => ({ id, size })),
     period: DB_PERIODS.includes(p.period) ? p.period : 'week',
+    compare: DB_COMPARE.includes(p.compare) ? p.compare : 'prev',
     feature: Number(p.feature) || 0,
     summary: p.summary && typeof p.summary === 'object' ? p.summary : null,
     // «Сегодня»: the day, the week or the month of its calendar (static/js/today.js)
@@ -105,17 +111,19 @@ function dbSize(w) {
 }
 
 // --- Data ---
-async function loadDashboard() {
+// keepWeek: the period only moved (‹ ›, «Текущий период», another period or comparison): the week of «Нагрузка
+// недели» and «Рабочий день» is asked again only when it is another week
+async function loadDashboard({ keepWeek = false } = {}) {
   const p = dbPrefs();
   const seq = (DB.seq = (DB.seq || 0) + 1);  // a period switched quickly: only the last answer is shown
   DB.loading = true;
-  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
+  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}${DB.at ? `&at=${DB.at}` : ''}&compare=${p.compare}`
+    + `&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
   // every request on its own, each widget drawn in place as its data comes (the grid is shown at once with what
   // is known; the widgets are not drawn anew, so they do not rise a second time)
   const fresh = ids => { if (seq === DB.seq && state.appView === 'dashboard' && !DB.edit && !(DB.drag && DB.drag.on)) ids.forEach(dbRedrawWidget); };
   const side = [
-    dbLoadWeek().then(w => { if (w) DB.week = w; fresh(['load']); }),
-    dbLoadWork().then(() => fresh(['worked'])),
+    ...dbLoadWeekWidgets(keepWeek),
     dbLoadApps().then(() => fresh(['apps'])),
     dbLoadPeople().then(() => fresh(['people'])),
   ];
@@ -123,12 +131,140 @@ async function loadDashboard() {
   if (seq !== DB.seq) return;
   DB.loading = false;
   // a failed request keeps what was shown rather than an empty «Обзор»
-  DB.data = data || (DB.data && DB.data.period === p.period ? DB.data : null);
+  DB.data = data || (DB.data && DB.data.period === p.period && DB.data.start === dbSpan()[0] ? DB.data : null);
   if (state.appView === 'dashboard') {
     dbRenderHead();
     fresh(dbPrefs().layout.map(w => w.id).filter(id => !DB_LOCAL_WIDGETS.includes(id) || id === 'people'));
   }
   await Promise.all(side);
+}
+
+// The week of «Нагрузка недели» and «Рабочий день»: the current one, or for a past period (DB.at) the week of its
+// last day (a past week: that week; a month, a quarter, a year: its last week). Found in review: a past period
+// showed the current week in both
+function dbWeekMonday() {
+  if (!DB.at) return dbMonday();
+  const last = new Date(`${dbSpan()[1]}T12:00:00`);
+  last.setDate(last.getDate() - 1);
+  return dbMonday(last);
+}
+
+// What the two widgets draw: the current week (DB.week, DB.prevWeek, DB.work — «Главная» reads them too), or the
+// past one of DB.past, loaded for its Monday
+function dbWeekData() {
+  const monday = dbWeekMonday();
+  if (!DB.at) return { week: DB.week, prev: DB.prevWeek, work: DB.work, monday, past: false };
+  const P = DB.past && DB.past.monday === calKey(monday) ? DB.past : {};
+  return { week: P.week, prev: P.prev, work: P.work, monday, past: true };
+}
+
+// The requests of the week's widgets; none for a week already loaded when the period only moved (keep)
+function dbLoadWeekWidgets(keep) {
+  const monday = dbWeekMonday(), key = calKey(monday), before = new Date(monday);
+  before.setDate(monday.getDate() - 7);
+  const draw = (ids, ok) => { if (ok() && state.appView === 'dashboard' && !DB.edit && !(DB.drag && DB.drag.on)) ids.forEach(dbRedrawWidget); };
+  if (DB.at) {
+    if (keep && DB.past && DB.past.monday === key) return [];
+    const P = (DB.past = { monday: key }), mine = () => DB.past === P;  // a later week does not take this one's answers
+    return [
+      dbLoadWeek(monday).then(w => { if (w) P.week = w; draw(['load'], mine); }),
+      dbLoadPrevWeek(monday).then(w => { if (w) P.prev = w; draw(['load'], mine); }),
+      dbLoadWork(monday, P).then(() => draw(['worked'], mine)),
+    ];
+  }
+  const cur = () => !DB.at && calKey(dbMonday()) === key;
+  return [
+    keep && DB.week && DB.week.monday === key ? null : dbLoadWeek(monday).then(w => { if (w && cur()) DB.week = w; draw(['load'], cur); }),
+    keep && DB.prevWeek && DB.prevWeek.monday === calKey(before) ? null
+      : dbLoadPrevWeek(monday).then(w => { if (w && cur()) DB.prevWeek = w; draw(['load'], cur); }),
+    keep && DB.work && DB.work.monday === key ? null : dbLoadWork(monday).then(() => draw(['worked'], cur)),
+  ].filter(Boolean);
+}
+
+// The period around a day, as app/dashboard._bounds: [first day, the day after the last] as YYYY-MM-DD
+function dbBounds(period, day) {
+  const y = day.getFullYear(), m = day.getMonth();
+  let a, b;
+  if (period === 'year') { a = new Date(y, 0, 1); b = new Date(y + 1, 0, 1); }
+  else if (period === 'quarter') { a = new Date(y, m - m % 3, 1); b = new Date(y, m - m % 3 + 3, 1); }
+  else if (period === 'month') { a = new Date(y, m, 1); b = new Date(y, m + 1, 1); }
+  else { a = dbMonday(day); b = new Date(a); b.setDate(a.getDate() + 7); }
+  return [calKey(a), calKey(b)];
+}
+
+// The period shown: the current one, or the past one DB.at is in
+function dbSpan() {
+  return dbBounds(dbPrefs().period, DB.at ? new Date(`${DB.at}T12:00:00`) : new Date());
+}
+
+// A past period stays one only when it is not the current one (a period switched from a past week may hold today)
+function dbSetAt(day) {
+  const period = dbPrefs().period, cur = dbBounds(period, new Date())[0];
+  const start = day ? dbBounds(period, new Date(`${day}T12:00:00`))[0] : '';
+  DB.at = start && start < cur ? start : '';
+}
+
+// The name of the period shown: «17–23 ноября», «Октябрь 2026», «III квартал 2026», «2025»
+function dbSpanName() {
+  const p = dbPrefs().period, [a] = dbSpan(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  const first = new Date(`${a}T12:00:00`);
+  const y = first.getFullYear();
+  if (p === 'year') return String(y);
+  if (p === 'quarter') {
+    const q = Math.floor(first.getMonth() / 3);
+    return t('dbQuarterName').replace('{q}', () => ['I', 'II', 'III', 'IV'][q]).replace('{n}', () => q + 1).replace('{y}', () => y);
+  }
+  if (p === 'month') {
+    const name = first.toLocaleDateString(lang, { month: 'long' });
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
+  }
+  return dbWeekName(first);
+}
+
+// A week by its days: «17–23 ноября», «27 октября – 2 ноября», with the year when it is not the current one
+function dbWeekName(first) {
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', last = new Date(first);
+  last.setDate(first.getDate() + 6);
+  const other = last.getFullYear() !== new Date().getFullYear() ? ` ${last.getFullYear()}` : '';
+  const day = x => x.toLocaleDateString(lang, { day: 'numeric' });
+  if (first.getMonth() === last.getMonth()) {
+    const month = last.toLocaleDateString(lang, { day: 'numeric', month: 'long' }).replace(/\d+/, '').trim();
+    return lang === 'en-US' ? `${month} ${day(first)}–${day(last)}${other}` : `${day(first)}–${day(last)} ${month}${other}`;
+  }
+  const dm = x => x.toLocaleDateString(lang, { day: 'numeric', month: 'long' });
+  return `${dm(first)} – ${dm(last)}${other}`;
+}
+
+// ‹ the period before · its name · the next one › (none after the current one), «Текущий период» back to it
+function dbRenderNav() {
+  const el = document.getElementById('db-nav');
+  if (!el) return;
+  const now = !DB.at;
+  const arrow = d => `<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+  el.innerHTML = (now ? '' : `<button class="tk-btn" data-click="dbToCurrent" title="${escapeHtml(t('dbNavNowTip'))}">${escapeHtml(t('dbNavNow'))}</button>`)
+    + `<button class="tk-btn tk-btn-sq" data-click="dbShiftPeriod" data-click-args="[-1]" title="${escapeHtml(t('dbNavPrev'))}" aria-label="${escapeHtml(t('dbNavPrev'))}">${arrow('M15 6l-6 6 6 6')}</button>`
+    + `<span class="db-nav-name" aria-live="polite">${escapeHtml(dbSpanName())}</span>`
+    + `<button class="tk-btn tk-btn-sq" data-click="dbShiftPeriod" data-click-args="[1]" ${now ? 'disabled' : ''} title="${escapeHtml(t('dbNavNext'))}" aria-label="${escapeHtml(t('dbNavNext'))}">${arrow('M9 6l6 6-6 6')}</button>`;
+}
+
+function dbShiftPeriod(step) {
+  const [a, b] = dbSpan();
+  if (step > 0 && !DB.at) return;
+  const day = new Date(`${step < 0 ? a : b}T12:00:00`);
+  if (step < 0) day.setDate(day.getDate() - 1);
+  dbSetAt(calKey(day));
+  dbReload();
+}
+
+function dbToCurrent() {
+  DB.at = '';
+  dbReload();
+}
+
+function dbReload() {
+  loadDashboard({ keepWeek: true });
+  renderDashboard();
+  dbRefreshDetail();
 }
 
 function dbMonday(d = new Date()) {
@@ -176,11 +312,12 @@ async function dbLoadPeople() {
 }
 
 // The hours worked of this week (app/worktime.py): asked again at each tick, the minutes go on
-async function dbLoadWork() {
-  const a = dbMonday(), b = new Date(a);
+// (or of the week from Monday `a`, into `into`: a past week of «Обзор» goes to DB.past)
+async function dbLoadWork(a = dbMonday(), into = DB) {
+  const b = new Date(a);
   b.setDate(a.getDate() + 7);
   const w = await fetch(`/api/worktime?start=${calKey(a)}&end=${calKey(b)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
-  if (w) DB.work = w;
+  if (w) into.work = { ...w, monday: calKey(a) };
 }
 
 // «Мои программы» of this week and the one before (app/worktime.py), only while the widget is on «Главная»
@@ -197,11 +334,23 @@ function dbWorkedShort(min) {
   return min ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}` : '';
 }
 
-async function dbLoadWeek() {
-  const a = dbMonday(), b = new Date(a);
+// The calendar and the recordings of the week from Monday `a` (this week by default), with that Monday
+async function dbLoadWeek(a = dbMonday()) {
+  const b = new Date(a);
   b.setDate(a.getDate() + 7);
-  return fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
+  const w = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
     .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  return w && { ...w, monday: calKey(a) };
+}
+
+// The week before the one of «Нагрузка недели», for its comparison: the same request one week back. The answer
+// keeps the Monday it was asked for, so a week moved meanwhile is not compared with the wrong one
+async function dbLoadPrevWeek(b = dbMonday()) {
+  const a = new Date(b);
+  a.setDate(b.getDate() - 7);
+  const w = await fetch(`/api/calendar/range?start=${encodeURIComponent(hmIso(a))}&end=${encodeURIComponent(hmIso(b))}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`)
+    .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  return w && { ...w, monday: calKey(a) };
 }
 
 // --- Drawing ---
@@ -253,6 +402,7 @@ function dbHeadHtml(id, size) {
     if (id === 'apps' && DB.apps && DB.apps.enabled) tools.push(dbChartSwitch('apps', DB_APPS_KINDS, 'list'));
     if (id === 'apps') tools.push(dbWPeriodSwitch('apps'));
     if (id === 'kpis') {
+      tools.push(dbCompareSwitch());
       tools.push(`<button class="tk-btn tk-btn-sm db-kc-btn${DB.kpiCfg ? ' on' : ''}" data-click="dbKpiPanel" aria-expanded="${DB.kpiCfg}" title="${escapeHtml(t('kpiCfgTip'))}">`
         + '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>'
         + `<span>${escapeHtml(t('kpiCfg'))}</span></button>`);
@@ -329,6 +479,7 @@ function dbRenderHead() {
   // goes, as the pills of «Сегодня»; calendar or working days as chosen in «Настроить»
   const prog = document.getElementById('db-progress');
   if (prog) prog.innerHTML = d ? dbProgressPill(d) : '';
+  dbRenderNav();
   document.getElementById('db-periods').innerHTML = DB_PERIODS.map(k =>
     `<button role="radio" aria-checked="${p.period === k}" class="tk-seg-btn${p.period === k ? ' tk-on' : ''}" data-click="setDashPeriod" data-click-args='["${k}"]'>${escapeHtml(t(`dbPeriod_${k}`))}</button>`).join('');
   const f = p.feature ? featureById(p.feature) : null;
@@ -508,6 +659,20 @@ function setDashChart(id, kind) {
   dbRedrawWidget(id);
 }
 
+// «Статистика»: compared with the period before or with the same days a year earlier
+function dbCompareSwitch() {
+  const cur = dbPrefs().compare;
+  return `<span class="db-wp" role="radiogroup" aria-label="${escapeHtml(t('dbCompare'))}" title="${escapeHtml(t('dbCompare'))}">${DB_COMPARE.map(k =>
+    `<button role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-click="setDashCompare" data-click-args='["${k}"]' title="${escapeHtml(t(`dbCmpTip_${k}`))}">${escapeHtml(t(`dbCmp_${k}`))}</button>`).join('')}</span>`;
+}
+
+function setDashCompare(k) {
+  if (!DB_COMPARE.includes(k) || dbPrefs().compare === k) return;
+  dbSave({ compare: k });
+  dbRedrawWidget('kpis');
+  loadDashboard({ keepWeek: true });
+}
+
 // День · Неделя · Месяц · Год of a widget
 function dbWPeriodSwitch(id) {
   const cur = dbWPeriod(id);
@@ -522,100 +687,174 @@ async function setDashWPeriod(id, p) {
   if (state.appView === 'dashboard') dbRedrawWidget(id);
 }
 
-// rows: [{ label, value (hours), tip, cls }]; norm: hours of a day, or 0. The line: its fill and the line in an SVG
-// that stretches with the card, the dots, figures and days in HTML at percent places, so the text never stretches
+// rows: [{ label, value (hours), plan (the hours of it still ahead), prev (the hours of the same day a week before,
+// or null), dx (the difference to it, «+1,5», or ''), tip, cls }]; norm: hours of a day, or 0.
+// The hours ahead are a plan: a neutral grey part that continues the day's mark (the hours passed keep the day's
+// colour), the figure of a day all ahead grey. A plan above the norm stays grey and gets an orange frame over the
+// part above the norm (CLAUDE.md: a part above the norm keeps its hue and gets a mark of its own). The week before:
+// a thin light tick at its hours of the same day, over the mark, and the difference in a column of its own.
+// The line: its fill and the line in an SVG that stretches with the card, the dots, figures and days in HTML at
+// percent places, so the text never stretches
 function dbChartHtml(id, rows, norm) {
-  const kind = dbChartKind(id), max = Math.max(norm || 0, ...rows.map(r => r.value)) || 1;
+  const kind = dbChartKind(id);
+  const max = Math.max(norm || 0, ...rows.map(r => Math.max(r.value, r.prev || 0))) || 1;
   const h1 = v => dbNum(Math.round(v * 10) / 10), hs = t('dbHoursShort');
-  const over = v => norm && v > norm;
+  const pl = r => (r.plan || 0) > 1e-4, done = r => Math.max(0, r.value - (r.plan || 0));
+  const allPl = r => pl(r) && done(r) < 1e-4;
+  const overFact = r => norm && done(r) > norm, over = r => norm && r.value > norm;
+  const hasPrev = rows.some(r => r.prev != null);
+  // the classes of a mark: «over» above the norm, «plan» with hours ahead
+  const mk = r => [over(r) ? 'over' : '', pl(r) ? 'plan' : ''].filter(Boolean).join(' ');
+  // a mark with hours ahead is grey as a whole; the hours already passed are in the day's colour at its start,
+  // and the planned part above the norm is framed orange
+  const doneIn = (r, dim, extra = '') => {
+    if (!pl(r)) return '';
+    const from = (dim === 'width' ? 'left' : 'bottom'), pc = v => (v / r.value * 100).toFixed(1);
+    const top = Math.max(norm || 0, done(r));
+    return (allPl(r) ? '' : `<s class="dbc-done${overFact(r) ? ' over' : ''}" style="${dim}:${pc(done(r))}%${extra}"></s>`)
+      + (over(r) && r.value - top > 1e-4 ? `<s class="dbc-ovp" style="${from}:${pc(top)}%;${dim}:${pc(r.value - top)}%"></s>` : '');
+  };
+  const prevAt = r => (r.prev ? (r.prev / max * 100).toFixed(1) : '');
+  const dx = (r, tag = 'span', style = '') => (hasPrev ? `<${tag} class="dbc-dx"${style}>${escapeHtml(r.dx || '')}</${tag}>` : '');
   if (kind === 'bar') {
-    return `<div class="dbc-bars">${rows.map(r => `<div class="dbc-hb ${r.cls || ''}" title="${escapeHtml(r.tip)}"><span class="dbc-hb-d">${escapeHtml(r.label)}</span>`
-      + `<span class="dbc-hb-t"><b class="${over(r.value) ? 'over' : ''}" style="width:${(r.value / max * 100).toFixed(1)}%"></b>${norm ? `<i style="left:${(norm / max * 100).toFixed(1)}%"></i>` : ''}</span>`
-      + `<span class="dbc-hb-v">${r.value ? `${h1(r.value)} ${hs}` : '—'}</span></div>`).join('')}</div>`;
+    return `<div class="dbc-bars${hasPrev ? ' dx' : ''}">${rows.map(r => `<div class="dbc-hb ${r.cls || ''}" title="${escapeHtml(r.tip)}"><span class="dbc-hb-d">${escapeHtml(r.label)}</span>`
+      + `<span class="dbc-hb-t"><b class="${mk(r)}" style="width:${(r.value / max * 100).toFixed(1)}%">${doneIn(r, 'width')}</b>${norm ? `<i style="left:${(norm / max * 100).toFixed(1)}%"></i>` : ''}`
+      + `${r.prev ? `<s class="dbc-prev" style="left:${prevAt(r)}%"></s>` : ''}</span>`
+      + `<span class="dbc-hb-v${allPl(r) ? ' pl' : ''}">${r.value ? `${h1(r.value)} ${hs}` : '—'}</span>${dx(r)}</div>`).join('')}</div>`;
   }
   if (kind === 'ring') {
     const xs = rows.filter(r => r.value).map((r, i) => ({ ...r, c: DB_SLICE[i % DB_SLICE.length] }));
     if (!xs.length) return `<div class="db-note">${escapeHtml(t('dbNoMeetingsYet'))}</div>`;
-    const sum = xs.reduce((s, r) => s + r.value, 0), top = Math.max(norm || 0, ...xs.map(r => r.value));
+    const sum = xs.reduce((s, r) => s + r.value, 0), top = Math.max(norm || 0, ...xs.map(r => Math.max(r.value, r.prev || 0)));
+    const dash = (from, len) => `stroke-dasharray="${Math.max(0.1, len).toFixed(2)} ${(100 - Math.max(0.1, len)).toFixed(2)}" stroke-dashoffset="${(25 - from).toFixed(2)}"`;
     let at = 0;
     const segs = xs.map(r => {
-      const len = r.value / sum * 100;
-      const da = `stroke-dasharray="${Math.max(0.1, len - 0.8).toFixed(2)} ${(100 - len + 0.8).toFixed(2)}" stroke-dashoffset="${(25 - at).toFixed(2)}"`;
+      const len = r.value / sum * 100, d = done(r) / sum * 100, gap = 0.8;
+      // the hours passed in the day's hue, those ahead grey
+      const seg = (from, l, cls) => (l > 0.05 ? `<circle r="15.9155" cx="18" cy="18" fill="none" stroke="${r.c}" stroke-width="4.2"${cls ? ` class="${cls}"` : ''} ${dash(from, l)}/>` : '');
+      const out = (pl(r) ? seg(at, d, '') + seg(at + d, len - d - gap, 'dbc-ring-plan') : seg(at, len - gap, ''))
+        // above the norm: the day keeps its hue, a thin amber arc outside marks it (as planned when only the plan is over)
+        + (over(r) ? `<circle r="19.1" cx="18" cy="18" fill="none" class="dbc-ring-over${overFact(r) ? '' : ' plan'}" stroke-width="1.2" pathLength="100" ${dash(at, len - gap)}/>` : '');
       at += len;
-      // above the norm: the day keeps its hue, a thin amber arc outside marks it
-      return `<circle r="15.9155" cx="18" cy="18" fill="none" stroke="${r.c}" stroke-width="4.2" ${da}/>`
-        + (over(r.value) ? `<circle r="19.1" cx="18" cy="18" fill="none" class="dbc-ring-over" stroke-width="1.2" pathLength="100" ${da}/>` : '');
+      return out;
     }).join('');
     return `<div class="dbc-ring"><svg viewBox="${norm ? '-1.6 -1.6 39.2 39.2' : '0 0 36 36'}" class="dbc-ring-svg" role="img" aria-label="${escapeHtml(`${h1(sum)} ${hs}`)}">${segs}`
       + `<text x="18" y="18" text-anchor="middle" class="dbc-ring-n">${h1(sum)}</text><text x="18" y="22.6" text-anchor="middle" class="dbc-ring-l">${escapeHtml(hs)}</text></svg>`
-      + `<div class="dbc-lg">${xs.map(r => `<div title="${escapeHtml(r.tip)}"><i style="background:${r.c}"></i><span class="dbc-lg-d">${escapeHtml(r.label)}</span>`
-        + `<b class="dbc-lg-bar"><u style="width:${(r.value / top * 100).toFixed(1)}%;background:${r.c}"></u>${norm ? `<em style="left:${(norm / top * 100).toFixed(1)}%"></em>` : ''}</b>`
-        + `<span class="dbc-lg-h${over(r.value) ? ' over' : ''}"${over(r.value) ? ` title="${escapeHtml(t('dbOverNorm'))}"` : ''}>${h1(r.value)} ${escapeHtml(hs)}</span>`
-        + `<span class="dbc-lg-p">${Math.round(r.value / sum * 100)}%</span></div>`).join('')}</div></div>`;
+      + `<div class="dbc-lg${hasPrev ? ' dx' : ''}">${xs.map(r => `<div title="${escapeHtml(r.tip)}"><i class="${allPl(r) ? 'plan' : ''}" style="${allPl(r) ? '' : `background:${r.c}`}"></i><span class="dbc-lg-d">${escapeHtml(r.label)}</span>`
+        + `<b class="dbc-lg-bar"><u class="${mk(r)}" style="width:${(r.value / top * 100).toFixed(1)}%${pl(r) ? '' : `;background:${r.c}`}">${doneIn(r, 'width', `;background:${r.c}`)}</u>${norm ? `<em style="left:${(norm / top * 100).toFixed(1)}%"></em>` : ''}`
+        + `${r.prev ? `<s class="dbc-prev" style="left:${(r.prev / top * 100).toFixed(1)}%"></s>` : ''}</b>`
+        + `<span class="dbc-lg-h${over(r) ? ' over' : ''}${allPl(r) ? ' pl' : ''}"${over(r) ? ` title="${escapeHtml(t('dbOverNorm'))}"` : ''}>${h1(r.value)} ${escapeHtml(hs)}</span>`
+        + `${dx(r)}<span class="dbc-lg-p">${Math.round(r.value / sum * 100)}%</span></div>`).join('')}</div></div>`;
   }
   if (kind === 'line') {
-    const n = rows.length, px = i => (n > 1 ? 3 + i * 94 / (n - 1) : 50), py = v => 100 - v / max * 82;
-    const pts = rows.map((r, i) => `${px(i).toFixed(2)},${py(r.value).toFixed(2)}`).join(' ');
+    const n = rows.length, px = i => (n > 1 ? 3 + i * 94 / (n - 1) : 50);
+    const py = v => 100 - v / max * 82;
+    const pt = i => `${px(i).toFixed(2)},${py(rows[i].value).toFixed(2)}`;
+    // solid up to the last day with nothing ahead, dashed grey from there on through the days of the plan
+    const f = rows.findIndex(pl), cut = f < 0 ? n - 1 : Math.max(0, f - 1);
+    const run = (a, b) => rows.slice(a, b + 1).map((r, k) => pt(a + k)).join(' ');
+    const part = (a, b, cls) => `<polygon points="${px(a).toFixed(2)},100 ${run(a, b)} ${px(b).toFixed(2)},100" class="dbc-l-area${cls}"/><polyline points="${run(a, b)}" class="dbc-l-line${cls}"/>`;
+    // the week before: a faint grey line under the week's own
+    const prevPts = rows.map((r, i) => [px(i), py(r.prev || 0)].map(v => v.toFixed(2)).join(',')).join(' ');
+    const prev = hasPrev ? `<polyline points="${prevPts}" class="dbc-l-prev"/>` : '';
     return `<div class="dbc-line"><div class="dbc-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">`
       + (norm ? `<line x1="0" x2="100" y1="${py(norm).toFixed(2)}" y2="${py(norm).toFixed(2)}" class="dbc-l-norm"/>` : '')
-      + `<polygon points="${px(0).toFixed(2)},100 ${pts} ${px(n - 1).toFixed(2)},100" class="dbc-l-area"/><polyline points="${pts}" class="dbc-l-line"/></svg>`
-      + rows.map((r, i) => `<i class="${over(r.value) ? 'over' : ''}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%" title="${escapeHtml(r.tip)}"></i>`
-        + (r.value ? `<span class="dbc-l-v" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%">${h1(r.value)}</span>` : '')).join('')
-      + `</div><div class="dbc-days">${rows.map((r, i) => `<span class="${r.cls || ''}" style="left:${px(i).toFixed(2)}%">${escapeHtml(r.label)}</span>`).join('')}</div></div>`;
+      + prev + (f === 0 ? '' : part(0, cut, '')) + (f < 0 ? '' : part(cut, n - 1, ' plan')) + '</svg>'
+      + rows.map((r, i) => `<i class="${mk(r)}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%" title="${escapeHtml(r.tip)}"></i>`
+        + (r.value ? `<span class="dbc-l-v${allPl(r) ? ' pl' : ''}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%">${h1(r.value)}</span>` : '')).join('')
+      + `</div><div class="dbc-days">${rows.map((r, i) => `<span class="${r.cls || ''}" style="left:${px(i).toFixed(2)}%">${escapeHtml(r.label)}</span>`).join('')}</div>`
+      + (hasPrev ? `<div class="dbc-days dbc-dxs">${rows.map((r, i) => dx(r, 'span', ` style="left:${px(i).toFixed(2)}%"`)).join('')}</div>` : '') + '</div>';
   }
   return `<div class="dbc-cols">${norm ? `<i class="dbc-norm" style="bottom:${(norm / max * 100).toFixed(1)}%"></i>` : ''}${rows.map(r => {
     const pct = r.value / max * 100;
-    return `<div class="dbc-col ${r.cls || ''}" title="${escapeHtml(r.tip)}"><i class="${over(r.value) ? 'over' : ''}" style="height:${r.value ? Math.max(2, pct).toFixed(1) : 0}%"></i>`
-      + (r.value ? `<span style="bottom:calc(${pct.toFixed(1)}% + 3px)">${h1(r.value)}</span>` : '') + '</div>';
-  }).join('')}</div><div class="dbc-axis">${rows.map(r => `<span class="${r.cls || ''}">${escapeHtml(r.label)}</span>`).join('')}</div>`;
+    return `<div class="dbc-col ${r.cls || ''}" title="${escapeHtml(r.tip)}"><i class="${mk(r)}" style="height:${r.value ? Math.max(2, pct).toFixed(1) : 0}%">${doneIn(r, 'height')}</i>`
+      + (r.prev ? `<s class="dbc-prev" style="bottom:${prevAt(r)}%"></s>` : '')
+      + (r.value ? `<span class="${allPl(r) ? 'pl' : ''}" style="bottom:calc(${pct.toFixed(1)}% + 3px)">${h1(r.value)}</span>` : '') + '</div>';
+  }).join('')}</div><div class="dbc-axis">${rows.map(r => `<span class="${r.cls || ''}">${escapeHtml(r.label)}</span>`).join('')}</div>`
+    + (hasPrev ? `<div class="dbc-axis dbc-dxs">${rows.map(r => dx(r)).join('')}</div>` : '');
+}
+
+// The hours of meetings of a day (YYYY-MM-DD) in a week's answer of /api/calendar/range, and of them those passed
+// by `now`: the calendar's meetings (not those of a whole day, not those ignored, not a block of DB_BLOCK_MS or
+// longer — a night or a day off is not hours of meetings) and the recordings, overlaps counted once
+function dbDayHours(w, k, now) {
+  const spans = [...(w.events || []).filter(e => !e.all_day && !hmIsIgnored(e)).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
+      .filter(([s, e]) => e - s < DB_BLOCK_MS),
+    ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
+    .filter(([s]) => calKey(new Date(s)) === k);
+  const busy = dbMerge(spans);
+  return { hours: busy.reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3,
+    // what of each meeting lies before now has passed; the rest is the plan
+    done: busy.reduce((sum, [s, e]) => sum + Math.max(0, Math.min(e, now) - s), 0) / 3600e3 };
 }
 
 // «Нагрузка недели»: the hours of meetings of each day of the week against the user's norm (a click on
-// the norm changes it: 2–6 h). The calendar's meetings, or the recordings without one
+// the norm changes it: 2–6 h). The calendar's meetings, or the recordings without one. The meetings still ahead
+// (the days to come, the rest of today) are a plan, drawn grey and counted apart in the head (reported by
+// the user: the meetings ahead read as hours already spent). The week before is a tick at each day and the
+// difference beside its hours (the whole day, the plan too); grey, as more meetings are neither better nor worse
 function dbLoadHtml() {
-  const w = DB.week;
-  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
-  const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', today = calKey(new Date());
-  const norm = dbPrefs().norm;
+  const { week: w, prev: pw0, monday: a, past } = dbWeekData();
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading || past ? 'dbLoading' : 'dbNoData'))}</div>`;
+  const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', now = Date.now(), today = calKey(new Date(now));
+  const norm = dbPrefs().norm, hs = t('dbHoursShort'), h1 = v => dbNum(Math.round(v * 10) / 10);
+  const ahead = h => t('dbLoadAhead').replace('{h}', () => h1(h));
+  const a0 = new Date(a); a0.setDate(a.getDate() - 7);
+  const pw = pw0 && pw0.monday === calKey(a0) ? pw0 : null;
   const rows = [];
   for (let i = 0; i < 7; i++) {
     const x = new Date(a); x.setDate(a.getDate() + i);
-    const k = calKey(x);
-    const spans = [...(w.events || []).filter(e => !e.all_day && !hmIsIgnored(e)).map(e => [new Date(e.start).getTime(), new Date(e.end || e.start).getTime()])
-        .filter(([s, e]) => e - s < DB_BLOCK_MS),  // a night or a day off is not hours of meetings
-      ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
-      .filter(([s]) => calKey(new Date(s)) === k);
-    const hours = dbMerge(spans).reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
+    const x0 = new Date(a0); x0.setDate(a0.getDate() + i);
+    const k = calKey(x), { hours, done } = dbDayHours(w, k, now);
+    const plan = Math.max(0, hours - done);
+    const prev = pw ? dbDayHours(pw, calKey(x0), now).hours : null;
     const hol = (w.holidays || {})[k] || '';
-    if (i < 5 || hours) {
-      rows.push({ label: x.toLocaleDateString(lang, { weekday: 'short' }), value: hours,
-        cls: `${k === today ? 'today' : ''}${k < today ? ' past' : ''}${hol ? ' hol' : ''}`,
-        tip: `${x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(hours * 10) / 10)} ${t('dbHoursShort')}${hol ? ` · ${hol}` : ''}` });
+    if (i < 5 || hours || prev) {
+      const d = prev == null ? 0 : Math.round(hours * 10) / 10 - Math.round(prev * 10) / 10;
+      const dx = Math.abs(d) < 0.05 ? '' : `${d > 0 ? '+' : '−'}${dbNum(Math.abs(d))}`;
+      const tip = (plan && !done ? `${h1(hours)} ${hs} ${t('dbLoadPlanned')}` : `${h1(done)} ${hs}${plan ? ` · ${ahead(plan)}` : ''}`)
+        + (prev == null ? '' : ` · ${t('dbLoadPrevTip').replace('{h}', () => h1(prev))}${dx ? ` (${dx})` : ''}`);
+      rows.push({ label: x.toLocaleDateString(lang, { weekday: 'short' }), value: hours, plan, prev, dx,
+        cls: `${k === today ? 'today' : ''}${k < today ? ' past' : ''}${k > today ? ' ahead' : ''}${hol ? ' hol' : ''}`,
+        tip: `${x.toLocaleDateString(lang, { weekday: 'short', day: 'numeric', month: 'short' })}: ${tip}${hol ? ` · ${hol}` : ''}` });
     }
   }
-  const sum = rows.reduce((s, d) => s + d.value, 0), over = rows.filter(d => d.value > norm);
-  return `<div class="db-load-head">${escapeHtml(t('dbLoadSum').replace('{h}', () => dbNum(Math.round(sum * 10) / 10)))}`
+  const sum = rows.reduce((s, d) => s + d.value - d.plan, 0), left = rows.reduce((s, d) => s + d.plan, 0);
+  // above the norm by the hours passed, or only by the plan
+  const byFact = rows.filter(d => d.value - d.plan > norm), byPlan = rows.filter(d => d.value > norm && d.value - d.plan <= norm);
+  const days = l => l.map(d => d.label).join(', ');
+  const note = byFact.length
+    ? t('dbLoadOver').replace('{days}', () => days(byFact)) + (byPlan.length ? `; ${t('dbLoadOverPlan').replace('{days}', () => days(byPlan))}` : '')
+    : (byPlan.length ? t('dbLoadOverPlanOnly').replace('{days}', () => days(byPlan)) : '');
+  const head = t('dbLoadSum').replace('{h}', () => h1(sum)) + (left >= 0.05 ? ` · ${ahead(left)}` : '');
+  // the key under the chart: its marks drawn as in the look chosen
+  // a past week has nothing ahead: no «план» in its key
+  const key = [['done', 'dbLoadKeyDone'], ...(past ? [] : [['plan', 'dbLoadKeyPlan']]), ...(pw ? [['prev', 'dbLoadKeyPrev']] : [])]
+    .map(([c, k]) => `<span><i class="k-${c}"></i>${escapeHtml(t(k))}</span>`).join('');
+  return (past ? `<div class="db-wk-sub db-week-name">${escapeHtml(dbWeekName(a))}</div>` : '') + `<div class="db-load-head"><span class="db-load-sum">${escapeHtml(head)}</span>`
     + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
     + dbChartHtml('load', rows, norm)
-    + (over.length ? `<div class="db-note">${escapeHtml(t('dbLoadOver').replace('{days}', () => over.map(d => d.label).join(', ')))}</div>` : '');
+    + `<div class="dbc-key dbc-key-${dbChartKind('load')}">${key}</div>`
+    + (note ? `<div class="db-note db-load-over">${escapeHtml(note)}</div>` : '');
 }
 
 // «Рабочий день»: the hours worked today against the norm (the reminder's hours), when it began, the breaks,
 // and the days of the week (app/worktime.py: the minutes this computer was in use)
 function dbWorkedHtml(size) {
-  const w = DB.work;
-  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
+  const { work: w, monday: a, past } = dbWeekData();
+  if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading || past ? 'dbLoading' : 'dbNoData'))}</div>`;
   if (!w.supported) return `<div class="db-note">${escapeHtml(t('dbWorkedNoSupport'))}</div>`;
   if (!w.enabled) return `<div class="db-note">${escapeHtml(t('dbWorkedOff'))} <button class="db-more" data-click="openWorkSettings">${escapeHtml(t('newsOpenSettings'))}</button></div>`;
   const today = w.days[w.today] || { worked: 0, start: '', end: '', breaks: 0 };
   const norm = (w.norm || 8) * 60, pct = Math.min(100, today.worked / norm * 100);
   const over = today.worked >= norm;
-  let html = `<div class="db-wk-head"><b class="db-wk-big${over ? ' over' : ''}">${escapeHtml(dbHm(today.worked * 60))}</b>`
+  // a past week: its name and its days, no «today»
+  let html = past ? `<div class="db-wk-sub db-week-name">${escapeHtml(dbWeekName(a))}</div>` : `<div class="db-wk-head"><b class="db-wk-big${over ? ' over' : ''}">${escapeHtml(dbHm(today.worked * 60))}</b>`
     + `<span class="db-wk-of">${escapeHtml(t('dbWorkedOf').replace('{h}', () => dbNum(w.norm || 8)))}</span></div>`
     + `<div class="db-wk-bar${over ? ' over' : ''}"><i style="width:${pct.toFixed(1)}%"></i></div>`
     + `<div class="db-wk-sub">${escapeHtml(today.start ? [t('dbWorkedSince').replace('{t}', () => today.start), today.breaks >= 15 ? t('dbWorkedBreaks').replace('{t}', () => dbHm(today.breaks * 60)) : ''].filter(Boolean).join(' · ') : t('dbWorkedNone'))}</div>`;
-  if (size !== 'S') {
-    const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  if (size !== 'S' || past) {
+    const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
     const rows = [];
     for (let i = 0; i < 7; i++) {
       const x = new Date(a); x.setDate(a.getDate() + i);
@@ -627,7 +866,7 @@ function dbWorkedHtml(size) {
       }
     }
     const sum = rows.reduce((s, d) => s + d.value, 0);
-    html += `<div class="db-load-head">${escapeHtml(t('dbWorkedWeek').replace('{t}', () => dbHm(sum * 3600)))}</div>` + dbChartHtml('worked', rows, w.norm || 8);
+    html += `<div class="db-load-head">${escapeHtml(t('dbWorkedWeek').replace('{t}', () => dbHm(sum * 3600)))}</div>` + (size !== 'S' ? dbChartHtml('worked', rows, w.norm || 8) : '');
   }
   return html;
 }
@@ -732,24 +971,9 @@ function dbSysloadHtml(size) {
   const data = vram.data;
   if (!data) return `<div class="db-note">${escapeHtml(t('dbLoading'))}</div>`;
   const sys = data.system || {}, own = data.own || {}, gpu = data.gpu, ram = sys.ram;
-  const pct = (a, b) => (a != null && b ? (100 * a) / Math.max(0.1, b) : 0);
-  const row = (k, all, mine, value, tip, ownText) => `<div class="ld-row" title="${escapeHtml(tip)}"><span class="ld-k">${HW_IC[k] || ''}${k}</span>`
-    + `<span class="ld-bar ld-bar-lg"><b style="width:${Math.max(0, Math.min(100, all || 0))}%"></b><i style="width:${Math.max(0, Math.min(100, mine || 0))}%"></i></span>`
-    + `<span class="ld-v${loadLevel(all || 0)}">${escapeHtml(value)}</span></div>`
-    + `<div class="db-sl-own">${ownText ? `<span class="ld-own"><i></i>Verbaliox ${escapeHtml(ownText)}</span>` : ''}</div>`;
-  const cpu = sys.cpu_percent;
-  let html = `<div class="ld-legend db-sl-legend"><span><i class="ld-me"></i>Verbaliox</span><span><i></i>${escapeHtml(t('ldOthers'))}</span></div>`;
-  html += row('CPU', cpu, own.cpu_percent, cpu == null ? '—' : `${Math.round(cpu)}%`, `Verbaliox: ${Math.round(own.cpu_percent || 0)}%`,
-    own.cpu_percent != null ? `${Math.round(own.cpu_percent)}%` : '');
-  html += ram
-    ? row('RAM', pct(ram.used_gb, ram.total_gb), pct(own.ram_gb, ram.total_gb), `${gbText(ram.used_gb)} / ${gbText(ram.total_gb)}`,
-      own.ram_gb != null ? `Verbaliox: ${gbText(own.ram_gb)}` : '', own.ram_gb != null ? gbText(own.ram_gb) : '')
-    : row('RAM', 0, 0, '—', '', '');
-  // without a video card that reports its memory the row keeps its place, said in words
-  html += gpu
-    ? row('GPU', pct(gpu.used_gb, gpu.total_gb), pct(own.gpu_gb, gpu.total_gb), `${gbText(gpu.used_gb)} / ${gbText(gpu.total_gb)}`,
-      own.gpu_gb != null ? `Verbaliox: ${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '', own.gpu_gb != null ? `${own.gpu_exact ? '' : '≈'}${gbText(own.gpu_gb)}` : '')
-    : row('GPU', 0, 0, t('dbSlNoGpu'), t('mpNoGpu'), '');
+  // the same columns as the «Нагрузка» window (static/js/pult.js ldRowsHtml); without a video card that reports its
+  // memory the GPU row keeps its place, said in words
+  let html = ldHeadHtml() + ldRowsHtml(sys, own, gpu, ram, null, [t('dbSlNoGpu'), t('mpNoGpu')]);
   if (size === 'S') return html;
   const models = loadModels();
   html += `<div class="db-sl-cap">${escapeHtml(t('ldInMemory'))}</div>`;
@@ -826,7 +1050,8 @@ function dbKpiList(v) {
 }
 
 function dbSpark(v) {
-  if (!v || v.length < 2) return '';
+  v = (v || []).filter(x => x != null);  // the periods before the first data have no value
+  if (v.length < 2) return '';
   const lo = Math.min(...v), hi = Math.max(...v), k = hi - lo || 1;
   const pts = v.map((x, i) => `${(i * 56 / (v.length - 1)).toFixed(1)},${(hi === lo ? 12 : 20 - (x - lo) / k * 16).toFixed(1)}`);
   const [cx, cy] = pts[pts.length - 1].split(',');
@@ -838,18 +1063,23 @@ function dbKpiFigure(key, d) {
   const def = DB_KPI[key], h = (d.history && d.history.values && d.history.values[key]) || null;
   const k = d.kpi;
   const now = h ? h[h.length - 1] : ({ meetings: k.meetings, hours: k.hours, mine: k.open, waiting: k.waiting, decisions: k.decisions, useless: k.useless })[key] ?? 0;
-  const before = h && h.length > 1 ? h[h.length - 2] : null;
+  // compared with what the server says (the period before, or the same days a year earlier); the trend's one before
+  const cmp = d.history && d.history.before;
+  const before = cmp && key in cmp ? cmp[key] : h && h.length > 1 ? h[h.length - 2] : null;
   let line = '', tone = 'flat';
   if (def.me && d.needs_me) return { value: '—', spark: '', line: '', tone, needsMe: true };
+  // no data up to this period (the share, the time without meetings before the first recording): unknown, not zero
+  if (now == null) return { value: '—', now: null, spark: '', line: '', tone };
   if (key === 'mine' && k.overdue) { line = t('dbOverdueN').replace('{n}', () => k.overdue); tone = 'bad'; }
   else if (key === 'waiting' && k.waiting_overdue) { line = t('kpiWaitOverdue').replace('{n}', () => k.waiting_overdue); tone = 'warn'; }
   else if (before != null) {
     const x = Math.round((now - before) * 10) / 10;
-    if (!x) line = t('kpiSame');
-    else if (key === 'share') line = t('kpiWas').replace('{v}', () => `${before}%`);
+    const ago = d.compare === 'year';
+    if (!x) line = t(ago ? 'kpiSameYear' : 'kpiSame');
+    else if (key === 'share') line = t(ago ? 'kpiWasYear' : 'kpiWas').replace('{v}', () => `${before}%`);
     else {
       const unit = def.unit === 'h' ? ` ${t('dbHoursShort')}` : def.unit === 'min' ? ` ${t('dbMinShort')}` : '';
-      line = `${x > 0 ? '+' : '−'}${dbNum(Math.abs(x))}${unit} ${t(`dbVsBefore_${d.period}`)}`;
+      line = `${x > 0 ? '+' : '−'}${dbNum(Math.abs(x))}${unit} ${t(`${ago ? 'dbVsYear' : 'dbVsBefore'}_${d.period}`)}`;
     }
     if (x && def.better) tone = (x > 0) === (def.better > 0) ? 'up' : def.worse;
   }
@@ -1016,6 +1246,7 @@ function dbTime(d) {
   const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', today = d.today;
   const label = x => {
     const dt = new Date(`${x.key}T12:00:00`);
+    if (x.kind === 'month') return dt.toLocaleDateString(lang, { month: 'short' }).replace('.', '');
     return x.kind === 'day' ? dt.toLocaleDateString(lang, { weekday: 'short' }) : dt.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
   };
   const top = b.reduce((m, x) => (x.hours > m.hours ? x : m), b[0]);
@@ -1091,9 +1322,8 @@ function dbRefreshDetail() {
 
 function setDashPeriod(period) {
   dbSave({ period });
-  loadDashboard();
-  renderDashboard();
-  dbRefreshDetail();
+  dbSetAt(DB.at);  // a past day stays: from a past month to its year
+  dbReload();
 }
 
 function setDashFeature(id) {
@@ -1163,7 +1393,7 @@ async function dbOpenDetail(kind, person = '') {
   const p = dbPrefs();
   Object.assign(DB_DETAIL, { kind, person, data: null, filter: kind === 'useless' ? 'useless' : 'all' });
   dbRenderDetail();
-  const q = new URLSearchParams({ kind, period: p.period, feature: p.feature || 0, person });
+  const q = new URLSearchParams({ kind, period: p.period, feature: p.feature || 0, person, at: DB.at });
   const data = await fetch(`/api/dashboard/detail?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
   if (DB_DETAIL.kind !== kind || DB_DETAIL.person !== person) return;  // another one opened meanwhile
   DB_DETAIL.data = data || { error: true };
@@ -1491,7 +1721,7 @@ function dbTickNow() {
   if (state.appView !== 'dashboard') return;
   const day = new Date().toDateString();
   if (day !== _dbDay) { _dbDay = day; loadDashboard(); }
-  else if (dbPrefs().layout.some(w => w.id === 'worked')) dbLoadWork().then(() => { if (!DB.edit && !DB.drag && state.appView === 'dashboard') dbRedrawWidget('worked'); });
+  else if (!DB.at && dbPrefs().layout.some(w => w.id === 'worked')) dbLoadWork().then(() => { if (!DB.edit && !DB.drag && state.appView === 'dashboard') dbRedrawWidget('worked'); });
   if (!DB.edit && !DB.drag) {
     dbPrefs().layout.forEach((w, i) => {
       if (!DB_TIME_WIDGETS.includes(w.id)) return;

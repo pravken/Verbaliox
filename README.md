@@ -168,10 +168,12 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | :--- | :--- |
 | First-time setup (the setup window, `setup.bat`) | PyPI and download.pytorch.org (Python packages); winget and astral.sh, if `uv` is missing, and for Ollama when it is ticked |
 | You download a speech model (Whisper, GigaAM, Parakeet with the Silero VAD) or a speaker model | Hugging Face (`huggingface.co`); for GigaAM and Parakeet the first time also PyPI (`onnx-asr`, checked by its hash) |
+| Russian live captions or a transcription on the processor with GigaAM downloaded before version 0.9.4, once | Hugging Face: the int8 files of GigaAM v3 from the same repository and commit (e2e-CTC for the captions, e2e-RNN-T for the processor; about 450 MB); until they are there, both work as before |
 | App start with an NVIDIA video card, once (Settings → Recognition, "GigaAM and Parakeet on the video card"; on by default) | PyPI: the GPU build of ONNX Runtime (`onnxruntime-gpu`, about 300 MB, checked by its hash) |
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
 | You set a calendar link (Settings → Recording → Calendar) | That link, at most every 15 minutes, to read the calendar |
 | You download an Ollama model | Ollama's model registry, via your local Ollama |
+| You download a translation model for live captions (Hy-MT3) | huggingface.co (`hf.co/tencent/Hy-MT3-*-GGUF`), via your local Ollama |
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
 | Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
@@ -211,6 +213,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Hugging Face Transformers (runs Nemotron) | Apache 2.0 |
 | safetensors / regex / typer, rich, markdown-it-py, mdurl / shellingham / Pygments (Transformers dependencies) | Apache 2.0 / Apache 2.0 AND CNRI-Python / MIT / ISC / BSD-2-Clause |
 | Gemma 4 E4B / E2B ([google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) rev. 4ecc2ba6, [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) rev. 4adf1574; Ollama `gemma4:e4b` dc35e8d9c606, `gemma4:e2b` b37049369adf) | Apache 2.0 |
+| Tencent Hy-MT3 7B / 1.8B ([tencent/Hy-MT3-7B-GGUF](https://huggingface.co/tencent/Hy-MT3-7B-GGUF), [tencent/Hy-MT3-1.8B-GGUF](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF) Q4_K_M; optional download, live caption translation only; the program re-creates the 1.8B in Ollama as `hy-mt3-1.8b` with the chat template of `tencent/Hy-MT3-1.8B`, since the one in its GGUF does not pass the text; checked files at rev. f7f0f5c2 / 4c4370b3, sha256 of `Hy-MT3-7B-Q4_K_M.gguf` `e08a5098918c6615e1a84fbe714637237bfdc832e17761bdde4bb65878eb17c9`, of `Hy-MT3-1.8B-Q4_K_M.gguf` `bae6e591103654ff43ef0de7d1492f6e6df1f955505f6bb2cc52e86fc399a942`: Ollama pulls the newest files of the repository, and one that differs is marked in Settings) | Apache 2.0 |
 | Ollama, FastAPI, pywebview | MIT / BSD-3 |
 | ONNX Runtime, CTranslate2, pythonnet | MIT |
 | scikit-learn, httpx, uvicorn | BSD-3 |
@@ -412,10 +415,12 @@ start.bat
 | :--- | :--- |
 | Первичная установка (окно установки, `setup.bat`) | PyPI и download.pytorch.org (пакеты Python); winget и astral.sh, если нет `uv`, и для Ollama, если она отмечена |
 | Вы скачиваете модель распознавания (Whisper, GigaAM, Parakeet вместе с Silero VAD) или модель спикеров | Hugging Face (`huggingface.co`); для GigaAM и Parakeet в первый раз ещё PyPI (`onnx-asr`, проверяется по хешу) |
+| Русские субтитры или расшифровка на процессоре с GigaAM, скачанной до версии 0.9.4, один раз | Hugging Face: файлы int8 GigaAM v3 из того же репозитория и коммита (e2e-CTC для субтитров, e2e-RNN-T для процессора; около 450 МБ); пока их нет, всё работает как раньше |
 | Запуск приложения с видеокартой NVIDIA, один раз («Настройки → Распознавание», «GigaAM и Parakeet на видеокарте»; включено по умолчанию) | PyPI: сборка ONNX Runtime для видеокарты (`onnxruntime-gpu`, около 300 МБ, проверяется по хешу) |
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
 | Вы указали ссылку на календарь («Настройки → Запись → Календарь») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь |
 | Вы скачиваете модель Ollama | Реестр моделей Ollama, через вашу локальную Ollama |
+| Вы скачиваете модель перевода живых субтитров (Hy-MT3) | huggingface.co (`hf.co/tencent/Hy-MT3-*-GGUF`), через вашу локальную Ollama |
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |
 | Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |

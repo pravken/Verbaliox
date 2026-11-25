@@ -17,7 +17,7 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MAX_VALUE_CHARS = 256 * 1024  # summary templates: up to 30 prompts of 4000 characters
 
 BOOLS = {
-    "diarization_enabled", "auto_summary", "analysis_after_meetings", "mcp_local_only", "show_disputed", "economy_mode", "live_captions_auto", "vad_filter", "audio_enhance", "clean_fillers", "batched_inference",
+    "diarization_enabled", "auto_summary", "analysis_after_meetings", "mcp_local_only", "show_disputed", "economy_mode", "live_captions_auto", "hint_studio_entry_seen", "vad_filter", "audio_enhance", "clean_fillers", "batched_inference",
     "keep_model_loaded", "onnx_gpu", "onnx_gpu_vad", "voice_profiles", "update_check", "quiet_mode",
     "call_auto_record", "semantic_search", "auto_title", "obsidian_auto", "summary_grounding", "analysis_chain", "auto_commitments", "auto_chapters", "dictionary_fuzzy", "asr_ensemble", "rec_echo_cancel", "teams_captions", "rec_sounds", "meeting_follow", "import_copy", "rec_voice_filter",
     "delete_media_after", "update_auto", "update_beta", "obsidian_summary", "obsidian_tasks", "obsidian_chapters",
@@ -38,12 +38,17 @@ CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "economy_for": {"0", "30", "60", "120", "240", "day"},
            # how long before a calendar meeting its reminder comes, seconds (app/brief_notice.py)
            "meet_notify_before": {"0", "30", "60", "120", "300", "600", "900"},
+           # «Качество / Скорость» of the captions' translation (the studio)
+           "live_speed": {"quality", "fast"},
            "cpu_threads": {"auto", "2", "4", "6", "8", "12", "16", "all"},
            "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},
            "mem_reserve_vram": {"auto", "0.5", "1", "1.5", "2", "3", "4"}}
 SPEECH_MODELS = {"whisper_model", "speech_model_ru", "live_whisper_model"}
 FOLDERS = {"recordings_dir", "export_dir", "obsidian_vault", "watch_folder"}
+# Ollama models chosen by name (app/live_translate.CHOICE_KEYS): empty is «Авто»
+OLLAMA_MODELS = {"live_translate_model_quality", "live_translate_model_fast"}
+OLLAMA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$")
 
 
 def _is_local_host(host: str) -> bool:
@@ -124,6 +129,16 @@ def clean(key: str, value: Any) -> str:
         return text_s
     if key in SPEECH_MODELS:
         if not is_speech_model(text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
+    if key in OLLAMA_MODELS:
+        if text_s and not OLLAMA_NAME_RE.match(text_s):
+            raise ValueError(f"{key}: недопустимое значение")
+        return text_s
+    if key == "live_translate_to":  # the language of the captions' translation: "" none, "auto" the pair
+        from app.translation import TEXT_LANGUAGES
+
+        if text_s and text_s != "auto" and text_s not in TEXT_LANGUAGES:
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
     if key == "dictation_translate_to":

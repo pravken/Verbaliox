@@ -23,16 +23,42 @@ page.on('pageerror', e => errors.push(`page: ${e.message}`));
 page.on('response', r => { if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url().replace(/\?.*/, '')}`); });
 
 let n = 0;
+// the window after an update opens by itself once the page has read the settings (after a reload of an earlier
+// step) and stood over the next steps (CI: «#upd-after intercepts pointer events»): closed before and after each
+// step but its own, with a note naming where it was found
+const closeUpdAfter = async (name, when) => {
+  if (name === 'window after an update') return;
+  const upd = await page.evaluate(() => { const w = document.getElementById('upd-after'); if (!w) return false;
+    if (typeof closeAfterUpdate === 'function') closeAfterUpdate(); else w.remove(); return true; }).catch(() => false);
+  if (upd) console.log(`note: the window after an update was open ${when} «${name}»`);
+};
 const step = async (name, fn) => {
+  await closeUpdAfter(name, 'before');
   try { await fn(); } catch (e) {
     // the first line, and for a click that timed out what stood in its way (CI shows nothing else)
     const why = e.message.split('\n').filter(l => /intercepts pointer|not visible|not stable|not enabled|outside of the viewport|waiting for/.test(l)).slice(-3).map(l => l.trim());
     errors.push(`${name}: ${e.message.split('\n')[0]}${why.length ? ` [${why.join(' | ')}]` : ''}`);
   }
   if (shots) await page.screenshot({ path: `${shots}/${String(++n).padStart(2, '0')}-${name.replace(/\W+/g, '-')}.png` });
+  // a question window a step left open (a confirmation, a dialog drawn by a script) would stand over the next steps:
+  // it is closed, and its title is printed with the step's name so the step can be fixed
+  await closeUpdAfter(name, 'after');
+  const left = await page.evaluate(() => [...document.querySelectorAll('div.modal-backdrop[role="dialog"]:not([id])')]
+    .filter(d => !d.classList.contains('hidden')).map(d => { const h = (d.querySelector('h2, h3, .font-semibold') || d).textContent.trim().slice(0, 60); d.remove(); return h; }))
+    .catch(() => []);
+  if (left.length) console.log(`note: «${name}» left a window open: ${left.join(' | ')}`);
 };
 const expect = (ok, what) => { if (!ok) throw new Error(what); };
 const sleep = (ms) => page.waitForTimeout(ms);
+// waits until fn (run in the page, with arg) is true: a condition, not a fixed pause that a slow runner outlasts
+const until = async (fn, what, ms = 5000, arg) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (await page.evaluate(fn, arg).catch(() => false)) return;
+    if (Date.now() > end) throw new Error(what);
+    await sleep(100);
+  }
+};
 
 await page.goto(`${base}/?token=${token}`);
 await sleep(2000);
@@ -67,8 +93,7 @@ await step('import window', async () => {
 // the precise mode among its choices. «Без запинок» and «Автопрокрутка» are in the view menu
 await step('read a recording', async () => {
   await page.evaluate(() => openMeeting(1));
-  await sleep(1500);
-  expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
+  await until(() => document.querySelectorAll('#transcript-container .segment-row').length > 0, 'no transcript lines', 8000);
   expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
   // one short row (variant B): «Модель: … ▾», «Расшифровать заново», «⋯» and when the text was made
   expect(/Модель:/.test(await page.textContent('#tx-model-chip')), 'no model button');
@@ -156,16 +181,19 @@ await step('transcript as a chat', async () => {
   await sleep(800);
   expect(await page.evaluate(() => state.activeWorkspaceTab) === 'transcript', 'another recording did not open on «Расшифровка»');
   await page.evaluate(() => openMeeting(1));
-  await sleep(800);
+  await until(() => state.activeMeeting?.id === 1 && document.querySelectorAll('#transcript-container .segment-row').length > 0,
+    'the recording did not open again', 8000);
   await page.evaluate(() => { openRecordTab('transcript'); setTxLayout('chat'); });
-  await sleep(300);
+  await until(() => document.querySelectorAll('#transcript-inner .ch-bub.segment-row').length > 0, 'no bubbles in «Чат»');
   const bubbles = await page.locator('#transcript-inner .ch-bub.segment-row').count();
   expect(bubbles > 0, 'no bubbles in «Чат»');
   expect(await page.locator('#transcript-inner .ch-bub .ch-tm').count() === bubbles, 'a bubble without its time');
   const runs = await page.locator('#transcript-inner .ch-group').count();
   expect(await page.locator('#transcript-inner .ch-group > .ch-av').count() === runs, 'the face is not once per run');
   await page.evaluate(() => updatePlaybackHighlight(1, true));
-  expect(await page.locator('#transcript-inner .ch-bub.segment-active').count() === 1, 'the phrase playing is not lit');
+  // the bubbles may be drawn again by the recording's refresh a moment later: lit again, waited for
+  await until(() => { updatePlaybackHighlight(1, true); return document.querySelectorAll('#transcript-inner .ch-bub.segment-active').length === 1; },
+    'the phrase playing is not lit', 3000);
   await page.click('#tx-layout-text');
   await sleep(200);
   expect(await page.locator('#transcript-inner .ch-bub').count() === 0 && await page.locator('#transcript-inner .segment-row').count() > 0, '«Текст» did not bring the text back');
@@ -317,14 +345,12 @@ await step('menus not looked for on a meter tick', async () => {
 // Undo instead of a question: a task goes at once and comes back with «Отменить» (6.1)
 await step('undo a removal', async () => {
   await page.evaluate(() => switchAppView('tasks'));
-  await sleep(800);
+  await until(() => typeof TK !== 'undefined' && TK.data && TK.data.tasks.length > 0, 'the tasks did not load', 8000);
   const before = await page.evaluate(() => TK.data.tasks.length);
   await page.evaluate(() => deleteTask(TK.data.tasks[0].id));
-  await sleep(300);
-  expect(await page.evaluate(() => TK.data.tasks.length) === before - 1, 'the task did not go');
+  await until(n => TK.data.tasks.length === n - 1, 'the task did not go', 5000, before);
   await page.click('#toast .toast-action');
-  await sleep(300);
-  expect(await page.evaluate(() => TK.data.tasks.length) === before, '«Отменить» did not bring it back');
+  await until(n => TK.data.tasks.length === n, '«Отменить» did not bring it back', 5000, before);
 });
 
 // The tasks as a calendar of due dates: the grouping greys (its place kept), today framed, a task with its
@@ -439,6 +465,54 @@ await step('settings sections', async () => {
   await sleep(300);
 });
 
+// Settings, one row in every section (asked by the user: the settings were overloaded): nothing folded away, the
+// name of every option at one left edge and its control at one right edge, measured in every section
+await step('settings rows line up', async () => {
+  await page.evaluate(() => openModal('settings', 'general'));
+  const tabs = ['general', 'record', 'recognition', 'analysis', 'calendar', 'export', 'privacy', 'advanced'];
+  const lefts = new Set(), rights = new Set(), bad = [];
+  let folded = 0, rows = 0;
+  for (const tab of tabs) {
+    await page.evaluate(t => selectSettingsTab(t), tab);
+    await sleep(500);
+    const r = await page.evaluate(() => {
+      const out = { lefts: [], rights: [], folded: document.querySelectorAll('#modal-settings .sx-more, #modal-settings details > summary[data-i18n]').length };
+      document.querySelectorAll('#modal-settings [data-stab]:not(.hidden) .sx-row:not(.sx-dep)').forEach(row => {
+        if (!row.offsetParent) return;
+        const label = row.querySelector('.sx-row-label');
+        const ctl = row.querySelector(':scope > .sx-row-ctl, :scope > .vs-switch');
+        const card = row.closest('.settings-card').getBoundingClientRect();
+        if (label) out.lefts.push(Math.round(label.getBoundingClientRect().left - card.left));
+        if (ctl) out.rights.push(Math.round(card.right - ctl.getBoundingClientRect().right));
+      });
+      return out;
+    });
+    folded += r.folded;
+    rows += r.lefts.length;
+    r.lefts.forEach(x => lefts.add(x));
+    r.rights.forEach(x => rights.add(x));
+    if (r.lefts.some(x => x !== r.lefts[0])) bad.push(tab);
+  }
+  await page.evaluate(() => closeModal('settings'));
+  expect(!folded && rows > 40 && lefts.size === 1 && rights.size === 1,
+    `settings rows: folded ${folded}, rows ${rows}, label edges ${[...lefts]}, control edges ${[...rights]} (${bad})`);
+});
+
+// The settings search finds an option by its new name and by its former one (the options were renamed)
+await step('settings search finds renamed options', async () => {
+  await page.evaluate(() => openModal('settings', 'general'));
+  const found = await page.evaluate(() => Object.fromEntries([['эхо', 'set-echo-cancel'], ['шум', 'set-voice-filter'],
+    ['MCP', 'set-mcp-local-only'], ['Obsidian', 'set-obsidian-auto'], ['CFG', 'set-dub-cfg'], ['vault', 'set-obsidian-auto'],
+    ['потоки', 'set-cpu-threads'], ['Резерв памяти', 'set-mem-reserve-ram'], ['Подготовка звука', 'set-proc-denoise'],
+    ['Эксперименты', 'set-dub-workers']].map(([q, id]) => {
+    settingsSearch(q);
+    const card = document.getElementById(id).closest('.settings-card');
+    return [q, !card.classList.contains('hidden') && !card.closest('[data-stab]').classList.contains('hidden')];
+  })));
+  await page.evaluate(() => { clearSettingsSearch(); closeModal('settings'); });
+  expect(Object.values(found).every(Boolean), `settings search: ${JSON.stringify(found)}`);
+});
+
 // A press in a dialog's field released over the backdrop keeps the dialog (1.1)
 await step('dialog keeps a selection', async () => {
   await page.evaluate(() => { askText('Название', 'текст'); });
@@ -463,6 +537,67 @@ await step('studio source', async () => {
   await page.evaluate(() => prepareStudio());
   await sleep(300);
   expect(await page.evaluate(() => document.getElementById('record-source-select').value) === 'mic', 'the Studio source was reset');
+});
+
+// The studio's options as a rail of four buttons (asked by the user: the column of cards was hardly used and scrolled):
+// the buttons of one size in one column, each opens its panel beside it with the focus inside, Esc closes it and gives
+// the focus back, a second click closes it, the choice of the source shows under its button; nothing scrolls at 1280×800
+await step('studio options rail', async () => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); switchAppView('studio'); });
+  await sleep(600);
+  const keys = ['source', 'video', 'meet', 'after'];
+  const boxes = await page.evaluate(ks => ks.map(k => { const r = document.getElementById(`st-rail-${k}`).getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }), keys);
+  expect(boxes.every(b => Math.abs(b[0] - boxes[0][0]) < 0.5 && Math.abs(b[2] - boxes[0][2]) < 0.5 && Math.abs(b[3] - boxes[0][3]) < 0.5 && b[2] > 0),
+    `the rail's buttons are not of one size in one column: ${JSON.stringify(boxes)}`);
+  expect(boxes.every((b, i) => !i || Math.abs((b[1] - boxes[i - 1][1]) - (boxes[1][1] - boxes[0][1])) < 0.5), `the rail's buttons are not evenly spaced: ${JSON.stringify(boxes)}`);
+  const noScroll = (id) => page.evaluate(i => { const e = document.getElementById(i); return e.scrollHeight <= e.clientHeight + 1; }, id);
+  expect(await noScroll('side-studio'), 'the rail scrolls');
+  for (const k of keys) {
+    await page.click(`#st-rail-${k}`);
+    await sleep(150);
+    const s = await page.evaluate(key => {
+      const fly = document.getElementById(`st-fly-${key}`), btn = document.getElementById(`st-rail-${key}`);
+      const f = fly.getBoundingClientRect(), b = btn.getBoundingClientRect();
+      return { shown: !fly.classList.contains('hidden'), exp: btn.getAttribute('aria-expanded'), focus: fly.contains(document.activeElement),
+        beside: f.left >= b.right, inView: f.bottom <= innerHeight, others: document.querySelectorAll('.st-fly:not(.hidden)').length };
+    }, k);
+    expect(s.shown && s.exp === 'true' && s.focus && s.beside && s.inView && s.others === 1, `the panel «${k}» did not open beside its button: ${JSON.stringify(s)}`);
+    expect(await noScroll(`st-fly-${k}`), `the panel «${k}» scrolls`);
+    await page.keyboard.press('Escape');
+    await sleep(150);
+    const c = await page.evaluate(key => [document.getElementById(`st-fly-${key}`).classList.contains('hidden'),
+      document.getElementById(`st-rail-${key}`).getAttribute('aria-expanded'), document.activeElement?.id], k);
+    expect(c[0] && c[1] === 'false' && c[2] === `st-rail-${k}`, `Esc did not close the panel «${k}» or the focus did not come back: ${c}`);
+  }
+  // a second click closes; a click elsewhere closes
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.click('#st-rail-source');
+  await sleep(150);
+  expect(await page.evaluate(() => document.getElementById('st-fly-source').classList.contains('hidden')), 'a second click did not close the panel');
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.mouse.click(1200, 700);  // the empty captions' pane, away from the panel
+  await sleep(150);
+  expect(await page.evaluate(() => document.getElementById('st-fly-source').classList.contains('hidden')), 'a click elsewhere did not close the panel');
+  // the source chosen in the panel: under the rail's button, and the recording reads it with the panel closed
+  const before = await page.evaluate(() => document.getElementById('record-source-select').value);
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.click('#st-src-system');
+  await sleep(150);
+  const label = await page.evaluate(() => [document.getElementById('st-rail-source-state').textContent, t('rdSasSrcSystem')]);
+  expect(label[0] === label[1], `the rail did not show the source: ${label}`);
+  await page.keyboard.press('Escape');
+  await sleep(150);
+  expect(await page.evaluate(() => document.getElementById('record-source-select').value) === 'system', 'the source was lost as the panel closed');
+  await page.click('#st-rail-source');
+  await sleep(150);
+  await page.click(`#st-src-${before}`);
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1300, height: 860 });
+  await sleep(150);
 });
 
 // First-run wizard: a set is chosen and its settings are written; nothing is really downloaded here
@@ -525,6 +660,10 @@ await step('first run wizard', async () => {
 // green «Сохранено»), the new features as cards, all the changes folded as «Новое» and «Исправлено»; «Готово»
 // marks every step answered, and they are not asked again
 await step('window after an update', async () => {
+  // what the step changes is put back as it was: leaving the steps unanswered opened this window again over the
+  // later steps after a reload (CI: «#upd-after intercepts pointer events» in the calendar steps)
+  const before = await page.evaluate(() => fetch('/api/system').then(r => r.json())
+    .then(d => ({ holiday_country: d.settings.holiday_country || '', holiday_subdiv: d.settings.holiday_subdiv || '', setup_done: d.settings.setup_done || '[]' })));
   await page.evaluate(() => document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()));
   await page.evaluate(() => openSetupSteps({ holiday_country: '', setup_done: '[]' }));
   await page.waitForSelector('#upd-after select[data-hol-country] option[value="RS"]', { state: 'attached' });
@@ -551,8 +690,8 @@ await step('window after an update', async () => {
   await page.evaluate(sv => openSetupSteps(sv), set);
   await sleep(400);
   expect(!(await page.$('#upd-after')), 'asked again after it was answered');
-  await page.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: { holiday_country: '', setup_done: '[]' } }) }));
+  await page.evaluate(b => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: b }) }), before);
 });
 
 // A calendar meeting about to start with a Teams link: «Подключиться» on its card joins the call (asked by the user)
@@ -608,13 +747,11 @@ await step('day off from the calendar', async () => {
   await page.click(`#cal-view [data-daykey="${day}"] .cal-day-more`);
   await sleep(200);
   await page.click('#text-menu button:has-text("Отметить выходным")');
-  await sleep(800);
-  expect(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`), 'the day is not marked');
+  await until(d => !!document.querySelector(`#cal-view [data-daykey="${d}"].cal-holday`), 'the day is not marked', 5000, day);
   await page.click(`#cal-view [data-daykey="${day}"]`, { button: 'right' });
   await sleep(200);
   await page.click('#text-menu button:has-text("Убрать выходной")');
-  await sleep(800);
-  expect(!(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`)), 'the day off is not taken back');
+  await until(d => !document.querySelector(`#cal-view [data-daykey="${d}"].cal-holday`), 'the day off is not taken back', 5000, day);
   await page.evaluate(() => closeCalendarView());
 });
 
@@ -723,7 +860,9 @@ await step('today open a day', async () => {
   const key = await page.evaluate(() => [...document.querySelectorAll('#td-cal .cal-col')].map(c => c.dataset.daykey).find(k => k !== calKey(new Date())));
   const col = page.locator(`#td-cal .cal-col[data-daykey="${key}"]`);
   expect(await col.getAttribute('title') === await page.evaluate(() => t('calOpenDay')), 'the day has no «Открыть день» hint');
-  expect(await col.evaluate(el => getComputedStyle(el).cursor) === 'pointer', 'no hand over the day');
+  // the week is drawn again once the calendar just saved is read: the column of that drawing is waited for
+  await until(k => { const el = document.querySelector(`#td-cal .cal-col[data-daykey="${k}"]`);
+    return !!el && getComputedStyle(el).cursor === 'pointer'; }, 'no hand over the day', 5000, key);
   const box = await col.boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
   await sleep(900);
@@ -851,7 +990,7 @@ await step('records section', async () => {
   expect(await barH() === h0, 'the list moved when a recording was selected');
   await page.click('#lt-bar button[data-click="clearLibSelection"]');
   await page.fill('#lt-q', 'тема');
-  await sleep(900);
+  await page.waitForSelector('#lt-body .lt-snip', { timeout: 6000 }).catch(() => {});
   expect(await page.locator('#lt-body .lt-snip').count() > 0, 'the search shows no places in the text');
   expect(/мест/.test(await page.textContent('#lt-count')), 'the count does not say how many places were found');
   await page.fill('#lt-q', '');
@@ -1006,6 +1145,10 @@ await step('dashboard rises once', async () => {
 await step('live captions as a chat', async () => {
   const rows = await page.evaluate(() => {
     switchAppView('studio');
+    // «Текст по ходу речи» off (on by default): the phrase still being spoken waits as a pending bubble
+    const draftBox = document.getElementById('live-draft-toggle');
+    const draftWas = draftBox.checked;
+    draftBox.checked = false;
     [[1, 'Начнём с плана.', 'Мария'], [2, 'Я посмотрю сроки.', 'Анна'], [3, 'И проверю оценку.', 'Анна']]
       .forEach(([id, text, who]) => liveCap.lines.set(id, { id, text, who, lang: 'ru', translation: '' }));
     liveCap.partial = 'ещё говорит';
@@ -1014,6 +1157,7 @@ await step('live captions as a chat', async () => {
     liveCap.lines.clear();
     liveCap.partial = '';
     capReset();
+    draftBox.checked = draftWas;
     return out;
   });
   expect(rows.length === 4 && rows.every(r => r.bub), `the lines are not bubbles: ${JSON.stringify(rows)}`);
@@ -1022,18 +1166,346 @@ await step('live captions as a chat', async () => {
   await page.evaluate(() => switchAppView('library'));
 });
 
+// «Текст по ходу речи» (asked by the user: the phrase being spoken flickered, jumped and changed size as it was
+// replaced each second): the words it keeps stay the same nodes, the new ones come one by one, the bubble never
+// shrinks, the draft becomes the final line in place, and a draft has the metrics of a final line
+await step('live draft grows word by word without jumps', async () => {
+  // the studio fills the languages and reads the saved choices as it opens: a language set before that was undone
+  // in the middle of the phrase (the view went from «Под фразой» to the original only, and the held size with it)
+  await page.evaluate(() => switchAppView('studio'));
+  for (let i = 0; i < 50 && !(await page.evaluate(() => [...document.getElementById('live-translate-select').options].some(o => o.value === 'en'))); i++) await sleep(100);
+  await sleep(300);
+  const run = () => page.evaluate(async () => {
+    const box = (id) => document.getElementById(id);
+    const was = { draft: box('live-draft-toggle').checked, tr: box('live-draft-tr-toggle').checked, lang: box('live-translate-select').value, view: studio.view };
+    box('live-draft-toggle').checked = true;
+    box('live-draft-tr-toggle').checked = true;
+    const hasEn = [...box('live-translate-select').options].some(o => o.value === 'en');
+    if (hasEn) box('live-translate-select').value = 'en';
+    studio.view = 'under';
+    liveCap.lines.clear();
+    capReset();
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+    const rowEl = () => document.querySelector('#studio-cap-rows > .cap-row');
+    const view = () => document.getElementById('studio-cap-rows').className.replace(' cap-has-who', '');
+    const metrics = (el) => { const cs = getComputedStyle(el); return [cs.fontSize, cs.lineHeight, cs.fontWeight, cs.fontStyle].join(' '); };
+    const steps = [['Сегодня мы', 'Today we'], ['Сегодня мы обсудим', 'Today we will discuss'], ['Сегодня мы обсуждаем план', 'Today we discuss the plan']];
+    const out = { firstAfterSet: [], sizes: [], same: true, row: true, text: [], tr: [] };
+    let first = null, row = null, draftMetrics = '', trFirst = null;
+    for (const [text, tr] of steps) {
+      liveCap.partial = text;
+      liveCap.partialTranslation = tr;
+      syncStudioCaptions();
+      out.firstAfterSet.push(rowEl().querySelectorAll('.cap-orig .cap-w').length);
+      for (let i = 0; i < 40 && rowEl().querySelector('.cap-orig').textContent.trim() !== text; i++) {
+        await wait(50);
+        const r = rowEl().querySelector('.cap-bub').getBoundingClientRect();
+        out.sizes.push([r.width, r.height, view()]);
+      }
+      const el = rowEl();
+      const r = el.querySelector('.cap-bub').getBoundingClientRect();
+      out.sizes.push([r.width, r.height, view()]);
+      const w0 = el.querySelector('.cap-orig .cap-w');
+      first = first || w0;
+      out.same = out.same && w0 === first;
+      row = row || el;
+      out.row = out.row && el === row;
+      if (hasEn) { const t0 = el.querySelector('.cap-tr .cap-w'); trFirst = trFirst || t0; out.same = out.same && t0 === trFirst; }
+      out.text.push(el.querySelector('.cap-orig').textContent.trim());
+      draftMetrics = metrics(el.querySelector('.cap-o'));
+    }
+    // final: the line comes and the phrase ends
+    liveCap.lines.set(1, { id: 1, text: 'Сегодня мы обсуждаем план.', lang: 'ru', translation: hasEn ? 'Today we discuss the plan.' : '' });
+    liveCap.partial = '';
+    liveCap.partialTranslation = '';
+    syncStudioCaptions();
+    const fin = rowEl();
+    const r = fin.querySelector('.cap-bub').getBoundingClientRect();
+    out.sizes.push([r.width, r.height, view()]);
+    out.finalSame = fin === row && document.querySelectorAll('#studio-cap-rows > .cap-row').length === 1 && !fin.classList.contains('cap-draft');
+    out.finalFirst = fin.querySelector('.cap-orig .cap-w') === first;
+    out.finalText = fin.querySelector('.cap-orig').textContent.trim();
+    out.metrics = [draftMetrics, metrics(fin.querySelector('.cap-o'))];
+    // with motion reduced the words come at once (the stable start still kept)
+    liveCap.lines.clear();
+    capReset();
+    liveCap.partial = 'Один два три четыре';
+    syncStudioCaptions();
+    out.calm = rowEl().querySelectorAll('.cap-orig .cap-w').length;
+    liveCap.partial = '';
+    capReset();
+    box('live-draft-toggle').checked = was.draft;
+    box('live-draft-tr-toggle').checked = was.tr;
+    box('live-translate-select').value = was.lang;
+    studio.view = was.view;
+    return out;
+  });
+  const out = await run();
+  expect(JSON.stringify(out.firstAfterSet) === '[1,3,4]', `the new words did not come one by one: ${JSON.stringify(out.firstAfterSet)}`);
+  expect(out.text.join('|') === 'Сегодня мы|Сегодня мы обсудим|Сегодня мы обсуждаем план', `the draft text: ${out.text.join('|')}`);
+  expect(out.same && out.row, 'the words kept by an update are new nodes, or the draft row was replaced');
+  expect(out.finalSame && out.finalFirst && out.finalText === 'Сегодня мы обсуждаем план.', `the final line is not the draft in place: ${JSON.stringify(out)}`);
+  // a change of the view lets the held size go by design (capReleaseSizes): it is not expected here
+  expect(out.sizes.every(s => s[2] === out.sizes[0][2]), `the view changed during the phrase: ${JSON.stringify(out.sizes)}`);
+  const shrunk = out.sizes.findIndex((s, i) => i && (s[0] < out.sizes[i - 1][0] - 0.5 || s[1] < out.sizes[i - 1][1] - 0.5));
+  expect(shrunk < 0, `the bubble shrank: ${JSON.stringify(out.sizes)}`);
+  expect(out.metrics[0] === out.metrics[1], `a draft and a final line differ in size: ${out.metrics.join(' / ')}`);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  try {
+    const calm = await run();
+    expect(calm.calm === 4 && JSON.stringify(calm.firstAfterSet) === '[2,3,4]', `with motion reduced the words still wait: ${JSON.stringify(calm)}`);
+  } finally { await page.emulateMedia({ reducedMotion: null }); }
+  await page.evaluate(() => { liveCap.lines.clear(); capReset(); syncStudioCaptions(); switchAppView('library'); });
+});
+
+// Two hours of captions: the page keeps the last 300 lines (found in review: thousands, all sorted at each
+// update), the document shows 150, the text let go stays for «Спросить» of a restarted session
+await step('captions keep the last lines', async () => {
+  const got = await page.evaluate(() => {
+    liveCap.lines.clear();
+    capReset();
+    for (let id = 1; id <= 420; id++) liveCap.lines.set(id, { id, text: `Строка ${id}`, lang: 'ru', translation: '', at: id });
+    syncStudioCaptions();
+    const out = { kept: liveCap.lines.size, first: Math.min(...liveCap.lines.keys()), rows: document.querySelectorAll('#studio-cap-rows > .cap-row').length,
+      gone: (liveCap.gone || []).length, goneFirst: ((liveCap.gone || [])[0] || {}).text };
+    liveCap.lines.clear();
+    liveCap.gone = [];
+    capReset();
+    syncStudioCaptions();
+    return out;
+  });
+  expect(got.kept === 300 && got.first === 121 && got.rows === 150, `the lines kept: ${JSON.stringify(got)}`);
+  expect(got.gone === 120 && got.goneFirst === 'Строка 1', `the text let go is lost: ${JSON.stringify(got)}`);
+});
+
 await step('captions do not start by themselves', async () => {
+  // «Не мешать на встречах» holds them on a meeting only: a voice note recorded by hand starts with them
   const held = await page.evaluate(() => [
-    captionsHeldAtStart({}),
-    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }),
-    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'false' }),
-    captionsHeldAtStart({ live_captions_auto: 'false', analysis_after_meetings: 'false' }),
+    captionsHeldAtStart({}, false),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }, true),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'true' }, false),
+    captionsHeldAtStart({ live_captions_auto: 'true', analysis_after_meetings: 'false' }, true),
+    captionsHeldAtStart({ live_captions_auto: 'false', analysis_after_meetings: 'false' }, false),
   ]);
-  expect(JSON.stringify(held) === '[true,true,false,true]', `the captions rule: ${held}`);
+  expect(JSON.stringify(held) === '[true,true,false,false,true]', `the captions rule: ${held}`);
   await page.evaluate(() => openModal('settings', 'recording'));
-  await sleep(600);
+  // the form is filled from the server (settings.js fillSystemInfo): read once it has been
+  await until(() => !!(state.system && state.system.settings), 'the settings did not load', 8000);
   expect(!(await page.isChecked('#set-live-captions-auto')), 'captions are on by default');
   await page.evaluate(() => closeModal('settings'));
+});
+
+// The studio's row (asked by the user: the tabs and the captions' choices were two rows of the same buttons): the
+// tabs and four chips of one height on one centre line; «Субтитры» switches, the language comes from a menu, the
+// models and the gear open their popovers, Esc and a second click close them
+await step('studio captions row', async () => {
+  await page.evaluate(() => switchAppView('studio'));
+  await sleep(600);  // the studio reads the saved choices of the captions as it opens
+  await page.evaluate(() => {
+    document.getElementById('live-captions-toggle').checked = false;
+    document.getElementById('live-translate-select').value = '';
+    studioConfigure();
+  });
+  await sleep(300);
+  const boxes = await page.evaluate(() => ['st-cap-pill', 'st-tr-pill', 'st-models-pill', 'st-cap-more-btn'].map(id => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return [Math.round(r.height), Math.round(r.top + r.height / 2)];
+  }));
+  expect(boxes.every(b => b[0] === boxes[0][0] && Math.abs(b[1] - boxes[0][1]) <= 1), `the chips are not in line: ${JSON.stringify(boxes)}`);
+  expect(await page.evaluate(() => document.querySelectorAll('#st-tab-text, #st-tab-notes, #st-tab-ask').length === 3
+    && !document.querySelector('.st-cap-bar:not(.st-focus-bar)')), 'the tabs are missing or the old row of the captions is back');
+  await page.click('#st-cap-pill');
+  expect(await page.evaluate(() => document.getElementById('live-captions-toggle').checked
+    && document.getElementById('st-cap-pill').getAttribute('aria-checked') === 'true'), '«Субтитры» did not turn the captions on');
+  await page.click('#st-tr-pill');
+  let item = -1;
+  for (let i = 0; i < 20 && item < 0; i++) {
+    await sleep(100);
+    item = await page.evaluate(() => [...document.querySelectorAll('#text-menu button[data-i]')]
+      .findIndex(b => b.textContent.trim() === langName('en')));
+  }
+  expect(item >= 0, 'the language menu did not open');
+  expect(await page.evaluate(() => document.querySelector('#text-menu button[data-i]').textContent.trim() === t('liveNoTranslation')),
+    '«Без перевода» is not first');
+  await page.evaluate((i) => document.querySelectorAll('#text-menu button[data-i]')[i].click(), item);
+  await sleep(200);
+  expect(await page.evaluate(() => document.getElementById('live-translate-select').value === 'en'
+    && document.getElementById('st-tr-pill-label').textContent === langName('en')), 'the language was not chosen');
+  await page.click('#st-models-pill');
+  await sleep(200);
+  expect(await page.isVisible('#st-models-pop') && await page.isVisible('#studio-cap-model') && await page.isVisible('#studio-tr-model'),
+    'the models popover did not open with its lists');
+  await page.click('#st-models-pill');
+  await sleep(200);
+  expect(!(await page.isVisible('#st-models-pop')), 'a second click did not close the models popover');
+  await page.click('#st-cap-more-btn');
+  await sleep(200);
+  expect(await page.isVisible('#studio-speech') && await page.isVisible('#live-draft-toggle'), 'the gear did not open its settings');
+  await page.keyboard.press('Escape');
+  await sleep(200);
+  expect(!(await page.isVisible('#st-cap-more')), 'Esc did not close the gear');
+  await page.evaluate(() => {
+    document.getElementById('live-captions-toggle').checked = false;
+    studioToggleCaptions(false);
+    document.getElementById('live-translate-select').value = '';
+    studioConfigure();
+    switchAppView('library');
+  });
+});
+
+// The studio's choices stay (asked by the user): «Субтитры», the language, «Качество / Скорость» and the models of the
+// popover are settings on the server, chosen before a recording too; a reload on an empty localStorage (another
+// port) shows them again, and Settings shows the same values
+await step('studio choices kept', async () => {
+  await page.route('**/api/live/models', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ installed: ['qwen3:8b', 'gemma4:e2b'], quality: 'qwen3:8b', fast: 'gemma4:e2b', auto: { quality: 'qwen3:8b', fast: 'gemma4:e2b' } }) }));
+  const parakeet = () => { state.onnxInstalled = ['parakeet-v3']; };  // no model is downloaded in the test data
+  await page.evaluate(() => switchAppView('studio'));
+  await sleep(600);
+  await page.evaluate(parakeet);
+  // the studio fills the languages and reads the saved choices as it opens: setting the language before that is done
+  // was undone by it (CI: the translation model list stayed hidden)
+  for (let i = 0; i < 50 && !(await page.evaluate(() => [...document.getElementById('live-translate-select').options].some(o => o.value === 'en'))); i++) await sleep(100);
+  await sleep(300);
+  if (!(await page.evaluate(() => document.getElementById('live-captions-toggle').checked))) await page.click('#st-cap-pill');
+  await page.evaluate(() => {
+    document.getElementById('live-translate-select').value = 'en';
+    studioConfigure();
+    studioSetSpeed('fast');
+    studioTranslateModelsChanged();
+  });
+  const openModels = async () => {
+    if (!(await page.isVisible('#st-models-pop'))) await page.click('#st-models-pill');
+    await sleep(200);
+  };
+  await openModels();
+  let ready = false;
+  for (let i = 0; i < 30 && !ready; i++) {
+    await sleep(100);
+    ready = await page.evaluate(() => [...document.getElementById('studio-tr-model').options].some(o => o.value === 'gemma4:e2b'));
+  }
+  expect(ready, 'the translation models are not listed');
+  expect(await page.evaluate(() => !document.getElementById('studio-cap-model').disabled && !document.getElementById('studio-tr-model').disabled),
+    'the model lists are locked before a recording');
+  // the popover is opened right before each choice: a re-render of the studio may close it in between (CI timed
+  // out «waiting for element to be visible» here)
+  const choose = async (sel, value) => {
+    for (let i = 0; i < 3; i++) {
+      // the status poll refills the installed models from the server, which has none: put Parakeet back and draw the
+      // lists at once (it was drawn only at the next tick, after the choice timed out)
+      await page.evaluate(() => { state.onnxInstalled = ['parakeet-v3']; if (typeof renderStudioCapBar === 'function') renderStudioCapBar(); });
+      await page.evaluate(() => {  // the translation language as the step set it: its model list shows only with one
+        const sel = document.getElementById('live-translate-select');
+        if (sel.value !== 'en') { sel.value = 'en'; studioConfigure(); }
+      });
+      await openModels();
+      try { await page.selectOption(sel, value, { timeout: 2500 }); return; } catch (e) { if (i === 2) throw e; }
+    }
+  };
+  await choose('#studio-cap-model', 'parakeet-v3');
+  await choose('#studio-tr-model', 'gemma4:e2b');
+  const keys = ['live_captions_auto', 'live_translate_to', 'live_speed', 'live_whisper_model', 'live_translate_model_fast', 'live_translate_model_quality'];
+  const want = JSON.stringify(['true', 'en', 'fast', 'parakeet-v3', 'gemma4:e2b', '']);
+  let saved = '';
+  for (let i = 0; i < 30 && saved !== want; i++) {
+    await sleep(100);
+    saved = await page.evaluate((k) => fetch('/api/system').then(r => r.json()).then(d => JSON.stringify(k.map(x => d.settings[x] ?? null))), keys);
+  }
+  expect(saved === want, `the choices were not saved: ${saved}`);
+
+  await page.evaluate(() => localStorage.clear());  // a launch on another port
+  await page.reload();
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
+  await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); switchAppView('studio'); });
+  let shown = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(150);
+    shown = await page.evaluate(() => ({ on: document.getElementById('live-captions-toggle').checked,
+      pill: document.getElementById('st-cap-pill').getAttribute('aria-checked'),
+      lang: document.getElementById('live-translate-select').value, speed: studio.speed,
+      fast: document.getElementById('studio-speed-fast').classList.contains('tk-on') }));
+    if (shown.on && shown.lang === 'en' && shown.fast) break;
+  }
+  expect(shown.on && shown.pill === 'true' && shown.lang === 'en' && shown.speed === 'fast' && shown.fast,
+    `the studio did not show the saved choices after a reload: ${JSON.stringify(shown)}`);
+  await openModels();
+  let models = null;
+  for (let i = 0; i < 30; i++) {
+    await sleep(100);
+    models = await page.evaluate(() => {
+      state.onnxInstalled = ['parakeet-v3'];
+      renderStudioCapBar();
+      return [document.getElementById('studio-cap-model').value, document.getElementById('studio-tr-model').value];
+    });
+    if (models[0] === 'parakeet-v3' && models[1] === 'gemma4:e2b') break;
+  }
+  expect(models[0] === 'parakeet-v3' && models[1] === 'gemma4:e2b', `the models were not kept: ${models}`);
+  if (process.env.PERSIST_SHOT) await page.locator('#st-models-pop').screenshot({ path: process.env.PERSIST_SHOT });
+  await page.evaluate(() => closeStudioModelsPop());
+
+  await page.evaluate(() => openModal('settings', 'recording'));
+  // the studio's choices reach the form of Settings once saved (studio.js): waited for, not a fixed pause
+  await until(() => {
+    state.onnxInstalled = ['parakeet-v3'];
+    renderLiveModelSelect();
+    return document.getElementById('set-live-captions-auto').checked && document.getElementById('set-live-model').value === 'parakeet-v3';
+  }, 'Settings did not take the choices', 5000).catch(() => {});  // the expect below says what it shows
+  const inSettings = await page.evaluate(() => {
+    state.onnxInstalled = ['parakeet-v3'];
+    renderLiveModelSelect();
+    return [document.getElementById('set-live-captions-auto').checked, document.getElementById('set-live-model').value];
+  });
+  expect(inSettings[0] === true && inSettings[1] === 'parakeet-v3', `Settings shows other values: ${inSettings}`);
+  // Settings → the studio: the switch turned off there is off in the studio
+  await page.evaluate(() => document.getElementById('set-live-captions-auto').click());  // the row may be folded
+  let off = false;
+  for (let i = 0; i < 30 && !off; i++) { await sleep(100); off = await page.evaluate(() => !document.getElementById('live-captions-toggle').checked); }
+  expect(off, 'the switch of Settings did not reach the studio');
+  await page.evaluate(() => closeModal('settings'));
+  await page.evaluate(() => {
+    studioSetModels({ caption_model: 'auto', translate_model: '' });
+    document.getElementById('live-translate-select').value = '';
+    studioConfigure();
+    studioSetSpeed('quality');
+    switchAppView('library');
+  });
+  await sleep(500);
+  await page.unroute('**/api/live/models');
+});
+
+// A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
+// fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
+await step('a choice in flight survives a settings read', async () => {
+  const cur = await page.evaluate(() => liveSettings().live_speed || 'quality');
+  const other = cur === 'fast' ? 'quality' : 'fast';
+  let release, held = 0, passed = 0;
+  const gate = new Promise(r => { release = r; });
+  await page.route('**/api/settings', async route => {
+    if (route.request().method() === 'POST' && /live_speed/.test(route.request().postData() || '')) { held++; await gate; }
+    await route.continue().catch(() => {});  // the held one may be reported handled already: it reaches the server all the same
+    passed++;
+  });
+  try {
+    await page.evaluate(s => studioSetSpeed(s), other);
+    for (let i = 0; i < 30 && !held; i++) await sleep(100);
+    expect(held === 1, 'the save was not held');
+    await page.evaluate(() => fillSystemInfo());
+    const mid = await page.evaluate(() => [liveSettings().live_speed, studio.speed]);
+    expect(mid.every(v => v === other), `the settings read put the old choice back: ${mid}`);
+  } finally {
+    release();
+    for (let i = 0; i < 30 && passed < held; i++) await sleep(100);
+    await page.unroute('**/api/settings');
+  }
+  let saved = '';
+  for (let i = 0; i < 30 && saved !== other; i++) {
+    await sleep(100);
+    saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.live_speed));
+  }
+  expect(saved === other, `the choice did not reach the server: ${saved}`);
+  await page.evaluate(() => fillSystemInfo());
+  expect(await page.evaluate(() => liveSettings().live_speed) === other, 'a later read lost the choice');
+  await page.evaluate(s => studioSetSpeed(s), cur);
 });
 
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
@@ -1117,10 +1589,79 @@ await step('dashboard', async () => {
   await page.click('#db-drawer button:has-text("Сбросить")');
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
-  await sleep(600);
+  await until(() => DB.data && DB.data.period === 'month', 'the month did not come');
   expect(await page.evaluate(() => DB.data && DB.data.period === 'month' && document.querySelector('#db-periods button[aria-checked="true"]').textContent === 'Месяц'), 'the period did not change');
   await page.click('#db-periods button >> nth=0');
   await sleep(300);
+});
+
+// «Обзор» of a year and of any past period (asked by the user): ‹ goes back, the name says which one, «Текущий
+// период» returns; the figures compared with the period before or the same days a year earlier. A year with no
+// data has no time without meetings («—», found in review: 2088 h made up); «Нагрузка недели» and «Рабочий
+// день» of a past period show its last week, named, not the current one (found in review)
+await step('dashboard: a past year, the comparison', async () => {
+  const year = new Date().getFullYear();
+  const name = () => page.evaluate(() => document.querySelector('#db-nav .db-nav-name').textContent);
+  await page.click('#db-periods button >> nth=3');
+  await until(() => DB.data && DB.data.period === 'year', 'the year did not come');
+  expect(await name() === String(year), `the current year is not named: ${await name()}`);
+  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Текущий период» on the current period');
+  expect(await page.isDisabled('#db-nav button[data-click="dbShiftPeriod"] >> nth=1'), '› is open on the current period');
+  expect(await page.evaluate(() => DB.data.buckets.length === 12 && DB.data.buckets[0].kind === 'month'), 'the year is not by month');
+  await page.click('#db-nav button[data-click="dbShiftPeriod"] >> nth=0');
+  await until(() => DB.data && DB.data.past && DB.data.start.endsWith('-01-01'), 'the year before did not come');
+  expect(await name() === String(year - 1), `the year before is not named: ${await name()}`);
+  expect(await page.evaluate(() => DB.data.start) === `${year - 1}-01-01`, 'not the year before');
+  expect(!(await page.isDisabled('#db-nav button[data-click="dbShiftPeriod"] >> nth=1')), '› is shut on a past period');
+  expect(await page.textContent('#db-nav button[data-click="dbToCurrent"]') === 'Текущий период', 'the way back is not «Текущий период»');
+  // the seed has nothing in the year before: «Время без встреч» is «—» with no comparison under it
+  const focus = () => page.evaluate(() => {
+    const i = dbPrefs().kpis.indexOf('focus'), el = document.querySelectorAll('#db-grid .db-kts .db-kt')[i];
+    return el ? [el.querySelector('.db-kt-n').textContent, el.querySelector('.db-kt-d').textContent] : null;
+  });
+  await until(() => document.querySelectorAll('#db-grid .db-kts .db-kt').length > 0, 'no tiles on the year before');
+  expect(JSON.stringify(await focus()) === JSON.stringify(['—', '']), `the time without meetings of a year with no data: ${JSON.stringify(await focus())}`);
+  // the week widgets: the last week of that year, named; nothing ahead in it
+  const weeks = await page.evaluate(y => [calKey(dbWeekMonday()), calKey(dbMonday(new Date(y, 11, 31)))], year - 1);
+  expect(weeks[0] === weeks[1], `not the last week of the year: ${weeks}`);
+  await until(() => DB.past && DB.past.week && document.querySelector('#db-grid .db-w-load .db-week-name'), 'the week of «Нагрузка недели» is not named');
+  expect(await page.evaluate(() => document.querySelector('#db-grid .db-w-load .db-week-name').textContent === dbWeekName(dbWeekMonday())), 'another week named');
+  expect(await page.locator('#db-grid .db-w-load .k-plan').count() === 0, '«план» in the key of a past week');
+  if (shots) await page.screenshot({ path: `${shots}/db-year-before.png` });
+  // the period only redrawn (another comparison, the same week): the week is not asked again
+  let asked = 0;
+  const count = r => { if (/\/api\/(calendar\/range|worktime\?)/.test(r.url())) asked++; };
+  page.on('request', count);
+  await page.evaluate(() => dbReload());
+  await sleep(500);
+  page.off('request', count);
+  expect(asked === 0, `the same week asked again: ${asked}`);
+  await page.click('#db-nav button[data-click="dbToCurrent"]');
+  await until(() => DB.data && !DB.data.past && DB.data.period === 'year', '«Текущий период» did not return');
+  expect(await name() === String(year), '«Текущий период» did not name the current year');
+  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Текущий период» stayed');
+  expect(await page.locator('#db-grid .db-w-load .db-week-name').count() === 0, 'the current week is named as a past one');
+  // the week: «год назад» says so under the figures, «С предыдущим» back to the week before
+  await page.click('#db-periods button >> nth=0');
+  await until(() => DB.data && DB.data.period === 'week', 'the week did not come');
+  const lines = () => page.evaluate(() => [...document.querySelectorAll('#db-grid .db-kt-d')].map(x => x.textContent).join(' | '));
+  await page.click('#db-grid .db-w-kpis button[data-click="setDashCompare"] >> nth=1');
+  await until(() => DB.data && DB.data.compare === 'year' && [...document.querySelectorAll('#db-grid .db-kt-d')].some(x => /год назад/.test(x.textContent)),
+    'the figures are not compared with a year ago');
+  expect(await page.evaluate(() => dbPrefs().compare) === 'year', 'the comparison was not kept');
+  await page.click('#db-grid .db-w-kpis button[data-click="setDashCompare"] >> nth=0');
+  await until(() => DB.data && DB.data.compare === 'prev', 'the comparison did not return');
+  await sleep(200);
+  expect(!/год назад/.test(await lines()), `still a year ago: ${await lines()}`);
+  // the week before: «Нагрузка недели» of that week, named
+  await page.click('#db-nav button[data-click="dbShiftPeriod"] >> nth=0');
+  await until(() => DB.data && DB.data.past && DB.data.period === 'week', 'the week before did not come');
+  await until(() => DB.past && DB.past.week && document.querySelector('#db-grid .db-w-load .db-week-name'), 'the week before is not named in «Нагрузка недели»');
+  expect(await page.evaluate(() => DB.past.monday === DB.data.start && document.querySelector('#db-grid .db-w-load .db-week-name').textContent === dbSpanName()),
+    '«Нагрузка недели» is not of the week shown');
+  if (shots) await page.screenshot({ path: `${shots}/db-load-past-week.png` });
+  await page.click('#db-nav button[data-click="dbToCurrent"]');
+  await until(() => DB.data && !DB.data.past, 'the current week did not return');
 });
 
 // The templates editor: a click beside it asks before dropping unsaved edits, and closes at once when
@@ -1249,6 +1790,58 @@ await step('back and forward buttons', async () => {
   expect(await page.evaluate(() => state.appView) === 'tasks', '«Вперёд» did not come back to «Задачи»');
 });
 
+// While recording the capsule shows the way to the studio (asked by the user: it was not obvious): «Студия ›» between the
+// sources and «Стоп», with the green outline while the captions are off; the time opens the studio, never stops; a hint
+// under the chip once, kept closed as a setting across a reload
+await step('recording capsule leads to the studio', async () => {
+  const fake = () => page.evaluate(() => {
+    window.__recOrig = window.__recOrig || [window.isRecording, window.shellQuickRecord]; window.__stops = 0;
+    window.isRecording = () => true; window.shellQuickRecord = () => { window.__stops++; };
+    document.getElementById('live-captions-toggle').checked = false;
+    document.getElementById('studio-timer').textContent = '00:07'; switchAppView('home'); updateRecordButtonState(); });
+  await fake();
+  expect(await page.isVisible('#tb-rec-studio'), 'no «Студия» chip while recording');
+  const boxes = await page.evaluate(() => ['tb-rec', 'tb-rec-studio', 'tb-rec-stop', 'tb-rec-wrap'].map(id => {
+    const r = document.getElementById(id).getBoundingClientRect(); return [r.left, r.right, r.top + r.height / 2];
+  }));
+  expect(boxes[1][0] >= boxes[0][1] && boxes[2][0] >= boxes[1][1] && boxes[2][1] <= boxes[3][1] && Math.abs(boxes[1][2] - boxes[2][2]) < 1,
+    `the chip is not between the time and «Стоп»: ${JSON.stringify(boxes)}`);
+  expect(await page.evaluate(() => document.getElementById('tb-rec-studio').classList.contains('is-call')), 'captions off: the chip has no green outline');
+  await page.evaluate(() => { document.getElementById('live-captions-toggle').checked = true; updateRecordButtonState(); });
+  expect(await page.evaluate(() => { const c = document.getElementById('tb-rec-studio').classList; return c.contains('is-on') && !c.contains('is-call'); }),
+    'captions on: the chip is not in the accent');
+  await page.evaluate(() => { document.getElementById('live-captions-toggle').checked = false; updateRecordButtonState(); });
+  // the hint: shown on the first recording, closed by ✕, not shown again after a reload
+  expect(await page.isVisible('#tb-rec-hint'), 'no hint on the first recording');
+  expect(/Субтитры и текст записи/.test(await page.textContent('#tb-rec-hint')), 'the hint says something else');
+  await page.click('#tb-rec-hint .tb-rec-hint-x');
+  expect(!(await page.isVisible('#tb-rec-hint')), '✕ did not close the hint');
+  let seen = '';
+  for (let i = 0; i < 30 && seen !== 'true'; i++) { await sleep(100); seen = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.hint_studio_entry_seen)); }
+  expect(seen === 'true', `the closed hint was not saved: ${seen}`);
+  await page.reload();
+  for (let i = 0; i < 40 && !(await page.evaluate(() => !!(state.system && state.system.settings))); i++) await sleep(100);
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
+  await page.evaluate(() => document.getElementById('first-run-wizard')?.remove());
+  await fake();
+  await sleep(200);
+  expect(await page.isVisible('#tb-rec-studio') && !(await page.isVisible('#tb-rec-hint')), 'the hint came back after a reload');
+  // the time opens the studio and does not stop; there the capsule keeps its width, its way to the studio inert
+  const wHome = await page.evaluate(() => document.getElementById('tb-rec-wrap').getBoundingClientRect().width);
+  await page.click('#tb-rec-clock');
+  await sleep(300);
+  const r = await page.evaluate(() => [state.appView, window.__stops, document.getElementById('tb-rec-studio').getAttribute('aria-disabled'),
+    document.getElementById('tb-rec-wrap').getBoundingClientRect().width]);
+  expect(r[0] === 'studio' && r[1] === 0, `the time did not open the studio alone: ${r}`);
+  expect(r[2] === 'true' && Math.abs(r[3] - wHome) < 1, `in the studio the chip is not inert or the capsule changed its width: ${r} / ${wHome}`);
+  await page.evaluate(() => switchAppView('libtable'));
+  await page.click('#tb-rec-studio');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'studio', '«Студия ›» did not open the studio');
+  await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; window.__recOrig = undefined;
+    document.getElementById('live-captions-toggle').checked = false; updateRecordButtonState(); switchAppView('home'); });
+});
+
 // While recording, only «Стоп» of the red button stops; the time and the sources open the studio (asked by the user:
 // a click on the microphone stopped the recording)
 await step('recording time opens the studio', async () => {
@@ -1264,11 +1857,17 @@ await step('recording time opens the studio', async () => {
   await sleep(300);
   r = await page.evaluate(() => [state.appView, window.__stops]);
   expect(r[0] === 'studio' && r[1] === 0, `the dot stopped the recording: ${r}`);
-  // in the studio the time does nothing more; «Стоп» stops
-  await page.click('#tb-rec-clock');
-  await page.click('#tb-rec-label');
+  // in the studio the time does nothing more (inert); «Стоп», a button of its own, stops
+  await page.evaluate(() => recButtonClick());
+  await page.click('#tb-rec-stop');
   await sleep(200);
   expect(await page.evaluate(() => window.__stops) === 1, 'only «Стоп» must stop the recording');
+  // the way to the studio from any section is the chip of the recording button; the strip no longer repeats it
+  await page.evaluate(() => { switchAppView('libtable'); strip.html = ''; renderStrip(); });
+  expect(!(await page.isVisible('#strip-acts button[data-click="openRecordStudio"]')), 'the strip still repeats the way to the studio');
+  await page.click('#tb-rec-studio');
+  await sleep(300);
+  expect(await page.evaluate(() => state.appView) === 'studio', 'the «Студия» chip did not open the studio');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 
@@ -1305,9 +1904,16 @@ await step('language from the server', async () => {
   for (let i = 0; i < 40 && lang !== 'en'; i++) { await sleep(150); lang = await page.evaluate(() => state.uiLang); }
   expect(lang === 'en', 'the language of the server was not taken');
   expect(await page.evaluate(() => dbPrefs().period) === 'month', 'the dashboard layout of the server was not taken');
+  // the first-run wizard of the fresh data folder opens a moment after the language: waited for, then removed
+  // (removed before it opened, it covered the page for the steps after this one)
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
   await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ period: 'week' }); });
-  await sleep(1200);
-  const kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
+  // the layout is saved 0.8 s after the last change: waited for, up to 5 s on a busy machine
+  let kept = [];
+  for (let i = 0; i < 25 && !(kept[0] === 'ru' && kept[1] === 'week'); i++) {
+    await sleep(200);
+    kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
+  }
   expect(kept[0] === 'ru' && kept[1] === 'week', `a choice on the page was not kept on the server: ${kept}`);
 });
 
@@ -1331,7 +1937,9 @@ await step('pending race', async () => {
   await sleep(1200);
   await page.route(/\/api\/meetings\/2$/, async r => { await new Promise(f => setTimeout(f, 1200)); await r.continue(); });
   await page.evaluate(() => { selectMeeting(2); selectMeeting(1); });
-  await sleep(2200);
+  await sleep(1300);  // the late answer for recording 2 has come
+  await until(() => state.pendingMeetingId == null && !document.getElementById('workspace-content').classList.contains('rec-pending'),
+    'the screen stayed pending', 5000).catch(() => {});  // the expect below says how it stayed
   await page.unroute(/\/api\/meetings\/2$/);
   const st = await page.evaluate(() => {
     const box = document.getElementById('workspace-content');
@@ -1359,14 +1967,75 @@ await step('queue island', async () => {
   // the job ends: «Готово», and the window opened from the island closes with it
   await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
   expect(/st-island-done/.test(await page.getAttribute('#strip-island', 'class')), 'no «Готово»');
-  await sleep(2900);
-  expect(!(await page.isVisible('#strip-island')) && !(await page.isVisible('#jobs-pop')), 'the island or its window stayed');
+  // «Готово» stays 2.6 s (pult.js doneTimer), then the queue is read again: up to 5 s on a slow runner
+  const gone = () => {
+    const shown = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden') && el.getClientRects().length > 0; };
+    return !shown('strip-island') && !shown('jobs-pop');
+  };
+  await until(gone, 'the island or its window stayed', 5000);
   // cancelled: no «Готово»
   await page.evaluate(() => { const m = state.meetings[0]; state.queue = [{ id: m.id, state: 'running', kind: 'analysis', title: m.title, progress: 3, position: 1 }]; strip.kind = 'free'; renderJobsIsland(); islandCancelled(); renderJobsIsland(); state.queue = []; renderJobsIsland(); });
   expect(!(await page.isVisible('#strip-island')), '«Готово» after a cancel');
   // never visible: no «Готово»
   await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
   expect(!(await page.isVisible('#strip-island')), '«Готово» with nothing before');
+});
+
+// «Не мешать на встречах»: the queue's window tells a meeting going on from the pause after it, the pause counts
+// down; a held transcription starts now after the question «Расшифровать» asks during a meeting (reported by the
+// user: «ждёт конца встречи» under a voice note with no meeting going on)
+await step('queue window meeting states', async () => {
+  let hold = { kind: 'meeting', reason: 'recording' };
+  const ran = [];
+  const json = (r, body) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/queue', r => json(r, [{ id: 9911, state: 'waiting', kind: 'transcribe', title: 'Заметка к планёрке', progress: 0, position: 1 },
+    { id: 9912, state: 'waiting', kind: 'translate', lang: 'en', title: 'Обзор квартала', progress: 0, position: 2 }]));
+  await page.route('**/api/queue/paused', r => json(r, { paused: false, meeting: true, hold }));
+  await page.route('**/api/queue/*/run-now', r => { ran.push(r.request().url()); return json(r, { ok: true }); });
+  try {
+    await page.evaluate(() => { strip.kind = 'free'; return loadQueue(); });
+    expect((await page.textContent('#strip-island')).includes('Ждут конца встречи'), 'the island does not say a meeting goes on');
+    await page.click('#strip-island');
+    await sleep(300);
+    let sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(sub.startsWith('Идёт встреча'), `the window during a meeting: ${sub}`);
+    // only the transcription waits for the meeting: «Начать сейчас» under it alone
+    expect(await page.locator('#jobs-pop .vx-prow-go button').count() === 1, 'no «Начать сейчас» on the transcription alone');
+    expect((await page.textContent('#jobs-pop .vx-prow-go button')).trim() === 'Начать сейчас', 'the button text');
+    // the pause after the meeting: its time left, counting down
+    hold = { kind: 'pause', reason: 'recording', until: Date.now() / 1000 + 100, left: 100 };
+    await page.evaluate(() => loadQueue());
+    sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(/^Пауза после встречи · 1:(40|39)/.test(sub), `the window during the pause: ${sub}`);
+    expect(/^Пауза после встречи 1:(40|39)/.test((await page.textContent('#strip-island')).trim()), 'the island does not count the pause');
+    expect(/начнётся через 1:(40|39)/.test(await page.textContent('#jobs-pop .vx-prow')), 'the item does not count the pause');
+    await sleep(2100);
+    sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(/^Пауза после встречи · 1:3\d/.test(sub), `the pause does not count down: ${sub}`);
+    // «Начать сейчас»: the question first; «Отмена» starts nothing, «Да, начать сейчас» starts it
+    await page.click('#jobs-pop .vx-prow-go button');
+    await sleep(300);
+    expect((await page.textContent('[role="dialog"] .vx-dlg')).includes('Пауза после встречи'), 'no question before the start');
+    await page.click('[role="dialog"] button[data-a="no"]');
+    await sleep(300);
+    expect(ran.length === 0, 'started without «Да»');
+    hold = { kind: 'meeting', reason: 'call' };
+    await page.evaluate(() => loadQueue());
+    if (!(await page.isVisible('#jobs-pop'))) await page.click('#strip-island');  // a click in the question closes it, as «Отменить всё»
+    await sleep(300);
+    await page.click('#jobs-pop .vx-prow-go button');
+    await sleep(300);
+    expect((await page.textContent('[role="dialog"] .vx-dlg')).includes('Идёт встреча'), 'the question during a meeting');
+    await page.click('[role="dialog"] button[data-a="yes"]');
+    await sleep(400);
+    expect(ran.length === 1 && /\/api\/queue\/9911\/run-now$/.test(ran[0]), `run-now: ${ran}`);
+    await page.evaluate(() => closeJobsPop());
+  } finally {
+    await page.unroute('**/api/queue');
+    await page.unroute('**/api/queue/paused');
+    await page.unroute('**/api/queue/*/run-now');
+    await page.evaluate(() => loadQueue().catch(() => {}));
+  }
 });
 
 // Menus: one open at a time, a second press of the button closes its menu, Esc closes the menu on top only (one
@@ -1493,11 +2162,22 @@ await step('features drawer', async () => {
 // «после встречи» for two minutes (reported by the user); the row shows the time left in place of the percent
 await step('mix wait countdown', async () => {
   const meeting = await page.evaluate(() => fetch('/api/meetings/3').then(r => r.json()));
-  const until = Date.now() / 1000 + 100;
-  Object.assign(meeting, { id: 9902, title: 'Запись 14-05', status: 'mixing', progress: 1, mix_wait: until, mix_deleting: false,
+  const waitEnd = Date.now() / 1000 + 100;
+  Object.assign(meeting, { id: 9902, title: 'Запись 14-05', status: 'mixing', progress: 1, mix_wait: waitEnd, mix_deleting: false,
     stage_text: 'Сведение дорожек: пауза на случай следующей встречи', segments: [], summaries: {}, transcript_versions: [], duration: 0 });
   await page.route(/\/api\/meetings\/9902(\/|\?|$)/, r => /\/api\/meetings\/9902(\?|$)/.test(r.request().url())
     ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meeting) }) : r.fulfill({ status: 404, body: '{}' }));
+  // the list the page polls (library.js pollMeetingsLoop) holds the row too: else a redraw drops it mid-step
+  await page.route(/\/api\/meetings(\?.*)?$/, async r => {
+    const headers = { ...r.request().headers() };
+    delete headers['if-none-match'];  // always the whole list, so the row is added to it
+    const res = await r.fetch({ headers });
+    const list = await res.json().catch(() => null);
+    if (!Array.isArray(list)) return r.fulfill({ response: res });
+    const { segments, ...row } = meeting;
+    if (!list.some(x => x.id === 9902)) list.unshift({ ...row, mix_wait: meeting.mix_wait });
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(list) });
+  });
   await page.evaluate(m => {
     const row = { ...m };
     delete row.segments;
@@ -1505,14 +2185,14 @@ await step('mix wait countdown', async () => {
     renderMeetingsSidebar();
     return openMeeting(9902);
   }, meeting);
-  await sleep(1200);
   const sub = () => page.textContent('#tx-rc-sub');
+  await until(() => /^Начнётся через 1:[34]\d — пауза/.test(document.getElementById('tx-rc-sub')?.textContent || ''),
+    'the card does not count down', 6000).catch(() => {});  // the expect below says what it shows
   const first = await sub();
   expect(/^Начнётся через 1:[34]\d — пауза/.test(first), `the card does not count down: «${first}»`);
   expect((await page.textContent('#tx-rc-title')) === 'Сведение дорожек', 'the card is not the mix');
   expect(!(await page.textContent('#tx-rc-pct')), 'the card still shows a percent');
-  await sleep(1300);
-  expect((await sub()) !== first, 'the countdown does not move');
+  await until(f => (document.getElementById('tx-rc-sub')?.textContent || '') !== f, 'the countdown does not move', 5000, first);
   const slot = await page.evaluate(() => document.querySelector('#meetings-list [data-mid="9902"] [data-mix-until]')?.textContent || '');
   expect(/^1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
   // a meeting going on: no countdown, the reason
@@ -1528,10 +2208,15 @@ await step('mix wait countdown', async () => {
   expect((await sub()) === 'Начнётся после встречи «Планёрка» (до 11:30)', `the meeting is not named: «${await sub()}»`);
   if (shots) await page.screenshot({ path: `${shots}/mix-wait-why.png` });
   let asked = '';
-  await page.route('**/api/meetings/9902/mix-now', r => { asked = r.request().method(); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await page.route('**/api/meetings/9902/mix-now', r => {
+    asked = r.request().method();
+    meeting.mix_wait = null;  // as the server: the mix starts, so the page's next poll no longer shows the wait
+    r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
   await page.click('#tx-rc-mixnow');
-  await sleep(300);
-  expect(asked === 'POST' && !(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» did not ask the server');
+  for (let i = 0; i < 30 && (asked !== 'POST' || await page.isVisible('#tx-rc-mixnow')); i++) await sleep(100);
+  expect(asked === 'POST', '«Свести сейчас» did not ask the server');
+  expect(!(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» is still offered after the mix started');
   await page.evaluate(() => { delete state.activeMeeting.mix_why; });
   await page.evaluate(() => {
     state.activeMeeting.mix_wait = Date.now() / 1000 + 100;
@@ -1547,6 +2232,7 @@ await step('mix wait cleanup', async () => {
     return openMeeting(1);
   });
   await page.unroute(/\/api\/meetings\/9902(\/|\?|$)/);
+  await page.unroute(/\/api\/meetings(\?.*)?$/);
   await sleep(800);
 });
 
@@ -1659,6 +2345,129 @@ await step('name chip in a brief', async () => {
     chat.items = chat.items.filter(i => i.id !== 993);
     renderAssistant();
   });
+});
+
+// A caption line keeps the name it was given while Teams' recent lines slide on (reported by the user: names came
+// and went and the captions jumped)
+await step('caption names stay', async () => {
+  const r = await page.evaluate(() => {
+    const keep = [_recStartTime, stPeople.teams];
+    try {
+      _recStartTime = Date.now() - 20e3;
+      const ln = { text: 'давайте посмотрим план', wall: Date.now() - 10e3, wallEnd: Date.now() - 8e3 };
+      stPeople.teams = { recent: [{ at: 9, name: 'Анна Смирнова', text: 'давайте посмотрим план' }] };
+      const first = capSpeaker(ln);
+      stPeople.teams = { recent: [] };  // the line Teams matched slid out of its recent ones
+      return [first, capSpeaker(ln)];
+    } finally { [_recStartTime, stPeople.teams] = keep; }
+  });
+  expect(r[0] === 'Анна Смирнова' && r[1] === 'Анна Смирнова', `the name did not stay: ${JSON.stringify(r)}`);
+});
+
+// «Нагрузка недели» on a Wednesday at noon: the hours passed and the hours ahead apart in the head, the days to
+// come and the rest of today drawn as planned (grey, not hatched), «по плану» in their hints, the days above the
+// norm by fact and by plan (reported by the user: the meetings still ahead of the week read as hours already spent).
+// The week before: a tick at its hours of each day, in place, and the difference beside the day's hours
+await step('load of the week: plan', async () => {
+  const p2 = await browser.newPage({ viewport: { width: 1300, height: 860 }, timezoneId: 'Europe/Berlin' });
+  try {
+    await p2.clock.install({ time: new Date('2026-11-25T12:00:00+01:00') });
+    const ev = (d, a, b) => ({ title: 'Встреча', start: `2026-11-${d}T${a}:00`, end: `2026-11-${d}T${b}:00`, all_day: false });
+    const week = { configured: true, recordings: [], holidays: {}, events: [
+      ev(23, '10:00', '12:00'), ev(23, '14:00', '15:30'),  // Monday: 3.5 h
+      ev(24, '09:00', '14:00'),                            // Tuesday: 5 h, above the norm of 4
+      ev(25, '10:00', '11:00'), ev(25, '14:00', '16:00'),  // today: 1 h passed, 2 h ahead
+      ev(26, '10:00', '11:00'),                            // Thursday: 1 h planned
+      ev(27, '09:00', '14:00'),                            // Friday: 5 h planned, above the norm by plan
+    ] };
+    const last = { configured: true, recordings: [], holidays: {}, events: [
+      ev(16, '10:00', '12:00'),                            // Monday: 2 h
+      ev(17, '08:00', '11:00'), ev(17, '12:00', '15:00'),  // Tuesday: 6 h
+      ev(18, '10:00', '13:00'),                            // Wednesday: 3 h, as this one
+      ev(20, '09:00', '13:00'),                            // Friday: 4 h
+    ] };
+    // the answer by the range asked: this week, or the one before
+    await p2.route('**/api/calendar/range*', r => {
+      const start = new URL(r.request().url()).searchParams.get('start') || '';
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(start.startsWith('2026-11-16') ? last : week) });
+    });
+    await p2.goto(`${base}/?token=${token}`);
+    await p2.waitForTimeout(1500);
+    await p2.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ norm: 4, charts: { ...(dbPrefs().charts || {}), load: 'col' } }); resetDashboard(); switchAppView('dashboard'); });
+    let got = null;
+    for (let i = 0; i < 40 && !(got && got.cols === 5); i++) {
+      await p2.waitForTimeout(150);
+      got = await p2.evaluate(() => {
+        const w = document.querySelector('#db-grid .db-w-load');
+        if (!w) return null;
+        const cols = [...w.querySelectorAll('.dbc-col')];
+        return { head: (w.querySelector('.db-load-sum') || {}).textContent, cols: cols.length,
+          plan: cols.map(c => c.querySelector('i').classList.contains('plan')), done: cols.map(c => !!c.querySelector('.dbc-done')),
+          tips: cols.map(c => c.title), note: (w.querySelector('.db-load-over') || {}).textContent };
+      });
+    }
+    expect(got && got.cols === 5, `the widget did not draw the week: ${JSON.stringify(got)}`);
+    expect(got.head === 'Во встречах: 9,5 ч · впереди 8 ч', `the head: «${got.head}»`);
+    expect(JSON.stringify(got.plan) === '[false,false,true,true,true]', `the planned columns: ${got.plan}`);
+    expect(JSON.stringify(got.done) === '[false,false,true,false,false]', `today's hours passed are not solid: ${got.done}`);
+    expect(/по плану/.test(got.tips[4]) && !/по плану/.test(got.tips[0]) && /впереди 2 ч/.test(got.tips[2]), `the hints: ${got.tips.join(' | ')}`);
+    expect(got.note === 'Сверх нормы: вт; по плану: пт', `the note: «${got.note}»`);
+    // the week before: in the hints, the differences beside the hours, the ticks at their hours (the scale is the
+    // largest of the norm, the days and the days before: 6 h), the plan a solid grey and Friday's part above the
+    // norm framed apart
+    const cmp = async () => {
+      for (let i = 0; i < 40; i++) {
+        const r = await p2.evaluate(() => {
+          const w = document.querySelector('#db-grid .db-w-load');
+          const cols = [...w.querySelectorAll('.dbc-col')];
+          const tick = c => { const s = c.querySelector('.dbc-prev'); if (!s) return null; const a = c.getBoundingClientRect(), b = s.getBoundingClientRect(); return (a.bottom - (b.top + b.bottom) / 2) / a.height; };
+          const plan = w.querySelector('.dbc-col i.plan'), cs = plan && getComputedStyle(plan);
+          return { tips: cols.map(c => c.title), dx: [...w.querySelectorAll('.dbc-dxs .dbc-dx')].map(x => x.textContent), ticks: cols.map(tick),
+            planBg: cs && cs.backgroundColor, planImg: cs && cs.backgroundImage, ovp: cols.map(c => !!c.querySelector('.dbc-ovp')),
+            key: [...w.querySelectorAll('.dbc-key span')].map(x => x.textContent) };
+        });
+        if (r.dx.length) return r;
+        await p2.waitForTimeout(150);
+      }
+      return null;
+    };
+    const c = await cmp();
+    expect(c && JSON.stringify(c.dx) === '["+1,5","−1","","+1","+1"]', `the differences: ${JSON.stringify(c && c.dx)}`);
+    expect(c.tips[1] === 'вт, 24 нояб.: 5 ч · прошлая неделя 6 ч (−1)', `the hint with the week before: «${c.tips[1]}»`);
+    const want = [2, 6, 3, null, 4].map(h => h && h / 6);
+    expect(c.ticks.every((v, i) => (want[i] == null ? v == null : Math.abs(v - want[i]) < 0.03)), `the ticks of the week before: ${JSON.stringify(c.ticks)}`);
+    expect(c.planBg === 'rgb(99, 99, 102)' && c.planImg === 'none', `the plan is not a solid grey: ${c.planBg} ${c.planImg}`);
+    expect(JSON.stringify(c.ovp) === '[false,false,false,false,true]', `the planned part above the norm: ${c.ovp}`);
+    expect(JSON.stringify(c.key) === '["прошло","по плану","прошлая неделя"]', `the key: ${c.key}`);
+    // the other looks: the planned bars, the grey parts of the ring, the dashed line; in the bars the ticks in place,
+    // the hours in one column and the differences in another
+    const looks = {};
+    for (const k of ['bar', 'ring', 'line']) {
+      await p2.evaluate(kind => setDashChart('load', kind), k);
+      looks[k] = await p2.evaluate(() => {
+        const w = document.querySelector('#db-grid .db-w-load');
+        return w.querySelectorAll('.dbc-hb-t b.plan, .dbc-ring-plan, .dbc-lg-bar u.plan, .dbc-plot i.plan, .dbc-l-line.plan').length;
+      });
+      if (k === 'bar') {
+        const b = await p2.evaluate(() => {
+          const w = document.querySelector('#db-grid .db-w-load');
+          const rows = [...w.querySelectorAll('.dbc-hb')];
+          const right = sel => rows.map(r => Math.round(r.querySelector(sel).getBoundingClientRect().right));
+          const ticks = rows.map(r => { const t = r.querySelector('.dbc-hb-t'), s = t.querySelector('.dbc-prev'); if (!s) return null; const a = t.getBoundingClientRect(), x = s.getBoundingClientRect(); return ((x.left + x.right) / 2 - a.left) / a.width; });
+          return { v: right('.dbc-hb-v'), dx: right('.dbc-dx'), ticks, text: rows.map(r => r.querySelector('.dbc-dx').textContent) };
+        });
+        expect(new Set(b.v).size === 1 && new Set(b.dx).size === 1 && b.dx[0] > b.v[0], `the hours and the differences out of their columns: ${JSON.stringify(b)}`);
+        expect(b.ticks.every((v, i) => (want[i] == null ? v == null : Math.abs(v - want[i]) < 0.03)), `the ticks of the bars: ${JSON.stringify(b.ticks)}`);
+        expect(JSON.stringify(b.text) === '["+1,5","−1","","+1","+1"]', `the differences of the bars: ${b.text}`);
+      }
+    }
+    expect(looks.bar === 3 && looks.ring >= 6 && looks.line >= 4, `the other looks: ${JSON.stringify(looks)}`);
+    await p2.evaluate(() => { setUILanguage('en'); dbRedrawWidget('load'); });
+    const en = await p2.evaluate(() => document.querySelector('#db-grid .db-w-load .db-load-sum').textContent);
+    expect(en === 'In meetings: 9.5 h · ahead 8 h', `the head in English: «${en}»`);
+    await p2.evaluate(() => { setDashChart('load', 'col'); setUILanguage('ru'); });
+    await p2.waitForTimeout(800);  // the language is kept on the server before the page closes
+  } finally { await p2.close(); }
 });
 
 await browser.close();

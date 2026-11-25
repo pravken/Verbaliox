@@ -108,5 +108,36 @@ class CancelWaitingTest(unittest.TestCase):
             transcriber._executor.submit(lambda: None, priority=9).result(5)
 
 
+    def test_a_cancelled_run_now_does_not_outlive_the_cancel(self):
+        """Found in review: «Начать сейчас» on a waiting recording and then «Отменить»: the recording queued again
+        went past the meeting and the captions without being asked."""
+        database.init_db()
+        a = database.create_meeting("Первая", "a.wav", "a.wav")["id"]
+        b = database.create_meeting("Вторая", "b.wav", "b.wav")["id"]
+        release, ran = threading.Event(), []
+
+        def job(mid):
+            ran.append(mid)
+            release.wait(5)
+
+        self.addCleanup(transcriber._forced.discard, b)
+        self.addCleanup(transcriber._forced_captions.discard, b)
+        with mock.patch.object(transcriber, "_process_meeting_job", job), \
+                mock.patch.object(transcriber, "_run_pending_exports"), \
+                mock.patch.object(transcriber, "release_whisper_model"):
+            transcriber.enqueue_meeting_job(a)
+            for _ in range(50):
+                if ran:
+                    break
+                threading.Event().wait(0.05)
+            transcriber.enqueue_meeting_job(b)
+            self.assertTrue(transcriber.run_now(b))
+            self.assertIn(b, transcriber._forced)
+            self.assertTrue(transcriber.cancel_waiting(b))
+            self.assertNotIn(b, transcriber._forced)
+            self.assertNotIn(b, transcriber._forced_captions)
+            release.set()
+            transcriber._executor.submit(lambda: None, priority=9).result(5)
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,5 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
-import tempfile
 import unittest
-from pathlib import Path
 
 from app.settings_schema import as_int, clean, clean_all
 
@@ -27,7 +25,7 @@ class SettingsSchemaTest(unittest.TestCase):
                 clean(key, bad)
 
     def test_calendar_and_folders(self):
-        ics = Path(tempfile.mkdtemp()) / "c.ics"
+        ics = tests.temp_dir(self) / "c.ics"
         ics.write_text("BEGIN:VCALENDAR\nEND:VCALENDAR\n")
         self.assertEqual(clean("calendar_ics", str(ics)), str(ics))
         self.assertEqual(clean("calendar_ics", "webcal://example.com/c.ics"), "webcal://example.com/c.ics")

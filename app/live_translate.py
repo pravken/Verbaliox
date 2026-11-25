@@ -5,8 +5,11 @@ One worker thread per caption session talks to Ollama:
   * the model is loaded when the session starts and kept in memory (keep_alive), with the same
     small context every time, so Ollama never reloads it between lines;
   * every final line is a short request of its own (about 0.1-0.3 s on a warm model on a GPU);
-  * the draft line (the phrase still being spoken) is translated too, at most every
-    DRAFT_INTERVAL_SEC, so the translation follows speech before the phrase is final;
+  * the draft line (the phrase still being spoken) is translated too, so the translation follows speech before
+    the phrase is final: three times as seldom as one translation takes (the translator is busy a third of the
+    time at most); on the processor not at all once one translation takes over DRAFT_OFF_ON_CPU_SEC;
+  * a model Ollama runs without a video card gets LIVE_CPU_THREADS threads (options.num_thread): by default it
+    takes one per core at normal priority, beside speech recognition (cpu_threads_in_use);
   * a line that failed (Ollama still starting, a timeout) is tried again later instead of being lost.
 """
 
@@ -20,12 +23,43 @@ import httpx
 
 KEEP_ALIVE = "30m"
 NUM_CTX = 2048            # short lines: a small context loads and runs faster
-DRAFT_INTERVAL_SEC = 1.2  # how often the draft line is translated
+DRAFT_INTERVAL_SEC = 1.2  # how often the draft line is translated before one translation is measured
+DRAFT_MIN_INTERVAL_SEC = 0.5  # with a fast model (Hy-MT3 1.8B: ~0.15 s a phrase); else three times its own time
+DRAFT_OFF_ON_CPU_SEC = 1.5  # on the processor: a draft that takes longer is not translated (final lines still are)
+LIVE_CPU_THREADS = 2      # options.num_thread of the captions' requests to a model running without a video card
 MAX_ATTEMPTS = 4
 
 _CJK_RUN = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]+")
 
 _QUOTES = "\"'`«»“”„‟‘’‚‛‹›〝〞〟＂ "
+
+
+# Short replies a line can be made of (the models are not asked: a general model invents symbols for «Um», a
+# translator answers «No.» with «No.»). By the target language; fillers («um», «эм») have no entry and stay as they are
+SHORT_REPLIES: Dict[str, Dict[str, str]] = {
+    "ru": {"no": "Нет", "nope": "Не-а", "nah": "Не", "yes": "Да", "yeah": "Да", "yep": "Ага", "yup": "Ага",
+           "ok": "Хорошо", "okay": "Хорошо", "sure": "Конечно", "right": "Верно", "hi": "Привет", "hey": "Привет",
+           "bye": "Пока", "wow": "Ого", "thanks": "Спасибо", "oh": "О", "why": "Почему", "what": "Что", "who": "Кто",
+           "how": "Как", "when": "Когда", "where": "Где", "so": "Итак", "well": "Ну", "and": "И", "but": "Но"},
+    "en": {"нет": "No", "не": "No", "да": "Yes", "ага": "Uh-huh", "угу": "Uh-huh", "ок": "OK", "окей": "OK",
+           "так": "So", "ну": "Well", "вот": "There", "привет": "Hi", "пока": "Bye", "спасибо": "Thanks",
+           "что": "What", "кто": "Who", "как": "How", "где": "Where", "когда": "When", "почему": "Why",
+           "и": "And", "но": "But", "а": "And", "ого": "Wow", "ой": "Oops"},
+}
+
+
+def short_reply(text: str, target: str) -> Optional[str]:
+    """The translation of a line that is one short word («No.», «Да?»), with its punctuation kept; None: not one."""
+    m = re.fullmatch(r"\s*([^\W\d_]+)([.!?…,]*)\s*", text or "")
+    if not m:
+        return None
+    word = m.group(1)
+    tr = SHORT_REPLIES.get((target or "").split("-")[0].lower(), {}).get(word.lower().replace("ё", "е"))
+    if tr is None:
+        return None
+    if word.isupper() and len(word) > 1:
+        tr = tr.upper()
+    return tr + m.group(2)
 
 
 def _first_line(text: str) -> str:
@@ -81,10 +115,122 @@ def serbian_to_latin(text: str) -> str:
     return "".join(_SR_BACK.get(ch, ch) for ch in text)
 
 
-# The fast model of live captions, first found among the installed ones. Measured en<->ru
+# The small general model of live captions when no translator (Hy-MT3) is installed. Measured en<->ru
 # (bench-report/translation.md): gemma4:e2b is near e4b in quality at ~0.4 s a phrase. Only models free
 # for commercial use: qwen2.5:3b (Qwen Research licence), llama3.2 and gemma2 (their own terms) are out.
-FAST_MODEL_HINTS = ("gemma4:e2b", "qwen3.5:2b", "qwen2.5:1.5b")
+FAST_MODEL_HINTS = ("gemma4:e2b",)
+
+# Hy-MT translates with the prompt and the sampling of its model card (bench-report/translation-2026-11.md,
+# tools/bench_translate.py). Measured with top_p 0.6; the card of Hy-MT3 gives 0.8 (temperature 0.7, top_k 20,
+# repetition_penalty 1.05 as here): kept as measured.
+HYMT_OPTIONS = {"temperature": 0.7, "top_p": 0.6, "top_k": 20, "repeat_penalty": 1.05, "num_ctx": NUM_CTX,
+                "num_predict": 200}
+
+
+# TranslateGemma: the prompt of its model card, nearly greedy (as measured in tools/bench_translate.py)
+TRANSLATEGEMMA_OPTIONS = {"temperature": 0.1, "num_ctx": NUM_CTX, "num_predict": 200}
+# A dictation is longer than a caption line: a paragraph or a few
+LONG_TEXT_OPTIONS = {"num_ctx": 4096, "num_predict": 1024}
+
+
+def hymt_prompt(text: str, dst: str) -> str:
+    """The English prompt of the Hy-MT model card: one user message, no system prompt, no context lines."""
+    return (f"Translate the following text into {dst}. Note that you should only output the "
+            f"translated result without any additional explanation:\n\n{text}")
+
+
+def translategemma_prompt(text: str, src: Optional[str], dst: str) -> str:
+    """The format of the TranslateGemma model card (tools/bench_translate.py): one user message, the languages by
+    name and code, two blank lines before the text. `src`, `dst`: codes of app/translation.TEXT_LANGUAGES; a source
+    that is not known is left out of the sentence."""
+    from app.translation import TEXT_LANGUAGES
+
+    d = TEXT_LANGUAGES.get(dst, dst)
+    s = TEXT_LANGUAGES.get(src or "")
+    if not s:
+        return (f"You are a professional translator into {d} ({dst}). Your goal is to accurately convey the meaning "
+                f"and nuances of the original text while adhering to {d} grammar, vocabulary, and cultural "
+                f"sensitivities. Produce only the {d} translation, without any additional explanations or "
+                f"commentary. Please translate the following text into {d}:\n\n\n{text}")
+    return (f"You are a professional {s} ({src}) to {d} ({dst}) translator. Your goal is to accurately convey "
+            f"the meaning and nuances of the original {s} text while adhering to {d} grammar, vocabulary, and "
+            f"cultural sensitivities. Produce only the {d} translation, without any additional explanations or "
+            f"commentary. Please translate the following {s} text into {d}:\n\n\n{text}")
+
+
+_ON_CPU: Dict[str, bool] = {}  # model -> Ollama runs it without the video card (/api/ps), as last seen
+_CPU_TRANSLATORS: set = set()  # ids of the caption translators whose model runs on the processor
+
+
+def cpu_threads_in_use() -> int:
+    """The processor threads Ollama's caption translation takes now (LIVE_CPU_THREADS while a caption session
+    translates with a model running without a video card, else 0): for the thread budget of speech recognition."""
+    return LIVE_CPU_THREADS if _CPU_TRANSLATORS else 0
+
+
+def model_on_cpu(model: str, base_url: Optional[str] = None) -> Optional[bool]:
+    """True: Ollama has `model` loaded wholly or partly outside video memory (/api/ps size_vram 0 or below its
+    size: the layers left out run on the processor); False: wholly in the video card; None: not loaded or unknown."""
+    from app.ollama_client import _listed
+
+    try:
+        with httpx.Client(timeout=2.0) as c:
+            loaded = c.get(f"{(base_url or _base_url()).rstrip('/')}/api/ps").json().get("models") or []
+    except Exception:
+        return None
+    for m in loaded:
+        name = m.get("name") or m.get("model") or ""
+        if name and _listed(model, [name]):
+            vram = m.get("size_vram")
+            if vram is None:
+                return None
+            try:
+                # partly in the video card counts as the processor: the layers left there run on all the cores
+                return int(vram) == 0 or int(vram) < int(m.get("size") or 0)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _is_translator(model: Optional[str]) -> bool:
+    from app.ollama_client import is_translate_only_model
+
+    return is_translate_only_model(model or "")
+
+
+def translator_payload(model: str, text: str, src: Optional[str], dst: str, long: bool = False,
+                       extra_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The request of a translator (Hy-MT, TranslateGemma) with the prompt and the sampling of its model card.
+    `src`, `dst`: language codes. `long`: a dictation (paragraphs), not a caption line. `extra_options`: added
+    to the options (num_thread of the captions on the processor)."""
+    from app.ollama_client import is_translategemma
+    from app.translation import TEXT_LANGUAGES
+
+    if is_translategemma(model):
+        content, options = translategemma_prompt(text, src, dst), dict(TRANSLATEGEMMA_OPTIONS)
+    else:
+        content, options = hymt_prompt(text, TEXT_LANGUAGES.get(dst, dst)), dict(HYMT_OPTIONS)
+    if long:
+        options.update(LONG_TEXT_OPTIONS)
+    options.update(extra_options or {})
+    return {"model": model, "stream": False, "messages": [{"role": "user", "content": content}], "options": options}
+
+
+def translator_chat(model: str, text: str, src: Optional[str], dst: str, timeout: float = 30.0,
+                    long: bool = False, captions: bool = False, extra_options: Optional[Dict[str, Any]] = None) -> str:
+    """One answer of a translator (a retry samples another one). captions: asked by the live captions
+    (app/idle_unload.touch)."""
+    from app import idle_unload
+    from app.llm_text import strip_think
+    from app.ollama_client import raise_for_ollama
+
+    idle_unload.touch(model, captions=captions)
+    payload = translator_payload(model, text, src, dst, long=long, extra_options=extra_options)
+    payload["keep_alive"] = idle_unload.ollama_keep_alive() or KEEP_ALIVE
+    with httpx.Client(timeout=timeout) as c:
+        r = c.post(f"{_base_url()}/api/chat", json=payload)
+        raise_for_ollama(r)
+        return strip_think(str((r.json().get("message") or {}).get("content") or "")).strip('"«»`')
 
 
 def _base_url() -> str:
@@ -95,26 +241,76 @@ def _base_url() -> str:
 
 
 def installed_models() -> List[str]:
+    """The models the captions can translate with (the translators too); a downloaded Hy-MT3 1.8B with its
+    broken template is repaired on the way (app/ollama_client.repair_hymt_models)."""
+    from app.ollama_client import repair_hymt_models, translate_models
+
     try:
         with httpx.Client(timeout=2.0) as c:
-            from app.ollama_client import chat_models
-
-            return chat_models([m.get("name") for m in c.get(f"{_base_url()}/api/tags").json().get("models") or []])
+            names = [m.get("name") for m in c.get(f"{_base_url()}/api/tags").json().get("models") or []]
     except Exception:
         return []
+    try:
+        names = repair_hymt_models(_base_url(), names)
+    except Exception:
+        traceback.print_exc()
+    return translate_models(names)
+
+
+# The models chosen in Settings → ИИ-анализ → «Модели перевода» for «Качество» and «Скорость»; empty: «Авто»
+CHOICE_KEYS = {"quality": "live_translate_model_quality", "fast": "live_translate_model_fast"}
+
+
+def choose_models(models: List[str], settings: Dict[str, Any]) -> Dict[str, Any]:
+    """{"quality", "fast", "auto": {"quality", "fast"}, "installed"} for the installed `models`. «Авто»:
+    «Качество» takes Hy-MT3-7B, else Hy-MT3-1.8B, else the analysis model; «Скорость» takes Hy-MT3-1.8B, else
+    gemma4:e2b, else the same as «Качество». A model chosen in the settings comes first while it is installed
+    (one that is not, or not listed yet, gives its place to «Авто»)."""
+    from app.ollama_client import (HYMT_1_8B, HYMT_7B, _listed, chat_models, translate_model_installed_as,
+                                   translate_models)
+
+    models = translate_models(models)
+    general = chat_models(models)
+    analysis = settings.get("ollama_model") or (general[0] if general else None)
+    if analysis and general and analysis not in general:
+        same = [m for m in general if m.startswith(analysis.split(":")[0])]
+        analysis = same[0] if same else general[0]
+    large = translate_model_installed_as(HYMT_7B, models)
+    small = translate_model_installed_as(HYMT_1_8B, models)
+    auto_quality = large or small or analysis
+    auto_fast = small or next((m for m in FAST_MODEL_HINTS if m in models), None) or auto_quality
+    out: Dict[str, Any] = {"auto": {"quality": auto_quality, "fast": auto_fast}, "installed": models}
+    for kind, key in CHOICE_KEYS.items():
+        chosen = str(settings.get(key) or "").strip()
+        out[kind] = (_listed(chosen, models) if chosen else None) or out["auto"][kind]
+    return out
 
 
 def model_choices() -> Dict[str, Any]:
-    """{"quality": configured model, "fast": a small installed model or None}."""
+    """choose_models for the models Ollama has now. A model chosen in the studio
+    (LiveTranslator.model_override) comes before both."""
     from app.database import get_all_settings
 
-    models = installed_models()
-    quality = get_all_settings().get("ollama_model") or (models[0] if models else None)
-    if quality and models and quality not in models:
-        same = [m for m in models if m.startswith(quality.split(":")[0])]
-        quality = same[0] if same else models[0]
-    fast = next((m for m in FAST_MODEL_HINTS if m in models), None)
-    return {"quality": quality, "fast": fast, "installed": models}
+    return choose_models(installed_models(), get_all_settings())
+
+
+def translation_model(kind: str = "quality", start_ollama: bool = False) -> Optional[str]:
+    """The model of «Качество» (or «Скорость») for another translation than the captions (the dictation).
+    `start_ollama`: a stopped Ollama is started first, so its list of models is read (an explicit user action)."""
+    try:
+        if start_ollama:
+            from app.ollama_client import ensure_ollama_running
+
+            ensure_ollama_running(_base_url())
+        return model_choices().get(kind)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def small_chat_model() -> Optional[str]:
+    """A small installed model that writes text (not a translator), for short checks; None: the analysis model."""
+    return next((m for m in FAST_MODEL_HINTS if m in installed_models()), None)
 
 
 AUTO = "auto"  # target "auto": a pair of languages, each line goes into the other one (RU ⇄ EN)
@@ -145,7 +341,15 @@ def phrase_language(text: str) -> Optional[str]:
     return None
 
 
+class _Stopped(Exception):
+    """The caption session closed while the translator was still getting its model ready."""
+
+
 class LiveTranslator:
+    on_cpu = False  # Ollama runs the model without the video card (set per translator in _ensure_ready)
+    _stop = False
+    _draft_cost: Optional[float] = None
+
     def __init__(self, get_source_lang: Callable[[], Optional[str]], target: str, speed: str = "quality",
                  pair: Optional[List[str]] = None):
         self._source_lang = get_source_lang
@@ -160,9 +364,12 @@ class LiveTranslator:
         self.draft_translation = ""
         self.draft_target = ""
         self._last_draft_at = 0.0
+        self._draft_cost: Optional[float] = None  # seconds a draft translation takes (smoothed)
+        self.on_cpu = False  # Ollama runs the model without the video card: LIVE_CPU_THREADS threads, drafts limited
         self._cond = threading.Condition()
         self._stop = False
         self._model: Optional[str] = None
+        self._loaded: Optional[str] = None  # the model last loaded: unloaded when another one replaces it
         self.model_override: Optional[str] = None  # chosen by hand in the studio; None: by speed
         self._context: List[str] = []  # last final lines, given to the model as context
         threading.Thread(target=self._run, daemon=True, name="live_translate").start()
@@ -223,6 +430,13 @@ class LiveTranslator:
                 self.ready = False
             self._cond.notify()
 
+    def reload_model(self) -> None:
+        """The model saved for the mode changed (the studio, Settings): resolved again and loaded on the next request."""
+        with self._cond:
+            self._model = None
+            self.ready = False
+            self._cond.notify()
+
     def stop(self) -> None:
         with self._cond:
             self._stop = True
@@ -237,10 +451,13 @@ class LiveTranslator:
         # Ollama may have just been started: wait for it instead of failing the first lines
         if self.model_override:
             return self.model_override
-        for _ in range(60):
+        for i in range(60):
+            if self._stop:
+                raise _Stopped()
             choices = model_choices()
             model = choices["fast"] if self.speed == "fast" and choices["fast"] else choices["quality"]
-            if model:
+            # a list not read yet (Ollama starting) would give the analysis model instead of the chosen one
+            if model and (choices["installed"] or i >= 10):
                 return model
             time.sleep(0.5)
         raise RuntimeError("Ollama не отвечает или в ней нет моделей")
@@ -257,6 +474,9 @@ class LiveTranslator:
         src = TEXT_LANGUAGES.get(src_lang or self._source_lang() or "", "the source language")
         target = target or self.target_for(src_lang or self._source_lang())
         dst = TEXT_LANGUAGES.get(target, target)
+        if _is_translator(model or self._model):
+            return translator_chat(model or self._model, text, _base(src_lang or self._source_lang()) or None, target,
+                                   timeout, captions=True, extra_options=self._live_options())
         # Live speech arrives in fragments; Qwen models, left alone with a fragment, sometimes
         # answer in Chinese or ask for "the full sentence" instead of translating
         system = (
@@ -271,12 +491,12 @@ class LiveTranslator:
         user = text
         from app import idle_unload
 
-        idle_unload.touch(model or self._model)
+        idle_unload.touch(model or self._model, captions=True)
         payload = {
             "model": model or self._model, "stream": False, "keep_alive": idle_unload.ollama_keep_alive() or KEEP_ALIVE,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "options": {"temperature": 0.0 if strict else 0.1, "num_ctx": NUM_CTX, "num_predict": 200,
-                        "repeat_penalty": 1.15},
+                        "repeat_penalty": 1.15, **self._live_options()},
         }
         from app.llm_text import strip_think, thinking_off
 
@@ -295,8 +515,11 @@ class LiveTranslator:
         from app.dub_text import has_foreign_script
 
         target = target or self.target_for(src_lang)
+        quick = short_reply(text, target)
+        if quick is not None:
+            return quick  # «No.», «Да?»: a word of its own, translated here
         if len(re.sub(r"[\W_]+", "", text)) <= 3:
-            return text  # "Um...", "Ok": nothing to translate, models invent symbols for it
+            return text  # "Um...", "Hmm": nothing to translate, models invent symbols for it
         tr = collapse_repeats(_first_line(self._chat(text, timeout=timeout, src_lang=src_lang, target=target)))
         if has_foreign_script(tr, target) or _degenerate(text, tr):
             tr = collapse_repeats(_first_line(self._chat(text, timeout=timeout, src_lang=src_lang, strict=True, target=target)))
@@ -312,18 +535,88 @@ class LiveTranslator:
             tr = serbian_to_latin(tr)
         return tr
 
+    def _live_options(self) -> Dict[str, Any]:
+        # the same in every request of the session: another num_thread makes Ollama load the model again
+        return {"num_thread": LIVE_CPU_THREADS} if self.on_cpu else {}
+
+    def _set_on_cpu(self, on: bool) -> None:
+        self.on_cpu = bool(on)
+        if self.on_cpu:
+            _CPU_TRANSLATORS.add(id(self))
+        else:
+            _CPU_TRANSLATORS.discard(id(self))
+
+    def wanted_model(self) -> Optional[str]:
+        """The model this translator uses, or will load next (app/idle_unload.py leaves it in memory)."""
+        if self._model:
+            return self._model
+        if self.model_override:
+            return self.model_override
+        choices = model_choices()
+        return (choices["fast"] if self.speed == "fast" and choices["fast"] else choices["quality"]) or self._loaded
+
     def _ensure_ready(self) -> None:
         if self._model and self.ready:
             return
+        if self._stop:
+            raise _Stopped()
         self._model = self._resolve_model()
+        if self._stop:
+            raise _Stopped()  # closed while Ollama was starting: the model is not loaded
+        previous, self._loaded = self._loaded, self._model
+        if previous and previous != self._model:
+            # «Качество» ↔ «Быстро» or a model chosen in the studio: the previous one leaves the card first
+            from app import idle_unload
+
+            idle_unload.translator_switched(previous, self._model)
+        if previous != self._model:
+            self._draft_cost = None  # measured with another model
+        model = self._model
+        self._set_on_cpu(_ON_CPU.get(model.lower(), False))  # as seen last time: loaded with its threads at once
         self._chat("ok", timeout=180.0)  # loads the model with the live options
+        on_cpu = None if self._stop else model_on_cpu(model)
+        if on_cpu is not None:
+            _ON_CPU[model.lower()] = on_cpu
+            if on_cpu != self.on_cpu:
+                self._set_on_cpu(on_cpu)
+                where = f"on the processor, {LIVE_CPU_THREADS} threads" if on_cpu else "in the video card"
+                print(f"[live_translate] {model} runs {where}", flush=True)
+                if not self._stop:
+                    self._chat("ok", timeout=180.0)  # loaded again with these options now, not on the first line
+        if self._stop:
+            # closed while the model was loading: it leaves the memory now, not after its keep_alive (a
+            # transcription job waiting for the captions to end wants the video card)
+            self._release_after_stop(self._model)
+            raise _Stopped()
         self.ready = True
         self.error = ""
 
+    @staticmethod
+    def _release_after_stop(model: Optional[str]) -> None:
+        """The model loaded for a session that closed meanwhile is unloaded (unless another caption session or an
+        analysis uses it: app/idle_unload.translator_switched)."""
+        if not model:
+            return
+        try:
+            from app import idle_unload
+
+            if idle_unload.translator_switched(model, None):
+                print(f"[live_translate] the captions closed while {model} was loading: released", flush=True)
+        except Exception:
+            traceback.print_exc()
+
     def _run(self) -> None:
+        try:
+            self._work()
+        finally:
+            _CPU_TRANSLATORS.discard(id(self))
+
+    def _work(self) -> None:
         # Load the model right away: the first phrase is still being spoken meanwhile
         try:
             self._ensure_ready()
+        except _Stopped:
+            return
         except Exception as e:
             traceback.print_exc()
             self.error = f"Перевод: {str(e)[:160]}"
@@ -352,13 +645,19 @@ class LiveTranslator:
                     self._last_draft_at = time.time()
                     src = phrase_language(draft) or self._source_lang()
                     target = self.target_for(src)
+                    started = time.time()
                     tr = draft if _base(src) == _base(target) else \
                         self._translate_clean(draft, None, timeout=10.0, target=target)
+                    if tr is not draft:
+                        took = time.time() - started
+                        self._draft_cost = took if self._draft_cost is None else 0.7 * self._draft_cost + 0.3 * took
                     self.draft_target = target
                     with self._cond:
                         if draft == self._draft_text:  # still the current draft
                             self.draft_translation = tr
                             self._draft_done_for = draft
+            except _Stopped:
+                return
             except Exception as e:
                 traceback.print_exc()
                 self.error = f"Перевод: {str(e)[:160]}"
@@ -372,6 +671,18 @@ class LiveTranslator:
                         line["translation"] = ""
                 time.sleep(1.0)
 
+    def draft_interval(self) -> float:
+        """How often the draft is translated: three times as seldom as one translation takes, so the translator is
+        busy a third of the time at most (not under DRAFT_MIN_INTERVAL_SEC); DRAFT_INTERVAL_SEC before the first one."""
+        if self._draft_cost is None:
+            return DRAFT_INTERVAL_SEC
+        return max(DRAFT_MIN_INTERVAL_SEC, 3 * self._draft_cost)
+
+    def drafts_off(self) -> bool:
+        """On the processor a draft taking over DRAFT_OFF_ON_CPU_SEC is not translated: it would come after the
+        phrase is final and keep the cores busy beside speech recognition. On again with another model."""
+        return self.on_cpu and self._draft_cost is not None and self._draft_cost > DRAFT_OFF_ON_CPU_SEC
+
     def _draft_due(self) -> bool:
-        return bool(self._draft_text) and self._draft_text != self._draft_done_for \
-            and time.time() - self._last_draft_at >= DRAFT_INTERVAL_SEC
+        return bool(self._draft_text) and self._draft_text != self._draft_done_for and not self.drafts_off() \
+            and time.time() - self._last_draft_at >= self.draft_interval()

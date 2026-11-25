@@ -130,12 +130,16 @@ def gpu_memory() -> Optional[Dict[str, float]]:
 # An analysis model that shares the card with speech recognition, and the video memory it takes at
 # a 32k context (bench-report/llm-profiles.md: gemma4:e4b with GigaAM fits even an 8 GB card, and
 # neither pushes the other out). Any other model still takes the card alone, as before.
-SHARES_THE_CARD_GB = {"gemma4:e4b": 5.8, "gemma4:e2b": 3.1}
+# The translators of live captions, at the captions' 2k context (bench-report/translation-2026-11.md: Hy-MT3-7B
+# leaves ~4 GB of a 10 GB card with GigaAM); the 1.8B by its downloaded name and by the program's one.
+SHARES_THE_CARD_GB = {"gemma4:e4b": 5.8, "gemma4:e2b": 3.1,
+                      "hf.co/tencent/hy-mt3-7b-gguf:q4_k_m": 5.3,
+                      "hf.co/tencent/hy-mt3-1.8b-gguf:q4_k_m": 1.5, "hy-mt3-1.8b:latest": 1.5}
 SHARE_MIN_CARD_GB = 7.5  # an "8 GB" card reports a little under 8
 
 
 def _sharing_size(model: str) -> Optional[float]:
-    name = model if ":" in model else f"{model}:latest"
+    name = (model if ":" in model else f"{model}:latest").lower()  # Ollama keeps the case of hf.co names
     for tag, gb in SHARES_THE_CARD_GB.items():
         if name == tag or name.startswith(tag + "-"):  # gemma4:e4b-it-q4_K_M too
             return gb

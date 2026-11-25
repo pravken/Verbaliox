@@ -401,14 +401,36 @@ function syncUiPrefsFromServer(settings) {
     saveUiSetting('ui_lang', state.uiLang);  // chosen before the server kept it: it does from now on
   }
   if (typeof dbPrefsFromServer === 'function') dbPrefsFromServer(settings);
+  if (typeof studioPrefsFromSettings === 'function') studioPrefsFromSettings();
 }
 
-// A preference of the page kept on the server (and in state.system.settings, so it is not sent twice)
+// A preference of the page kept on the server (and in state.system.settings, so it is not sent twice).
+// Each save is kept in _uiSaves until the server has answered it: settings read from the server meanwhile
+// (fillSystemInfo) still hold the old value and would put it back — found in review: «Быстро» chosen in the
+// studio while /api/system was on its way went back to «Качество». The steps of _uiTick order the saves and
+// the reads: a read asked at tick M knows every save answered before M
+const _uiSaves = {};
+let _uiTick = 0;
 function saveUiSetting(key, value) {
   const set = (state.system && state.system.settings) || null;
   if (set) { if (set[key] === value) return; set[key] = value; }
+  const save = (_uiSaves[key] = { value, done: Infinity });
+  const settle = () => { save.done = ++_uiTick; };
   fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: { [key]: value } }) }).catch(() => {});
+    body: JSON.stringify({ settings: { [key]: value } }) }).then(settle, settle);
+}
+
+// The tick a read of the settings is asked at (uiSettingsOverlay takes it)
+function uiSettingsMark() {
+  return ++_uiTick;
+}
+
+// Settings read from the server, with the page's saves the read could not know yet (unanswered, or answered
+// after the read was asked; without a mark: those unanswered) laid over them
+function uiSettingsOverlay(settings, mark = _uiTick) {
+  if (!settings) return settings;
+  for (const [key, save] of Object.entries(_uiSaves)) if (save.done > mark) settings[key] = save.value;
+  return settings;
 }
 
 function setUILanguage(lang) {
@@ -1102,6 +1124,9 @@ const VX_LAYERS = [
   ...['bulk-menu', 'series-menu', 'digest-menu', 'lib-view-menu', 'lib-filter-menu', 'as-menu', 'an-cfg-pop']
     .map(id => [id, () => vxThere(id), vxRemove(id), `#${id}`]),
   ['quick-lang-menu', () => vxThere('quick-lang-menu'), vxCall('closeQuickLangMenu'), '#quick-lang-menu'],
+  ['st-models-pop', () => vxShown('st-models-pop'), vxCall('closeStudioModelsPop'), '#st-models-pop'],
+  ['st-cap-more', () => vxShown('st-cap-more'), vxCall('closeStudioCapMore'), '#st-cap-more'],
+  ...['source', 'video', 'meet', 'after'].map(k => [`st-fly-${k}`, () => vxShown(`st-fly-${k}`), vxCall('closeStudioRail'), `#st-fly-${k}`]),
   ['tk-pop', () => vxThere('tk-pop'), vxCall('tkClosePop'), '#tk-pop'],
   ['hm-day-pop', () => vxShown('hm-day-pop'), () => {
     document.getElementById('hm-day-pop')?.classList.add('hidden');

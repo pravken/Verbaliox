@@ -14,6 +14,26 @@ OLD = [{"id": 0, "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00", "text": "п�
 NEW = [{"start": 0.0, "end": 2.0, "text": "новый текст", "words": []}]
 
 
+# A model a test reports as installed never fetches the files of its variants in the background
+# (asr_onnx._variant -> _complete_async -> fetch: a real download of the model)
+_no_fetch = None
+
+
+def setUpModule():
+    global _no_fetch
+    try:
+        from app import asr_onnx
+    except ImportError:  # app dependencies are not installed
+        return
+    _no_fetch = mock.patch.object(asr_onnx, "_complete_async")
+    _no_fetch.start()
+
+
+def tearDownModule():
+    if _no_fetch is not None:
+        _no_fetch.stop()
+
+
 @unittest.skipIf(transcriber is None, "app dependencies not installed")
 class ProcessMeetingJobTest(unittest.TestCase):
     """The recognition job end to end with GigaAM on ONNX, the model and FFmpeg replaced by stand-ins."""
@@ -46,6 +66,9 @@ class ProcessMeetingJobTest(unittest.TestCase):
             mock.patch.object(transcriber, "_after_transcription", return_value=[]),
             mock.patch.object(asr_onnx, "supports_language", return_value=True),
             mock.patch.object(asr_onnx, "is_installed", return_value=True),
+            mock.patch.object(asr_onnx, "_complete_async"),  # installed by the fake: no download of its variants
+            # the analysis models of the computer's Ollama are not asked to go before the speech model loads
+            mock.patch.object(transcriber, "_release_analysis_models"),
             mock.patch.object(semantic, "kick"),
             mock.patch("app.diarizer.diarize_and_merge_segments", side_effect=diarize),
             mock.patch("app.voice_profiles.apply_to_speakers", return_value=0),
@@ -78,6 +101,50 @@ class ProcessMeetingJobTest(unittest.TestCase):
         self.release.assert_any_call("gigaam-v3", gpu=True)
         self.assertEqual(m["status"], "completed")
         self.assertEqual([s["text"] for s in m["segments"]], ["новый текст"])
+
+    def test_gpu_failure_during_captions_of_the_same_model_waits_for_them(self):
+        # the processor would load a second Parakeet fp32 beside the captions' copy (6 GB): back to the queue instead
+        from app import live
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, model_name="parakeet-v3", language="en")
+        self.gpu.return_value = True
+        self.addCleanup(transcriber._gpu_failed.discard, self.mid)
+        calls = []
+
+        def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
+            calls.append(gpu)
+            if gpu:
+                raise RuntimeError("CUDA out of memory")
+            return NEW
+
+        with mock.patch.object(live, "model_in_use", return_value=True), \
+                mock.patch.object(live, "has_sessions", return_value=True), \
+                mock.patch.object(live, "onnx_models_in_use", return_value={"parakeet-v3"}), \
+                mock.patch.object(self.asr, "shares_live_copy", return_value=True):
+            with self.assertRaises(transcriber._WaitsForCaptions):
+                self._run(transcribe)
+            self.assertEqual(calls, [True])  # nothing loaded on the processor
+            self.assertEqual(get_meeting(self.mid)["status"], "queued")
+            self.assertTrue(transcriber.waits_for_captions(self.mid))  # the video card is not tried again
+        m = self._run(transcribe)  # the captions ended
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(m["status"], "completed")
+
+    def test_the_job_that_waits_for_captions_is_queued_again(self):
+        def job(mid):
+            transcriber._gpu_failed.add(mid)
+            raise transcriber._WaitsForCaptions()
+
+        with mock.patch.object(transcriber, "_process_meeting_job", side_effect=job), \
+                mock.patch.object(transcriber, "enqueue_meeting_job") as again, \
+                mock.patch.object(transcriber, "_run_pending_exports") as exports, \
+                mock.patch.object(transcriber, "release_whisper_model"):
+            transcriber._run_job(self.mid)
+        again.assert_called_once_with(self.mid)
+        exports.assert_not_called()  # they wait for the transcript
+        self.assertIn(self.mid, transcriber._gpu_failed)  # the next run goes on the processor
+        transcriber._gpu_failed.discard(self.mid)
 
     def test_cancel_keeps_the_previous_transcript(self):
         def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
@@ -482,15 +549,16 @@ class EnsembleJobTest(unittest.TestCase):
         self.assertIn("parakeet-v3", ran)  # recognized again: the old version was made for English
 
     def test_the_live_captions_keep_their_copy_of_the_model(self):
-        """A recording with GigaAM captions goes on while this job runs: only the video card's copies go."""
+        """A recording with GigaAM captions goes on while this job runs: only the job's copies go."""
         from app import live
 
-        gpu_release = mock.patch.object(self.asr, "release_gpu").start()
         with mock.patch.object(live, "has_sessions", return_value=True):
             self._run(self._transcribe)
         self.assertNotIn(mock.call(), self.release.call_args_list)  # not every copy
         self.assertNotIn(mock.call("parakeet-v3"), self.release.call_args_list)
-        gpu_release.assert_called()
+        self.assertTrue(self.release.call_args_list)
+        for call in self.release.call_args_list:
+            self.assertTrue(call.kwargs.get("keep_live") or call.kwargs.get("gpu"), call)
 
     def test_without_another_model_the_main_one_stays(self):
         from app import asr_onnx

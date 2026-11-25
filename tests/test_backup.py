@@ -1,6 +1,5 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import sqlite3
-import tempfile
 import unittest
 import zipfile
 from pathlib import Path
@@ -13,7 +12,7 @@ class BackupTest(unittest.TestCase):
         from app.database import DB_PATH, _db_lock, create_meeting, get_connection, get_meeting, init_db, list_meetings
 
         init_db()
-        media = Path(tempfile.mkdtemp()) / "talk.m4a"
+        media = tests.temp_dir(self) / "talk.m4a"
         media.write_bytes(b"sound")
         m = create_meeting("Встреча для копии", "talk.m4a", str(media))
         # the table of API keys of an earlier version, left in the database: never put into a copy
@@ -23,13 +22,13 @@ class BackupTest(unittest.TestCase):
             conn.execute("INSERT OR REPLACE INTO secrets VALUES ('llm_key_openai', 'plain:sk-test', '2026-01-01')")
             conn.commit()
             conn.close()
-        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        out = tests.temp_dir(self) / "copy.zip"
         info = backup.make(out, with_media=True)
         self.assertGreaterEqual(info["media_files"], 1)
         with zipfile.ZipFile(out) as z:
             names = z.namelist()
             self.assertIn("meetings.db", names)
-            db = Path(z.extract("meetings.db", tempfile.mkdtemp()))
+            db = Path(z.extract("meetings.db", str(tests.temp_dir(self))))
         conn = sqlite3.connect(str(db))
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         conn.close()
@@ -66,10 +65,10 @@ class BackupTest(unittest.TestCase):
         from app.database import create_meeting, init_db
 
         init_db()
-        media = Path(tempfile.mkdtemp()) / "cut.m4a"
+        media = tests.temp_dir(self) / "cut.m4a"
         media.write_bytes(b"sound" * 1000)
         create_meeting("Прерванное восстановление", "cut.m4a", str(media))
-        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        out = tests.temp_dir(self) / "copy.zip"
         backup.make(out, with_media=True)
         media.unlink()
         backup.PENDING.unlink(missing_ok=True)
@@ -111,10 +110,10 @@ class BackupTest(unittest.TestCase):
         init_db()
         update_settings({"apps_track": "true"})
         worktime.mark(datetime(2026, 11, 19, 10, 0), "outlook")
-        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        out = tests.temp_dir(self) / "copy.zip"
         backup.make(out, with_media=False)
         with zipfile.ZipFile(out) as z:
-            db = Path(z.extract("meetings.db", tempfile.mkdtemp()))
+            db = Path(z.extract("meetings.db", str(tests.temp_dir(self))))
         conn = sqlite3.connect(str(db))
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         track = conn.execute("SELECT value FROM settings WHERE key = 'apps_track'").fetchone()
@@ -136,10 +135,10 @@ class BackupTest(unittest.TestCase):
 
         init_db()
         worktime.mark(datetime(2026, 11, 19, 10, 0), "outlook")
-        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        out = tests.temp_dir(self) / "copy.zip"
         backup.make(out, with_media=False)
         # an older copy: with the minutes of another computer
-        tmp = Path(tempfile.mkdtemp())
+        tmp = tests.temp_dir(self)
         with zipfile.ZipFile(out) as z:
             z.extractall(tmp)
         conn = sqlite3.connect(str(tmp / "meetings.db"))
@@ -147,7 +146,7 @@ class BackupTest(unittest.TestCase):
         conn.execute("INSERT INTO app_minutes (day, minute, app) VALUES ('2026-11-18', 600, 'foreign')")
         conn.commit()
         conn.close()
-        old = Path(tempfile.mkdtemp()) / "old.zip"
+        old = tests.temp_dir(self) / "old.zip"
         with zipfile.ZipFile(old, "w") as z:
             for f in tmp.iterdir():
                 z.write(f, f.name)
@@ -171,7 +170,7 @@ class BackupTest(unittest.TestCase):
         from app.audio_utils import peaks_file
         from app.paths import THUMBS_DIR
 
-        tmp = Path(tempfile.mkdtemp())
+        tmp = tests.temp_dir(self)
 
         def db(name, rows):
             p = tmp / name
@@ -226,19 +225,19 @@ class BackupTest(unittest.TestCase):
         update_settings({"ollama_url": "http://127.0.0.1:11434"})
         inside = DATA_DIR / "uploads" / "inside.m4a"
         m = create_meeting("Своя", "inside.m4a", str(inside))
-        outside = Path(tempfile.mkdtemp()) / "Startup" / "evil.bat"
-        stray = Path(tempfile.mkdtemp()) / "stray.m4a"
-        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        outside = tests.temp_dir(self) / "Startup" / "evil.bat"
+        stray = tests.temp_dir(self) / "stray.m4a"
+        out = tests.temp_dir(self) / "copy.zip"
         backup.make(out)
         with zipfile.ZipFile(out) as z:
-            db = Path(z.extract("meetings.db", tempfile.mkdtemp()))
+            db = Path(z.extract("meetings.db", str(tests.temp_dir(self))))
         conn = sqlite3.connect(str(db))
         conn.execute("UPDATE settings SET value = 'http://attacker.example' WHERE key = 'ollama_url'")
         conn.execute("INSERT INTO meetings (title, filename, media_path, created_at) VALUES ('Чужая', 'evil.bat', ?, '2026-01-01')", (str(outside),))
         evil_id = conn.execute("SELECT max(id) FROM meetings").fetchone()[0]
         conn.commit()
         conn.close()
-        bad = Path(tempfile.mkdtemp()) / "bad.zip"
+        bad = tests.temp_dir(self) / "bad.zip"
         media = [{"id": m["id"], "path": str(inside), "name": f"media/{m['id']}_inside.m4a"},
                  {"id": evil_id, "path": str(outside), "name": f"media/{evil_id}_evil.bat"},
                  {"id": m["id"], "path": str(stray), "name": "media/stray.m4a"}]
@@ -270,12 +269,12 @@ class BackupTest(unittest.TestCase):
         init_db()
         update_settings({"ollama_url": "http://127.0.0.1:11434"})
         own = create_meeting("Своя", "own.m4a", str(DATA_DIR / "uploads" / "own.m4a"))
-        victim = Path(tempfile.mkdtemp()) / "thesis.docx"
+        victim = tests.temp_dir(self) / "thesis.docx"
         victim.write_text("keep me")
-        out = Path(tempfile.mkdtemp()) / "copy.zip"
+        out = tests.temp_dir(self) / "copy.zip"
         backup.make(out)
         with zipfile.ZipFile(out) as z:
-            db = Path(z.extract("meetings.db", tempfile.mkdtemp()))
+            db = Path(z.extract("meetings.db", str(tests.temp_dir(self))))
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TRIGGER evil AFTER UPDATE ON settings BEGIN "
                      "UPDATE settings SET value = 'http://attacker.example' WHERE key = 'ollama_url'; END")
@@ -293,7 +292,7 @@ class BackupTest(unittest.TestCase):
         conn.execute("UPDATE meetings SET owns_media = 1, media_path = ? WHERE id = ?", (str(victim.with_suffix(".mp4")), own["id"]))
         conn.commit()
         conn.close()
-        bad = Path(tempfile.mkdtemp()) / "bad.zip"
+        bad = tests.temp_dir(self) / "bad.zip"
         media = [{"id": evil_id, "path": str(tool), "name": f"media/{evil_id}_a.mp3"}]
         with zipfile.ZipFile(bad, "w") as z:
             z.writestr("manifest.json", json.dumps({"format": 1, "app": "Verbaliox", "media": media}))
@@ -320,7 +319,7 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(victim.read_text(), "keep me")
 
     def test_not_a_backup(self):
-        bad = Path(tempfile.mkdtemp()) / "x.zip"
+        bad = tests.temp_dir(self) / "x.zip"
         with zipfile.ZipFile(bad, "w") as z:
             z.writestr("hello.txt", "hi")
         with self.assertRaises(ValueError):
@@ -332,7 +331,7 @@ class DamagedRestoreTest(unittest.TestCase):
         """Found in the audit: a damaged database could not be checkpointed, and the restore failed at every start."""
         from unittest import mock
 
-        d = Path(tempfile.mkdtemp())
+        d = tests.temp_dir(self)
         db, pending = d / "meetings.db", d / "meetings.restore.db"
         db.write_bytes(b"not a database" * 100)
         conn = sqlite3.connect(str(pending))

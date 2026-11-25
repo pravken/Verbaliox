@@ -180,9 +180,14 @@ def init_db() -> None:
             "economy_for": "0",  # for how long it is turned on: "0" until turned off, minutes, "day"
             "economy_until": "",  # when it ends (unix seconds), "" when turned off by hand only
             "live_captions_auto": "false",  # captions start with a recording; off by default (asked by the user: they load a model)
+            "hint_studio_entry_seen": "false",  # the hint under «Студия ›» of the recording capsule was shown and closed (static/js/shell.js)
             "cpu_threads": "auto",  # threads of GigaAM / Parakeet on the processor (app/asr_onnx.cpu_threads)
             "ollama_url": "http://localhost:11434",
             "ollama_model": hw["recommended_ollama_model"],
+            "live_translate_model_quality": "",  # the translation model of live captions; "" = «Авто» (app/live_translate.py)
+            "live_translate_model_fast": "",
+            # live_translate_to and live_speed (the studio's translation and «Качество / Скорость») have no default:
+            # absent until chosen, so the page takes the choice an earlier version kept in its localStorage once
             "vad_filter": "true",
             "audio_enhance": "true",
             "clean_fillers": "true",
@@ -1819,6 +1824,16 @@ def meeting_briefs(ids: List[int]) -> Dict[int, Dict[str, Any]]:
             [int(i) for i in ids]).fetchall()
         conn.close()
     return {r["id"]: dict(r) for r in rows}
+
+
+def meeting_speech_choice(meeting_id: int) -> Dict[str, Any]:
+    """The model and the language chosen for a recording (the queue asks while live captions run): one short row."""
+    with _db_lock:
+        conn = get_connection()
+        row = conn.execute("SELECT model_name, language, language_choice FROM meetings WHERE id = ?",
+                           (int(meeting_id),)).fetchone()
+        conn.close()
+    return dict(row) if row else {}
 
 
 # The participants of each recording as the list shows them (names, colours: no voice prints), kept by

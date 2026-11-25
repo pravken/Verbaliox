@@ -81,12 +81,16 @@ class _PriorityExecutor:
             with self._cv:
                 # the queue paused by the user, or the economy mode (recording only): the next job waits
                 # until it ends (wake() or 5 s); the job running goes on. During a meeting the
-                # transcriptions wait (app/meeting_guard.holds_queue), the user's other jobs go first
+                # transcriptions wait (app/meeting_guard.holds_queue), the user's other jobs go first; so does a
+                # transcription that would load a second copy of the model live captions use (_waits_for_captions)
                 while True:
                     item = None
                     if self._heap and not _paused[0] and not economy.on():
                         hold = _meeting_holds()
-                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3]))]
+                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3], e[4]))]
+                        captions = {_job_meeting(e[3], e[4]) for e in ready if _waits_for_captions(e[3], e[4])}
+                        _captions_said(captions)
+                        ready = [e for e in ready if not (captions and _job_meeting(e[3], e[4]) in captions)]
                         if ready:
                             item = min(ready)  # (priority, order, …): the order is unique, nothing else is compared
                             self._heap.remove(item)
@@ -103,11 +107,124 @@ class _PriorityExecutor:
                 fut.set_exception(e)
 
 
-def _waits_for_meeting(fn: Callable) -> bool:
-    """A transcription (or the load of its model) waits for the end of a meeting; what the user asked for
-    by hand otherwise (a translation, a dub, a new split) does not."""
+# Recordings the user let go during a meeting («Расшифровать» and «Да», asked by the user): their transcription
+# does not wait. Dropped when the job ends
+_forced: Set[int] = set()
+
+
+def _waits_for_meeting(fn: Callable, args: tuple = ()) -> bool:
+    """A transcription (or the load of its model) waits for the end of a meeting, unless the user let it go
+    now; what the user asked for by hand otherwise (a translation, a dub, a new split) does not."""
     fn = getattr(fn, "func", fn)  # the queue holds its jobs as functools.partial(fn, token=…) (_queue_start)
+    if fn is _run_job and args and args[0] in _forced:
+        return False
     return fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper"
+
+
+def run_now(meeting_id: int) -> bool:
+    """«Начать сейчас»: the transcription of this recording no longer waits for what the queue's window says it
+    waits for — the end of the meeting, or, once the meeting has let it go (or none goes on), the end of the live
+    captions (_waits_for_captions). False when it is neither queued nor running."""
+    with _jobs_lock:
+        if meeting_id not in _active_jobs:
+            return False
+        meeting_first = _held_said[0] and int(meeting_id) not in _forced
+        _forced.add(int(meeting_id))
+        if not meeting_first:
+            _forced_captions.add(int(meeting_id))
+    print(f"[queue] meeting {meeting_id}: transcribed now "
+          f"{'during the meeting' if meeting_first else 'while live captions run'}, as the user confirmed", flush=True)
+    _executor.wake()
+    _publish_queue_changed()
+    return True
+
+
+# Two copies of Parakeet fp32 at once — live captions and a transcription on the processor — took 6 GB of memory
+# (bench-report/asr-2026-11-check.md, «Что обсудить», item 2). While live captions recognize with a model, a
+# transcription that would load the same files on the processor (asr_onnx.shares_live_copy) waits for the
+# captions to end; with a video card free for it, it runs there at once. «Начать сейчас» lets it go (run_now):
+# it then runs on the processor with the threads left by the captions (asr_onnx.queue_threads).
+_forced_captions: Set[int] = set()
+# Recordings whose transcription failed on the video card and goes on the processor: while the captions recognize with
+# the same model it waits for them as a job without a video card does (a second copy of Parakeet fp32 beside theirs)
+_gpu_failed: Set[int] = set()
+
+
+class _WaitsForCaptions(Exception):
+    """The job stops before loading a second copy of the captions' model on the processor and goes back to the queue,
+    where it waits for the end of the captions (_run_job queues it again)."""
+
+
+def _job_meeting(fn: Callable, args: tuple) -> Optional[int]:
+    """The recording of a transcription as the queue holds it (functools.partial with its token), else None."""
+    fn = getattr(fn, "func", fn)
+    return args[0] if fn is _run_job and args else None
+
+
+def _job_model(meeting_id: int) -> str:
+    """The speech model the transcription of this recording will take, as far as it is known before it starts.
+    For «auto» speech with a model of its own for Russian the language is heard in the job by the main model
+    (speech_route.resolve): that one is named, it is loaded first."""
+    from app import asr_onnx, speech_route
+    from app.database import meeting_speech_choice
+    from app.model_manager import WHISPER_REPLACED
+
+    settings = get_all_settings()
+    m = meeting_speech_choice(meeting_id)
+    model = m.get("model_name") or settings.get("whisper_model") or "large-v3-turbo"
+    if model in ("merged", "teams"):
+        model = speech_route.default_choice(settings)
+    if model == speech_route.AUTO:
+        lang = m.get("language_choice") or m.get("language") or settings.get("language") or "auto"
+        model, _ = speech_route.resolve(settings, lang, lambda: None)
+        if speech_route.routing_on(settings) and lang in ("auto", "", None):
+            model = speech_route.main_model(settings)
+    return {**WHISPER_REPLACED, **asr_onnx.REPLACED}.get(model, model)
+
+
+def waits_for_captions(meeting_id: int) -> bool:
+    """The transcription of this recording waits for the end of the live captions: they recognize with the model
+    it takes, it would load the same files on the processor (asr_onnx.shares_live_copy), and the video card cannot
+    take it now (onnx_gpu.gpu_for_job). Not after «Начать сейчас»."""
+    if int(meeting_id) in _forced_captions:
+        return False
+    try:
+        from app import asr_onnx, live
+
+        if not live.has_sessions():
+            return False
+        models = live.onnx_models_in_use()
+        if not models:
+            return False
+        model = _job_model(meeting_id)
+        if model not in models or not asr_onnx.shares_live_copy(model):
+            return False
+        from app import onnx_gpu
+
+        return int(meeting_id) in _gpu_failed or not onnx_gpu.gpu_for_job(model)
+    except Exception:
+        traceback.print_exc()
+        return False
+
+
+def _waits_for_captions(fn: Callable, args: tuple = ()) -> bool:
+    meeting_id = _job_meeting(fn, args)
+    return meeting_id is not None and waits_for_captions(meeting_id)
+
+
+_captions_held: Set[int] = set()  # the transcriptions the queue last held for the captions (said once each)
+
+
+def _captions_said(held: Set[int]) -> None:
+    if held == _captions_held:
+        return
+    for mid in sorted(held - _captions_held):
+        print(f"[queue] meeting {mid}: waits for the end of the live captions (their model would be loaded twice)", flush=True)
+    for mid in sorted(_captions_held - held):
+        print(f"[queue] meeting {mid}: no longer waits for the live captions", flush=True)
+    _captions_held.clear()
+    _captions_held.update(held)
+    _publish_queue_changed()
 
 
 _held_said = [False]
@@ -242,6 +359,10 @@ def cancel_waiting(meeting_id: int) -> bool:
         _queue[:] = [q for q in _queue if q["id"] != meeting_id]
         _active_jobs.discard(meeting_id)
         _cancel_requested.discard(meeting_id)
+        # «Начать сейчас» given while it waited goes with it: queued again, it waits for the meeting and the captions
+        _forced.discard(meeting_id)
+        _forced_captions.discard(meeting_id)
+        _gpu_failed.discard(meeting_id)
         _dropped.add(entry["n"])
     from app.database import update_meeting_progress
 
@@ -326,6 +447,9 @@ def _queue_finish(meeting_id: int) -> None:
         if _running_id == meeting_id:
             _running_id = None
     _publish_queue_changed()
+    # the queue empty: the models go a minute later unless used meanwhile. The automatic analysis runs in the
+    # transcription's own job, so the models are never let go between the two
+    _work_done_if_idle()
 
 
 def queue_snapshot() -> List[Dict[str, Any]]:
@@ -343,6 +467,8 @@ def queue_snapshot() -> List[Dict[str, Any]]:
     items.sort(key=lambda q: (0 if q["id"] == running else 1, q.get("prio", 2), q.get("n", 0)))
     out = []
     waiting_pos = 0
+    with _jobs_lock:
+        forced = set(_forced)
     for q in items:
         m = meetings.get(q["id"])
         if not m:
@@ -350,9 +476,14 @@ def queue_snapshot() -> List[Dict[str, Any]]:
         is_running = q["id"] == running
         if not is_running:
             waiting_pos += 1
+        # what holds a waiting transcription besides a meeting: "captions" (waits_for_captions); forced: the user
+        # let it go during the meeting («Начать сейчас»)
+        captions = not is_running and q["kind"] == "transcribe" and waits_for_captions(q["id"])
         out.append(
             {
                 **q,
+                "hold": "captions" if captions else "",
+                "forced": q["id"] in forced,
                 "title": m.get("title") or "",
                 "state": "running" if is_running else "waiting",
                 "position": 0 if is_running else waiting_pos,
@@ -451,14 +582,26 @@ def _run_job(meeting_id: int, token: Optional[int] = None) -> None:
     if _skip_dropped(meeting_id, token):  # cancelled while it waited
         return
     _queue_start(meeting_id)
+    again = False
     try:
         _process_meeting_job(meeting_id)
+    except _WaitsForCaptions:
+        again = True
     finally:
         _queue_finish(meeting_id)
         with _jobs_lock:
             _active_jobs.discard(meeting_id)
             _cancel_requested.discard(meeting_id)
+            if not again:  # queued again it keeps «Начать сейчас» given during the meeting, and the processor
+                _forced.discard(meeting_id)
+                _gpu_failed.discard(meeting_id)
+            _forced_captions.discard(meeting_id)
             queue_empty = not _active_jobs
+        if again:
+            print(f"[queue] meeting {meeting_id}: the video card failed; queued again to wait for the live captions "
+                  f"(their model would be loaded twice on the processor)", flush=True)
+            enqueue_meeting_job(meeting_id)
+            return  # exports wait for the transcript
         if queue_empty:
             try:  # a driver failing here (after sleep) must not skip the exports below
                 release_whisper_model()
@@ -478,6 +621,17 @@ def _run_pending_exports(meeting_id: int) -> None:
         process(meeting_id)
     except Exception:
         traceback.print_exc()
+    _work_done_if_idle()  # an export that asked the analysis model counted as a use: the minute starts again
+
+
+def _work_done_if_idle() -> None:
+    """Nothing running or waiting in the queue: the models go a minute later unless used (app/idle_unload.py)."""
+    with _jobs_lock:
+        idle = not _queue and not _preloading and _running_id is None
+    if idle:
+        from app import idle_unload
+
+        idle_unload.work_done("the processing finished")
 
 
 # A job on a finished recording (dub, translation, cut, subtitles) gives it back the status it had:
@@ -1600,10 +1754,7 @@ def _release_onnx(model: Optional[str] = None) -> None:
     from app import asr_onnx
 
     if _live_captions_on():
-        if model:
-            asr_onnx.release(model, gpu=True)
-        else:
-            asr_onnx.release_gpu()
+        asr_onnx.release(model, keep_live=True)  # the job's copies (a copy of its own: app/asr_onnx._key)
     elif model:
         asr_onnx.release(model)
     else:
@@ -2065,7 +2216,15 @@ def _process_meeting_job(meeting_id: int) -> None:
                     except Exception as e:
                         raise RuntimeError(f"Не удалось скачать модель {onnx_name}: {e}")
                     _check_cancel(meeting_id)
-                use_gpu = onnx_gpu.gpu_for_job(model_name)
+                # (a recording whose job failed on the video card goes on the processor)
+                use_gpu = meeting_id not in _gpu_failed and onnx_gpu.gpu_for_job(model_name)
+                if not use_gpu and asr_onnx.shares_live_copy(model_name):
+                    from app import live
+
+                    # the captions ended (the job waited for them): their copy does not stay beside the job's
+                    # until the idle unload; after «Начать сейчас» during them it stays
+                    if not live.model_in_use(model_name) and asr_onnx.release_live(model_name):
+                        print(f"[queue] meeting {meeting_id}: the copy of live captions of {model_name} released", flush=True)
                 update_meeting_progress(meeting_id, status="transcribing", progress=15,
                                         stage_text=f"Распознавание речи — {asr_onnx.ONNX_MODELS[model_name]['name']}"
                                         + (" на видеокарте" if use_gpu else ""))
@@ -2095,6 +2254,16 @@ def _process_meeting_job(meeting_id: int) -> None:
                         raise
                     traceback.print_exc()  # CUDA out of memory, a missing DLL: the CPU does the same work
                     asr_onnx.release(model_name, gpu=True)
+                    _gpu_failed.add(meeting_id)
+                    from app import live
+
+                    if meeting_id not in _forced_captions and asr_onnx.shares_live_copy(model_name) \
+                            and live.model_in_use(model_name):
+                        # the processor would load a second copy of the captions' model (Parakeet fp32: 6 GB with
+                        # the two): back to the queue, which starts it once the captions end
+                        update_meeting_progress(meeting_id, status="queued", progress=0,
+                                                stage_text="В очереди на распознавание")
+                        raise _WaitsForCaptions()
                     onnx_done.clear()
                     where["gpu"] = " на процессоре"
                     update_meeting_progress(meeting_id, stage_text="Сбой видеокарты — распознавание на процессоре")
@@ -2347,6 +2516,8 @@ def _process_meeting_job(meeting_id: int) -> None:
         else:
             _drop_work_audio(meeting_id, wav_path)
 
+    except _WaitsForCaptions:
+        raise
     except JobCancelled:
         whisper_model = None
         release_whisper_model()
