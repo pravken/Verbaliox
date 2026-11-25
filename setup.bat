@@ -124,7 +124,7 @@ call :venv_runs
 if not defined VENV_OK goto :venv_failed
 echo ##STEP packages
 echo [2/2] Installing dependencies via pip...
-".venv\Scripts\python.exe" -m pip install --upgrade pip
+".venv\Scripts\python.exe" -m pip install --require-hashes -r requirements-pip.txt
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt --require-hashes --extra-index-url https://download.pytorch.org/whl/cu126
 if errorlevel 1 goto :install_failed
 
