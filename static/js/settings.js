@@ -606,7 +606,7 @@ function renderModelsPop() {
         <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
       ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
     <div class="mp-idle"><span>${escapeHtml(t('mpIdleLabel'))}</span>
-      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? idle.minutes ?? 10))}</button></div>`;
+      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? vram.data?.idle?.minutes ?? 10))}</button></div>`;
   placeModelsPop();
 }
 

@@ -2649,6 +2649,21 @@ await step('bulk action errors name no deletion', async () => {
   expect(toast.includes('Не выполнено для записей: 1. Название слишком длинное') && !toast.includes('удалить'), `the message: «${toast}»`);
 });
 
+// The models popover before the setting of unloading is read: it threw «idle is not defined»
+await step('models popover without the unload setting', async () => {
+  const r = await page.evaluate(() => {
+    const s = (state.system && state.system.settings) || {};
+    const had = s.idle_unload_minutes;
+    delete s.idle_unload_minutes;
+    let err = '';
+    try { toggleModelsPop(); } catch (e) { err = e.message; } finally { s.idle_unload_minutes = had; }
+    const text = document.querySelector('#models-pop .mp-idle-btn')?.textContent || '';
+    closeModelsPop();
+    return { err, text };
+  });
+  expect(!r.err && r.text, `the popover: ${JSON.stringify(r)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
