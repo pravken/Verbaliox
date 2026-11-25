@@ -173,6 +173,7 @@ Verbaliox has no telemetry. It connects to the internet only for these actions:
 | You import by link | The site of the link, and PyPI the first time (yt-dlp) |
 | You set a calendar link (Settings → Recording → Calendar) | That link, at most every 15 minutes, to read the calendar |
 | You download an Ollama model | Ollama's model registry, via your local Ollama |
+| You download a translation model for live captions (Hy-MT3) | huggingface.co (`hf.co/tencent/Hy-MT3-*-GGUF`), via your local Ollama |
 | You confirm installing Ollama | winget (package `Ollama.Ollama`) |
 | You install the dubbing environment (optional) | PyPI and download.pytorch.org |
 | Your first dubbing job | Hugging Face (VoxCPM2 and Demucs weights) |
@@ -419,6 +420,7 @@ start.bat
 | Вы импортируете запись по ссылке | Сайт ссылки, а в первый раз — PyPI (yt-dlp) |
 | Вы указали ссылку на календарь («Настройки → Запись → Календарь») | Эта ссылка, не чаще раза в 15 минут, чтобы прочитать календарь |
 | Вы скачиваете модель Ollama | Реестр моделей Ollama, через вашу локальную Ollama |
+| Вы скачиваете модель перевода живых субтитров (Hy-MT3) | huggingface.co (`hf.co/tencent/Hy-MT3-*-GGUF`), через вашу локальную Ollama |
 | Вы подтверждаете установку Ollama | winget (пакет `Ollama.Ollama`) |
 | Вы устанавливаете окружение дубляжа (по желанию) | PyPI и download.pytorch.org |
 | Первый запуск дубляжа | Hugging Face (веса VoxCPM2 и Demucs) |
