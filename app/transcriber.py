@@ -351,6 +351,9 @@ def cancel_waiting(meeting_id: int) -> bool:
         _queue[:] = [q for q in _queue if q["id"] != meeting_id]
         _active_jobs.discard(meeting_id)
         _cancel_requested.discard(meeting_id)
+        # «Начать сейчас» given while it waited goes with it: queued again, it waits for the meeting and the captions
+        _forced.discard(meeting_id)
+        _forced_captions.discard(meeting_id)
         _dropped.add(entry["n"])
     from app.database import update_meeting_progress
 
