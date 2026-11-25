@@ -106,6 +106,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   completed in the background on first use, and until then the processor uses the model as before.
 - **Short replies in the captions are translated**: a line of one word («No.», «Yes?», «Да.») gets its translation; it
   was shown untranslated. Fillers («um», «эм») still are not translated.
+- **«Load of the week» tells the hours passed from the plan**: the meetings still ahead (the coming days of the week
+  and the rest of today) are drawn as planned — the same hue hatched (lighter in the ring), their figures grey, «planned»
+  in the hint. The head reads «In meetings: 4.6 h · ahead 4 h»; under the chart, which days are above the norm by fact
+  and which by plan («Above the norm: Tue; planned: Fri»).
 
 ## 0.9.3 — English
 
@@ -1343,6 +1347,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   первом использовании, а до этого процессор работает с моделью как раньше.
 - **Короткие ответы в субтитрах переводятся**: строка из одного слова («No.», «Yes?», «Да.») получает перевод, раньше
   она оставалась без него. Слова-паразиты («um», «эм») по-прежнему не переводятся.
+- **«Нагрузка недели» отделяет прошедшее от запланированного**: встречи ещё впереди (следующие дни недели и
+  остаток сегодняшнего) показаны как план — тем же цветом со штриховкой (в кольце светлее), их числа серые, в подсказке
+  «по плану». В заголовке — «Во встречах: 4,6 ч · впереди 4 ч»; под диаграммой — какие дни сверх нормы по факту, а какие
+  по плану («Сверх нормы: вт; по плану: пт»).
 
 ## 0.9.3
 
