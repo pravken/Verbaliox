@@ -1337,6 +1337,10 @@ def enqueue_whisper_preload(model_name: Optional[str] = None) -> bool:
 
     if economy.on():  # recording only: no model is loaded ahead
         return False
+    if _paused[0] or _meeting_holds():
+        # the worker would not take it until the queue goes on, and the load waiting counted as work all that
+        # time: no model was unloaded for idleness, memory or «Только запись» (found in an audit)
+        return False
     with _jobs_lock:
         if _queue or _preloading:
             return False
