@@ -3,7 +3,8 @@ Live captions by VAD phrases (bench-report/asr-2026-11.md, item 3): for Russian 
 
 Instead of recognizing a sliding window of up to 20 s again and again (app/live.py), the Silero VAD follows the
 stream frame by frame (32 ms) and only the phrase being spoken is recognized: from the start of speech, as a
-draft at most every DRAFT_SEC, and once more as the final text after a pause of END_PAUSE_SEC. In the bench this
+draft every DRAFT_MIN_SEC or more (DraftPace: never sooner than three times the last draft took), and once more
+as the final text after a pause of END_PAUSE_SEC. In the bench this
 gave the final text in 0.9–1.1 s instead of 3–4 s, with a lower WER, a seventh of the processor load and 0.44 GB of
 memory instead of 2.9.
 
@@ -22,6 +23,7 @@ quiet speech is otherwise taken for silence by the VAD.
 
 from collections import deque
 from pathlib import Path
+from time import perf_counter as _clock
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
@@ -37,7 +39,8 @@ MAX_PHRASE_SEC = 20.0  # speech without a pause is cut here
 CUT_SEARCH_SEC = 4.0   # the forced cut goes where the speech is weakest in the last seconds
 TAIL_FRAGMENT_SEC = 1.0  # a phrase after a forced cut this short with one letter is a fragment, no line
 PAD_SEC = 0.1          # audio kept before the speech starts and after it ends
-DRAFT_SEC = 1.2        # a draft at most this often
+DRAFT_MIN_SEC = 0.3    # a draft of the phrase being spoken at most this often (on average, in audio received)
+DRAFT_COST_SHARE = 3.0  # and at most every this many times its own recognition time (DraftPace)
 MIN_DRAFT_SEC = 0.5    # and not for less speech than this
 
 
@@ -197,6 +200,45 @@ class StreamLevel:
         return np.clip(piece * self.gain, -1.0, 1.0).astype(np.float32)
 
 
+class DraftPace:
+    """How often the draft of the phrase being spoken is recognized again: every DRAFT_MIN_SEC of audio received, but
+    never sooner than DRAFT_COST_SHARE times the time the last draft took, so drafts take at most a third of the
+    caption copy's threads and a slow computer gets fewer drafts instead of a backlog. The schedule runs on audio
+    received: the page sends it in pieces of about 0.25 s, so the drafts fall on every first or second piece and
+    keep the interval on average; after a delay (the model busy with a final or a window) one draft is made and the
+    schedule starts again from there, with no burst of drafts to catch up."""
+
+    def __init__(self) -> None:
+        self.cost = 0.0           # seconds the last draft took
+        self.next_at: Optional[float] = None  # audio received (s) from which the next draft is due; None: at once
+
+    def interval(self) -> float:
+        return max(DRAFT_MIN_SEC, DRAFT_COST_SHARE * self.cost)
+
+    def due(self, received: float) -> bool:
+        return self.next_at is None or received >= self.next_at - 1e-6
+
+    def done(self, received: float, cost: float) -> None:
+        """A draft was recognized at `received` seconds of audio and took `cost` seconds."""
+        self.cost = max(0.0, cost)
+        step = self.interval()
+        planned = received if self.next_at is None else self.next_at
+        # on schedule: from the planned time (the average holds); late: no sooner than half an interval from now
+        self.next_at = max(planned + step, received + step / 2)
+
+    def restart(self) -> None:
+        """A phrase ended: the first draft of the next one is due as soon as it has MIN_DRAFT_SEC of speech."""
+        self.next_at = None
+
+    def run(self, received: float, recognize: Any) -> Any:
+        """`recognize()` timed: its result, and the schedule moved on."""
+        t = _clock()
+        try:
+            return recognize()
+        finally:
+            self.done(received, _clock() - t)
+
+
 class PhraseState:
     """What a caption session keeps between steps in this mode."""
 
@@ -205,7 +247,8 @@ class PhraseState:
         self.vad = vad
         self.level = StreamLevel()
         self.levelled_to = start_at  # the stream is levelled in place up to here
-        self.last_draft = 0.0        # seconds received when the last draft was made
+        self.pace = DraftPace()      # when the draft of the phrase being spoken is recognized again
+        self.drafted_to = start_at   # and up to where the last draft heard it (in a pause no new draft)
         self.after_cut = False       # the phrase before was ended by a forced cut
         self.seam = ""               # and this was its last word
 

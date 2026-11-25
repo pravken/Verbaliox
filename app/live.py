@@ -392,7 +392,7 @@ class LiveSession:
     def _transcribe_phrases(self) -> None:
         """Russian captions by VAD phrases (app/live_phrases.py): the VAD goes over the new audio; a phrase that
         ended (a pause of 0.5 s, or 20 s of speech without one) is recognized once and its sentences are final;
-        the phrase still being spoken is the draft, recognized again at most every 1.2 s."""
+        the phrase still being spoken is the draft, recognized again every 0.3 s or more (live_phrases.DraftPace)."""
         from app import asr_onnx, live_phrases as lp, vocab
 
         onnx_id = self.onnx_model
@@ -445,13 +445,14 @@ class LiveSession:
                 })
                 self._next_id += 1
         if ended:
-            ph.last_draft = self.received  # the draft starts again with the next phrase
+            ph.pace.restart()  # the first draft of the next phrase as soon as it has enough speech
             self.partial = ""
         if c.start is None:
             self.partial = ""
-        elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and self.received - ph.last_draft >= lp.DRAFT_SEC:
-            ph.last_draft = self.received
-            parts = asr_onnx.recognize_phrase(onnx_id, audio[c.start - base:c.pos - base])
+        elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and c.last_speech > ph.drafted_to and ph.pace.due(self.received):
+            phrase = audio[c.start - base:c.pos - base]
+            ph.drafted_to = c.pos
+            parts = ph.pace.run(self.received, lambda: asr_onnx.recognize_phrase(onnx_id, phrase))
             draft = vocab.fix_text(" ".join(t for _, _, t in parts), rules).strip()
             self.partial = lp.drop_seam_repeat(ph.seam, draft) if ph.seam and c.continued else draft
         with self._audio_lock:
