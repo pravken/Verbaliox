@@ -775,9 +775,15 @@ def live_window_app(root: Path, job: Dict[str, Any], audio, segs, total: float) 
     os.environ["VERBALIOX_DATA_DIR"] = str(paths(root)["tmp"] / "app-data")
     os.environ["VERBALIOX_MODELS_DIR"] = str(paths(root)["models"] / "app")
     sys.path.insert(0, str(ROOT))
+    if job.get("cpus"):
+        # the app sizes its threads by the logical processors (asr_onnx.cpu_threads, queue_threads): on --cpus N
+        # it sees N, as on a PC with that many
+        os.cpu_count = lambda: job["cpus"]
     from app import asr_onnx, live
     from app.database import init_db, update_settings
 
+    if os.environ.get("BENCH_LIVE_THREADS"):  # another thread count of the captions' copy (asr_onnx.LIVE_THREADS)
+        asr_onnx.LIVE_THREADS = int(os.environ["BENCH_LIVE_THREADS"])
     init_db()
     mid = "gigaam-v3" if job["model"].startswith("gigaam") else "parakeet-v3"
     update_settings({"live_whisper_model": mid, "cpu_threads": str(job["threads_setting"])})
@@ -807,10 +813,12 @@ def live_window_app(root: Path, job: Dict[str, Any], audio, segs, total: float) 
 
         asr_onnx._cpu_options = opts
     t0 = time.perf_counter()
-    asr_onnx._load(mid)
+    asr_onnx._load(mid, live=True)  # the copy of live captions (asr_onnx._key)
     load_sec = time.perf_counter() - t0
     sess = live.LiveSession(job["lang"], None)
     assert sess.onnx_model == mid, sess.onnx_model
+    with live._sessions_lock:  # a running caption session, as start_session leaves it: the queue's thread budget sees it
+        live._sessions[sess.id] = sess
     stop_queue = threading.Event()
     queue_stats = {"audio_sec": 0.0, "busy_sec": 0.0}
     if job.get("queue_inproc"):
@@ -859,7 +867,8 @@ def live_window_app(root: Path, job: Dict[str, Any], audio, segs, total: float) 
     res = {"total": total}  # the scores: in the parent (the app's Python has no jiwer)
     res.update({"load_sec": round(load_sec, 2), "steps": len(steps),
                 "step_median": round(statistics.median(steps), 3) if steps else None,
-                "step_max": round(max(steps), 3) if steps else None, "events": events, "error": sess.error})
+                "step_max": round(max(steps), 3) if steps else None, "events": events, "error": sess.error,
+                "phrases": sess.phrases(), "copies": {k: list(v) for k, v in getattr(asr_onnx, "_made", {}).items()}})
     if job.get("queue_inproc"):
         res["queue_rtfx"] = round(queue_stats["audio_sec"] / max(1e-6, queue_stats["busy_sec"]), 2)
         res["queue_audio_sec"] = queue_stats["audio_sec"]

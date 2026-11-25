@@ -91,6 +91,103 @@
    "video": true
   }
  },
+ "call-gigaam-rnnt-window-ru-tapp-spin-on-normal-q-inproc-normal-cpus8-v094": {
+  "total": 300.0,
+  "load_sec": 1.34,
+  "steps": 300,
+  "step_median": 0.034,
+  "step_max": 0.826,
+  "error": "",
+  "phrases": true,
+  "copies": {
+   "gigaam-v3@live": [
+    "gigaam-v3-e2e-ctc",
+    "int8",
+    2
+   ],
+   "gigaam-v3": [
+    "gigaam-v3-e2e-rnnt",
+    "int8",
+    4
+   ]
+  },
+  "queue_rtfx": 10.1,
+  "queue_audio_sec": 3000.0,
+  "usage": {
+   "system_cpu": {
+    "mean": 16.6,
+    "peak": 38.5
+   },
+   "dpc_pct": {
+    "mean": 0.1,
+    "peak": 0.8
+   },
+   "interrupt_pct": {
+    "mean": 0.2,
+    "peak": 1.1
+   },
+   "pages_per_sec": {
+    "mean": 764.9,
+    "peak": 65160.3
+   },
+   "ffmpeg": {
+    "cpu": {
+     "mean": 6.4,
+     "peak": 11.7
+    },
+    "rss_peak_mb": 130.0
+   },
+   "live": {
+    "cpu": {
+     "mean": 6.8,
+     "peak": 13.3
+    },
+    "rss_peak_mb": 1247.0
+   }
+  },
+  "wer": 6.13,
+  "cer": 1.72,
+  "finals": 33,
+  "final_latency_median": 1.34,
+  "final_latency_p90": 1.87,
+  "first_draft_median": 1.67,
+  "first_draft_p90": 3.31,
+  "probe": {
+   "samples": 30650,
+   "p50_ms": 0.5,
+   "p99_ms": 2.46,
+   "p999_ms": 6.3,
+   "max_ms": 11.0,
+   "stalls_50": 0,
+   "stalls_200": 0
+  },
+  "queue": null,
+  "video": {
+   "fps_mean": 30.0,
+   "fps_min": 27.8,
+   "share_below_28": 0.005
+  },
+  "job": {
+   "threads": 8,
+   "threads_setting": "auto",
+   "spin": true,
+   "prio": "normal",
+   "device": "cpu",
+   "mode": "live",
+   "model": "gigaam-rnnt",
+   "scheme": "window",
+   "lang": "ru",
+   "seconds": 300.0,
+   "tick": 0.2,
+   "draft_sec": 1.2,
+   "queue_inproc": true,
+   "queue": "inproc",
+   "queue_threads": "app",
+   "queue_prio": "normal",
+   "cpus": 8,
+   "video": true
+  }
+ },
  "call-nemotron-560-stream-ru-t2-spin-off-below-q-parakeet-int8-idle-cpus8": {
   "wer": 15.86,
   "cer": 8.22,
@@ -178,6 +275,290 @@
    "queue": "parakeet-int8",
    "queue_threads": "4",
    "queue_prio": "idle",
+   "cpus": 8,
+   "video": true
+  }
+ },
+ "call-parakeet-fp32-window-en-tapp-spin-on-normal-cpus8-v094": {
+  "total": 300.0,
+  "load_sec": 3.71,
+  "steps": 226,
+  "step_median": 0.92,
+  "step_max": 5.238,
+  "error": "",
+  "phrases": false,
+  "copies": {
+   "parakeet-v3@live": [
+    "nemo-parakeet-tdt-0.6b-v3",
+    null,
+    2
+   ]
+  },
+  "usage": {
+   "system_cpu": {
+    "mean": 13.4,
+    "peak": 25.7
+   },
+   "dpc_pct": {
+    "mean": 0.1,
+    "peak": 0.7
+   },
+   "interrupt_pct": {
+    "mean": 0.2,
+    "peak": 1.1
+   },
+   "pages_per_sec": {
+    "mean": 259.3,
+    "peak": 45171.0
+   },
+   "ffmpeg": {
+    "cpu": {
+     "mean": 6.2,
+     "peak": 11.8
+    },
+    "rss_peak_mb": 114.0
+   },
+   "live": {
+    "cpu": {
+     "mean": 3.5,
+     "peak": 6.3
+    },
+    "rss_peak_mb": 2921.0
+   }
+  },
+  "wer": 8.0,
+  "cer": 4.6,
+  "finals": 36,
+  "final_latency_median": 4.28,
+  "final_latency_p90": 6.4,
+  "first_draft_median": 0.9,
+  "first_draft_p90": 2.96,
+  "probe": {
+   "samples": 30600,
+   "p50_ms": 0.49,
+   "p99_ms": 6.03,
+   "p999_ms": 6.88,
+   "max_ms": 7.7,
+   "stalls_50": 0,
+   "stalls_200": 0
+  },
+  "queue": null,
+  "video": {
+   "fps_mean": 30.0,
+   "fps_min": 27.2,
+   "share_below_28": 0.008
+  },
+  "job": {
+   "threads": 8,
+   "threads_setting": "auto",
+   "spin": true,
+   "prio": "normal",
+   "device": "cpu",
+   "mode": "live",
+   "model": "parakeet-fp32",
+   "scheme": "window",
+   "lang": "en",
+   "seconds": 300.0,
+   "tick": 0.2,
+   "draft_sec": 1.2,
+   "queue_inproc": false,
+   "queue": null,
+   "queue_threads": "app",
+   "queue_prio": "normal",
+   "cpus": 8,
+   "video": true
+  }
+ },
+ "call-parakeet-fp32-window-en-tapp-spin-on-normal-q-inproc-normal-cpus8-v094-live4": {
+  "total": 300.0,
+  "load_sec": 3.44,
+  "steps": 278,
+  "step_median": 0.334,
+  "step_max": 3.483,
+  "error": "",
+  "phrases": false,
+  "copies": {
+   "parakeet-v3@live": [
+    "nemo-parakeet-tdt-0.6b-v3",
+    null,
+    4
+   ],
+   "parakeet-v3": [
+    "nemo-parakeet-tdt-0.6b-v3",
+    null,
+    2
+   ]
+  },
+  "queue_rtfx": 2.48,
+  "queue_audio_sec": 600.0,
+  "usage": {
+   "system_cpu": {
+    "mean": 18.4,
+    "peak": 31.1
+   },
+   "dpc_pct": {
+    "mean": 0.1,
+    "peak": 0.7
+   },
+   "interrupt_pct": {
+    "mean": 0.2,
+    "peak": 1.2
+   },
+   "pages_per_sec": {
+    "mean": 266.1,
+    "peak": 48164.8
+   },
+   "ffmpeg": {
+    "cpu": {
+     "mean": 6.3,
+     "peak": 11.6
+    },
+    "rss_peak_mb": 111.0
+   },
+   "live": {
+    "cpu": {
+     "mean": 8.1,
+     "peak": 17.7
+    },
+    "rss_peak_mb": 6047.0
+   }
+  },
+  "wer": 5.57,
+  "cer": 2.88,
+  "finals": 36,
+  "final_latency_median": 3.24,
+  "final_latency_p90": 5.54,
+  "first_draft_median": 1.23,
+  "first_draft_p90": 3.0,
+  "probe": {
+   "samples": 30300,
+   "p50_ms": 0.51,
+   "p99_ms": 6.16,
+   "p999_ms": 7.53,
+   "max_ms": 10.5,
+   "stalls_50": 0,
+   "stalls_200": 0
+  },
+  "queue": null,
+  "video": {
+   "fps_mean": 30.0,
+   "fps_min": 26.9,
+   "share_below_28": 0.006
+  },
+  "job": {
+   "threads": 8,
+   "threads_setting": "auto",
+   "spin": true,
+   "prio": "normal",
+   "device": "cpu",
+   "mode": "live",
+   "model": "parakeet-fp32",
+   "scheme": "window",
+   "lang": "en",
+   "seconds": 300.0,
+   "tick": 0.2,
+   "draft_sec": 1.2,
+   "queue_inproc": true,
+   "queue": "inproc",
+   "queue_threads": "app",
+   "queue_prio": "normal",
+   "cpus": 8,
+   "video": true
+  }
+ },
+ "call-parakeet-fp32-window-en-tapp-spin-on-normal-q-inproc-normal-cpus8-v094": {
+  "total": 300.0,
+  "load_sec": 5.5,
+  "steps": 211,
+  "step_median": 1.063,
+  "step_max": 5.44,
+  "error": "",
+  "phrases": false,
+  "copies": {
+   "parakeet-v3@live": [
+    "nemo-parakeet-tdt-0.6b-v3",
+    null,
+    2
+   ],
+   "parakeet-v3": [
+    "nemo-parakeet-tdt-0.6b-v3",
+    null,
+    4
+   ]
+  },
+  "queue_rtfx": 3.84,
+  "queue_audio_sec": 900.0,
+  "usage": {
+   "system_cpu": {
+    "mean": 22.2,
+    "peak": 40.4
+   },
+   "dpc_pct": {
+    "mean": 0.2,
+    "peak": 0.6
+   },
+   "interrupt_pct": {
+    "mean": 0.2,
+    "peak": 1.0
+   },
+   "pages_per_sec": {
+    "mean": 2251.9,
+    "peak": 153275.4
+   },
+   "ffmpeg": {
+    "cpu": {
+     "mean": 6.9,
+     "peak": 11.4
+    },
+    "rss_peak_mb": 130.0
+   },
+   "live": {
+    "cpu": {
+     "mean": 10.8,
+     "peak": 16.8
+    },
+    "rss_peak_mb": 5971.0
+   }
+  },
+  "wer": 9.04,
+  "cer": 5.41,
+  "finals": 35,
+  "final_latency_median": 4.19,
+  "final_latency_p90": 7.5,
+  "first_draft_median": 1.79,
+  "first_draft_p90": 3.57,
+  "probe": {
+   "samples": 30500,
+   "p50_ms": 0.51,
+   "p99_ms": 6.9,
+   "p999_ms": 9.42,
+   "max_ms": 13.4,
+   "stalls_50": 0,
+   "stalls_200": 0
+  },
+  "queue": null,
+  "video": {
+   "fps_mean": 30.0,
+   "fps_min": 27.0,
+   "share_below_28": 0.013
+  },
+  "job": {
+   "threads": 8,
+   "threads_setting": "auto",
+   "spin": true,
+   "prio": "normal",
+   "device": "cpu",
+   "mode": "live",
+   "model": "parakeet-fp32",
+   "scheme": "window",
+   "lang": "en",
+   "seconds": 300.0,
+   "tick": 0.2,
+   "draft_sec": 1.2,
+   "queue_inproc": true,
+   "queue": "inproc",
+   "queue_threads": "app",
+   "queue_prio": "normal",
    "cpus": 8,
    "video": true
   }
