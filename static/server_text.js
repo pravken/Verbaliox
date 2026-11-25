@@ -175,6 +175,7 @@ const SERVER_TEXT_EN = {
   "Неверный промежуток времени": "Invalid time span",
   "Неверный формат разговора": "Wrong conversation format",
   "Недостаточно места на диске для записи": "Not enough disk space to record",
+  "Недостаточно места на диске для восстановления копии": "Not enough disk space to restore the backup",
   "Неизвестная модель": "Unknown model",
   "Неизвестное состояние": "Unknown state",
   "Неизвестный вариант субтитров": "Unknown subtitle variant",

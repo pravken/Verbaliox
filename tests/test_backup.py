@@ -318,6 +318,54 @@ class BackupTest(unittest.TestCase):
         backup.PENDING.unlink()
         self.assertEqual(victim.read_text(), "keep me")
 
+    def test_the_settings_of_a_copy_are_checked_as_the_page_s_are(self):
+        """A copy's settings that no page could have saved: a model that is any Hugging Face repository, a
+        number out of range, a list of the wrong form. Corrected or dropped (the default), the rest kept."""
+        import json
+
+        from app.database import init_db
+
+        init_db()
+        out = tests.temp_dir(self) / "copy.zip"
+        backup.make(out)
+        with zipfile.ZipFile(out) as z:
+            db = Path(z.extract("meetings.db", str(tests.temp_dir(self))))
+        conn = sqlite3.connect(str(db))
+        for key, value in (("whisper_model", "some-org/some-repo"), ("num_speakers", "99"), ("meet_never", "not json"),
+                           ("auto_title", "true"), ("clean_exit", "1"), ("my_name", "Анна")):
+            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (key, value))
+        conn.commit()
+        conn.close()
+        bad = tests.temp_dir(self) / "bad.zip"
+        with zipfile.ZipFile(bad, "w") as z:
+            z.writestr("manifest.json", json.dumps({"format": 1, "app": "Verbaliox", "media": []}))
+            z.write(db, "meetings.db")
+        backup.restore(bad)
+        conn = sqlite3.connect(str(backup.PENDING))
+        got = dict(conn.execute("SELECT key, value FROM settings").fetchall())
+        conn.close()
+        backup.PENDING.unlink()
+        self.assertNotIn("whisper_model", got)
+        self.assertNotIn("meet_never", got)
+        self.assertEqual(got["num_speakers"], "20")
+        self.assertEqual((got["auto_title"], got["clean_exit"], got["my_name"]), ("true", "1", "Анна"))
+
+    def test_a_copy_unpacks_only_when_the_disk_holds_it(self):
+        import json
+        from unittest import mock
+
+        from app.database import init_db
+
+        init_db()
+        out = tests.temp_dir(self) / "copy.zip"
+        backup.make(out)
+        with mock.patch.object(backup.shutil, "disk_usage", return_value=mock.Mock(free=10)):
+            with self.assertRaises(ValueError):
+                backup.restore(out)
+        self.assertFalse(backup.PENDING.exists())
+        self.assertTrue(json.loads(zipfile.ZipFile(out).read("manifest.json")))
+
     def test_not_a_backup(self):
         bad = tests.temp_dir(self) / "x.zip"
         with zipfile.ZipFile(bad, "w") as z:

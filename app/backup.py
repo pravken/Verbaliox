@@ -228,6 +228,37 @@ def _clean_dubs(raw: Any) -> Optional[str]:
     return None if len(kept) == len(dubs) else json.dumps(kept, ensure_ascii=False)
 
 
+def _clean_settings(conn: sqlite3.Connection) -> None:
+    """The copy's settings go through the checks a setting saved by the page goes through
+    (app/settings_schema.py): a value no page could have saved (a model that is no model of the catalog, a
+    number out of its range, a list of the wrong form) is corrected or dropped, and the default is used."""
+    from app.settings_schema import SERVER_KEYS, clean
+
+    for key, value in conn.execute("SELECT key, value FROM settings").fetchall():
+        if key in LOCAL_SETTINGS or key in SERVER_KEYS:  # this computer's (just below) and the program's own
+            continue
+        try:
+            fixed = clean(str(key), value)
+        except ValueError:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            continue
+        if fixed != value:
+            conn.execute("UPDATE settings SET value = ? WHERE key = ?", (fixed, key))
+
+
+ROOM_MARGIN = 512 * 2**20  # left free on the disk after a file of the copy is written
+
+
+def _check_room(size: int, folder: Path) -> None:
+    """A file of the copy is written only when the disk holds it: a small zip can unpack to any size."""
+    try:
+        free = shutil.disk_usage(folder).free
+    except OSError:
+        return
+    if size + ROOM_MARGIN > free:
+        raise ValueError("Недостаточно места на диске для восстановления копии")
+
+
 def _keep_local_settings(conn: sqlite3.Connection) -> None:
     from app.database import get_all_settings
 
@@ -261,6 +292,7 @@ def _restore(src: Path) -> Dict[str, Any]:
         manifest = _check(z)
         names = set(z.namelist())
         with tempfile.TemporaryDirectory(prefix="vs_restore_") as tmp:
+            _check_room(z.getinfo("meetings.db").file_size * 2, Path(tmp))  # unpacked, then staged next to the database
             db = Path(z.extract("meetings.db", tmp))
             conn = sqlite3.connect(str(db))
             try:
@@ -288,6 +320,7 @@ def _restore(src: Path) -> Dict[str, Any]:
                         skipped += 1
                         continue
                     target.parent.mkdir(parents=True, exist_ok=True)
+                    _check_room(z.getinfo(name).file_size, target.parent)
                     # written aside and renamed: a restore cut off midway left a truncated file at the
                     # place, which the next restore skipped as already there (found in review)
                     part = target.with_name(target.name + ".partial")
@@ -299,6 +332,7 @@ def _restore(src: Path) -> Dict[str, Any]:
                     put_back[mid] = str(target)
                     restored += 1
                 _clean_paths(conn, roots, put_back)
+                _clean_settings(conn)
                 _keep_local_settings(conn)
                 conn.execute("DROP TABLE IF EXISTS secrets")  # the API keys of a copy of an earlier version
                 # the minutes worked and «Мои программы» (a copy of an older version may still have them)
