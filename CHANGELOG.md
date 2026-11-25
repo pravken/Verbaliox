@@ -23,6 +23,29 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   model they use instead.
 
 
+### Speed with a large library
+
+- **«Recordings» opens about five times faster with a large library**: the table draws its first 150 rows and the
+  next ones as it is scrolled, every recording still selectable (Ctrl+A, Shift, the arrow keys, the actions of the
+  selection). The hidden list of the former sidebar is no longer drawn. Measured on 1200 recordings: the page at the
+  start holds 4 200 elements instead of 27 600, «Recordings» opens in 0.18 s instead of 0.95 s, a click on a check box
+  answers in 0.02 s instead of 0.16 s.
+- **The player costs almost nothing while a long recording plays**: the bars and the speakers' ribbon are drawn once
+  and copied at each frame (a three-hour meeting: 0.06 ms a frame instead of 1.4 ms, with «Skip silence» 0.09 ms
+  instead of 7.8 ms). «Course of the discussion» of the speakers' tab is drawn when the tab is opened.
+- **A person on the dashboard opens at once**: 0.07 s instead of 4.4 s for 1200 recordings. A contact's card finds
+  the mentions of the person through the search index (0.05 s instead of 0.14 s), including a name written in small
+  letters. A question about a folder learns its length without reading every transcript (0.04 s instead of 0.56 s for
+  235 recordings). The agent's decisions and tasks (MCP) answer in 0.04 s and 0.02 s instead of 2.8 s and 1.3 s, at
+  most 500 items with their total.
+- **Less memory for long recordings**: the levelling of quiet speech takes 0.7 GB instead of 2.1 GB besides a
+  three-hour recording, the waveform 11 MB instead of 1.4 GB; the speed test decodes only the minute it compares.
+  A full disk is named in the error of the sound extraction.
+- The Ollama status no longer waits for the Hy-MT3 1.8B repair, and an Obsidian note being written by the model no
+  longer holds the other notes. Whisper on the processor also keeps to «Processor load». The video memory is read again
+  after the computer wakes up or the video card resets. The app starts without loading the Word export.
+
+
 ## 0.9.4 — English
 
 
@@ -1327,6 +1350,29 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Hy-MT3 1.8B» (для режима «Качество» — модель перевода для этого компьютера) с размером и кнопкой «Скачать», в цвете
   внимания. Пока модели нет, на кнопке моделей — оранжевый «!», под ней — подсказка со скачиванием до закрытия, а
   субтитры с переводом без модели режима один раз за запуск сообщают, какая модель используется вместо неё.
+
+
+### Скорость на большой медиатеке
+
+- **«Записи» открываются примерно в пять раз быстрее на большой медиатеке**: таблица рисует первые 150 строк, а
+  следующие — по мере прокрутки; выбрать по-прежнему можно любую запись (Ctrl+A, Shift, стрелки, действия с
+  выбранными). Скрытый список прежней боковой панели больше не рисуется. Замер на 1200 записях: на странице при
+  запуске 4 200 элементов вместо 27 600, «Записи» открываются за 0,18 с вместо 0,95 с, щелчок по флажку — 0,02 с
+  вместо 0,16 с.
+- **Плеер почти не нагружает компьютер при воспроизведении длинной записи**: столбики и полоса говорящих рисуются один
+  раз и копируются в каждом кадре (встреча на три часа: 0,06 мс на кадр вместо 1,4 мс, с «Пропускать тишину» —
+  0,09 мс вместо 7,8 мс). Блок «Ход обсуждения» вкладки участников рисуется при открытии вкладки.
+- **Человек в дэшборде открывается сразу**: 0,07 с вместо 4,4 с на 1200 записях. Карточка контакта находит упоминания
+  человека через поисковый индекс (0,05 с вместо 0,14 с), в том числе имя, написанное со строчной буквы. Вопрос по
+  папке определяет её объём без чтения всех расшифровок (0,04 с вместо 0,56 с на 235 записях). Решения и задачи для
+  агента (MCP) — 0,04 с и 0,02 с вместо 2,8 с и 1,3 с, не больше 500 пунктов с общим числом.
+- **Меньше памяти на длинных записях**: выравнивание тихой речи занимает 0,7 ГБ вместо 2,1 ГБ сверх трёхчасовой
+  записи, волна плеера — 11 МБ вместо 1,4 ГБ; проверка скорости распознавания декодирует только сравниваемую минуту.
+  Ошибка извлечения звука сообщает о заполненном диске.
+- Состояние Ollama больше не ждёт исправления шаблона Hy-MT3 1.8B, а заметка Obsidian, которую пишет модель, не
+  задерживает остальные заметки. Whisper на процессоре тоже соблюдает настройку «Нагрузка на процессор». Сведения о видеопамяти
+  снова читаются после выхода компьютера из сна или сброса видеокарты. Программа запускается без загрузки экспорта
+  в Word.
 
 
 ## 0.9.4
