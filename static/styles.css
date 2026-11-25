@@ -5673,3 +5673,6 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:checked { bor
    tooltip (they were «Реш.» and «Зад.») */
 .db-dt-hic { display: inline-flex; justify-content: center; }
 .db-dt-hic svg { width: 14px; height: 14px; }
+/* The quick translation of the transcript: the icon of translation before the language («文A EN») */
+.quick-lang-tr { display: inline-flex; align-items: center; gap: 5px; }
+.quick-lang-ic { width: 14px; height: 14px; flex: none; }
