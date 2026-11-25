@@ -107,7 +107,7 @@ def _series_reasons(rows: List[Dict[str, Any]]) -> None:
                 r["reasons"].append("series")
 
 
-def _dull_series(meetings: List[Dict[str, Any]], me: set, fmap: Dict[int, List[int]]) -> List[Dict[str, Any]]:
+def _dull_series(meetings: List[Dict[str, Any]], fmap: Dict[int, List[int]]) -> List[Dict[str, Any]]:
     """The series giving nothing lately: their newest analysed meetings, SERIES_MIN or more in a row, ended
     without a decision or a task. Most such meetings first."""
     try:
@@ -125,7 +125,9 @@ def _dull_series(meetings: List[Dict[str, Any]], me: set, fmap: Dict[int, List[i
         if len(group) < SERIES_MIN:
             continue
         last = sorted(group, key=lambda x: str(x.get("recorded_at") or x.get("created_at") or ""), reverse=True)[:SERIES_LOOK]
-        rows = [r for r in _meeting_rows(last, me, fmap) if r["analysed"]]
+        # without the user's share of the talk: only «no_outcome» counts here, and the share read every line of
+        # these meetings (audit K21: half the time of the dashboard)
+        rows = [r for r in _meeting_rows(last, set(), fmap) if r["analysed"]]
         streak = 0
         for r in rows:  # newest first
             if "no_outcome" not in r["reasons"]:
@@ -535,7 +537,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         "history": history,
         "buckets": buckets, "features": feats, "people": people,
         "decisions": decisions[:12], "tasks": [task_brief(t) for t in focus[:10]], "needs_me": not me,
-        "dull_series": _dull_series(meetings, me, fmap),
+        "dull_series": _dull_series(meetings, fmap),
         "recent": [{"id": m["id"], "title": m.get("title") or "", "date": _day(m).isoformat(), "duration": m.get("duration") or 0,
                     "status": m.get("status"), "has_summary": bool(m.get("has_summary")), "features": fmap.get(m["id"], [])}
                    for m in recent],
@@ -589,7 +591,7 @@ def detail(kind: str, period: str = "week", feature_id: Optional[int] = None, pe
     from app import commitments
     from app.database import fill_durations, list_meetings
     from app.features import feature_map
-    from app.people import canonical, my_names
+    from app.people import _rows as directory_rows, canonical as canonical_of, my_names
 
     kind = kind if kind in DETAILS else "meetings"
     period = period if period in PERIODS else "week"
@@ -640,7 +642,11 @@ def detail(kind: str, period: str = "week", feature_id: Optional[int] = None, pe
         out["tasks"] = [brief(t) for t in sorted((t for t in tasks if me and t.get("status") != "done" and not is_mine(t)
                                                   and (t.get("to_whom") or "").strip().lower() in me), key=order)]
         return out
-    # a person: every meeting they spoke in (any period), the tasks on them and theirs to the user
+    # a person: every meeting they spoke in (any period), the tasks on them and theirs to the user. The directory is
+    # read once (audit K21: canonical() read it, with two connections, for each speaker of each recording and each
+    # task: 5 s for a library of 1200 recordings)
+    rows_dir = directory_rows()
+    canonical = lambda n: canonical_of(n, rows_dir)  # noqa: E731
     name = canonical(person.strip()) if person.strip() else ""
     out["person"] = name
     low = name.lower()

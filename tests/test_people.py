@@ -136,6 +136,29 @@ class PeopleDirectoryTest(unittest.TestCase):
         self.assertEqual([t["what"] for t in c["tasks"]], ["Прислать смету"])
         self.assertIsNone(people.card("Никто Неизвестный"))
 
+    def test_a_card_finds_mentions_by_the_search_index(self):
+        """Audit K21: the mentions come from the search index, not a LIKE over every line of the library (its words
+        and all) under the lock; a name in small letters counts, a word that only begins like it does not."""
+        from unittest import mock
+
+        named = self._meeting(names=("Мария", "Участник 2"),
+                              texts=["спросим олега завтра", "Олегу передать", "ок", "Олеговна не придёт", "ок", "ок"])
+        people.add("Олег")
+        sql = []
+        real = database.get_connection
+
+        def watched():
+            c = real()
+            c.set_trace_callback(sql.append)
+            return c
+        with mock.patch("app.people.get_connection", side_effect=watched):
+            c = people.card("Олег")
+        self.assertEqual([(r["meeting_id"], r["count"], r["first_at"]) for r in c["mentioned"]], [(named, 2, 0.0)])
+        self.assertFalse([s for s in sql if "LIKE" in s.upper()], sql)
+        self.assertFalse([s for s in sql if "CREATE TABLE" in s.upper()], "the table is made once per database, not at each reading")
+        self.assertEqual([people._name_prefix(s) for s in ("Ксения", "Игорь", "Лев", "Ян Ли", "Анна-Мария")],
+                         ["ксен", "игор", "лев", "ян", "анн"])
+
     def test_a_name_put_right_is_written_anew_in_the_analysis(self):
         r = people.rename_in_text
         text = "Ярослав Мельник предложил; задача для Ярослава Мельника. Мельник ушёл."
