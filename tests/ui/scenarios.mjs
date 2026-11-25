@@ -2664,6 +2664,34 @@ await step('models popover without the unload setting', async () => {
   expect(!r.err && r.text, `the popover: ${JSON.stringify(r)}`);
 });
 
+// Captions switched off while they start: what the start gets is stopped (a server session, a worklet and a timer
+// went on for the rest of the recording)
+await step('captions stopped while they start', async () => {
+  const calls = [];
+  const start = /\/api\/live\/start$/, sess = /\/api\/live\/audit-race\//;
+  await page.route(start, async r => {
+    await new Promise(res => setTimeout(res, 700));
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session: 'audit-race' }) });
+  });
+  await page.route(sess, r => { calls.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+  let r;
+  try {
+    r = await page.evaluate(async () => {
+      const ctx = new AudioContext();
+      const stream = ctx.createMediaStreamDestination().stream;
+      const run = startLiveCaptions(ctx, stream).catch(e => e.message);
+      stopLiveCaptions();
+      const err = await run;
+      await new Promise(res => setTimeout(res, 300));
+      const out = { err: err || '', session: liveCap.session, timer: liveCap.timer, node: !!liveCap.node, starting: !!liveCap.starting };
+      ctx.close();
+      return out;
+    });
+  } finally { await page.unroute(start); await page.unroute(sess); }
+  expect(!r.session && !r.timer && !r.node && !r.starting && !r.err, `the captions after the stop: ${JSON.stringify(r)}`);
+  expect(calls.some(u => u.endsWith('/audit-race/stop')), `the server session was not stopped: ${calls.join(', ')}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
