@@ -251,6 +251,31 @@ await step('scrub the wave', async () => {
   await page.evaluate(() => document.getElementById('media-player').pause());
 });
 
+// While the recording plays a frame copies the bars and the ribbon drawn once and asks no layout of the page (audit
+// K20: every frame drew every phrase and read the canvas's box); a change of the speakers' filter draws them again
+await step('player frames reuse their layers', async () => {
+  const r = await page.evaluate(() => {
+    rpRender();
+    const drawn = rp.layersDrawn;
+    let rects = 0;
+    const orig = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () { rects++; return orig.call(this); };
+    rp.drag = true;
+    try { for (let i = 0; i < 30; i++) { rp.dragTime = i; rpRender(); } } finally { rp.drag = false; rp.dragTime = null; Element.prototype.getBoundingClientRect = orig; }
+    const same = rp.layersDrawn - drawn;
+    const spk = Object.keys(state.activeMeeting.speakers || {})[0];
+    state.speakerFilter = spk;
+    rpRender();
+    const filtered = rp.layersDrawn - drawn - same;
+    state.speakerFilter = null;
+    rpRender();
+    return { same, rects, filtered };
+  });
+  expect(r.same === 0, `the layers were drawn again ${r.same} times in 30 frames`);
+  expect(r.rects === 0, `the frames read the layout ${r.rects} times`);
+  expect(r.filtered === 1, `the speakers' filter did not draw the layers again: ${r.filtered}`);
+});
+
 // «Сведения»: four cards of «key — value» rows, the actions of each under a line (only the program's own)
 await step('recording details', async () => {
   await page.evaluate(() => openRecordTab('info'));
