@@ -421,11 +421,22 @@ class LiveSession:
         self.error = ""
         rules = vocab.current()
         new_lines = []
-        for a, b, _forced in ended:
-            for s, e, t in asr_onnx.recognize_phrase(onnx_id, audio[a - base:b - base]):
+        for a, b, forced in ended:
+            parts = []
+            # the tail of a forced cut shorter than a word: not recognized at all
+            heard = [] if ph.after_cut and b - a < lp.MIN_SPEECH_SEC * SR else \
+                asr_onnx.recognize_phrase(onnx_id, audio[a - base:b - base])
+            for k, (s, e, t) in enumerate(heard):
                 text = vocab.fix_text(t, rules).strip()
-                if not text:
-                    continue
+                if ph.seam and k == 0:  # the seam of a forced cut: the word cut in half is not heard twice
+                    text = lp.drop_seam_repeat(ph.seam, text)
+                if text:
+                    parts.append((s, e, text))
+            if ph.after_cut and parts and lp.tail_fragment(b - a, " ".join(t for _, _, t in parts)):
+                parts = []  # only the tail of the cut word: no line of one letter
+            ph.after_cut = forced
+            ph.seam = lp.last_word(parts[-1][2]) if forced and parts else ""
+            for s, e, text in parts:
                 if not self.speech_lang:
                     self.lang = asr_onnx.guess_language(text)
                 new_lines.append({
@@ -441,7 +452,8 @@ class LiveSession:
         elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and self.received - ph.last_draft >= lp.DRAFT_SEC:
             ph.last_draft = self.received
             parts = asr_onnx.recognize_phrase(onnx_id, audio[c.start - base:c.pos - base])
-            self.partial = vocab.fix_text(" ".join(t for _, _, t in parts), rules).strip()
+            draft = vocab.fix_text(" ".join(t for _, _, t in parts), rules).strip()
+            self.partial = lp.drop_seam_repeat(ph.seam, draft) if ph.seam and c.continued else draft
         with self._audio_lock:
             self._cut(max(0, ph.keep_from() - self.base))
         self.lines.extend(new_lines)

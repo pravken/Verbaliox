@@ -78,6 +78,49 @@ class PhraseCutterTest(unittest.TestCase):
         self.assertEqual(out[0][1], out[1][0])  # 64 ms of a word left after the cut: still a phrase
 
 
+class ForcedCutWithoutBrokenWordsTest(unittest.TestCase):
+    """A word cut in half at 20 s was heard by both phrases (bench-report/asr-2026-11-check.md): «которых ко
+    которых», «и и вправду», and a line of one character from a phrase of 0.04 s."""
+
+    def test_the_cut_goes_into_a_gap_between_words_not_into_a_dip_inside_one(self):
+        probs = [0.95] * _sec(25)
+        probs[_sec(13)] = 0.2   # a gap between words, below the end of speech
+        probs[_sec(18)] = 0.5   # a dip inside a word: the weakest of the last 4 s, but still speech
+        out, _ = _run(probs + [0.0] * _sec(1))
+        self.assertTrue(out[0][2])
+        self.assertEqual(out[0][1], _sec(13) * F + F // 2)  # before: in the middle of the word at 18 s
+        self.assertEqual(out[0][1], out[1][0])
+
+    def test_of_the_gaps_in_the_last_seconds_the_weakest(self):
+        probs = [0.95] * _sec(25)
+        probs[_sec(12)] = 0.1
+        probs[_sec(17)] = 0.3
+        probs[_sec(18.5)] = 0.2
+        out, _ = _run(probs + [0.0] * _sec(1))
+        self.assertEqual(out[0][1], _sec(18.5) * F + F // 2)
+
+    def test_without_a_gap_at_the_weakest_point_as_before(self):
+        probs = [0.95] * _sec(25)
+        probs[_sec(18)] = 0.5
+        out, _ = _run(probs + [0.0] * _sec(1))
+        self.assertEqual(out[0][1], _sec(18) * F + F // 2)
+
+    def test_the_repeated_word_at_the_seam_is_dropped(self):
+        self.assertEqual(lp.drop_seam_repeat("которых", "ко которых мы говорили."), "мы говорили.")
+        self.assertEqual(lp.drop_seam_repeat("и", "И вправду так."), "вправду так.")
+        self.assertEqual(lp.drop_seam_repeat("Которых,", "которых нет."), "нет.")
+        self.assertEqual(lp.drop_seam_repeat("и", "Вправду так."), "Вправду так.")  # nothing repeated
+        self.assertEqual(lp.drop_seam_repeat("которых", "к ним."), "к ним.")  # one letter: a word of its own
+        self.assertEqual(lp.drop_seam_repeat("", "и так."), "и так.")
+        self.assertEqual(lp.last_word("Говорили о тех, которых."), "которых")
+
+    def test_a_tail_of_the_cut_is_no_line(self):
+        self.assertTrue(lp.tail_fragment(int(0.04 * SR), "а"))
+        self.assertTrue(lp.tail_fragment(int(0.5 * SR), "а."))
+        self.assertFalse(lp.tail_fragment(int(0.5 * SR), "да."))
+        self.assertFalse(lp.tail_fragment(int(2.0 * SR), "Я."))  # a whole phrase of one word stays
+
+
 class StreamLevelTest(unittest.TestCase):
     def test_quiet_speech_is_raised_and_loud_is_not(self):
         lev = lp.StreamLevel()
@@ -164,6 +207,37 @@ class LivePhraseSessionTest(unittest.TestCase):
             self.assertLessEqual(a["end"] - a["start"], lp.MAX_PHRASE_SEC + 0.01)
         self.assertAlmostEqual(lines[-1]["end"], 47.0 + lp.PAD_SEC, delta=0.05)
         self.assertLess(s.audio.size, 2 * SR)
+
+    def _seam(self, first, second, tail_sec=0.0, tail_text=""):
+        """Lines of 20.5 s of speech without a pause cut by force and recognized by a fake that hears a word at the
+        seam twice; with tail_sec, the cut leaves only that much of the speech."""
+        s = self._session()
+
+        def heard(model, audio):
+            sec = audio.size / SR
+            if sec >= 19.5:
+                return [(0.0, sec, first)]
+            return [(0.0, sec, tail_text if tail_sec else second)]
+
+        self.patches[-1].stop()
+        p = mock.patch("app.asr_onnx.recognize_phrase", side_effect=heard)
+        p.start()
+        self.addCleanup(p.stop)
+        self.patches = self.patches[:-1]
+        speech = (20.0 + tail_sec) if tail_sec else 22.0
+        self._feed(s, np.concatenate([np.full(int(speech * SR), 0.5, dtype=np.float32), np.zeros(SR, dtype=np.float32)]))
+        return [x["text"] for x in s.lines]
+
+    def test_the_word_cut_in_half_is_not_repeated(self):
+        self.assertEqual(self._seam("Говорили о тех, которых", "ко которых мы ждали."),
+                         ["Говорили о тех, которых", "мы ждали."])
+
+    def test_a_repeated_conjunction_is_not_repeated(self):
+        self.assertEqual(self._seam("Он сказал, и", "и вправду так."), ["Он сказал, и", "вправду так."])
+
+    def test_a_tail_of_one_letter_is_no_line(self):
+        self.assertEqual(self._seam("Говорили о тех, которых", "", tail_sec=0.06, tail_text="х"),
+                         ["Говорили о тех, которых"])
 
     def test_the_translator_gets_the_finals(self):
         s = self._session()

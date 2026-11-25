@@ -93,8 +93,11 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   and again. The voice detector follows the speech, only the phrase being spoken is recognized (a draft at most every
   1.2 s), and it becomes final once, after a pause of half a second, by GigaAM v3 e2e-CTC int8. In the measurement:
   the final line in about 1 s instead of 3–4 s, fewer errors (WER 5.9 % instead of 8.5 %), a seventh of the processor load
-  and 0.44 GB of memory instead of 2.9. Speech without pauses is cut at 20 s where it is weakest, and the next line
-  starts exactly there: no words are lost or repeated at the cut. The model file (about 214 MB, from the same
+  and 0.44 GB of memory instead of 2.9. Speech without pauses is cut at 20 s in a gap between words (where the
+  voice detector hears no speech; only without such a gap where the speech is weakest), and the next line starts
+  exactly there: no words are lost at the cut. A word cut in half all the same is not written twice: the next line
+  loses its first word when it repeats the last word of the line before or is its beginning (a piece of the word), and
+  a tail of the cut shorter than a quarter of a second or of one letter is not shown as a line. The model file (about 214 MB, from the same
   repository) is downloaded once by itself; until then the captions go as before. English and other languages keep
   Parakeet in the window, which is more accurate for them.
 - **GigaAM transcribes faster on the processor**: a transcription without the video card takes GigaAM v3 e2e-RNN-T in
@@ -1325,8 +1328,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   следит за речью, распознаётся только текущая фраза (черновик — не чаще раза в 1,2 с), а финальной она становится
   один раз, после паузы в полсекунды, моделью GigaAM v3 e2e-CTC int8. В замере: финальная строка примерно через 1 с
   вместо 3–4 с, меньше ошибок (WER 5,9 % вместо 8,5 %), в семь раз меньше нагрузки на процессор и 0,44 ГБ
-  памяти вместо 2,9. Речь без пауз режется на 20 с в самом тихом месте, и следующая строка начинается ровно там же:
-  на стыке слова не теряются и не повторяются. Файл модели (около 214 МБ, из того же репозитория) скачивается один
+  памяти вместо 2,9. Речь без пауз режется на 20 с в промежутке между словами (где детектор речи не слышит речь;
+  только без такого промежутка — в самом тихом месте), и следующая строка начинается ровно там же: на стыке слова не
+  теряются. Слово, разрезанное всё же пополам, не пишется дважды: следующая строка теряет первое слово, если оно
+  повторяет последнее слово предыдущей или его начало («которых ко которых»), а хвост разреза короче четверти секунды
+  или из одной буквы не показывается отдельной строкой. Файл модели (около 214 МБ, из того же репозитория) скачивается один
   раз сам; до этого субтитры идут как раньше. Английский и другие языки остаются на Parakeet с окном — для них оно
   точнее.
 - **GigaAM быстрее расшифровывает на процессоре**: расшифровка без видеокарты идёт на GigaAM v3 e2e-RNN-T в int8 с той

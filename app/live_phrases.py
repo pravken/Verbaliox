@@ -7,10 +7,14 @@ draft at most every DRAFT_SEC, and once more as the final text after a pause of 
 gave the final text in 0.9–1.1 s instead of 3–4 s, with a lower WER, a seventh of the processor load and 0.44 GB of
 memory instead of 2.9.
 
-Speech without pauses is cut at MAX_PHRASE_SEC, where the VAD hears the speech weakest in the last
-CUT_SEARCH_SEC (most often a breath or a gap between words). The next phrase starts exactly there: no audio is
-recognized twice and none is left out (the duplicated and lost words at forced cuts of other programs,
-Meetily issue #756).
+Speech without pauses is cut at MAX_PHRASE_SEC, in a gap between words: a frame the VAD hears below KEEP_PROB,
+the weakest of the last CUT_SEARCH_SEC, else the latest of the second half of the phrase; only without any such frame
+where the speech is weakest in the last CUT_SEARCH_SEC (a breath). The next phrase starts exactly there: no audio
+is recognized twice and none is left out (the duplicated and lost words at forced cuts of other programs,
+Meetily issue #756). A word cut in half all the same is heard by both phrases (bench-report/asr-2026-11-check.md:
+«которых ко которых», «и и вправду»): at the seam the next phrase loses its first word when it repeats the last one
+of the phrase before or is the start of it (drop_seam_repeat), and a tail of the cut shorter than MIN_SPEECH_SEC or
+of one letter is not a line of its own (tail_fragment).
 
 The stream is levelled as the recordings are (app.asr_onnx.level), from the loudest part of the last 10 s:
 quiet speech is otherwise taken for silence by the VAD.
@@ -31,6 +35,7 @@ END_PAUSE_SEC = 0.5  # a pause this long ends the phrase
 MIN_SPEECH_SEC = 0.25  # a shorter sound is noise
 MAX_PHRASE_SEC = 20.0  # speech without a pause is cut here
 CUT_SEARCH_SEC = 4.0   # the forced cut goes where the speech is weakest in the last seconds
+TAIL_FRAGMENT_SEC = 1.0  # a phrase after a forced cut this short with one letter is a fragment, no line
 PAD_SEC = 0.1          # audio kept before the speech starts and after it ends
 DRAFT_SEC = 1.2        # a draft at most this often
 MIN_DRAFT_SEC = 0.5    # and not for less speech than this
@@ -69,6 +74,9 @@ class PhraseCutter:
             if self.last_speech - start < MIN_SPEECH_SEC * SR and not self.continued:
                 return None  # a click, a cough: no phrase
             end = min(self.pos, self.last_speech + pad)
+            if end <= start:  # cut in a gap that went on into the pause: nothing is left of the phrase
+                self.floor = start
+                return None
             self.floor = end
             return start, end, False
         if self.pos - self.start >= MAX_PHRASE_SEC * SR:
@@ -79,14 +87,60 @@ class PhraseCutter:
         return None
 
     def _cut_point(self) -> int:
-        """Where speech without a pause is cut: the middle of the frame with the weakest speech in the last
-        CUT_SEARCH_SEC, the latest one of equals (the cut phrase keeps as much as it can)."""
-        lo = max(self.start + int(MAX_PHRASE_SEC * SR / 2), self.pos - int(CUT_SEARCH_SEC * SR))
-        frames = [(q, -s, s) for s, q in self.probs if s >= lo]
-        if not frames:
+        """Where speech without a pause is cut, in the middle of a frame: the weakest frame below KEEP_PROB (a gap
+        between words) in the last CUT_SEARCH_SEC, the latest one of equals (the cut phrase keeps as much as it
+        can); else the latest such frame in the second half of the phrase; only without any, the weakest frame of
+        the last CUT_SEARCH_SEC (a word may be cut in half there)."""
+        half = self.start + int(MAX_PHRASE_SEC * SR / 2)
+        recent = max(half, self.pos - int(CUT_SEARCH_SEC * SR))
+        gaps = [(q, -s, s) for s, q in self.probs if s >= recent and q < KEEP_PROB]
+        if not gaps:
+            earlier = [s for s, q in self.probs if s >= half and q < KEEP_PROB]
+            if earlier:
+                return min(self.pos, earlier[-1] + FRAME // 2)
+            gaps = [(q, -s, s) for s, q in self.probs if s >= recent]
+        if not gaps:
             return self.pos
-        _, _, s = min(frames)
+        _, _, s = min(gaps)
         return min(self.pos, s + FRAME // 2)
+
+
+def _word(w: str) -> str:
+    return "".join(ch for ch in w.lower().replace("ё", "е") if ch.isalnum())
+
+
+def last_word(text: str) -> str:
+    """The last word of a line as drop_seam_repeat compares it ("" for none)."""
+    words = [_word(w) for w in text.split()]
+    words = [w for w in words if w]
+    return words[-1] if words else ""
+
+
+def drop_seam_repeat(prev_last: str, text: str, most: int = 2) -> str:
+    """The text of the phrase after a forced cut without the word cut in half heard twice: its first words while
+    they repeat the last word of the phrase before (any case and punctuation: «и» | «и вправду») or are the start
+    of it («которых» | «ко которых»), at most `most` of them."""
+    prev = _word(prev_last)
+    if not prev:
+        return text
+    words = text.split()
+    dropped = 0
+    while words and dropped < most:
+        w = _word(words[0])
+        if not w or not (w == prev or len(w) >= 2 and prev.startswith(w)):
+            break
+        words.pop(0)
+        dropped += 1
+    return " ".join(words) if dropped else text
+
+
+def tail_fragment(samples: int, text: str) -> bool:
+    """The phrase after a forced cut is only its tail: shorter than MIN_SPEECH_SEC, or shorter than
+    TAIL_FRAGMENT_SEC with one letter or digit at most (a line of one character from a phrase of 0.04 s in
+    bench-report/asr-2026-11-check.md)."""
+    if samples < MIN_SPEECH_SEC * SR:
+        return True
+    return samples < TAIL_FRAGMENT_SEC * SR and sum(ch.isalnum() for ch in text) <= 1
 
 
 class SileroStream:
@@ -152,6 +206,8 @@ class PhraseState:
         self.level = StreamLevel()
         self.levelled_to = start_at  # the stream is levelled in place up to here
         self.last_draft = 0.0        # seconds received when the last draft was made
+        self.after_cut = False       # the phrase before was ended by a forced cut
+        self.seam = ""               # and this was its last word
 
     def keep_from(self) -> int:
         """The first sample still needed: the start of the phrase going on, or a little before the next one."""
