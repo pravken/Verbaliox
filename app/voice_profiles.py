@@ -95,11 +95,20 @@ def learn(name: str, embedding: Optional[List[float]]) -> None:
     if not embedding or is_default_name(name) or not enabled():
         return
     new = _unit(np.asarray(embedding, dtype=np.float32))
-    existing = {p["name"].lower(): p for p in _load()}
+    init_table()
     now = datetime.now().isoformat(timespec="seconds")
     with _db_lock:
         conn = get_connection()
-        p = existing.get(name.lower())
+        # read under the lock that writes: two recordings naming the same new person at once both inserted it,
+        # and the second failed on the unique name (found in an audit)
+        p = None
+        for r in conn.execute("SELECT id, name, embedding, samples FROM voice_profiles").fetchall():
+            if str(r[1]).lower() == name.lower():
+                try:
+                    p = {"id": r[0], "embedding": np.asarray(json.loads(r[2]), dtype=np.float32), "samples": r[3]}
+                except (ValueError, TypeError):
+                    p = {"id": r[0], "embedding": np.zeros_like(new), "samples": 0}  # unreadable: the new print
+                break
         if p is None:
             conn.execute(
                 "INSERT INTO voice_profiles (name, embedding, samples, updated_at) VALUES (?, ?, 1, ?)",
