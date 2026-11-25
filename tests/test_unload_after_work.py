@@ -292,6 +292,7 @@ class TranslatorSwitchTest(unittest.TestCase):
         t._model, t._loaded, t.ready, t.error = None, None, False, ""
         with mock.patch.object(LiveTranslator, "_resolve_model", side_effect=["hy-mt3:7b", "hy-mt3:1.8b"]), \
                 mock.patch.object(LiveTranslator, "_chat", return_value="ok"), \
+                mock.patch("app.live_translate.model_on_cpu", return_value=None), \
                 mock.patch.object(idle_unload, "translator_switched") as switched:
             t._ensure_ready()
             switched.assert_not_called()  # the first model: nothing before it
