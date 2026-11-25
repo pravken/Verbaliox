@@ -114,6 +114,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   and the rest of today) are drawn as planned — the same hue hatched (lighter in the ring), their figures grey, «planned»
   in the hint. The head reads «In meetings: 4.6 h · ahead 4 h»; under the chart, which days are above the norm by fact
   and which by plan («Above the norm: Tue; planned: Fri»).
+- **Overview of a year and of any past period**: «Year» joins Week, Month and Quarter (its meeting hours by month,
+  its «Statistics» trend over the years there are data for, six at most). ‹ › beside the period switch go back to any
+  past week, month, quarter or year, named in the head («October 2026», «Q3 2026», «2025»); «Today» returns to the
+  current one. A past period is counted whole: all its days gone by, the tasks open at its end.
+- **Compare with a year ago**: the «Statistics» tiles compare each figure with the previous period or with the same
+  period a year ago (the switch in the widget's head, kept with the layout).
 
 ## 0.9.3 — English
 
@@ -1359,6 +1365,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   остаток сегодняшнего) показаны как план — тем же цветом со штриховкой (в кольце светлее), их числа серые, в подсказке
   «по плану». В заголовке — «Во встречах: 4,6 ч · впереди 4 ч»; под диаграммой — какие дни сверх нормы по факту, а какие
   по плану («Сверх нормы: вт; по плану: пт»).
+- **«Обзор» за год и за любой прошедший период**: к «Неделе», «Месяцу» и «Кварталу» добавлен «Год» (часы встреч по
+  месяцам, тренд «Статистики» по годам, за которые есть данные, не больше шести). Кнопки ‹ › рядом с выбором периода
+  открывают любую прошедшую неделю, месяц, квартал или год, а его название показано в заголовке («Октябрь 2026»,
+  «III квартал 2026», «2025»); «Сегодня» возвращает к текущему. Прошедший период считается целиком: все его дни прошли,
+  задачи — открытые на его конец.
+- **Сравнение с прошлым годом**: плитки «Статистики» сравнивают каждый показатель с предыдущим периодом или с тем же
+  периодом год назад (переключатель в заголовке виджета, сохраняется вместе с раскладкой).
 
 ## 0.9.3
 

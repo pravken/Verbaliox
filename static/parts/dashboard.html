@@ -11,6 +11,8 @@
         <span class="tk-grow"></span>
         <div class="tk-head-actions">
           <div id="db-periods" class="tk-seg" role="radiogroup" data-i18n-title="dbPeriod" title="Период"></div>
+          <!-- any past period: ‹ its name ›, and «Сегодня» back to the current one (dbRenderNav) -->
+          <span id="db-nav" class="db-nav"></span>
           <span class="db-feature-grp">
             <button id="db-feature-btn" class="tk-btn" data-click="openDashFeatureMenu" data-click-args='[{"$": "event"}]' aria-haspopup="menu"></button>
             <button id="db-feature-clear" type="button" class="tk-btn db-feature-x hidden" data-click="setDashFeature" data-click-args="[0]"

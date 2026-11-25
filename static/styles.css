@@ -3216,6 +3216,9 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
 .db-feature-grp .db-feature-on { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .db-feature-x { width: var(--ctl-h, 32px); padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; color: var(--hc-dim, #AEAEB2); }
 .db-feature-x:hover { color: #FFFFFF; }
+/* «Обзор»: «Сегодня» back to the current period, ‹ the period's name › (a year's name no narrower than the arrows' gap) */
+.db-nav { display: inline-flex; align-items: center; gap: 4px; }
+.db-nav-name { min-width: 64px; padding: 0 6px; text-align: center; font-size: var(--fs-ui); font-weight: 600; color: #F5F5F7; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .db-kts-note { margin: 10px 2px 0; }
 .db-note { font-size: var(--fs-label); color: var(--hc-dim, #8E8E93); line-height: 1.45; margin: 4px 0 8px; }
 /* the reminder of recordings whose transcription was cancelled (app/untranscribed.py) */

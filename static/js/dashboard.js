@@ -1,8 +1,10 @@
 // Verbaliox page script: «Обзор» (static/parts/dashboard.html; docs/pult-plan.md, stage 3), the analytics of a
 // period: widgets the user arranges («Настроить»: dragged, sized S · M · L · W, removed, added from the list), kept
 // with the settings. The data widgets read /api/dashboard (app/dashboard.py) for the period and the feature chosen;
-// «Частые участники» and «Мои программы» have a period of their own. The day (its meetings and its cards) is
-// «Сегодня» (static/js/today.js), which draws its cards with the functions of this file.
+// «Частые участники» and «Мои программы» have a period of their own. ‹ › go back to any past period (DB.at, not
+// kept with the settings: the app opens on the current one), its figures compared with the period before or the
+// same days a year earlier (dbPrefs().compare). The day (its meetings and its cards) is «Сегодня»
+// (static/js/today.js), which draws its cards with the functions of this file.
 // The parts are classic scripts sharing one global scope, loaded in order by index.html.
 
 const DB_KEY = 'vx-dashboard';
@@ -29,7 +31,9 @@ const DB_WIDGETS = {
 };
 // rows that add up to 12: W · M+M · L+S · M+M · W
 const DB_DEFAULT = [['kpis', 'W'], ['time', 'M'], ['load', 'M'], ['features', 'L'], ['people', 'S'], ['decisions', 'M'], ['dull', 'M'], ['summary', 'W']];
-const DB_PERIODS = ['week', 'month', 'quarter'];
+const DB_PERIODS = ['week', 'month', 'quarter', 'year'];
+// what the figures of «Статистика» are compared with: the period before, or the same days a year earlier
+const DB_COMPARE = ['prev', 'year'];
 // added after the first dashboard: offered once to an existing layout, after the widget named (removed by
 // the user, it stays out)
 const DB_NEW_WIDGETS = [['waiting', 'mytasks'], ['load', 'time'], ['dull', 'decisions'], ['worked', 'kpis']];
@@ -39,7 +43,8 @@ const DB_KPI_MAX = 8, DB_KPI_MIN = 2;
 // the period of one widget («Частые участники», «Мои программы»), apart from the page's own
 const DB_WPERIODS = ['day', 'week', 'month', 'year'];
 
-const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false, kpiCfg: false, people: null };
+// at: the first day of the past period shown (YYYY-MM-DD), '' for the current one
+const DB = { data: null, week: null, edit: false, loading: false, prefs: null, drag: null, summaryBusy: false, kpiCfg: false, people: null, at: '' };
 
 function dbPrefs() {
   if (DB.prefs) return DB.prefs;
@@ -62,6 +67,7 @@ function dbPrefs() {
     days: p.days === 'work' ? 'work' : 'cal',
     layout: layout && layout.length ? layout : DB_DEFAULT.map(([id, size]) => ({ id, size })),
     period: DB_PERIODS.includes(p.period) ? p.period : 'week',
+    compare: DB_COMPARE.includes(p.compare) ? p.compare : 'prev',
     feature: Number(p.feature) || 0,
     summary: p.summary && typeof p.summary === 'object' ? p.summary : null,
     // «Сегодня»: the day, the week or the month of its calendar (static/js/today.js)
@@ -109,7 +115,8 @@ async function loadDashboard() {
   const p = dbPrefs();
   const seq = (DB.seq = (DB.seq || 0) + 1);  // a period switched quickly: only the last answer is shown
   DB.loading = true;
-  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
+  const q = `period=${p.period}${p.feature ? `&feature=${p.feature}` : ''}${DB.at ? `&at=${DB.at}` : ''}&compare=${p.compare}`
+    + `&lang=${state.uiLang === 'en' ? 'en' : 'ru'}`;
   // every request on its own, each widget drawn in place as its data comes (the grid is shown at once with what
   // is known; the widgets are not drawn anew, so they do not rise a second time)
   const fresh = ids => { if (seq === DB.seq && state.appView === 'dashboard' && !DB.edit && !(DB.drag && DB.drag.on)) ids.forEach(dbRedrawWidget); };
@@ -123,12 +130,92 @@ async function loadDashboard() {
   if (seq !== DB.seq) return;
   DB.loading = false;
   // a failed request keeps what was shown rather than an empty «Обзор»
-  DB.data = data || (DB.data && DB.data.period === p.period ? DB.data : null);
+  DB.data = data || (DB.data && DB.data.period === p.period && DB.data.start === dbSpan()[0] ? DB.data : null);
   if (state.appView === 'dashboard') {
     dbRenderHead();
     fresh(dbPrefs().layout.map(w => w.id).filter(id => !DB_LOCAL_WIDGETS.includes(id) || id === 'people'));
   }
   await Promise.all(side);
+}
+
+// The period around a day, as app/dashboard._bounds: [first day, the day after the last] as YYYY-MM-DD
+function dbBounds(period, day) {
+  const y = day.getFullYear(), m = day.getMonth();
+  let a, b;
+  if (period === 'year') { a = new Date(y, 0, 1); b = new Date(y + 1, 0, 1); }
+  else if (period === 'quarter') { a = new Date(y, m - m % 3, 1); b = new Date(y, m - m % 3 + 3, 1); }
+  else if (period === 'month') { a = new Date(y, m, 1); b = new Date(y, m + 1, 1); }
+  else { a = dbMonday(day); b = new Date(a); b.setDate(a.getDate() + 7); }
+  return [calKey(a), calKey(b)];
+}
+
+// The period shown: the current one, or the past one DB.at is in
+function dbSpan() {
+  return dbBounds(dbPrefs().period, DB.at ? new Date(`${DB.at}T12:00:00`) : new Date());
+}
+
+// A past period stays one only when it is not the current one (a period switched from a past week may hold today)
+function dbSetAt(day) {
+  const period = dbPrefs().period, cur = dbBounds(period, new Date())[0];
+  const start = day ? dbBounds(period, new Date(`${day}T12:00:00`))[0] : '';
+  DB.at = start && start < cur ? start : '';
+}
+
+// The name of the period shown: «17–23 ноября», «Октябрь 2026», «III квартал 2026», «2025»
+function dbSpanName() {
+  const p = dbPrefs().period, [a, b] = dbSpan(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU';
+  const first = new Date(`${a}T12:00:00`), last = new Date(`${b}T12:00:00`);
+  last.setDate(last.getDate() - 1);
+  const y = first.getFullYear();
+  if (p === 'year') return String(y);
+  if (p === 'quarter') {
+    const q = Math.floor(first.getMonth() / 3);
+    return t('dbQuarterName').replace('{q}', () => ['I', 'II', 'III', 'IV'][q]).replace('{n}', () => q + 1).replace('{y}', () => y);
+  }
+  if (p === 'month') {
+    const name = first.toLocaleDateString(lang, { month: 'long' });
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
+  }
+  const other = last.getFullYear() !== new Date().getFullYear() ? ` ${last.getFullYear()}` : '';
+  const day = x => x.toLocaleDateString(lang, { day: 'numeric' });
+  if (first.getMonth() === last.getMonth()) {
+    const month = last.toLocaleDateString(lang, { day: 'numeric', month: 'long' }).replace(/\d+/, '').trim();
+    return lang === 'en-US' ? `${month} ${day(first)}–${day(last)}${other}` : `${day(first)}–${day(last)} ${month}${other}`;
+  }
+  const dm = x => x.toLocaleDateString(lang, { day: 'numeric', month: 'long' });
+  return `${dm(first)} – ${dm(last)}${other}`;
+}
+
+// ‹ the period before · its name · the next one › (none after the current one), «Сегодня» back to the current one
+function dbRenderNav() {
+  const el = document.getElementById('db-nav');
+  if (!el) return;
+  const now = !DB.at;
+  const arrow = d => `<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+  el.innerHTML = (now ? '' : `<button class="tk-btn" data-click="dbToCurrent" title="${escapeHtml(t('dbNavNowTip'))}">${escapeHtml(t('dbNavNow'))}</button>`)
+    + `<button class="tk-btn tk-btn-sq" data-click="dbShiftPeriod" data-click-args="[-1]" title="${escapeHtml(t('dbNavPrev'))}" aria-label="${escapeHtml(t('dbNavPrev'))}">${arrow('M15 6l-6 6 6 6')}</button>`
+    + `<span class="db-nav-name" aria-live="polite">${escapeHtml(dbSpanName())}</span>`
+    + `<button class="tk-btn tk-btn-sq" data-click="dbShiftPeriod" data-click-args="[1]" ${now ? 'disabled' : ''} title="${escapeHtml(t('dbNavNext'))}" aria-label="${escapeHtml(t('dbNavNext'))}">${arrow('M9 6l6 6-6 6')}</button>`;
+}
+
+function dbShiftPeriod(step) {
+  const [a, b] = dbSpan();
+  if (step > 0 && !DB.at) return;
+  const day = new Date(`${step < 0 ? a : b}T12:00:00`);
+  if (step < 0) day.setDate(day.getDate() - 1);
+  dbSetAt(calKey(day));
+  dbReload();
+}
+
+function dbToCurrent() {
+  DB.at = '';
+  dbReload();
+}
+
+function dbReload() {
+  loadDashboard();
+  renderDashboard();
+  dbRefreshDetail();
 }
 
 function dbMonday(d = new Date()) {
@@ -253,6 +340,7 @@ function dbHeadHtml(id, size) {
     if (id === 'apps' && DB.apps && DB.apps.enabled) tools.push(dbChartSwitch('apps', DB_APPS_KINDS, 'list'));
     if (id === 'apps') tools.push(dbWPeriodSwitch('apps'));
     if (id === 'kpis') {
+      tools.push(dbCompareSwitch());
       tools.push(`<button class="tk-btn tk-btn-sm db-kc-btn${DB.kpiCfg ? ' on' : ''}" data-click="dbKpiPanel" aria-expanded="${DB.kpiCfg}" title="${escapeHtml(t('kpiCfgTip'))}">`
         + '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>'
         + `<span>${escapeHtml(t('kpiCfg'))}</span></button>`);
@@ -329,6 +417,7 @@ function dbRenderHead() {
   // goes, as the pills of «Сегодня»; calendar or working days as chosen in «Настроить»
   const prog = document.getElementById('db-progress');
   if (prog) prog.innerHTML = d ? dbProgressPill(d) : '';
+  dbRenderNav();
   document.getElementById('db-periods').innerHTML = DB_PERIODS.map(k =>
     `<button role="radio" aria-checked="${p.period === k}" class="tk-seg-btn${p.period === k ? ' tk-on' : ''}" data-click="setDashPeriod" data-click-args='["${k}"]'>${escapeHtml(t(`dbPeriod_${k}`))}</button>`).join('');
   const f = p.feature ? featureById(p.feature) : null;
@@ -506,6 +595,20 @@ function dbChartSwitch(id, kinds, def) {
 function setDashChart(id, kind) {
   dbSave({ charts: { ...(dbPrefs().charts || {}), [id]: kind } });
   dbRedrawWidget(id);
+}
+
+// «Статистика»: compared with the period before or with the same days a year earlier
+function dbCompareSwitch() {
+  const cur = dbPrefs().compare;
+  return `<span class="db-wp" role="radiogroup" aria-label="${escapeHtml(t('dbCompare'))}" title="${escapeHtml(t('dbCompare'))}">${DB_COMPARE.map(k =>
+    `<button role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-click="setDashCompare" data-click-args='["${k}"]' title="${escapeHtml(t(`dbCmpTip_${k}`))}">${escapeHtml(t(`dbCmp_${k}`))}</button>`).join('')}</span>`;
+}
+
+function setDashCompare(k) {
+  if (!DB_COMPARE.includes(k) || dbPrefs().compare === k) return;
+  dbSave({ compare: k });
+  dbRedrawWidget('kpis');
+  loadDashboard();
 }
 
 // День · Неделя · Месяц · Год of a widget
@@ -855,18 +958,21 @@ function dbKpiFigure(key, d) {
   const def = DB_KPI[key], h = (d.history && d.history.values && d.history.values[key]) || null;
   const k = d.kpi;
   const now = h ? h[h.length - 1] : ({ meetings: k.meetings, hours: k.hours, mine: k.open, waiting: k.waiting, decisions: k.decisions, useless: k.useless })[key] ?? 0;
-  const before = h && h.length > 1 ? h[h.length - 2] : null;
+  // compared with what the server says (the period before, or the same days a year earlier); the trend's one before
+  const cmp = d.history && d.history.before;
+  const before = cmp && key in cmp ? cmp[key] : h && h.length > 1 ? h[h.length - 2] : null;
   let line = '', tone = 'flat';
   if (def.me && d.needs_me) return { value: '—', spark: '', line: '', tone, needsMe: true };
   if (key === 'mine' && k.overdue) { line = t('dbOverdueN').replace('{n}', () => k.overdue); tone = 'bad'; }
   else if (key === 'waiting' && k.waiting_overdue) { line = t('kpiWaitOverdue').replace('{n}', () => k.waiting_overdue); tone = 'warn'; }
   else if (before != null) {
     const x = Math.round((now - before) * 10) / 10;
-    if (!x) line = t('kpiSame');
-    else if (key === 'share') line = t('kpiWas').replace('{v}', () => `${before}%`);
+    const ago = d.compare === 'year';
+    if (!x) line = t(ago ? 'kpiSameYear' : 'kpiSame');
+    else if (key === 'share') line = t(ago ? 'kpiWasYear' : 'kpiWas').replace('{v}', () => `${before}%`);
     else {
       const unit = def.unit === 'h' ? ` ${t('dbHoursShort')}` : def.unit === 'min' ? ` ${t('dbMinShort')}` : '';
-      line = `${x > 0 ? '+' : '−'}${dbNum(Math.abs(x))}${unit} ${t(`dbVsBefore_${d.period}`)}`;
+      line = `${x > 0 ? '+' : '−'}${dbNum(Math.abs(x))}${unit} ${t(`${ago ? 'dbVsYear' : 'dbVsBefore'}_${d.period}`)}`;
     }
     if (x && def.better) tone = (x > 0) === (def.better > 0) ? 'up' : def.worse;
   }
@@ -1033,6 +1139,7 @@ function dbTime(d) {
   const lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', today = d.today;
   const label = x => {
     const dt = new Date(`${x.key}T12:00:00`);
+    if (x.kind === 'month') return dt.toLocaleDateString(lang, { month: 'short' }).replace('.', '');
     return x.kind === 'day' ? dt.toLocaleDateString(lang, { weekday: 'short' }) : dt.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
   };
   const top = b.reduce((m, x) => (x.hours > m.hours ? x : m), b[0]);
@@ -1108,9 +1215,8 @@ function dbRefreshDetail() {
 
 function setDashPeriod(period) {
   dbSave({ period });
-  loadDashboard();
-  renderDashboard();
-  dbRefreshDetail();
+  dbSetAt(DB.at);  // a past day stays: from a past month to its year
+  dbReload();
 }
 
 function setDashFeature(id) {
@@ -1180,7 +1286,7 @@ async function dbOpenDetail(kind, person = '') {
   const p = dbPrefs();
   Object.assign(DB_DETAIL, { kind, person, data: null, filter: kind === 'useless' ? 'useless' : 'all' });
   dbRenderDetail();
-  const q = new URLSearchParams({ kind, period: p.period, feature: p.feature || 0, person });
+  const q = new URLSearchParams({ kind, period: p.period, feature: p.feature || 0, person, at: DB.at });
   const data = await fetch(`/api/dashboard/detail?${q}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
   if (DB_DETAIL.kind !== kind || DB_DETAIL.person !== person) return;  // another one opened meanwhile
   DB_DETAIL.data = data || { error: true };
