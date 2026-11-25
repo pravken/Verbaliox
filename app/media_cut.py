@@ -253,6 +253,19 @@ def run_cut(ffmpeg: str, media: Path, intervals: List[Interval], has_video: bool
     return out
 
 
+def _remove_after(proc: subprocess.Popen, out: Path) -> None:
+    """The unfinished file removed once FFmpeg has let it go: on Windows a process just killed still holds it, and
+    the error of the delete took the place of the cancel (found in an audit)."""
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        out.unlink(missing_ok=True)
+    except OSError as e:
+        print(f"[cut] {out.name} not removed: {e}", flush=True)
+
+
 def _follow(proc: subprocess.Popen, total: float, out: Path, on_progress: Callable[[float], None],
             check_cancel: Callable[[], None]) -> None:
     """Reports FFmpeg's progress (-progress pipe:1) and stops it on a cancel. Its messages are read
@@ -277,9 +290,9 @@ def _follow(proc: subprocess.Popen, total: float, out: Path, on_progress: Callab
         proc.wait()
     except BaseException:
         proc.kill()
-        out.unlink(missing_ok=True)
+        _remove_after(proc, out)
         raise
     if proc.returncode != 0:
-        out.unlink(missing_ok=True)
+        _remove_after(proc, out)
         drain.join(timeout=2)
         raise RuntimeError("FFmpeg: " + "\n".join(err_tail)[-300:])
