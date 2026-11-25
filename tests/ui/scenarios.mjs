@@ -1542,8 +1542,17 @@ await step('caption models not downloaded', async () => {
     await page.selectOption('#studio-tr-model', `dl:${FAST}`);
     await until(() => !!document.querySelector('.vx-dlg-foot button[data-a="yes"]'), 'the question did not come again');
     await page.click('.vx-dlg-foot button[data-a="yes"]');
-    for (let i = 0; i < 30 && !fake.pulls.length; i++) await sleep(100);
+    for (let i = 0; i < 80 && !fake.pulls.length; i++) await sleep(100);
     expect(fake.pulls[0] === FAST, `the pull was not asked for the 1.8B: ${fake.pulls}`);
+    // a status read older than the download (the settings' /api/system) says «not downloading» for a moment: the
+    // choice waits for the download, it is not dropped (it was: the model would never have become the mode's)
+    await until(() => capDl.pending.length === 1, 'the chosen download is not followed');
+    const kept = await page.evaluate(() => {
+      updateOllamaUI({ ...(state.system.ollama || {}), pull_state: { active: false, progress: 0, logs: [] } });
+      capDlTick();
+      return capDl.pending.map(p => p.key).join();
+    });
+    expect(kept === 'live_translate_model_fast', `a stale status read dropped the chosen download: «${kept}»`);
     fake.progress = 37;
     let row = null;
     for (let i = 0; i < 50 && !(row && row[0] === '37%' && row[1] === `dl:${FAST}`); i++) {
@@ -1576,7 +1585,7 @@ await step('caption models not downloaded', async () => {
     await page.evaluate(() => { closeStudioModelsPop(); state.system.ollama.installed = true; saveUiSetting('live_translate_model_fast', ''); studioNeedSeen.dismissed = {}; studioTranslateModelsChanged(); });
     await until(() => !document.getElementById('st-need-hint').classList.contains('hidden'), 'the callout did not come back');
     await page.click('#st-need-hint .st-attn-btn');
-    for (let i = 0; i < 30 && fake.pulls.length < 2; i++) await sleep(100);
+    for (let i = 0; i < 80 && fake.pulls.length < 2; i++) await sleep(100);
     expect(fake.pulls.length === 2 && fake.pulls[1] === FAST && !(await page.isVisible('#st-need-hint')), `the callout's «Скачать» did not download: ${fake.pulls}`);
     fake.done = true;
     await sleep(1500);

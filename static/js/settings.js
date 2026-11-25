@@ -2425,8 +2425,9 @@ async function capDlChoose(kind, id, key) {
       .replace('{name}', () => name).replace('{size}', () => modelSizeLabel(item));
     if (!(await askConfirm(ask, false, t('uiDownload')))) return false;
     if (kind === 'tr') {
-      await pullTranslateModel(id);
-      if (!(state.ollamaPullState || {}).active) return false;  // Ollama not installed and its install declined
+      // false: Ollama not installed and its install declined (a status read meanwhile may say «not downloading»
+      // before the download's own poll does: not asked of the state)
+      if (!(await pullTranslateModel(id))) return false;
     } else if (item.engine === 'onnx') {
       await startOnnxModelDownload(id);
     } else {
@@ -2434,7 +2435,7 @@ async function capDlChoose(kind, id, key) {
     }
   }
   capDl.pending = capDl.pending.filter(p => p.key !== key);
-  capDl.pending.push({ kind, id, key, pct: 1, started: Date.now(), seen: running });
+  capDl.pending.push({ kind, id, key, pct: 1, goneSince: 0 });
   if (!capDl.timer) capDl.timer = setInterval(capDlTick, 1000);
   capDlTick();
   return true;
@@ -2453,18 +2454,24 @@ function capDlInstalledAs(p) {
 }
 
 // The downloads chosen from the lists: the percent, and at the end the model becomes the choice it was picked for.
-// A download that ended without the model (an error, said by the download itself) leaves the choice as it was
+// A download that ended without the model (an error, said by the download itself) leaves the choice as it was.
+// One reading without the download is not its end: the status read with the settings (/api/system) can be older
+// than the download's own poll and say «not downloading» for a moment (the choice was lost so); the download is
+// taken as gone (ended with an error, said by the download itself) once it stays away for CAP_DL_GONE_MS
+const CAP_DL_GONE_MS = 8000;
 function capDlTick() {
+  const now = Date.now();
   for (const p of [...capDl.pending]) {
-    const now = modelDownloadsNow().find(d => d.id === p.id);
-    if (now) { p.pct = now.pct || p.pct; p.seen = true; continue; }
+    const dl = modelDownloadsNow().find(d => d.id === p.id);
+    if (dl) { p.pct = dl.pct || p.pct; p.goneSince = 0; continue; }
     const as = capDlInstalledAs(p);
     if (as) {
       capDl.pending = capDl.pending.filter(x => x !== p);
       capDlApply(p, as);
-    } else if (p.seen || Date.now() - p.started > 10000) {
-      capDl.pending = capDl.pending.filter(x => x !== p);
+      continue;
     }
+    if (!p.goneSince) p.goneSince = now;
+    if (now - p.goneSince > CAP_DL_GONE_MS) capDl.pending = capDl.pending.filter(x => x !== p);
   }
   if (!capDl.pending.length && capDl.timer) { clearInterval(capDl.timer); capDl.timer = null; }
   renderTranslateChoices();
@@ -2776,7 +2783,7 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   let allowInstall = false;
   if (state.system && state.system.ollama && !state.system.ollama.installed) {
     allowInstall = await askConfirm(t('uiOllamaIsNotInstalled'), false, t('cfInstall'));
-    if (!allowInstall) return;
+    if (!allowInstall) return false;
   }
   if (makeActive) document.getElementById('set-ollama-model').value = model;  // not for the embedding model
   const pretty = formatModelName(model);
@@ -2803,6 +2810,7 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   });
 
   startOllamaPollingLoop(model);
+  return true;  // started (false: Ollama is not installed and its install was declined)
 }
 
 // The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog; one not
