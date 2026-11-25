@@ -38,7 +38,10 @@ class _NvmlMemory(ctypes.Structure):
 _nvml_lock = threading.Lock()
 _ollama_loading = threading.Event()  # set while the preload button loads an Ollama model
 _ollama_loading_name: List[Optional[str]] = [None]
-_nvml: Dict[str, Any] = {"lib": None, "handle": None, "failed": False}
+_nvml: Dict[str, Any] = {"lib": None, "handle": None, "failed": False, "failed_at": 0.0}
+# NVML that failed is tried again after this pause, not never: a driver not ready after the PC woke up, or reset
+# after a hang of the video card, left the video memory unknown until the app was restarted (audit В22)
+NVML_RETRY_SEC = 300.0
 
 
 def _nvml_memory() -> Optional[Tuple[int, int]]:
@@ -46,9 +49,13 @@ def _nvml_memory() -> Optional[Tuple[int, int]]:
     (used, total) bytes of GPU 0 from the driver's NVML library, loaded once into this process.
     Faster than starting nvidia-smi on every poll, and nothing is left hanging if the driver stalls.
     """
+    import time
+
     with _nvml_lock:
         if _nvml["failed"]:
-            return None
+            if time.monotonic() - _nvml["failed_at"] < NVML_RETRY_SEC:
+                return None
+            _nvml.update(lib=None, handle=None, failed=False)  # loaded again: the old handle may be dead
         try:
             if _nvml["lib"] is None:
                 lib = ctypes.CDLL("nvml.dll") if sys.platform == "win32" else ctypes.CDLL("libnvidia-ml.so.1")
@@ -60,10 +67,12 @@ def _nvml_memory() -> Optional[Tuple[int, int]]:
                 _nvml.update(lib=lib, handle=handle)
             mem = _NvmlMemory()
             if _nvml["lib"].nvmlDeviceGetMemoryInfo(_nvml["handle"], ctypes.byref(mem)) != 0:
+                _nvml.update(lib=None, handle=None)  # the next poll starts NVML again (a handle dead after a reset)
                 return None
             return int(mem.used), int(mem.total)
         except Exception:
-            _nvml["failed"] = True  # no NVIDIA driver: do not try again on every poll
+            # no NVIDIA driver, or it stopped answering: not tried again on every poll
+            _nvml.update(failed=True, failed_at=time.monotonic())
             return None
 
 

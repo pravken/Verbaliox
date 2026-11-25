@@ -269,5 +269,43 @@ class ClearOneThingTest(unittest.TestCase):
         self.assertEqual(commitments.delete_for_meeting(m["id"]), 0)
 
 
+class NvmlAgainTest(unittest.TestCase):
+    """Audit В22: one failure of NVML (the driver not ready after sleep, a reset of the video card) left the video
+    memory unknown until a restart; it is tried again after a pause, and a dead handle is opened anew."""
+
+    def test_nvml_is_tried_again(self):
+        from app import vram
+
+        now = [1000.0]
+        state = {"init": 1, "mem": 0, "inits": 0}
+
+        class Lib:
+            def nvmlInit_v2(self):
+                state["inits"] += 1
+                return state["init"]
+
+            def nvmlDeviceGetHandleByIndex_v2(self, i, ref):
+                return 0
+
+            def nvmlDeviceGetMemoryInfo(self, handle, ref):
+                ref._obj.used, ref._obj.total = 3, 8
+                return state["mem"]
+
+        saved = dict(vram._nvml)
+        self.addCleanup(lambda: (vram._nvml.clear(), vram._nvml.update(saved)))
+        vram._nvml.update(lib=None, handle=None, failed=False, failed_at=0.0)
+        with mock.patch("ctypes.CDLL", return_value=Lib()), mock.patch("time.monotonic", lambda: now[0]):
+            self.assertIsNone(vram._nvml_memory())  # the driver not ready
+            state["init"] = 0
+            self.assertIsNone(vram._nvml_memory())  # not on every poll
+            now[0] += vram.NVML_RETRY_SEC
+            self.assertEqual(vram._nvml_memory(), (3, 8))
+            state["mem"] = 1  # the handle died (a reset of the card)
+            self.assertIsNone(vram._nvml_memory())
+            state["mem"] = 0
+            self.assertEqual(vram._nvml_memory(), (3, 8))  # opened anew at the next poll
+        self.assertEqual(state["inits"], 3)
+
+
 if __name__ == "__main__":
     unittest.main()
