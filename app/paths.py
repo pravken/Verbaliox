@@ -80,8 +80,10 @@ def _log(msg: str) -> None:
     print(f"[data] {msg}", flush=True)
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        from app.applog import scrub  # the Windows user's name in the paths it moves
+
         with (DATA_DIR / "migration.log").open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
+            f.write(scrub(line) + "\n")
     except OSError:
         pass
 

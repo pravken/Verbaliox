@@ -799,7 +799,7 @@ def api_relink_media(meeting_id: int, payload: RelinkPayload) -> Any:
     from app.database import relink_media
 
     relink_media(meeting_id, str(target.resolve()))
-    print(f"[relink] meeting {meeting_id}: {target}", flush=True)
+    print(f"[relink] meeting {meeting_id}: linked to a file of type {target.suffix.lower() or '-'}", flush=True)  # not its name: a title
     if not m.get("segments") and m.get("status") in ("failed", "cancelled", "cleared"):
         update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание",
                                 error_message="")
