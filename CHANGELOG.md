@@ -104,6 +104,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
   the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
   completed in the background on first use, and until then the processor uses the model as before.
+- **Short replies in the captions are translated**: a line of one word («No.», «Yes?», «Да.») gets its translation; it
+  was shown untranslated. Fillers («um», «эм») still are not translated.
 
 ## 0.9.3 — English
 
@@ -1339,6 +1341,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
   как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
   первом использовании, а до этого процессор работает с моделью как раньше.
+- **Короткие ответы в субтитрах переводятся**: строка из одного слова («No.», «Yes?», «Да.») получает перевод, раньше
+  она оставалась без него. Слова-паразиты («um», «эм») по-прежнему не переводятся.
 
 ## 0.9.3
 

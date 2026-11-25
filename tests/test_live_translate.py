@@ -87,3 +87,32 @@ class DraftIntervalTest(unittest.TestCase):
 
         self.assertEqual(self._tr(0.6).draft_interval(), DRAFT_INTERVAL_SEC)
         self.assertAlmostEqual(self._tr(0.3).draft_interval(), 0.9)
+
+
+class ShortReplyTest(unittest.TestCase):
+    """A line of one short word is translated without the model: a translator answered «No.» with «No.», and the
+    page hid the translation as the same text."""
+
+    def test_one_word_replies(self):
+        from app.live_translate import short_reply
+
+        self.assertEqual(short_reply("No.", "ru"), "Нет.")
+        self.assertEqual(short_reply("No?", "ru"), "Нет?")
+        self.assertEqual(short_reply("Да?", "en"), "Yes?")
+        self.assertEqual(short_reply("NO!", "ru"), "НЕТ!")
+
+    def test_fillers_and_phrases_are_not_short_replies(self):
+        from app.live_translate import short_reply
+
+        self.assertIsNone(short_reply("Um...", "ru"))
+        self.assertIsNone(short_reply("No way.", "ru"))
+        self.assertIsNone(short_reply("No.", "de"))  # no list for that language: the model translates
+
+    def test_the_translator_is_not_asked(self):
+        from app.live_translate import LiveTranslator
+
+        tr = LiveTranslator.__new__(LiveTranslator)
+        tr.target, tr.pair = "ru", ["ru", "en"]
+        tr._source_lang = lambda: "en"
+        tr._chat = lambda *a, **k: self.fail("the model was asked")
+        self.assertEqual(tr._translate_clean("No.", "en", target="ru"), "Нет.")

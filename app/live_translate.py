@@ -29,6 +29,34 @@ _CJK_RUN = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf
 _QUOTES = "\"'`«»“”„‟‘’‚‛‹›〝〞〟＂ "
 
 
+# Short replies a line can be made of (the models are not asked: a general model invents symbols for «Um», a
+# translator answers «No.» with «No.»). By the target language; fillers («um», «эм») have no entry and stay as they are
+SHORT_REPLIES: Dict[str, Dict[str, str]] = {
+    "ru": {"no": "Нет", "nope": "Не-а", "nah": "Не", "yes": "Да", "yeah": "Да", "yep": "Ага", "yup": "Ага",
+           "ok": "Хорошо", "okay": "Хорошо", "sure": "Конечно", "right": "Верно", "hi": "Привет", "hey": "Привет",
+           "bye": "Пока", "wow": "Ого", "thanks": "Спасибо", "oh": "О", "why": "Почему", "what": "Что", "who": "Кто",
+           "how": "Как", "when": "Когда", "where": "Где", "so": "Итак", "well": "Ну", "and": "И", "but": "Но"},
+    "en": {"нет": "No", "не": "No", "да": "Yes", "ага": "Uh-huh", "угу": "Uh-huh", "ок": "OK", "окей": "OK",
+           "так": "So", "ну": "Well", "вот": "There", "привет": "Hi", "пока": "Bye", "спасибо": "Thanks",
+           "что": "What", "кто": "Who", "как": "How", "где": "Where", "когда": "When", "почему": "Why",
+           "и": "And", "но": "But", "а": "And", "ого": "Wow", "ой": "Oops"},
+}
+
+
+def short_reply(text: str, target: str) -> Optional[str]:
+    """The translation of a line that is one short word («No.», «Да?»), with its punctuation kept; None: not one."""
+    m = re.fullmatch(r"\s*([^\W\d_]+)([.!?…,]*)\s*", text or "")
+    if not m:
+        return None
+    word = m.group(1)
+    tr = SHORT_REPLIES.get((target or "").split("-")[0].lower(), {}).get(word.lower().replace("ё", "е"))
+    if tr is None:
+        return None
+    if word.isupper() and len(word) > 1:
+        tr = tr.upper()
+    return tr + m.group(2)
+
+
 def _first_line(text: str) -> str:
     """A caption translation is one line; anything after it is the model talking."""
     for line in (text or "").splitlines():
@@ -434,8 +462,11 @@ class LiveTranslator:
         from app.dub_text import has_foreign_script
 
         target = target or self.target_for(src_lang)
+        quick = short_reply(text, target)
+        if quick is not None:
+            return quick  # «No.», «Да?»: a word of its own, translated here
         if len(re.sub(r"[\W_]+", "", text)) <= 3:
-            return text  # "Um...", "Ok": nothing to translate, models invent symbols for it
+            return text  # "Um...", "Hmm": nothing to translate, models invent symbols for it
         tr = collapse_repeats(_first_line(self._chat(text, timeout=timeout, src_lang=src_lang, target=target)))
         if has_foreign_script(tr, target) or _degenerate(text, tr):
             tr = collapse_repeats(_first_line(self._chat(text, timeout=timeout, src_lang=src_lang, strict=True, target=target)))
