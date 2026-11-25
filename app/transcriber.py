@@ -1168,11 +1168,16 @@ def _load_whisper_with_fallback(model_name: str, device: str, compute_type: str)
         try:
             from faster_whisper import WhisperModel
 
+            # on the processor with the threads of «Потоки процессора» and the live captions' share (the ONNX
+            # models had them, Whisper took its own default: audit В22)
+            from app.asr_onnx import queue_threads
+
             model = WhisperModel(
                 model_or_path,
                 device=dev,
                 compute_type=ctype,
                 download_root=str(whisper_cache),
+                cpu_threads=queue_threads() if dev == "cpu" else 0,
             )
             if (dev, ctype) != (device, compute_type):
                 print(f"[transcriber] Whisper {model_name} loaded as {dev}/{ctype} instead of {device}/{compute_type}", flush=True)

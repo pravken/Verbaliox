@@ -130,3 +130,24 @@ class QueueBudgetCountsOllamaTest(unittest.TestCase):
                 without = asr_onnx.queue_threads(settings, captions=True)
             with mock.patch.object(live_translate, "cpu_threads_in_use", return_value=2):
                 self.assertEqual(asr_onnx.queue_threads(settings, captions=True), without - 2)
+
+
+class WhisperThreadsTest(unittest.TestCase):
+    """Audit В22: Whisper on the processor took its own number of threads, not «Потоки процессора» and the share
+    the live captions leave (the ONNX models had them)."""
+
+    def test_whisper_on_the_processor_takes_the_budget(self):
+        import sys
+        import types
+
+        from app import transcriber
+
+        made = []
+        fake = types.SimpleNamespace(WhisperModel=lambda *a, **k: made.append(k) or object())
+        with mock.patch.dict(sys.modules, {"faster_whisper": fake}), \
+                mock.patch.object(asr_onnx, "queue_threads", return_value=3), \
+                mock.patch("app.model_manager.get_whisper_model_path", return_value="m"), \
+                mock.patch.object(transcriber, "register_cuda_dlls"):
+            transcriber._load_whisper_with_fallback("small", "cpu", "int8")
+            transcriber._load_whisper_with_fallback("small", "cuda", "float16")
+        self.assertEqual([k["cpu_threads"] for k in made], [3, 0])
