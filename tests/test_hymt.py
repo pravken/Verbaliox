@@ -213,7 +213,9 @@ class HyMtPromptTest(unittest.TestCase):
         fake = _Ollama(chat=answer)
         with mock.patch.object(live_translate.httpx, "Client", fake), \
                 mock.patch.object(live_translate, "_base_url", return_value="http://127.0.0.1:11434"), \
+                mock.patch("app.llm_text._ask_ollama", return_value=None), \
                 mock.patch("app.idle_unload.touch"), mock.patch("app.idle_unload.ollama_keep_alive", return_value="10m"):
+            # the question whether the model can think (app/llm_text.thinking_off) goes to the fake too: unanswered
             out = self._translator(model)._translate_clean("Let's move the meeting to Friday", "en", target="ru")
         return fake, out
 
