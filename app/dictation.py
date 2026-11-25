@@ -298,6 +298,61 @@ def _unicode_keystrokes(text: str) -> List[Tuple[int, int, int]]:
     return out
 
 
+def _global_copy(kernel32, data: bytes):
+    """A movable global memory block holding `data`, as SetClipboardData wants it; None when Windows gave none
+    (the block is freed then). Nothing is written through a NULL pointer: the process crashed (found in an audit)."""
+    import ctypes
+
+    GMEM_MOVEABLE = 0x0002
+    h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(data))
+    if not h:
+        return None
+    p = kernel32.GlobalLock(h)
+    if not p:
+        kernel32.GlobalFree(h)
+        return None
+    try:
+        ctypes.memmove(p, data, len(data))
+    finally:
+        kernel32.GlobalUnlock(h)
+    return h
+
+
+def _write_clipboard(user32, kernel32, value: str, tries: int = 10) -> bool:
+    """Puts the text into the clipboard, kept out of its history. A block the clipboard did not take (it was busy:
+    a remote desktop, a clipboard manager) is freed here; one it took belongs to Windows."""
+    CF_UNICODETEXT = 13
+    h = _global_copy(kernel32, (value + "\0").encode("utf-16-le"))
+    if h is None:
+        return False
+    for _ in range(tries):
+        if user32.OpenClipboard(None):
+            break
+        time.sleep(0.05)
+    else:
+        kernel32.GlobalFree(h)
+        return False
+    try:
+        user32.EmptyClipboard()
+        if not user32.SetClipboardData(CF_UNICODETEXT, h):
+            kernel32.GlobalFree(h)
+            return False
+        # Kept out of the clipboard history (Win+V) and its sync to other devices: the dictated text
+        # is in the clipboard only for the moment of the paste
+        # (not ExcludeClipboardContentFromMonitorProcessing: remote desktops and virtual machines watch
+        # the clipboard that way, and the paste there would get nothing)
+        for name in ("CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"):
+            fmt = user32.RegisterClipboardFormatW(name)
+            if not fmt:
+                continue
+            hz = _global_copy(kernel32, b"\0\0\0\0")  # a DWORD 0: «no»
+            if hz is not None and not user32.SetClipboardData(fmt, hz):
+                kernel32.GlobalFree(hz)
+    finally:
+        user32.CloseClipboard()
+    return True
+
+
 def type_text(text: str) -> None:
     if sys.platform != "win32":
         return
@@ -305,7 +360,10 @@ def type_text(text: str) -> None:
     from ctypes import wintypes
 
     user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
+    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
     kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalFree.restype = wintypes.HGLOBAL
     kernel32.GlobalLock.restype = ctypes.c_void_p
     kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
     # Handles are 64-bit: without argtypes ctypes passes them as a 32-bit int and fails (OverflowError)
@@ -317,7 +375,7 @@ def type_text(text: str) -> None:
     user32.RegisterClipboardFormatW.restype = wintypes.UINT
     user32.EnumClipboardFormats.argtypes = [wintypes.UINT]
     user32.EnumClipboardFormats.restype = wintypes.UINT
-    CF_UNICODETEXT, GMEM_MOVEABLE = 13, 0x0002
+    CF_UNICODETEXT = 13
 
     def clip_formats() -> Optional[List[int]]:
         """The formats in the clipboard, without asking their owner to render any."""
@@ -374,37 +432,7 @@ def type_text(text: str) -> None:
             user32.CloseClipboard()
 
     def write_clip(value: str) -> bool:
-        data = ctypes.create_unicode_buffer(value)
-        size = ctypes.sizeof(data)
-        h = kernel32.GlobalAlloc(GMEM_MOVEABLE, size)
-        p = kernel32.GlobalLock(h)
-        ctypes.memmove(p, data, size)
-        kernel32.GlobalUnlock(h)
-        for _ in range(10):
-            if user32.OpenClipboard(None):
-                break
-            time.sleep(0.05)
-        else:
-            return False
-        try:
-            user32.EmptyClipboard()
-            user32.SetClipboardData(CF_UNICODETEXT, h)
-            # Kept out of the clipboard history (Win+V) and its sync to other devices: the dictated text
-            # is in the clipboard only for the moment of the paste
-            # (not ExcludeClipboardContentFromMonitorProcessing: remote desktops and virtual machines watch
-            # the clipboard that way, and the paste there would get nothing)
-            for name in ("CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"):
-                fmt = user32.RegisterClipboardFormatW(name)
-                hz = kernel32.GlobalAlloc(GMEM_MOVEABLE, 4)  # a DWORD 0: «no»
-                pz = kernel32.GlobalLock(hz)
-                if pz:
-                    ctypes.memset(pz, 0, 4)
-                    kernel32.GlobalUnlock(hz)
-                    if fmt:
-                        user32.SetClipboardData(fmt, hz)
-        finally:
-            user32.CloseClipboard()
-        return True
+        return _write_clipboard(user32, kernel32, value)
 
     VK_CONTROL, VK_V, KEYUP = 0x11, 0x56, 0x0002
     formats = clip_formats()
@@ -416,6 +444,8 @@ def type_text(text: str) -> None:
         return
     previous = read_clip()
     if not write_clip(text + " "):
+        if previous is not None:  # emptied, and the text not taken: what was there comes back
+            write_clip(previous)
         return
     for vk in (0x12, 0x10):  # Alt and Shift of the hotkey may still be held
         user32.keybd_event(vk, 0, KEYUP, 0)
