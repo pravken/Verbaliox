@@ -33,8 +33,12 @@ was checked — or when the user says so («давай не бету»).
    e.g. a fixed date that went stale, a background thread of another test). Merge with a merge commit when
    green, the merge state clean, and the user asked for the release.
 5. **The Release workflow** on `main` with the tag: `actions_run_trigger`, `release.yml`, ref `main`,
-   inputs `{"tag": "vX.Y.Z"}`. It builds the launcher and the installer, signs `SHA256SUMS.txt`, checks the
-   signature with the app's key and publishes.
+   inputs `{"tag": "vX.Y.Z"}`. Three jobs, each on its own runner: **test** (packages from the hash-locked
+   `requirements-test.txt`, the unit tests; no secrets), **build** (no pip install: the launcher, the zip, the
+   installer and `SHA256SUMS.txt`, uploaded as the artifact `verbaliox-release`), **sign-publish** (the only
+   job with `RELEASE_SIGNING_KEY` and a write token: re-checks every file against `SHA256SUMS.txt`, signs it,
+   checks the signature with the app's key and publishes). A red job: read its log (`get_job_logs`); a failed
+   checksum or signature check is never worked around — find why.
 6. **Check what was published** (`get_release_by_tag`): not a draft; `prerelease` true for a beta only; the
    assets `Verbaliox-Installer-vX.Y.Z.exe`, `Verbaliox-vX.Y.Z.zip`, `Verbaliox.exe`, `SHA256SUMS.txt`,
    `SHA256SUMS.txt.minisig`; the body begins with the English section. Tell the user, with the link and
@@ -42,6 +46,11 @@ was checked — or when the user says so («давай не бету»).
 
 ## A build without a tag
 
-`actions_run_trigger` `release.yml` on the working branch with `{"tag": ""}`: the launcher (`build_exe.py`) and
-the Inno Setup installer compile; nothing is published. Use it after changes to `run.py`, `build_exe.py`,
-`installer/`, `setup.bat`, `update.bat`.
+`actions_run_trigger` `release.yml` on the working branch with `{"tag": ""}`: the jobs test and build run (the
+launcher from `build_exe.py` and the Inno Setup installer compile, the artifact `verbaliox-release` holds them
+with `SHA256SUMS.txt`, unsigned); sign-publish is skipped, so the signing key reaches no runner and nothing is
+published. Use it after changes to `run.py`, `build_exe.py`, `installer/`, `setup.bat`, `update.bat`,
+`release.yml` or `requirements-test.*`.
+
+`requirements-test.txt` is generated: change `requirements-test.in`, then run the command in the header of
+`requirements-test.txt` (`uv pip compile ... --universal --python-version 3.11 --generate-hashes`).

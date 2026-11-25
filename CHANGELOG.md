@@ -27,6 +27,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   instructions to it.
 - **The logs leave out more**: the Windows user name in the first line and in `migration.log`, one-time sign-in
   addresses, session cookies, and the names of notes and files (the recording's number instead).
+- **Releases are signed on a runner without third-party packages**: the tests (with packages pinned by their
+  hashes), the build and the signature run on separate machines; the release key reaches only the last one,
+  which checks the built files against their checksums before signing them.
 - **Smaller fixes**: network paths in any spelling of their slashes are refused by «Show in folder»; the browser
   mode sends the session key only to a server that proves it is Verbaliox; the window grants the page only the
   permissions it uses; the scripts never run a folder or branch name as a command, and removing the installed
@@ -1391,6 +1394,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   указания.
 - **Журналы скрывают больше**: имя пользователя Windows в первой строке и в `migration.log`, одноразовые адреса
   входа, cookie сессии, названия заметок и файлов (вместо них — номер записи).
+- **Релизы подписываются на машине без сторонних пакетов**: тесты (с пакетами, закреплёнными по хешам), сборка
+  и подпись идут на отдельных машинах; ключ релиза попадает только на последнюю, и она сверяет собранные файлы
+  с их контрольными суммами перед подписью.
 - **Мелкие исправления**: «Показать в папке» отклоняет сетевые пути при любом написании косых черт; режим браузера
   отправляет ключ сессии только серверу, который подтвердил, что он Verbaliox; окно выдаёт странице только те
   разрешения, которыми она пользуется; скрипты не выполняют название папки или ветки как команду, а удаление
