@@ -276,6 +276,24 @@ await step('player frames reuse their layers', async () => {
   expect(r.filtered === 1, `the speakers' filter did not draw the layers again: ${r.filtered}`);
 });
 
+// «Как прошёл разговор» (a bar per phrase) is drawn when the speakers' tab is shown, not into the hidden tab at
+// each opening of a recording (audit В22)
+await step('talk analytics wait for their tab', async () => {
+  await page.evaluate(() => openRecordTab('transcript'));
+  const asked = [];
+  const seen = r => { if (/\/analytics$/.test(r.url())) asked.push(r.url()); };
+  page.on('request', seen);
+  await page.evaluate(() => renderSpeakersPanel());
+  await sleep(300);
+  const hidden = await page.evaluate(() => document.querySelectorAll('#talk-analytics .sp-lane').length);
+  await page.evaluate(() => openRecordTab('speakers'));
+  await until(() => document.querySelectorAll('#talk-analytics .sp-lane').length > 0, 'the speakers tab has no lanes');
+  page.off('request', seen);
+  await page.evaluate(() => openRecordTab('transcript'));
+  expect(hidden === 0, `the hidden tab was drawn: ${hidden} lanes`);
+  expect(asked.length === 1, `the analytics were asked ${asked.length} times`);
+});
+
 // «Сведения»: four cards of «key — value» rows, the actions of each under a line (only the program's own)
 await step('recording details', async () => {
   await page.evaluate(() => openRecordTab('info'));
