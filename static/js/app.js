@@ -1322,13 +1322,18 @@ function renderMyNotesEditor(box) {
 const MARKDOWN_TAGS = ['p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'del', 's', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'sup', 'sub'];
 function sanitizedMarkdown(md) {
-  const html = DOMPurify.sanitize(marked.parse(md || ''), {
+  return sanitizedHtml(marked.parse(md || ''));
+}
+
+// HTML kept from an earlier sanitizedMarkdown (a card's saved summary): sanitized again when shown, since
+// what is stored (the settings, a restored backup) may hold anything
+function sanitizedHtml(html) {
+  return DOMPurify.sanitize(String(html || ''), {
     ALLOWED_TAGS: MARKDOWN_TAGS, ALLOWED_ATTR: ['href', 'title', 'start', 'align', 'colspan', 'rowspan'],
     ALLOWED_URI_REGEXP: /^https?:\/\//i, ALLOW_DATA_ATTR: false,
     // not addresses: DOMPurify would hold them to the URI rule above and drop them («3.» shown as «1.»)
     ADD_URI_SAFE_ATTR: ['start', 'align', 'colspan', 'rowspan'],
   });
-  return html;
 }
 
 function renderMarkdownWithTimestamps(box, md, durationSec) {

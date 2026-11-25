@@ -185,6 +185,9 @@ function accentColor() { return getComputedStyle(document.documentElement).getPr
 // (el.dataset.x). A text from a recording can never become a placeholder: jsArg makes it a string.
 const PAGE_EVENTS = ['click', 'dblclick', 'change', 'input', 'keydown', 'contextmenu', 'dragstart', 'dragover', 'dragleave', 'drop'];
 const PAGE_OWN_EVENTS = { focusin: 'focus', focusout: 'blur', error: 'error' };  // of the element itself
+// A failed image runs its handler with no click at all: only these may be named there, so markup that
+// reached the page from stored data (a restored backup) cannot start any other function by itself
+const PAGE_ERROR_FNS = new Set(['removeElement', 'tileIconFallback']);
 
 // The event as an inline handler saw it: its currentTarget is the element that has the handler
 // (the listener is on the document, so the real one is the document). Methods act on the real event.
@@ -231,6 +234,10 @@ function callPage(name, ...args) {
 
 function runPageHandler(el, type, ev) {
   const name = el.getAttribute('data-' + type);
+  if (type === 'error' && !PAGE_ERROR_FNS.has(name)) {
+    console.error(`data-error: "${name}" is not a fallback of an image`);
+    return;
+  }
   const fn = pageFunction(name);
   if (!fn) {
     console.error(`data-${type}: no page function "${name}"`);
