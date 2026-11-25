@@ -557,11 +557,13 @@ def _write_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[Di
     only the lines that changed are written (an edit of one line writes one row)."""
     _speaker_seconds_cache.pop(meeting_id, None)
     rows = _segment_rows(segments)
+    whole = True
     if before is not None and len(before) == len(segments):
-        old = before
-        conn.executemany("UPDATE segments SET data = ? WHERE meeting_id = ? AND pos = ?",
-                         [(r, meeting_id, i) for i, (r, o) in enumerate(zip(rows, old)) if r != o])
-    else:
+        changed = [(r, meeting_id, i) for i, (r, o) in enumerate(zip(rows, before)) if r != o]
+        # A line whose row is not at its place (a transcript moved from an older version's JSON skipped its empty
+        # entries) was not written, and its edit lost without a word (found in an audit): written whole then
+        whole = conn.executemany("UPDATE segments SET data = ? WHERE meeting_id = ? AND pos = ?", changed).rowcount != len(changed)
+    if whole:
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
         conn.executemany("INSERT INTO segments (meeting_id, pos, data) VALUES (?, ?, ?)",
                          [(meeting_id, i, r) for i, r in enumerate(rows)])
