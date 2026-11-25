@@ -3462,6 +3462,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-free-t { font-family: var(--font-mono); font-size: var(--fs-ui); color: #F5F5F7; }
 .db-free-len { font-size: var(--fs-label); color: #7EE787; }
 .db-load-head { display: flex; align-items: center; gap: 8px; font-size: var(--fs-ui); color: #E5E5EA; margin-bottom: 8px; }
+.db-load-sum { min-width: 0; }
+.db-load-over { margin-top: 6px; }
 .db-load { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 120px; padding-top: 14px; }
 .db-load-norm { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgba(255, 159, 10, 0.6); margin-bottom: 18px; pointer-events: none; }
 .db-load-day { position: relative; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; padding-bottom: 18px; }
@@ -3944,6 +3946,26 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .dbc-l-line { fill: none; stroke: rgb(var(--accent-rgb)); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .dbc-l-area { fill: rgb(var(--accent-rgb) / 0.14); }
 .dbc-l-norm { stroke: rgba(255, 255, 255, 0.45); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* «Нагрузка недели»: the hours ahead are a plan — the same hue hatched (a ring: lighter), the figure of a day all
+   ahead grey; above the norm only by the plan, the orange mark is hatched too. The hours passed of a day with hours
+   ahead are solid at the start of its mark (.dbc-done) */
+.dbc-col i, .dbc-hb-t b, .dbc-lg-bar u { position: relative; overflow: hidden; }
+.dbc-col i.plan, .dbc-hb-t b.plan, .dbc-lg-bar u.plan, .dbc-lg i.plan {
+  background: repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px currentColor;
+}
+.dbc-col i.plan, .dbc-hb-t b.plan { color: rgb(var(--accent-rgb) / 0.75); }
+.dbc-col i.over.plan, .dbc-hb-t b.over.plan { color: rgb(255 159 10 / 0.75); }
+.dbc-done { position: absolute; left: 0; bottom: 0; top: auto; display: block; width: 100%; height: 100%; text-decoration: none; background: linear-gradient(rgb(var(--accent-rgb) / 0.8), rgb(var(--accent-rgb) / 0.8)), var(--bg); }
+.dbc-done.over { background: #FF9F0A; }
+.dbc-hb-t .dbc-done, .dbc-lg-bar .dbc-done { top: 0; height: auto; }
+.dbc-col span.pl, .dbc-hb-v.pl, .dbc-l-v.pl, .dbc-lg-h.pl { color: var(--hc-dim, #8E8E93); }
+.dbc-lg-h.over.pl { color: rgb(255 159 10 / 0.75); }
+.dbc-ring-plan { stroke-opacity: 0.4; }
+.dbc-ring-over.plan { stroke-opacity: 0.45; }
+.dbc-l-line.plan { stroke-dasharray: 4 3; stroke-opacity: 0.75; }
+.dbc-l-area.plan { fill: rgb(var(--accent-rgb) / 0.06); }
+.dbc-plot i.plan { background: var(--bg); box-shadow: inset 0 0 0 2px rgb(var(--accent-rgb)), 0 0 0 2px var(--bg); }
+.dbc-plot i.over.plan { box-shadow: inset 0 0 0 2px #FF9F0A, 0 0 0 2px var(--bg); }
 
 /* «Мои программы»: a program's name wraps, it is never cut; the ring and the columns */
 .db-app { grid-template-columns: 22px minmax(0, 10em) minmax(24px, 1fr) 4.4em 2.8em 4.4em; }

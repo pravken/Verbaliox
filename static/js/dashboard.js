@@ -522,61 +522,81 @@ async function setDashWPeriod(id, p) {
   if (state.appView === 'dashboard') dbRedrawWidget(id);
 }
 
-// rows: [{ label, value (hours), tip, cls }]; norm: hours of a day, or 0. The line: its fill and the line in an SVG
-// that stretches with the card, the dots, figures and days in HTML at percent places, so the text never stretches
+// rows: [{ label, value (hours), plan (the hours of it still ahead), tip, cls }]; norm: hours of a day, or 0.
+// The hours ahead are a plan: the same hue, hatched or lighter, the figure of a day all ahead grey; a day above the
+// norm only by its plan gets its orange mark drawn as planned too. The line: its fill and the line in an SVG that
+// stretches with the card, the dots, figures and days in HTML at percent places, so the text never stretches
 function dbChartHtml(id, rows, norm) {
   const kind = dbChartKind(id), max = Math.max(norm || 0, ...rows.map(r => r.value)) || 1;
   const h1 = v => dbNum(Math.round(v * 10) / 10), hs = t('dbHoursShort');
-  const over = v => norm && v > norm;
+  const pl = r => (r.plan || 0) > 1e-4, done = r => Math.max(0, r.value - (r.plan || 0));
+  const allPl = r => pl(r) && done(r) < 1e-4;
+  const overFact = r => norm && done(r) > norm, over = r => norm && r.value > norm;
+  // the classes of a mark: «over» above the norm, «plan» with hours ahead
+  const mk = r => [over(r) ? 'over' : '', pl(r) ? 'plan' : ''].filter(Boolean).join(' ');
+  // a mark with hours ahead is hatched as a whole; the hours already passed are solid at its start
+  const doneIn = (r, dim, extra = '') => (pl(r) && !allPl(r)
+    ? `<s class="dbc-done${overFact(r) ? ' over' : ''}" style="${dim}:${(done(r) / r.value * 100).toFixed(1)}%${extra}"></s>` : '');
   if (kind === 'bar') {
     return `<div class="dbc-bars">${rows.map(r => `<div class="dbc-hb ${r.cls || ''}" title="${escapeHtml(r.tip)}"><span class="dbc-hb-d">${escapeHtml(r.label)}</span>`
-      + `<span class="dbc-hb-t"><b class="${over(r.value) ? 'over' : ''}" style="width:${(r.value / max * 100).toFixed(1)}%"></b>${norm ? `<i style="left:${(norm / max * 100).toFixed(1)}%"></i>` : ''}</span>`
-      + `<span class="dbc-hb-v">${r.value ? `${h1(r.value)} ${hs}` : '—'}</span></div>`).join('')}</div>`;
+      + `<span class="dbc-hb-t"><b class="${mk(r)}" style="width:${(r.value / max * 100).toFixed(1)}%">${doneIn(r, 'width')}</b>${norm ? `<i style="left:${(norm / max * 100).toFixed(1)}%"></i>` : ''}</span>`
+      + `<span class="dbc-hb-v${allPl(r) ? ' pl' : ''}">${r.value ? `${h1(r.value)} ${hs}` : '—'}</span></div>`).join('')}</div>`;
   }
   if (kind === 'ring') {
     const xs = rows.filter(r => r.value).map((r, i) => ({ ...r, c: DB_SLICE[i % DB_SLICE.length] }));
     if (!xs.length) return `<div class="db-note">${escapeHtml(t('dbNoMeetingsYet'))}</div>`;
     const sum = xs.reduce((s, r) => s + r.value, 0), top = Math.max(norm || 0, ...xs.map(r => r.value));
+    const dash = (from, len) => `stroke-dasharray="${Math.max(0.1, len).toFixed(2)} ${(100 - Math.max(0.1, len)).toFixed(2)}" stroke-dashoffset="${(25 - from).toFixed(2)}"`;
     let at = 0;
     const segs = xs.map(r => {
-      const len = r.value / sum * 100;
-      const da = `stroke-dasharray="${Math.max(0.1, len - 0.8).toFixed(2)} ${(100 - len + 0.8).toFixed(2)}" stroke-dashoffset="${(25 - at).toFixed(2)}"`;
+      const len = r.value / sum * 100, d = done(r) / sum * 100, gap = 0.8;
+      // the hours passed in the day's hue, those ahead in the same hue, lighter
+      const seg = (from, l, cls) => (l > 0.05 ? `<circle r="15.9155" cx="18" cy="18" fill="none" stroke="${r.c}" stroke-width="4.2"${cls ? ` class="${cls}"` : ''} ${dash(from, l)}/>` : '');
+      const out = (pl(r) ? seg(at, d, '') + seg(at + d, len - d - gap, 'dbc-ring-plan') : seg(at, len - gap, ''))
+        // above the norm: the day keeps its hue, a thin amber arc outside marks it (as planned when only the plan is over)
+        + (over(r) ? `<circle r="19.1" cx="18" cy="18" fill="none" class="dbc-ring-over${overFact(r) ? '' : ' plan'}" stroke-width="1.2" pathLength="100" ${dash(at, len - gap)}/>` : '');
       at += len;
-      // above the norm: the day keeps its hue, a thin amber arc outside marks it
-      return `<circle r="15.9155" cx="18" cy="18" fill="none" stroke="${r.c}" stroke-width="4.2" ${da}/>`
-        + (over(r.value) ? `<circle r="19.1" cx="18" cy="18" fill="none" class="dbc-ring-over" stroke-width="1.2" pathLength="100" ${da}/>` : '');
+      return out;
     }).join('');
+    const hue = r => `${pl(r) ? 'color' : 'background'}:${r.c}`;
     return `<div class="dbc-ring"><svg viewBox="${norm ? '-1.6 -1.6 39.2 39.2' : '0 0 36 36'}" class="dbc-ring-svg" role="img" aria-label="${escapeHtml(`${h1(sum)} ${hs}`)}">${segs}`
       + `<text x="18" y="18" text-anchor="middle" class="dbc-ring-n">${h1(sum)}</text><text x="18" y="22.6" text-anchor="middle" class="dbc-ring-l">${escapeHtml(hs)}</text></svg>`
-      + `<div class="dbc-lg">${xs.map(r => `<div title="${escapeHtml(r.tip)}"><i style="background:${r.c}"></i><span class="dbc-lg-d">${escapeHtml(r.label)}</span>`
-        + `<b class="dbc-lg-bar"><u style="width:${(r.value / top * 100).toFixed(1)}%;background:${r.c}"></u>${norm ? `<em style="left:${(norm / top * 100).toFixed(1)}%"></em>` : ''}</b>`
-        + `<span class="dbc-lg-h${over(r.value) ? ' over' : ''}"${over(r.value) ? ` title="${escapeHtml(t('dbOverNorm'))}"` : ''}>${h1(r.value)} ${escapeHtml(hs)}</span>`
+      + `<div class="dbc-lg">${xs.map(r => `<div title="${escapeHtml(r.tip)}"><i class="${allPl(r) ? 'plan' : ''}" style="${allPl(r) ? `color:${r.c}` : `background:${r.c}`}"></i><span class="dbc-lg-d">${escapeHtml(r.label)}</span>`
+        + `<b class="dbc-lg-bar"><u class="${pl(r) ? 'plan' : ''}" style="width:${(r.value / top * 100).toFixed(1)}%;${hue(r)}">${doneIn(r, 'width', `;background:${r.c}`)}</u>${norm ? `<em style="left:${(norm / top * 100).toFixed(1)}%"></em>` : ''}</b>`
+        + `<span class="dbc-lg-h${over(r) ? ' over' : ''}${allPl(r) ? ' pl' : ''}"${over(r) ? ` title="${escapeHtml(t('dbOverNorm'))}"` : ''}>${h1(r.value)} ${escapeHtml(hs)}</span>`
         + `<span class="dbc-lg-p">${Math.round(r.value / sum * 100)}%</span></div>`).join('')}</div></div>`;
   }
   if (kind === 'line') {
     const n = rows.length, px = i => (n > 1 ? 3 + i * 94 / (n - 1) : 50), py = v => 100 - v / max * 82;
-    const pts = rows.map((r, i) => `${px(i).toFixed(2)},${py(r.value).toFixed(2)}`).join(' ');
+    const pt = i => `${px(i).toFixed(2)},${py(rows[i].value).toFixed(2)}`;
+    // solid up to the last day with nothing ahead, dashed from there on through the days of the plan
+    const f = rows.findIndex(pl), cut = f < 0 ? n - 1 : Math.max(0, f - 1);
+    const run = (a, b) => rows.slice(a, b + 1).map((r, k) => pt(a + k)).join(' ');
+    const part = (a, b, cls) => `<polygon points="${px(a).toFixed(2)},100 ${run(a, b)} ${px(b).toFixed(2)},100" class="dbc-l-area${cls}"/><polyline points="${run(a, b)}" class="dbc-l-line${cls}"/>`;
     return `<div class="dbc-line"><div class="dbc-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">`
       + (norm ? `<line x1="0" x2="100" y1="${py(norm).toFixed(2)}" y2="${py(norm).toFixed(2)}" class="dbc-l-norm"/>` : '')
-      + `<polygon points="${px(0).toFixed(2)},100 ${pts} ${px(n - 1).toFixed(2)},100" class="dbc-l-area"/><polyline points="${pts}" class="dbc-l-line"/></svg>`
-      + rows.map((r, i) => `<i class="${over(r.value) ? 'over' : ''}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%" title="${escapeHtml(r.tip)}"></i>`
-        + (r.value ? `<span class="dbc-l-v" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%">${h1(r.value)}</span>` : '')).join('')
+      + (f === 0 ? '' : part(0, cut, '')) + (f < 0 ? '' : part(cut, n - 1, ' plan')) + '</svg>'
+      + rows.map((r, i) => `<i class="${mk(r)}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%" title="${escapeHtml(r.tip)}"></i>`
+        + (r.value ? `<span class="dbc-l-v${allPl(r) ? ' pl' : ''}" style="left:${px(i).toFixed(2)}%;top:${py(r.value).toFixed(2)}%">${h1(r.value)}</span>` : '')).join('')
       + `</div><div class="dbc-days">${rows.map((r, i) => `<span class="${r.cls || ''}" style="left:${px(i).toFixed(2)}%">${escapeHtml(r.label)}</span>`).join('')}</div></div>`;
   }
   return `<div class="dbc-cols">${norm ? `<i class="dbc-norm" style="bottom:${(norm / max * 100).toFixed(1)}%"></i>` : ''}${rows.map(r => {
     const pct = r.value / max * 100;
-    return `<div class="dbc-col ${r.cls || ''}" title="${escapeHtml(r.tip)}"><i class="${over(r.value) ? 'over' : ''}" style="height:${r.value ? Math.max(2, pct).toFixed(1) : 0}%"></i>`
-      + (r.value ? `<span style="bottom:calc(${pct.toFixed(1)}% + 3px)">${h1(r.value)}</span>` : '') + '</div>';
+    return `<div class="dbc-col ${r.cls || ''}" title="${escapeHtml(r.tip)}"><i class="${mk(r)}" style="height:${r.value ? Math.max(2, pct).toFixed(1) : 0}%">${doneIn(r, 'height')}</i>`
+      + (r.value ? `<span class="${allPl(r) ? 'pl' : ''}" style="bottom:calc(${pct.toFixed(1)}% + 3px)">${h1(r.value)}</span>` : '') + '</div>';
   }).join('')}</div><div class="dbc-axis">${rows.map(r => `<span class="${r.cls || ''}">${escapeHtml(r.label)}</span>`).join('')}</div>`;
 }
 
 // «Нагрузка недели»: the hours of meetings of each day of the week against the user's norm (a click on
-// the norm changes it: 2–6 h). The calendar's meetings, or the recordings without one
+// the norm changes it: 2–6 h). The calendar's meetings, or the recordings without one. The meetings still ahead
+// (the days to come, the rest of today) are a plan, drawn as planned and counted apart in the head (reported by
+// the user: the meetings ahead read as hours already spent)
 function dbLoadHtml() {
   const w = DB.week;
   if (!w) return `<div class="db-note">${escapeHtml(t(DB.loading ? 'dbLoading' : 'dbNoData'))}</div>`;
-  const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', today = calKey(new Date());
-  const norm = dbPrefs().norm;
+  const a = dbMonday(), lang = state.uiLang === 'en' ? 'en-US' : 'ru-RU', now = Date.now(), today = calKey(new Date(now));
+  const norm = dbPrefs().norm, hs = t('dbHoursShort'), h1 = v => dbNum(Math.round(v * 10) / 10);
+  const ahead = h => t('dbLoadAhead').replace('{h}', () => h1(h));
   const rows = [];
   for (let i = 0; i < 7; i++) {
     const x = new Date(a); x.setDate(a.getDate() + i);
@@ -585,19 +605,31 @@ function dbLoadHtml() {
         .filter(([s, e]) => e - s < DB_BLOCK_MS),  // a night or a day off is not hours of meetings
       ...(w.recordings || []).map(r => [new Date(r.at).getTime(), new Date(r.at).getTime() + (r.duration || 0) * 1000])]
       .filter(([s]) => calKey(new Date(s)) === k);
-    const hours = dbMerge(spans).reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
+    const busy = dbMerge(spans);
+    const hours = busy.reduce((sum, [s, e]) => sum + (e - s), 0) / 3600e3;
+    // what of each meeting lies before now has passed; the rest is the plan
+    const done = busy.reduce((sum, [s, e]) => sum + Math.max(0, Math.min(e, now) - s), 0) / 3600e3;
+    const plan = Math.max(0, hours - done);
     const hol = (w.holidays || {})[k] || '';
     if (i < 5 || hours) {
-      rows.push({ label: x.toLocaleDateString(lang, { weekday: 'short' }), value: hours,
-        cls: `${k === today ? 'today' : ''}${k < today ? ' past' : ''}${hol ? ' hol' : ''}`,
-        tip: `${x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${dbNum(Math.round(hours * 10) / 10)} ${t('dbHoursShort')}${hol ? ` · ${hol}` : ''}` });
+      const tip = plan && !done ? `${h1(hours)} ${hs} ${t('dbLoadPlanned')}` : `${h1(done)} ${hs}${plan ? ` · ${ahead(plan)}` : ''}`;
+      rows.push({ label: x.toLocaleDateString(lang, { weekday: 'short' }), value: hours, plan,
+        cls: `${k === today ? 'today' : ''}${k < today ? ' past' : ''}${k > today ? ' ahead' : ''}${hol ? ' hol' : ''}`,
+        tip: `${x.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'short' })}: ${tip}${hol ? ` · ${hol}` : ''}` });
     }
   }
-  const sum = rows.reduce((s, d) => s + d.value, 0), over = rows.filter(d => d.value > norm);
-  return `<div class="db-load-head">${escapeHtml(t('dbLoadSum').replace('{h}', () => dbNum(Math.round(sum * 10) / 10)))}`
+  const sum = rows.reduce((s, d) => s + d.value - d.plan, 0), left = rows.reduce((s, d) => s + d.plan, 0);
+  // above the norm by the hours passed, or only by the plan
+  const byFact = rows.filter(d => d.value - d.plan > norm), byPlan = rows.filter(d => d.value > norm && d.value - d.plan <= norm);
+  const days = l => l.map(d => d.label).join(', ');
+  const note = byFact.length
+    ? t('dbLoadOver').replace('{days}', () => days(byFact)) + (byPlan.length ? `; ${t('dbLoadOverPlan').replace('{days}', () => days(byPlan))}` : '')
+    : (byPlan.length ? t('dbLoadOverPlanOnly').replace('{days}', () => days(byPlan)) : '');
+  const head = t('dbLoadSum').replace('{h}', () => h1(sum)) + (left >= 0.05 ? ` · ${ahead(left)}` : '');
+  return `<div class="db-load-head"><span class="db-load-sum">${escapeHtml(head)}</span>`
     + `<button class="db-more" data-click="dbCycleNorm" title="${escapeHtml(t('dbNormTip'))}">${escapeHtml(t('dbNorm').replace('{h}', () => norm))}</button></div>`
     + dbChartHtml('load', rows, norm)
-    + (over.length ? `<div class="db-note">${escapeHtml(t('dbLoadOver').replace('{days}', () => over.map(d => d.label).join(', ')))}</div>` : '');
+    + (note ? `<div class="db-note db-load-over">${escapeHtml(note)}</div>` : '');
 }
 
 // «Рабочий день»: the hours worked today against the norm (the reminder's hours), when it began, the breaks,

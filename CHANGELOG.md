@@ -104,6 +104,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
   the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
   completed in the background on first use, and until then the processor uses the model as before.
+- **«Load of the week» tells the hours passed from the plan**: the meetings still ahead (the coming days of the week
+  and the rest of today) are drawn as planned — the same hue hatched (lighter in the ring), their figures grey, «planned»
+  in the hint. The head reads «In meetings: 4.6 h · ahead 4 h»; under the chart, which days are above the norm by fact
+  and which by plan («Above the norm: Tue; planned: Fri»).
 
 ## 0.9.3 — English
 
@@ -1339,6 +1343,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
   как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
   первом использовании, а до этого процессор работает с моделью как раньше.
+- **«Нагрузка недели» отделяет прошедшее от запланированного**: встречи ещё впереди (следующие дни недели и
+  остаток сегодняшнего) показаны как план — тем же цветом со штриховкой (в кольце светлее), их числа серые, в подсказке
+  «по плану». В заголовке — «Во встречах: 4,6 ч · впереди 4 ч»; под диаграммой — какие дни сверх нормы по факту, а какие
+  по плану («Сверх нормы: вт; по плану: пт»).
 
 ## 0.9.3
 

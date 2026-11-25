@@ -2100,6 +2100,61 @@ await step('caption names stay', async () => {
   expect(r[0] === 'Анна Смирнова' && r[1] === 'Анна Смирнова', `the name did not stay: ${JSON.stringify(r)}`);
 });
 
+// «Нагрузка недели» on a Wednesday at noon: the hours passed and the hours ahead apart in the head, the days to
+// come and the rest of today drawn as planned, «по плану» in their hints, the days above the norm by fact and by plan
+// (reported by the user: the meetings still ahead of the week read as hours already spent)
+await step('load of the week: plan', async () => {
+  const p2 = await browser.newPage({ viewport: { width: 1300, height: 860 }, timezoneId: 'Europe/Berlin' });
+  try {
+    await p2.clock.install({ time: new Date('2026-11-25T12:00:00+01:00') });
+    const ev = (d, a, b) => ({ title: 'Встреча', start: `2026-11-${d}T${a}:00`, end: `2026-11-${d}T${b}:00`, all_day: false });
+    const week = { configured: true, recordings: [], holidays: {}, events: [
+      ev(23, '10:00', '12:00'), ev(23, '14:00', '15:30'),  // Monday: 3.5 h
+      ev(24, '09:00', '14:00'),                            // Tuesday: 5 h, above the norm of 4
+      ev(25, '10:00', '11:00'), ev(25, '14:00', '16:00'),  // today: 1 h passed, 2 h ahead
+      ev(26, '10:00', '11:00'),                            // Thursday: 1 h planned
+      ev(27, '09:00', '14:00'),                            // Friday: 5 h planned, above the norm by plan
+    ] };
+    await p2.route('**/api/calendar/range*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(week) }));
+    await p2.goto(`${base}/?token=${token}`);
+    await p2.waitForTimeout(1500);
+    await p2.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ norm: 4, charts: { ...(dbPrefs().charts || {}), load: 'col' } }); resetDashboard(); switchAppView('dashboard'); });
+    let got = null;
+    for (let i = 0; i < 40 && !(got && got.cols === 5); i++) {
+      await p2.waitForTimeout(150);
+      got = await p2.evaluate(() => {
+        const w = document.querySelector('#db-grid .db-w-load');
+        if (!w) return null;
+        const cols = [...w.querySelectorAll('.dbc-col')];
+        return { head: (w.querySelector('.db-load-sum') || {}).textContent, cols: cols.length,
+          plan: cols.map(c => c.querySelector('i').classList.contains('plan')), done: cols.map(c => !!c.querySelector('.dbc-done')),
+          tips: cols.map(c => c.title), note: (w.querySelector('.db-load-over') || {}).textContent };
+      });
+    }
+    expect(got && got.cols === 5, `the widget did not draw the week: ${JSON.stringify(got)}`);
+    expect(got.head === 'Во встречах: 9,5 ч · впереди 8 ч', `the head: «${got.head}»`);
+    expect(JSON.stringify(got.plan) === '[false,false,true,true,true]', `the planned columns: ${got.plan}`);
+    expect(JSON.stringify(got.done) === '[false,false,true,false,false]', `today's hours passed are not solid: ${got.done}`);
+    expect(/по плану/.test(got.tips[4]) && !/по плану/.test(got.tips[0]) && /впереди 2 ч/.test(got.tips[2]), `the hints: ${got.tips.join(' | ')}`);
+    expect(got.note === 'Сверх нормы: вт; по плану: пт', `the note: «${got.note}»`);
+    // the other looks: the planned bars, the lighter parts of the ring, the dashed line
+    const looks = {};
+    for (const k of ['bar', 'ring', 'line']) {
+      await p2.evaluate(kind => setDashChart('load', kind), k);
+      looks[k] = await p2.evaluate(() => {
+        const w = document.querySelector('#db-grid .db-w-load');
+        return w.querySelectorAll('.dbc-hb-t b.plan, .dbc-ring-plan, .dbc-lg-bar u.plan, .dbc-plot i.plan, .dbc-l-line.plan').length;
+      });
+    }
+    expect(looks.bar === 3 && looks.ring >= 6 && looks.line >= 4, `the other looks: ${JSON.stringify(looks)}`);
+    await p2.evaluate(() => { setUILanguage('en'); dbRedrawWidget('load'); });
+    const en = await p2.evaluate(() => document.querySelector('#db-grid .db-w-load .db-load-sum').textContent);
+    expect(en === 'In meetings: 9.5 h · ahead 8 h', `the head in English: «${en}»`);
+    await p2.evaluate(() => { setDashChart('load', 'col'); setUILanguage('ru'); });
+    await p2.waitForTimeout(800);  // the language is kept on the server before the page closes
+  } finally { await p2.close(); }
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
