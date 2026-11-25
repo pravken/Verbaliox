@@ -159,6 +159,11 @@ class SileroStream:
             raise RuntimeError("Модель обнаружения речи Silero не найдена")
         self.sess = ort.InferenceSession(str(files[0]), _cpu_options(1), providers=["CPUExecutionProvider"])
         self.inputs = [i.name for i in self.sess.get_inputs()]
+        self.reset()
+
+    def reset(self) -> None:
+        """Hears a new stream from its start: the state cleared, the session kept (making one is a new
+        InferenceSession)."""
         self.state = np.zeros((2, 1, 128), dtype=np.float32)
         self.context = np.zeros((1, CONTEXT), dtype=np.float32)
 
@@ -211,9 +216,12 @@ class DraftPace:
     def __init__(self) -> None:
         self.cost = 0.0           # seconds the last draft took
         self.next_at: Optional[float] = None  # audio received (s) from which the next draft is due; None: at once
+        # the share of the time the drafts may take: a third by VAD phrases; in the window scheme what the window
+        # leaves of the captions' budget (app/live.py, LiveSession._window_ran)
+        self.share = 1.0 / DRAFT_COST_SHARE
 
     def interval(self) -> float:
-        return max(DRAFT_MIN_SEC, DRAFT_COST_SHARE * self.cost)
+        return max(DRAFT_MIN_SEC, self.cost / self.share)
 
     def due(self, received: float) -> bool:
         return self.next_at is None or received >= self.next_at - 1e-6

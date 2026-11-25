@@ -185,11 +185,17 @@ class DraftPaceTest(unittest.TestCase):
 class _FakeVad:
     """Speech where the audio is loud."""
 
+    made = 0  # how many were made (each is an InferenceSession of the Silero VAD)
+
     def __init__(self, *_a):
-        pass
+        type(self).made += 1
+        self.resets = 0
 
     def prob(self, frame):
         return 0.95 if float(np.abs(frame).max()) > 0.1 else 0.02
+
+    def reset(self):
+        self.resets += 1
 
 
 def _pcm(sig):
@@ -489,16 +495,18 @@ class WindowPhraseDraftTest(unittest.TestCase):
 
         init_db()
 
-    def _session(self, window_sec=0.0):
+    def _session(self, window_sec=0.0, draft_sec=0.0):
         from app import asr_onnx, live
 
         with mock.patch.object(live, "caption_onnx_model", return_value="parakeet-v3"):
             s = live.LiveSession("en", None)
         self.windows, self.phrases, self.at_window = [], [], []
-        clock = [0.0]
+        clock = self.clock = [0.0]
+        self.window_sec = window_sec  # a number, or a list: the time of each run in turn (the last one repeats)
 
         def window(model, audio):
-            clock[0] += window_sec
+            costs = self.window_sec if isinstance(self.window_sec, list) else [self.window_sec]
+            clock[0] += costs[min(len(self.windows), len(costs) - 1)]
             self.windows.append(audio.size)
             self.at_window.append(len(self.phrases))
             out, loud = [], np.abs(audio) > 0.1
@@ -515,6 +523,7 @@ class WindowPhraseDraftTest(unittest.TestCase):
             return out
 
         def phrase(model, audio):
+            clock[0] += draft_sec
             self.phrases.append(audio.size)
             return [(0.0, audio.size / SR, f"beta {len(self.phrases)}")]
 
@@ -523,7 +532,9 @@ class WindowPhraseDraftTest(unittest.TestCase):
                    mock.patch.object(lp, "SileroStream", _FakeVad),
                    mock.patch.object(asr_onnx, "recognize_array", side_effect=window),
                    mock.patch.object(asr_onnx, "recognize_phrase", side_effect=phrase),
-                   mock.patch.object(live, "_clock", lambda: clock[0])]
+                   mock.patch.object(live, "_clock", lambda: clock[0]),
+                   mock.patch.object(lp, "_clock", lambda: clock[0])]
+        _FakeVad.made = 0
         for p in patches:
             p.start()
         self.addCleanup(lambda: [p.stop() for p in reversed(patches)])
@@ -578,3 +589,51 @@ class WindowPhraseDraftTest(unittest.TestCase):
         self.assertIs(s._follow, False)
         self.assertEqual(self.phrases, [])
         self.assertTrue(self.windows)
+
+    def test_window_and_drafts_share_one_budget(self):
+        """The window and the drafts of the phrase together take at most CAPTION_BUSY_SHARE of the time of the copy:
+        drafts at a third of it besides the window took up to 63 % of a 4-thread copy (review of the load)."""
+        from app import live
+
+        for window_sec, draft_sec in ((0.3, 0.1), (0.5, 0.05), (0.1, 0.1)):
+            s = self._session(window_sec=window_sec, draft_sec=draft_sec)
+            self._feed(s, np.full(30 * SR, 0.3, dtype=np.float32))
+            self.assertTrue(self.phrases, (window_sec, draft_sec))
+            busy = self.clock[0] / 30.0
+            self.assertLessEqual(busy, live.CAPTION_BUSY_SHARE + 0.02, (window_sec, draft_sec, busy))
+
+    def test_the_vad_listens_while_the_drafts_are_off(self):
+        """A slow window turns the drafts off; the VAD goes on hearing every frame, so turning them on again needs no
+        new VAD (each was a new InferenceSession) and the phrase being spoken is known at once."""
+        s = self._session(window_sec=[0.7, 0.7, 0.3])
+        speech = np.full(int(9.5 * SR), 0.3, dtype=np.float32)
+        self._feed(s, speech[:int(4.5 * SR)])
+        self.assertFalse(s._drafts_on)  # off after a run of 0.7 s
+        drafts_off = len(self.phrases)
+        self.assertGreaterEqual(s._follow.cutter.pos, s.base + s.audio.size - SR // 2)  # heard to the end
+        self._feed(s, speech[int(4.5 * SR):])
+        self.assertTrue(s._drafts_on)  # on again after a run under 0.4 s
+        self.assertGreater(len(self.phrases), drafts_off)
+        self.assertEqual(_FakeVad.made, 1)
+
+    def test_drafts_go_off_above_the_limit_and_on_only_well_below_it(self):
+        from app import live
+
+        s = self._session()
+        for cost, on in ((0.3, True), (0.65, False), (0.5, False), (0.45, False), (0.35, True), (0.55, True),
+                         (0.61, False)):
+            s._window_ran(cost)
+            self.assertEqual(s._drafts_on, on, cost)
+        self.assertEqual((live.DRAFTS_OFF_SEC, live.DRAFTS_ON_SEC), (0.6, 0.4))
+
+    def test_audio_dropped_before_the_vad_heard_it_resets_the_vad(self):
+        s = self._session()
+        self._feed(s, np.full(2 * SR, 0.3, dtype=np.float32))
+        vad = s._follow.vad
+        with s._audio_lock:
+            s._cut(s.audio.size)  # dropped (a failed step) before the VAD heard what comes next
+        s.base += SR
+        s._follow_speech()
+        self.assertIs(s._follow.vad, vad)
+        self.assertEqual(vad.resets, 1)
+        self.assertEqual(_FakeVad.made, 1)

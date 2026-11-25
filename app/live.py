@@ -11,7 +11,8 @@ Russian speech with GigaAM goes by VAD phrases instead (app/live_phrases.py): on
 recognized, by the GigaAM v3 e2e-CTC int8, and it is final once after a pause. English and the other languages
 keep the window for the final lines (Parakeet: the phrases without context lose 6–9 points of WER,
 bench-report/asr-2026-11.md); between the window's runs the VAD follows the speech too and only the phrase being
-spoken is recognized for the draft line, every 0.3 s or more (live_phrases.SpeechFollow, DraftPace).
+spoken is recognized for the draft line, every 0.3 s or more (live_phrases.SpeechFollow, DraftPace). The window and
+these drafts share one budget of the caption copy's time (CAPTION_BUSY_SHARE).
 
 After recording stops the usual full transcription of the saved file runs; live captions are only
 for following along, so they favour speed (greedy decoding, short window) over accuracy.
@@ -33,7 +34,7 @@ import numpy as np
 from app.database import get_all_settings
 from app.paths import APP_DIR
 
-_clock = time.perf_counter  # times a run of the window (window_drafts)
+_clock = time.perf_counter  # times a run of the window (_window_ran)
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
 SR = 16000
@@ -43,7 +44,17 @@ LIVE_STEP_SEC = 2.0
 PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about every 0.25 s)
 LIVE_WINDOW_SEC = 20.0    # longest audio kept undecided (forced to final beyond it)
 FINAL_MARGIN_SEC = 1.6    # a phrase ending this long before the window end is final
-WINDOW_BUSY_SHARE = 0.3   # phrase drafts between the window's runs only while a run takes under this share of LIVE_STEP_SEC
+# The window and the drafts of the phrase being spoken between its runs take together at most this share of the time of
+# the caption copy (its WINDOW_THREADS threads): with the drafts at a third of it on their own besides the window,
+# English captions took up to 63 % of a 4-thread copy. The drafts get what the window leaves (live_phrases.DraftPace,
+# share), at least MIN_DRAFT_SHARE. They run on the same copy as the window: a copy of their own on 2 threads would hold
+# Parakeet fp32 twice (3 GB more), and ONNX Runtime fixes the threads of a session when it is made.
+CAPTION_BUSY_SHARE = 0.35
+MIN_DRAFT_SHARE = 0.05
+# The drafts go off when a run of the window takes over DRAFTS_OFF_SEC (the window keeps the draft line alone) and on
+# again only under DRAFTS_ON_SEC: a run near the limit turned them off and on at every run. The VAD listens either way.
+DRAFTS_OFF_SEC = 0.6
+DRAFTS_ON_SEC = 0.4
 SESSION_IDLE_SEC = 120.0  # sessions without audio for this long are dropped
 
 WORKER_IDLE_SEC = 120.0   # the caption worker is closed (VRAM freed) after this long unused
@@ -236,6 +247,7 @@ class LiveSession:
         self._follow = None         # app/live_phrases.SpeechFollow: drafts of the phrase in the window scheme (False: off)
         self._win_draft: List[Tuple[int, int, str]] = []  # the window's draft sentences at its last run (samples)
         self._window_cost = 0.0     # seconds the last run of the window took
+        self._drafts_on = True      # the drafts of the phrase in the window scheme (off while the window is slow)
         self.last_window_at = 0.0   # self.received when the window was last transcribed
         self.received = 0.0         # seconds of audio received in total
         self.last_run_at = 0.0      # self.received when the last step ran
@@ -315,21 +327,33 @@ class LiveSession:
 
         return asr_onnx.live_phrases(self.onnx_model)
 
-    def window_drafts(self) -> bool:
-        """In the window scheme with GigaAM / Parakeet the phrase being spoken is recognized alone for the draft between
-        the window's runs (live_phrases.SpeechFollow), while the window keeps up: a run under WINDOW_BUSY_SHARE of
-        LIVE_STEP_SEC. Not for the Whisper captions (their own process)."""
-        if not self.onnx_model or self._follow is False or self._window_cost > WINDOW_BUSY_SHARE * LIVE_STEP_SEC:
+    def follows_speech(self) -> bool:
+        """In the window scheme with GigaAM / Parakeet the VAD follows the speech (live_phrases.SpeechFollow) at every
+        step, whether the drafts of the phrase are on or not: about 0.2 ms a frame. Not for the Whisper captions
+        (their own process)."""
+        if not self.onnx_model or self._follow is False:
             return False
         from app import asr_onnx
 
         return asr_onnx.is_loaded(self.onnx_model)
 
+    def _window_ran(self, cost: float) -> None:
+        """A run of the window took `cost` seconds: the drafts off above DRAFTS_OFF_SEC, on again under DRAFTS_ON_SEC,
+        and their share of the budget is what the window leaves of CAPTION_BUSY_SHARE."""
+        self._window_cost = cost
+        if cost > DRAFTS_OFF_SEC:
+            self._drafts_on = False
+        elif cost < DRAFTS_ON_SEC:
+            self._drafts_on = True
+        if self._follow:
+            self._follow.pace.share = max(MIN_DRAFT_SHARE, CAPTION_BUSY_SHARE - cost / LIVE_STEP_SEC)
+
     def step(self) -> None:
         """Transcribes the undecided window (or the phrase being spoken) if enough new audio arrived and
         nothing else is running."""
         phrases = self.phrases()
-        drafts = not phrases and self.window_drafts()
+        follow = not phrases and self.follows_speech()
+        drafts = follow and self._drafts_on
         every = PHRASE_STEP_SEC if phrases or drafts else LIVE_STEP_SEC
         if self.received - self.last_run_at < every or not self._busy.acquire(blocking=False):
             return
@@ -340,13 +364,13 @@ class LiveSession:
                 self._transcribe_phrases()
             else:
                 self._ph = None
-                if drafts:
+                if follow:
                     self._follow_speech()  # before the window cuts what is final: the VAD must have heard it
                 if self.received - self.last_window_at >= LIVE_STEP_SEC:
                     self.last_window_at = self.received
                     t = _clock()
                     self._transcribe_window()
-                    self._window_cost = _clock() - t
+                    self._window_ran(_clock() - t)
                 elif drafts:
                     self._draft_phrase()
         except Exception as e:  # a failed step must not end the recording
@@ -456,7 +480,12 @@ class LiveSession:
         from app import asr_onnx, live_phrases as lp
 
         f = self._follow
-        if f is None or f.cutter.pos < self.base:  # the first step, or audio dropped before the VAD heard it
+        if f and f.cutter.pos < self.base:  # audio dropped before the VAD heard it: its state reset, its session kept
+            f.vad.reset()
+            share = f.pace.share
+            f = self._follow = lp.SpeechFollow(self.base, f.vad)
+            f.pace.share = share
+        elif f is None:  # the first step
             try:
                 f = self._follow = lp.SpeechFollow(self.base, lp.SileroStream(asr_onnx._vad_dir()))
             except Exception as e:
@@ -514,8 +543,12 @@ class LiveSession:
             return
         ph = self._ph
         if ph is None or min(ph.keep_from(), ph.levelled_to) < self.base:
-            # the first step, or the audio waited for the model so long that its start was dropped
-            ph = self._ph = lp.PhraseState(self.base, lp.SileroStream(asr_onnx._vad_dir()))
+            # the first step, or the audio waited for the model so long that its start was dropped: the VAD made
+            # once (an InferenceSession), its state reset for the new start
+            vad = ph.vad if ph is not None else lp.SileroStream(asr_onnx._vad_dir())
+            if ph is not None:
+                vad.reset()
+            ph = self._ph = lp.PhraseState(self.base, vad)
         with self._audio_lock:  # the new audio levelled in place: the VAD and the model hear the same
             i = ph.levelled_to - self.base
             new = ph.level(self.audio[i:])
