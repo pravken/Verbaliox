@@ -30,6 +30,12 @@ const step = async (name, fn) => {
     errors.push(`${name}: ${e.message.split('\n')[0]}${why.length ? ` [${why.join(' | ')}]` : ''}`);
   }
   if (shots) await page.screenshot({ path: `${shots}/${String(++n).padStart(2, '0')}-${name.replace(/\W+/g, '-')}.png` });
+  // a question window a step left open (a confirmation, a dialog drawn by a script) would stand over the next steps:
+  // it is closed, and its title is printed with the step's name so the step can be fixed
+  const left = await page.evaluate(() => [...document.querySelectorAll('div.modal-backdrop[role="dialog"]:not([id])')]
+    .filter(d => !d.classList.contains('hidden')).map(d => { const h = (d.querySelector('h2, h3, .font-semibold') || d).textContent.trim().slice(0, 60); d.remove(); return h; }))
+    .catch(() => []);
+  if (left.length) console.log(`note: «${name}» left a window open: ${left.join(' | ')}`);
 };
 const expect = (ok, what) => { if (!ok) throw new Error(what); };
 const sleep = (ms) => page.waitForTimeout(ms);
@@ -1224,6 +1230,10 @@ await step('studio choices kept', async () => {
   await page.evaluate(() => switchAppView('studio'));
   await sleep(600);
   await page.evaluate(parakeet);
+  // the studio fills the languages and reads the saved choices as it opens: setting the language before that is done
+  // was undone by it (CI: the translation model list stayed hidden)
+  for (let i = 0; i < 50 && !(await page.evaluate(() => [...document.getElementById('live-translate-select').options].some(o => o.value === 'en'))); i++) await sleep(100);
+  await sleep(300);
   if (!(await page.evaluate(() => document.getElementById('live-captions-toggle').checked))) await page.click('#st-cap-pill');
   await page.evaluate(() => {
     document.getElementById('live-translate-select').value = 'en';
@@ -1248,7 +1258,13 @@ await step('studio choices kept', async () => {
   // out «waiting for element to be visible» here)
   const choose = async (sel, value) => {
     for (let i = 0; i < 3; i++) {
-      await page.evaluate(parakeet);
+      // the status poll refills the installed models from the server, which has none: put Parakeet back and draw the
+      // lists at once (it was drawn only at the next tick, after the choice timed out)
+      await page.evaluate(() => { state.onnxInstalled = ['parakeet-v3']; if (typeof renderStudioCapBar === 'function') renderStudioCapBar(); });
+      await page.evaluate(() => {  // the translation language as the step set it: its model list shows only with one
+        const sel = document.getElementById('live-translate-select');
+        if (sel.value !== 'en') { sel.value = 'en'; studioConfigure(); }
+      });
       await openModels();
       try { await page.selectOption(sel, value, { timeout: 2500 }); return; } catch (e) { if (i === 2) throw e; }
     }
@@ -1935,7 +1951,7 @@ await step('mix wait countdown', async () => {
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
   await page.click('#tx-rc-mixnow');
-  await sleep(300);
+  for (let i = 0; i < 30 && (asked !== 'POST' || await page.isVisible('#tx-rc-mixnow')); i++) await sleep(100);
   expect(asked === 'POST', '«Свести сейчас» did not ask the server');
   expect(!(await page.isVisible('#tx-rc-mixnow')), '«Свести сейчас» is still offered after the mix started');
   await page.evaluate(() => { delete state.activeMeeting.mix_why; });
