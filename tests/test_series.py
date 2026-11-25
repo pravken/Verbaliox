@@ -148,7 +148,7 @@ class LiveOnnxLoadingTest(unittest.TestCase):
 
         calls = []
 
-        def failing(model_id, gpu=False):
+        def failing(model_id, gpu=False, live=False):
             calls.append(model_id)
             raise RuntimeError("onnx-asr could not be installed")
 

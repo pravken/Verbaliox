@@ -189,12 +189,10 @@ def release_speech_models() -> List[str]:
     if loaded:
         captions = live.onnx_models_in_use() if live.has_sessions() else set()
         if captions:
-            gpu = [m for m in loaded if asr_onnx.on_gpu(m)]
-            asr_onnx.release_gpu()
-            others = [m for m in loaded if m not in captions]
-            for model in others:
-                asr_onnx.release(model)
-            if gpu or others:
+            before = asr_onnx.copies()
+            for model in loaded:  # only the captions' own copies stay (app/asr_onnx._key)
+                asr_onnx.release(model, keep_live=model in captions)
+            if asr_onnx.copies() != before:
                 released.append("onnx")
         else:
             asr_onnx.release()  # GigaAM / Parakeet: up to 3 GB of RAM or VRAM

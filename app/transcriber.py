@@ -1634,10 +1634,7 @@ def _release_onnx(model: Optional[str] = None) -> None:
     from app import asr_onnx
 
     if _live_captions_on():
-        if model:
-            asr_onnx.release(model, gpu=True)
-        else:
-            asr_onnx.release_gpu()
+        asr_onnx.release(model, keep_live=True)  # the job's copies (a copy of its own: app/asr_onnx._key)
     elif model:
         asr_onnx.release(model)
     else:

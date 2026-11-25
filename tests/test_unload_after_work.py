@@ -232,13 +232,10 @@ class CaptionsFreeTheCardTest(unittest.TestCase):
                 mock.patch.object(transcriber, "whisper_cache_key", return_value=None), \
                 mock.patch("app.vram.ecapa_loaded_on", return_value=None), \
                 mock.patch("app.nemotron_diar.loaded", return_value=False), \
-                mock.patch.object(asr_onnx, "loaded_models", return_value=["gigaam-v3", "parakeet-v3"]), \
-                mock.patch.object(asr_onnx, "on_gpu", return_value=False), \
-                mock.patch.object(asr_onnx, "release_gpu") as rel_gpu, \
-                mock.patch.object(asr_onnx, "release") as rel:
+                mock.patch.dict(asr_onnx._loaded, {"gigaam-v3@live": 1, "gigaam-v3": 2, "gigaam-v3@gpu": 3,
+                                                   "parakeet-v3@live": 4}, clear=True):
             out = idle_unload.release_speech_models()
-        rel_gpu.assert_called_once()
-        rel.assert_called_once_with("parakeet-v3")
+            self.assertEqual(asr_onnx.copies(), ["gigaam-v3@live"])  # the queue's copies and the unused one go
         self.assertEqual(out, ["onnx"])
 
     def test_a_session_start_and_its_end(self):
