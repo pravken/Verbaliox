@@ -89,7 +89,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   Parakeet, a transcription that would run Parakeet on the processor waits for the captions to end («waits for the
   captions to end» in the queue) instead of loading a second copy of the model (about 3 GB more memory). With a video
   card that has room for it, it runs there at once. «Start now» in the queue starts it anyway, with the threads left
-  by the captions; once the captions end it starts by itself, and the captions' copy leaves the memory.
+  by the captions; once the captions end it starts by itself, and the captions' copy leaves the memory. A transcription
+  whose video card fails during such captions goes back to the queue and waits for them too, then runs on the processor.
 - **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
   live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
   one), and so does the separate process of the Whisper captions.
@@ -109,7 +110,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   is recognized every 0.3 s — less often on a slow computer (never sooner than three times its own recognition time),
   so the captions do not fall behind and do not load the processor beyond their threads. In English and other
   languages only the phrase being spoken is recognized for the draft between the runs of the window; the final lines
-  come from the window as before.
+  come from the window as before. The window and these drafts together take at most about a third of the time of the
+  captions' model; when a run of the window gets slow the drafts pause until it is fast again.
 - **GigaAM transcribes faster on the processor**: a transcription without the video card takes GigaAM v3 e2e-RNN-T in
   int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
   the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
@@ -1350,7 +1352,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Parakeet, расшифровка, которой нужен Parakeet на процессоре, ждёт окончания субтитров («ждёт окончания субтитров» в
   очереди) и не загружает вторую копию модели (ещё около 3 ГБ памяти). Если на видеокарте хватает места, расшифровка
   сразу идёт на ней. «Начать сейчас» в очереди запускает её и так, с потоками, оставшимися от субтитров; после
-  окончания субтитров она начинается сама, а копия модели субтитров освобождает память.
+  окончания субтитров она начинается сама, а копия модели субтитров освобождает память. Расшифровка, у которой во время
+  таких субтитров случился сбой видеокарты, возвращается в очередь и тоже ждёт их окончания, затем идёт на процессоре.
 - **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
   распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
   процесс субтитров Whisper.
@@ -1369,7 +1372,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   через одну-две секунды. Студия отправляет звук каждые 0,25 с вместо раза в секунду, а черновик текущей фразы
   распознаётся каждые 0,3 с. На медленном компьютере — реже, не чаще чем раз в три длительности самого распознавания:
   субтитры не отстают и не нагружают процессор сверх своих потоков. В английском и других языках между запусками окна
-  для черновика распознаётся только текущая фраза; финальные строки по-прежнему берутся из окна.
+  для черновика распознаётся только текущая фраза; финальные строки по-прежнему берутся из окна. Окно и эти черновики
+  вместе занимают не больше трети времени модели субтитров; когда шаг окна становится медленным, черновики фразы
+  приостанавливаются, пока окно снова не станет быстрым.
 - **GigaAM быстрее расшифровывает на процессоре**: расшифровка без видеокарты идёт на GigaAM v3 e2e-RNN-T в int8 с той
   же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
   как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
