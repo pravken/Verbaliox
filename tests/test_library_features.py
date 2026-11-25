@@ -451,6 +451,26 @@ class LibraryScopeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             library_qa.ask_library("вопрос", meeting_ids=[])
 
+    def test_a_large_folder_is_not_read_whole(self):
+        """Audit K21: every recording of a chosen folder was read whole (its lines and words) only to learn that the
+        folder is too long to be given in full; SQLite counts the length, the overviews answer without the texts."""
+        from app import library_qa
+
+        folder = create_folder("Large")
+        for _ in range(3):
+            set_meeting_folder(_done_meeting()["id"], folder["id"])
+        ids = meeting_ids_in_folder(folder["id"])
+        self.assertEqual([s["chars"] for s in library_qa._scope(ids)], [library_qa._transcript_chars(get_meeting(i)) for i in ids])
+        with mock.patch.object(library_qa, "FULL_MODE_MAX_CHARS", 10), \
+                mock.patch("app.library_qa.get_meeting", side_effect=AssertionError("a transcript read whole")), \
+                mock.patch("app.semantic.search", return_value=[]), \
+                mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", return_value="Коротко [1].") as chat:
+            res = library_qa.ask_library("какие итоги квартала?", meeting_ids=ids)
+        self.assertEqual(res["mode"], "search")
+        self.assertIn("Коротко", chat.call_args[0][3])  # the overviews of the folder
+
     def _ask(self, question, reply):
         from app import library_qa
 
