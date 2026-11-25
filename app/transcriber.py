@@ -145,6 +145,14 @@ def run_now(meeting_id: int) -> bool:
 # captions to end; with a video card free for it, it runs there at once. «Начать сейчас» lets it go (run_now):
 # it then runs on the processor with the threads left by the captions (asr_onnx.queue_threads).
 _forced_captions: Set[int] = set()
+# Recordings whose transcription failed on the video card and goes on the processor: while the captions recognize with
+# the same model it waits for them as a job without a video card does (a second copy of Parakeet fp32 beside theirs)
+_gpu_failed: Set[int] = set()
+
+
+class _WaitsForCaptions(Exception):
+    """The job stops before loading a second copy of the captions' model on the processor and goes back to the queue,
+    where it waits for the end of the captions (_run_job queues it again)."""
 
 
 def _job_meeting(fn: Callable, args: tuple) -> Optional[int]:
@@ -193,7 +201,7 @@ def waits_for_captions(meeting_id: int) -> bool:
             return False
         from app import onnx_gpu
 
-        return not onnx_gpu.gpu_for_job(model)
+        return int(meeting_id) in _gpu_failed or not onnx_gpu.gpu_for_job(model)
     except Exception:
         traceback.print_exc()
         return False
@@ -354,6 +362,7 @@ def cancel_waiting(meeting_id: int) -> bool:
         # «Начать сейчас» given while it waited goes with it: queued again, it waits for the meeting and the captions
         _forced.discard(meeting_id)
         _forced_captions.discard(meeting_id)
+        _gpu_failed.discard(meeting_id)
         _dropped.add(entry["n"])
     from app.database import update_meeting_progress
 
@@ -573,16 +582,26 @@ def _run_job(meeting_id: int, token: Optional[int] = None) -> None:
     if _skip_dropped(meeting_id, token):  # cancelled while it waited
         return
     _queue_start(meeting_id)
+    again = False
     try:
         _process_meeting_job(meeting_id)
+    except _WaitsForCaptions:
+        again = True
     finally:
         _queue_finish(meeting_id)
         with _jobs_lock:
             _active_jobs.discard(meeting_id)
             _cancel_requested.discard(meeting_id)
-            _forced.discard(meeting_id)
+            if not again:  # queued again it keeps «Начать сейчас» given during the meeting, and the processor
+                _forced.discard(meeting_id)
+                _gpu_failed.discard(meeting_id)
             _forced_captions.discard(meeting_id)
             queue_empty = not _active_jobs
+        if again:
+            print(f"[queue] meeting {meeting_id}: the video card failed; queued again to wait for the live captions "
+                  f"(their model would be loaded twice on the processor)", flush=True)
+            enqueue_meeting_job(meeting_id)
+            return  # exports wait for the transcript
         if queue_empty:
             try:  # a driver failing here (after sleep) must not skip the exports below
                 release_whisper_model()
@@ -2197,7 +2216,8 @@ def _process_meeting_job(meeting_id: int) -> None:
                     except Exception as e:
                         raise RuntimeError(f"Не удалось скачать модель {onnx_name}: {e}")
                     _check_cancel(meeting_id)
-                use_gpu = onnx_gpu.gpu_for_job(model_name)
+                # (a recording whose job failed on the video card goes on the processor)
+                use_gpu = meeting_id not in _gpu_failed and onnx_gpu.gpu_for_job(model_name)
                 if not use_gpu and asr_onnx.shares_live_copy(model_name):
                     from app import live
 
@@ -2234,6 +2254,16 @@ def _process_meeting_job(meeting_id: int) -> None:
                         raise
                     traceback.print_exc()  # CUDA out of memory, a missing DLL: the CPU does the same work
                     asr_onnx.release(model_name, gpu=True)
+                    _gpu_failed.add(meeting_id)
+                    from app import live
+
+                    if meeting_id not in _forced_captions and asr_onnx.shares_live_copy(model_name) \
+                            and live.model_in_use(model_name):
+                        # the processor would load a second copy of the captions' model (Parakeet fp32: 6 GB with
+                        # the two): back to the queue, which starts it once the captions end
+                        update_meeting_progress(meeting_id, status="queued", progress=0,
+                                                stage_text="В очереди на распознавание")
+                        raise _WaitsForCaptions()
                     onnx_done.clear()
                     where["gpu"] = " на процессоре"
                     update_meeting_progress(meeting_id, stage_text="Сбой видеокарты — распознавание на процессоре")
@@ -2486,6 +2516,8 @@ def _process_meeting_job(meeting_id: int) -> None:
         else:
             _drop_work_audio(meeting_id, wav_path)
 
+    except _WaitsForCaptions:
+        raise
     except JobCancelled:
         whisper_model = None
         release_whisper_model()

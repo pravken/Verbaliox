@@ -79,6 +79,50 @@ class ProcessMeetingJobTest(unittest.TestCase):
         self.assertEqual(m["status"], "completed")
         self.assertEqual([s["text"] for s in m["segments"]], ["новый текст"])
 
+    def test_gpu_failure_during_captions_of_the_same_model_waits_for_them(self):
+        # the processor would load a second Parakeet fp32 beside the captions' copy (6 GB): back to the queue instead
+        from app import live
+        from app.database import update_meeting_fields
+
+        update_meeting_fields(self.mid, model_name="parakeet-v3", language="en")
+        self.gpu.return_value = True
+        self.addCleanup(transcriber._gpu_failed.discard, self.mid)
+        calls = []
+
+        def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
+            calls.append(gpu)
+            if gpu:
+                raise RuntimeError("CUDA out of memory")
+            return NEW
+
+        with mock.patch.object(live, "model_in_use", return_value=True), \
+                mock.patch.object(live, "has_sessions", return_value=True), \
+                mock.patch.object(live, "onnx_models_in_use", return_value={"parakeet-v3"}), \
+                mock.patch.object(self.asr, "shares_live_copy", return_value=True):
+            with self.assertRaises(transcriber._WaitsForCaptions):
+                self._run(transcribe)
+            self.assertEqual(calls, [True])  # nothing loaded on the processor
+            self.assertEqual(get_meeting(self.mid)["status"], "queued")
+            self.assertTrue(transcriber.waits_for_captions(self.mid))  # the video card is not tried again
+        m = self._run(transcribe)  # the captions ended
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(m["status"], "completed")
+
+    def test_the_job_that_waits_for_captions_is_queued_again(self):
+        def job(mid):
+            transcriber._gpu_failed.add(mid)
+            raise transcriber._WaitsForCaptions()
+
+        with mock.patch.object(transcriber, "_process_meeting_job", side_effect=job), \
+                mock.patch.object(transcriber, "enqueue_meeting_job") as again, \
+                mock.patch.object(transcriber, "_run_pending_exports") as exports, \
+                mock.patch.object(transcriber, "release_whisper_model"):
+            transcriber._run_job(self.mid)
+        again.assert_called_once_with(self.mid)
+        exports.assert_not_called()  # they wait for the transcript
+        self.assertIn(self.mid, transcriber._gpu_failed)  # the next run goes on the processor
+        transcriber._gpu_failed.discard(self.mid)
+
     def test_cancel_keeps_the_previous_transcript(self):
         def transcribe(model, wav, dur, progress, cancel, out, gpu=False, leveling=True):
             out.append(NEW[0])
