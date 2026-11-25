@@ -47,6 +47,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   only on «Download» (in the popover of the caption models or in Settings → AI analysis); «Quality» then translates
   with Hy-MT3 7B (else 1.8B) and «Fast» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
   The 1.8B is set up in Ollama with a working chat template (the one in its file does not pass the text to the model).
+- **The downloaded Hy-MT3 file is checked**: Ollama downloads the newest file of the model's repository, so the app
+  compares its checksum with the one checked for this version. A file that differs is still used; the translation
+  models block marks it «The model file differs from the checked one», and the log names both checksums.
 - **Translation models have their own block** in Settings → AI analysis, «Translation Models (Ollama)», under the
   analysis models: both Hy-MT3 sizes (the one for this computer marked «Recommended for this computer», the other one
   can be downloaded too), with the measured time of a phrase and the video memory beside speech recognition. Two
@@ -1312,6 +1315,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   субтитров или в «Настройки → ИИ-анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Быстро» —
   Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Модель 1.8B настраивается в Ollama с рабочим
   шаблоном чата (шаблон из её файла не передаёт модели текст).
+- **Скачанный файл Hy-MT3 проверяется**: Ollama скачивает самый новый файл из репозитория модели, поэтому программа
+  сверяет его контрольную сумму с проверенной для этой версии. Файл с другой суммой используется, но в блоке моделей
+  перевода отмечен «Файл модели отличается от проверенного», а в журнале записаны обе суммы.
 - **Свой блок для моделей перевода** в «Настройки → ИИ-анализ» — «Модели перевода (Ollama)», под моделями анализа:
   обе модели Hy-MT3 (подходящая этому компьютеру отмечена «Рекомендуется для этого компьютера», другую тоже можно
   скачать), с измеренным временем перевода фразы и видеопамятью вместе с распознаванием. Два списка выбирают модель

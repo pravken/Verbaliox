@@ -300,6 +300,94 @@ class HyMtPromptTest(unittest.TestCase):
         self.assertEqual(body["messages"][1], {"role": "user", "content": "Let's move the meeting to Friday"})
 
 
+class _Show(_Ollama):
+    """/api/show answering a modelfile; records the names asked."""
+
+    def __init__(self, modelfile="", status=200):
+        super().__init__()
+        self.modelfile, self.status, self.asked = modelfile, status, []
+
+    def post(self, url, json=None, **k):
+        self.asked.append(json["model"])
+        return _Resp(self.status, {"modelfile": self.modelfile})
+
+
+@unittest.skipIf(ollama_client is None, "app dependencies not installed")
+class ModelFileTest(unittest.TestCase):
+    """Ollama pulls Hy-MT3 from the repository's main branch: the file it got is compared with the one checked."""
+
+    BASE = "http://127.0.0.1:11434"
+
+    def setUp(self):
+        ollama_client._file_checks.clear()
+        self.addCleanup(ollama_client._file_checks.clear)
+
+    def _digest(self, modelfile, status=200, models_dir=None):
+        import tempfile
+
+        fake = _Show(modelfile, status)
+        with mock.patch.object(ollama_client.httpx, "Client", fake):
+            return ollama_client.model_file_digest(self.BASE, RAW_7B, models_dir=models_dir or tempfile.mkdtemp())
+
+    def test_the_checked_files(self):
+        self.assertEqual(set(ollama_client.HYMT_GGUF_SHA256), {RAW_7B, RAW_1_8B})
+        for digest in ollama_client.HYMT_GGUF_SHA256.values():
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+
+    def test_the_blob_of_the_from_line(self):
+        d = "ab" * 32
+        self.assertEqual(self._digest(f"# Modelfile\nFROM /home/u/.ollama/models/blobs/sha256-{d}\nTEMPLATE x"), d)
+        self.assertEqual(self._digest(f"FROM C:\\Users\\u\\.ollama\\models\\blobs\\sha256-{d.upper()}"), d)
+        self.assertIsNone(self._digest("FROM hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M"))  # no blob named
+        self.assertIsNone(self._digest("", status=404))
+
+    def test_else_the_manifest_on_the_disk(self):
+        import json
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        d = "cd" * 32
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        path = Path(root, "manifests", "hf.co", "tencent", "Hy-MT3-7B-GGUF", "Q4_K_M")
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"layers": [
+            {"mediaType": "application/vnd.ollama.image.template", "digest": "sha256:" + "ee" * 32},
+            {"mediaType": "application/vnd.ollama.image.model", "digest": "sha256:" + d}]}), encoding="utf-8")
+        self.assertEqual(self._digest("", status=500, models_dir=root), d)
+        self.assertEqual(ollama_client._manifest_path("hy-mt3-1.8b:latest", root),
+                         Path(root, "manifests", "registry.ollama.ai", "library", "hy-mt3-1.8b", "latest"))
+
+    def _check(self, models, digest):
+        with mock.patch.object(ollama_client, "model_file_digest", return_value=digest) as ask:
+            ollama_client.check_translator_files(self.BASE, models)
+        return ask
+
+    def test_another_file_is_marked_and_kept(self):
+        ask = self._check([RAW_7B, LOCAL_1_8B], "00" * 32)
+        self.assertEqual(sorted(c.args[1] for c in ask.call_args_list), sorted([RAW_7B, LOCAL_1_8B]))
+        with mock.patch("app.ollama_client.get_all_settings", return_value={}):
+            catalog = ollama_client.translate_catalog([RAW_7B, LOCAL_1_8B])
+        self.assertEqual([(c["installed"], c["file_differs"]) for c in catalog], [(True, True), (True, True)])
+
+    def test_the_checked_file_is_not_marked_and_asked_once(self):
+        expected = ollama_client.HYMT_GGUF_SHA256[RAW_7B]
+        self._check([RAW_7B], expected)
+        self.assertFalse(ollama_client.translator_file_differs(RAW_7B))
+        self.assertFalse(self._check([RAW_7B], expected).called)  # the status is read often: asked once
+
+    def test_unknown_is_no_warning(self):
+        self._check([RAW_7B], None)
+        self.assertFalse(ollama_client.translator_file_differs(RAW_7B))
+        self.assertFalse(self._check([RAW_7B], None).called)  # not asked again at once
+        with mock.patch.object(ollama_client.time, "time", return_value=ollama_client.time.time() + 601):
+            self.assertTrue(self._check([RAW_7B], None).called)
+
+    def test_a_model_not_installed_is_not_asked(self):
+        self.assertFalse(self._check(["gemma4:e4b"], "00" * 32).called)
+
+
 class TranslateRecommendationTest(unittest.TestCase):
     def test_by_the_card(self):
         from app import hardware

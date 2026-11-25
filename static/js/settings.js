@@ -2286,6 +2286,8 @@ function translateMetersLine(item) {
   const parts = [];
   if (sec.length === 2) parts.push(part(t('trMmPhrase'), `${meterNum(sec[0])}–${meterNum(sec[1])} ${t('unitSec')}`));
   if (item.card_gb) parts.push(part(t('trMmCard'), `${meterNum(item.card_gb)} ${t('unitGB')}`));
+  // the downloaded file is not the one the program checked (app/ollama_client.check_translator_files)
+  if (item.file_differs) parts.push(`<span class="mm-part"><span class="mm-lbl mm-warn" data-tr-file-differs title="${escapeHtml(t('tipTrFileDiffers'))}">${escapeHtml(t('trFileDiffers'))}</span></span>`);
   return `<div class="mm-line">${parts.join('')}</div>`;
 }
 

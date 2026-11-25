@@ -71,6 +71,15 @@ HYMT_1_8B_TEMPLATE = (
     + _HY_BOS + "{{ end }}<｜hy_User｜>{{ .Prompt }}<｜hy_Assistant｜>{{ .Response }}" + _HY_EOS
 )
 HYMT_1_8B_STOP = [_HY_EOS, "<｜hy_place▁holder▁no▁8｜>"]
+# Ollama pulls hf.co/... from the repository's main branch and cannot pin a revision in the name: the file it got is
+# compared with the one checked (the sha256 of the Q4_K_M GGUF on Hugging Face, read 2026-11-25 at
+# tencent/Hy-MT3-7B-GGUF f7f0f5c2d4be781b49ec2cbb4a37a9588e5f0b41 and tencent/Hy-MT3-1.8B-GGUF
+# 4c4370b31f13ccac4ac71133e3a0967c88cc792c). Ollama keeps the file as the blob sha256-<it>; the re-created 1.8B
+# uses the same blob. Another file is kept and used, marked in Settings and written in the log.
+HYMT_GGUF_SHA256 = {
+    HYMT_7B: "e08a5098918c6615e1a84fbe714637237bfdc832e17761bdde4bb65878eb17c9",
+    HYMT_1_8B: "bae6e591103654ff43ef0de7d1492f6e6df1f955505f6bb2cc52e86fc399a942",
+}
 
 TRANSLATE_MODELS: List[Dict[str, Any]] = [
     {
@@ -398,6 +407,7 @@ def delete_ollama_model(name: str) -> None:
             raise RuntimeError("В Ollama несколько вариантов этой модели: удалите нужный по его полному имени")
         target = found[0]
         r = client.request("DELETE", f"{base}/api/delete", json={"model": target})
+    _file_checks.pop(target.lower(), None)  # a new download is checked afresh
     if r.status_code == 404:  # deleted in the meantime (another window, the Ollama app itself)
         return
     raise_for_ollama(r)
@@ -454,14 +464,86 @@ def translate_model_installed_as(model_id: str, models: List[str]) -> Optional[s
     return _listed(item["local"], models) or _listed(item["id"], models)
 
 
+_BLOB_DIGEST = re.compile(r"sha256[-:]([0-9a-f]{64})", re.I)
+_MODEL_LAYER = "application/vnd.ollama.image.model"
+_file_checks: Dict[str, Tuple[Optional[bool], float]] = {}  # installed name -> (differs, when); None: not known
+FILE_RECHECK_SEC = 600.0  # an answer that told nothing is asked again after this
+
+
+def _manifest_path(name: str, models_dir: Optional[str] = None) -> Path:
+    """Ollama's manifest of `name` on the disk: «hf.co/user/repo:tag» -> manifests/hf.co/user/repo/tag,
+    «model:tag» -> manifests/registry.ollama.ai/library/model/tag."""
+    base, _, tag = name.partition(":")
+    parts = base.split("/")
+    if len(parts) == 1:
+        parts = ["registry.ollama.ai", "library"] + parts
+    elif len(parts) == 2:
+        parts = ["registry.ollama.ai"] + parts
+    return Path(models_dir or ollama_models_dir(), "manifests", *parts, tag or "latest")
+
+
+def model_file_digest(base_url: str, name: str, models_dir: Optional[str] = None) -> Optional[str]:
+    """The sha256 of the GGUF file Ollama runs `name` with: the blob of the FROM line of /api/show's modelfile,
+    else the model layer of its manifest on the disk; None when neither tells."""
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            r = client.post(f"{base_url.rstrip('/')}/api/show", json={"model": name})
+        if r.status_code == 200:
+            for line in str(r.json().get("modelfile") or "").splitlines():
+                if line.strip().upper().startswith("FROM "):
+                    m = _BLOB_DIGEST.search(line)
+                    if m:
+                        return m.group(1).lower()
+    except Exception:
+        pass
+    try:
+        manifest = json.loads(_manifest_path(name, models_dir).read_text(encoding="utf-8"))
+        for layer in manifest.get("layers") or []:
+            if layer.get("mediaType") == _MODEL_LAYER:
+                m = _BLOB_DIGEST.search(str(layer.get("digest") or ""))
+                if m:
+                    return m.group(1).lower()
+    except Exception:
+        pass
+    return None
+
+
+def check_translator_files(base_url: str, models: List[str], force: bool = False) -> None:
+    """Compares the file of each installed Hy-MT3 with HYMT_GGUF_SHA256 (once per model; `force`: after a
+    download). A file that differs is kept: it is marked in the catalog (file_differs) and written in the log."""
+    now = time.time()
+    for item in TRANSLATE_MODELS:
+        expected = HYMT_GGUF_SHA256.get(item["id"])
+        as_name = translate_model_installed_as(item["id"], models)
+        if not expected or not as_name:
+            continue
+        key = as_name.lower()
+        seen = _file_checks.get(key)
+        if seen and not force and (seen[0] is not None or now - seen[1] < FILE_RECHECK_SEC):
+            continue
+        digest = model_file_digest(base_url, as_name)
+        differs = None if digest is None else digest != expected
+        _file_checks[key] = (differs, now)
+        if differs:
+            print(f"[ollama] {as_name}: the model file differs from the checked one (sha256 {digest}, "
+                  f"checked {expected}); it is used as it is", flush=True)
+
+
+def translator_file_differs(as_name: str) -> bool:
+    """True when the file of the installed translator `as_name` is known to differ from the checked one."""
+    return bool((_file_checks.get((as_name or "").lower()) or (None, 0.0))[0])
+
+
 def translate_catalog(models: List[str]) -> List[Dict[str, Any]]:
     """The translators of TRANSLATE_MODELS (offered for download), then any other translator the user installed
     in Ollama: never offered, listed with the trash and with a licence to check (TranslateGemma: the Gemma Terms
-    of Use, with restrictions of use; an older Hy-MT: Tencent's own licence)."""
+    of Use, with restrictions of use; an older Hy-MT: Tencent's own licence). file_differs: the downloaded file
+    is not the one checked (check_translator_files)."""
     out = []
     for item in TRANSLATE_MODELS:
         as_name = translate_model_installed_as(item["id"], models)
-        out.append({**item, "installed": as_name is not None, "installed_as": as_name or "", "offered": True})
+        out.append({**item, "installed": as_name is not None, "installed_as": as_name or "", "offered": True,
+                    "file_differs": bool(as_name) and translator_file_differs(as_name)})
     known = {str(m["installed_as"]).lower() for m in out if m["installed_as"]}
     for m in models:
         if not is_translate_only_model(m) or m.lower() in known:
@@ -601,6 +683,8 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
             running = False
     if running and not _pull_state["active"] and _raw_hymt_1_8b(models):
         models = repair_hymt_models(base_url, models)  # once: a downloaded 1.8B gets its working template
+    if running and not _pull_state["active"]:
+        check_translator_files(base_url, models)  # once per model: is the downloaded file the checked one
     if not running:
         # started only when analysis needs it: what it has downloaded is on the disk
         models = models_on_disk()
@@ -853,7 +937,10 @@ def start_model_pull(
                     _pull_state["status"] = f"Настройка шаблона {pretty_name}"
                     _append_log(f"Настройка шаблона {pretty_name}")
                     _hymt_checked.discard(model_name)
-                    repair_hymt_models(base_url, [model_name], strict=True)
+                    names = repair_hymt_models(base_url, [model_name], strict=True)
+                else:
+                    names = [model_name]
+                check_translator_files(base_url, names, force=True)  # is the file the checked one
                 _append_log(f"Модель {pretty_name} скачана: она переводит живые субтитры.")
                 _pull_state.update({"active": False, "status": f"Модель {pretty_name} установлена", "progress": 100})
                 return
