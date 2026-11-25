@@ -2831,6 +2831,20 @@ await step('notices clear of the player and the question', async () => {
   expect(!player.length && !ask.length, `covered by a notice: ${[...player, ...ask]}`);
 });
 
+// The hint of the strip without a calendar gives way with «…» (it was cut mid-word at 1100 px)
+await step('strip hint ends with an ellipsis', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await sleep(500);
+  const r = await page.evaluate(() => {
+    const g = document.getElementById('strip-grow'), meta = document.getElementById('strip-meta');
+    return { text: g.textContent, cut: g.scrollWidth > g.clientWidth, ell: getComputedStyle(g).textOverflow, meta: meta.textContent,
+      kind: strip.kind };
+  });
+  await page.setViewportSize({ width: 1300, height: 860 });
+  if (r.kind !== 'free') return;  // a calendar in the data: no hint
+  expect(r.text.includes('календар') && !r.meta && r.ell === 'ellipsis', `the hint: ${JSON.stringify(r)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
