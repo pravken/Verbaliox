@@ -22,6 +22,7 @@ from app.audio_utils import format_timestamp
 
 _INVALID = re.compile(r'[\\/:*?"<>|\x00-\x1f#^\[\]]')
 _lock = threading.Lock()
+_gen_lock = threading.Lock()  # the overview and tasks of a note made by the model, one recording at a time
 
 _LABELS = {
     "ru": {"summary": "Резюме", "overview": "Обзор", "tasks": "Задачи", "chapters": "Главы", "transcript": "Расшифровка",
@@ -586,8 +587,14 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
     folder = vault_dir(settings)
     if folder is None:
         raise ValueError("Папка хранилища Obsidian не выбрана в настройках")
+    if generate and _on(settings, "obsidian_generate"):
+        # The overview and the tasks the note lacks are made first, outside _lock: the model takes minutes, and
+        # every other note (an automatic update, a move after a rename) waited for it (audit K22). One such
+        # generation at a time: a second export of the same recording finds them made
+        with _gen_lock:
+            _prepare(meeting_id, True, settings)
     with _lock:
-        m = _prepare(meeting_id, generate and _on(settings, "obsidian_generate"), settings)
+        m = get_meeting(meeting_id) or {}  # read under the lock: an export running now changes the note's path
         if not m:
             raise LookupError("Встреча не найдена")
         if (m.get("status") != "completed" and not in_job) or not m.get("segments"):

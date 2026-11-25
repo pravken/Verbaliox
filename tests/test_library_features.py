@@ -171,6 +171,35 @@ class ObsidianTest(unittest.TestCase):
         self.assertNotEqual(written, foreign)
         self.assertEqual(foreign.read_text(encoding="utf-8"), "моя заметка")
 
+    def test_other_notes_do_not_wait_for_the_model(self):
+        """Audit K22: an export that has the model write the overview held the lock of every note for those
+        minutes; another recording's note is written meanwhile, and the overview made lands in the note."""
+        import threading
+
+        slow = _done_meeting(title="Долгая", recorded_at="2024-05-12 10:30:00")
+        quick = _done_meeting(title="Быстрая", recorded_at="2024-05-12 11:30:00")
+        database.update_meeting_fields(slow["id"], summaries_json="{}")
+        update_settings({"obsidian_generate": "true", "obsidian_summary": "true", "obsidian_tasks": "false"})
+        self.addCleanup(update_settings, {"obsidian_generate": "false", "obsidian_tasks": "true"})
+        inside, go = threading.Event(), threading.Event()
+
+        def summary(**kw):
+            inside.set()
+            go.wait(10)
+            return "## Обзор\n- Сделано моделью"
+        done = {}
+        with mock.patch("app.ollama_client.generate_meeting_summary", side_effect=summary), \
+                mock.patch("app.grounding.maybe_ground", side_effect=lambda text, key, m: text):
+            t = threading.Thread(target=lambda: done.setdefault("slow", obsidian.export_meeting(slow["id"], generate=True)))
+            t.start()
+            self.assertTrue(inside.wait(5))
+            other = obsidian.export_meeting(quick["id"])  # waited for the model before
+            self.assertFalse(done)
+            go.set()
+            t.join(10)
+        self.assertTrue(other.is_file())
+        self.assertIn("Сделано моделью", done["slow"].read_text(encoding="utf-8"))
+
     def test_notes_follow_the_date_folders_and_come_back(self):
         """Asked by the user: «Папки по дате» turned on, the notes made before go into their date's folders;
         turned off, they come back and the date folders left empty go."""
