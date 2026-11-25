@@ -88,6 +88,8 @@ const SERVER_TEXT_EN = {
   "Выберите серию или человека": "Choose a series or a person",
   "Выберите хотя бы двоих, чтобы объединить": "Choose at least two to merge",
   "Выберите хотя бы одну модель": "Choose at least one model",
+  "Эта модель не скачана: сравнить можно только скачанные модели": "This model is not downloaded: only downloaded models can be compared",
+  "Модель Whisper не скачана: скачайте её в «Настройки → Распознавание»": "The Whisper model is not downloaded: download it in Settings → Recognition",
   "Голосовой профиль не найден": "Voice profile not found",
   "Двуязычный экспорт доступен в SRT, VTT и DOCX": "Bilingual export is available in SRT, VTT and DOCX",
   "Для автоперевода нужны два разных языка": "Automatic translation needs two different languages",

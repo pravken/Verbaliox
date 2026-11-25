@@ -49,7 +49,11 @@ class BenchRunTest(unittest.TestCase):
         bench.clear_history()
         with mock.patch("app.audio_utils.extract_audio_16k_mono", fake_extract), \
              mock.patch.object(bench, "_asr_one", fake_one), mock.patch.object(bench, "busy_reason", return_value=""), \
+             mock.patch.object(bench, "asr_choices", return_value=[{"id": "good", "name": "Good"}, {"id": "bad", "name": "Bad"}]), \
              mock.patch("app.database.get_meeting", return_value=done):
+            # a model the page does not offer (not downloaded, or any Hugging Face repository) is refused
+            with self.assertRaises(ValueError):
+                bench.start("asr", m["id"], ["good", "some-org/some-repo"], 60)
             bench.start("asr", m["id"], ["good", "bad"], 60)
             for _ in range(100):
                 if not bench.status()["running"]:
@@ -71,6 +75,18 @@ class BenchRunTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             bench.start("asr", m["id"], ["a"])
 
+
+
+class WhisperPathTest(unittest.TestCase):
+    def test_only_catalog_models_and_never_a_download_by_faster_whisper(self):
+        from app import model_manager
+
+        with self.assertRaises(ValueError):  # faster-whisper would download any repository by this name
+            model_manager.get_whisper_model_path("some-org/some-repo")
+        with mock.patch.object(model_manager, "ensure_whisper_model") as ensure:
+            with self.assertRaises(ValueError):  # not downloaded: a pinned download first, never the newest commit
+                model_manager.get_whisper_model_path("large-v3-turbo")
+        ensure.assert_called_once_with("large-v3-turbo")
 
 
 class GroundingLanguageTest(unittest.TestCase):

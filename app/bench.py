@@ -248,6 +248,10 @@ def start(kind: str, meeting_id: int, models: List[str], clip_sec: int = 180) ->
         names = {c["id"]: c["name"] for c in (asr_choices() if kind == "asr" else llm_choices())}
     except Exception:
         names = {}
+    # Only the models the page offers (downloaded ones): a name sent by hand would be fetched by
+    # faster-whisper from any Hugging Face repository
+    if any(x not in names for x in models):
+        raise ValueError("Эта модель не скачана: сравнить можно только скачанные модели")
     with _lock:
         if _state["running"]:
             raise ValueError("Сравнение уже идёт")
