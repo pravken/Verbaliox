@@ -351,10 +351,14 @@ class LiveSession:
         """A run of the window took `cost` seconds: the drafts off above DRAFTS_OFF_SEC, on again under DRAFTS_ON_SEC,
         and their share of the budget is what the window leaves of CAPTION_BUSY_SHARE."""
         self._window_cost = cost
+        was = self._drafts_on
         if cost > DRAFTS_OFF_SEC:
             self._drafts_on = False
         elif cost < DRAFTS_ON_SEC:
             self._drafts_on = True
+        if self._drafts_on != was:
+            print(f"[live] phrase drafts {'on' if self._drafts_on else 'off'}: a run of the window took {cost:.2f} s",
+                  flush=True)
         if self._follow:
             self._follow.pace.share = max(MIN_DRAFT_SHARE, CAPTION_BUSY_SHARE - cost / LIVE_STEP_SEC)
 
