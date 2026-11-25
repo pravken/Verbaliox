@@ -70,6 +70,26 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   finds «null»; tooltips name the real speed range (0.25× to 3×) and the queue in the status bar.
 
 
+### Design
+
+- **One definition of the time in meetings on «Overview»**: «Statistics» and «Load of the week» count the same way —
+  the recordings and the calendar's meetings, overlaps counted once, only the time gone by (three recordings of a
+  minute made together read «0.1 h» beside «0 h»). Less than 0.1 h is written in minutes («6 min»).
+- **One place for the search**: in «Recordings», «Tasks», «Glossary» and «People» the search is the last control of
+  the head, at its right edge, of one width and height; «People» has it in the head instead of the list.
+- **Targets of 24 px at least**: the moment of a task, the task and person boxes, the switches of the widgets'
+  charts and periods, the links of the widgets, «More», the moment of a phrase and «+ add» take the click on
+  24 px or more; their drawing is unchanged.
+- **No abbreviated words**: «3 participants», «5 days ago», «2 people», «Russian» and «English» of the model
+  comparison; the decisions and tasks columns of the «Meetings» list of «Overview» are icons with their full names.
+- **Glossary: one way to add a word** — the row at the top of «Words»; the head's «Add word» is gone.
+- **The first-run window says «Step 2 of 4»** beside its dots.
+- **The features' keywords** are described as found in the title of any meeting (it said a Teams meeting).
+- **The Assistant's conversations are saved when the window closes**: what changed in the last half-second is
+  sent as the window closes (it was lost).
+- **The quick translation button of the transcript** carries the translation icon («文A EN»): it looked like the
+  switch of the program's language.
+
 ### Fixes
 
 - **No sound deleted by mistake**: after a restore from a backup, «Keep the sound N days» counts from the restore
@@ -1457,6 +1477,26 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   та же кнопка на обеих карточках «Сегодня»; поиск задач больше не находит «null»; подсказки называют настоящий
   диапазон скорости (от 0,25× до 3×) и очередь в строке состояния.
 
+
+### Оформление
+
+- **Одно определение времени во встречах в «Обзоре»**: «Статистика» и «Нагрузка недели» считают одинаково — записи
+  и встречи календаря, пересечения один раз, только прошедшее время (три записи по минуте, сделанные одновременно,
+  давали «0,1 ч» рядом с «0 ч»). Меньше 0,1 ч пишется в минутах («6 мин»).
+- **Одно место для поиска**: в «Записях», «Задачах», «Словаре» и «Людях» поле поиска — последний элемент шапки, у её
+  правого края, одной ширины и высоты; в «Людях» оно перенесено из списка в шапку.
+- **Размер нажатия не меньше 24 px**: момент задачи, флажки задач и людей, переключатели вида и периода виджетов,
+  ссылки виджетов, «Подробнее», время реплики и «+ добавить» у фичи принимают нажатие на площади от 24 px; их
+  рисунок не изменился.
+- **Без сокращений слов**: «3 участника», «5 дней назад», «2 человека», «русский» и «английский» в сравнении
+  моделей; столбцы решений и задач в списке «Встречи» «Обзора» — значки с полными названиями в подсказке.
+- **Словарь: один способ добавить слово** — строка вверху «Слов»; кнопка «Добавить слово» в шапке убрана.
+- **Окно первого запуска показывает «Шаг 2 из 4»** рядом с точками.
+- **Ключевые слова фич** находят фичу в названии любой встречи (в описании была только встреча Teams).
+- **Беседы Ассистента сохраняются при закрытии окна**: изменения последних полсекунды отправляются при закрытии
+  (раньше пропадали).
+- **Кнопка быстрого перевода расшифровки** получила значок перевода («文A EN»): она была похожа на переключатель языка
+  программы.
 
 ### Исправления
 
