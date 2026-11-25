@@ -5443,6 +5443,13 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .st-attn-ic { width: 14px; height: 14px; flex: none; }
 .st-moffer.is-attn { display: inline-flex; align-items: flex-start; gap: 6px; color: #FFB340; }
 .st-moffer.is-attn .st-attn-ic { margin-top: 1px; }
+/* the line of the missing model takes the popover's whole width (it wrapped to four lines in the select's column);
+   its size and «Скачать» go under it, in the columns of the rows above */
+#st-tr-offer { row-gap: 6px; }
+#st-tr-offer > .st-mlabel { display: none; }
+#st-tr-offer > .st-moffer { grid-column: 1 / -1; }
+#st-tr-offer > .st-mgb { grid-column: 3; }
+#st-tr-offer > .st-moffer-btn { grid-column: 4; }
 .st-attn-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; font-size: var(--fs-label);
   font-weight: 600; color: #FFB340; background: rgba(255, 159, 10, 0.14); border: 1px solid rgba(255, 159, 10, 0.6); cursor: pointer; white-space: nowrap; }
 .st-attn-btn:hover:not(:disabled) { background: rgba(255, 159, 10, 0.24); color: #FFC56B; }
