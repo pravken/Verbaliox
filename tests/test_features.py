@@ -223,14 +223,11 @@ class PeopleTest(unittest.TestCase):
 
 class DeleteWithSourceTest(unittest.TestCase):
     def test_source_file_only_on_request(self):
-        import tempfile
-        from pathlib import Path
-
         from app import database as db
 
         db.init_db()
         for with_source in (False, True):
-            src = Path(tempfile.mkdtemp()) / "talk.mp3"
+            src = tests.temp_dir(self) / "talk.mp3"
             src.write_bytes(b"x")
             mid = db.create_meeting("Локальная", "talk.mp3", str(src), source="local")["id"]
             db.delete_meeting(mid, with_source=with_source)
@@ -239,14 +236,11 @@ class DeleteWithSourceTest(unittest.TestCase):
 
 class FileNamingTest(unittest.TestCase):
     def test_recording_renamed_by_template(self):
-        import tempfile
-        from pathlib import Path
-
         from app import database as db
         from app.naming import base_name, rename_recording_file
 
         db.init_db()
-        d = Path(tempfile.mkdtemp())
+        d = tests.temp_dir(self)
         f = d / "a1b2c3d4_Запись.m4a"
         f.write_bytes(b"x")
         mid = db.create_meeting("Планёрка: релиз?", f.name, str(f), source="recording", owns_media=True,
@@ -277,11 +271,9 @@ class OnnxAsrTest(unittest.TestCase):
 
         res = [SimpleNamespace(start=1.0, end=3.0, text=" Добрый  день ", tokens=[" Добрый", " день"], timestamps=[0.0, 0.8]),
                SimpleNamespace(start=4.0, end=5.0, text="", tokens=[], timestamps=[])]
-        import tempfile
         import wave
-        from pathlib import Path
 
-        wav = Path(tempfile.mkdtemp()) / "a.wav"
+        wav = tests.temp_dir(self) / "a.wav"
         with wave.open(str(wav), "wb") as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\0\0" * 16000)
         fake = SimpleNamespace(recognize=lambda audio, sample_rate=16000: iter(res))
@@ -424,9 +416,6 @@ class AnalyticsTest(unittest.TestCase):
 
 class WatchFolderTest(unittest.TestCase):
     def test_only_new_files_once_they_stop_growing(self):
-        import tempfile
-        from pathlib import Path
-
         from app import database as db
         from app import watch_folder as wf
 
@@ -435,7 +424,7 @@ class WatchFolderTest(unittest.TestCase):
         except ImportError:
             self.skipTest("app dependencies not installed")
         db.init_db()
-        d = Path(tempfile.mkdtemp())
+        d = tests.temp_dir(self)
         (d / "old.mp3").write_bytes(b"x" * 10)
         db.update_settings({"watch_folder": str(d), "watch_folder_baseline": ""})
         added = []
@@ -478,12 +467,10 @@ class MediaCutTest(unittest.TestCase):
     @unittest.skipUnless(__import__("shutil").which("ffmpeg"), "no ffmpeg on PATH")
     def test_cut_joins_the_kept_parts(self):
         import subprocess
-        import tempfile
-        from pathlib import Path
 
         from app.media_cut import run_cut
 
-        d = Path(tempfile.mkdtemp())
+        d = tests.temp_dir(self)
         src = d / "talk.wav"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440", "-t", "10", str(src)], check=True)
         seen = []
@@ -623,8 +610,6 @@ class CutStderrTest(unittest.TestCase):
         """FFmpeg writing a lot of errors (a damaged source) must not block on a full pipe."""
         import subprocess
         import sys
-        import tempfile
-        from pathlib import Path
 
         from app import media_cut
 
@@ -632,7 +617,7 @@ class CutStderrTest(unittest.TestCase):
                   "print('out_time_us=1000000', flush=True)\nsys.exit(1)\n")
         proc = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, encoding="utf-8")
-        out = Path(tempfile.mkdtemp()) / "cut.mp4"
+        out = tests.temp_dir(self) / "cut.mp4"
         with self.assertRaises(RuntimeError) as err:
             media_cut._follow(proc, 1.0, out, lambda _f: None, lambda: None)
         self.assertIn("decode error 19999", str(err.exception))
@@ -720,9 +705,6 @@ class DubMemoryTest(unittest.TestCase):
 
 class WorkAudioTest(unittest.TestCase):
     def test_wav_goes_waveform_stays(self):
-        import tempfile
-        from pathlib import Path
-
         import soundfile as sf
         from fastapi.testclient import TestClient
 
@@ -732,7 +714,7 @@ class WorkAudioTest(unittest.TestCase):
         from app.paths import AUDIO_DIR
 
         init_db()
-        media = Path(tempfile.mkdtemp()) / "rec.m4a"
+        media = tests.temp_dir(self) / "rec.m4a"
         media.write_bytes(b"sound")
         m = create_meeting(title="Своя запись", filename="rec.m4a", media_path=str(media), owns_media=True)
         wav = AUDIO_DIR / f"meeting_{m['id']}.wav"

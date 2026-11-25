@@ -1,8 +1,14 @@
 # Tests never touch the real user data folder: everything goes to a throw-away directory.
+import atexit
 import os
+import shutil
 import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="verbaliox-tests-")
+atexit.register(shutil.rmtree, _TMP, True)  # about a gigabyte and a half with a model: never left behind
+# Every temporary folder a test or the app makes lands inside it, so even one a test forgets goes with it
+os.makedirs(os.path.join(_TMP, "tmp"), exist_ok=True)
+tempfile.tempdir = os.path.join(_TMP, "tmp")
 os.environ["VERBALIOX_DATA_DIR"] = os.path.join(_TMP, "data")  # even when the shell points to real data
 os.environ["VERBALIOX_MODELS_DIR"] = os.path.join(_TMP, "models")
 os.environ["VERBALIOX_SKIP_MIGRATION"] = "1"
@@ -104,3 +110,12 @@ try:
     _idle_unload._started = True
 except ImportError:  # the release CI runs without the app's packages
     pass
+
+
+def temp_dir(case):
+    """A new temporary folder for this test, deleted when the test ends (pass/fail alike)."""
+    from pathlib import Path
+
+    d = tempfile.mkdtemp()
+    case.addCleanup(shutil.rmtree, d, True)
+    return Path(d)

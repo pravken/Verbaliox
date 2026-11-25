@@ -79,11 +79,9 @@ class DashboardTest(unittest.TestCase):
         """Reported by the user: the meeting hours stood still. The length was written only when a
         transcription began, so a recording waiting in the queue counted 0 hours, and a cancelled one was
         not counted at all."""
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
-        folder = Path(tempfile.mkdtemp())
+        folder = tests.temp_dir(self)
         ids = []
         for title, status in (("В очереди", "queued"), ("Отменённая", "cancelled"), ("Сломанная", "failed")):
             media = folder / f"{status}.wav"
@@ -109,11 +107,9 @@ class DashboardTest(unittest.TestCase):
         """Found in the review: every load of «Главная» ran ffprobe again on files it cannot read, and wrote
         the length of a recording still being mixed (its file not whole yet)."""
         import os
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
-        folder = Path(tempfile.mkdtemp())
+        folder = tests.temp_dir(self)
         rows = []
         for status in ("queued", "mixing"):
             media = folder / f"{status}.wav"

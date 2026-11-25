@@ -367,13 +367,10 @@ class PhraseVariantTest(unittest.TestCase):
     """The captions' copy of GigaAM is the e2e-CTC int8, once its file is there; until then the main model."""
 
     def setUp(self):
-        import tempfile
-        from pathlib import Path
-
         from app import asr_onnx
 
         self.asr = asr_onnx
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = tests.temp_dir(self)
         self.patches = [mock.patch.object(asr_onnx, "model_dir", lambda mid: self.dir / mid),
                         mock.patch.object(asr_onnx, "_vad_dir", lambda: self.dir / "vad"),
                         mock.patch.object(asr_onnx, "_present", set()),
