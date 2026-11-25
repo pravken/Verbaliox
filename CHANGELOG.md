@@ -8,12 +8,98 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 
 ## 0.9.4 — English
 
+
+### Live captions
+
+- **No more freezes of the computer during live captions on a processor with few cores**: the threads of GigaAM,
+  Parakeet and the voice detector no longer wait for work actively (ONNX Runtime's spinning). In the measurement on
+  8 logical processors (captions, a transcription in the queue and a video call at once) the pauses of the system
+  over 50 ms went from 645 in 5 minutes to none, with the same accuracy, and the queue transcribes 1.5 times faster.
 - **The phrase being spoken no longer flickers** («Text as spoken», «Translate as spoken»): the words
   already shown stay in place, a revised word changes in place with a short fade, and new words appear one by one
   right after they are recognized. The bubble does not shrink or jump while the phrase is revised, and it becomes the
   final line in place, with the same font and size. With reduced motion in the system the words appear without fades.
-- **«Captions and text»** in the meeting strip while recording: the studio with the live captions and the text from any
-  section.
+- **Captions word by word**: a spoken word reaches the draft line in about a third of a second instead of one to two
+  seconds. The studio sends the audio every 0.25 s instead of every second, and the draft of the phrase being spoken
+  is recognized every 0.3 s — less often on a slow computer (never sooner than three times its own recognition time),
+  so the captions do not fall behind and do not load the processor beyond their threads. In English and other
+  languages only the phrase being spoken is recognized for the draft between the runs of the window; the final lines
+  come from the window as before. The window and these drafts together take at most about a third of the time of the
+  captions' model; when a run of the window gets slow the drafts pause until it is fast again.
+- **Russian live captions by phrases**: with GigaAM the captions no longer recognize a window of up to 20 s again
+  and again. The voice detector follows the speech, only the phrase being spoken is recognized (its draft as it is
+  spoken), and it becomes final once, after a pause of half a second, by GigaAM v3 e2e-CTC int8. In the measurement:
+  the final line in about 1 s instead of 3–4 s, fewer errors (WER 5.9 % instead of 8.5 %), a seventh of the processor load
+  and 0.44 GB of memory instead of 2.9. Speech without pauses is cut at 20 s in a gap between words (where the
+  voice detector hears no speech; only without such a gap where the speech is weakest), and the next line starts
+  exactly there: no words are lost at the cut. A word cut in half all the same is not written twice: the next line
+  loses its first word when it repeats the last word of the line before or is its beginning (a piece of the word), and
+  a tail of the cut shorter than a quarter of a second or of one letter is not shown as a line. The model file (about 214 MB, from the same
+  repository) is downloaded once by itself; until then the captions go as before. English and other languages keep
+  Parakeet in the window, which is more accurate for them.
+- **Live captions with Teams no longer jump**: a line keeps the speaker it was given, and the room for the names stays.
+- **Short replies in the captions are translated**: a line of one word («No.», «Yes?», «Да.») gets its translation; it
+  was shown untranslated. Fillers («um», «эм») still are not translated.
+- **Captions follow the speech**: «Text as it is spoken» and «Translate as it is spoken» are on by default, and the
+  draft is translated as often as the model allows: about every half second with Hy-MT3 1.8B, with a slower model three
+  times as seldom as one translation takes, so the translation model is busy a third of the time at most. A translation
+  model that Ollama runs without a video card takes 2 threads of the processor instead of one per core, and its
+  draft is not translated when one translation takes over 1.5 s: the final lines still are.
+- **One row above the studio's text**: the tabs «Text · My notes · Questions» on the left, and on the right the chips
+  «Captions» with its switch, the translation language (a menu), the memory of the caption models (a popover with the
+  recognition and translation models, their size and whether they are in memory) and the gear with the rest.
+### Translation of captions
+
+- **A translation model for live captions**: the captions' models offer one model of Tencent Hy-MT3 (Apache 2.0) by the
+  video card, Hy-MT3 7B (4.9 GB) on a card of 10 GB and more, else Hy-MT3 1.8B (1.3 GB); in the app's measurements
+  both translate English to Russian and back more accurately than the Gemma models used so far. It is downloaded
+  only on «Download» (in the popover of the caption models or in Settings → Analysis); «Quality» then translates
+  with Hy-MT3 7B (else 1.8B) and «Fast» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
+  The 1.8B is set up in Ollama with a working chat template (the one in its file does not pass the text to the model).
+- **Translation models have their own block** in Settings → Analysis, «Translation Models (Ollama)», under the
+  analysis models: both Hy-MT3 sizes (the one for this computer marked «Recommended for this computer», the other one
+  can be downloaded too), with the measured time of a phrase and the video memory beside speech recognition. Two
+  lists choose the model of «Quality» and «Fast» of the captions: «Auto · <the model it takes now>», the installed
+  translators and the analysis models; a chosen model that is deleted gives its place to «Auto», and a model chosen in
+  the studio still applies to its caption session. Dictation with translation now translates with the «Quality» model
+  (Hy-MT3 when installed, with the prompt of its model card), else with the analysis model as before.
+- **Translators are no longer listed as analysis models**: Hy-MT3 and a TranslateGemma installed in Ollama by hand
+  cannot write an analysis and are listed with the translation models only. TranslateGemma (Gemma Terms of Use) is
+  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «The license needs checking
+  before commercial use», and it translates with the prompt of its model card.
+- **The downloaded Hy-MT3 file is checked**: Ollama downloads the newest file of the model's repository, so the app
+  compares its checksum with the one checked for this version. A file that differs is still used; the translation
+  models block marks it «The model file differs from the checked one», and the log names both checksums.
+
+### Speed and load
+
+- **One thread budget for speech recognition**: live captions by phrases (GigaAM) take 2 threads of the
+  processor, by the window (Parakeet) 4; while they run a transcription on the processor takes at most «logical
+  processors − caption threads − 2» (2 for the system and the call app), never more than «Processor load». Captions and transcription have
+  copies of the model of their own: a transcription started before the captions keeps its threads, the next one
+  takes the budget of its start.
+- **No second copy of Parakeet during live captions**: while English (or another non-Russian) captions recognize with
+  Parakeet, a transcription that would run Parakeet on the processor waits for the captions to end («waits for the
+  captions to end» in the queue) instead of loading a second copy of the model (about 3 GB more memory). With a video
+  card that has room for it, it runs there at once. «Start now» in the queue starts it anyway, with the threads left
+  by the captions; once the captions end it starts by itself, and the captions' copy leaves the memory. A transcription
+  whose video card fails during such captions goes back to the queue and waits for them too, then runs on the processor.
+- **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
+  live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
+  one), and so does the separate process of the Whisper captions.
+- **Models leave the memory a minute after the processing**: once the queue has nothing running or waiting (a
+  transcription with its automatic analysis counts as one job) and nothing uses the app for 60 seconds, the speech
+  models and the analysis model are unloaded; a model asked by hand (a question to the assistant) stays for the time
+  set in «Free the models from memory after». Live captions starting unload the analysis model they do not use (not
+  during a running analysis), switching «Quality» ↔ «Fast» unloads the previous translation model, and the captions'
+  models go a minute after the captions end. Each unload is written in the log with its reason.
+- **GigaAM transcribes faster on the processor**: a transcription without the video card takes GigaAM v3 e2e-RNN-T in
+  int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
+  the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
+  completed in the background on first use, and until then the processor uses the model as before.
+
+### Studio and recording
+
 - **The way to the studio is in the recording button**: while recording, a click on the dot, the time or the sources
   opens the studio; «Studio ›» between them and «Stop» shows whether the captions are on (a green outline while they
   are off). On the first recording a hint under it says where the captions and the text are; once closed it is not
@@ -33,97 +119,19 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 - **The queue says what it waits for**: «A meeting is under way» or «Pause after the meeting · 1:40» with the time
   counting down, in the queue window, the strip's island, the strip and the status bar. Each transcription waiting for
   the meeting has «Start now» (after the same question as «Transcribe» during a meeting).
-- **Live captions with Teams no longer jump**: a line keeps the speaker it was given, and the room for the names stays.
-- **One row above the studio's text**: the tabs «Text · My notes · Questions» on the left, and on the right the chips
-  «Captions» with its switch, the translation language (a menu), the memory of the caption models (a popover with the
-  recognition and translation models, their size and whether they are in memory) and the gear with the rest.
 - **A meeting moved or cancelled in the calendar is not reminded of at its old time**: the calendar is read afresh two
   minutes before each reminder and each meeting's start, and the reminder follows that read (a moved meeting gets its
   reminder at its new time). If the read fails, the reminder comes as before. While a meeting starts within the hour,
   the calendar is read every 5 minutes instead of 15.
-- **A translation model for live captions**: the captions' models offer one model of Tencent Hy-MT3 (Apache 2.0) by the
-  video card, Hy-MT3 7B (4.9 GB) on a card of 10 GB and more, else Hy-MT3 1.8B (1.3 GB); in the app's measurements
-  both translate English to Russian and back more accurately than the Gemma models used so far. It is downloaded
-  only on «Download» (in the popover of the caption models or in Settings → AI analysis); «Quality» then translates
-  with Hy-MT3 7B (else 1.8B) and «Fast» with Hy-MT3 1.8B (else Gemma 4 E2B). Without it everything works as before.
-  The 1.8B is set up in Ollama with a working chat template (the one in its file does not pass the text to the model).
-- **The downloaded Hy-MT3 file is checked**: Ollama downloads the newest file of the model's repository, so the app
-  compares its checksum with the one checked for this version. A file that differs is still used; the translation
-  models block marks it «The model file differs from the checked one», and the log names both checksums.
-- **Translation models have their own block** in Settings → AI analysis, «Translation Models (Ollama)», under the
-  analysis models: both Hy-MT3 sizes (the one for this computer marked «Recommended for this computer», the other one
-  can be downloaded too), with the measured time of a phrase and the video memory beside speech recognition. Two
-  lists choose the model of «Quality» and «Fast» of the captions: «Auto · <the model it takes now>», the installed
-  translators and the analysis models; a chosen model that is deleted gives its place to «Auto», and a model chosen in
-  the studio still applies to its caption session. Dictation with translation now translates with the «Quality» model
-  (Hy-MT3 when installed, with the prompt of its model card), else with the analysis model as before.
-- **Translators are no longer listed as analysis models**: Hy-MT3 and a TranslateGemma installed in Ollama by hand
-  cannot write an analysis and are listed with the translation models only. TranslateGemma (Gemma Terms of Use) is
-  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «The license needs checking
-  before commercial use», and it translates with the prompt of its model card.
-- **Simpler settings, nothing hidden**: no «More» to unfold; every option is a row with a short name, a line under it
-  only where the effect is not obvious, and its control at the right edge, in every section. A switch with a mode
-  beside it is one list with «Off» in it (the «Recording only» mode, meeting notifications, GigaAM and Parakeet on the
-  video card). The search also finds options by their former names.
-- **Models leave the memory a minute after the processing**: once the queue has nothing running or waiting (a
-  transcription with its automatic analysis counts as one job) and nothing uses the app for 60 seconds, the speech
-  models and the analysis model are unloaded; a model asked by hand (a question to the assistant) stays for the time
-  set in «Free the models from memory after». Live captions starting unload the analysis model they do not use (not
-  during a running analysis), switching «Quality» ↔ «Fast» unloads the previous translation model, and the captions'
-  models go a minute after the captions end. Each unload is written in the log with its reason.
 - **The studio's choices stay**: «Captions» switched on or off, the translation language, «Quality / Fast», the
   caption model and the translation model are kept as settings and survive a new recording, a restart and a launch on
   another port. «Captions» is «Turn captions on when a recording starts», the caption model is «Caption model», the
   translation model is the one of the chosen mode in «Translation models»: Settings shows the same values. The models
   can be chosen before a recording too. A recording preset no longer switches the captions or the translation. With
   «Do not disturb in meetings» captions do not start by themselves on a meeting only; a voice note starts with them.
-- **Captions follow the speech**: «Text as it is spoken» and «Translate as it is spoken» are on by default, and the
-  draft is translated as often as the model allows: about every half second with Hy-MT3 1.8B, with a slower model three
-  times as seldom as one translation takes, so the translation model is busy a third of the time at most. A translation
-  model that Ollama runs without a video card takes 2 threads of the processor instead of one per core, and its
-  draft is not translated when one translation takes over 1.5 s: the final lines still are.
-- **No more freezes of the computer during live captions on a processor with few cores**: the threads of GigaAM,
-  Parakeet and the voice detector no longer wait for work actively (ONNX Runtime's spinning). In the measurement on
-  8 logical processors (captions, a transcription in the queue and a video call at once) the pauses of the system
-  over 50 ms went from 645 in 5 minutes to none, with the same accuracy, and the queue transcribes 1.5 times faster.
-- **One thread budget for speech recognition**: live captions by phrases (GigaAM) take 2 threads of the
-  processor, by the window (Parakeet) 4; while they run a transcription on the processor takes at most «logical
-  processors − caption threads − 2» (2 for the system and the call app), never more than «Processor load». Captions and transcription have
-  copies of the model of their own: a transcription started before the captions keeps its threads, the next one
-  takes the budget of its start.
-- **No second copy of Parakeet during live captions**: while English (or another non-Russian) captions recognize with
-  Parakeet, a transcription that would run Parakeet on the processor waits for the captions to end («waits for the
-  captions to end» in the queue) instead of loading a second copy of the model (about 3 GB more memory). With a video
-  card that has room for it, it runs there at once. «Start now» in the queue starts it anyway, with the threads left
-  by the captions; once the captions end it starts by itself, and the captions' copy leaves the memory. A transcription
-  whose video card fails during such captions goes back to the queue and waits for them too, then runs on the processor.
-- **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
-  live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
-  one), and so does the separate process of the Whisper captions.
-- **Russian live captions by phrases**: with GigaAM the captions no longer recognize a window of up to 20 s again
-  and again. The voice detector follows the speech, only the phrase being spoken is recognized (its draft as it is
-  spoken), and it becomes final once, after a pause of half a second, by GigaAM v3 e2e-CTC int8. In the measurement:
-  the final line in about 1 s instead of 3–4 s, fewer errors (WER 5.9 % instead of 8.5 %), a seventh of the processor load
-  and 0.44 GB of memory instead of 2.9. Speech without pauses is cut at 20 s in a gap between words (where the
-  voice detector hears no speech; only without such a gap where the speech is weakest), and the next line starts
-  exactly there: no words are lost at the cut. A word cut in half all the same is not written twice: the next line
-  loses its first word when it repeats the last word of the line before or is its beginning (a piece of the word), and
-  a tail of the cut shorter than a quarter of a second or of one letter is not shown as a line. The model file (about 214 MB, from the same
-  repository) is downloaded once by itself; until then the captions go as before. English and other languages keep
-  Parakeet in the window, which is more accurate for them.
-- **Captions word by word**: a spoken word reaches the draft line in about a third of a second instead of one to two
-  seconds. The studio sends the audio every 0.25 s instead of every second, and the draft of the phrase being spoken
-  is recognized every 0.3 s — less often on a slow computer (never sooner than three times its own recognition time),
-  so the captions do not fall behind and do not load the processor beyond their threads. In English and other
-  languages only the phrase being spoken is recognized for the draft between the runs of the window; the final lines
-  come from the window as before. The window and these drafts together take at most about a third of the time of the
-  captions' model; when a run of the window gets slow the drafts pause until it is fast again.
-- **GigaAM transcribes faster on the processor**: a transcription without the video card takes GigaAM v3 e2e-RNN-T in
-  int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
-  the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
-  completed in the background on first use, and until then the processor uses the model as before.
-- **Short replies in the captions are translated**: a line of one word («No.», «Yes?», «Да.») gets its translation; it
-  was shown untranslated. Fillers («um», «эм») still are not translated.
+
+### Overview
+
 - **«Load of the week» tells the hours passed from the plan and compares with the week before**: the meetings still
   ahead (the coming days of the week and the rest of today) continue the day's mark as a grey part, their figures grey,
   «planned» in the hint; a plan above the norm stays grey with an orange frame over the part above the norm. A thin
@@ -141,6 +149,13 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   without meetings: «—» instead of hours that were never recorded.
 - **Compare with a year ago**: the «Statistics» tiles compare each figure with the previous period or with the same
   period a year ago (the switch in the widget's head, kept with the layout).
+
+### Settings
+
+- **Simpler settings, nothing hidden**: no «More» to unfold; every option is a row with a short name, a line under it
+  only where the effect is not obvious, and its control at the right edge, in every section. A switch with a mode
+  beside it is one list with «Off» in it (the «Recording only» mode, meeting notifications, GigaAM and Parakeet on the
+  video card). The search also finds options by their former names.
 
 ## 0.9.3 — English
 
@@ -1283,11 +1298,97 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 
 ## 0.9.4
 
+
+### Живые субтитры
+
+- **Компьютер больше не замирает во время субтитров на процессоре с небольшим числом ядер**: потоки GigaAM, Parakeet
+  и детектора речи больше не ждут работу активно (spinning ONNX Runtime). В замере на 8 логических процессорах
+  (субтитры, расшифровка в очереди и видеозвонок одновременно) задержки системы больше 50 мс сократились с 645 за
+  5 минут до нуля при той же точности, а очередь расшифровывает в полтора раза быстрее.
 - **Фраза, которая сейчас звучит, больше не мерцает** («Текст по ходу речи», «Перевод по ходу речи»): показанные
   слова остаются на месте, исправленное слово меняется на месте с коротким переходом, новые слова появляются по одному
   сразу после распознавания. Пузырь фразы не сжимается и не прыгает, пока фраза уточняется, и становится итоговой
   строкой на том же месте, тем же шрифтом и размером. При уменьшении движения в системе слова появляются без переходов.
-- **«Субтитры и текст»** в полосе встречи во время записи: студия с живыми субтитрами и текстом из любого раздела.
+- **Субтитры слово за словом**: произнесённое слово появляется в черновой строке примерно через треть секунды, а не
+  через одну-две секунды. Студия отправляет звук каждые 0,25 с вместо раза в секунду, а черновик текущей фразы
+  распознаётся каждые 0,3 с. На медленном компьютере — реже, не чаще чем раз в три длительности самого распознавания:
+  субтитры не отстают и не нагружают процессор сверх своих потоков. В английском и других языках между запусками окна
+  для черновика распознаётся только текущая фраза; финальные строки по-прежнему берутся из окна. Окно и эти черновики
+  вместе занимают не больше трети времени модели субтитров; когда шаг окна становится медленным, черновики фразы
+  приостанавливаются, пока окно снова не станет быстрым.
+- **Русские субтитры по фразам**: с GigaAM субтитры больше не распознают раз за разом окно до 20 с. Детектор речи
+  следит за речью, распознаётся только текущая фраза (черновик — по ходу речи), а финальной она становится
+  один раз, после паузы в полсекунды, моделью GigaAM v3 e2e-CTC int8. В замере: финальная строка примерно через 1 с
+  вместо 3–4 с, меньше ошибок (WER 5,9 % вместо 8,5 %), в семь раз меньше нагрузки на процессор и 0,44 ГБ
+  памяти вместо 2,9. Речь без пауз режется на 20 с в промежутке между словами (где детектор речи не слышит речь;
+  только без такого промежутка — в самом тихом месте), и следующая строка начинается ровно там же: на стыке слова не
+  теряются. Слово, разрезанное всё же пополам, не пишется дважды: следующая строка теряет первое слово, если оно
+  повторяет последнее слово предыдущей или его начало («которых ко которых»), а хвост разреза короче четверти секунды
+  или из одной буквы не показывается отдельной строкой. Файл модели (около 214 МБ, из того же репозитория) скачивается один
+  раз сам; до этого субтитры идут как раньше. Английский и другие языки остаются на Parakeet с окном — для них оно
+  точнее.
+- **Субтитры с Teams больше не дёргаются**: строка сохраняет найденного говорящего, а место под имена не пропадает.
+- **Короткие ответы в субтитрах переводятся**: строка из одного слова («No.», «Yes?», «Да.») получает перевод, раньше
+  она оставалась без него. Слова-паразиты («um», «эм») по-прежнему не переводятся.
+- **Субтитры успевают за речью**: «Текст по ходу речи» и «Перевод по ходу речи» включены по умолчанию, а черновик
+  переводится так часто, как позволяет модель: с Hy-MT3 1.8B — примерно раз в полсекунды, с более медленной моделью —
+  втрое реже, чем длится один перевод, так что модель перевода занята не больше трети времени. Модель перевода, которую
+  Ollama запускает без видеокарты, занимает 2 потока процессора, а не по одному на ядро, и черновик
+  с ней не переводится, если один перевод длится дольше 1,5 с: готовые строки переводятся по-прежнему.
+- **Одна строка над текстом студии**: слева вкладки «Текст · Мои заметки · Вопросы», справа «Субтитры» с переключателем,
+  язык перевода (меню), память моделей субтитров (окно с моделями распознавания и перевода, их размером и состоянием)
+  и шестерёнка с остальными настройками.
+### Перевод субтитров
+
+- **Модель перевода для живых субтитров**: модели субтитров предлагают одну модель Tencent Hy-MT3 (Apache 2.0) по
+  видеокарте — Hy-MT3 7B (4,9 ГБ) на картах от 10 ГБ, иначе Hy-MT3 1.8B (1,3 ГБ); в замерах программы обе переводят
+  с английского на русский и обратно точнее прежних моделей Gemma. Скачивается только по «Скачать» (в окне моделей
+  субтитров или в «Настройки → Анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Быстро» —
+  Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Модель 1.8B настраивается в Ollama с рабочим
+  шаблоном чата (шаблон из её файла не передаёт модели текст).
+- **Свой блок для моделей перевода** в «Настройки → Анализ» — «Модели перевода (Ollama)», под моделями анализа:
+  обе модели Hy-MT3 (подходящая этому компьютеру отмечена «Рекомендуется для этого компьютера», другую тоже можно
+  скачать), с измеренным временем перевода фразы и видеопамятью вместе с распознаванием. Два списка выбирают модель
+  «Качества» и «Быстро» для субтитров: «Авто · <модель, которую оно берёт сейчас>», установленные модели перевода и
+  модели анализа; выбранная модель, если её удалить, уступает место «Авто», а модель, выбранная в студии, по-прежнему
+  действует до конца сеанса субтитров. Диктовку с переводом теперь переводит модель «Качества» (Hy-MT3, если
+  установлена, — промптом со своей карточки), иначе модель анализа, как раньше.
+- **Модели перевода больше не в списке моделей анализа**: Hy-MT3 и TranslateGemma, установленная в Ollama вручную,
+  не пишут анализ и показываются только среди моделей перевода. TranslateGemma (Gemma Terms of Use) программа не
+  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Лицензию модели нужно
+  проверить перед коммерческим использованием» и переводит промптом со своей карточки.
+- **Скачанный файл Hy-MT3 проверяется**: Ollama скачивает самый новый файл из репозитория модели, поэтому программа
+  сверяет его контрольную сумму с проверенной для этой версии. Файл с другой суммой используется, но в блоке моделей
+  перевода отмечен «Файл модели отличается от проверенного», а в журнале записаны обе суммы.
+
+### Скорость и нагрузка
+
+- **Общий бюджет потоков для распознавания речи**: субтитры по фразам (GigaAM) занимают 2 потока процессора, по окну
+  (Parakeet) — 4; пока они идут, расшифровка на процессоре получает не больше «логические процессоры − потоки субтитров
+  − 2» (2 — системе и программе звонков) и не больше значения «Нагрузка на процессор». У субтитров и расшифровки свои копии модели:
+  расшифровка, начатая до субтитров, сохраняет свои потоки, следующая получает бюджет на момент своего начала.
+- **Без второй копии Parakeet во время субтитров**: пока английские (или другие нерусские) субтитры распознаёт
+  Parakeet, расшифровка, которой нужен Parakeet на процессоре, ждёт окончания субтитров («ждёт окончания субтитров» в
+  очереди) и не загружает вторую копию модели (ещё около 3 ГБ памяти). Если на видеокарте хватает места, расшифровка
+  сразу идёт на ней. «Начать сейчас» в очереди запускает её и так, с потоками, оставшимися от субтитров; после
+  окончания субтитров она начинается сама, а копия модели субтитров освобождает память. Расшифровка, у которой во время
+  таких субтитров случился сбой видеокарты, возвращается в очередь и тоже ждёт их окончания, затем идёт на процессоре.
+- **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
+  распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
+  процесс субтитров Whisper.
+- **Модели выгружаются через минуту после обработки**: когда в очереди ничего не выполняется и не ждёт (расшифровка
+  с автоматическим анализом — одна задача) и программой не пользуются 60 секунд, модели распознавания и модель
+  анализа выгружаются; модель, к которой обращались вручную (вопрос ассистенту), остаётся на время из «Выгружать
+  модели через». Запуск субтитров выгружает модель анализа, которую они не используют (кроме времени идущего
+  анализа), переключение «Качество» ↔ «Быстро» выгружает предыдущую модель перевода, а модели субтитров выгружаются
+  через минуту после их окончания. Каждая выгрузка записывается в журнал с причиной.
+- **GigaAM быстрее расшифровывает на процессоре**: расшифровка без видеокарты идёт на GigaAM v3 e2e-RNN-T в int8 с той
+  же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
+  как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
+  первом использовании, а до этого процессор работает с моделью как раньше.
+
+### Студия и запись
+
 - **Путь в студию — в кнопке записи**: во время записи нажатие на точку, время или источники открывает студию; «Студия ›»
   между ними и «Стоп» показывает, включены ли субтитры (зелёная рамка, пока они выключены). При первой записи под ней
   появляется подсказка, где субтитры и текст; закрытая, она больше не показывается. В меню значка в трее во время
@@ -1306,96 +1407,19 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **Очередь говорит, чего ждёт**: «Идёт встреча» или «Пауза после встречи · 1:40» с обратным отсчётом — в окне
   очереди, на островке полосы, в самой полосе и в строке состояния. У каждой расшифровки, ждущей конца встречи, есть
   «Начать сейчас» (после того же вопроса, что и у «Расшифровать» во время встречи).
-- **Субтитры с Teams больше не дёргаются**: строка сохраняет найденного говорящего, а место под имена не пропадает.
-- **Одна строка над текстом студии**: слева вкладки «Текст · Мои заметки · Вопросы», справа «Субтитры» с переключателем,
-  язык перевода (меню), память моделей субтитров (окно с моделями распознавания и перевода, их размером и состоянием)
-  и шестерёнка с остальными настройками.
 - **Перенесённая или отменённая в календаре встреча не напоминает о себе в прежнее время**: календарь читается заново
   за две минуты до каждого напоминания и начала каждой встречи, и напоминание следует этому чтению (о перенесённой
   встрече напомнит её новое время). Если чтение не удалось, напоминание приходит как раньше. Пока до встречи меньше
   часа, календарь читается каждые 5 минут вместо 15.
-- **Модель перевода для живых субтитров**: модели субтитров предлагают одну модель Tencent Hy-MT3 (Apache 2.0) по
-  видеокарте — Hy-MT3 7B (4,9 ГБ) на картах от 10 ГБ, иначе Hy-MT3 1.8B (1,3 ГБ); в замерах программы обе переводят
-  с английского на русский и обратно точнее прежних моделей Gemma. Скачивается только по «Скачать» (в окне моделей
-  субтитров или в «Настройки → ИИ-анализ»); тогда «Качество» переводит моделью Hy-MT3 7B (иначе 1.8B), а «Быстро» —
-  Hy-MT3 1.8B (иначе Gemma 4 E2B). Без неё всё работает как прежде. Модель 1.8B настраивается в Ollama с рабочим
-  шаблоном чата (шаблон из её файла не передаёт модели текст).
-- **Скачанный файл Hy-MT3 проверяется**: Ollama скачивает самый новый файл из репозитория модели, поэтому программа
-  сверяет его контрольную сумму с проверенной для этой версии. Файл с другой суммой используется, но в блоке моделей
-  перевода отмечен «Файл модели отличается от проверенного», а в журнале записаны обе суммы.
-- **Свой блок для моделей перевода** в «Настройки → ИИ-анализ» — «Модели перевода (Ollama)», под моделями анализа:
-  обе модели Hy-MT3 (подходящая этому компьютеру отмечена «Рекомендуется для этого компьютера», другую тоже можно
-  скачать), с измеренным временем перевода фразы и видеопамятью вместе с распознаванием. Два списка выбирают модель
-  «Качества» и «Быстро» для субтитров: «Авто · <модель, которую оно берёт сейчас>», установленные модели перевода и
-  модели анализа; выбранная модель, если её удалить, уступает место «Авто», а модель, выбранная в студии, по-прежнему
-  действует до конца сеанса субтитров. Диктовку с переводом теперь переводит модель «Качества» (Hy-MT3, если
-  установлена, — промптом со своей карточки), иначе модель анализа, как раньше.
-- **Модели перевода больше не в списке моделей анализа**: Hy-MT3 и TranslateGemma, установленная в Ollama вручную,
-  не пишут анализ и показываются только среди моделей перевода. TranslateGemma (Gemma Terms of Use) программа не
-  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Лицензию модели нужно
-  проверить перед коммерческим использованием» и переводит промптом со своей карточки.
-- **Настройки проще, ничего не спрятано**: нет «Дополнительно»; каждая настройка — строка с коротким названием,
-  пояснением только там, где последствие неочевидно, и переключателем у правого края, во всех разделах. Переключатель
-  с режимом рядом — один список, где «Выключено» — один из вариантов (режим «Только запись», уведомления о встречах,
-  GigaAM и Parakeet на видеокарте). Поиск находит настройки и по прежним названиям.
-- **Модели выгружаются через минуту после обработки**: когда в очереди ничего не выполняется и не ждёт (расшифровка
-  с автоматическим анализом — одна задача) и программой не пользуются 60 секунд, модели распознавания и модель
-  анализа выгружаются; модель, к которой обращались вручную (вопрос ассистенту), остаётся на время из «Выгружать
-  модели через». Запуск субтитров выгружает модель анализа, которую они не используют (кроме времени идущего
-  анализа), переключение «Качество» ↔ «Быстро» выгружает предыдущую модель перевода, а модели субтитров выгружаются
-  через минуту после их окончания. Каждая выгрузка записывается в журнал с причиной.
-- **Выбор в студии сохраняется**: включённые или выключенные «Субтитры», язык перевода, «Качество / Скорость», модель
+- **Выбор в студии сохраняется**: включённые или выключенные «Субтитры», язык перевода, «Качество / Быстро», модель
   субтитров и модель перевода хранятся в настройках и остаются после новой записи, перезапуска и запуска на другом
   порту. «Субтитры» — это «Включать субтитры при начале записи», модель субтитров — «Модель субтитров», модель
   перевода — модель выбранного режима в «Моделях перевода»: в настройках те же значения. Модели можно выбрать и до
   записи. Шаблон записи больше не переключает субтитры и перевод. При «Не мешать на встречах» субтитры не включаются
   сами только на встречах; голосовая заметка начинается с ними.
-- **Субтитры успевают за речью**: «Текст по ходу речи» и «Перевод по ходу речи» включены по умолчанию, а черновик
-  переводится так часто, как позволяет модель: с Hy-MT3 1.8B — примерно раз в полсекунды, с более медленной моделью —
-  втрое реже, чем длится один перевод, так что модель перевода занята не больше трети времени. Модель перевода, которую
-  Ollama запускает без видеокарты, занимает 2 потока процессора, а не по одному на ядро, и черновик
-  с ней не переводится, если один перевод длится дольше 1,5 с: готовые строки переводятся по-прежнему.
-- **Компьютер больше не замирает во время субтитров на процессоре с небольшим числом ядер**: потоки GigaAM, Parakeet
-  и детектора речи больше не ждут работу активно (spinning ONNX Runtime). В замере на 8 логических процессорах
-  (субтитры, расшифровка в очереди и видеозвонок одновременно) задержки системы больше 50 мс сократились с 645 за
-  5 минут до нуля при той же точности, а очередь расшифровывает в полтора раза быстрее.
-- **Общий бюджет потоков для распознавания речи**: субтитры по фразам (GigaAM) занимают 2 потока процессора, по окну
-  (Parakeet) — 4; пока они идут, расшифровка на процессоре получает не больше «логические процессоры − потоки субтитров
-  − 2» (2 — системе и программе звонков) и не больше значения «Нагрузка на процессор». У субтитров и расшифровки свои копии модели:
-  расшифровка, начатая до субтитров, сохраняет свои потоки, следующая получает бюджет на момент своего начала.
-- **Без второй копии Parakeet во время субтитров**: пока английские (или другие нерусские) субтитры распознаёт
-  Parakeet, расшифровка, которой нужен Parakeet на процессоре, ждёт окончания субтитров («ждёт окончания субтитров» в
-  очереди) и не загружает вторую копию модели (ещё около 3 ГБ памяти). Если на видеокарте хватает места, расшифровка
-  сразу идёт на ней. «Начать сейчас» в очереди запускает её и так, с потоками, оставшимися от субтитров; после
-  окончания субтитров она начинается сама, а копия модели субтитров освобождает память. Расшифровка, у которой во время
-  таких субтитров случился сбой видеокарты, возвращается в очередь и тоже ждёт их окончания, затем идёт на процессоре.
-- **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
-  распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
-  процесс субтитров Whisper.
-- **Русские субтитры по фразам**: с GigaAM субтитры больше не распознают раз за разом окно до 20 с. Детектор речи
-  следит за речью, распознаётся только текущая фраза (черновик — по ходу речи), а финальной она становится
-  один раз, после паузы в полсекунды, моделью GigaAM v3 e2e-CTC int8. В замере: финальная строка примерно через 1 с
-  вместо 3–4 с, меньше ошибок (WER 5,9 % вместо 8,5 %), в семь раз меньше нагрузки на процессор и 0,44 ГБ
-  памяти вместо 2,9. Речь без пауз режется на 20 с в промежутке между словами (где детектор речи не слышит речь;
-  только без такого промежутка — в самом тихом месте), и следующая строка начинается ровно там же: на стыке слова не
-  теряются. Слово, разрезанное всё же пополам, не пишется дважды: следующая строка теряет первое слово, если оно
-  повторяет последнее слово предыдущей или его начало («которых ко которых»), а хвост разреза короче четверти секунды
-  или из одной буквы не показывается отдельной строкой. Файл модели (около 214 МБ, из того же репозитория) скачивается один
-  раз сам; до этого субтитры идут как раньше. Английский и другие языки остаются на Parakeet с окном — для них оно
-  точнее.
-- **Субтитры слово за словом**: произнесённое слово появляется в черновой строке примерно через треть секунды, а не
-  через одну-две секунды. Студия отправляет звук каждые 0,25 с вместо раза в секунду, а черновик текущей фразы
-  распознаётся каждые 0,3 с. На медленном компьютере — реже, не чаще чем раз в три длительности самого распознавания:
-  субтитры не отстают и не нагружают процессор сверх своих потоков. В английском и других языках между запусками окна
-  для черновика распознаётся только текущая фраза; финальные строки по-прежнему берутся из окна. Окно и эти черновики
-  вместе занимают не больше трети времени модели субтитров; когда шаг окна становится медленным, черновики фразы
-  приостанавливаются, пока окно снова не станет быстрым.
-- **GigaAM быстрее расшифровывает на процессоре**: расшифровка без видеокарты идёт на GigaAM v3 e2e-RNN-T в int8 с той
-  же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
-  как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
-  первом использовании, а до этого процессор работает с моделью как раньше.
-- **Короткие ответы в субтитрах переводятся**: строка из одного слова («No.», «Yes?», «Да.») получает перевод, раньше
-  она оставалась без него. Слова-паразиты («um», «эм») по-прежнему не переводятся.
+
+### «Обзор»
+
 - **«Нагрузка недели» отделяет прошедшее от запланированного и сравнивает с прошлой неделей**: встречи ещё впереди
   (следующие дни недели и остаток сегодняшнего) продолжают полосу дня серой частью, их числа серые, в подсказке
   «по плану»; план сверх нормы остаётся серым, а часть выше нормы обведена оранжевым. Тонкая светлая отметка
@@ -1413,6 +1437,13 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   первой записи или задачи нет доли рабочего времени и времени без встреч: вместо часов, которые не записывались, — «—».
 - **Сравнение с прошлым годом**: плитки «Статистики» сравнивают каждый показатель с предыдущим периодом или с тем же
   периодом год назад (переключатель в заголовке виджета, сохраняется вместе с раскладкой).
+
+### Настройки
+
+- **Настройки проще, ничего не спрятано**: нет «Дополнительно»; каждая настройка — строка с коротким названием,
+  пояснением только там, где последствие неочевидно, и переключателем у правого края, во всех разделах. Переключатель
+  с режимом рядом — один список, где «Выключено» — один из вариантов (режим «Только запись», уведомления о встречах,
+  GigaAM и Parakeet на видеокарте). Поиск находит настройки и по прежним названиям.
 
 ## 0.9.3
 
