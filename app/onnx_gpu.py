@@ -165,9 +165,11 @@ def _cpu_version() -> str:
 
 def install_async() -> Dict[str, Any]:
     with _lock:
-        if _state["installing"]:
-            return status()
-        _state.update(installing=True, error="")
+        already = _state["installing"]
+        if not already:
+            _state.update(installing=True, error="")
+    if already:  # status() takes the lock itself: asked under it, a second click hung the app (found in an audit)
+        return status()
     threading.Thread(target=_install, daemon=True, name="onnx_gpu_install").start()
     return status()
 
