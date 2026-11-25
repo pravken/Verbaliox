@@ -247,7 +247,10 @@ def api_nemotron_choose(payload: NemotronChoice) -> Dict[str, Any]:
 @router.post("/api/nemotron/remove")
 def api_nemotron_remove() -> Dict[str, Any]:
     from app import nemotron_diar
+    from app.transcriber import running_job_kind
 
+    if running_job_kind() == "transcribe":  # it may be marking the speakers of that recording now
+        raise HTTPException(status_code=409, detail="Модель сейчас используется — удалите её после задачи")
     nemotron_diar.remove()
     update_settings({"diarizer_engine": "ecapa"})
     return nemotron_diar.status()

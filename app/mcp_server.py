@@ -127,10 +127,11 @@ def get_meeting(id: int, sections: Optional[List[str]] = None) -> Dict[str, Any]
         points = decisions_of((m.get("summaries") or {}).get("protocol") or "")
         if points:
             parts["decisions"] = ("## Decisions\n" if (m.get("language") or "") == "en" else "## Решения\n") + "\n".join(f"- {p}" for p in points)
-    if wanted:
+    available = list(dict.fromkeys([sid for sid, _ in found] + (["decisions"] if "decisions" in parts else [])))
+    if wanted:  # what the meeting has is said whatever was asked for (the decisions were lost here)
         parts = {k: v for k, v in parts.items() if k in wanted}
     text = "\n\n".join(parts.values())
-    return {"id": m["id"], "title": m.get("title") or "", "date": _day(m), "available_sections": list(dict.fromkeys([sid for sid, _ in found] + (["decisions"] if "decisions" in parts else []))),
+    return {"id": m["id"], "title": m.get("title") or "", "date": _day(m), "available_sections": available,
             "text": text[:MAX_TEXT] + ("\n…" if len(text) > MAX_TEXT else "")}
 
 
@@ -152,15 +153,19 @@ def list_tasks(scope: str = "mine", person: str = "", status: str = "open") -> D
     from app.people import canonical, my_names
 
     hidden = _hidden()
-    me = set(my_names())
+    me = set(my_names()) | {canonical(n).lower() for n in my_names()}
+
+    def is_me(name: str) -> bool:  # a variant merged in the directory («Макс» of «Maksim Orlov») is the same person
+        return bool(name) and (name.lower() in me or canonical(name).lower() in me)
+
     out = []
     for t in commitments.all_tasks():
         if t["meeting_id"] in hidden or (status != "all" and (t.get("status") or "open") != status):
             continue
         who, to = (t.get("who") or "").strip(), (t.get("to_whom") or "").strip()
-        if scope == "mine" and who.lower() not in me:
+        if scope == "mine" and not is_me(who):
             continue
-        if scope == "waiting" and (who.lower() in me or to.lower() not in me):
+        if scope == "waiting" and (is_me(who) or not is_me(to)):
             continue
         if person and canonical(person).lower() not in (canonical(who).lower(), canonical(to).lower()):
             continue

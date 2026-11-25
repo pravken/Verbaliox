@@ -303,6 +303,10 @@ class ConcurrentEditsTest(unittest.TestCase):
             api_unmerge_segment(mid, 3, UnmergePayload(first=first, second=second))
         self.assertEqual(e.exception.status_code, 409)
         self.assertEqual(len(main.get_meeting(mid)["segments"]), 29)
+        for bad in ("abc", "nan", float("inf"), -1):  # a time that is no time: refused, never stored
+            with self.assertRaises(HTTPException) as e:
+                api_unmerge_segment(mid, 3, UnmergePayload(first={**first, "start": bad}, second=second))
+            self.assertEqual(e.exception.status_code, 400)
 
 
 @unittest.skipIf(main is None, "fastapi and app dependencies not installed")
