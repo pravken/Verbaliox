@@ -2630,6 +2630,25 @@ await step('digest is saved with its conversation', async () => {
   expect(saved.includes('Итог недели: решения приняты.'), 'the digest was not saved');
 });
 
+// A bulk action that is not a deletion says what failed, not «Не удалось удалить записей»
+await step('bulk action errors name no deletion', async () => {
+  const route = /\/api\/meetings\/1\/title$/;
+  await page.route(route, r => r.request().method() === 'PATCH'
+    ? r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ detail: 'Название слишком длинное' }) }) : r.continue());
+  let toast = '';
+  try {
+    toast = await page.evaluate(async () => {
+      const ask = window.askText, sel = window.libSelectedInOrder;
+      window.askText = async () => 'Итоги {n}';
+      window.libSelectedInOrder = () => state.meetings.filter(m => m.id === 1);
+      document.getElementById('toast').innerHTML = '';
+      try { await bulkRename(); } finally { window.askText = ask; window.libSelectedInOrder = sel; }
+      return document.getElementById('toast').textContent;
+    });
+  } finally { await page.unroute(route); }
+  expect(toast.includes('Не выполнено для записей: 1. Название слишком длинное') && !toast.includes('удалить'), `the message: «${toast}»`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

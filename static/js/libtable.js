@@ -910,20 +910,20 @@ function ltBulkFolder(e) {
 
 // mode: "add" or "remove" the feature fid, or "clear" all of them
 async function ltSetFeatures(list, mode, fid) {
-  let failed = 0;
+  let failed = 0, why = '';
   for (const m of list) {
     const had = m.features || [];
     const ids = mode === 'clear' ? [] : mode === 'remove' ? had.filter(x => x !== fid) : [...new Set([...had, fid])];
     const res = await fetch(`/api/meetings/${m.id}/features`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, for_series: false }) }).catch(() => null);
     const data = res ? await readJson(res) : {};
-    if (!res || !res.ok) { failed++; continue; }
+    if (!res || !res.ok) { failed++; why = why || (res ? errorText(data, res) : t('errorGeneric')); continue; }
     m.features = data.features || [];
     m.feature_suggestions = data.feature_suggestions || [];
     if (state.activeMeeting && state.activeMeeting.id === m.id) applyMeetingFeatures(state.activeMeeting, data);
   }
   scheduleSidebarRender();
   renderLibTable();
-  if (failed) showError(t('bulkSomeFailed').replace('{n}', () => failed));
+  if (failed) showError(bulkFailedText(failed, why));
 }
 
 // A feature on all of them, or off all of them when they all have it already
@@ -973,11 +973,11 @@ async function ltExportMany(fmt) {
   }
   let dir;
   try { dir = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (err) { return; }  // cancelled
-  let saved = 0, failed = 0;
+  let saved = 0, failed = 0, why = '';
   for (const m of list) {
     try {
       const res = await fetch(`/api/meetings/${m.id}/export/${fmt}`);
-      if (!res.ok) { failed++; continue; }
+      if (!res.ok) { failed++; why = why || await bulkWhy(res); continue; }
       const blob = await res.blob();
       const file = await dir.getFileHandle(ltExportName(res, m, fmt), { create: true });
       const w = await file.createWritable();
@@ -986,9 +986,10 @@ async function ltExportMany(fmt) {
       saved++;
     } catch (err) {
       failed++;
+      why = why || err.message || t('errorGeneric');
     }
   }
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('ltExported').replace('{n}', () => saved).replace('{dir}', () => dir.name), null, failed ? 'warning' : 'success');
+  showToast(failed ? bulkFailedText(failed, why) : t('ltExported').replace('{n}', () => saved).replace('{dir}', () => dir.name), null, failed ? 'warning' : 'success');
 }
 
 // Recognition again for the selected ones that have no text (added only, failed, cancelled, cleared)
@@ -996,13 +997,13 @@ async function ltBulkTranscribe() {
   const list = ltSelected().filter(m => LT_UNTRANSCRIBED.includes(m.status));
   if (!list.length) { showWarning(t('ltNothingToTranscribe')); return; }
   if (!requireRecognitionModel()) return;
-  let queued = 0, failed = 0;
+  let queued = 0, failed = 0, why = '';
   for (const m of list) {
     const res = await fetch(`/api/meetings/${m.id}/retry`, { method: 'POST' }).catch(() => null);
-    if (res && res.ok) queued++; else failed++;
+    if (res && res.ok) queued++; else { failed++; why = why || await bulkWhy(res); }
   }
   await loadMeetingsList();
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('ltQueuedN').replace('{n}', () => plural(queued, t('ltCountForms'))), null, failed ? 'warning' : 'success');
+  showToast(failed ? bulkFailedText(failed, why) : t('ltQueuedN').replace('{n}', () => plural(queued, t('ltCountForms'))), null, failed ? 'warning' : 'success');
 }
 
 // The rest of what the old bar of the selection did: one name for all, titles from the texts, delete

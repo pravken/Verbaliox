@@ -1519,34 +1519,44 @@ async function bulkRename() {
   const tpl = await askText(t('bulkRenamePrompt'), `${list[0].title} {n}`);
   if (!tpl || !tpl.trim()) return;
   const width = String(list.length).length;
-  let failed = 0;
+  let failed = 0, why = '';
   for (const [i, m] of list.entries()) {
     const d = meetingDate(m);
     const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const title = tpl.replaceAll('{n}', String(i + 1).padStart(width, '0')).replaceAll('{title}', m.title || '').replaceAll('{date}', ymd).trim();
     const res = await fetch(`/api/meetings/${m.id}/title`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
-    });
-    if (!res.ok) failed++;
+    }).catch(() => null);
+    if (!res || !res.ok) { failed++; why = why || await bulkWhy(res); }
   }
   await loadMeetingsList();
   libRefreshActiveIn(state.multi);
-  if (failed) showError(t('bulkSomeFailed').replace('{n}', () => failed));
+  if (failed) showError(bulkFailedText(failed, why));
 }
 
 // Titles made by the analysis model from each transcript
 async function bulkAutoTitles() {
   const list = libSelectedInOrder().filter(m => m.status === 'completed');
   if (!list.length) { showWarning(t('bulkNoTranscripts')); return; }
-  let failed = 0;
+  let failed = 0, why = '';
   for (const [i, m] of list.entries()) {
     showToast(t('bulkAutoTitleWorking').replace('{i}', () => i + 1).replace('{n}', () => list.length));
-    const res = await fetch(`/api/meetings/${m.id}/title/generate`, { method: 'POST' });
-    if (!res.ok) failed++;
+    const res = await fetch(`/api/meetings/${m.id}/title/generate`, { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) { failed++; why = why || await bulkWhy(res); }
     await loadMeetingsList();
   }
   libRefreshActiveIn(state.multi);
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('bulkAutoTitleDone'));
+  if (failed) showError(bulkFailedText(failed, why));
+  else showToast(t('bulkAutoTitleDone'));
+}
+
+// A bulk action (not a deletion) that failed for some recordings: how many, and the reason of the first one
+// (they all said «Не удалось удалить записей», whatever the action was: found in the audit)
+async function bulkWhy(res) {
+  return res ? errorText(await readJson(res), res) : t('errorGeneric');
+}
+function bulkFailedText(n, why) {
+  return t('bulkOpFailed').replace('{n}', () => n).replace('{why}', () => why || t('errorGeneric'));
 }
 
 // Ctrl+A selects recordings only after a click in the library (elsewhere it selects text as usual)
