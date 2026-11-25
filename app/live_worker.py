@@ -22,6 +22,10 @@ def main() -> None:
     proto = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr
 
+    from app.cpu_priority import lower_process
+
+    lower_process()  # only speech recognition here: the call app and the page first (app/cpu_priority.py)
+
     import numpy as np
 
     from app.database import get_all_settings

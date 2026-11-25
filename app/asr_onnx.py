@@ -562,9 +562,13 @@ def level(audio: Any, sr: int = 16000) -> Any:
 def recognize_array(model_id: str, audio: Any) -> List[Tuple[float, float, str]]:
     """Sentences of a short 16 kHz float32 window (live captions): [(start, end, text)], cut at the
     word timings, so a sentence ends exactly where the next one starts. The copy of live captions does it."""
+    from app.cpu_priority import below_normal_thread
+
     asr = _load(model_id, live=True)
     out = []
-    for res in asr.recognize(level(audio), sample_rate=16000):
+    with below_normal_thread():  # the call app and the page first (app/cpu_priority.py)
+        results = list(asr.recognize(level(audio), sample_rate=16000))
+    for res in results:
         text = clean_text(" ".join((res.text or "").split()))
         if not text:
             continue
@@ -738,9 +742,21 @@ def transcribe(model_id: str, wav_path: Path, total_dur: float, on_progress: Cal
                gpu: bool = False, leveling: bool = True) -> List[Dict[str, Any]]:
     """Segments like faster-whisper's: [{start, end, text, words: [{word, start, end, prob}]}].
     `out` (optional) receives them as they come, for showing the text while it is recognized."""
-    import soundfile as sf
+    import contextlib
+
+    from app.cpu_priority import below_normal_thread
 
     asr = _load(model_id, gpu)
+    # on the processor the job's thread runs «below normal»: the call app and the page first (app/cpu_priority.py)
+    with contextlib.nullcontext() if gpu else below_normal_thread():
+        return _transcribe_with(asr, wav_path, total_dur, on_progress, check_cancel, out, leveling)
+
+
+def _transcribe_with(asr: Any, wav_path: Path, total_dur: float, on_progress: Callable[[float], None],
+                     check_cancel: Callable[[], None], out: Optional[List[Dict[str, Any]]],
+                     leveling: bool) -> List[Dict[str, Any]]:
+    import soundfile as sf
+
     audio, sr = sf.read(str(wav_path), dtype="float32")  # 16 kHz mono (app/audio_utils.py)
     if getattr(audio, "ndim", 1) > 1:
         audio = audio.mean(axis=1)

@@ -81,6 +81,9 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   captions, 2 for the system and the call app), never more than «Processor load». Captions and transcription have
   copies of the model of their own: a transcription started before the captions keeps its threads, the next one
   takes the budget of its start.
+- **Speech recognition on the processor gives way to the call**: on Windows a transcription on the processor and the
+  live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
+  one), and so does the separate process of the Whisper captions.
 
 ## 0.9.3 — English
 
@@ -1293,6 +1296,9 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   пока они идут, расшифровка на процессоре получает не больше «логические процессоры − 4» (2 — субтитрам, 2 — системе
   и программе звонков) и не больше значения «Нагрузка на процессор». У субтитров и расшифровки свои копии модели:
   расшифровка, начатая до субтитров, сохраняет свои потоки, следующая получает бюджет на момент своего начала.
+- **Распознавание речи на процессоре уступает звонку**: в Windows расшифровка на процессоре и субтитры во время
+  распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
+  процесс субтитров Whisper.
 
 ## 0.9.3
 
