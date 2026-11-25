@@ -137,13 +137,11 @@ class DubVoiceModelTest(unittest.TestCase):
         self.assertTrue(dub_worker.VOXCPM_REVISION)
 
     def test_chatterbox_weights_are_offered_for_deletion_only(self):
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
         from app import dub_models
 
-        hub = Path(tempfile.mkdtemp())
+        hub = tests.temp_dir(self)
         (hub / "models--ResembleAI--chatterbox" / "snapshots" / "x").mkdir(parents=True)
         with mock.patch.object(dub_models, "HF_HUB_DIR", hub):
             items = {i["id"]: i for i in dub_models.weights_status()["items"]}
@@ -153,5 +151,5 @@ class DubVoiceModelTest(unittest.TestCase):
                     mock.patch.object(dub_models.threading, "Thread") as thread:
                 dub_models.start_download(["chatterbox"], dub_job_running=False)
             thread.assert_not_called()  # never downloaded again
-        with mock.patch.object(dub_models, "HF_HUB_DIR", Path(tempfile.mkdtemp())):
+        with mock.patch.object(dub_models, "HF_HUB_DIR", tests.temp_dir(self)):
             self.assertNotIn("chatterbox", {i["id"] for i in dub_models.weights_status()["items"]})

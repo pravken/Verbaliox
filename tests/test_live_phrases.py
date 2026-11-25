@@ -381,18 +381,43 @@ class LivePhraseSessionTest(unittest.TestCase):
         pre.assert_called_with("gigaam-v3")
         self.assertEqual(s.audio.size, 3 * SR)
 
+    def test_an_hour_in_quarter_seconds_keeps_the_buffer_bounded(self):
+        """A meeting of an hour, fed as the page sends it (0.25 s pieces): phrases with pauses, now and then
+        a minute without one (forced cuts). What is final leaves the buffer (_cut(keep_from)): the audio kept and
+        the array under it stay within a phrase, not the hour."""
+        s = self._session()
+        piece = SR // 4
+        talk = _pcm(np.full(piece, 0.5, dtype=np.float32))
+        quiet = _pcm(np.zeros(piece, dtype=np.float32))
+        # one cycle of 90 s: six phrases of 7 s with a pause of 1 s, then 41 s without a pause and 1 s of pause
+        cycle = ([talk] * 28 + [quiet] * 4) * 6 + [talk] * 164 + [quiet] * 4
+        biggest = biggest_array = 0
+        sent = 0
+        while sent < 3600 * SR:
+            for chunk in cycle:
+                s.add_pcm16(chunk)
+                s.step()
+                sent += piece
+                biggest = max(biggest, s.audio.size)
+                biggest_array = max(biggest_array, s._buf.size if s._buf.base is None else s._buf.base.size)
+        self.assertEqual(sent, 3600 * SR)
+        self.assertEqual(s.error, "")
+        self.assertEqual(len(s.lines), 40 * (6 + 3))  # every phrase of the 40 cycles is a line, the long one in three
+        self.assertLessEqual(s.lines[-1]["end"], 3600.0 + lp.PAD_SEC)
+        self.assertGreater(s.lines[-1]["end"], 3590.0)
+        self.assertLessEqual(biggest, int((lp.MAX_PHRASE_SEC + 1.0) * SR))
+        self.assertLessEqual(biggest_array, 2 * int((lp.MAX_PHRASE_SEC + 1.0) * SR))
+        self.assertEqual(s.base + s.audio.size, sent)  # nothing lost on the way: the stream adds up
+
 
 class PhraseVariantTest(unittest.TestCase):
     """The captions' copy of GigaAM is the e2e-CTC int8, once its file is there; until then the main model."""
 
     def setUp(self):
-        import tempfile
-        from pathlib import Path
-
         from app import asr_onnx
 
         self.asr = asr_onnx
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = tests.temp_dir(self)
         self.patches = [mock.patch.object(asr_onnx, "model_dir", lambda mid: self.dir / mid),
                         mock.patch.object(asr_onnx, "_vad_dir", lambda: self.dir / "vad"),
                         mock.patch.object(asr_onnx, "_present", set()),
@@ -480,6 +505,82 @@ class PhraseVariantTest(unittest.TestCase):
         self.assertEqual([o[2] for o in out], ["Да.", "Хорошо"])
         self.assertEqual(out[1][0], 1.2)
         self.assertEqual(out[1][1], 2.0)
+
+
+class SpeechFollowTest(unittest.TestCase):
+    """live_phrases.SpeechFollow: the VAD of the window scheme, which phrase the next draft is for."""
+
+    def _follow(self, start_at=0):
+        f = lp.SpeechFollow(start_at, _FakeVad())
+        f.level = lambda piece: piece  # the levelling is StreamLevelTest's: here the loudness is the VAD's input
+        return f
+
+    @staticmethod
+    def _audio(*parts):
+        """(seconds, loud) pieces -> the audio of the stream."""
+        return np.concatenate([np.full(int(sec * SR), 0.5 if loud else 0.0, dtype=np.float32) for sec, loud in parts])
+
+    def test_silence_gives_no_target(self):
+        f = self._follow()
+        f.follow(self._audio((2.0, False)), 0)
+        self.assertIsNone(f.target())
+        self.assertIsNone(f.last)
+
+    def test_the_phrase_being_spoken_once_it_has_enough_speech(self):
+        f = self._follow()
+        audio = self._audio((1.0, False), (0.3, True))
+        f.follow(audio, 0)
+        self.assertIsNone(f.target())  # under MIN_DRAFT_SEC of speech: no draft yet
+        audio = np.concatenate([audio, self._audio((0.7, True))])
+        f.follow(audio, 0)  # only the frames not heard yet go to the VAD
+        start, end = f.target()
+        self.assertAlmostEqual(start / SR, 1.0 - lp.PAD_SEC, delta=F / SR)
+        self.assertEqual(end, f.cutter.pos)
+        self.assertEqual(f.cutter.pos, audio.size // F * F)
+
+    def test_no_target_in_a_pause_once_the_draft_heard_the_last_word(self):
+        f = self._follow()
+        audio = self._audio((1.0, True), (0.3, False))  # a pause shorter than END_PAUSE_SEC: the phrase goes on
+        f.follow(audio, 0)
+        self.assertIsNotNone(f.cutter.start)
+        self.assertIsNotNone(f.target())  # the last word not drafted yet
+        f.drafted_to = f.cutter.last_speech
+        self.assertIsNone(f.target())  # nothing new said in the pause: the draft stays
+
+    def test_the_phrase_that_ended_is_the_target_until_drafted(self):
+        f = self._follow()
+        f.pace.next_at = 99.0
+        f.follow(self._audio((0.5, False), (1.5, True), (1.0, False)), 0)
+        self.assertIsNone(f.cutter.start)  # the pause ended it
+        start, end = f.last
+        self.assertAlmostEqual(start / SR, 0.5 - lp.PAD_SEC, delta=F / SR)
+        self.assertAlmostEqual(end / SR, 2.0 + lp.PAD_SEC, delta=F / SR)
+        self.assertIsNone(f.pace.next_at)  # the first draft of the next phrase is due at once
+        self.assertEqual(f.target(), f.last)  # its end not in the draft line yet
+        f.drafted_to = end
+        self.assertIsNone(f.target())
+
+    def test_a_forced_cut_ends_a_phrase_and_restarts_the_pace(self):
+        f = self._follow(start_at=5 * SR)
+        audio = self._audio((lp.MAX_PHRASE_SEC + 2.0, True))
+        f.pace.next_at = 99.0
+        f.follow(audio, 5 * SR)  # the stream from sample 5 s on, as after a cut of the buffer
+        start, cut = f.last
+        self.assertEqual(start, 5 * SR)
+        self.assertLessEqual((cut - start) / SR, lp.MAX_PHRASE_SEC)
+        self.assertGreater((cut - start) / SR, lp.MAX_PHRASE_SEC / 2)
+        self.assertIsNone(f.pace.next_at)
+        self.assertEqual(f.cutter.start, cut)  # the speech goes on from the cut, no gap
+        self.assertEqual(f.target(), (cut, f.cutter.pos))
+
+    def test_audio_already_heard_is_not_heard_again(self):
+        f = self._follow()
+        audio = self._audio((1.0, True))
+        f.follow(audio, 0)
+        pos = f.cutter.pos
+        f.vad = mock.Mock(side_effect=AssertionError("heard twice"))
+        f.follow(audio, 0)
+        self.assertEqual(f.cutter.pos, pos)
 
 
 if __name__ == "__main__":

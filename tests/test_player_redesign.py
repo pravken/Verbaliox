@@ -1,7 +1,6 @@
 """The player of the redesign: pauses to skip, the text shown without fillers (the text itself stays),
 the saved copies of a recording, the options of the text export."""
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -65,7 +64,7 @@ class FillerViewTest(unittest.TestCase):
 class CopiesTest(unittest.TestCase):
     def setUp(self):
         init_db()
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = tests.temp_dir(self)
 
     def test_media_exports_are_copies_and_delete_removes_file_and_line(self):
         m = create_meeting(title="Запись", filename="a.wav", media_path=str(self.dir / "a.wav"))

@@ -80,7 +80,7 @@ class FolderTest(unittest.TestCase):
             delete_folder(system_folder_id("recordings"))
 
     def test_old_library_is_sorted_once(self):
-        root = Path(tempfile.mkdtemp())
+        root = tests.temp_dir(self)
         try:
             conn = sqlite3.connect(root / "old.db")
             conn.execute("CREATE TABLE meetings (id INTEGER PRIMARY KEY, media_path TEXT, filename TEXT, created_at TEXT, "
@@ -108,7 +108,7 @@ class FolderTest(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 
     def test_delete_removes_own_recordings_only(self):
-        outside = Path(tempfile.mkdtemp())
+        outside = tests.temp_dir(self)
         try:
             own = outside / "rec.m4a"
             theirs = outside / "theirs.mp4"
@@ -140,7 +140,7 @@ class TitleTest(unittest.TestCase):
 class ObsidianTest(unittest.TestCase):
     def setUp(self):
         init_db()
-        self.vault = Path(tempfile.mkdtemp())
+        self.vault = tests.temp_dir(self)
         update_settings({"obsidian_vault": str(self.vault), "obsidian_subfolder": "Meetings/2024",
                          "obsidian_filename": "{date} {title}", "obsidian_generate": "false"})
 
@@ -377,7 +377,7 @@ class FormerNameNoteTest(unittest.TestCase):
 class PendingExportTest(unittest.TestCase):
     def setUp(self):
         init_db()
-        self.out = Path(tempfile.mkdtemp())
+        self.out = tests.temp_dir(self)
         update_settings({"export_dir": str(self.out)})
 
     def tearDown(self):

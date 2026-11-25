@@ -248,7 +248,6 @@ class FinishInBackgroundTest(unittest.TestCase):
     def test_the_recording_is_there_at_once_and_queued_when_mixed(self):
         import shutil
         import subprocess
-        import tempfile
         import time
         from pathlib import Path
         from unittest import mock
@@ -265,7 +264,7 @@ class FinishInBackgroundTest(unittest.TestCase):
         from app.database import delete_meeting, get_meeting, init_db
 
         init_db()
-        tmp = Path(tempfile.mkdtemp())
+        tmp = tests.temp_dir(self)
         sample = tmp / "s.webm"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=300:duration=2", "-c:a", "libopus",
                         str(sample)], check=True)
@@ -293,8 +292,6 @@ class FinishInBackgroundTest(unittest.TestCase):
 
 class FinishFailureTest(unittest.TestCase):
     def test_a_mix_that_breaks_keeps_the_parts_as_recordings(self):
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
         try:
@@ -305,7 +302,7 @@ class FinishFailureTest(unittest.TestCase):
         from app.database import create_meeting, get_meeting, init_db
 
         init_db()
-        page = Path(tempfile.mkdtemp()) / ".page_x.webm.part"
+        page = tests.temp_dir(self) / ".page_x.webm.part"
         page.write_bytes(b"x" * 10000)
         m = create_meeting(title="Сбой", filename="s", media_path="", source="recording")
         app_status.mixing.add(m["id"])

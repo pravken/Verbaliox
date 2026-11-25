@@ -4,6 +4,7 @@ with a video card it runs there at once, and «Начать сейчас» lets 
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import functools
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -139,6 +140,59 @@ class CaptionsHoldTest(unittest.TestCase):
         self.assertTrue(asr_onnx.release_live("parakeet-v3"))
         self.assertEqual(asr_onnx.copies(), ["parakeet-v3"])
         self.assertFalse(asr_onnx.release_live("parakeet-v3"))
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
+class CaptionsIdleOutTest(unittest.TestCase):
+    """A page closed or crashed during the captions: its session ends after SESSION_IDLE_SEC without audio
+    (live._drop_idle), and a transcription that waited for the captions is let go at once."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+
+        from app import live
+
+        init_db()
+        update_settings({"whisper_model": "parakeet-v3", "speech_model_ru": "gigaam-v3", "language": "auto"})
+        self.live = live
+        self.session = SimpleNamespace(id="idle-page", onnx_model="parakeet-v3", translator=mock.Mock(),
+                                       touched=time.time())
+        with live._sessions_lock:
+            self.assertEqual(live._sessions, {})  # no other test left a session behind
+            live._sessions[self.session.id] = self.session
+        self.addCleanup(lambda: live._sessions.pop(self.session.id, None))
+        for target, kw in (("app.onnx_gpu.gpu_for_job", {"return_value": False}),
+                           ("app.idle_unload.work_done", {})):
+            p = mock.patch(target, **kw)
+            p.start()
+            self.addCleanup(p.stop)
+        self.wake = mock.patch("app.transcriber.wake_queue").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def test_the_hold_ends_with_the_session_that_idled_out(self):
+        mid = _meeting("parakeet-v3")
+        self.assertTrue(transcriber.waits_for_captions(mid))  # the page still sends audio
+        self.wake.assert_not_called()
+        self.session.touched -= self.live.SESSION_IDLE_SEC + 1  # and then nothing for two minutes
+        self.assertFalse(transcriber.waits_for_captions(mid))
+        self.assertNotIn(self.session.id, self.live._sessions)
+        self.session.translator.stop.assert_called_once()
+        self.wake.assert_called_once()  # the queue starts the held job now, not at its next look
+        self.assertFalse(self.live.has_sessions())
+        self.wake.assert_called_once()  # once: the session is gone
+
+    def test_another_session_still_open_keeps_the_hold(self):
+        from types import SimpleNamespace
+
+        mid = _meeting("parakeet-v3")
+        other = SimpleNamespace(id="open-page", onnx_model="parakeet-v3", translator=None,
+                                touched=time.time())
+        with self.live._sessions_lock:
+            self.live._sessions[other.id] = other
+        self.addCleanup(lambda: self.live._sessions.pop(other.id, None))
+        self.session.touched -= self.live.SESSION_IDLE_SEC + 1
+        self.assertTrue(transcriber.waits_for_captions(mid))
+        self.wake.assert_not_called()  # the captions go on in the other page
 
 
 if __name__ == "__main__":

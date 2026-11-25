@@ -79,11 +79,9 @@ class DashboardTest(unittest.TestCase):
         """Reported by the user: the meeting hours stood still. The length was written only when a
         transcription began, so a recording waiting in the queue counted 0 hours, and a cancelled one was
         not counted at all."""
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
-        folder = Path(tempfile.mkdtemp())
+        folder = tests.temp_dir(self)
         ids = []
         for title, status in (("В очереди", "queued"), ("Отменённая", "cancelled"), ("Сломанная", "failed")):
             media = folder / f"{status}.wav"
@@ -109,11 +107,9 @@ class DashboardTest(unittest.TestCase):
         """Found in the review: every load of «Главная» ran ffprobe again on files it cannot read, and wrote
         the length of a recording still being mixed (its file not whole yet)."""
         import os
-        import tempfile
-        from pathlib import Path
         from unittest import mock
 
-        folder = Path(tempfile.mkdtemp())
+        folder = tests.temp_dir(self)
         rows = []
         for status in ("queued", "mixing"):
             media = folder / f"{status}.wav"
@@ -353,6 +349,42 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(c.get("/api/dashboard", params={"at": "1900-01-01"}).status_code, 400)
         r = c.get("/api/dashboard/detail", params={"kind": "meetings", "period": "month", "at": "2025-06-10"})
         self.assertEqual((r.json()["start"], r.json()["end"]), ("2025-06-01", "2025-07-01"))
+
+    def test_february_of_a_leap_year(self):
+        """The 29th of February: the month ends on it, «as of» is it, and a year earlier it is the 28th
+        (February 2027 has no 29th). Nothing of March slips into the comparison."""
+        from unittest import mock
+
+        self._meeting("29 февраля", "2028-02-29")
+        self._meeting("Начало февраля", "2028-02-01")
+        self._meeting("Год назад, 28 февраля", "2027-02-28")
+        self._meeting("Год назад, 1 марта", "2027-03-01")  # after the compared month
+        t = commitments.create("Сверить отчёт", "Олег", due_date="2028-02-28")
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE commitments SET created_at = '2028-02-10T09:00:00' WHERE id = ?", (t["id"],))
+            conn.commit()
+            conn.close()
+        self.assertEqual(dashboard.anchor("month", date(2028, 2, 15), date(2028, 3, 10)),
+                         (date(2028, 2, 1), date(2028, 3, 1), date(2028, 1, 1), date(2028, 2, 29), True))
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            past = dashboard.build("month", today=date(2028, 3, 10), at=date(2028, 2, 15), compare="year")
+            now = dashboard.build("month", today=date(2028, 2, 29), compare="year")
+            week = dashboard.build("week", today=date(2028, 2, 29), compare="year")
+        for d in (past, now):
+            self.assertEqual((d["start"], d["end"], d["asof"]), ("2028-02-01", "2028-03-01", "2028-02-29"))
+            self.assertEqual(d["history"]["compare"], {"kind": "year", "start": "2027-02-01", "end": "2027-03-01"})
+            self.assertEqual(d["kpi"]["meetings"], 2)
+            self.assertEqual((d["kpi"]["meetings_before"], d["history"]["before"]["meetings"]), (1, 1))
+            self.assertEqual((d["kpi"]["open"], d["kpi"]["overdue"]), (1, 1))  # due the 28th, open on the 29th
+        self.assertTrue(past["past"])
+        self.assertFalse(now["past"])
+        # every working day of February 2028 (21, the 29th a Tuesday), one hour in meetings
+        self.assertEqual(past["history"]["values"]["focus"][-1], 21 * 8 - 1.0)
+        # the week of the 29th (Monday 28 February to Sunday 5 March) against 28 February to 6 March 2027
+        self.assertEqual((week["start"], week["end"]), ("2028-02-28", "2028-03-06"))
+        self.assertEqual(week["history"]["compare"], {"kind": "year", "start": "2027-02-28", "end": "2027-03-06"})
+        self.assertEqual((week["kpi"]["meetings"], week["kpi"]["meetings_before"]), (1, 2))
 
 
 if __name__ == "__main__":

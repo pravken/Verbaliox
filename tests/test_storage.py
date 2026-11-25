@@ -3,7 +3,6 @@ import asyncio
 import json
 import shutil
 import sqlite3
-import tempfile
 import sys
 import threading
 import unittest
@@ -17,7 +16,7 @@ from app.paths import migrate_legacy_data_dir, migrate_renamed_data_dir
 
 class MigrationTest(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp()).resolve()  # the CI runner has a short (8.3) temp path
+        self.root = tests.temp_dir(self).resolve()  # the CI runner has a short (8.3) temp path
         self.legacy = self.root / "app" / "data"
         (self.legacy / "uploads").mkdir(parents=True)
         (self.legacy / "audio").mkdir()
@@ -300,7 +299,7 @@ class RenamedDataDirTest(unittest.TestCase):
     """The data folder of the former name (VerbaScribe) becomes the Verbaliox one."""
 
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp()).resolve()
+        self.root = tests.temp_dir(self).resolve()
         self.old = self.root / "VerbaScribe"
         self.new = self.root / "Verbaliox"
         (self.old / "uploads").mkdir(parents=True)
@@ -389,14 +388,13 @@ class PendingDeleteTest(unittest.TestCase):
     """A file Windows keeps open (the player streams it) is deleted at the next start, not left forever."""
 
     def test_locked_file_is_deleted_later(self):
-        import tempfile
         from pathlib import Path
         from unittest import mock
 
         from app import database
 
         database.init_db()
-        f = Path(tempfile.mkdtemp()) / "open.wav"
+        f = tests.temp_dir(self) / "open.wav"
         f.write_bytes(b"x")
         real_unlink = Path.unlink
 
@@ -440,7 +438,7 @@ class SubtitlesPathTest(unittest.TestCase):
         from app.api import media as media_api
 
         database.init_db()
-        video = Path(tempfile.mkdtemp()) / "call.mp4"
+        video = tests.temp_dir(self) / "call.mp4"
         video.write_bytes(b"video")
         m = database.create_meeting("Видео", "call.mp4", str(video))
         database.save_meeting_results(m["id"], segments=[{"id": 1, "start": 0.0, "end": 2.0, "text": "Привет"}], language="ru")

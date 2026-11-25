@@ -1,8 +1,29 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from app.series import matching_meeting, people, title_key
+
+
+# A model a test reports as installed never fetches the files of its variants in the background
+# (asr_onnx._variant -> _complete_async -> fetch: a real download of the model)
+_no_fetch = None
+
+
+def setUpModule():
+    global _no_fetch
+    try:
+        from app import asr_onnx
+    except ImportError:  # app dependencies are not installed
+        return
+    _no_fetch = mock.patch.object(asr_onnx, "_complete_async")
+    _no_fetch.start()
+
+
+def tearDownModule():
+    if _no_fetch is not None:
+        _no_fetch.stop()
 
 
 def _m(id, title, when, names=()):

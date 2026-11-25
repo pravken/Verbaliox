@@ -1,6 +1,5 @@
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import sys
-import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -16,7 +15,7 @@ def _fake_build(d: Path) -> None:
 
 class OnnxGpuTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
+        self.tmp = tests.temp_dir(self)
         self.target = self.tmp / "onnxruntime-gpu"
         self.patches = [mock.patch.object(onnx_gpu, "TARGET", self.target),
                         mock.patch.object(onnx_gpu, "NEW", self.tmp / "onnxruntime-gpu.new"),
