@@ -808,8 +808,15 @@ def _remember_export(meeting_id: int, path: Path) -> None:
     """The folder is offered next time; the file is listed with the recording (deleted with it on request)."""
     from app.database import add_export_path
 
-    update_settings({"export_dir": str(_export_base(path.parent))})
+    _remember_export_dir(path)
     add_export_path(meeting_id, str(path))
+
+
+def _remember_export_dir(path: Path) -> None:
+    """The folder of a file a queued job writes: offered next time. The file itself is listed with the recording
+    by the job once written (listed before, a job refused or failed left the path of a file the user already had
+    there, which «delete with its copies» then deleted: found in an audit)."""
+    update_settings({"export_dir": str(_export_base(path.parent))})
 
 
 def _export_base(folder: Path) -> Path:

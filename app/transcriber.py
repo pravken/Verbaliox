@@ -24,6 +24,7 @@ from app.audio_utils import extract_audio_16k_mono, format_timestamp, get_media_
 from app.database import (
     AUDIO_DIR,
     MODELS_DIR,
+    add_export_path,
     edit_meeting,
     get_all_settings,
     get_meeting,
@@ -771,7 +772,7 @@ def _translate_runner(meeting_id: int, target_lang: str, model: Optional[str], o
     return f"Перевод ({target_lang.upper()}) готов: {res['translated']} реплик, модель {res.get('model')}"
 
 
-def _burn_runner(meeting_id: int, lang: str, srt_text: str, out_path: str) -> str:
+def _burn_runner(meeting_id: int, lang: str, srt_text: str, out_path: str, remember: bool = False) -> str:
     from app.video_subtitles import burn_subtitles, probe_media
 
     meeting = get_meeting(meeting_id)
@@ -792,6 +793,8 @@ def _burn_runner(meeting_id: int, lang: str, srt_text: str, out_path: str) -> st
         lambda pct, text: update_meeting_progress(meeting_id, progress=pct, stage_text=text),
         lambda: _check_cancel(meeting_id),
     )
+    if remember:  # listed with the recording once written, never before (app/main._remember_export_dir)
+        add_export_path(meeting_id, str(out))
     return f"Видео с субтитрами ({lang.upper()}) готово: {out}"
 
 
@@ -810,6 +813,7 @@ def _cut_runner(meeting_id: int, kind: str, intervals: List[Tuple[float, float]]
     out = run_cut(tool_cmd("ffmpeg"), media, intervals, has_video, Path(out_path),
                   lambda r: update_meeting_progress(meeting_id, progress=max(1, int(99 * r)), stage_text=f"{label}: {int(100 * r)}%"),
                   lambda: _check_cancel(meeting_id), afilter=DENOISE_FILTER if kind == "denoise" else "")
+    add_export_path(meeting_id, str(out))  # listed with the recording once written, never before
     return f"{label} готова: {out}"
 
 
@@ -1132,10 +1136,11 @@ def enqueue_translate_job(meeting_id: int, target_lang: str, model: Optional[str
     )
 
 
-def enqueue_burn_subtitles_job(meeting_id: int, lang: str, srt_text: str, out_path: str) -> bool:
+def enqueue_burn_subtitles_job(meeting_id: int, lang: str, srt_text: str, out_path: str, remember: bool = False) -> bool:
+    """remember: the file is listed with the recording once written (an export the user saved)."""
     return _enqueue_side_job(
         meeting_id, "burn_subs", lang, "rendering", "Встраивание субтитров в очереди...",
-        _burn_runner, lang, srt_text, out_path,
+        _burn_runner, lang, srt_text, out_path, remember,
     )
 
 

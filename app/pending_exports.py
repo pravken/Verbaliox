@@ -177,11 +177,12 @@ def _video_subtitles(m: Dict[str, Any], item: Dict[str, Any], folder: Path) -> O
     check_output_path(media, out)
     from app.database import add_export_path
 
-    add_export_path(int(m["id"]), str(out))
     if mode == "soft":
         title = f"{track_lang.upper()} (AI translation)" if lang else (track_lang.upper() or "Subtitles")
-        return mux_soft_subtitles(media, srt_text, track_lang, title, out)
-    if not enqueue_burn_subtitles_job(int(m["id"]), track_lang or "orig", srt_text, str(out)):
+        written = mux_soft_subtitles(media, srt_text, track_lang, title, out)
+        add_export_path(int(m["id"]), str(out))  # listed once written, never before (app/main._remember_export_dir)
+        return written
+    if not enqueue_burn_subtitles_job(int(m["id"]), track_lang or "orig", srt_text, str(out), remember=True):
         raise RuntimeError("Не удалось поставить встраивание субтитров в очередь")
     return None
 
