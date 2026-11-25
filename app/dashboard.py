@@ -508,6 +508,12 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         history["before"] = {k: v[0] for k, v in got.items() if k != "_norm"}
     else:
         history["before"] = {k: v[-2] for k, v in hv.items() if len(v) > 1}
+        # the current period counts its working time up to today: the time without meetings is set against the same
+        # days of the period before, not all of it («−16,1 ч к прошлой неделе» in red on a Wednesday: audit)
+        if not past and history["before"].get("focus") is not None:
+            same = _figures([(cmp_a, cmp_b)], cmp_a + (asof - start), meetings, tasks, me, names.people_of,
+                            _first_day(meetings, tasks))
+            history["before"]["focus"] = same["focus"][0]
     history["compare"] = {"kind": compare, "start": cmp_a.isoformat(), "end": cmp_b.isoformat()}
 
     def task_brief(t: Dict[str, Any]) -> Dict[str, Any]:
