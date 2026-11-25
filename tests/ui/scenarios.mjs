@@ -2747,6 +2747,20 @@ await step('export names of one export', async () => {
   expect(JSON.stringify(r) === '["Итоги.docx","итоги (2).docx","Итоги (3).docx","План"]', `the names: ${JSON.stringify(r)}`);
 });
 
+// The toast of a saved recording says what waits: «Только запись» or the paused queue
+await step('saved recording says what waits', async () => {
+  const r = await page.evaluate(() => {
+    const out = {};
+    const eco = window.economyOn, paused = state.queuePaused;
+    window.economyOn = () => true; out.eco = recordSavedKey();
+    window.economyOn = () => false; state.queuePaused = true; out.paused = recordSavedKey();
+    state.queuePaused = false; out.queued = recordSavedKey();
+    window.economyOn = eco; state.queuePaused = paused;
+    return out;
+  });
+  expect(r.eco === 'recordSavedEconomy' && r.paused === 'recordSavedPaused' && r.queued === 'recordSavedQueued', `the saved toast: ${JSON.stringify(r)}`);
+});
+
 // «Изменить текст» of a task works in «Карточки» too (it looked for a row of the list only)
 await step('task text edited in the cards', async () => {
   await page.evaluate(() => switchAppView('tasks'));

@@ -3009,6 +3009,14 @@ async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, st
   return afterSaved(data, quiet);
 }
 
+// What happens to a saved recording now: recognized, or waiting for «Только запись» to end or the queue to go on
+// (it said «отправлена на распознавание» in both: audit)
+function recordSavedKey() {
+  if (typeof economyOn === 'function' && economyOn()) return 'recordSavedEconomy';
+  if (state.queuePaused) return 'recordSavedPaused';
+  return 'recordSavedQueued';
+}
+
 async function afterSaved(data, quiet = false) {
   const created = data.created;
   await loadMeetingsList();
@@ -3016,7 +3024,7 @@ async function afterSaved(data, quiet = false) {
   const first = created && created[0];
   if (quiet) return first || null;
   showToast(
-    t('recordSavedQueued'),
+    t(recordSavedKey()),
     first ? { label: t('recordOpen'), title: first.media_path || '', onClick: () => { switchAppView('library'); selectMeeting(first.id, true); } } : undefined
   );
   return first || null;
