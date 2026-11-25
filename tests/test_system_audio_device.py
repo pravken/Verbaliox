@@ -95,6 +95,36 @@ class DeviceChangeTest(unittest.TestCase):
 
 
 @unittest.skipIf(system_audio is None, "app dependencies not installed")
+class ClockTest(unittest.TestCase):
+    """Found in an audit: the time written was counted on the wall clock, so a clock moved forward (synced, or by
+    hand) put that much silence into the track at once — after a night's sleep, one array of gigabytes."""
+
+    def test_a_clock_moved_forward_puts_no_silence_in(self):
+        a = _Dev("A", 0.3)
+        fake = types.SimpleNamespace(default_speaker=lambda: a, get_microphone=lambda id, include_loopback: a)
+        real, jump = time.time, {"by": 0.0}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(sys.modules, {"soundcard": fake}), \
+                mock.patch.object(system_audio.time, "time", side_effect=lambda: real() + jump["by"]):
+            cap = system_audio.SystemCapture(Path(tmp) / "sys.wav")
+            cap.start()
+            time.sleep(0.4)
+            jump["by"] = 30.0
+            time.sleep(0.6)
+            cap.stop()
+            data, sr = sf.read(str(cap.path), dtype="float32")
+        self.assertAlmostEqual(len(data) / sr, 1.0, delta=0.4)
+        self.assertEqual(cap.gaps, 0)
+
+    def test_a_long_gap_is_written_in_pieces(self):
+        sizes = []
+        out = types.SimpleNamespace(write=lambda block: sizes.append(block.shape))
+        system_audio.write_silence(out, 25 * 48000 + 7)
+        self.assertEqual(sum(s[0] for s in sizes), 25 * 48000 + 7)
+        self.assertLessEqual(max(s[0] for s in sizes), 10 * 48000)
+        self.assertEqual({s[1] for s in sizes}, {2})
+
+
+@unittest.skipIf(system_audio is None, "app dependencies not installed")
 class CrashedFileTest(unittest.TestCase):
     def test_a_file_left_open_by_a_crash_is_read_whole_after_repair(self):
         import subprocess

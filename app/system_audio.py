@@ -66,6 +66,18 @@ def silence_to_add(elapsed_sec: float, written: int, block: int) -> int:
     return place_block(elapsed_sec, written, block, elapsed_sec, False)[0]
 
 
+SILENCE_CHUNK = 10 * SR  # silence is written in pieces of 10 s
+
+
+def write_silence(out, frames: int) -> None:
+    """`frames` of stereo silence, a piece at a time: a long gap (the computer woke from sleep) was one array of
+    gigabytes, and the capture failed with MemoryError (found in an audit)."""
+    while frames > 0:
+        n = min(frames, SILENCE_CHUNK)
+        out.write(np.zeros((n, 2), dtype=np.float32))
+        frames -= n
+
+
 class SystemCapture:
     def __init__(self, path: Path):
         self.id = uuid.uuid4().hex
@@ -117,7 +129,10 @@ class SystemCapture:
             rec.__enter__()
             # RF64: a plain WAV ends at 4 GB, about 6 hours of this sound (FFmpeg and soundfile read both)
             with sf.SoundFile(str(self.path), "w", samplerate=SR, channels=2, subtype="PCM_16", format="RF64") as out:
-                self.started_at = time.time()
+                self.started_at = time.time()  # the wall clock: the page lines its recorder up by it
+                # the time written is counted on the monotonic clock: a change of the system clock (synced, or
+                # moved by hand) put hours of silence in, or took the sound away (found in an audit)
+                t0 = time.monotonic()
                 self._ready.set()
                 print(f"[system audio] recording the output device «{name}»", flush=True)
                 written, checked, switched = 0, time.time(), False
@@ -133,7 +148,7 @@ class SystemCapture:
                         if now_id != device:
                             device, switched = self._switch(sc, rec, device)
                             rec = self._rec
-                    asked = time.time()
+                    asked = time.monotonic()
                     # Windows marks data it dropped (the app did not read in time): soundcard warns of it;
                     # caught here (it is a gap to fill) and not written to the log thousands of times
                     try:
@@ -152,19 +167,19 @@ class SystemCapture:
                         self.lost += 1
                     if block.ndim == 1:
                         block = np.stack([block, block], axis=1)
-                    now = time.time()
-                    gap, drop = place_block(now - self.started_at, written, len(block), now - asked, lost)
+                    now = time.monotonic()
+                    gap, drop = place_block(now - t0, written, len(block), now - asked, lost)
                     if drop:
                         block = block[drop:]
                         self.dropped += drop
                     if gap:
-                        out.write(np.zeros((gap, 2), dtype=np.float32))
+                        write_silence(out, gap)
                         written += gap
                         self.padded += gap
                         self.gaps += 1
                         if self._live_wanted():
                             with self._live_lock:
-                                self._live = np.concatenate([self._live, np.zeros(gap // 3, dtype=np.float32)])[-16000 * 30:]
+                                self._live = np.concatenate([self._live, np.zeros(min(gap // 3, 16000 * 30), dtype=np.float32)])[-16000 * 30:]
                     out.write(block)
                     written += len(block)
                     self.written = written
