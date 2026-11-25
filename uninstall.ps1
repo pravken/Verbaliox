@@ -99,7 +99,9 @@ function Remove-Folder([string]$path) {
         Start-Sleep -Seconds 2  # a file still held by a process that is ending
     }
     # a long path or a read-only file: cmd's rd copes with them
-    cmd.exe /c "rd /s /q `"$path`"" 2>$null | Out-Null
+    # the path through the environment: in the command line cmd would expand a "%" of a folder's name
+    $env:VERBALIOX_RD_PATH = $path
+    cmd.exe /c 'rd /s /q "%VERBALIOX_RD_PATH%"' 2>$null | Out-Null
     if (Test-Path -LiteralPath $path) { Write-Host "  не удалось удалить полностью: $path" -ForegroundColor Yellow }
 }
 

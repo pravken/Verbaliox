@@ -183,8 +183,10 @@ for %%p in ("%LOCALAPPDATA%\Programs\Python\Python311\python.exe" "%ProgramFiles
         goto :eof
     )
 )
+rem A path is compared as text, not piped to find: a pipe reads it as a command line again
 for /f "delims=" %%p in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul') do (
-    echo %%p | find /i "WindowsApps" >nul || set "SIGNED_PY=%%p"
+    set "CAND=%%p"
+    if "!CAND:WindowsApps=!"=="!CAND!" set "SIGNED_PY=%%p"
 )
 goto :eof
 
@@ -251,7 +253,8 @@ call :find_signed_python
 if defined SIGNED_PY set "PY311=!SIGNED_PY!"
 if defined PY311 goto :eof
 for /f "delims=" %%p in ('python -c "import sys; sys.version_info[:2] == (3, 11) and print(sys.executable)" 2^>nul') do (
-    echo %%p | find /i "WindowsApps" >nul || set "PY311=%%p"
+    set "CAND=%%p"
+    if "!CAND:WindowsApps=!"=="!CAND!" set "PY311=%%p"
 )
 goto :eof
 
