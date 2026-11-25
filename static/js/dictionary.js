@@ -84,12 +84,6 @@ function renderDictOffers() {
 }
 
 function setDictGroup(g) { DC.group = g; renderDictPage(); }
-// «Добавить слово» in the head: to the row that adds one
-function dcFocusAdd() {
-  const input = document.getElementById('settings-dict-term');
-  input.scrollIntoView({ block: 'nearest', behavior: scrollMotion() });
-  input.focus();
-}
 function onDictSearch(value) { DC.q = value; renderDictPage(); }
 
 // A suggestion's buttons wait for the server's answer: a double click sent it twice, and the second removal by its
