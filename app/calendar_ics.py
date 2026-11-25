@@ -132,7 +132,8 @@ class _FileZone(tzinfo):
 
         month, nth, wd, hour, minute = rule
         days = [d for d in range(1, calendar.monthrange(year, month)[1] + 1) if calendar.weekday(year, month, d) == wd]
-        day = days[nth - 1] if 0 < nth <= len(days) else days[-1]
+        # «-2SU»: the last but one (it was taken for the last: an audit); a place the month has not: the last
+        day = days[nth - 1] if 0 < nth <= len(days) else days[nth] if -len(days) <= nth < 0 else days[-1]
         return datetime(year, month, day, hour, minute)
 
     def _summer(self, dt: datetime) -> bool:
