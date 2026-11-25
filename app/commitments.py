@@ -1019,8 +1019,15 @@ def _was_dismissed(item: Dict[str, Any], dismissed: List[Dict[str, Any]]) -> boo
 def _dismissed_examples() -> str:
     """The tasks the user deleted lately, as the model's examples of what is not a task here."""
     _init()
-    rows = _rows("SELECT meeting_id, what FROM commitments_dismissed ORDER BY id DESC LIMIT ?", (DISMISSED_EXAMPLES,))
-    whats = [r["what"].strip()[:120] for r in rows if (r["what"] or "").strip()]
+    from app.database import dictation_ids
+
+    # Not a dictation's: it can hold anything said (a password too), and these go into every other
+    # recording's request. The text is one line without quotes: it cannot end the list and add orders
+    private = dictation_ids()
+    rows = _rows("SELECT meeting_id, what FROM commitments_dismissed ORDER BY id DESC LIMIT ?", (DISMISSED_EXAMPLES * 4,))
+    whats = [" ".join(re.sub(r"[«»\"„“”<>]", " ", r["what"] or "").split())[:120] for r in rows
+             if r["meeting_id"] not in private]
+    whats = [w for w in whats if w][:DISMISSED_EXAMPLES]
     if not whats:
         return ""
     return ("\nЭтот пользователь раньше удалял такие найденные задачи как НЕ задачи — похожее не включай: "
