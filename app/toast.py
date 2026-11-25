@@ -9,6 +9,7 @@ PowerShell through the WinRT notification API. Where that fails, the caller fall
 """
 
 import base64
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -19,9 +20,20 @@ APP_ID = "Verbaliox.Desktop.Studio.1"  # run.py set_app_user_model_id, installer
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+# Characters XML 1.0 does not allow: one in a meeting's title (an invitation's text) made the toast's XML invalid,
+# and Windows showed nothing (found in an audit)
+_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
+def _xml_text(value: str) -> str:
+    return _NOT_XML.sub("", str(value or ""))
+
+
 def toast_xml(title: str, text: str, buttons: List[Tuple[str, str]], launch: str = "", stay: bool = False) -> str:
     """The toast: its click opens `launch`, each button (label, link) opens its link, the last one is
     «Закрыть» (in the UI language). stay: it stays on the screen until answered (a meeting starting now)."""
+    title, text, launch = _xml_text(title), _xml_text(text), _xml_text(launch)
+    buttons = [(_xml_text(label), _xml_text(link)) for label, link in buttons]
     acts = "".join(f"<action content={quoteattr(label)} activationType=\"protocol\" arguments={quoteattr(link)}/>"
                    for label, link in buttons)
     from app.ui_lang import tr
