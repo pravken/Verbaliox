@@ -7,6 +7,9 @@ os.environ["VERBALIOX_DATA_DIR"] = os.path.join(_TMP, "data")  # even when the s
 os.environ["VERBALIOX_MODELS_DIR"] = os.path.join(_TMP, "models")
 os.environ["VERBALIOX_SKIP_MIGRATION"] = "1"
 os.environ["VERBALIOX_NO_FFMPEG_AUTO"] = "1"  # the app start would download FFmpeg into the test data (Windows)
+# Nothing is downloaded from Hugging Face: a test that reaches the background download of a model's files
+# (app/asr_onnx._complete_async with is_installed faked) fails offline instead of fetching gigabytes
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 # PyTorch (CUDA wheels, gigabytes) is not installed for the tests: a small stand-in reports "no GPU"
 try:

@@ -46,6 +46,7 @@ class ProcessMeetingJobTest(unittest.TestCase):
             mock.patch.object(transcriber, "_after_transcription", return_value=[]),
             mock.patch.object(asr_onnx, "supports_language", return_value=True),
             mock.patch.object(asr_onnx, "is_installed", return_value=True),
+            mock.patch.object(asr_onnx, "_complete_async"),  # installed by the fake: no download of its variants
             mock.patch.object(semantic, "kick"),
             mock.patch("app.diarizer.diarize_and_merge_segments", side_effect=diarize),
             mock.patch("app.voice_profiles.apply_to_speakers", return_value=0),
