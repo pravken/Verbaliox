@@ -1898,7 +1898,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tk-ava-none { border: 1.5px dashed rgba(255, 255, 255, 0.2); color: var(--hc-dim, #8E8E93); }
 .tk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto auto 26px; align-items: center; gap: 14px; min-height: 46px; padding: 6px 10px 6px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.05)); }
 .tk-row:hover { background: rgba(255, 255, 255, 0.055); }
-.tk-check { width: 18px; height: 18px; margin: 3px; accent-color: #30D158; cursor: pointer; }
+.tk-check { width: 18px; height: 18px; margin: 0; accent-color: #30D158; cursor: pointer; }
 .tk-row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tk-row-text { font-size: var(--fs-body); color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-done .tk-row-text { color: var(--hc-dim, #8E8E93); text-decoration: line-through; }
@@ -2754,7 +2754,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .an-tasks { display: flex; flex-direction: column; gap: 8px; }
 .an-task { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
 .an-task:hover { background: rgba(255, 255, 255, 0.06); }
-.an-task .tk-check { margin-top: 1px; }
+.an-task .tk-check { margin-top: -2px; }
 .an-task-main { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
 .an-task-what { font-size: var(--fs-body); line-height: 1.4; font-weight: 500; color: #F5F5F7; overflow-wrap: anywhere; }
 .an-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--fs-caption); line-height: 1.35; color: var(--hc-dim, #8E8E93); }
@@ -4155,7 +4155,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-group .tk-row:hover { background: rgba(255, 255, 255, 0.03); }
 .tk-group .tk-group-head + .tk-row { border-top: 0; }
 .tk-group .tk-who, .tk-group .tk-due { justify-self: start; max-width: 100%; }
-.tk-row .tk-check { margin: 0; width: 16px; height: 16px; }
+.tk-row .tk-check { margin: -3px; }
 .tk-kindic { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; background: none; color: var(--hc-dim, #8E8E93); cursor: pointer; }
 .tk-kindic:hover { color: #F5F5F7; }
 .tk-kindic-none { cursor: default; }
@@ -4173,7 +4173,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-tcard-over { border-color: rgba(255, 69, 58, 0.45); }
 .tk-tcard-t { display: flex; align-items: flex-start; gap: 8px; }
 .tk-tcard-t .tk-row-text { flex: 1; min-width: 0; white-space: normal; font-weight: 500; line-height: 1.35; }
-.tk-tcard-t .tk-check { margin: 1px 0 0; width: 16px; height: 16px; }
+.tk-tcard-t .tk-check { margin: -2px -3px -3px; }
 .tk-tcard-f { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-caption); min-width: 0; }
 .tk-tcard-f .tk-who, .tk-tcard-f .tk-due { max-width: 70%; }
 .tk-tcard.tk-done .tk-row-text { color: var(--hc-dim, #8E8E93); text-decoration: line-through; }
@@ -4272,7 +4272,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .pv-row { display: grid; grid-template-columns: 22px 30px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
 .pv-row:hover { background: rgba(255, 255, 255, 0.04); }
 .pv-row.pv-sel { background: rgb(var(--accent-rgb) / 0.14); }
-.pv-row .tk-check { margin: 0; width: 16px; height: 16px; }
+.pv-row .tk-check { margin: -3px; }
 .pv-row-t { min-width: 0; display: flex; flex-direction: column; }
 .pv-row-t b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv-row-t b em { font-style: normal; font-size: var(--fs-label); color: var(--accent-text); }
@@ -5644,3 +5644,25 @@ label.sx-row:has(.vs-switch:disabled) { cursor: default; }
 .sx-input.sx-ctl-w { width: 260px; }
 .sx-row-ctl.sx-range { width: 260px; }
 .settings-card > :is(.sx-row, .sx-block):has(+ .hidden:last-child) { padding-bottom: 0; }
+
+/* Targets of 24px at least (found in the audit: the moment of a task 18×18, the looks of a chart 24×20, the period
+   switches 20px high, the links of the widgets 17px): the area that takes the click grows, the drawing stays.
+   - a task's or a person's box: 18px drawn in a 24px box (a transparent border of 3px, the frame an inner shadow),
+     its place in the row kept by its margins (−3px in a row, 0 where it had 3px around it);
+   - the round box of a task on «Обзор»: 16px drawn in 24px, a margin of −4px;
+   - the moment of a task: 24px around its 18px icon, a margin of −3px;
+   - the segments of a widget's switches: 24px high in a frame of 1px inside (2px higher than before);
+   - the text links (a widget's «Все →», «Подробнее», the moment of a phrase, «+ фича»): padding above and under,
+     taken back by a negative margin, so the line keeps its height */
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check { width: 24px; height: 24px; border: 3px solid transparent; border-radius: 9px;
+  background-clip: padding-box; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.3); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:hover { border-color: transparent; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.5); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:checked { border-color: transparent; box-shadow: none; }
+.db-ck { width: 24px; height: 24px; margin: -4px; flex: none; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1.5px #6E6E73; }
+.db-ck:hover { border-color: transparent; box-shadow: inset 0 0 0 1.5px #30D158; }
+.tk-kindic { width: 24px; height: 24px; margin: -3px; }
+.db-chsw, .db-wp { padding: 1px; }
+.db-chsw button, .db-wp button { height: 24px; }
+.db-more, .ch-tm { padding-top: 4px; padding-bottom: 4px; margin-top: -4px; margin-bottom: -4px; }
+.dc-more { padding-top: 4px; padding-bottom: 4px; }
+.ft-add { padding-top: 2px; padding-bottom: 2px; margin-top: -1px; margin-bottom: -1px; }
