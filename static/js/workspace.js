@@ -392,6 +392,11 @@ async function mixNowActive() {
   const r = await fetch(`/api/meetings/${m.id}/mix-now`, { method: 'POST' }).catch(() => null);
   if (!r) { showError(t('errNoNetwork')); return; }
   if (!r.ok) { showError(serverText((await readJson(r)).detail)); return; }
+  // the mix starts now: the page's copy no longer waits either, else a redraw before the next poll offered it again
+  m.mix_wait = null;
+  m.mix_why = null;
+  const row = (state.meetings || []).find(x => x.id === m.id);
+  if (row) row.mix_wait = null;
   document.getElementById('tx-rc-mixnow').classList.add('hidden');
   showToast(t('mixNowStarted'), null, 'status');
 }
