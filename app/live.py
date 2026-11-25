@@ -438,16 +438,17 @@ class LiveSession:
                            for s in segs[len(new_lines):] if s.text.strip()]
         if self._follow:
             self._follow.drafted_to = base0 + window.size
-        if self.translator:
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        if tr:
             if new_lines:
-                self.translator.add_lines(new_lines)
+                tr.add_lines(new_lines)
                 # The draft translation belonged to the phrase that is final now: the next draft
                 # must not be shown with it (the page keeps it on the final line until its own
                 # translation arrives)
-                self.translator.reset_draft()
+                tr.reset_draft()
             # The draft (revised several times while spoken) is translated only when the page shows
             # it; otherwise the model is left free for the final lines
-            self.translator.set_draft(self.partial if self.draft else "")
+            tr.set_draft(self.partial if self.draft else "")
 
     def _follow_speech(self) -> None:
         """The VAD over the new audio in the window scheme (live_phrases.SpeechFollow); its model is the Silero VAD
@@ -497,8 +498,9 @@ class LiveSession:
         if not text:
             return  # nothing heard: the window's draft stays
         self.partial = " ".join(keep + [text])
-        if self.translator:
-            self.translator.set_draft(self.partial if self.draft else "")
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        if tr:
+            tr.set_draft(self.partial if self.draft else "")
 
     def _transcribe_phrases(self) -> None:
         """Russian captions by VAD phrases (app/live_phrases.py): the VAD goes over the new audio; a phrase that
@@ -569,11 +571,12 @@ class LiveSession:
         with self._audio_lock:
             self._cut(max(0, ph.keep_from() - self.base))
         self.lines.extend(new_lines)
-        if self.translator:
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
+        if tr:
             if new_lines:
-                self.translator.add_lines(new_lines)
-                self.translator.reset_draft()
-            self.translator.set_draft(self.partial if self.draft else "")
+                tr.add_lines(new_lines)
+                tr.reset_draft()
+            tr.set_draft(self.partial if self.draft else "")
 
     def configure(self, translate_to: Optional[str], speed: Optional[str], speech_lang: Optional[str] = None,
                   pair: Optional[List[str]] = None) -> None:
@@ -609,22 +612,23 @@ class LiveSession:
 
     # -------------------------------------------------------------- out
     def state(self, since_id: int = 0) -> Dict[str, Any]:
+        tr = self.translator  # once: configure() in another request may set it to None meanwhile
         return {
             "session": self.id,
             "lang": self.lang,
             "speech_lang": self.speech_lang or "auto",
             # New lines, and recent ones still waiting for a translation (not the whole meeting:
             # this answer goes out about four times a second)
-            "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (self.translator and ln["translation"] is None)],
+            "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (tr and ln["translation"] is None)],
             "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
             # The language each line went into (differs per line with translate_to="auto")
             # the recent lines, like the two above: every line of the recording was gone through each second
             "targets": {ln["id"]: ln.get("target") for ln in self.lines[-200:] if ln.get("target")},
-            "partial_target": self.translator.draft_target if self.translator else "",
+            "partial_target": tr.draft_target if tr else "",
             "partial": self.partial,
-            "partial_translation": self.translator.draft_translation if self.translator else "",
-            "translation_ready": bool(self.translator and self.translator.ready),
-            "error": self.error or (self.translator.error if self.translator else ""),
+            "partial_translation": tr.draft_translation if tr else "",
+            "translation_ready": bool(tr and tr.ready),
+            "error": self.error or (tr.error if tr else ""),
             "caption_model": self.caption_label(),
             "caption_choice": self.caption_choice,
             "translate_choice": self.translate_choice,
@@ -683,7 +687,7 @@ class LiveSession:
         return format_whisper_model_name(name) if name else "Whisper"
 
     def translate_label(self) -> str:
-        model = getattr(self.translator, "_model", None) if self.translator else None
+        model = getattr(self.translator, "_model", None)  # None without a translator (read once)
         if not model:
             return ""
         from app.ollama_client import format_llm_model_name

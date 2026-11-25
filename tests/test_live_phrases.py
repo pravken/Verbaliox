@@ -350,6 +350,19 @@ class LivePhraseSessionTest(unittest.TestCase):
         s.translator.add_lines.assert_called_once()
         s.translator.set_draft.assert_called()
 
+    def test_translation_turned_off_meanwhile_loses_nothing(self):
+        """Another request's configure() sets the translator to None while the step uses it: no AttributeError (the
+        step failed with it and its lines were not handed over)."""
+        s = self._session()
+        tr = mock.Mock()
+        tr.add_lines.side_effect = lambda lines: setattr(s, "translator", None)  # configure() in another thread
+        s.translator = tr
+        self._feed(s, np.concatenate([np.full(2 * SR, 0.5, dtype=np.float32), np.zeros(SR, dtype=np.float32)]))
+        self.assertEqual(s.error, "")
+        tr.add_lines.assert_called_once()
+        tr.reset_draft.assert_called_once()
+        self.assertEqual(len(s.lines), 1)
+
     def test_waits_for_the_model_keeping_the_audio(self):
         from app import asr_onnx, live
 
