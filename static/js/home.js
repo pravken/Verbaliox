@@ -159,6 +159,11 @@ function hmDuration(sec) {
   return m >= 60 ? `${Math.floor(m / 60)} ${t('impHours')} ${m % 60} ${t('impMinutes')}` : `${m} ${t('impMinutes')}`;
 }
 
+// A recording not done yet: «в очереди» while it waits (for a meeting, the captions or its turn), else the progress
+function hmBusyLabel(m) {
+  return m.status === 'queued' ? t('hmQueued') : t('hmProcessing').replace('{pct}', () => m.progress || 0);
+}
+
 function renderHomeRecent() {
   const box = document.getElementById('hm-recent');
   if (!box) return;
@@ -177,7 +182,7 @@ function renderHomeRecent() {
       ? '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg>'
       : '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>';
     const line = busy
-      ? `<span class="hm-busy"><span class="hm-bar"><span style="--fill: ${Math.max(2, m.progress || 0) / 100}"></span></span>${escapeHtml(t('hmProcessing').replace('{pct}', () => m.progress || 0))}</span>`
+      ? `<span class="hm-busy"><span class="hm-bar"><span style="--fill: ${Math.max(2, m.progress || 0) / 100}"></span></span>${escapeHtml(hmBusyLabel(m))}</span>`
       : r.summary ? `<span class="hm-sum"><svg class="hm-ai" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2l1.9 5.6 5.6 1.9-5.6 1.9L10 17l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span class="truncate">${escapeHtml(r.summary)}</span></span>` : '';
     const tag = r.tasks ? `<span class="hm-tag">${escapeHtml(plural(r.tasks, t('hmTaskForms')))}</span>` : '';
     return `<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-rec">
@@ -314,7 +319,7 @@ function renderHomeMeetings() {
     const lines = Math.max(1, Math.floor((hpx - (narrow && hpx < 40 ? 6 : 23)) / 17));  // the title wraps as far as the height lets it
     if (e.rec) {  // a recording of a day gone by, made outside any meeting: the whole card opens it
       const r = e.rec, at = `${hmPad(e.s.getHours())}:${hmPad(e.s.getMinutes())}`;
-      const label = DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : t('hmProcessing').replace('{pct}', () => r.progress || 0);
+      const label = DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : hmBusyLabel(r);
       html.push(`<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-mt hm-mt-k-recording${narrow ? ' hm-mt-narrow' : ''}" style="top: ${top(s)}px; height: ${hpx}px; ${place}" title="${escapeHtml(`${at} · ${e.title || t('hmUntitled')}\n${t('hmRecOutside')}`)}">
           <span class="flex-1 min-w-0 flex flex-col gap-px text-left"><span class="hm-mt-title">${escapeHtml(e.title || t('hmUntitled'))}</span>
           ${hpx >= 34 && !narrow ? `<span class="hm-mt-sub"><span class="hm-mono">${escapeHtml(at)}</span> · ${escapeHtml(t('hmRecOutside'))}</span>` : ''}</span>
@@ -343,7 +348,7 @@ function renderHomeMeetings() {
     if (past) {
       const r = e.recording;
       action = r
-        ? `<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-mt-link">${escapeHtml(DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : t('hmProcessing').replace('{pct}', () => r.progress || 0))}</button>`
+        ? `<button ${pageCall('click', 'openMeeting', [r.id])} class="hm-mt-link">${escapeHtml(DONE_STATUSES.includes(r.status) ? t('hmRecordingLink') : hmBusyLabel(r))}</button>`
         : `<span class="hm-mt-none">${escapeHtml(t('hmNoRecording'))}</span>`;
     } else if (hmAutoRec && hmAutoRec.key === e.key && isRecording()) {
       action = `<span class="hm-mt-btn hm-mt-rec" title="${escapeHtml(t('hmRecordingNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordingNow'))}</span></span>`;
