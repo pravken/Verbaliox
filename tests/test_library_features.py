@@ -229,6 +229,21 @@ class ObsidianTest(unittest.TestCase):
         obsidian.export_meeting(m["id"], explicit=False)
         self.assertEqual(path.read_text(encoding="utf-8"), edited)
 
+    def test_a_note_edited_in_obsidian_keeps_its_link_when_moved(self):
+        """Found in an audit: an automatic update after a rename moved the note edited in Obsidian, then left it
+        (the edit is kept) before the recording learnt the new place: the next export wrote a second note."""
+        m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")
+        path = obsidian.export_meeting(m["id"])
+        edited = path.read_text(encoding="utf-8").replace("## Резюме", "## Резюме (моё)")
+        path.write_text(edited, encoding="utf-8")
+        database.update_meeting_fields(m["id"], title="Планёрка отдела")
+        moved = obsidian.export_meeting(m["id"], explicit=False)
+        self.assertFalse(path.exists())
+        self.assertEqual(moved.read_text(encoding="utf-8"), edited)  # the edit is not undone
+        self.assertEqual(database.get_meeting(m["id"])["obsidian_path"], str(moved))
+        self.assertEqual(obsidian.export_meeting(m["id"]), moved)  # no second note
+        self.assertEqual(sorted(p.name for p in moved.parent.glob("*.md")), [moved.name])
+
     def test_a_failed_write_keeps_the_note_and_the_users_section(self):
         m = _done_meeting(title="Планёрка", recorded_at="2024-05-13 10:30:00")
         path = obsidian.export_meeting(m["id"])

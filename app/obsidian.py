@@ -606,8 +606,11 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
             else:
                 target = _unique(target)
         if moving and not target.exists():
-            # The title (or the template) changed: move the note instead of leaving the old one
-            old.replace(target)
+            # The title (or the template) changed: move the note instead of leaving the old one. Moved (not
+            # renamed: a vault moved to another drive left its notes there) and the recording told at once: a note
+            # edited in Obsidian is left as it is below, and the next export made a second one (found in an audit)
+            shutil.move(str(old), str(target))
+            update_meeting_fields(meeting_id, obsidian_path=str(target))
             moving = False
         existing = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
         ours, notes = split_user_notes(existing)
