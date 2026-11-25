@@ -612,6 +612,21 @@ def repair_hymt_models(base_url: str, models: List[str], strict: bool = False) -
         _hymt_lock.release()
 
 
+_hymt_background: List[threading.Thread] = []  # the repair started by the status, while it runs
+
+
+def repair_hymt_in_background(base_url: str, models: List[str]) -> bool:
+    """repair_hymt_models in a thread of its own, for the status: it is read every few seconds and answers within
+    a second, and the repair (Ollama makes a model: up to two minutes) held it, with every read after it waiting
+    on the lock (audit K22). The status shows the downloaded name until the repair is done. True: started."""
+    if not _hymt_to_repair(models, False) or _hymt_lock.locked() or any(t.is_alive() for t in _hymt_background):
+        return False
+    t = threading.Thread(target=repair_hymt_models, args=(base_url, list(models)), name="hymt-repair", daemon=True)
+    _hymt_background[:] = [t]
+    t.start()
+    return True
+
+
 def _repair_hymt(client: "httpx.Client", base: str, models: List[str], raws: List[str], strict: bool) -> List[str]:
     out = list(models)
     for raw in raws:
@@ -682,7 +697,7 @@ def get_ollama_status(base_url: Optional[str] = None) -> Dict[str, Any]:
         except Exception:
             running = False
     if running and not _pull_state["active"] and _raw_hymt_1_8b(models):
-        models = repair_hymt_models(base_url, models)  # once: a downloaded 1.8B gets its working template
+        repair_hymt_in_background(base_url, models)  # once: a downloaded 1.8B gets its working template
     if running and not _pull_state["active"]:
         check_translator_files(base_url, models)  # once per model: is the downloaded file the checked one
     if not running:
