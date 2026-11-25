@@ -76,13 +76,16 @@ async function openUpdateDialog(after = false) {
         ${canGo ? `<button data-a="go" class="an-btn an-btn-primary">${escapeHtml(goLabel)}</button>` : ''}
       </div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('keydown', e => { if (e.key === 'Escape') wrap.remove(); });
+  // Esc closes this window only, wherever the focus is (over the settings it closed them too, or only them: audit)
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape' && wrap.isConnected) { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
   wrap.addEventListener('click', e => {
     const b = e.target.closest('button');
-    if (e.target === wrap || (b && b.dataset.a === 'close')) { wrap.remove(); return; }
+    if (e.target === wrap || (b && b.dataset.a === 'close')) { close(); return; }
     if (!b) return;
     if (b.dataset.a === 'page') { openExternal(latest.url); return; }
-    if (b.dataset.a === 'go') { wrap.remove(); installUpdate(); }
+    if (b.dataset.a === 'go') { close(); installUpdate(); }
   });
 }
 

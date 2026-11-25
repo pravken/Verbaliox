@@ -168,7 +168,8 @@ function renderTasks() {
 function tkMatchesPeopleAndSearch(task) {
   if (TK.people.length && !TK.people.includes((task.who || '').toLocaleLowerCase())) return false;
   const q = TK.q.trim().toLocaleLowerCase();
-  if (q && !`${task.what} ${task.who} ${task.meeting_title} ${task.quote}`.toLocaleLowerCase().includes(q)) return false;
+  // the fields there are (an empty one was «null» in the text searched: «null» found every task without a quote)
+  if (q && ![task.what, task.who, task.meeting_title, task.quote].filter(Boolean).join(' ').toLocaleLowerCase().includes(q)) return false;
   return true;
 }
 

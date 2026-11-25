@@ -2761,6 +2761,20 @@ await step('saved recording says what waits', async () => {
   expect(r.eco === 'recordSavedEconomy' && r.paused === 'recordSavedPaused' && r.queued === 'recordSavedQueued', `the saved toast: ${JSON.stringify(r)}`);
 });
 
+// The search of the tasks does not find the empty fields («null»); the names of people have no Latin letter in a
+// Russian one
+await step('task search and given names', async () => {
+  const r = await page.evaluate(() => {
+    const q = TK.q;
+    TK.q = 'null';
+    const nullFound = tkMatchesPeopleAndSearch({ what: 'Прислать смету', who: null, meeting_title: null, quote: undefined });
+    TK.q = q;
+    return { nullFound, mixed: [...GIVEN_NAMES].filter(n => /[а-яё]/.test(n) && /[a-z]/.test(n)) };
+  });
+  expect(!r.nullFound, '«null» finds a task with empty fields');
+  expect(!r.mixed.length, `names with Latin letters: ${r.mixed}`);
+});
+
 // «Изменить текст» of a task works in «Карточки» too (it looked for a row of the list only)
 await step('task text edited in the cards', async () => {
   await page.evaluate(() => switchAppView('tasks'));
@@ -2866,6 +2880,31 @@ await step('set my name: one button on the cards', async () => {
   }));
   if (r.length < 2) return;  // the name is set in the data: nothing to compare
   expect(new Set(r.map(x => `${x.cls}|${x.h}|${x.w}|${x.dx}`)).size === 1, `the buttons differ: ${JSON.stringify(r)}`);
+});
+
+// Esc in the window of an update over the settings closes that window only; the deletion question is a dialog
+await step('esc over the settings closes the top window', async () => {
+  await page.evaluate(async () => {
+    openModal('settings', 'general');
+    updateState.info = updateState.info || { current: '0.0.0', latest: { version: '0.0.1', notes: '' }, download: {} };
+    await openUpdateDialog();
+  });
+  await sleep(300);
+  await page.evaluate(() => document.body.focus());
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  const r = await page.evaluate(() => ({ dlg: !!document.getElementById('upd-dlg'), settings: !document.getElementById('modal-settings').classList.contains('hidden') }));
+  await page.evaluate(() => { document.getElementById('upd-dlg')?.remove(); closeModal('settings'); });
+  expect(!r.dlg && r.settings, `after Esc: ${JSON.stringify(r)}`);
+  const role = await page.evaluate(async () => {
+    const ask = confirmDeleteDialog(state.meetings[0]);
+    const w = document.querySelector('[aria-labelledby="del-dlg-title"]');
+    const out = w ? `${w.getAttribute('role')}|${w.getAttribute('aria-modal')}` : '';
+    w?.querySelector('button[data-a="no"]')?.click();
+    await ask;
+    return out;
+  });
+  expect(role === 'dialog|true', `the deletion question: «${role}»`);
 });
 
 await browser.close();
