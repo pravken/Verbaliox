@@ -6,6 +6,23 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.5 — English
+
+
+### Live captions
+
+- **The caption models are offered whether downloaded or not**: the lists of the studio's «Caption models» and of
+  Settings → «Translation models» show the downloaded models first, then, in a group «Not downloaded», every
+  recognition, translation and analysis model the program offers that fits the computer, with its size. Choosing one
+  asks to download it, the row shows the percent, and once it is downloaded the model becomes the choice of the mode
+  (or of the captions' recognition); a cancel leaves the choice as it was.
+- **The model of the translation mode is named when it is missing**: under the translation list «The “Fast” mode needs
+  the Hy-MT3 1.8B model» (for “Quality”: the translator for the computer) with its size and «Download», in the
+  attention colour. The chip of the models has an orange «!» while the model is missing, a callout under it offers
+  the download until it is closed, and captions translating without the mode's model say once per mode and run which
+  model they use instead.
+
+
 ## 0.9.4 — English
 
 
@@ -1295,6 +1312,22 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.5
+
+
+### Живые субтитры
+
+- **Модели субтитров предлагаются и скачанные, и нескачанные**: списки «Модели субтитров» в студии и «Настройки →
+  Модели перевода» показывают сначала скачанные модели, затем в группе «Не скачаны» — все модели распознавания,
+  перевода и анализа, которые предлагает программа и которые подходят компьютеру, с размером. Выбор такой модели
+  запрашивает скачивание, строка показывает процент, после скачивания модель становится выбранной для режима (или для
+  распознавания субтитров); отмена оставляет прежний выбор.
+- **Отсутствие модели режима перевода видно сразу**: под списком перевода — «Для режима «Быстро» нужна модель
+  Hy-MT3 1.8B» (для режима «Качество» — модель перевода для этого компьютера) с размером и кнопкой «Скачать», в цвете
+  внимания. Пока модели нет, на кнопке моделей — оранжевый «!», под ней — подсказка со скачиванием до закрытия, а
+  субтитры с переводом без модели режима один раз за запуск сообщают, какая модель используется вместо неё.
+
 
 ## 0.9.4
 

@@ -5438,6 +5438,30 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 /* the translator offered for this computer: its name under the lists, the size in line, «Скачать» in the state column */
 .st-moffer { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
 .st-moffer-btn { justify-self: start; }
+/* the model of the translation mode missing: the attention colour (orange: needs attention, CLAUDE.md), an «!» in a
+   circle before the line, on «Скачать», on the chip of the models and in the callout under it */
+.st-attn-ic { width: 14px; height: 14px; flex: none; }
+.st-moffer.is-attn { display: inline-flex; align-items: flex-start; gap: 6px; color: #FFB340; }
+.st-moffer.is-attn .st-attn-ic { margin-top: 1px; }
+.st-attn-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; font-size: var(--fs-label);
+  font-weight: 600; color: #FFB340; background: rgba(255, 159, 10, 0.14); border: 1px solid rgba(255, 159, 10, 0.6); cursor: pointer; white-space: nowrap; }
+.st-attn-btn:hover:not(:disabled) { background: rgba(255, 159, 10, 0.24); color: #FFC56B; }
+.st-attn-btn:disabled { opacity: 0.7; cursor: default; }
+.st-attn-btn .st-attn-ic { width: 13px; height: 13px; }
+.st-mstate.is-dl { color: var(--accent-text, #8FB2F0); font-variant-numeric: tabular-nums; }
+.st-mstate.is-dl::before { border: 1.5px solid currentColor; }
+#st-models-pill { position: relative; }
+#st-models-pill.has-need { border-color: rgba(255, 159, 10, 0.55); }
+/* captions off dim the chips; the mark of a missing model stays bright */
+.st-pill.is-dim.has-need { opacity: 1; color: var(--hc-dim, #8E8E93); }
+.st-pill-badge { top: -7px; left: auto; right: -6px; min-width: 15px; padding: 0 3px; line-height: 15px; font-size: 10.5px; font-weight: 700; }
+.st-pill-badge.hidden { display: none; }
+.tb-rec-hint.st-need-hint { top: calc(100% + 10px); border-color: rgba(255, 159, 10, 0.6); border-left: 3px solid #FF9F0A; padding-left: 10px;
+  white-space: normal; width: max-content; max-width: min(460px, calc(100vw - 32px)); }
+.tb-rec-hint.st-need-hint::before { border-color: rgba(255, 159, 10, 0.6); }
+.st-need-hint > .st-attn-ic { color: #FF9F0A; width: 16px; height: 16px; }
+.st-need-hint-t { min-width: 0; line-height: 1.35; }
+.st-need-hint .st-attn-btn { flex: none; }
 .st-pop-note { margin: 0; width: 100%; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-label); line-height: 1.45; color: var(--hc-dim, #8E8E93); white-space: pre-line; }
 .st-pop-note:empty { display: none; }
 /* what the captions are doing when it needs saying (the translation model loading, an error), under the row */

@@ -1473,6 +1473,130 @@ await step('studio choices kept', async () => {
   await page.unroute('**/api/live/models');
 });
 
+// The caption models not downloaded (asked by the user): the lists offer every model that fits the computer, the ones
+// not downloaded in their own group with the size; choosing one asks, downloads (Ollama's pull) with its percent in the
+// row, and the mode takes it when it is there; «Отмена» leaves the choice as it was. The mode's model missing: the line
+// of the popover names it for «Быстро», the chip has an orange «!», a callout under it until ✕, its «Скачать» downloads
+await step('caption models not downloaded', async () => {
+  const FAST = 'hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M';
+  const BIG = 'hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M';
+  const fake = { installed: [BIG], pulls: [], progress: 0, done: false };
+  await page.route('**/api/live/models', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ installed: fake.installed, quality: BIG, fast: fake.installed.includes('hy-mt3-1.8b') ? 'hy-mt3-1.8b' : BIG,
+      auto: { quality: BIG, fast: fake.installed.includes('hy-mt3-1.8b') ? 'hy-mt3-1.8b' : BIG } }) }));
+  await page.route('**/api/ollama/pull', r => { fake.pulls.push(JSON.parse(r.request().postData() || '{}').model); fake.progress = 1;
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"active": true}' }); });
+  await page.route('**/api/ollama/status', async r => {
+    const res = await r.fetch();
+    const d = await res.json().catch(() => ({}));
+    d.installed = true;
+    d.pull_state = fake.done ? { active: false, model: FAST, progress: 100, logs: [] }
+      : { active: fake.progress > 0, model: FAST, progress: fake.progress, logs: [] };
+    d.translate_catalog = (d.translate_catalog || []).map(m => m.id === FAST && fake.done ? { ...m, installed: true, installed_as: 'hy-mt3-1.8b' } : m);
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d) });
+  });
+  try {
+    await page.evaluate(() => {
+      state.system.ollama.installed = true;  // no question about installing Ollama
+      saveUiSetting('live_translate_model_fast', '');
+      switchAppView('studio');
+    });
+    await sleep(600);
+    await page.evaluate(() => {
+      document.getElementById('live-translate-select').value = 'en';
+      studioConfigure();
+      studioSetSpeed('fast');
+      studioNeedSeen.dismissed = {};
+      studioTranslateModelsChanged();
+    });
+    await until(() => !document.getElementById('st-need-hint').classList.contains('hidden'), 'the callout of the missing model is not shown');
+    const hint = await page.evaluate(() => [document.getElementById('st-need-hint-text').textContent,
+      !document.getElementById('st-models-need').classList.contains('hidden'), document.getElementById('st-models-pill').title]);
+    expect(hint[0].includes('Hy-MT3 1.8B') && hint[1] && hint[2].includes('Hy-MT3 1.8B'), `the callout or the chip's mark is wrong: ${hint}`);
+    await page.click('#st-need-hint .tb-rec-hint-x');
+    await sleep(200);
+    expect(!(await page.isVisible('#st-need-hint')) && await page.isVisible('#st-models-need'), '✕ did not hide the callout, or the mark went with it');
+
+    await page.click('#st-models-pill');
+    await until(() => [...document.getElementById('studio-tr-model').options].some(o => o.value === `dl:${'hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M'}`),
+      'the translation list does not offer the 1.8B not downloaded');
+    const listed = await page.evaluate((id) => {
+      const o = [...document.getElementById('studio-tr-model').options].find(x => x.value === `dl:${id}`);
+      return [o.textContent, o.parentElement.label, document.getElementById('st-tr-offer-text').textContent,
+        !document.getElementById('st-tr-offer').classList.contains('hidden'), t('capDlGroup'), t('studioSpeedFast')];
+    }, FAST);
+    expect(listed[0].includes('Hy-MT3 1.8B') && /1[,.]3/.test(listed[0]) && listed[1] === listed[4], `the 1.8B is listed without its size or group: ${listed}`);
+    expect(listed[3] && listed[2].includes(listed[5]) && listed[2].includes('Hy-MT3 1.8B'), `the offer line does not name the model of «Быстро»: ${listed}`);
+
+    // cancelled: the choice stays, nothing is downloaded
+    await page.selectOption('#studio-tr-model', `dl:${FAST}`);
+    await until(() => !!document.querySelector('.vx-dlg-foot button[data-a="yes"]'), 'choosing a model not downloaded asked nothing');
+    const ask = await page.evaluate(() => [document.querySelector('.vx-dlg').textContent, t('studioSpeedFast')]);
+    expect(ask[0].includes('Hy-MT3 1.8B') && ask[0].includes(ask[1]), `the question does not name the model and the mode: ${ask[0]}`);
+    await page.click('.vx-dlg-foot button[data-a="no"]');
+    await until(() => document.getElementById('studio-tr-model').value === '', 'cancel did not restore the choice');
+    expect(fake.pulls.length === 0, 'cancel started a download');
+
+    // confirmed: the pull, the percent in the row, then the mode takes the model
+    if (!(await page.isVisible('#st-models-pop'))) await page.click('#st-models-pill');
+    await page.selectOption('#studio-tr-model', `dl:${FAST}`);
+    await until(() => !!document.querySelector('.vx-dlg-foot button[data-a="yes"]'), 'the question did not come again');
+    await page.click('.vx-dlg-foot button[data-a="yes"]');
+    for (let i = 0; i < 30 && !fake.pulls.length; i++) await sleep(100);
+    expect(fake.pulls[0] === FAST, `the pull was not asked for the 1.8B: ${fake.pulls}`);
+    fake.progress = 37;
+    let row = null;
+    for (let i = 0; i < 50 && !(row && row[0] === '37%' && row[1] === `dl:${FAST}`); i++) {
+      await sleep(150);
+      // the popover may be closed by a redraw of the studio meanwhile: the row is read with it open
+      row = await page.evaluate(() => {
+        if (document.getElementById('st-models-pop').classList.contains('hidden')) toggleStudioModelsPop();
+        return [document.getElementById('st-tr-model-state').textContent, document.getElementById('studio-tr-model').value,
+          JSON.stringify(capDl.pending.map(p => [p.key, p.id, p.pct])), JSON.stringify(state.ollamaPullState || {})];
+      });
+    }
+    expect(row[0] === '37%' && row[1] === `dl:${FAST}`, `the row does not show the download: ${row}`);
+    const slots = await page.evaluate(() => ['st-cap-model-gb', 'st-tr-model-gb', 'st-tr-offer-gb'].map(id => {
+      const r = document.getElementById(id).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
+    expect(slots.every(s => s[0] === slots[0][0] && s[1] === slots[0][1]), `the size slots moved: ${JSON.stringify(slots)}`);
+    if (shots) await page.locator('#st-models-pop').screenshot({ path: `${shots}/capmodels-download.png` });
+    fake.installed = [BIG, 'hy-mt3-1.8b'];
+    fake.done = true;
+    let saved = '';
+    for (let i = 0; i < 60 && saved !== 'hy-mt3-1.8b'; i++) {
+      await sleep(150);
+      saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.live_translate_model_fast || ''));
+    }
+    expect(saved === 'hy-mt3-1.8b', `the downloaded model did not become the choice of «Быстро»: «${saved}»`);
+
+    // the callout's «Скачать» downloads the mode's model
+    fake.installed = [BIG];
+    fake.done = false;
+    fake.progress = 0;
+    await page.evaluate(() => { closeStudioModelsPop(); state.system.ollama.installed = true; saveUiSetting('live_translate_model_fast', ''); studioNeedSeen.dismissed = {}; studioTranslateModelsChanged(); });
+    await until(() => !document.getElementById('st-need-hint').classList.contains('hidden'), 'the callout did not come back');
+    await page.click('#st-need-hint .st-attn-btn');
+    for (let i = 0; i < 30 && fake.pulls.length < 2; i++) await sleep(100);
+    expect(fake.pulls.length === 2 && fake.pulls[1] === FAST && !(await page.isVisible('#st-need-hint')), `the callout's «Скачать» did not download: ${fake.pulls}`);
+    fake.done = true;
+    await sleep(1500);
+  } finally {
+    await page.unroute('**/api/ollama/pull');
+    await page.unroute('**/api/ollama/status');
+    await page.unroute('**/api/live/models');
+    await page.evaluate(() => {
+      closeStudioModelsPop();
+      saveUiSetting('live_translate_model_fast', '');
+      document.getElementById('live-translate-select').value = '';
+      studioConfigure();
+      studioSetSpeed('quality');
+      studioTranslateModelsChanged();
+      switchAppView('library');
+    });
+    await sleep(300);
+  }
+});
+
 // A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
 // fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
 await step('a choice in flight survives a settings read', async () => {
