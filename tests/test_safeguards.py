@@ -336,6 +336,41 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("Verbaliox-Installer-*.exe", wf)
         self.assertIn('$setup.FullName -Algorithm SHA256', wf)  # in SHA256SUMS.txt, so signed
 
+    def test_the_signing_key_never_shares_a_runner_with_third_party_packages(self):
+        """release.yml: packages from PyPI (hash-locked) only in the test job; build and sign-publish
+        install nothing; the secret and the write token only in sign-publish, which runs only with a tag."""
+        import re
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        wf = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        head, jobs = wf.split("\njobs:\n", 1)
+        parts = re.split(r"^  ([a-z-]+):\n", jobs, flags=re.M)
+        job = dict(zip(parts[1::2], parts[2::2]))
+        self.assertEqual(list(job), ["test", "build", "sign-publish"])
+        self.assertIn("permissions:\n  contents: read", head)
+        self.assertIn("pip install --require-hashes -r requirements-test.txt", job["test"])
+        for name in ("build", "sign-publish"):
+            self.assertNotRegex(job[name], r"pip install|uv pip|pipx|uvx")
+        for name in ("test", "build"):
+            self.assertNotIn("secrets.", job[name])
+            self.assertNotIn("github.token", job[name])
+            self.assertIn("contents: read", job[name])
+        self.assertIn("RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}", job["sign-publish"])
+        self.assertIn("contents: write", job["sign-publish"])
+        self.assertIn("needs: build", job["sign-publish"])
+        self.assertIn("if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''", job["sign-publish"])
+        self.assertIn("does not match SHA256SUMS.txt", job["sign-publish"])
+        self.assertEqual(wf.count("persist-credentials: false"), 3)
+        for action in re.findall(r"uses: (\S+)", wf):  # every action pinned by its commit
+            self.assertRegex(action, r"@[0-9a-f]{40}$")
+        lock = (root / "requirements-test.txt").read_text(encoding="utf-8")
+        self.assertIn("--generate-hashes", lock.splitlines()[1])
+        for line in (root / "requirements-test.in").read_text(encoding="utf-8").splitlines():
+            name = re.match(r"[A-Za-z0-9_.-]+", line)
+            if name and not line.startswith("#"):
+                self.assertRegex(lock, rf"(?im)^{re.escape(name.group(0))}==")
+
     def test_installer_shows_the_folder_and_moves_the_program(self):
         """The folder page says where Verbaliox is installed; another folder takes the environment, the
         models and uv's Python along, and pyvenv.cfg and OLLAMA_MODELS follow."""
