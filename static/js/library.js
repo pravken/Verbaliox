@@ -230,7 +230,7 @@ function queueKindLabel(q) {
 
 function renderQueuePanel() {
   const panel = document.getElementById('queue-panel');
-  if (!panel) return;
+  if (!panel || !sidebarShown()) return;
   const items = state.queue || [];
   panel.classList.toggle('hidden', items.length === 0);
   document.getElementById('queue-count').textContent = items.length ? `(${items.length})` : '';
@@ -1381,9 +1381,11 @@ function libSelectionShown() {
   return state.multi.size > 0 || !state.appView || state.appView === 'library';
 }
 
-// The recordings in the order on screen: the rows of «Записи» (the list of the old sidebar is hidden)
+// The recordings in the order on screen: the rows of «Записи», drawn or not yet (the list of the old sidebar is
+// hidden); away from «Записи», in its order all the same
 function libVisibleIds() {
   if (state.appView === 'libtable' && typeof LT !== 'undefined') return [...LT.ids];
+  if (!sidebarShown() && typeof ltOrderIds === 'function') return ltOrderIds();
   return [...document.querySelectorAll('#meetings-list [data-mid]')].map(el => Number(el.dataset.mid));
 }
 
@@ -1706,9 +1708,21 @@ function openLiveStudio() {
   studioTab('text');
 }
 
+// The old sidebar is hidden for good (styles.css, #app-sidebar): its list of recordings and its queue are not
+// drawn. For a library of 1200 recordings the list was 22 000 elements, drawn at the start and again at each
+// change of the selection, each progress and each second of the queue (audit K19)
+function sidebarShown() {
+  const aside = document.getElementById('app-sidebar');
+  return !!aside && aside.getClientRects().length > 0;
+}
+
 function renderMeetingsSidebar() {
   (state.libPendingHides || []).forEach(hide => hide());  // removals still waiting on «Отменить»
   const listEl = document.getElementById('meetings-list');
+  if (!sidebarShown()) {
+    if (listEl && listEl.firstChild) { listEl._keyed = false; listEl.innerHTML = ''; }
+    return;
+  }
   renderLibFilterUi();
 
   const filtering = libFilterCount() > 0;
