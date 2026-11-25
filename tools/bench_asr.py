@@ -18,11 +18,13 @@ Modes:
   * offline: every FLEURS phrase recognized whole. WER / CER (jiwer; one normalization for every model: lower case,
     no punctuation, ё -> е, numbers as they are), RTFx, load time, peak memory.
   * live: a ~10 min file of FLEURS phrases joined with pauses of 0.3-1.5 s is fed in real time, as from a microphone.
-    Schemes: "window" - the app's own code (app.live.LiveSession: every page post of ~1 s of audio, the window of up
-    to 20 s is recognized again; run with the app's Python, see --app-python); "vad" - only the current phrase (from
+    Schemes: "window" - the app's own code (app.live.LiveSession: a page post every --post-sec, 0.25 s as the studio
+    sends it; Russian with GigaAM goes by phrases, other languages by the window with drafts of the phrase; run with
+    the app's Python, see --app-python); "vad" - only the current phrase (from
     the speech start by the Silero VAD) is recognized, at most every --draft-sec, and once more when a pause of
     >= 500 ms ends it; "stream" - a streaming model (sherpa-onnx: Nemotron 3.5, T-one) gets every piece of audio once.
     WER of the final text, latency "phrase end in the audio -> final text" (median, p90), latency of the first draft,
+    how often the draft changes while a phrase is spoken (draft_gap: a new word waits about half of it plus a step),
     processor load of the process and of the system, peak memory.
   * call: live, and at the same time a transcription of a 10 min file in a second process (--queue), a video call's
     load (ffmpeg encodes 1080p30 x264 veryfast in real time) and a probe process of normal priority that sleeps for
@@ -763,7 +765,11 @@ def _events_metrics(events: List[Dict[str, Any]], segs: List[Dict[str, Any]], to
     def pct(v, q):
         return round(sorted(v)[min(len(v) - 1, int(q * len(v)))], 2) if v else None
 
+    # how often the text on the screen changes while a phrase is spoken: a word spoken waits about half of it
+    shown = sorted(e["at"] for e in texts)
+    gaps = [b - a for a, b in zip(shown, shown[1:]) if any(s["start"] <= a and b <= s["end"] + 0.6 for s in segs)]
     return {"wer": round(w, 2), "cer": round(c, 2), "finals": len(finals),
+            "draft_gap_median": round(statistics.median(gaps), 2) if gaps else None, "draft_gap_p90": pct(gaps, 0.9),
             "final_latency_median": round(statistics.median(lat), 2) if lat else None, "final_latency_p90": pct(lat, 0.9),
             "first_draft_median": round(statistics.median(first), 2) if first else None,
             "first_draft_p90": pct(first, 0.9)}
@@ -771,7 +777,7 @@ def _events_metrics(events: List[Dict[str, Any]], segs: List[Dict[str, Any]], to
 
 def live_window_app(root: Path, job: Dict[str, Any], audio, segs, total: float) -> Dict[str, Any]:
     """The app's own captions (app.live.LiveSession) with its own model loading (app.asr_onnx), fed as the page does:
-    a post of the audio gathered since the last one about every second, never two at once."""
+    a post of the audio gathered since the last one every --post-sec (0.25 s), never two at once."""
     os.environ["VERBALIOX_DATA_DIR"] = str(paths(root)["tmp"] / "app-data")
     os.environ["VERBALIOX_MODELS_DIR"] = str(paths(root)["models"] / "app")
     sys.path.insert(0, str(ROOT))
@@ -847,7 +853,7 @@ def live_window_app(root: Path, job: Dict[str, Any], audio, segs, total: float) 
     seen, partial = 0, ""
     sent_at = 0.0
     while not feeder.done():
-        feeder.wait_until(sent_at + 1.0)
+        feeder.wait_until(sent_at + job.get("post_sec", 0.25))
         sent_at = feeder.now()
         piece = feeder.take()
         if not piece.size:
@@ -1279,7 +1285,7 @@ def cmd_longform(args) -> None:
 
 def _live_job(args) -> Dict[str, Any]:
     return {**job_base(args), "mode": "live", "model": args.model, "scheme": args.scheme, "lang": args.lang,
-            "seconds": args.seconds, "tick": args.tick, "draft_sec": args.draft_sec}
+            "seconds": args.seconds, "tick": args.tick, "draft_sec": args.draft_sec, "post_sec": args.post_sec}
 
 
 def _live_python(args) -> Optional[str]:
@@ -1407,7 +1413,7 @@ def cmd_call(args) -> None:
                   "cpus": args.cpus, "video": not args.no_video}
     save(args, name, res)
     brief = {k: res.get(k) for k in ("wer", "final_latency_median", "final_latency_p90", "first_draft_median",
-                                      "probe", "video", "queue", "queue_rtfx")}
+                                      "draft_gap_median", "probe", "video", "queue", "queue_rtfx")}
     brief["cpu"] = usage
     say(json.dumps(brief, ensure_ascii=False))
 
@@ -1596,6 +1602,8 @@ def main() -> None:
         p.add_argument("--seconds", type=float, default=0, help="only the first N seconds of the long file")
         p.add_argument("--tick", type=float, default=0.2, help="how often audio arrives (vad, stream)")
         p.add_argument("--draft-sec", type=float, default=1.2)
+        p.add_argument("--post-sec", type=float, default=0.25,
+                       help="window: how often the page posts the audio (0.25 as the studio; 1.0 as before)")
         p.add_argument("--app-python", help="Python of the app (scheme window; default: the repository's .venv)")
         if mode == "call":
             p.add_argument("--queue", help='model of the queue\'s transcription, or "inproc" (window: the app\'s own, same process)')

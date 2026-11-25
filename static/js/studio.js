@@ -1040,8 +1040,10 @@ function renderRecordSaveHint() {
 
 // --- Live captions while recording ---
 // The same mixed stream that is recorded is tapped by an AudioWorklet, resampled to 16 kHz mono
-// 16-bit PCM and posted about once a second; each answer carries new final lines, their
+// 16-bit PCM and posted every LIVE_SEND_MS (each block of the worklet, about 0.25 s): the draft line then follows
+// the speech within a fraction of a second. One post at a time; each answer carries new final lines, their
 // translations and the current draft line.
+const LIVE_SEND_MS = 250;
 const liveCap = { session: null, node: null, pcm: [], pcmLen: 0, inFlight: false, timer: null, lines: new Map(), partial: '', lastId: 0 };
 
 function liveCaptionPrefs() {
@@ -1612,9 +1614,10 @@ async function startLiveCaptions(ctx, stream) {
     // Sent from here too: with the window minimized the page's timers fire about once a minute, the
     // audio then reached the server in minute-long lumps and the captions came in batches. The audio
     // thread keeps its pace in the background
-    if (Date.now() - (liveCap.sentAt || 0) >= 1000) sendLiveAudio();
+    // (a little under the block's length, so a block that comes early is not left for the next one)
+    if (Date.now() - (liveCap.sentAt || 0) >= LIVE_SEND_MS - 50) sendLiveAudio();
   };
-  liveCap.timer = setInterval(sendLiveAudio, 1000);
+  liveCap.timer = setInterval(sendLiveAudio, LIVE_SEND_MS);
   liveCap.wall0 = Date.now();  // the session's times count from here: its lines are put on the clock
   syncStudioCaptions();
 }

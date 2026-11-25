@@ -1,7 +1,7 @@
 """
 Live captions while recording, optionally translated.
 
-The page sends the recording's audio as 16 kHz mono 16-bit PCM about once a second. The server
+The page sends the recording's audio as 16 kHz mono 16-bit PCM about every 0.25 s. The server
 keeps the audio that is not yet final and, at most every LIVE_STEP_SEC, transcribes that window
 (at most LIVE_WINDOW_SEC) with the Whisper model already in memory. Phrases that end well before
 the end of the window are final: they are kept, their audio is dropped and, if asked, they are
@@ -9,7 +9,9 @@ translated by Ollama in the background. The rest of the window is shown as a dra
 
 Russian speech with GigaAM goes by VAD phrases instead (app/live_phrases.py): only the phrase being spoken is
 recognized, by the GigaAM v3 e2e-CTC int8, and it is final once after a pause. English and the other languages
-keep the window (Parakeet: the phrases without context lose 6–9 points of WER, bench-report/asr-2026-11.md).
+keep the window for the final lines (Parakeet: the phrases without context lose 6–9 points of WER,
+bench-report/asr-2026-11.md); between the window's runs the VAD follows the speech too and only the phrase being
+spoken is recognized for the draft line, every 0.3 s or more (live_phrases.SpeechFollow, DraftPace).
 
 After recording stops the usual full transcription of the saved file runs; live captions are only
 for following along, so they favour speed (greedy decoding, short window) over accuracy.
@@ -31,13 +33,17 @@ import numpy as np
 from app.database import get_all_settings
 from app.paths import APP_DIR
 
+_clock = time.perf_counter  # times a run of the window (window_drafts)
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
 SR = 16000
-LIVE_STEP_SEC = 1.2       # transcribe the window at most this often
-PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about once a second)
+# transcribe the window at most this often: every 2 s, as when the page sent the audio once a second (the window ran
+# on every second piece; its final lines and its load were measured so, bench-report/asr-2026-11-check.md)
+LIVE_STEP_SEC = 2.0
+PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about every 0.25 s)
 LIVE_WINDOW_SEC = 20.0    # longest audio kept undecided (forced to final beyond it)
 FINAL_MARGIN_SEC = 1.6    # a phrase ending this long before the window end is final
+WINDOW_BUSY_SHARE = 0.3   # phrase drafts between the window's runs only while a run takes under this share of LIVE_STEP_SEC
 SESSION_IDLE_SEC = 120.0  # sessions without audio for this long are dropped
 
 WORKER_IDLE_SEC = 120.0   # the caption worker is closed (VRAM freed) after this long unused
@@ -222,12 +228,17 @@ class LiveSession:
         self.translate_choice = _translate_choice(settings, self.speed)
         self.translate_to = translate_to or None
         self.pair = list(pair or ["ru", "en"])[:2]  # the two languages of translate_to="auto"
-        self.audio = np.zeros(0, dtype=np.float32)
+        self._buf = np.zeros(0, dtype=np.float32)  # self.audio is its start (room for the next pieces after it)
+        self._n = 0
         self.offset = 0.0           # recording time (s) of self.audio[0]
         self.base = 0               # the same in samples (exact: the VAD phrases count in samples)
         self._ph = None             # app/live_phrases.PhraseState while captions go by VAD phrases
+        self._follow = None         # app/live_phrases.SpeechFollow: drafts of the phrase in the window scheme (False: off)
+        self._win_draft: List[Tuple[int, int, str]] = []  # the window's draft sentences at its last run (samples)
+        self._window_cost = 0.0     # seconds the last run of the window took
+        self.last_window_at = 0.0   # self.received when the window was last transcribed
         self.received = 0.0         # seconds of audio received in total
-        self.last_run_at = 0.0      # self.received when the window was last transcribed
+        self.last_run_at = 0.0      # self.received when the last step ran
         self.lines: List[Dict[str, Any]] = []
         self.partial = ""
         self.error = ""
@@ -245,10 +256,33 @@ class LiveSession:
         self._next_id = 1
 
     # -------------------------------------------------------------- audio in
+    @property
+    def audio(self) -> np.ndarray:
+        """The audio kept (not final yet), from self.offset: a view of the buffer, valid while this step holds it
+        (the pieces received meanwhile go after its end, a cut only moves the start)."""
+        return self._buf[:self._n]
+
+    @audio.setter
+    def audio(self, value: np.ndarray) -> None:
+        self._buf = np.asarray(value, dtype=np.float32)
+        self._n = self._buf.size
+
+    def _append(self, chunk: np.ndarray) -> None:
+        """A piece after the audio kept (call with _audio_lock held): into the room after it, so a piece every 0.25 s
+        does not copy the whole window each time; the buffer grows by doubling."""
+        need = self._n + chunk.size
+        if need > self._buf.size:
+            grown = np.empty(max(need, 2 * self._n, 4 * SR), dtype=np.float32)
+            grown[:self._n] = self._buf[:self._n]
+            self._buf = grown
+        self._buf[self._n:need] = chunk
+        self._n = need
+
     def add_pcm16(self, data: bytes) -> None:
         if len(data) % 2:
             data = data[:-1]
-        chunk = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+        chunk = np.frombuffer(data, dtype="<i2").astype(np.float32)
+        chunk *= 1.0 / 32768.0
         if self.capture_id:
             # System audio captured by the app (app/system_audio.py) joins the page's microphone
             from app.system_audio import get_capture
@@ -256,10 +290,9 @@ class LiveSession:
             cap = get_capture(self.capture_id)
             if cap is not None:
                 sys_part = cap.take_live(chunk.size)
-                chunk = chunk.copy()
                 chunk[: sys_part.size] += sys_part
         with self._audio_lock:
-            self.audio = np.concatenate([self.audio, chunk])
+            self._append(chunk)
             self.received += chunk.size / SR
         # Nothing decoded for long (steps fail or one hangs): only the last part is kept. Not while a
         # step runs: it cuts the buffer from its start when it ends
@@ -282,20 +315,40 @@ class LiveSession:
 
         return asr_onnx.live_phrases(self.onnx_model)
 
+    def window_drafts(self) -> bool:
+        """In the window scheme with GigaAM / Parakeet the phrase being spoken is recognized alone for the draft between
+        the window's runs (live_phrases.SpeechFollow), while the window keeps up: a run under WINDOW_BUSY_SHARE of
+        LIVE_STEP_SEC. Not for the Whisper captions (their own process)."""
+        if not self.onnx_model or self._follow is False or self._window_cost > WINDOW_BUSY_SHARE * LIVE_STEP_SEC:
+            return False
+        from app import asr_onnx
+
+        return asr_onnx.is_loaded(self.onnx_model)
+
     def step(self) -> None:
         """Transcribes the undecided window (or the phrase being spoken) if enough new audio arrived and
         nothing else is running."""
         phrases = self.phrases()
-        every = PHRASE_STEP_SEC if phrases else LIVE_STEP_SEC
+        drafts = not phrases and self.window_drafts()
+        every = PHRASE_STEP_SEC if phrases or drafts else LIVE_STEP_SEC
         if self.received - self.last_run_at < every or not self._busy.acquire(blocking=False):
             return
         try:
             self.last_run_at = self.received
             if phrases:
+                self._follow = None
                 self._transcribe_phrases()
             else:
                 self._ph = None
-                self._transcribe_window()
+                if drafts:
+                    self._follow_speech()  # before the window cuts what is final: the VAD must have heard it
+                if self.received - self.last_window_at >= LIVE_STEP_SEC:
+                    self.last_window_at = self.received
+                    t = _clock()
+                    self._transcribe_window()
+                    self._window_cost = _clock() - t
+                elif drafts:
+                    self._draft_phrase()
         except Exception as e:  # a failed step must not end the recording
             if str(e)[:200] != self.error:
                 traceback.print_exc()
@@ -314,12 +367,14 @@ class LiveSession:
 
     def _cut(self, cut: int) -> None:
         """Drops the first `cut` samples (call with _audio_lock held): what was appended meanwhile stays."""
-        self.audio = self.audio[cut:]
+        cut = min(cut, self._n)
+        self._buf = self._buf[cut:]
+        self._n -= cut
         self.base += cut
         self.offset = self.base / SR
 
     def _transcribe_window(self) -> None:
-        window = self.audio
+        window, base0 = self.audio, self.base
         win_sec = window.size / SR
         if win_sec < 0.8:
             return
@@ -378,6 +433,11 @@ class LiveSession:
         self.lines.extend(new_lines)
         # Everything after the final phrases is the draft line
         self.partial = " ".join(s.text.strip() for s in segs[len(new_lines):]).strip()
+        # kept for the drafts of the phrase being spoken until the next run (_draft_phrase), in samples of the stream
+        self._win_draft = [(base0 + int(s.start * SR), base0 + int(s.end * SR), s.text.strip())
+                           for s in segs[len(new_lines):] if s.text.strip()]
+        if self._follow:
+            self._follow.drafted_to = base0 + window.size
         if self.translator:
             if new_lines:
                 self.translator.add_lines(new_lines)
@@ -389,10 +449,61 @@ class LiveSession:
             # it; otherwise the model is left free for the final lines
             self.translator.set_draft(self.partial if self.draft else "")
 
+    def _follow_speech(self) -> None:
+        """The VAD over the new audio in the window scheme (live_phrases.SpeechFollow); its model is the Silero VAD
+        of the phrases. If it cannot start, the window's draft goes on as before."""
+        from app import asr_onnx, live_phrases as lp
+
+        f = self._follow
+        if f is None or f.cutter.pos < self.base:  # the first step, or audio dropped before the VAD heard it
+            try:
+                f = self._follow = lp.SpeechFollow(self.base, lp.SileroStream(asr_onnx._vad_dir()))
+            except Exception as e:
+                print(f"[live] the drafts of the phrase are off: {e}", flush=True)
+                self._follow = False
+                return
+        with self._audio_lock:
+            audio, base = self.audio, self.base
+        f.follow(audio, base)
+
+    def _draft_phrase(self) -> None:
+        """The draft line between the window's runs: the window's draft sentences that end before the phrase being
+        spoken stay, and the phrase (from the start of a sentence of the window that reaches into it) is recognized
+        alone, at the pace of live_phrases.DraftPace. The final lines come from the window as before."""
+        from app import asr_onnx, live_phrases as lp, vocab
+
+        f = self._follow
+        span = f.target() if f else None
+        if not span or not f.pace.due(self.received):
+            return
+        with self._audio_lock:
+            audio, base = self.audio, self.base
+        start, end = max(span[0], base), min(span[1], base + audio.size)
+        keep = []
+        for a, b, text in self._win_draft:
+            if b <= base:
+                continue
+            if b <= start + int(lp.PAD_SEC * SR):
+                keep.append(text)
+                continue
+            start = max(base, min(start, a))  # a sentence of the window reaching into the phrase: heard with it
+            break
+        if end - start < lp.MIN_SPEECH_SEC * SR:
+            return
+        phrase = asr_onnx.level(audio[start - base:end - base])
+        parts = f.pace.run(self.received, lambda: asr_onnx.recognize_phrase(self.onnx_model, phrase))
+        f.drafted_to = end
+        text = vocab.fix_text(" ".join(t for _, _, t in parts), vocab.current()).strip()
+        if not text:
+            return  # nothing heard: the window's draft stays
+        self.partial = " ".join(keep + [text])
+        if self.translator:
+            self.translator.set_draft(self.partial if self.draft else "")
+
     def _transcribe_phrases(self) -> None:
         """Russian captions by VAD phrases (app/live_phrases.py): the VAD goes over the new audio; a phrase that
         ended (a pause of 0.5 s, or 20 s of speech without one) is recognized once and its sentences are final;
-        the phrase still being spoken is the draft, recognized again at most every 1.2 s."""
+        the phrase still being spoken is the draft, recognized again every 0.3 s or more (live_phrases.DraftPace)."""
         from app import asr_onnx, live_phrases as lp, vocab
 
         onnx_id = self.onnx_model
@@ -445,13 +556,14 @@ class LiveSession:
                 })
                 self._next_id += 1
         if ended:
-            ph.last_draft = self.received  # the draft starts again with the next phrase
+            ph.pace.restart()  # the first draft of the next phrase as soon as it has enough speech
             self.partial = ""
         if c.start is None:
             self.partial = ""
-        elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and self.received - ph.last_draft >= lp.DRAFT_SEC:
-            ph.last_draft = self.received
-            parts = asr_onnx.recognize_phrase(onnx_id, audio[c.start - base:c.pos - base])
+        elif c.pos - c.start >= lp.MIN_DRAFT_SEC * SR and c.last_speech > ph.drafted_to and ph.pace.due(self.received):
+            phrase = audio[c.start - base:c.pos - base]
+            ph.drafted_to = c.pos
+            parts = ph.pace.run(self.received, lambda: asr_onnx.recognize_phrase(onnx_id, phrase))
             draft = vocab.fix_text(" ".join(t for _, _, t in parts), rules).strip()
             self.partial = lp.drop_seam_repeat(ph.seam, draft) if ph.seam and c.continued else draft
         with self._audio_lock:
@@ -502,7 +614,7 @@ class LiveSession:
             "lang": self.lang,
             "speech_lang": self.speech_lang or "auto",
             # New lines, and recent ones still waiting for a translation (not the whole meeting:
-            # this answer goes out about once a second)
+            # this answer goes out about four times a second)
             "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (self.translator and ln["translation"] is None)],
             "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
             # The language each line went into (differs per line with translate_to="auto")

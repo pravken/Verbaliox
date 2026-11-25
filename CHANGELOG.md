@@ -94,8 +94,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   live captions run at «below normal» priority while they recognize (the app's own window and server keep the normal
   one), and so does the separate process of the Whisper captions.
 - **Russian live captions by phrases**: with GigaAM the captions no longer recognize a window of up to 20 s again
-  and again. The voice detector follows the speech, only the phrase being spoken is recognized (a draft at most every
-  1.2 s), and it becomes final once, after a pause of half a second, by GigaAM v3 e2e-CTC int8. In the measurement:
+  and again. The voice detector follows the speech, only the phrase being spoken is recognized (its draft as it is
+  spoken), and it becomes final once, after a pause of half a second, by GigaAM v3 e2e-CTC int8. In the measurement:
   the final line in about 1 s instead of 3–4 s, fewer errors (WER 5.9 % instead of 8.5 %), a seventh of the processor load
   and 0.44 GB of memory instead of 2.9. Speech without pauses is cut at 20 s in a gap between words (where the
   voice detector hears no speech; only without such a gap where the speech is weakest), and the next line starts
@@ -104,6 +104,12 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   a tail of the cut shorter than a quarter of a second or of one letter is not shown as a line. The model file (about 214 MB, from the same
   repository) is downloaded once by itself; until then the captions go as before. English and other languages keep
   Parakeet in the window, which is more accurate for them.
+- **Captions word by word**: a spoken word reaches the draft line in about a third of a second instead of one to two
+  seconds. The studio sends the audio every 0.25 s instead of every second, and the draft of the phrase being spoken
+  is recognized every 0.3 s — less often on a slow computer (never sooner than three times its own recognition time),
+  so the captions do not fall behind and do not load the processor beyond their threads. In English and other
+  languages only the phrase being spoken is recognized for the draft between the runs of the window; the final lines
+  come from the window as before.
 - **GigaAM transcribes faster on the processor**: a transcription without the video card takes GigaAM v3 e2e-RNN-T in
   int8, with the same accuracy (WER 5.03 % on FLEURS), 1.6 times faster and with 0.46 GB of memory instead of 1.1. On
   the video card GigaAM stays as it was. Its files (about 230 MB) come with the model; an installation made before is
@@ -1345,7 +1351,7 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   распознавания работают с приоритетом «ниже среднего» (окно и сервер программы сохраняют обычный), как и отдельный
   процесс субтитров Whisper.
 - **Русские субтитры по фразам**: с GigaAM субтитры больше не распознают раз за разом окно до 20 с. Детектор речи
-  следит за речью, распознаётся только текущая фраза (черновик — не чаще раза в 1,2 с), а финальной она становится
+  следит за речью, распознаётся только текущая фраза (черновик — по ходу речи), а финальной она становится
   один раз, после паузы в полсекунды, моделью GigaAM v3 e2e-CTC int8. В замере: финальная строка примерно через 1 с
   вместо 3–4 с, меньше ошибок (WER 5,9 % вместо 8,5 %), в семь раз меньше нагрузки на процессор и 0,44 ГБ
   памяти вместо 2,9. Речь без пауз режется на 20 с в промежутке между словами (где детектор речи не слышит речь;
@@ -1355,6 +1361,11 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   или из одной буквы не показывается отдельной строкой. Файл модели (около 214 МБ, из того же репозитория) скачивается один
   раз сам; до этого субтитры идут как раньше. Английский и другие языки остаются на Parakeet с окном — для них оно
   точнее.
+- **Субтитры слово за словом**: произнесённое слово появляется в черновой строке примерно через треть секунды, а не
+  через одну-две секунды. Студия отправляет звук каждые 0,25 с вместо раза в секунду, а черновик текущей фразы
+  распознаётся каждые 0,3 с. На медленном компьютере — реже, не чаще чем раз в три длительности самого распознавания:
+  субтитры не отстают и не нагружают процессор сверх своих потоков. В английском и других языках между запусками окна
+  для черновика распознаётся только текущая фраза; финальные строки по-прежнему берутся из окна.
 - **GigaAM быстрее расшифровывает на процессоре**: расшифровка без видеокарты идёт на GigaAM v3 e2e-RNN-T в int8 с той
   же точностью (WER 5,03 % на FLEURS), в 1,6 раза быстрее и с 0,46 ГБ памяти вместо 1,1. На видеокарте GigaAM работает
   как раньше. Её файлы (около 230 МБ) скачиваются вместе с моделью; установка прежней версии дополняется в фоне при
