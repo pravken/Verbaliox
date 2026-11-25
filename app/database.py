@@ -1565,6 +1565,15 @@ def relink_media(meeting_id: int, path: str) -> None:
 _DUB_PATH_KEYS = ("path", "srt_path")
 
 
+def _is_dub_file(p: Path) -> bool:
+    """A file a dub made: in the data folder's dubs/ (app/dubbing.DUBS_DIR). Only these are deleted with
+    a dub; a path of a restored database naming the database itself or bin/ffmpeg.exe is left alone."""
+    try:
+        return bool(p.name) and (DATA_DIR / "dubs").resolve() in p.resolve().parents
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def _dub_paths_to_storage(entry: Dict[str, Any]) -> Dict[str, Any]:
     """Dub files live in the data folder; store them relative to it so moving the folder keeps them."""
     out = dict(entry)
@@ -1605,7 +1614,7 @@ def save_meeting_dub(meeting_id: int, entry: Dict[str, Any]) -> None:
     for old in replaced:
         for key in ("path", "srt_path"):
             p = Path(old.get(key) or "")
-            if p.name and p.exists() and DATA_DIR in p.resolve().parents and p.resolve() != Path(entry.get(key) or "").resolve():
+            if p.exists() and _is_dub_file(p) and p.resolve() != Path(entry.get(key) or "").resolve():
                 try:
                     p.unlink()
                 except Exception:
@@ -1632,7 +1641,7 @@ def delete_meeting_dub(meeting_id: int, lang: str) -> bool:
     for old in gone:
         for key in _DUB_PATH_KEYS:
             p = Path(old.get(key) or "")
-            if p.name and p.exists() and DATA_DIR in p.resolve().parents:
+            if p.exists() and _is_dub_file(p):
                 delete_file(str(p))
     events.publish({"type": "list"})
     return bool(gone)
@@ -2137,8 +2146,11 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
             print(f"[delete] source file of meeting {meeting_id}: {e}", flush=True)
 
     dub_paths = [d.get(k) for d in meeting.get("dubs") or [] for k in ("path", "srt_path")]
+    for p_str in dub_paths:
+        if p_str and Path(p_str).exists() and _is_dub_file(Path(p_str)):
+            delete_file(p_str)
     owned = [meeting.get("media_path")] if meeting.get("owns_media") else []
-    for p_str in [meeting.get("media_path"), meeting.get("audio_path"), *dub_paths]:
+    for p_str in [meeting.get("media_path"), meeting.get("audio_path")]:
         if p_str:
             p = Path(p_str)
             # Files in the data folder, and the app's own recordings wherever the recordings folder is;
@@ -2182,7 +2194,7 @@ def clear_results(meeting_id: int) -> bool:
     for d in m.get("dubs") or []:
         for key in _DUB_PATH_KEYS:
             p = Path(d.get(key) or "")
-            if p.name and p.exists() and DATA_DIR in p.resolve().parents:
+            if p.exists() and _is_dub_file(p):
                 delete_file(str(p))
     with _db_lock:
         conn = get_connection()

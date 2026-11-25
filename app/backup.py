@@ -203,8 +203,9 @@ def _clean_paths(conn: sqlite3.Connection, roots: List[Path], restored: Dict[int
 
 
 def _clean_dubs(raw: Any) -> Optional[str]:
-    """Dub files are stored relative to the data folder (database._dub_paths_to_storage): an entry with
-    an absolute path or one that leaves the folder is dropped. None: nothing to change."""
+    """Dub files are stored relative to the data folder (database._dub_paths_to_storage), in its dubs/: an
+    entry with any other path (absolute, leaving the folder, or another file of it such as meetings.db or
+    bin/ffmpeg.exe, which deleting the dub would delete) is dropped. None: nothing to change."""
     try:
         dubs = json.loads(raw or "[]")
     except (TypeError, ValueError):
@@ -216,7 +217,8 @@ def _clean_dubs(raw: Any) -> Optional[str]:
         if not p:
             return True
         q = Path(str(p).replace("\\", "/"))
-        return not q.is_absolute() and not q.drive and ".." not in q.parts
+        return (not q.is_absolute() and not q.drive and ".." not in q.parts and len(q.parts) > 1
+                and q.parts[0].lower() == "dubs")
 
     kept = [d for d in dubs if isinstance(d, dict) and all(fine(d.get(k)) for k in ("path", "srt_path"))]
     return None if len(kept) == len(dubs) else json.dumps(kept, ensure_ascii=False)
