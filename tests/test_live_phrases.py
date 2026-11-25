@@ -289,6 +289,28 @@ class LivePhraseSessionTest(unittest.TestCase):
         self.assertLessEqual(len(self.calls), 12 / 0.75 + 1)
         self.assertTrue(s.partial)
 
+    def test_pieces_of_a_quarter_second_go_into_the_room_after_the_audio(self):
+        """A piece every 0.25 s: the audio kept is not copied for each one, cuts keep the times, nothing is lost."""
+        from app import live
+
+        with mock.patch.object(live, "caption_onnx_model", return_value=None):
+            s = live.LiveSession("ru", None)
+        sig = (np.arange(12 * SR) % 20000 / 20000.0 - 0.5).astype(np.float32)
+        n = SR // 4
+        copies = 0
+        for i in range(0, sig.size, n):
+            before = s._buf
+            s.add_pcm16(_pcm(sig[i:i + n]))
+            copies += s._buf is not before
+            if i == 6 * SR:
+                with s._audio_lock:
+                    s._cut(5 * SR)
+        self.assertLessEqual(copies, 4)
+        self.assertEqual(s.base, 5 * SR)
+        self.assertEqual(s.audio.size, 7 * SR)
+        want = np.round(sig[5 * SR:] * 32767) / 32768.0
+        self.assertTrue(np.allclose(s.audio, want, atol=1e-4))
+
     def _seam(self, first, second, tail_sec=0.0, tail_text=""):
         """Lines of 20.5 s of speech without a pause cut by force and recognized by a fake that hears a word at the
         seam twice; with tail_sec, the cut leaves only that much of the speech."""

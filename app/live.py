@@ -1,7 +1,7 @@
 """
 Live captions while recording, optionally translated.
 
-The page sends the recording's audio as 16 kHz mono 16-bit PCM about once a second. The server
+The page sends the recording's audio as 16 kHz mono 16-bit PCM about every 0.25 s. The server
 keeps the audio that is not yet final and, at most every LIVE_STEP_SEC, transcribes that window
 (at most LIVE_WINDOW_SEC) with the Whisper model already in memory. Phrases that end well before
 the end of the window are final: they are kept, their audio is dropped and, if asked, they are
@@ -34,8 +34,10 @@ from app.paths import APP_DIR
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
 SR = 16000
-LIVE_STEP_SEC = 1.2       # transcribe the window at most this often
-PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about once a second)
+# transcribe the window at most this often: every 2 s, as when the page sent the audio once a second (the window ran
+# on every second piece; its final lines and its load were measured so, bench-report/asr-2026-11-check.md)
+LIVE_STEP_SEC = 2.0
+PHRASE_STEP_SEC = 0.2     # by VAD phrases: every piece of audio the page sends (about every 0.25 s)
 LIVE_WINDOW_SEC = 20.0    # longest audio kept undecided (forced to final beyond it)
 FINAL_MARGIN_SEC = 1.6    # a phrase ending this long before the window end is final
 SESSION_IDLE_SEC = 120.0  # sessions without audio for this long are dropped
@@ -222,7 +224,8 @@ class LiveSession:
         self.translate_choice = _translate_choice(settings, self.speed)
         self.translate_to = translate_to or None
         self.pair = list(pair or ["ru", "en"])[:2]  # the two languages of translate_to="auto"
-        self.audio = np.zeros(0, dtype=np.float32)
+        self._buf = np.zeros(0, dtype=np.float32)  # self.audio is its start (room for the next pieces after it)
+        self._n = 0
         self.offset = 0.0           # recording time (s) of self.audio[0]
         self.base = 0               # the same in samples (exact: the VAD phrases count in samples)
         self._ph = None             # app/live_phrases.PhraseState while captions go by VAD phrases
@@ -245,10 +248,33 @@ class LiveSession:
         self._next_id = 1
 
     # -------------------------------------------------------------- audio in
+    @property
+    def audio(self) -> np.ndarray:
+        """The audio kept (not final yet), from self.offset: a view of the buffer, valid while this step holds it
+        (the pieces received meanwhile go after its end, a cut only moves the start)."""
+        return self._buf[:self._n]
+
+    @audio.setter
+    def audio(self, value: np.ndarray) -> None:
+        self._buf = np.asarray(value, dtype=np.float32)
+        self._n = self._buf.size
+
+    def _append(self, chunk: np.ndarray) -> None:
+        """A piece after the audio kept (call with _audio_lock held): into the room after it, so a piece every 0.25 s
+        does not copy the whole window each time; the buffer grows by doubling."""
+        need = self._n + chunk.size
+        if need > self._buf.size:
+            grown = np.empty(max(need, 2 * self._n, 4 * SR), dtype=np.float32)
+            grown[:self._n] = self._buf[:self._n]
+            self._buf = grown
+        self._buf[self._n:need] = chunk
+        self._n = need
+
     def add_pcm16(self, data: bytes) -> None:
         if len(data) % 2:
             data = data[:-1]
-        chunk = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+        chunk = np.frombuffer(data, dtype="<i2").astype(np.float32)
+        chunk *= 1.0 / 32768.0
         if self.capture_id:
             # System audio captured by the app (app/system_audio.py) joins the page's microphone
             from app.system_audio import get_capture
@@ -256,10 +282,9 @@ class LiveSession:
             cap = get_capture(self.capture_id)
             if cap is not None:
                 sys_part = cap.take_live(chunk.size)
-                chunk = chunk.copy()
                 chunk[: sys_part.size] += sys_part
         with self._audio_lock:
-            self.audio = np.concatenate([self.audio, chunk])
+            self._append(chunk)
             self.received += chunk.size / SR
         # Nothing decoded for long (steps fail or one hangs): only the last part is kept. Not while a
         # step runs: it cuts the buffer from its start when it ends
@@ -314,7 +339,9 @@ class LiveSession:
 
     def _cut(self, cut: int) -> None:
         """Drops the first `cut` samples (call with _audio_lock held): what was appended meanwhile stays."""
-        self.audio = self.audio[cut:]
+        cut = min(cut, self._n)
+        self._buf = self._buf[cut:]
+        self._n -= cut
         self.base += cut
         self.offset = self.base / SR
 
@@ -503,7 +530,7 @@ class LiveSession:
             "lang": self.lang,
             "speech_lang": self.speech_lang or "auto",
             # New lines, and recent ones still waiting for a translation (not the whole meeting:
-            # this answer goes out about once a second)
+            # this answer goes out about four times a second)
             "lines": [ln for ln in self.lines[-200:] if ln["id"] > since_id or (self.translator and ln["translation"] is None)],
             "translations": {ln["id"]: ln["translation"] for ln in self.lines[-60:] if ln["translation"]},
             # The language each line went into (differs per line with translate_to="auto")
