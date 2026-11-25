@@ -38,6 +38,27 @@ class DictationBusyTest(unittest.TestCase):
                 dictation._state.update(saved)
 
 
+class DictationDoublePressTest(unittest.TestCase):
+    """Found in an audit: two quick presses both found the dictation running and recognized it twice (the second
+    time with no sound, which wrote «Речь не распознана» over the text)."""
+
+    def test_a_second_press_while_the_first_stops_it_starts_nothing(self):
+        with dictation._lock:
+            saved = dict(dictation._state)
+            dictation._state.update(active=True, busy=False)
+        try:
+            with mock.patch.object(dictation.threading, "Thread") as thread, mock.patch.object(dictation, "_start") as start:
+                self.assertEqual(dictation.toggle(), "stopped")
+                self.assertEqual(dictation.toggle(), "busy")
+            self.assertEqual(thread.call_count, 1)  # one recognition
+            start.assert_not_called()
+            self.assertEqual(dictation.status()["active"], False)
+        finally:
+            with dictation._lock:
+                dictation._state.clear()
+                dictation._state.update(saved)
+
+
 class DictationTranslateTest(unittest.TestCase):
     def setUp(self):
         init_db()

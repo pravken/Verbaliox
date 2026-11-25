@@ -31,6 +31,7 @@ MAX_SEC = 300  # a forgotten dictation stops by itself
 _state: Dict[str, Any] = {"active": False, "busy": False, "error": "", "last_text": "", "started_at": 0.0, "translate_to": ""}
 TRANSLATE_TIMEOUT_SEC = 30.0  # the first translation may wait for Ollama to load its model
 _lock = threading.Lock()
+_toggle_lock = threading.Lock()  # a press of the hotkey (or the button) at a time: toggle()
 _chunks: List[np.ndarray] = []
 _thread: Optional[threading.Thread] = None
 _finish_args: Dict[str, Any] = {"notify": None, "type_out": True}  # how the dictation started: used when MAX_SEC ends it
@@ -48,16 +49,21 @@ def toggle(notify=None, translate: bool = False, type_out: bool = True) -> str:
     window with the focus is Verbaliox itself; the page shows it (status()["last_text"]).
     While the last dictation is still being recognized or translated: "busy", nothing starts (a new
     one would reset that one's state and its target language)."""
-    with _lock:
-        active, busy = _state["active"], _state.get("busy")
-    if busy and not active:
-        return "busy"
-    if active:
-        threading.Thread(target=_finish, args=(notify, type_out), daemon=True, name="dictation_finish").start()
-        return "stopped"
-    _finish_args.update(notify=notify, type_out=type_out)
-    _start(translate_target() if translate else "")
-    return "started"
+    # One press at a time, and the state turned over before the next one is read: two quick presses started two
+    # recorders, or recognized one dictation twice (the second with nothing) (found in an audit)
+    with _toggle_lock:
+        with _lock:
+            active, busy = _state["active"], _state.get("busy")
+            if active:
+                _state.update(active=False, busy=True)  # the recorder stops; _finish recognizes what it heard
+        if busy and not active:
+            return "busy"
+        if active:
+            threading.Thread(target=_finish, args=(notify, type_out), daemon=True, name="dictation_finish").start()
+            return "stopped"
+        _finish_args.update(notify=notify, type_out=type_out)
+        _start(translate_target() if translate else "")
+        return "started"
 
 
 def cancel() -> None:
