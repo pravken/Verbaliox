@@ -223,6 +223,7 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | DOMPurify (in `static/vendor`) | Apache 2.0 or MPL 2.0 |
 | PyTorch, torchaudio | BSD-3 |
 | SoundCard (system audio recording) | BSD-3 |
+| soundfile (reads and writes sound files; its Windows build includes the libsndfile library as a separate DLL) | BSD-3 (soundfile) / LGPL 2.1 or later (libsndfile) |
 | tzdata (time zones of calendar events) | Apache 2.0 |
 | holidays (public holidays of a country and its regions, offline) | MIT |
 | python-dateutil (needed by holidays) | Apache 2.0 / BSD-3-Clause |
@@ -234,6 +235,8 @@ Verbaliox's own code is released under the [MIT License](LICENSE). Models and li
 | Perth watermark `resemble-perth` (optional dubbing) | MIT |
 | Demucs `htdemucs` (optional dubbing) | MIT |
 | num2words (optional dubbing: numbers as words) | LGPL 2.1 |
+| lameenc (needed by Demucs, optional dubbing: MP3 encoding) | LGPL 3.0 or later |
+| soxr (needed by librosa, optional dubbing: resampling) | LGPL 2.1 or later |
 | Inter, JetBrains Mono fonts | SIL Open Font License |
 | Inno Setup (builds `Verbaliox-Installer.exe`; its setup code is inside the installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt): free, also for commercial use |
 
@@ -446,7 +449,7 @@ start.bat
 
 ### Лицензии
 
-Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Под Apache 2.0 только Gemma 4: у прежних версий Gemma (Gemma 3 и старше) собственные условия Google. В необязательном окружении дубляжа есть num2words (LGPL 2.1, числа словами), см. [Перевод и дубляж](#дубляж). Если скачиваете через Ollama другие модели, проверьте и их условия.
+Код Verbaliox распространяется по [лицензии MIT](LICENSE). У моделей и библиотек свои лицензии; перед коммерческим использованием проверьте их самостоятельно (таблица выше, в английском разделе). Не все размеры Qwen 2.5 выпущены под Apache 2.0: у моделей 3B и 72B другая лицензия. Под Apache 2.0 только Gemma 4: у прежних версий Gemma (Gemma 3 и старше) собственные условия Google. В необязательном окружении дубляжа есть библиотеки под LGPL: num2words (LGPL 2.1, числа словами), lameenc (LGPL 3.0, кодирование MP3 для Demucs) и soxr (LGPL 2.1, передискретизация для librosa), см. [Перевод и дубляж](#дубляж). Библиотека soundfile (BSD-3) в сборке для Windows содержит libsndfile (LGPL 2.1) отдельной DLL. Библиотеки под LGPL подключаются динамически и не изменяются. Если скачиваете через Ollama другие модели, проверьте и их условия.
 
 ### Поддержать проект
 

@@ -111,12 +111,12 @@ jobs:
           pip-audit -r requirements.txt --disable-pip --no-deps --progress-spinner off
           --ignore-vuln PYSEC-2026-3447 --ignore-vuln GHSA-xmj3-9gf7-h52w
 
-      # The dubbing environment's lock. Its findings are listed as a warning instead of failing: perth
-      # needs setuptools<81 (PYSEC-2026-3447 and GHSA-xmj3-9gf7-h52w, as in the main lock).
+      # The dubbing environment's lock: a finding fails as in the main lock. perth needs setuptools<81
+      # (PYSEC-2026-3447 and GHSA-xmj3-9gf7-h52w, ignored above for the same reason); any other fails.
       - name: pip-audit (dubbing environment)
-        run: |
-          pip-audit -r requirements-dub.txt -r requirements-dub-voxcpm.txt --disable-pip --no-deps --progress-spinner off \
-            || echo "::warning title=Dubbing environment::known vulnerabilities in requirements-dub.txt (see this step's log)"
+        run: >-
+          pip-audit -r requirements-dub.txt -r requirements-dub-voxcpm.txt --disable-pip --no-deps --progress-spinner off
+          --ignore-vuln PYSEC-2026-3447 --ignore-vuln GHSA-xmj3-9gf7-h52w
 
       # The npm packages are build tools plus the libraries copied into static/vendor. Only those
       # libraries reach the page: a finding in them fails, a build-only finding (Tailwind's file
