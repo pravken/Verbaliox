@@ -116,3 +116,83 @@ class ShortReplyTest(unittest.TestCase):
         tr._source_lang = lambda: "en"
         tr._chat = lambda *a, **k: self.fail("the model was asked")
         self.assertEqual(tr._translate_clean("No.", "en", target="ru"), "Нет.")
+
+
+def _translator(**kw):
+    """A LiveTranslator without its worker thread (the test calls _run itself)."""
+    from unittest import mock
+
+    from app import live_translate
+
+    with mock.patch.object(live_translate.threading, "Thread"):
+        tr = live_translate.LiveTranslator(lambda: "en", "ru", **kw)
+    return tr
+
+
+def _no_db(test):
+    """Ollama's address without the settings table."""
+    from unittest import mock
+
+    from app import live_translate
+
+    p = mock.patch.object(live_translate, "_base_url", return_value="http://127.0.0.1:11434")
+    p.start()
+    test.addCleanup(p.stop)
+
+
+@unittest.skipIf(collapse_repeats is None, "app dependencies not installed")
+class StopWhileLoadingTest(unittest.TestCase):
+    """A caption session closed while its translator was getting ready loads nothing into Ollama afterwards."""
+
+    def setUp(self):
+        _no_db(self)
+
+    def test_closed_while_ollama_starts_no_model_is_loaded(self):
+        from unittest import mock
+
+        from app import live_translate
+
+        tr = _translator()
+        calls = []
+
+        def choices():
+            calls.append(1)
+            tr.stop()  # the session closes while the list of models is not read yet
+            return {"quality": None, "fast": None, "installed": []}
+
+        tr._chat = lambda *a, **k: self.fail("the model was loaded")
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch.object(live_translate, "model_choices", choices), \
+                mock.patch.object(live_translate.time, "sleep"):
+            tr._run()  # returns instead of waiting 30 s and loading
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(tr.ready)
+
+    def test_closed_during_the_warm_up_the_model_is_released(self):
+        from unittest import mock
+
+        tr = _translator()
+        tr.model_override = "hy-mt3-1.8b"
+
+        def warm_up(*a, **k):
+            tr.stop()
+            return "ок"
+
+        tr._chat = warm_up
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.idle_unload.translator_switched", return_value=True) as switched:
+            tr._run()
+        switched.assert_called_once_with("hy-mt3-1.8b", None)
+        self.assertFalse(tr.ready)
+
+    def test_a_session_that_stays_keeps_its_model(self):
+        from unittest import mock
+
+        tr = _translator()
+        tr.model_override = "hy-mt3-1.8b"
+        tr._chat = lambda *a, **k: "ок"
+        with mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.idle_unload.translator_switched") as switched:
+            tr._ensure_ready()
+        self.assertTrue(tr.ready)
+        switched.assert_not_called()

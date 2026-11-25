@@ -299,6 +299,10 @@ def phrase_language(text: str) -> Optional[str]:
     return None
 
 
+class _Stopped(Exception):
+    """The caption session closed while the translator was still getting its model ready."""
+
+
 class LiveTranslator:
     def __init__(self, get_source_lang: Callable[[], Optional[str]], target: str, speed: str = "quality",
                  pair: Optional[List[str]] = None):
@@ -401,6 +405,8 @@ class LiveTranslator:
         if self.model_override:
             return self.model_override
         for i in range(60):
+            if self._stop:
+                raise _Stopped()
             choices = model_choices()
             model = choices["fast"] if self.speed == "fast" and choices["fast"] else choices["quality"]
             # a list not read yet (Ollama starting) would give the analysis model instead of the chosen one
@@ -494,7 +500,11 @@ class LiveTranslator:
     def _ensure_ready(self) -> None:
         if self._model and self.ready:
             return
+        if self._stop:
+            raise _Stopped()
         self._model = self._resolve_model()
+        if self._stop:
+            raise _Stopped()  # closed while Ollama was starting: the model is not loaded
         previous, self._loaded = self._loaded, self._model
         if previous and previous != self._model:
             # «Качество» ↔ «Быстро» or a model chosen in the studio: the previous one leaves the card first
@@ -502,13 +512,34 @@ class LiveTranslator:
 
             idle_unload.translator_switched(previous, self._model)
         self._chat("ok", timeout=180.0)  # loads the model with the live options
+        if self._stop:
+            # closed while the model was loading: it leaves the memory now, not after its keep_alive (a
+            # transcription job waiting for the captions to end wants the video card)
+            self._release_after_stop(self._model)
+            raise _Stopped()
         self.ready = True
         self.error = ""
+
+    @staticmethod
+    def _release_after_stop(model: Optional[str]) -> None:
+        """The model loaded for a session that closed meanwhile is unloaded (unless another caption session or an
+        analysis uses it: app/idle_unload.translator_switched)."""
+        if not model:
+            return
+        try:
+            from app import idle_unload
+
+            if idle_unload.translator_switched(model, None):
+                print(f"[live_translate] the captions closed while {model} was loading: released", flush=True)
+        except Exception:
+            traceback.print_exc()
 
     def _run(self) -> None:
         # Load the model right away: the first phrase is still being spoken meanwhile
         try:
             self._ensure_ready()
+        except _Stopped:
+            return
         except Exception as e:
             traceback.print_exc()
             self.error = f"Перевод: {str(e)[:160]}"
@@ -548,6 +579,8 @@ class LiveTranslator:
                         if draft == self._draft_text:  # still the current draft
                             self.draft_translation = tr
                             self._draft_done_for = draft
+            except _Stopped:
+                return
             except Exception as e:
                 traceback.print_exc()
                 self.error = f"Перевод: {str(e)[:160]}"
