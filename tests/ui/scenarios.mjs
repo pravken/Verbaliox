@@ -1790,8 +1790,12 @@ await step('language from the server', async () => {
   // (removed before it opened, it covered the page for the steps after this one)
   for (let i = 0; i < 30 && !(await page.evaluate(() => !!document.getElementById('first-run-wizard'))); i++) await sleep(100);
   await page.evaluate(() => { document.getElementById('first-run-wizard')?.remove(); setUILanguage('ru'); dbSave({ period: 'week' }); });
-  await sleep(1200);
-  const kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
+  // the layout is saved 0.8 s after the last change: waited for, up to 5 s on a busy machine
+  let kept = [];
+  for (let i = 0; i < 25 && !(kept[0] === 'ru' && kept[1] === 'week'); i++) {
+    await sleep(200);
+    kept = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => [d.settings.ui_lang, JSON.parse(d.settings.ui_dashboard).period]));
+  }
   expect(kept[0] === 'ru' && kept[1] === 'week', `a choice on the page was not kept on the server: ${kept}`);
 });
 
