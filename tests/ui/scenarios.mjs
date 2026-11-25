@@ -2845,6 +2845,17 @@ await step('strip hint ends with an ellipsis', async () => {
   expect(r.text.includes('календар') && !r.meta && r.ell === 'ellipsis', `the hint: ${JSON.stringify(r)}`);
 });
 
+// The tab chosen shows the keyboard's ring
+await step('the chosen tab shows the focus', async () => {
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); switchWorkspaceTab('transcript'); });
+  await sleep(300);
+  await page.focus('#nav-transcript');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const r = await page.evaluate(() => { const e = document.activeElement; const s = getComputedStyle(e); return { id: e.id, outline: s.outlineStyle, w: s.outlineWidth }; });
+  expect(r.id !== 'nav-transcript' || (r.outline !== 'none' && r.w !== '0px'), `no ring: ${JSON.stringify(r)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
