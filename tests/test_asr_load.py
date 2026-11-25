@@ -1,5 +1,6 @@
-"""Loading GigaAM / Parakeet (app/asr_onnx._load): an installation without the files of the variants loads offline.
-Nothing is downloaded: the resolvers of onnx-asr and the library itself are fakes."""
+"""Loading GigaAM / Parakeet (app/asr_onnx._load): an installation without the files of the variants loads offline,
+the captions' preload never hangs, and a job loading a model does not stop the captions. Nothing is downloaded: the
+resolvers of onnx-asr and the library itself are fakes."""
 import tests  # noqa: F401 - keeps the real user data out of reach (see tests/__init__.py)
 import sys
 import tempfile
@@ -109,6 +110,80 @@ class OfflineLoadTest(unittest.TestCase):
         self.res.online = True
         self.assertTrue(asr_onnx.fetch("gigaam-v3"))
         self.assertIn(("gigaam-v3-e2e-ctc", "int8"), self.res.on_disk)
+
+
+class PreloadDeadlockTest(unittest.TestCase):
+    def test_preload_returns_when_the_copy_is_loaded_and_a_variant_is_missing(self):
+        # is_loaded → _variant → _complete_async took _lock, which preload_async held around is_loaded: it hung
+        made = ("gigaam-v3-e2e-rnnt", None, 2)
+        out = []
+        with mock.patch.dict(asr_onnx._loaded, {"gigaam-v3@live": object()}, clear=True), \
+                mock.patch.dict(asr_onnx._made, {"gigaam-v3@live": made}, clear=True), \
+                mock.patch.dict(asr_onnx._completing, {}, clear=True), \
+                mock.patch.object(asr_onnx, "_has_files", return_value=False), \
+                mock.patch.object(asr_onnx, "is_installed", return_value=True), \
+                mock.patch.object(asr_onnx, "fetch"):
+            t = threading.Thread(target=lambda: out.append(asr_onnx.preload_async("gigaam-v3")), daemon=True)
+            t.start()
+            t.join(3)
+            self.assertFalse(t.is_alive(), "preload_async hangs")
+        self.assertEqual(out, [""])
+
+
+class CaptionsDuringALoadTest(unittest.TestCase):
+    """A job loading Parakeet fp32 (tens of seconds) must not stop the steps of the captions, whose copy is loaded."""
+
+    def test_the_captions_copy_answers_while_a_job_loads_its_own(self):
+        loading, release = threading.Event(), threading.Event()
+
+        def load_model(name, path, **kw):
+            if kw["sess_options"].intra_op_num_threads == 6:  # the job's copy
+                loading.set()
+                release.wait(5)
+            return mock.Mock()
+
+        fake = _fake_onnx_asr(load_model)
+        with mock.patch.dict(sys.modules, {"onnx_asr": fake}), mock.patch.object(asr_onnx, "ensure_package"), \
+                mock.patch.object(asr_onnx, "fetch"), mock.patch.object(asr_onnx, "_main_on_disk", return_value=True), \
+                mock.patch.object(asr_onnx, "queue_threads", return_value=6), \
+                mock.patch.object(asr_onnx, "live_threads", return_value=4), \
+                mock.patch.dict(asr_onnx._loaded, {}, clear=True), mock.patch.dict(asr_onnx._made, {}, clear=True), \
+                mock.patch.dict(asr_onnx._plain, {}, clear=True):
+            live = asr_onnx._load("parakeet-v3", live=True)
+            job = threading.Thread(target=asr_onnx._load, args=("parakeet-v3",), daemon=True)
+            job.start()
+            self.assertTrue(loading.wait(3))
+            try:
+                got = []
+                step = threading.Thread(target=lambda: got.append(asr_onnx._load("parakeet-v3", live=True)), daemon=True)
+                step.start()
+                step.join(1)
+                self.assertFalse(step.is_alive(), "the captions wait for the job's load")
+                self.assertIs(got[0], live)
+                pre = threading.Thread(target=asr_onnx.preload_async, args=("parakeet-v3",), daemon=True)
+                pre.start()
+                pre.join(1)
+                self.assertFalse(pre.is_alive())
+            finally:
+                release.set()
+                job.join(5)
+            self.assertEqual(asr_onnx.copies(), ["parakeet-v3", "parakeet-v3@live"])
+            # a release waits for a load in progress and drops it after: nothing is left in memory
+            asr_onnx.release("parakeet-v3")
+            self.assertEqual(asr_onnx.copies(), [])
+
+    def test_the_steps_do_not_read_the_settings_each_time(self):
+        fake = _fake_onnx_asr()
+        with mock.patch.dict(sys.modules, {"onnx_asr": fake}), mock.patch.object(asr_onnx, "ensure_package"), \
+                mock.patch.object(asr_onnx, "fetch"), mock.patch.object(asr_onnx, "_main_on_disk", return_value=True), \
+                mock.patch.object(asr_onnx, "_settings", return_value={"cpu_threads": "auto"}) as settings, \
+                mock.patch.object(asr_onnx, "_settings_seen", [0.0, None]), \
+                mock.patch.dict(asr_onnx._loaded, {}, clear=True), mock.patch.dict(asr_onnx._made, {}, clear=True), \
+                mock.patch.dict(asr_onnx._plain, {}, clear=True):
+            for _ in range(20):
+                asr_onnx._load("parakeet-v3", live=True)
+        self.assertEqual(settings.call_count, 1)
+        self.assertEqual(fake.load_model.call_count, 1)
 
 
 if __name__ == "__main__":
