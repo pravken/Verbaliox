@@ -33,7 +33,11 @@ const LT_KEY = 'verbaliox_library_table';
 const LT_LEAD = '22px 18px';
 
 const LT = { prefs: null, cur: null, anchor: null, q: '', ids: [], taskCounts: null, hits: null, hitsQ: '', chip: 'all', colsOpen: false,
-  pressed: false, later: false };  // a press in the table (a click, a column dragged): the progress waits for its end
+  pressed: false, later: false,  // a press in the table (a click, a column dragged): the progress waits for its end
+  rest: [], drawn: 0, row: null, endWatch: null };  // the rows not drawn yet (ltRenderMore), how many are drawn
+// Rows drawn at a time: «Записи» of a library of 1200 recordings drew every row at once, 59 000 elements and a
+// second before the page answered (audit K19); the next ones are drawn as the table is scrolled to its end
+const LT_CHUNK = 150;  // a press in the table (a click, a column dragged): the progress waits for its end
 
 const LT_SVG = (d, w = 14) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const LT_ICON = {
@@ -284,9 +288,15 @@ function ltGroups(list) {
   return keys.map(k => [p.group, label(k), buckets.get(k)]);
 }
 
+// The recordings in the order «Записи» shows them (its search, filters, sort and groups), without drawing them
+function ltOrderIds() {
+  const shown = ltSorted((state.meetings || []).filter(m => ltMatches(m)));
+  return (ltPrefs().view === 'table' ? ltGroups(shown).flatMap(g => g[2]) : shown).map(m => m.id);
+}
+
 // One card per group: the icon of its kind, its name and how many recordings it holds
-function ltCard(kind, label, n, inner) {
-  return `<section class="lt-card"><h3 class="lt-card-h"><span class="lt-card-ic">${LT_SVG(LT_ICON[kind] || LT_ICON.none)}</span>`
+function ltCard(kind, label, n, inner, g = 0) {
+  return `<section class="lt-card" data-g="${g}"><h3 class="lt-card-h"><span class="lt-card-ic">${LT_SVG(LT_ICON[kind] || LT_ICON.none)}</span>`
     + `<span class="lt-ell">${escapeHtml(label)}</span><b class="lt-card-n">${n}</b></h3>${inner}</section>`;
 }
 
@@ -327,17 +337,25 @@ function ltRowAttrs(m, extra = '') {
 
 // «Таблица» and «Папки» are one table: the columns of «Колонки» in their order. In «Папки» the folder
 // column is left out (the tree says it) and the date is shown in full (no day's heading above it)
-function ltTableHtml(groups, inFolders = false) {
+function ltTableHtml(groups, inFolders = false, budget = Infinity) {
   const p = ltPrefs();
   const cols = ltShownCols().filter(c => !(inFolders && c === 'folder'));
   const arrow = p.dir === 'asc' ? '▴' : '▾';
   const head = '<span></span><span></span>' + cols.map(c => `<span data-col="${c}" class="lt-hc${p.sort === c ? ' lt-sorted' : ''}" title="${escapeHtml(t('ltSortTip'))}">`
     + `<span class="lt-th">${escapeHtml(t(`ltCol_${c}`))}${p.sort === c ? `<span class="lt-arrow">${arrow}</span>` : ''}</span>`
     + (c === 'name' ? '' : `<span class="lt-rs" data-rs="${c}" title="${escapeHtml(t('ltResizeTip'))}"></span>`) + '</span>').join('');
-  const body = groups.map(([kind, label, ms]) => ltCard(kind, label, ms.length, ms.map(m => {
-    LT.ids.push(m.id);
-    return `<div ${ltRowAttrs(m)}>${ltBox(m)}${ltKind(m)}` + cols.map(c => `<span class="lt-c lt-c-${c}">${ltCell(c, m)}</span>`).join('') + '</div>';
-  }).join('') || `<div class="lt-none">${escapeHtml(t('ltFolderEmpty'))}</div>`)).join('');
+  LT.row = m => `<div ${ltRowAttrs(m)}>${ltBox(m)}${ltKind(m)}` + cols.map(c => `<span class="lt-c lt-c-${c}">${ltCell(c, m)}</span>`).join('') + '</div>';
+  // every recording is in LT.ids (the selection, Shift, Ctrl+A, the keys), the first `budget` of them are drawn:
+  // a group none of whose rows is drawn yet has no card yet (ltRenderMore makes it)
+  let left = budget;
+  const body = groups.map(([kind, label, ms], g) => {
+    for (const m of ms) LT.ids.push(m.id);
+    if (!ms.length) return left > 0 ? ltCard(kind, label, 0, `<div class="lt-none">${escapeHtml(t('ltFolderEmpty'))}</div>`, g) : '';
+    const now = left > 0 ? ms.slice(0, left) : [];
+    left -= now.length;
+    for (const m of ms.slice(now.length)) LT.rest.push({ g, kind, label, n: ms.length, m });
+    return now.length ? ltCard(kind, label, ms.length, now.map(LT.row).join(''), g) : '';
+  }).join('');
   const minW = ltTableMinW(cols);
   return { html: `<div class="lt-hrow">${head}</div>${body}`, tpl: ltTableTpl(cols), minW };
 }
@@ -345,7 +363,6 @@ function ltTableHtml(groups, inFolders = false) {
 // A card of «Карточки»: a frame of the video or the bars of the voices, the title, and the details ticked
 // in «Колонки» (one setting for every view). A detail a recording lacks keeps its place on its card
 function ltTile(m) {
-  LT.ids.push(m.id);
   const on = c => ltPrefs().cols.includes(c);
   const ps = ltPeople(m);
   const colors = ps.length ? ps.map((s, i) => (/^#[0-9A-Fa-f]{6}$/.test(s.color || '') ? s.color : TK_COLORS[i % TK_COLORS.length])) : ['#8E8E93'];
@@ -448,18 +465,24 @@ function renderLibTable(opts = {}) {
   }
   LT.taskCounts = null;
   LT.ids = [];
+  LT.rest = [];
+  // drawn again (a progress, a change of the selection's features) with as many rows as were scrolled to
+  const budget = Math.max(LT_CHUNK, LT.drawn || 0);
   renderLibTableCount(all, shown);
   if (!(opts.live && LT.colsOpen)) renderLibTableBar();
   let html = '', tpl = '', minW = 0;
   if (p.view === 'table') {
-    ({ html, tpl, minW } = ltTableHtml(ltGroups(shown)));
+    ({ html, tpl, minW } = ltTableHtml(ltGroups(shown), false, budget));
   } else if (p.view === 'cards') {
     // one grid, the newest first: a day's group would leave a hole at the end of its row (the date is on each card)
-    html = `<div class="lt-tiles">${shown.map(ltTile).join('')}</div>`;
+    for (const m of shown) LT.ids.push(m.id);
+    LT.row = ltTile;
+    LT.rest = shown.slice(budget).map(m => ({ tile: true, m }));
+    html = `<div class="lt-tiles">${shown.slice(0, budget).map(ltTile).join('')}</div>`;
   } else {
     const fid = ltOpenFolder();
     const f = fid === 'none' ? null : folderById(fid);
-    const table = ltTableHtml([['folder', f ? folderName(f) : t('ltNoFolder'), shown]], true);
+    const table = ltTableHtml([['folder', f ? folderName(f) : t('ltNoFolder'), shown]], true, budget);
     html = `<div class="lt-fview">${ltFolderTree()}<div class="lt-fmain" style="min-width:${table.minW}px">${table.html}</div></div>`;
     tpl = table.tpl;
   }
@@ -477,7 +500,9 @@ function renderLibTable(opts = {}) {
   box.className = `lt-body lt-v-${p.view}${p.dense ? ' lt-dense' : ''}`;
   box.style.setProperty('--lt-tpl', tpl || 'none');
   box.style.minWidth = minW ? `${minW}px` : '';
-  box.innerHTML = html;
+  box.innerHTML = html + (LT.rest.length ? '<div id="lt-more" class="lt-more" aria-hidden="true"></div>' : '');
+  LT.drawn = LT.ids.length - LT.rest.length;
+  ltWatchEnd();
   const empty = document.getElementById('lt-empty');
   const none = !shown.length && p.view !== 'folders';
   empty.classList.toggle('hidden', !none);
@@ -486,6 +511,54 @@ function renderLibTable(opts = {}) {
       ? `<div>${escapeHtml(t(LT.q.trim() ? 'noMatches' : 'libFilterNone'))}</div><button class="tk-btn tk-btn-sm" data-click="resetLibTableFilters">${escapeHtml(t('libFilterResetAll'))}</button>`
       : `<div>${escapeHtml(t('noRecordings'))}</div>`;
   }
+}
+
+// The next rows (LT_CHUNK, or up to the recording `until`) drawn under the last ones: into the card of their group
+// when it is drawn, in a card of its own after it otherwise
+function ltRenderMore(until) {
+  const box = document.getElementById('lt-body');
+  if (!box || !LT.rest.length) return false;
+  let n = LT_CHUNK;
+  if (until != null) {
+    const i = LT.rest.findIndex(x => x.m.id === until);
+    if (i < 0) return false;
+    n = Math.max(n, i + 1);
+  }
+  const take = LT.rest.splice(0, n);
+  if (take[0].tile) {
+    box.querySelector('.lt-tiles')?.insertAdjacentHTML('beforeend', take.map(x => ltTile(x.m)).join(''));
+  } else {
+    const holder = box.querySelector('.lt-hrow')?.parentElement;
+    for (let i = 0; holder && i < take.length;) {
+      const { g, kind, label, n: count } = take[i];
+      let j = i;
+      while (j < take.length && take[j].g === g) j++;
+      const rows = take.slice(i, j).map(x => LT.row(x.m)).join('');
+      const card = holder.querySelector(`:scope > .lt-card[data-g="${g}"]`);
+      if (card) card.insertAdjacentHTML('beforeend', rows);
+      else holder.insertAdjacentHTML('beforeend', ltCard(kind, label, count, rows, g));
+      i = j;
+    }
+  }
+  LT.drawn += take.length;
+  ltWatchEnd();
+  return true;
+}
+
+// The mark after the last row drawn: within 800 px of the table's bottom edge, the next rows are drawn
+function ltWatchEnd() {
+  const end = document.getElementById('lt-more');
+  if (!end) return;
+  if (!LT.rest.length) { end.remove(); return; }
+  const box = document.getElementById('lt-body');
+  if (end !== box.lastElementChild) box.appendChild(end);  // after the cards added
+  if (!LT.endWatch && typeof IntersectionObserver === 'function') {
+    LT.endWatch = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) ltRenderMore(); },
+      { root: document.getElementById('lt-scroll'), rootMargin: '0px 0px 800px 0px' });
+  }
+  if (!LT.endWatch) { while (LT.rest.length) ltRenderMore(); return; }
+  LT.endWatch.disconnect();
+  LT.endWatch.observe(end);  // observed again: it tells at once whether the mark is still in reach
 }
 
 // Beside the title: how many recordings, or what the search found in the texts
@@ -774,6 +847,7 @@ function ltMove(step) {
   if (!LT.ids.length) return;
   const i = LT.ids.indexOf(LT.cur);
   LT.cur = LT.ids[Math.max(0, Math.min(LT.ids.length - 1, i < 0 ? 0 : i + step))];
+  if (!document.querySelector(`#lt-body [data-mid="${LT.cur}"]`)) ltRenderMore(LT.cur);  // a row not drawn yet
   ltPaintPick();
   document.querySelector(`#lt-body [data-mid="${LT.cur}"]`)?.scrollIntoView({ block: 'nearest' });
 }
@@ -1019,6 +1093,7 @@ registerView('libtable', {
   show: () => {
     if (LT.cur == null && state.activeMeeting) LT.cur = state.activeMeeting.id;
     LT.tasksAsked = false;
+    LT.drawn = 0;  // a new visit starts with the first rows
     syncLibTableButton();
     renderLibTable();
     renderLibSelectionBar();

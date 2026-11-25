@@ -1869,13 +1869,56 @@ await step('library poll is cheap', async () => {
   await sleep(300);
   page.off('response', seen);
   expect(statuses[0] === 304 && statuses[1] === 200, `poll ${statuses[0]}, full ${statuses[1]}`);
-  expect(await page.locator('#meetings-list [data-mid]').count() > 0, 'the list is empty after the poll');
+  expect(await page.evaluate(() => state.meetings.length) > 0, 'the list is empty after the poll');
 });
 
-// A progress event redraws only that recording's row, not the sorted list of every recording (audit:
-// each event rebuilt all rows); a change of its status still draws the whole list
+// A large library (audit K19): «Записи» draws its rows in parts as it is scrolled, every recording still selectable
+// (Ctrl+A, the keys); the hidden list of the old sidebar is not drawn at all
+await step('a large library is drawn in parts', async () => {
+  const r = await page.evaluate(async () => {
+    const wait = (ms) => new Promise(res => setTimeout(res, ms));
+    const real = state.meetings;
+    const base = real[0];
+    state.meetings = [...real, ...Array.from({ length: 400 }, (_, i) => ({ ...base, id: 50000 + i, title: `Демо ${i}`,
+      recorded_at: `2025-0${1 + (i % 9)}-1${i % 10} 10:00:00`, created_at: `2025-0${1 + (i % 9)}-1${i % 10} 10:00:00` }))];
+    try {
+      switchAppView('libtable');
+      renderLibTable();
+      await wait(100);
+      const rows = () => document.querySelectorAll('#lt-body [data-mid]').length;
+      const first = rows(), ids = LT.ids.length;
+      const sidebar = document.querySelectorAll('#meetings-list [data-mid]').length;
+      const order = libVisibleIds().length;
+      // the keys reach a row not drawn yet
+      const scroll = document.getElementById('lt-scroll');
+      LT.cur = LT.ids[first - 1];
+      scroll.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      await wait(50);
+      const next = LT.ids[first];
+      const keyed = !!document.querySelector(`#lt-body [data-mid="${next}"].lt-cur`);
+      scroll.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', ctrlKey: true, bubbles: true }));
+      const picked = state.multi.size;
+      state.multi.clear();
+      ltPaintPick();
+      for (let i = 0; i < 30 && LT.rest.length; i++) { scroll.scrollTop = scroll.scrollHeight; await wait(80); }
+      return { first, ids, sidebar, order, keyed, picked, all: rows(), more: !!document.getElementById('lt-more') };
+    } finally {
+      state.meetings = real;
+      renderLibTable();
+    }
+  });
+  expect(r.ids === r.order && r.ids > 400, `not every recording is in the table's order: ${JSON.stringify(r)}`);
+  expect(r.first <= 160, `the first drawing drew ${r.first} rows`);
+  expect(r.sidebar === 0, `the hidden sidebar drew ${r.sidebar} rows`);
+  expect(r.keyed, 'the arrow key did not reach the next row, not drawn yet');
+  expect(r.picked === r.ids, `Ctrl+A picked ${r.picked} of ${r.ids}`);
+  expect(r.all === r.ids && !r.more, `scrolled to the end, ${r.all} of ${r.ids} rows drawn`);
+});
+
+// A progress event redraws only that recording's row of «Записи», not the sorted table of every recording
+// (audit: each event rebuilt all rows); a change of its status still draws the whole table
 await step('progress redraws one row', async () => {
-  await page.evaluate(() => switchAppView('library'));
+  await page.evaluate(() => switchAppView('libtable'));
   await sleep(300);
   const r = await page.evaluate(async () => {
     const frame = () => new Promise(res => requestAnimationFrame(() => setTimeout(res, 0)));
@@ -1883,18 +1926,18 @@ await step('progress redraws one row', async () => {
     const was = m.status;
     m.status = 'transcribing';
     m.progress = 10;
-    renderMeetingsSidebar();
+    renderLibTable();
     let full = 0;
-    const real = window.renderMeetingsSidebar;
-    window.renderMeetingsSidebar = (...a) => { full++; return real(...a); };
+    const real = window.renderLibTable;
+    window.renderLibTable = (...a) => { full++; return real(...a); };
     handleLiveEvent({ type: 'progress', id: m.id, progress: 37, stage_text: 'x' });
     await frame();
-    const row = document.querySelector(`#meetings-list [data-mid="${m.id}"]`);
+    const row = document.querySelector(`#lt-body [data-mid="${m.id}"]`);
     const shown = row ? row.textContent.includes('37%') : false;
     const afterRow = full;
     handleLiveEvent({ type: 'progress', id: m.id, status: was, progress: 100 });
     await frame();
-    window.renderMeetingsSidebar = real;
+    window.renderLibTable = real;
     return { shown, afterRow, afterStatus: full };
   });
   expect(r.shown, 'the row does not show the new progress');
@@ -2351,8 +2394,17 @@ await step('mix wait countdown', async () => {
   expect((await page.textContent('#tx-rc-title')) === 'Сведение дорожек', 'the card is not the mix');
   expect(!(await page.textContent('#tx-rc-pct')), 'the card still shows a percent');
   await until(f => (document.getElementById('tx-rc-sub')?.textContent || '') !== f, 'the countdown does not move', 5000, first);
-  const slot = await page.evaluate(() => document.querySelector('#meetings-list [data-mid="9902"] [data-mix-until]')?.textContent || '');
-  expect(/^1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
+  // the row of «Записи» counts down too (the old sidebar's list is not drawn: audit K19)
+  const slot = await page.evaluate(async () => {
+    const back = state.appView;
+    switchAppView('libtable');
+    await new Promise(r => setTimeout(r, 300));
+    const text = document.querySelector('#lt-body [data-mid="9902"] [data-mix-until]')?.textContent || '';
+    switchAppView(back);
+    await new Promise(r => setTimeout(r, 300));
+    return text;
+  });
+  expect(/^Сведение · 1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
   // a meeting going on: no countdown, the reason
   await page.evaluate(() => {
     for (const m of [state.activeMeeting, state.meetings.find(x => x.id === 9902)]) m.mix_wait = 0;
