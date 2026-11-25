@@ -2060,7 +2060,7 @@ function modelMetersLine(id) {
   const cell = html => html.replace(/^<td/, '<span').replace(/<\/td>$/, '</span>');
   const part = (label, html) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${cell(html)}</span>`;
   const quality = !m.quality
-    ? part(`${t('mmAccuracy')} ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
+    ? part(`${t('mmAccuracy')}: ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
     : part(t('mmQuality'), meterQualityCell(m));
   return `<div class="mm-line">${quality}${part(t('mmSpeed'), meterSpeedCell(m))}${part(t('mmLoad'), meterLoadCell(m))}</div>`;
 }

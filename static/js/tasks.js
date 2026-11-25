@@ -1075,7 +1075,7 @@ function renderTasksReport() {
     return { k, name: l[0].who || t('tkNobody'), kind: l[0].who_kind, n: l.length, d, o, w: l.length - d - o };
   }).sort((a, b) => b.n - a.n || b.o - a.o);
   const max = Math.max(1, ...who.map(r => r.n));
-  const scopeText = TK.people.length ? (TK.people.length === 1 ? (tkPerson(TK.people[0])?.name || t('tkNobody')) : t('tkNPeople').replace('{n}', () => TK.people.length)) : t('tkAllPeopleLow');
+  const scopeText = TK.people.length ? (TK.people.length === 1 ? (tkPerson(TK.people[0])?.name || t('tkNobody')) : plural(TK.people.length, t('pvPeopleForms'))) : t('tkAllPeopleLow');
   const chip = (on, fn, args, label) => `<button class="tk-chip${on ? ' tk-on' : ''}" aria-pressed="${on}" ${pageCall('click', fn, args)}>${escapeHtml(label)}</button>`;
   const periods = [['week', t('tkPWeek')], ['month', t('tkPMonth')], ['custom', t('tkPCustom')]];
   const incl = [['done', t('tkIDone')], ['open', t('tkIOpen')], ['over', t('tkIOver')]];

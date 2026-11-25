@@ -5666,3 +5666,7 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:checked { bor
 .db-more, .ch-tm { padding-top: 4px; padding-bottom: 4px; margin-top: -4px; margin-bottom: -4px; }
 .dc-more { padding-top: 4px; padding-bottom: 4px; }
 .ft-add { padding-top: 2px; padding-bottom: 2px; margin-top: -1px; margin-bottom: -1px; }
+/* The decisions and the tasks of a meeting in «Встречи периода»: 30px columns, an icon each with its full name in the
+   tooltip (they were «Реш.» and «Зад.») */
+.db-dt-hic { display: inline-flex; justify-content: center; }
+.db-dt-hic svg { width: 14px; height: 14px; }

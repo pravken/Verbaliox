@@ -1205,7 +1205,7 @@ function dbDue(task, today) {
   if (!task.due_date) return `<span class="db-due">${escapeHtml(t('tkNoDue'))}</span>`;
   const days = Math.round((new Date(`${task.due_date}T12:00:00`) - new Date(`${today}T12:00:00`)) / 864e5);
   const cls = days < 0 ? 'over' : days === 0 ? 'today' : '';
-  const text = days < 0 ? t('dbDaysAgo').replace('{n}', () => -days) : days === 0 ? t('tkTodayLow') : days === 1 ? t('tkTomorrowLow')
+  const text = days < 0 ? t('dbDaysAgo').replace('{n}', () => plural(-days, t('dbDayForms'))) : days === 0 ? t('tkTodayLow') : days === 1 ? t('tkTomorrowLow')
     : new Date(`${task.due_date}T12:00:00`).toLocaleDateString(state.uiLang === 'en' ? 'en-US' : 'ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
   return `<span class="db-due ${cls}">${escapeHtml(text)}</span>`;
 }
@@ -1399,7 +1399,7 @@ function dbWaitingHtml(d, size) {
   return list.slice(0, n).map(x => `<div class="db-task db-task-wait">`
     + `<span class="db-who" title="${escapeHtml(x.who)}">${escapeHtml(x.who || '—')}</span>`
     + `<button class="db-task-t" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]' title="${escapeHtml(x.meeting_title ? `${x.what} — ${x.meeting_title}` : x.what)}">${escapeHtml(x.what)}</button>`
-    + (x.due_date ? dbDue(x, d.today) : `<span class="db-due">${escapeHtml(t('dbDaysWaiting').replace('{n}', () => x.days || 0))}</span>`) + '</div>').join('');
+    + (x.due_date ? dbDue(x, d.today) : `<span class="db-due">${escapeHtml(plural(x.days || 0, t('dbDayForms')))}</span>`) + '</div>').join('');
 }
 
 // --- The details of a number or a widget (asked by the user: hours, tasks, decisions could not be opened):
@@ -1453,7 +1453,7 @@ function dbDetailMeetings(d) {
   }).join('');
   return `<div class="db-dt-sum">${escapeHtml(t('dbDtMeetingsSum').replace('{n}', () => rows.length).replace('{h}', () => dbHm(total)))}</div>`
     + (chips ? `<div class="db-dt-chips">${chips}</div>` : '') + seg
-    + (rows.length ? `<div class="db-dt-head"><span></span><span>${escapeHtml(t('dbDtDec'))}</span><span>${escapeHtml(t('dbDtTasks'))}</span><span>${escapeHtml(t('dbDtShare'))}</span><span></span></div>${list}`
+    + (rows.length ? `<div class="db-dt-head"><span></span><span class="db-dt-hic" role="img" title="${escapeHtml(t('dbDtDec'))}" aria-label="${escapeHtml(t('dbDtDec'))}">${pultIcon('dec')}</span><span class="db-dt-hic" role="img" title="${escapeHtml(t('dbDtTasks'))}" aria-label="${escapeHtml(t('dbDtTasks'))}">${pultIcon('task')}</span><span>${escapeHtml(t('dbDtShare'))}</span><span></span></div>${list}`
       : vxEmpty('meet', t(DB_DETAIL.filter === 'useless' ? 'dbUselessNone' : 'dbNoMeetingsYet')));
 }
 
@@ -1463,7 +1463,7 @@ function dbDetailTasks(list, today, mine) {
     + (mine && x.status !== 'done' ? `<button class="db-ck" data-click="dbDetailDone" data-click-args='[${x.id}]' title="${escapeHtml(t('dbMarkDone'))}" aria-label="${escapeHtml(t('dbMarkDone'))}"></button>` : '<span class="db-ck-gap"></span>')
     + `<button class="db-dt-main" data-click="dashOpenTask" data-click-args='[${x.id}, ${Number(x.meeting_id) || 0}]'><span class="db-dt-text">${escapeHtml(x.what)}</span>`
     + `<small>${escapeHtml([mine ? (x.to ? `→ ${x.to}` : '') : x.who, x.meeting_title ? `«${x.meeting_title}»` : '', x.meeting_date ? dbAgo(x.meeting_date, today) : ''].filter(Boolean).join(' · '))}</small></button>`
-    + (x.due_date ? dbDue(x, today) : `<span class="db-due">${escapeHtml(mine ? t('tkNoDue') : t('dbDaysWaiting').replace('{n}', () => x.days || 0))}</span>`) + '</div>').join('');
+    + (x.due_date ? dbDue(x, today) : `<span class="db-due">${escapeHtml(mine ? t('tkNoDue') : plural(x.days || 0, t('dbDayForms')))}</span>`) + '</div>').join('');
 }
 
 async function dbDetailDone(id) {
