@@ -212,8 +212,20 @@ def cpu_threads(settings: Optional[Dict[str, str]] = None) -> int:
     return max(2, min(8, cores // 2))
 
 
+# ONNX Runtime's threads wait for work actively by default (spinning): two such pools on a 4-core / 8-thread
+# laptop (live captions and the queue) froze the whole PC for up to 0.1 s hundreds of times in five minutes,
+# with no gain in speed (bench-report/asr-2026-11.md, «созвон»). Without it the queue is even faster.
+NO_SPINNING = {"session.intra_op.allow_spinning": "0", "session.inter_op.allow_spinning": "0"}
+
+
+def _no_spinning(so: Any) -> Any:
+    for key, value in NO_SPINNING.items():
+        so.add_session_config_entry(key, value)
+    return so
+
+
 def _cpu_options():
-    """Session options of a model on the processor: its threads limited (cpu_threads)."""
+    """Session options of a model on the processor: its threads limited (cpu_threads), not spinning."""
     try:
         import onnxruntime as ort
     except ImportError:
@@ -221,7 +233,16 @@ def _cpu_options():
     so = ort.SessionOptions()
     so.intra_op_num_threads = cpu_threads()
     so.inter_op_num_threads = 1
-    return so
+    return _no_spinning(so)
+
+
+def _gpu_options():
+    """Session options of a model on the video card: the operators left on the processor do not spin either."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return None
+    return _no_spinning(ort.SessionOptions())
 
 
 def release_cpu() -> None:
@@ -249,11 +270,11 @@ def _load(model_id: str, gpu: bool = False):
             if gpu:
                 onnx_gpu.prepare_cuda()
             batch, vad_gpu = gpu_tuning() if gpu else (CPU_BATCH, False)
-            cpu = None if gpu else _cpu_options()
+            opts = _gpu_options() if gpu else _cpu_options()
             asr = onnx_asr.load_model(ONNX_MODELS[model_id]["onnx_name"], model_dir(model_id),
-                                      providers=onnx_gpu.providers(gpu), sess_options=cpu)
+                                      providers=onnx_gpu.providers(gpu), sess_options=opts)
             vad = onnx_asr.load_vad(VAD_NAME, _vad_dir(), providers=onnx_gpu.providers(vad_gpu),
-                                    sess_options=None if vad_gpu else _cpu_options())
+                                    sess_options=_gpu_options() if vad_gpu else _cpu_options())
             _loaded[key] = asr.with_vad(vad, max_speech_duration_s=MAX_PHRASE_SEC, min_silence_duration_ms=300,
                                         speech_pad_ms=120, batch_size=batch).with_timestamps()
         return _loaded[key]

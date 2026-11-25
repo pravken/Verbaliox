@@ -72,6 +72,10 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   «Do not disturb in meetings» captions do not start by themselves on a meeting only; a voice note starts with them.
 - **Captions follow the speech**: «Text as it is spoken» and «Translate as it is spoken» are on by default, and the
   draft is translated as often as the model allows: about every half second with Hy-MT3 1.8B, every 1.2 s with a slower one.
+- **No more freezes of the computer during live captions on a processor with few cores**: the threads of GigaAM,
+  Parakeet and the voice detector no longer wait for work actively (ONNX Runtime's spinning). In the measurement on
+  8 logical processors (captions, a transcription in the queue and a video call at once) the pauses of the system
+  over 50 ms went from 645 in 5 minutes to none, with the same accuracy, and the queue transcribes 1.5 times faster.
 
 ## 0.9.3 — English
 
@@ -1276,6 +1280,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   сами только на встречах; голосовая заметка начинается с ними.
 - **Субтитры успевают за речью**: «Текст по ходу речи» и «Перевод по ходу речи» включены по умолчанию, а черновик
   переводится так часто, как позволяет модель: с Hy-MT3 1.8B — примерно раз в полсекунды, с медленной — раз в 1,2 с.
+- **Компьютер больше не замирает во время субтитров на процессоре с небольшим числом ядер**: потоки GigaAM, Parakeet
+  и детектора речи больше не ждут работу активно (spinning ONNX Runtime). В замере на 8 логических процессорах
+  (субтитры, расшифровка в очереди и видеозвонок одновременно) задержки системы больше 50 мс сократились с 645 за
+  5 минут до нуля при той же точности, а очередь расшифровывает в полтора раза быстрее.
 
 ## 0.9.3
 
