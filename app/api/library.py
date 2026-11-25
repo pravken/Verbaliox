@@ -557,7 +557,7 @@ def api_add_local_path(payload: LocalPathPayload) -> Dict[str, Any]:
     """
     raw_path = payload.path.strip().strip('"').strip("'")
     target = Path(raw_path)
-    if not target.exists():
+    if not raw_path or not target.exists():  # an empty path is the program's own folder: never scanned (an audit)
         raise HTTPException(status_code=400, detail=f"Путь не найден на диске: {raw_path}")
 
     _check_model(payload.model_name)
