@@ -1545,6 +1545,13 @@ await step('caption models not downloaded', async () => {
     d.translate_catalog = (d.translate_catalog || []).map(m => m.id === FAST && fake.done ? { ...m, installed: true, installed_as: 'hy-mt3-1.8b' } : m);
     await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d) });
   });
+  // a settings read replaces state.system: Ollama stays «installed» in it too, or «Скачать» asks to install it
+  await page.route('**/api/system', async r => {
+    const res = await r.fetch();
+    const d = await res.json().catch(() => ({}));
+    if (d.ollama) d.ollama.installed = true;
+    await r.fulfill({ status: res.status(), contentType: 'application/json', body: JSON.stringify(d) });
+  });
   try {
     await page.evaluate(() => {
       state.system.ollama.installed = true;  // no question about installing Ollama
@@ -1643,6 +1650,7 @@ await step('caption models not downloaded', async () => {
     await page.unroute('**/api/ollama/pull');
     await page.unroute('**/api/ollama/status');
     await page.unroute('**/api/live/models');
+    await page.unroute('**/api/system');
     await page.evaluate(() => {
       closeStudioModelsPop();
       saveUiSetting('live_translate_model_fast', '');
