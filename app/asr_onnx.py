@@ -286,7 +286,12 @@ def queue_threads(settings: Optional[Dict[str, str]] = None, captions: Optional[
         captions = _captions_running()
     if captions:
         cores = os.cpu_count() or 4
-        limit = min(limit, max(1, cores - _captions_threads(settings) - RESERVED_THREADS))
+        try:  # Ollama translating the captions on the processor takes its threads too
+            from app.live_translate import cpu_threads_in_use
+            ollama = cpu_threads_in_use()
+        except Exception:
+            ollama = 0
+        limit = min(limit, max(1, cores - _captions_threads(settings) - RESERVED_THREADS - ollama))
     return limit
 
 

@@ -260,6 +260,15 @@ class ProcessorThreadsTest(unittest.TestCase):
         with mock.patch.object(live_translate.httpx, "Client", _Ps([{"name": "gemma4:e2b"}])):
             self.assertIsNone(live_translate.model_on_cpu("gemma4:e2b"))  # an Ollama that does not say
 
+    def test_a_model_partly_in_the_video_card_counts_as_the_processor(self):
+        from unittest import mock
+
+        from app import live_translate
+
+        ps = [{"name": "hy-mt3-7b:latest", "size": 5300, "size_vram": 3000}]
+        with mock.patch.object(live_translate.httpx, "Client", _Ps(ps)):
+            self.assertTrue(live_translate.model_on_cpu("hy-mt3-7b"))
+
     def _ready(self, on_cpu):
         from unittest import mock
 

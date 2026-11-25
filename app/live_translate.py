@@ -169,8 +169,8 @@ def cpu_threads_in_use() -> int:
 
 
 def model_on_cpu(model: str, base_url: Optional[str] = None) -> Optional[bool]:
-    """True: Ollama has `model` loaded with nothing in video memory (/api/ps size_vram 0); False: in the video card
-    (wholly or partly); None: not loaded or Ollama did not say."""
+    """True: Ollama has `model` loaded wholly or partly outside video memory (/api/ps size_vram 0 or below its
+    size: the layers left out run on the processor); False: wholly in the video card; None: not loaded or unknown."""
     from app.ollama_client import _listed
 
     try:
@@ -185,7 +185,8 @@ def model_on_cpu(model: str, base_url: Optional[str] = None) -> Optional[bool]:
             if vram is None:
                 return None
             try:
-                return int(vram) == 0
+                # partly in the video card counts as the processor: the layers left there run on all the cores
+                return int(vram) == 0 or int(vram) < int(m.get("size") or 0)
             except (TypeError, ValueError):
                 return None
     return None

@@ -380,7 +380,8 @@ class LiveSession:
                 self._ph = None
                 if follow:
                     self._follow_speech()  # before the window cuts what is final: the VAD must have heard it
-                if self.received - self.last_window_at >= LIVE_STEP_SEC:
+                # a slow window (a slow PC, on battery) runs less often: it never takes more than the budget
+                if self.received - self.last_window_at >= max(LIVE_STEP_SEC, self._window_cost / CAPTION_BUSY_SHARE):
                     self.last_window_at = self.received
                     t = _clock()
                     self._transcribe_window()

@@ -679,7 +679,11 @@ class WindowPhraseDraftTest(unittest.TestCase):
     def test_a_slow_window_keeps_its_own_draft(self):
         s = self._session(window_sec=1.0)  # a run of the window takes 1 s: the window does not keep up
         self._feed(s, self._speech())
-        self.assertGreaterEqual(len(self.windows), 2)
+        # a slow window runs less often too: never more than CAPTION_BUSY_SHARE of the time (1 s / 0.35 ≈ every 2.9 s)
+        self.assertGreaterEqual(len(self.windows), 1)
+        from app import live
+
+        self.assertLessEqual(len(self.windows), 5.5 / (1.0 / live.CAPTION_BUSY_SHARE) + 1)
         self.assertEqual(len(self.phrases), self.at_window[0])  # no phrase draft after the first slow run
         self.assertTrue(s.partial)
 

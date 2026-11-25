@@ -113,3 +113,20 @@ class CopiesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QueueBudgetCountsOllamaTest(unittest.TestCase):
+    """While Ollama translates the captions on the processor, its threads leave the queue's budget."""
+
+    def test_ollama_threads_leave_the_budget(self):
+        from unittest import mock
+
+        from app import asr_onnx, live_translate
+
+        settings = {"cpu_threads": "all"}
+        with mock.patch("os.cpu_count", return_value=16), \
+                mock.patch.object(asr_onnx, "_captions_threads", return_value=4):
+            with mock.patch.object(live_translate, "cpu_threads_in_use", return_value=0):
+                without = asr_onnx.queue_threads(settings, captions=True)
+            with mock.patch.object(live_translate, "cpu_threads_in_use", return_value=2):
+                self.assertEqual(asr_onnx.queue_threads(settings, captions=True), without - 2)
