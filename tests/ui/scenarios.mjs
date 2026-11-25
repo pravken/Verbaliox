@@ -23,7 +23,17 @@ page.on('pageerror', e => errors.push(`page: ${e.message}`));
 page.on('response', r => { if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url().replace(/\?.*/, '')}`); });
 
 let n = 0;
+// the window after an update opens by itself once the page has read the settings (after a reload of an earlier
+// step) and stood over the next steps (CI: «#upd-after intercepts pointer events»): closed before and after each
+// step but its own, with a note naming where it was found
+const closeUpdAfter = async (name, when) => {
+  if (name === 'window after an update') return;
+  const upd = await page.evaluate(() => { const w = document.getElementById('upd-after'); if (!w) return false;
+    if (typeof closeAfterUpdate === 'function') closeAfterUpdate(); else w.remove(); return true; }).catch(() => false);
+  if (upd) console.log(`note: the window after an update was open ${when} «${name}»`);
+};
 const step = async (name, fn) => {
+  await closeUpdAfter(name, 'before');
   try { await fn(); } catch (e) {
     // the first line, and for a click that timed out what stood in its way (CI shows nothing else)
     const why = e.message.split('\n').filter(l => /intercepts pointer|not visible|not stable|not enabled|outside of the viewport|waiting for/.test(l)).slice(-3).map(l => l.trim());
@@ -32,6 +42,7 @@ const step = async (name, fn) => {
   if (shots) await page.screenshot({ path: `${shots}/${String(++n).padStart(2, '0')}-${name.replace(/\W+/g, '-')}.png` });
   // a question window a step left open (a confirmation, a dialog drawn by a script) would stand over the next steps:
   // it is closed, and its title is printed with the step's name so the step can be fixed
+  await closeUpdAfter(name, 'after');
   const left = await page.evaluate(() => [...document.querySelectorAll('div.modal-backdrop[role="dialog"]:not([id])')]
     .filter(d => !d.classList.contains('hidden')).map(d => { const h = (d.querySelector('h2, h3, .font-semibold') || d).textContent.trim().slice(0, 60); d.remove(); return h; }))
     .catch(() => []);
@@ -180,7 +191,9 @@ await step('transcript as a chat', async () => {
   const runs = await page.locator('#transcript-inner .ch-group').count();
   expect(await page.locator('#transcript-inner .ch-group > .ch-av').count() === runs, 'the face is not once per run');
   await page.evaluate(() => updatePlaybackHighlight(1, true));
-  expect(await page.locator('#transcript-inner .ch-bub.segment-active').count() === 1, 'the phrase playing is not lit');
+  // the bubbles may be drawn again by the recording's refresh a moment later: lit again, waited for
+  await until(() => { updatePlaybackHighlight(1, true); return document.querySelectorAll('#transcript-inner .ch-bub.segment-active').length === 1; },
+    'the phrase playing is not lit', 3000);
   await page.click('#tx-layout-text');
   await sleep(200);
   expect(await page.locator('#transcript-inner .ch-bub').count() === 0 && await page.locator('#transcript-inner .segment-row').count() > 0, '«Текст» did not bring the text back');
@@ -847,7 +860,9 @@ await step('today open a day', async () => {
   const key = await page.evaluate(() => [...document.querySelectorAll('#td-cal .cal-col')].map(c => c.dataset.daykey).find(k => k !== calKey(new Date())));
   const col = page.locator(`#td-cal .cal-col[data-daykey="${key}"]`);
   expect(await col.getAttribute('title') === await page.evaluate(() => t('calOpenDay')), 'the day has no «Открыть день» hint');
-  expect(await col.evaluate(el => getComputedStyle(el).cursor) === 'pointer', 'no hand over the day');
+  // the week is drawn again once the calendar just saved is read: the column of that drawing is waited for
+  await until(k => { const el = document.querySelector(`#td-cal .cal-col[data-daykey="${k}"]`);
+    return !!el && getComputedStyle(el).cursor === 'pointer'; }, 'no hand over the day', 5000, key);
   const box = await col.boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
   await sleep(900);
