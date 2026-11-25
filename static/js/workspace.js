@@ -1729,13 +1729,19 @@ async function saveMeetingTitle() {
   if (!state.activeMeeting) return;
   const newTitle = document.getElementById('meeting-title-input').value.trim();
   if (!newTitle || newTitle === state.activeMeeting.title) return;
-
-  await fetch(`/api/meetings/${state.activeMeeting.id}/title`, {
+  const m = state.activeMeeting;
+  const res = await fetch(`/api/meetings/${m.id}/title`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: newTitle })
-  });
-  state.activeMeeting.title = newTitle;
+  }).catch(() => null);
+  // refused: said, and the title shown is the one kept (it took the new one whatever the answer: audit)
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    if (state.activeMeeting === m) document.getElementById('meeting-title-input').value = m.title || '';
+    return;
+  }
+  m.title = newTitle;
   await loadMeetingsList();
 }
 

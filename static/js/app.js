@@ -129,13 +129,16 @@ async function checkForUpdates(force) {
 async function followUpdateDownload() {
   if (updateState.polling) return;
   updateState.polling = true;
-  while (true) {
-    await new Promise(res => setTimeout(res, 1500));
-    try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
-    renderUpdateStatus();
-    if (!updateState.info.download.active) break;
-  }
-  updateState.polling = false;
+  // released whatever happens: an answer without its download part left it set, and no download could start again
+  try {
+    while (true) {
+      await new Promise(res => setTimeout(res, 1500));
+      try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
+      renderUpdateStatus();
+      if (!(updateState.info.download || {}).active) break;
+    }
+  } finally { updateState.polling = false; }
+  if (!updateState.info.download) return;
   const info = updateState.info;
   if (info.download.done && !updateState.notified) {
     updateState.notified = true;
@@ -155,14 +158,15 @@ async function installUpdate() {
     updateState.info = await r.json();
     renderUpdateStatus();
     updateState.polling = true;
-    while (true) {
-      await new Promise(res => setTimeout(res, 700));
-      try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
-      renderUpdateStatus();
-      if (!updateState.info.download.active) break;
-    }
-    updateState.polling = false;
-    if (!updateState.info.download.done) return;
+    try {
+      while (true) {
+        await new Promise(res => setTimeout(res, 700));
+        try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
+        renderUpdateStatus();
+        if (!(updateState.info.download || {}).active) break;
+      }
+    } finally { updateState.polling = false; }
+    if (!(updateState.info.download || {}).done) return;
   }
   const ok = await askConfirm(t('updInstallConfirm').replace('{v}', () => info.latest.version), false, t('cfInstall'));
   if (!ok) return;

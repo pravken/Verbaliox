@@ -2692,6 +2692,34 @@ await step('captions stopped while they start', async () => {
   expect(calls.some(u => u.endsWith('/audit-race/stop')), `the server session was not stopped: ${calls.join(', ')}`);
 });
 
+// A refusal is said: «Расшифровать заново…» and a new title showed success whatever the server answered
+await step('refusals are not shown as success', async () => {
+  const re = /\/api\/meetings\/1\/(reconfigure|title)$/;
+  await page.route(re, r => ['POST', 'PATCH'].includes(r.request().method())
+    ? r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Запись обрабатывается' }) }) : r.continue());
+  let r;
+  try {
+    r = await page.evaluate(async () => {
+      switchAppView('library');
+      await openMeeting(1);
+      document.getElementById('toast').innerHTML = '';
+      state.contextMeetingId = 1;
+      ctxOpenReconfigureModal();
+      await submitReconfigure();
+      const open = !document.getElementById('modal-reconfigure').classList.contains('hidden');
+      const toast1 = document.getElementById('toast').textContent;
+      closeModal('reconfigure');
+      const before = state.activeMeeting.title;
+      document.getElementById('meeting-title-input').value = `${before} (правка)`;
+      await saveMeetingTitle();
+      return { open, toast1, kept: state.activeMeeting.title === before, input: document.getElementById('meeting-title-input').value === before,
+        toast2: document.getElementById('toast').textContent };
+    });
+  } finally { await page.unroute(re); }
+  expect(r.open && r.toast1.includes('Запись обрабатывается') && !r.toast1.includes('Запущена'), `reprocessing: ${JSON.stringify(r)}`);
+  expect(r.kept && r.input, `the title: ${JSON.stringify(r)}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

@@ -438,9 +438,7 @@ function ctxOpenReconfigureModal() {
 async function submitReconfigure() {
   const id = state.contextMeetingId;
   if (!id) return;
-  closeModal('reconfigure');
-
-  await fetch(`/api/meetings/${id}/reconfigure`, {
+  const res = await fetch(`/api/meetings/${id}/reconfigure`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -448,7 +446,11 @@ async function submitReconfigure() {
       language: document.getElementById('reconfig-language').value,
       num_speakers_hint: Number(document.getElementById('reconfig-speakers').value || 0),
     })
-  });
+  }).catch(() => null);
+  // refused (the recording is busy, no model): said, and the window stays with its choices (it said «Запущена
+  // повторная обработка» whatever the answer: audit)
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  closeModal('reconfigure');
   await loadMeetingsList();
   await selectMeeting(id, false);
   showToast(t('uiReProcessingStarted'));
