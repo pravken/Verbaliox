@@ -13,7 +13,8 @@ Tasks page as they were found, not tracked here). Whose they are comes from «Э
 `needs_me` asks the page to have it set.
 """
 
-from datetime import date, datetime, timedelta
+import json
+from datetime import date, datetime, time, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 PERIODS = ("week", "month", "quarter", "year")
@@ -32,6 +33,78 @@ SERIES_LOOK = 6
 # «Статистика»: each figure with its trend over this many periods (the current one last); for the year as many
 # years as there are data, this many at most
 HISTORY_N = 6
+
+
+# «Время во встречах»: one rule for «Статистика» (its hours, the share of the working time and the time without
+# meetings), the hours by day of «Время во встречах» and «Нагрузка недели» (static/js/dashboard.js dbDayHours).
+# The time of a day taken by meetings, overlaps counted once: the recordings (from their start, for their
+# length) and the calendar's meetings (not those of a whole day, not those the user said are no meeting, not a
+# block of calendar_ics.BLOCK_HOURS or longer), of these only the part gone by. A recording made during a calendar
+# meeting adds only what lies outside it. With a feature chosen only its recordings count: the calendar knows no
+# features. Found in the audit: «Статистика» summed the recordings (three of a minute at once: «0,1 ч») while
+# «Нагрузка недели» counted them once («0 ч»), side by side.
+def _start_of(m: Dict[str, Any]) -> Optional[datetime]:
+    """When a recording began, as local time without a zone (as /api/calendar/range gives it), or None."""
+    raw = str(m.get("recorded_at") or m.get("created_at") or "")
+    try:
+        t = datetime.fromisoformat(raw.replace("Z", "+00:00")) if raw else None
+    except ValueError:
+        return None
+    if t and t.tzinfo:
+        t = t.astimezone().replace(tzinfo=None)
+    return t
+
+
+def _calendar_spans(a: date, b: date, today: date) -> List[Tuple[datetime, datetime]]:
+    """The calendar's meetings of the days a…b (b exclusive) as (start, end), cut at the moment gone by: now for
+    the current day, the end of `today` for a day counted as of the past. Empty without a calendar."""
+    try:
+        from app import calendar_ics
+        from app.database import get_all_settings
+
+        if not calendar_ics._source():
+            return []
+        try:
+            ignored = json.loads(get_all_settings().get("meet_ignore") or "[]")
+        except ValueError:
+            ignored = []
+        cut = datetime.now() if today >= date.today() else datetime.combine(today + timedelta(days=1), time())
+        return [(e["start"], min(e["end"], cut))
+                for e in calendar_ics.window(datetime.combine(a, time()), datetime.combine(b, time()))
+                if e["start"] < cut and calendar_ics.is_meeting(e, ignored)]
+    except Exception:  # an unreadable calendar leaves the recordings
+        return []
+
+
+def busy_days(meetings: List[Dict[str, Any]], a: date, b: date, today: date, calendar: bool = True) -> Dict[date, float]:
+    """{day: seconds in meetings} of the days a…b (b exclusive), by the rule above."""
+    spans: List[Tuple[datetime, datetime]] = []
+    for m in meetings:
+        s, dur = _start_of(m), float(m.get("duration") or 0)
+        if s and dur > 0:
+            spans.append((s, s + timedelta(seconds=dur)))
+    if calendar:
+        spans += _calendar_spans(a, b, today)
+    by_day: Dict[date, List[Tuple[datetime, datetime]]] = {}
+    for s, e in spans:
+        if e > s and a <= s.date() < b:
+            by_day.setdefault(s.date(), []).append((s, e))
+    out: Dict[date, float] = {}
+    for d, part in by_day.items():
+        total, end = 0.0, None
+        for s, e in sorted(part):
+            if end is None or s > end:
+                total, end = total + (e - s).total_seconds(), e
+            elif e > end:
+                total, end = total + (e - end).total_seconds(), e
+        out[d] = total
+    return out
+
+
+def _hours(busy: Dict[date, float], a: date, b: date) -> float:
+    """The hours in meetings of the days a…b (b exclusive), to the minute: the page writes less than 0,1 h in
+    minutes («6 мин»), not «0,1 ч» or «0 ч»."""
+    return round(sum(v for d, v in busy.items() if a <= d < b) / 3600, 2)
 
 
 def _outcomes(ids: List[int], me: set) -> Dict[int, Dict[str, Any]]:
@@ -221,14 +294,14 @@ def _protocols(ids: List[int]) -> Dict[int, str]:
 
 
 def _history(period: str, start: date, today: date, meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]],
-             me: set, people_of: Callable[[Dict[str, Any]], set]) -> Dict[str, Any]:
+             me: set, people_of: Callable[[Dict[str, Any]], set], calendar: bool = True) -> Dict[str, Any]:
     """«Статистика»: the figures (_figures) of the last HISTORY_N periods up to the one starting at `start`,
     oldest first; the years only from the first one with a recording or a task."""
     spans = _periods_back(period, start)
     first = _first_day(meetings, tasks)
     if period == "year":
         spans = [s for s in spans if first and s[1] > first] or spans[-1:]
-    values = _figures(spans, today, meetings, tasks, me, people_of, first)
+    values = _figures(spans, today, meetings, tasks, me, people_of, first, calendar)
     return {"starts": [a.isoformat() for a, _e in spans], "norm": values.pop("_norm"), "values": values}
 
 
@@ -248,13 +321,16 @@ def _iso_day(v: Any) -> bool:
 
 
 def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]],
-             me: set, people_of: Callable[[Dict[str, Any]], set], first_day: Optional[date] = None) -> Dict[str, Any]:
+             me: set, people_of: Callable[[Dict[str, Any]], set], first_day: Optional[date] = None,
+             calendar: bool = True) -> Dict[str, Any]:
     """Every figure of each span (start, end exclusive), in their order, from what build has loaded
     already (the library list, the tasks) and the protocols of those meetings: no transcript is read.
     «Встречи без итогов» counts the analysed meetings with no decision and no task here; build puts the
     current period's figures (with the silent meetings and the series) in the last place.
-    The share of the working time: the meeting hours of the working days against the norm of a day
-    (the reminder's hours, 8 without it) times the working days gone by; the time without meetings is the rest.
+    The hours in meetings follow the one rule of busy_days (overlaps once, the calendar's meetings with the
+    recordings unless `calendar` is off). The share of the working time: the meeting hours of the working days
+    against the norm of a day (the reminder's hours, 8 without it) times the working days gone by; the time without
+    meetings is the rest.
     A span that ends before `first_day` (the first day with a recording or a task), or any span with no data
     at all, has neither: None, not 2088 hours «without meetings» of a year never recorded."""
     from app.database import fill_durations
@@ -263,6 +339,7 @@ def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[st
     first, last = spans[0][0], spans[-1][1]
     inside = [m for m in meetings if first <= _day(m) < last]
     fill_durations(inside)
+    busy = busy_days(inside, first, last, today, calendar)
     protocols = _protocols([m["id"] for m in inside])
     task_n: Dict[int, int] = {}
     for t in tasks:
@@ -287,11 +364,11 @@ def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[st
                                                        "decisions", "useless", "avg", "people")}
     for a, b in spans:
         ms = [m for m in inside if a <= _day(m) < b]
-        sec = sum(float(m.get("duration") or 0) for m in ms)
+        sec = sum(float(m.get("duration") or 0) for m in ms)  # the recordings' own length: their average
         known = first_day is not None and b > first_day
         work_h = _work_days(a, b, today, off) * norm if known else 0.0
-        on_work = sum(float(m.get("duration") or 0) for m in ms
-                      if _day(m).weekday() < 5 and _day(m).isoformat() not in off and _day(m) <= today) / 3600
+        on_work = sum(v for d, v in busy.items()
+                      if a <= d < b and d.weekday() < 5 and d.isoformat() not in off and d <= today) / 3600
         decided = useless = 0
         names: set = set()
         for m in ms:
@@ -302,7 +379,7 @@ def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[st
                 useless += 1
             names |= people_of(m)
         values["meetings"].append(len(ms))
-        values["hours"].append(round(sec / 3600, 1))
+        values["hours"].append(_hours(busy, a, b))
         values["share"].append((round(min(100.0, on_work / work_h * 100)) if work_h else 0) if known else None)
         values["focus"].append(round(max(0.0, work_h - on_work), 1) if known else None)
         values["mine"].append(sum(1 for t in mine if _open_at(t, b)))
@@ -359,7 +436,7 @@ class _Names:
                 e["meetings"] += 1
                 e["hours"] += float(m.get("duration") or 0) / 3600
         for e in met.values():
-            e["hours"] = round(e["hours"], 1)
+            e["hours"] = round(e["hours"], 2)  # to the minute: the page writes less than 0,1 h in minutes
         return sorted(met.values(), key=lambda x: (-x["meetings"], x["name"].lower()))[:n]
 
 
@@ -419,6 +496,10 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     now = [m for m in meetings if start <= _day(m) < end]
     before = [m for m in meetings if cmp_a <= _day(m) < cmp_b]
     fill_durations(now + before)
+    # the hours in meetings by one rule (busy_days): the calendar's meetings too, unless a feature is chosen
+    cal = not feature_id
+    busy, busy_before = busy_days(now, start, end, today, cal), busy_days(before, cmp_a, cmp_b, today, cal)
+    hours = lambda a, b: _hours(busy, a, b)  # noqa: E731
 
     tasks = commitments.all_tasks()
     if feature_id:
@@ -452,20 +533,20 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         for k in range(12):
             a, b = date(start.year, k + 1, 1), date(start.year + (k == 11), (k + 1) % 12 + 1, 1)
             ms = [m for m in now if a <= _day(m) < b]
-            buckets.append({"key": a.isoformat(), "kind": "month", "hours": round(sum(float(m.get("duration") or 0) for m in ms) / 3600, 2),
+            buckets.append({"key": a.isoformat(), "kind": "month", "hours": hours(a, b),
                             "meetings": [{"id": m["id"], "title": m.get("title") or ""} for m in ms][:12]})
     elif period == "week":
         for i in range(7):
             d = start + timedelta(days=i)
             ms = [m for m in now if _day(m) == d]
-            if i < 5 or ms:  # the weekend only when something was recorded on it
-                buckets.append({"key": d.isoformat(), "kind": "day", "hours": round(sum(float(m.get("duration") or 0) for m in ms) / 3600, 2),
+            if i < 5 or ms or busy.get(d):  # the weekend only when something was recorded on it
+                buckets.append({"key": d.isoformat(), "kind": "day", "hours": hours(d, d + timedelta(days=1)),
                                 "meetings": [{"id": m["id"], "title": m.get("title") or ""} for m in ms]})
     else:
         w = start - timedelta(days=start.weekday())
         while w < end:
             ms = [m for m in now if w <= _day(m) < w + timedelta(days=7)]
-            buckets.append({"key": max(w, start).isoformat(), "kind": "week", "hours": round(sum(float(m.get("duration") or 0) for m in ms) / 3600, 2),
+            buckets.append({"key": max(w, start).isoformat(), "kind": "week", "hours": hours(max(w, start), min(w + timedelta(days=7), end)),
                             "meetings": [{"id": m["id"], "title": m.get("title") or ""} for m in ms][:12]})
             w += timedelta(days=7)
 
@@ -496,15 +577,15 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     # the people met most in the period
     names = _Names(me)
     people = names.most(now)
-    history = _history(period, start, asof, meetings, tasks, me, names.people_of)
+    history = _history(period, start, asof, meetings, tasks, me, names.people_of, cal)
     hv = history["values"]  # the current period: as the widgets count it (a past one: its tasks open at its end)
     hv["meetings"][-1], hv["mine"][-1] = len(now), len(mine_then if past else mine)
     hv["waiting"][-1] = len(waiting_then if past else waiting)
-    hv["hours"][-1] = round(sum(float(m.get("duration") or 0) for m in now) / 3600, 1)
+    hv["hours"][-1] = hours(start, end)
     hv["decisions"][-1], hv["useless"][-1] = len(decisions), len(useless)
     # what each figure is compared with: the period before in the trend, or the same days a year earlier
     if compare == "year":
-        got = _figures([(cmp_a, cmp_b)], _year_ago(asof), meetings, tasks, me, names.people_of, _first_day(meetings, tasks))
+        got = _figures([(cmp_a, cmp_b)], _year_ago(asof), meetings, tasks, me, names.people_of, _first_day(meetings, tasks), cal)
         history["before"] = {k: v[0] for k, v in got.items() if k != "_norm"}
     else:
         history["before"] = {k: v[-2] for k, v in hv.items() if len(v) > 1}
@@ -512,7 +593,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         # days of the period before, not all of it («−16,1 ч к прошлой неделе» in red on a Wednesday: audit)
         if not past and history["before"].get("focus") is not None:
             same = _figures([(cmp_a, cmp_b)], cmp_a + (asof - start), meetings, tasks, me, names.people_of,
-                            _first_day(meetings, tasks))
+                            _first_day(meetings, tasks), cal)
             history["before"]["focus"] = same["focus"][0]
     history["compare"] = {"kind": compare, "start": cmp_a.isoformat(), "end": cmp_b.isoformat()}
 
@@ -529,8 +610,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
         "past": past, "asof": asof.isoformat(), "compare": compare,
         "outside": outside,
         "kpi": {"meetings": len(now), "meetings_before": len(before),
-                "hours": round(sum(float(m.get("duration") or 0) for m in now) / 3600, 1),
-                "hours_before": round(sum(float(m.get("duration") or 0) for m in before) / 3600, 1),
+                "hours": hours(start, end), "hours_before": _hours(busy_before, cmp_a, cmp_b),
                 "open": len(mine_then if past else mine), "overdue": len(over_then if past else over), "decisions": len(decisions),
                 "decision_meetings": len({d["meeting_id"] for d in decisions}),
                 "useless": len(useless), "useless_hours": round(sum(r["duration"] for r in useless) / 3600, 1),
@@ -634,7 +714,7 @@ def detail(kind: str, period: str = "week", feature_id: Optional[int] = None, pe
         for r in rows:
             for fid in r["features"] or [0]:
                 by_feature[fid] = by_feature.get(fid, 0.0) + r["duration"]
-        out["by_feature"] = [{"feature": k, "hours": round(v / 3600, 1)} for k, v in sorted(by_feature.items(), key=lambda kv: -kv[1])]
+        out["by_feature"] = [{"feature": k, "hours": round(v / 3600, 2)} for k, v in sorted(by_feature.items(), key=lambda kv: -kv[1])]
         return out
     is_mine = lambda t: (t.get("who") or "").strip().lower() in me  # noqa: E731
     order = lambda t: (t.get("status") == "done", not (t.get("due_date") and t["due_date"] < today.isoformat()),  # noqa: E731
