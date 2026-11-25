@@ -585,6 +585,9 @@ def extract(meeting_id: int, model_name: Optional[str] = None, hints: Optional[s
     day, speaking = _meeting_day(m), {n.casefold() for n in participants(m)}
     with _db_lock:
         conn = get_connection()
+        if not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            conn.close()  # deleted while its tasks were looked for: they would stay in «Задачи» (found in an audit)
+            return []
         # Ticked off: found again by the same task (its words, or the same person at the same moment in
         # similar words) or the same quote from the recording — the model words it differently each time,
         # and a done task came back open after a new transcription

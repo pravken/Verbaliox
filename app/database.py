@@ -1024,6 +1024,10 @@ def save_meeting_results(
     values.append(meeting_id)
     with _db_lock:
         conn = get_connection()
+        if segments is not None and not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            # deleted while it was transcribed: its lines would stay in the search for good (found in an audit)
+            conn.close()
+            return
         if summaries is not None or (speakers is not None and segments is not None and reindex):
             row = conn.execute("SELECT speakers_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
             stored = _loads_dict(row[0]) if row else {}

@@ -301,6 +301,9 @@ def suggest_by_title(meeting_id: int) -> List[int]:
 def _keep_suggestions(meeting_id: int, ids: List[int]) -> List[int]:
     with _db_lock:
         conn = _conn()
+        if not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            conn.close()  # deleted while the model was asked (found in an audit)
+            return []
         declined = {r[0] for r in conn.execute("SELECT feature_id FROM feature_declined WHERE meeting_id = ?", (meeting_id,)).fetchall()}
         ids = [f for f in ids if f not in declined]
         conn.execute("DELETE FROM feature_suggestions WHERE meeting_id = ?", (meeting_id,))
