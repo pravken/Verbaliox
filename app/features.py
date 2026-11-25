@@ -40,11 +40,22 @@ def _init(conn) -> None:
     # a suggestion the user turned down is not made again for that meeting
     conn.execute("CREATE TABLE IF NOT EXISTS feature_declined (meeting_id INTEGER NOT NULL, feature_id INTEGER NOT NULL, "
                  "PRIMARY KEY (meeting_id, feature_id))")
+    # the meetings and series of a feature (its card, its delete): the keys above start with the meeting or series
+    conn.execute("CREATE INDEX IF NOT EXISTS meeting_features_feature ON meeting_features (feature_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS series_features_feature ON series_features (feature_id)")
+
+
+_READY_AT: List[int] = []  # database.schema_epoch when the tables were made: they were made before every reading
 
 
 def _conn():
+    from app import database
+
     conn = get_connection()
-    _init(conn)
+    if not (_READY_AT and _READY_AT[0] == database.schema_epoch):
+        _init(conn)
+        conn.commit()
+        _READY_AT[:] = [database.schema_epoch]
     return conn
 
 
