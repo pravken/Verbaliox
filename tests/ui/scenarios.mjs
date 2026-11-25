@@ -39,6 +39,15 @@ const step = async (name, fn) => {
 };
 const expect = (ok, what) => { if (!ok) throw new Error(what); };
 const sleep = (ms) => page.waitForTimeout(ms);
+// waits until fn (run in the page, with arg) is true: a condition, not a fixed pause that a slow runner outlasts
+const until = async (fn, what, ms = 5000, arg) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (await page.evaluate(fn, arg).catch(() => false)) return;
+    if (Date.now() > end) throw new Error(what);
+    await sleep(100);
+  }
+};
 
 await page.goto(`${base}/?token=${token}`);
 await sleep(2000);
@@ -73,8 +82,7 @@ await step('import window', async () => {
 // the precise mode among its choices. «Без запинок» and «Автопрокрутка» are in the view menu
 await step('read a recording', async () => {
   await page.evaluate(() => openMeeting(1));
-  await sleep(1500);
-  expect(await page.locator('#transcript-container .segment-row').count() > 0, 'no transcript lines');
+  await until(() => document.querySelectorAll('#transcript-container .segment-row').length > 0, 'no transcript lines', 8000);
   expect(!(await page.isVisible('#tx-model-bar')), 'the recognition row is not folded');
   // one short row (variant B): «Модель: … ▾», «Расшифровать заново», «⋯» and when the text was made
   expect(/Модель:/.test(await page.textContent('#tx-model-chip')), 'no model button');
@@ -162,9 +170,10 @@ await step('transcript as a chat', async () => {
   await sleep(800);
   expect(await page.evaluate(() => state.activeWorkspaceTab) === 'transcript', 'another recording did not open on «Расшифровка»');
   await page.evaluate(() => openMeeting(1));
-  await sleep(800);
+  await until(() => state.activeMeeting?.id === 1 && document.querySelectorAll('#transcript-container .segment-row').length > 0,
+    'the recording did not open again', 8000);
   await page.evaluate(() => { openRecordTab('transcript'); setTxLayout('chat'); });
-  await sleep(300);
+  await until(() => document.querySelectorAll('#transcript-inner .ch-bub.segment-row').length > 0, 'no bubbles in «Чат»');
   const bubbles = await page.locator('#transcript-inner .ch-bub.segment-row').count();
   expect(bubbles > 0, 'no bubbles in «Чат»');
   expect(await page.locator('#transcript-inner .ch-bub .ch-tm').count() === bubbles, 'a bubble without its time');
@@ -323,14 +332,12 @@ await step('menus not looked for on a meter tick', async () => {
 // Undo instead of a question: a task goes at once and comes back with «Отменить» (6.1)
 await step('undo a removal', async () => {
   await page.evaluate(() => switchAppView('tasks'));
-  await sleep(800);
+  await until(() => typeof TK !== 'undefined' && TK.data && TK.data.tasks.length > 0, 'the tasks did not load', 8000);
   const before = await page.evaluate(() => TK.data.tasks.length);
   await page.evaluate(() => deleteTask(TK.data.tasks[0].id));
-  await sleep(300);
-  expect(await page.evaluate(() => TK.data.tasks.length) === before - 1, 'the task did not go');
+  await until(n => TK.data.tasks.length === n - 1, 'the task did not go', 5000, before);
   await page.click('#toast .toast-action');
-  await sleep(300);
-  expect(await page.evaluate(() => TK.data.tasks.length) === before, '«Отменить» did not bring it back');
+  await until(n => TK.data.tasks.length === n, '«Отменить» did not bring it back', 5000, before);
 });
 
 // The tasks as a calendar of due dates: the grouping greys (its place kept), today framed, a task with its
@@ -727,13 +734,11 @@ await step('day off from the calendar', async () => {
   await page.click(`#cal-view [data-daykey="${day}"] .cal-day-more`);
   await sleep(200);
   await page.click('#text-menu button:has-text("Отметить выходным")');
-  await sleep(800);
-  expect(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`), 'the day is not marked');
+  await until(d => !!document.querySelector(`#cal-view [data-daykey="${d}"].cal-holday`), 'the day is not marked', 5000, day);
   await page.click(`#cal-view [data-daykey="${day}"]`, { button: 'right' });
   await sleep(200);
   await page.click('#text-menu button:has-text("Убрать выходной")');
-  await sleep(800);
-  expect(!(await page.$(`#cal-view [data-daykey="${day}"].cal-holday`)), 'the day off is not taken back');
+  await until(d => !document.querySelector(`#cal-view [data-daykey="${d}"].cal-holday`), 'the day off is not taken back', 5000, day);
   await page.evaluate(() => closeCalendarView());
 });
 
@@ -970,7 +975,7 @@ await step('records section', async () => {
   expect(await barH() === h0, 'the list moved when a recording was selected');
   await page.click('#lt-bar button[data-click="clearLibSelection"]');
   await page.fill('#lt-q', 'тема');
-  await sleep(900);
+  await page.waitForSelector('#lt-body .lt-snip', { timeout: 6000 }).catch(() => {});
   expect(await page.locator('#lt-body .lt-snip').count() > 0, 'the search shows no places in the text');
   expect(/мест/.test(await page.textContent('#lt-count')), 'the count does not say how many places were found');
   await page.fill('#lt-q', '');
@@ -1249,7 +1254,8 @@ await step('captions do not start by themselves', async () => {
   ]);
   expect(JSON.stringify(held) === '[true,true,false,false,true]', `the captions rule: ${held}`);
   await page.evaluate(() => openModal('settings', 'recording'));
-  await sleep(600);
+  // the form is filled from the server (settings.js fillSystemInfo): read once it has been
+  await until(() => !!(state.system && state.system.settings), 'the settings did not load', 8000);
   expect(!(await page.isChecked('#set-live-captions-auto')), 'captions are on by default');
   await page.evaluate(() => closeModal('settings'));
 });
@@ -1403,7 +1409,12 @@ await step('studio choices kept', async () => {
   await page.evaluate(() => closeStudioModelsPop());
 
   await page.evaluate(() => openModal('settings', 'recording'));
-  await sleep(600);
+  // the studio's choices reach the form of Settings once saved (studio.js): waited for, not a fixed pause
+  await until(() => {
+    state.onnxInstalled = ['parakeet-v3'];
+    renderLiveModelSelect();
+    return document.getElementById('set-live-captions-auto').checked && document.getElementById('set-live-model').value === 'parakeet-v3';
+  }, 'Settings did not take the choices', 5000).catch(() => {});  // the expect below says what it shows
   const inSettings = await page.evaluate(() => {
     state.onnxInstalled = ['parakeet-v3'];
     renderLiveModelSelect();
@@ -1508,7 +1519,7 @@ await step('dashboard', async () => {
   await page.click('#db-drawer button:has-text("Сбросить")');
   await page.click('#db-edit-btn');
   await page.click('#db-periods button >> nth=1');
-  await sleep(600);
+  await until(() => DB.data && DB.data.period === 'month', 'the month did not come');
   expect(await page.evaluate(() => DB.data && DB.data.period === 'month' && document.querySelector('#db-periods button[aria-checked="true"]').textContent === 'Месяц'), 'the period did not change');
   await page.click('#db-periods button >> nth=0');
   await sleep(300);
@@ -1517,10 +1528,6 @@ await step('dashboard', async () => {
 // «Обзор» of a year and of any past period (asked by the user): ‹ goes back, the name says which one, «Сегодня»
 // returns; the figures compared with the period before or the same days a year earlier
 await step('dashboard: a past year, the comparison', async () => {
-  const until = async (fn, what) => {
-    for (let k = 0; k < 50; k++) { if (await page.evaluate(fn)) return; await sleep(100); }
-    throw new Error(what);
-  };
   const year = new Date().getFullYear();
   const name = () => page.evaluate(() => document.querySelector('#db-nav .db-nav-name').textContent);
   await page.click('#db-periods button >> nth=3');
@@ -1826,7 +1833,9 @@ await step('pending race', async () => {
   await sleep(1200);
   await page.route(/\/api\/meetings\/2$/, async r => { await new Promise(f => setTimeout(f, 1200)); await r.continue(); });
   await page.evaluate(() => { selectMeeting(2); selectMeeting(1); });
-  await sleep(2200);
+  await sleep(1300);  // the late answer for recording 2 has come
+  await until(() => state.pendingMeetingId == null && !document.getElementById('workspace-content').classList.contains('rec-pending'),
+    'the screen stayed pending', 5000).catch(() => {});  // the expect below says how it stayed
   await page.unroute(/\/api\/meetings\/2$/);
   const st = await page.evaluate(() => {
     const box = document.getElementById('workspace-content');
@@ -1854,8 +1863,12 @@ await step('queue island', async () => {
   // the job ends: «Готово», and the window opened from the island closes with it
   await page.evaluate(() => { state.queue = []; renderJobsIsland(); });
   expect(/st-island-done/.test(await page.getAttribute('#strip-island', 'class')), 'no «Готово»');
-  await sleep(2900);
-  expect(!(await page.isVisible('#strip-island')) && !(await page.isVisible('#jobs-pop')), 'the island or its window stayed');
+  // «Готово» stays 2.6 s (pult.js doneTimer), then the queue is read again: up to 5 s on a slow runner
+  const gone = () => {
+    const shown = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden') && el.getClientRects().length > 0; };
+    return !shown('strip-island') && !shown('jobs-pop');
+  };
+  await until(gone, 'the island or its window stayed', 5000);
   // cancelled: no «Готово»
   await page.evaluate(() => { const m = state.meetings[0]; state.queue = [{ id: m.id, state: 'running', kind: 'analysis', title: m.title, progress: 3, position: 1 }]; strip.kind = 'free'; renderJobsIsland(); islandCancelled(); renderJobsIsland(); state.queue = []; renderJobsIsland(); });
   expect(!(await page.isVisible('#strip-island')), '«Готово» after a cancel');
@@ -2045,11 +2058,22 @@ await step('features drawer', async () => {
 // «после встречи» for two minutes (reported by the user); the row shows the time left in place of the percent
 await step('mix wait countdown', async () => {
   const meeting = await page.evaluate(() => fetch('/api/meetings/3').then(r => r.json()));
-  const until = Date.now() / 1000 + 100;
-  Object.assign(meeting, { id: 9902, title: 'Запись 14-05', status: 'mixing', progress: 1, mix_wait: until, mix_deleting: false,
+  const waitEnd = Date.now() / 1000 + 100;
+  Object.assign(meeting, { id: 9902, title: 'Запись 14-05', status: 'mixing', progress: 1, mix_wait: waitEnd, mix_deleting: false,
     stage_text: 'Сведение дорожек: пауза на случай следующей встречи', segments: [], summaries: {}, transcript_versions: [], duration: 0 });
   await page.route(/\/api\/meetings\/9902(\/|\?|$)/, r => /\/api\/meetings\/9902(\?|$)/.test(r.request().url())
     ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meeting) }) : r.fulfill({ status: 404, body: '{}' }));
+  // the list the page polls (library.js pollMeetingsLoop) holds the row too: else a redraw drops it mid-step
+  await page.route(/\/api\/meetings(\?.*)?$/, async r => {
+    const headers = { ...r.request().headers() };
+    delete headers['if-none-match'];  // always the whole list, so the row is added to it
+    const res = await r.fetch({ headers });
+    const list = await res.json().catch(() => null);
+    if (!Array.isArray(list)) return r.fulfill({ response: res });
+    const { segments, ...row } = meeting;
+    if (!list.some(x => x.id === 9902)) list.unshift({ ...row, mix_wait: meeting.mix_wait });
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(list) });
+  });
   await page.evaluate(m => {
     const row = { ...m };
     delete row.segments;
@@ -2057,14 +2081,14 @@ await step('mix wait countdown', async () => {
     renderMeetingsSidebar();
     return openMeeting(9902);
   }, meeting);
-  await sleep(1200);
   const sub = () => page.textContent('#tx-rc-sub');
+  await until(() => /^Начнётся через 1:[34]\d — пауза/.test(document.getElementById('tx-rc-sub')?.textContent || ''),
+    'the card does not count down', 6000).catch(() => {});  // the expect below says what it shows
   const first = await sub();
   expect(/^Начнётся через 1:[34]\d — пауза/.test(first), `the card does not count down: «${first}»`);
   expect((await page.textContent('#tx-rc-title')) === 'Сведение дорожек', 'the card is not the mix');
   expect(!(await page.textContent('#tx-rc-pct')), 'the card still shows a percent');
-  await sleep(1300);
-  expect((await sub()) !== first, 'the countdown does not move');
+  await until(f => (document.getElementById('tx-rc-sub')?.textContent || '') !== f, 'the countdown does not move', 5000, first);
   const slot = await page.evaluate(() => document.querySelector('#meetings-list [data-mid="9902"] [data-mix-until]')?.textContent || '');
   expect(/^1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
   // a meeting going on: no countdown, the reason
@@ -2104,6 +2128,7 @@ await step('mix wait cleanup', async () => {
     return openMeeting(1);
   });
   await page.unroute(/\/api\/meetings\/9902(\/|\?|$)/);
+  await page.unroute(/\/api\/meetings(\?.*)?$/);
   await sleep(800);
 });
 
