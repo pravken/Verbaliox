@@ -2930,6 +2930,34 @@ await step('esc over the settings closes the top window', async () => {
   expect(role === 'dialog|true', `the deletion question: «${role}»`);
 });
 
+// The search of a section (found in the audit: 280px at four places, in «Люди» in the list on the left): the last control of
+// the head in «Записи», «Задачи», «Словарь» and «Люди», at one x, y and width, 32px high, at the window's minimum too
+await step('one place for the search', async () => {
+  const boxes = {};
+  for (const [w, h] of [[1300, 860], [1100, 700]]) {
+    await page.setViewportSize({ width: w, height: h });
+    for (const v of ['libtable', 'tasks', 'dict', 'people']) {
+      await page.evaluate(x => switchAppView(x), v);
+      await until(x => !document.getElementById(`${x}-view`).classList.contains('hidden'), `${v} did not open`, 5000, v);
+      await sleep(400);  // the section fades in
+      boxes[`${v}@${w}`] = await page.evaluate(x => {
+        const head = document.querySelector(`#${x}-view .vx-shead`);
+        const s = head && head.querySelector('.tk-search');
+        if (!s) return null;
+        const b = s.getBoundingClientRect(), view = document.getElementById(`${x}-view`).getBoundingClientRect();
+        const last = [...head.querySelectorAll('button, label, input')].filter(e => e.offsetParent && !s.contains(e))
+          .every(e => e.getBoundingClientRect().right <= b.left + 1 || e.getBoundingClientRect().bottom <= b.top + 1);
+        return { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), gap: Math.round(view.right - b.right), last };
+      }, v);
+    }
+    const list = Object.entries(boxes).filter(([k]) => k.endsWith(`@${w}`));
+    const bad = list.filter(([, b]) => !b || Math.abs(b.w - 236) > 1 || Math.abs(b.h - 32) > 1 || Math.abs(b.gap - 24) > 1 || !b.last
+      || Math.abs(b.x - list[0][1].x) > 1 || Math.abs(b.y - list[0][1].y) > 1);
+    expect(!bad.length, `the search is not in one place at ${w}px: ${JSON.stringify(Object.fromEntries(list))}`);
+  }
+  await page.setViewportSize({ width: 1300, height: 860 });
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
