@@ -36,7 +36,7 @@ ONNX_MODELS: Dict[str, Dict[str, Any]] = {
                               "v3_e2e_rnnt_joint.int8.onnx", "v3_e2e_rnnt_vocab.txt"]},
         },
         "name": "GigaAM v3",
-        "size_mb": 1350,
+        "size_mb": 1285,  # MiB as _dir_mb counts them: 1281 for the model folder downloaded on 2026-11-25
         "license": "MIT",
         "vram_gb": 1.5,  # on the GPU (app/onnx_gpu.py)
         "languages": ["ru"],
