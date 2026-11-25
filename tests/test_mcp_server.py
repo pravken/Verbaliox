@@ -163,6 +163,27 @@ class McpServerTest(unittest.TestCase):
         self.assertIn(self.secret, mcp_server._hidden())
         self.assertEqual([m["id"] for m in _call("search_meetings", query="туман")[1]["meetings"]], [self.mid])
 
+    def test_decisions_and_tasks_read_little_and_are_capped(self):
+        """Audit В22: the decisions read every meeting of the period whole (its transcript), the tasks the directory
+        for each task, and both answered without a limit."""
+        from app import people
+
+        with mock.patch("app.database.get_meeting", side_effect=AssertionError("a meeting read whole")):
+            err, got = _call("list_decisions", since="2000-01-01")
+        self.assertFalse(err, got)
+        self.assertEqual([d["decision"] for d in got["decisions"]], ["Выпускать в пятницу"])
+        self.assertNotIn("truncated", got)
+        for i in range(4):
+            commitments.create(f"Задача {i}", "Боря", meeting_id=self.mid)
+        people.merge(["Борис", "Боря"])
+        self.addCleanup(lambda: [people.remove(n) for n in ("Борис", "Боря")])
+        real = database.get_connection
+        with mock.patch("app.people.get_connection", side_effect=real) as conn, mock.patch.object(mcp_server, "MAX_ITEMS", 3):
+            err, tasks = _call("list_tasks", scope="all", person="Борис")
+        self.assertFalse(err, tasks)
+        self.assertEqual((len(tasks["tasks"]), tasks["total"], tasks["truncated"]), (3, 5, True))
+        self.assertLessEqual(conn.call_count, 1)
+
     def test_people_heard_only_in_dictations_are_not_listed(self):
         """Found in the audit: list_people counted the hidden recordings, so their speakers, calendar
         attendees and task owners reached the agent."""

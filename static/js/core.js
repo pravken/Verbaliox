@@ -1081,6 +1081,8 @@ function switchWorkspaceTab(tab) {
   if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
   if (tab === 'info') loadMeetingInfo();
+  // «Как прошёл разговор» is drawn only when its tab is shown (people.js, renderTalkAnalytics)
+  if (tab === 'speakers' && document.getElementById('talk-analytics')?.dataset.stale === '1' && typeof renderTalkAnalytics === 'function') renderTalkAnalytics();
   ['transcript', 'summary', 'speakers', 'info'].forEach(k => {
     document.getElementById(`wview-${k}`).classList.toggle('hidden', k !== tab);
     const btn = document.getElementById(`wtab-${k}`);

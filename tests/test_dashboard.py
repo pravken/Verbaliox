@@ -163,6 +163,41 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual({m["id"] for m in person["meetings"]}, {good, empty})
         self.assertEqual([t["what"] for t in person["owes_me"]], ["Прислать смету"])
 
+    def test_a_person_reads_the_directory_once(self):
+        """Audit K21: «a person» named each speaker of each recording and each task by the directory, read anew
+        (two connections) each time: thousands of connections for a large library. A variant still finds them."""
+        from unittest import mock
+
+        from app import people
+
+        ids = [self._meeting(f"Встреча {i}", f"2026-11-{10 + i:02d}", names=("Олег", "Маша" if i % 2 else "Мария")) for i in range(6)]
+        people.merge(["Мария", "Маша"])
+        self.addCleanup(lambda: [people.remove(n) for n in ("Мария", "Маша")])
+        commitments.create("Прислать смету", "Маша", meeting_id=ids[1])
+        real = database.get_connection
+        with mock.patch("app.people.get_connection", side_effect=real) as conn:
+            d = dashboard.detail("person", "week", person="Маша", today=self.TODAY)
+        self.assertEqual(d["person"], "Мария")
+        self.assertEqual({m["id"] for m in d["meetings"]}, set(ids))
+        self.assertEqual([t["what"] for t in d["owes_me"]], ["Прислать смету"])
+        self.assertLessEqual(conn.call_count, 1)  # was 2 per speaker and per task
+
+    def test_dull_series_reads_no_transcripts(self):
+        """Audit K21: «Серии без результатов» needs no share of the talk: the lines of its meetings are not read."""
+        from unittest import mock
+
+        from app import series
+
+        sid = series.create_series("Синк")
+        for i in (2, 3, 4):
+            database.update_meeting_fields(self._meeting(f"Синк {i}", f"2026-11-{9 + i:02d}", protocol="## Обзор\n- Ок\n"), series_id=sid)
+        seen = []
+        real = dashboard._outcomes
+        with mock.patch("app.dashboard._outcomes", side_effect=lambda ids, me: seen.append(bool(me)) or real(ids, me)):
+            got = dashboard._dull_series(database.list_meetings(), {})
+        self.assertEqual([x["streak"] for x in got], [3])
+        self.assertEqual(seen, [False])
+
     def test_meetings_are_read_without_their_transcripts(self):
         """The period's meetings: the protocol and each speaker's talk are read in one query, not a
         get_meeting (every word, versions, translations) per meeting; the user's share as before."""

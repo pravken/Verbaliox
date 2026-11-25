@@ -20,6 +20,18 @@ class DocxControlCharsTest(unittest.TestCase):
         self.assertIn("План встречи", text)
         self.assertIn("раз два", text)
 
+    def test_word_is_not_loaded_at_the_start(self):
+        """Audit В22: python-docx and lxml were imported with the app (about 0.1 s of every start); they are
+        loaded at the first Word export."""
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        code = "import sys, app.export_build, app.exporter; print('docx' in sys.modules)"
+        out = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, timeout=120)
+        self.assertEqual(out.stdout.strip().splitlines()[-1:], ["False"], out.stderr[-500:])
+
 
 if __name__ == "__main__":
     unittest.main()

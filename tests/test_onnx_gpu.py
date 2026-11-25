@@ -195,6 +195,32 @@ class OnnxTextTest(unittest.TestCase):
         self.assertLess(float(np.abs(out[sr * 50:]).max()), 0.01)  # the pause is not raised
         self.assertLessEqual(float(np.abs(out).max()), 1.0)
 
+    def test_a_long_recording_is_levelled_without_copies(self):
+        """Audit В21: the loudness of a long recording was found by np.percentile of np.abs (two copies of it), the
+        quiet one raised into two more: 2.8 GB for three hours. Part by part now, as exact for the gain."""
+        import tracemalloc
+
+        import numpy as np
+
+        sr = 16000
+        rng = np.random.default_rng(1)
+        a = (rng.standard_normal(sr * 600).astype(np.float32) * 0.02)  # ten quiet minutes
+        a[sr * 100: sr * 110] *= 0.1  # a quieter part
+        exact = float(np.percentile(np.abs(a), 99.9))
+        self.assertAlmostEqual(asr_onnx._peak(a), exact, delta=exact * 1e-3)
+        before = a.copy()
+        tracemalloc.start()
+        try:
+            out = asr_onnx.level(a, sr)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, a.nbytes * 2)  # one copy and its parts (four copies before)
+        self.assertGreater(float(np.abs(out).max()), 0.5)
+        self.assertLessEqual(float(np.abs(out).max()), 1.0)
+        self.assertTrue(np.array_equal(a, before))  # the caller's array is not changed
+        self.assertFalse(np.shares_memory(out, a))
+
     def test_word_ends_keep_pauses(self):
         # "да" at 0.0, a pause, "нет" at 3.0: the first word ends soon after its token, not at 3.0
         words = asr_onnx.words_from_text("да нет", ["▁да", "▁нет"], [0.0, 3.0], 0.0, 4.0)
@@ -241,6 +267,44 @@ class ClearOneThingTest(unittest.TestCase):
         self.assertFalse(delete_meeting_dub(m["id"], "en"))
 
         self.assertEqual(commitments.delete_for_meeting(m["id"]), 0)
+
+
+class NvmlAgainTest(unittest.TestCase):
+    """Audit В22: one failure of NVML (the driver not ready after sleep, a reset of the video card) left the video
+    memory unknown until a restart; it is tried again after a pause, and a dead handle is opened anew."""
+
+    def test_nvml_is_tried_again(self):
+        from app import vram
+
+        now = [1000.0]
+        state = {"init": 1, "mem": 0, "inits": 0}
+
+        class Lib:
+            def nvmlInit_v2(self):
+                state["inits"] += 1
+                return state["init"]
+
+            def nvmlDeviceGetHandleByIndex_v2(self, i, ref):
+                return 0
+
+            def nvmlDeviceGetMemoryInfo(self, handle, ref):
+                ref._obj.used, ref._obj.total = 3, 8
+                return state["mem"]
+
+        saved = dict(vram._nvml)
+        self.addCleanup(lambda: (vram._nvml.clear(), vram._nvml.update(saved)))
+        vram._nvml.update(lib=None, handle=None, failed=False, failed_at=0.0)
+        with mock.patch("ctypes.CDLL", return_value=Lib()), mock.patch("time.monotonic", lambda: now[0]):
+            self.assertIsNone(vram._nvml_memory())  # the driver not ready
+            state["init"] = 0
+            self.assertIsNone(vram._nvml_memory())  # not on every poll
+            now[0] += vram.NVML_RETRY_SEC
+            self.assertEqual(vram._nvml_memory(), (3, 8))
+            state["mem"] = 1  # the handle died (a reset of the card)
+            self.assertIsNone(vram._nvml_memory())
+            state["mem"] = 0
+            self.assertEqual(vram._nvml_memory(), (3, 8))  # opened anew at the next poll
+        self.assertEqual(state["inits"], 3)
 
 
 if __name__ == "__main__":

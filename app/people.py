@@ -44,7 +44,14 @@ def _set_me(name: str, on: bool) -> None:
         update_settings({"my_name": ", ".join(n for n in names if n.lower() != name.lower())})
 
 
+_READY_AT: List[int] = []  # database.schema_epoch when the table was made: it was made before every reading
+
+
 def init_table() -> None:
+    from app import database
+
+    if _READY_AT and _READY_AT[0] == database.schema_epoch:
+        return
     with _db_lock:
         conn = get_connection()
         conn.execute(
@@ -62,6 +69,7 @@ def init_table() -> None:
         )
         conn.commit()
         conn.close()
+        _READY_AT[:] = [database.schema_epoch]
 
 
 def _clean(name: Any) -> str:
@@ -775,6 +783,26 @@ def _name_patterns(spellings: List[str]) -> List["re.Pattern"]:
     return [re.compile(r"(?<![\w-])" + name_regex(s) + r"(?![\w-])", re.I) for s in spellings if len(s) >= 3]
 
 
+def _name_prefix(spelling: str) -> str:
+    """The start every form of a name begins with (name_regex changes only the last letter of a one-word name):
+    its first word, without its last letter when that may change."""
+    words = re.findall(r"\w+", spelling.casefold())
+    if not words:
+        return ""
+    w = words[0]
+    return w[:4] if len(w) >= 5 else w[:3] if len(w) == 4 else w
+
+
+def _mention_lines(conn: Any, spellings: List[str]) -> List[Any]:
+    """(meeting_id, start, text) of the lines with a word that begins as one of the spellings (of 3 letters and
+    more), from the search index, in any case of the letters."""
+    prefixes = sorted({p for p in (_name_prefix(s) for s in spellings if len(s) >= 3) if p})
+    if not prefixes:
+        return []
+    match = " OR ".join(f'"{p}"*' for p in prefixes)
+    return conn.execute("SELECT meeting_id, start, text FROM segments_fts WHERE segments_fts MATCH ?", (match,)).fetchall()
+
+
 def card(name: str) -> Optional[Dict[str, Any]]:
     """One person of «Контакты»: the directory's entry, the recordings they speak in, were invited to or
     are named in, and their tasks. {person, spoke, invited, mentioned, tasks}; None for a name nobody knows."""
@@ -794,11 +822,9 @@ def card(name: str) -> Optional[Dict[str, Any]]:
         conn = get_connection()
         meetings = {int(r["id"]): dict(r) for r in conn.execute(
             "SELECT id, title, recorded_at, created_at, user_notes FROM meetings WHERE status = 'completed'").fetchall()}
-        # the transcripts that may name the person: the database narrows by the name's start, Python checks
-        likes = sorted({s[:4] for s in spellings if len(s) >= 3})
-        found_rows = conn.execute(
-            "SELECT meeting_id, data FROM segments WHERE " + " OR ".join(["data LIKE ?"] * len(likes)),
-            tuple(f"%{x}%" for x in likes)).fetchall() if likes else []
+        # the lines that may name the person: the search index finds the words that begin as the name, Python checks
+        # its forms (audit K21: a LIKE over every line of the library, words and all, under the lock)
+        found_rows = _mention_lines(conn, spellings)
         conn.close()
 
     def brief(mid: int) -> Dict[str, Any]:
@@ -813,15 +839,11 @@ def card(name: str) -> Optional[Dict[str, Any]]:
         mid = int(r["meeting_id"])
         if mid not in meetings or mid in spoke_ids:
             continue
-        try:
-            seg = json.loads(r["data"] or "{}")
-        except ValueError:
-            continue
-        text = str(seg.get("text") or "")
+        text, at = str(r["text"] or ""), float(r["start"] or 0)
         if any(p.search(text) for p in pats):
-            e = named.setdefault(mid, {**brief(mid), "count": 0, "first_at": float(seg.get("start") or 0)})
+            e = named.setdefault(mid, {**brief(mid), "count": 0, "first_at": at})
             e["count"] += 1
-            e["first_at"] = min(e["first_at"], float(seg.get("start") or 0))
+            e["first_at"] = min(e["first_at"], at)
     from app import commitments
 
     tasks = [t for t in commitments.all_tasks()

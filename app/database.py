@@ -331,6 +331,8 @@ def init_db() -> None:
         )
         cur.execute(_FTS_ROWS_DDL)
         cur.execute(_FTS_ROWS_INDEX)
+        for ddl in _MEETING_INDEXES:  # made once on a database of an earlier version
+            cur.execute(ddl)
         # The transcript: one row per line (see _write_segments), not one JSON in the recording's row
         cur.execute(_SEGMENTS_DDL)
         cur.execute(_VERSIONS_DDL)
@@ -383,6 +385,16 @@ def init_db() -> None:
 
 
 _FTS_SCHEMA_VERSION = 1
+
+# The recordings by what is looked up among them (audit В20): the state polled every few seconds (a download
+# going on), a folder's recordings, a series', the others using the same file before it is deleted. Under a
+# millisecond without them for a library of 1200 recordings, but each lookup read the whole table
+_MEETING_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS meetings_status ON meetings (status)",
+    "CREATE INDEX IF NOT EXISTS meetings_folder ON meetings (folder_id)",
+    "CREATE INDEX IF NOT EXISTS meetings_series ON meetings (series_id)",
+    "CREATE INDEX IF NOT EXISTS meetings_media ON meetings (media_path)",
+)
 
 # Where each line of a recording is in segments_fts (its rowid): the index stores meeting_id and
 # segment_id UNINDEXED, so deleting by them scanned the whole index (an edit of 300 lines took 16 s
@@ -1807,9 +1819,11 @@ def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
 def get_meeting(meeting_id: int) -> Optional[Dict[str, Any]]:
     with _db_lock:
         conn = get_connection()
-        row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
-        m = _deserialize_meeting(dict(row), conn) if row else None
-        conn.close()
+        try:  # closed also when a damaged row fails to read (audit В20: the connection stayed open)
+            row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+            m = _deserialize_meeting(dict(row), conn) if row else None
+        finally:
+            conn.close()
     if m is not None:
         try:
             from app.features import feature_map, suggestion_map

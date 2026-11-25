@@ -453,6 +453,15 @@ async function renderTalkAnalytics() {
   const box = document.getElementById('talk-analytics');
   const m = state.activeMeeting;
   if (!box || !m || !(m.segments || []).length) { if (box) box.innerHTML = ''; return; }
+  // drawn when the tab is shown (switchWorkspaceTab): each opening of a recording asked for its analytics and drew a
+  // bar for each of its phrases, 2700 for a three-hour meeting, into the hidden tab (audit В22)
+  if (state.activeWorkspaceTab !== 'speakers') {
+    if (box.dataset.mid !== String(m.id)) box.innerHTML = '';
+    box.dataset.stale = '1';
+    return;
+  }
+  box.dataset.stale = '';
+  box.dataset.mid = String(m.id);
   const a = await fetch(`/api/meetings/${m.id}/analytics`).then(r => r.ok ? r.json() : null).catch(() => null);
   if (!a || state.activeMeeting !== m) return;
   const segs = m.segments || [];

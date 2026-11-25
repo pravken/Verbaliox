@@ -2947,6 +2947,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-fadd { color: var(--hc-dim, #AEAEB2); }
 .lt-fmain { min-width: 0; }
 .lt-none { padding: 12px 8px; color: var(--hc-dim, #8E8E93); }
+/* the mark after the last row drawn: the next rows are drawn when it comes near (libtable.js, ltWatchEnd) */
+.lt-more { height: 1px; }
 .lt-empty { padding: 48px 16px; text-align: center; color: var(--hc-dim, #8E8E93); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .lt-empty.hidden { display: none; }
 /* A narrow window (as «Задачи», the same width: the bar of either does not fit there in one line): the views on

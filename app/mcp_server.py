@@ -31,6 +31,7 @@ if __package__ in (None, ""):  # run as a script by the agent's client: the app'
 PROTOCOL = "2025-06-18"
 NAME = "verbaliox"
 MAX_TEXT = 200_000  # an answer this long at most (a long transcript is cut, the agent can ask by sections)
+MAX_ITEMS = 500  # decisions or tasks in one answer at most (the agent narrows by the dates, the feature, the person)
 
 
 def _settings() -> Dict[str, str]:
@@ -135,29 +136,42 @@ def get_meeting(id: int, sections: Optional[List[str]] = None) -> Dict[str, Any]
             "text": text[:MAX_TEXT] + ("\n…" if len(text) > MAX_TEXT else "")}
 
 
+def _capped(key: str, items: List[Dict[str, Any]], **extra: Any) -> Dict[str, Any]:
+    """MAX_ITEMS of the items, with how many there are when there are more (a year of a large library listed
+    every decision with its meeting: megabytes in the agent's context)."""
+    out: Dict[str, Any] = {key: items[:MAX_ITEMS], **extra}
+    if len(items) > MAX_ITEMS:
+        out.update(total=len(items), truncated=True)
+    return out
+
+
 def list_decisions(since: str = "", until: str = "", feature: str = "") -> Dict[str, Any]:
-    from app.database import get_meeting as load
+    from app.dashboard import _protocols
     from app.features import decisions_of
 
+    rows = _meetings(since or (date.today() - timedelta(days=30)).isoformat(), until, feature)
+    # the protocols only, in one reading (each meeting was read whole with its transcript)
+    protocols = _protocols([r["id"] for r in rows])
     out = []
-    for r in _meetings(since or (date.today() - timedelta(days=30)).isoformat(), until, feature):
-        m = load(r["id"]) or {}
-        for d in decisions_of((m.get("summaries") or {}).get("protocol") or ""):
+    for r in rows:
+        for d in decisions_of(protocols.get(r["id"]) or ""):
             out.append({"decision": d, "meeting_id": r["id"], "meeting": r["title"], "date": r["date"], "features": r["features"]})
-    return {"decisions": out}
+    return _capped("decisions", out)
 
 
 def list_tasks(scope: str = "mine", person: str = "", status: str = "open") -> Dict[str, Any]:
     """scope: mine (on the user), waiting (promised to the user by others), all; person narrows to someone."""
     from app import commitments
-    from app.people import canonical, my_names
+    from app.people import _rows as directory_rows, canonical, my_names
 
     hidden = _hidden()
-    me = set(my_names()) | {canonical(n).lower() for n in my_names()}
+    rows = directory_rows()  # the directory read once, not for each task
+    me = set(my_names()) | {canonical(n, rows).lower() for n in my_names()}
 
     def is_me(name: str) -> bool:  # a variant merged in the directory («Макс» of «Maksim Orlov») is the same person
-        return bool(name) and (name.lower() in me or canonical(name).lower() in me)
+        return bool(name) and (name.lower() in me or canonical(name, rows).lower() in me)
 
+    want = canonical(person, rows).lower() if person else ""
     out = []
     for t in commitments.all_tasks():
         if t["meeting_id"] in hidden or (status != "all" and (t.get("status") or "open") != status):
@@ -167,12 +181,12 @@ def list_tasks(scope: str = "mine", person: str = "", status: str = "open") -> D
             continue
         if scope == "waiting" and (is_me(who) or not is_me(to)):
             continue
-        if person and canonical(person).lower() not in (canonical(who).lower(), canonical(to).lower()):
+        if person and want not in (canonical(who, rows).lower(), canonical(to, rows).lower()):
             continue
         out.append({"task": t.get("what") or "", "who": who, "for": to, "due": t.get("due_date") or "", "status": t.get("status") or "open",
                     "meeting_id": t["meeting_id"], "meeting": t.get("meeting_title") or "", "date": str(t.get("meeting_date") or "")[:10],
                     "quote": t.get("quote") or ""})
-    return {"tasks": out, "me": sorted(me)}
+    return _capped("tasks", out, me=sorted(me))
 
 
 def list_people() -> Dict[str, Any]:

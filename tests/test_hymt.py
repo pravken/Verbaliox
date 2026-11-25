@@ -224,6 +224,56 @@ class RepairTemplateTest(unittest.TestCase):
                 t.join(10)
         self.assertEqual(peak[0], 1)
 
+    def test_the_status_does_not_wait_for_the_repair(self):
+        """Audit K22: the status (read every few seconds, 0.8 s for Ollama's list) made the model again itself,
+        up to two minutes; the repair runs beside it, once, and the status answers at once."""
+        import threading
+        import time as _time
+
+        go, calls = threading.Event(), []
+
+        def slow(base, models, strict=False):
+            calls.append(list(models))
+            go.wait(10)
+            return models
+
+        class Tags:
+            status_code = 200
+
+            def json(self):
+                return {"models": [{"name": RAW_1_8B}, {"name": "gemma4:e4b"}]}
+
+        class Client:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def get(self, url, **k):
+                return Tags()
+
+        with mock.patch.object(ollama_client, "_is_ollama_port_open", return_value=True), \
+                mock.patch.object(ollama_client.httpx, "Client", Client), \
+                mock.patch.object(ollama_client, "repair_hymt_models", side_effect=slow), \
+                mock.patch.object(ollama_client, "check_translator_files"), \
+                mock.patch.object(ollama_client, "find_ollama_executable", return_value="ollama"), \
+                mock.patch.object(ollama_client, "get_all_settings", return_value={"ollama_model": "gemma4:e4b"}):
+            t0 = _time.monotonic()
+            st = ollama_client.get_ollama_status()
+            st2 = ollama_client.get_ollama_status()
+            took = _time.monotonic() - t0
+            go.set()
+            for t in list(ollama_client._hymt_background):
+                t.join(5)
+        self.assertLess(took, 2.0)
+        self.assertEqual(len(calls), 1)  # one repair, not one per reading
+        self.assertIn(RAW_1_8B, st["models"])
+        self.assertTrue(st2["running"])
+
     def test_broken_template_is_detected(self):
         self.assertTrue(ollama_client.template_is_broken(self.BROKEN))
         self.assertTrue(ollama_client.template_is_broken(""))

@@ -22,12 +22,20 @@ BRIEF_MEETINGS = 5
 _DEFAULT_NAME = re.compile(r"^(Участник|Speaker|SPEAKER)[ _]?\d+$", re.I)
 
 
+_READY_AT: List[int] = []  # database.schema_epoch when the table was made: it was made before every reading
+
+
 def _init() -> None:
+    from app import database
+
+    if _READY_AT and _READY_AT[0] == database.schema_epoch:
+        return
     with _db_lock:
         conn = get_connection()
         conn.execute("CREATE TABLE IF NOT EXISTS series (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at TEXT NOT NULL)")
         conn.commit()
         conn.close()
+    _READY_AT[:] = [database.schema_epoch]
 
 
 def list_series() -> List[Dict[str, Any]]:

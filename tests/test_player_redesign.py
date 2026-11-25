@@ -143,5 +143,67 @@ class ExportOptionsTest(unittest.TestCase):
         self.assertNotIn("Анна", bare)
 
 
+class WavePeaksTest(unittest.TestCase):
+    """Audit В21: the loudness of the waveform (400 numbers) read the whole WAV into memory, 1.4 GB for a
+    three-hour recording; part by part now, with the same numbers."""
+
+    def test_the_peaks_are_read_part_by_part(self):
+        import tempfile
+        import tracemalloc
+
+        import numpy as np
+        import soundfile as sf
+
+        from app.audio_utils import loudness_peaks
+
+        sr = 16000
+        rng = np.random.default_rng(3)
+        mono = (rng.standard_normal(sr * 300) * np.repeat(rng.random(300), sr) * 0.3).astype(np.float32)
+        stereo = np.stack([mono, mono * 0.5], axis=1)
+        with tempfile.TemporaryDirectory() as d:
+            for name, data in (("mono.wav", mono), ("stereo.wav", stereo)):
+                path = Path(d) / name
+                sf.write(str(path), data, sr, subtype="FLOAT")
+                flat = data.mean(axis=1) if data.ndim > 1 else data
+                usable = len(flat) - len(flat) % 400
+                rms = np.sqrt(np.mean(np.square(flat[:usable].reshape(400, -1)), axis=1))
+                want = [round(float(v), 3) for v in np.clip(rms / float(np.percentile(rms, 98)), 0.0, 1.0)]
+                tracemalloc.start()
+                try:
+                    got = loudness_peaks(path, 400)
+                    peak = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+                self.assertEqual(len(got), 400)
+                self.assertLess(max(abs(x - y) for x, y in zip(got, want)), 0.0015, name)
+                self.assertLess(peak, data.nbytes / 20, name)  # one bar at a time, not the file
+
+    def test_only_a_part_of_the_file_is_decoded(self):
+        """Audit В21: the speed test made the whole recording a WAV for one minute of it; a full disk said nothing
+        of the disk."""
+        import tempfile
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from app import audio_utils
+
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "clip.wav"
+            cmds = []
+
+            def run(cmd, flags, check):
+                cmds.append(cmd)
+                out.write_bytes(b"\0" * 200)
+                return SimpleNamespace(returncode=0, stderr="")
+            with mock.patch.object(audio_utils, "_run_ffmpeg", side_effect=run), \
+                    mock.patch.object(audio_utils, "find_tool", return_value="ffmpeg"):
+                audio_utils.extract_audio_16k_mono(Path(d) / "a.mp4", out, enhance_audio=False, start=5400, duration=60.5)
+        cmd = cmds[0]
+        self.assertEqual(cmd[cmd.index("-ss") + 1], "5400.000")
+        self.assertLess(cmd.index("-ss"), cmd.index("-i"))  # a seek in the input, not a decode up to it
+        self.assertEqual(cmd[cmd.index("-t") + 1], "60.500")
+        self.assertEqual(audio_utils.ffmpeg_reason("x.wav: No space left on device"), "на диске не осталось места")
+
+
 if __name__ == "__main__":
     unittest.main()

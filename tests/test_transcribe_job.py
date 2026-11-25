@@ -600,7 +600,7 @@ class WhisperFallbackTest(unittest.TestCase):
         calls = []
 
         class FakeWhisper:
-            def __init__(self, path, device, compute_type, download_root):
+            def __init__(self, path, device, compute_type, download_root, cpu_threads=0):
                 calls.append((device, compute_type))
                 if device == "cuda":
                     raise RuntimeError("cudnn missing")

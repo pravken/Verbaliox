@@ -160,13 +160,137 @@ function rpComputeBarSpeakers() {
 }
 
 // --- Drawing ---
+// The canvas's size, read once after it changes (a ResizeObserver, the window, the zoom), not at every frame of
+// playback: getBoundingClientRect at 60 frames a second made the page lay itself out each time (audit K20)
+function rpCanvasBox(canvas) {
+  const z = (typeof uiZoom === 'function' ? uiZoom() : 1) || 1;
+  if (!rp.box || rp.box.z !== z || rp.box.el !== canvas) {
+    if (!rp.boxWatch && typeof ResizeObserver === 'function') {
+      rp.boxWatch = new ResizeObserver(() => { rp.box = null; rpRender(); });
+      window.addEventListener('resize', () => { rp.box = null; });
+    }
+    if (rp.boxWatch && (!rp.box || rp.box.el !== canvas)) rp.boxWatch.observe(canvas);
+    const r = canvas.getBoundingClientRect();
+    rp.box = { el: canvas, z, w: r.width, h: r.height };
+  }
+  return rp.box;
+}
+
+// The layers that stay the same while the recording plays (audit K20: every frame drew all 180 bars and every
+// phrase of the speakers' ribbon, thousands of rounded rectangles for a three-hour meeting): the bars as played,
+// as not yet played and under the mouse, and the ribbon as played and not yet played, each drawn once on a
+// canvas of its own. A frame copies them, each cut at the playhead, and draws only what moves
+function rpLayerKey(w, h, dpr, dur) {
+  const all = (state.activeMeeting && state.activeMeeting.speakers) || {};
+  const colors = Object.keys(all).map(k => `${k}=${(all[k] && all[k].color) || ''}`).join(',');
+  return [w, h, dpr, dur, state.speakerFilter || '', state.skipSilence ? 1 : 0, rp.pauses.length, colors].join('|');
+}
+
+function rpLayers(w, h, dpr, dur) {
+  const key = rpLayerKey(w, h, dpr, dur);
+  const segs = rpSegments();
+  const L = rp.layers;
+  if (L && L.key === key && L.peaks === rp.peaks && L.barSpk === rp.barSpk && L.pauses === rp.pauses
+      && L.segs === segs && L.nSegs === segs.length) return L;
+  const make = () => {
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return [c, ctx];
+  };
+  const x = (t) => (dur > 0 ? (t / dur) * w : 0);
+  const filter = state.speakerFilter;
+  const peaks = rp.peaks.length ? rp.peaks : new Array(RP_BARS).fill(0.14);
+  const n = peaks.length;
+  const gap = 2;
+  const barW = Math.max(1.5, (w - gap * (n - 1)) / n);
+  const bandTop = 8, bandH = Math.max(20, h - 18);  // bars from 8 px at the top to 10 px above the bottom
+  const base = bandTop + bandH * 0.58;
+  const pauses = state.skipSilence ? rp.pauses : [];
+  const hush = Array.from({ length: n }, (_, i) => {
+    const t = ((i + 0.5) / n) * dur;
+    return pauses.some(([a, b]) => t >= a && t <= b);
+  });
+  // The pauses that are skipped: hatched, under the bars
+  const hatch = (ctx) => {
+    if (!pauses.length) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    for (const [a0, b0] of pauses) {
+      const a = x(a0), bw = Math.max(3, x(b0) - a);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(a, 6, bw, h - 16);
+      ctx.clip();
+      for (let k = a - h; k < a + bw; k += 4) { ctx.beginPath(); ctx.moveTo(k, h - 10); ctx.lineTo(k + h, -10); ctx.stroke(); }
+      ctx.restore();
+    }
+    ctx.restore();
+  };
+  // The bars: above a line at 58 % of their band, a faint reflection below it. kind: played, ahead, hover
+  const bars = (kind) => {
+    const [c, ctx] = make();
+    hatch(ctx);
+    for (let i = 0; i < n; i++) {
+      const bx = i * (barW + gap);
+      const who = rp.barSpk[i];
+      const off = !!filter && who && who !== filter;
+      const k = off ? 0.35 : hush[i] ? 0.55 : 1;
+      const amp = Math.max(0.1, peaks[i]);
+      const topH = Math.max(2, amp * bandH * 0.52 * k);
+      const botH = Math.max(1.5, amp * bandH * 0.19 * k);
+      const color = off ? '#3A3A3F' : rpSpeaker(who).color;
+      ctx.globalAlpha = off ? 0.7 : 1;
+      ctx.fillStyle = kind === 'played' ? color : off ? '#2C2C30' : rpHexA(color, kind === 'hover' ? 0.62 : 0.42);
+      rpRoundRect(ctx, bx, base - topH, barW, topH, Math.min(3, barW / 2));
+      ctx.fill();
+      ctx.globalAlpha = off ? 0.2 : kind === 'played' ? 0.45 : 0.5;
+      rpRoundRect(ctx, bx, base + 1.5, barW, botH, Math.min(3, barW / 2));
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    return c;
+  };
+  // Who speaks when: a ribbon at the bottom (the phrase being played is drawn over it at each frame)
+  const ribbon = (played) => {
+    const [c, ctx] = make();
+    for (const s of segs) {
+      const a = x(Number(s.start) || 0), b = x(Number(s.end) || Number(s.start) || 0);
+      if (b - a < 0.5) continue;
+      ctx.globalAlpha = filter && s.speaker !== filter ? 0.15 : played ? 0.75 : 0.4;
+      ctx.fillStyle = rpSpeaker(s.speaker).color;
+      rpRoundRect(ctx, a, h - 10, Math.max(1, b - a - 1), 4, 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    return c;
+  };
+  rp.layers = { key, peaks: rp.peaks, barSpk: rp.barSpk, pauses: rp.pauses, segs, nSegs: segs.length, n, barW, gap,
+    played: bars('played'), ahead: bars('ahead'), hover: null, hoverBars: () => bars('hover'),
+    ribPlayed: ribbon(true), ribAhead: ribbon(false) };
+  rp.layersDrawn = (rp.layersDrawn || 0) + 1;
+  return rp.layers;
+}
+
+// A layer copied between x0 and x1 (CSS pixels)
+function rpBlit(ctx, layer, x0, x1, w, h) {
+  x0 = Math.max(0, x0);
+  x1 = Math.min(w, x1);
+  if (x1 <= x0) return;
+  const sx = layer.width / w;
+  ctx.drawImage(layer, x0 * sx, 0, (x1 - x0) * sx, layer.height, x0, 0, x1 - x0, h);
+}
+
 function rpRender() {
   const canvas = document.getElementById('player-waveform-canvas');
   if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const z = (typeof uiZoom === 'function' ? uiZoom() : 1) || 1;
-  const w = Math.max(200, rect.width / z || 540);
-  const h = Math.max(40, rect.height / z || 76);
+  const box = rpCanvasBox(canvas);
+  const z = box.z;
+  const w = Math.max(200, box.w / z || 540);
+  const h = Math.max(40, box.h / z || 76);
   const dpr = (window.devicePixelRatio || 1) * z;
   if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
     canvas.width = Math.round(w * dpr);
@@ -220,74 +344,43 @@ function rpRender() {
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
-  // The pauses that are skipped: hatched
-  if (state.skipSilence && rp.pauses.length) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth = 1;
-    for (const [a0, b0] of rp.pauses) {
-      const a = x(a0), bw = Math.max(3, x(b0) - a);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(a, 6, bw, h - 16);
-      ctx.clip();
-      for (let k = a - h; k < a + bw; k += 4) { ctx.beginPath(); ctx.moveTo(k, h - 10); ctx.lineTo(k + h, -10); ctx.stroke(); }
-      ctx.restore();
-    }
-    ctx.restore();
-  }
 
-  // The bars: above a line at 58 % of their band, a faint reflection below it
-  const peaks = rp.peaks.length ? rp.peaks : new Array(RP_BARS).fill(0.14);
-  const n = peaks.length;
-  const gap = 2;
-  const barW = Math.max(1.5, (w - gap * (n - 1)) / n);
-  const bandTop = 8, bandH = Math.max(20, h - 18);  // bars from 8 px at the top to 10 px above the bottom
-  const base = bandTop + bandH * 0.58;
-  const pos = ratio * n;
-  const filter = state.speakerFilter;
-  for (let i = 0; i < n; i++) {
-    const bx = i * (barW + gap);
-    const t = ((i + 0.5) / n) * dur;
-    const who = rp.barSpk[i];
-    const off = !!filter && who && who !== filter;
-    const hush = state.skipSilence && rp.pauses.some(([a, b]) => t >= a && t <= b);
-    const k = off ? 0.35 : hush ? 0.55 : 1;
-    const amp = Math.max(0.1, peaks[i]);
-    const topH = Math.max(2, amp * bandH * 0.52 * k);
-    const botH = Math.max(1.5, amp * bandH * 0.19 * k);
-    const color = off ? '#3A3A3F' : rpSpeaker(who).color;
-    const frac = Math.max(0, Math.min(1, pos - i));
-    const ahead = off ? '#2C2C30' : rpHexA(color, 0.42);
-    let fill = frac >= 1 ? color : frac <= 0 ? ahead : null;
-    if (!fill) {
-      const g = ctx.createLinearGradient(bx, 0, bx + barW, 0);
-      g.addColorStop(0, color); g.addColorStop(frac, color); g.addColorStop(frac, ahead); g.addColorStop(1, ahead);
-      fill = g;
+  // The bars and the ribbon from their layers: played up to the playhead (within its bar, where the bar's
+  // colour changes), the bars under the mouse ahead of it lighter
+  const L = rpLayers(w, h, dpr, dur);
+  const pos = ratio * L.n;
+  const step = L.barW + L.gap;
+  const split = Math.floor(pos) * step + Math.min(1, pos - Math.floor(pos)) * L.barW;
+  rpBlit(ctx, L.played, 0, split, w, h);
+  let hoverFrom = w;
+  let hoverTo = w;
+  if (state.playerHoverRatio >= 0) {
+    const last = Math.min(L.n - 1, Math.floor(state.playerHoverRatio * L.n));
+    const first = Math.ceil(pos);
+    if (last >= first) {
+      hoverFrom = first * step;
+      hoverTo = last * step + L.barW + L.gap / 2;
+      if (!L.hover) L.hover = L.hoverBars();
     }
-    if (state.playerHoverRatio >= 0 && frac <= 0 && i / n <= state.playerHoverRatio && !off) fill = rpHexA(color, 0.62);
-    ctx.globalAlpha = off ? 0.7 : 1;
-    ctx.fillStyle = fill;
-    rpRoundRect(ctx, bx, base - topH, barW, topH, Math.min(3, barW / 2));
-    ctx.fill();
-    ctx.globalAlpha = off ? 0.2 : frac > 0 ? 0.45 : 0.5;
-    rpRoundRect(ctx, bx, base + 1.5, barW, botH, Math.min(3, barW / 2));
-    ctx.fill();
   }
-  ctx.globalAlpha = 1;
-
-  // Who speaks when: a ribbon at the bottom
-  segs.forEach((s, i) => {
-    const a = x(Number(s.start) || 0), b = x(Number(s.end) || Number(s.start) || 0);
-    if (b - a < 0.5) return;
-    const col = rpSpeaker(s.speaker).color;
-    const on = i === idx;
-    ctx.globalAlpha = filter && s.speaker !== filter ? 0.15 : on ? 1 : (Number(s.end) || 0) <= cur ? 0.75 : 0.4;
-    ctx.fillStyle = col;
-    rpRoundRect(ctx, a, h - (on ? 11 : 10), Math.max(1, b - a - 1), on ? 6 : 4, 2);
-    ctx.fill();
-  });
-  ctx.globalAlpha = 1;
+  rpBlit(ctx, L.ahead, split, hoverFrom, w, h);
+  if (hoverTo > hoverFrom) {
+    rpBlit(ctx, L.hover, hoverFrom, hoverTo, w, h);
+    rpBlit(ctx, L.ahead, hoverTo, w, w, h);
+  }
+  rpBlit(ctx, L.ribPlayed, 0, ratio * w, w, h);
+  rpBlit(ctx, L.ribAhead, ratio * w, w, w, h);
+  if (curSeg) {  // the phrase being played: higher and brighter on the ribbon
+    const a = x(Number(curSeg.start) || 0), b = x(Number(curSeg.end) || Number(curSeg.start) || 0);
+    if (b - a >= 0.5) {
+      const filter = state.speakerFilter;
+      ctx.globalAlpha = filter && curSeg.speaker !== filter ? 0.15 : 1;
+      ctx.fillStyle = curColor;
+      rpRoundRect(ctx, a, h - 11, Math.max(1, b - a - 1), 6, 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
 
   // The marked moments
   for (const t of rp.marks) {

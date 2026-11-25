@@ -171,6 +171,35 @@ class ObsidianTest(unittest.TestCase):
         self.assertNotEqual(written, foreign)
         self.assertEqual(foreign.read_text(encoding="utf-8"), "моя заметка")
 
+    def test_other_notes_do_not_wait_for_the_model(self):
+        """Audit K22: an export that has the model write the overview held the lock of every note for those
+        minutes; another recording's note is written meanwhile, and the overview made lands in the note."""
+        import threading
+
+        slow = _done_meeting(title="Долгая", recorded_at="2024-05-12 10:30:00")
+        quick = _done_meeting(title="Быстрая", recorded_at="2024-05-12 11:30:00")
+        database.update_meeting_fields(slow["id"], summaries_json="{}")
+        update_settings({"obsidian_generate": "true", "obsidian_summary": "true", "obsidian_tasks": "false"})
+        self.addCleanup(update_settings, {"obsidian_generate": "false", "obsidian_tasks": "true"})
+        inside, go = threading.Event(), threading.Event()
+
+        def summary(**kw):
+            inside.set()
+            go.wait(10)
+            return "## Обзор\n- Сделано моделью"
+        done = {}
+        with mock.patch("app.ollama_client.generate_meeting_summary", side_effect=summary), \
+                mock.patch("app.grounding.maybe_ground", side_effect=lambda text, key, m: text):
+            t = threading.Thread(target=lambda: done.setdefault("slow", obsidian.export_meeting(slow["id"], generate=True)))
+            t.start()
+            self.assertTrue(inside.wait(5))
+            other = obsidian.export_meeting(quick["id"])  # waited for the model before
+            self.assertFalse(done)
+            go.set()
+            t.join(10)
+        self.assertTrue(other.is_file())
+        self.assertIn("Сделано моделью", done["slow"].read_text(encoding="utf-8"))
+
     def test_notes_follow_the_date_folders_and_come_back(self):
         """Asked by the user: «Папки по дате» turned on, the notes made before go into their date's folders;
         turned off, they come back and the date folders left empty go."""
@@ -486,6 +515,26 @@ class LibraryScopeTest(unittest.TestCase):
         self.assertIn("Тестирование до пятницы.", chat.call_args[0][3])
         with self.assertRaises(ValueError):
             library_qa.ask_library("вопрос", meeting_ids=[])
+
+    def test_a_large_folder_is_not_read_whole(self):
+        """Audit K21: every recording of a chosen folder was read whole (its lines and words) only to learn that the
+        folder is too long to be given in full; SQLite counts the length, the overviews answer without the texts."""
+        from app import library_qa
+
+        folder = create_folder("Large")
+        for _ in range(3):
+            set_meeting_folder(_done_meeting()["id"], folder["id"])
+        ids = meeting_ids_in_folder(folder["id"])
+        self.assertEqual([s["chars"] for s in library_qa._scope(ids)], [library_qa._transcript_chars(get_meeting(i)) for i in ids])
+        with mock.patch.object(library_qa, "FULL_MODE_MAX_CHARS", 10), \
+                mock.patch("app.library_qa.get_meeting", side_effect=AssertionError("a transcript read whole")), \
+                mock.patch("app.semantic.search", return_value=[]), \
+                mock.patch("app.ollama_client.ensure_ollama_running"), \
+                mock.patch("app.ollama_client.get_ollama_status", return_value={"running": True, "models": ["qwen2.5:7b"]}), \
+                mock.patch("app.ollama_client._ollama_chat", return_value="Коротко [1].") as chat:
+            res = library_qa.ask_library("какие итоги квартала?", meeting_ids=ids)
+        self.assertEqual(res["mode"], "search")
+        self.assertIn("Коротко", chat.call_args[0][3])  # the overviews of the folder
 
     def _ask(self, question, reply):
         from app import library_qa

@@ -1848,7 +1848,7 @@ async function refreshCallMicNow() {
   const modal = document.getElementById('modal-settings');
   const block = document.getElementById('call-record-block');
   // Only while the recording settings are on screen
-  if (!box || !modal || modal.classList.contains('hidden') || !block || block.classList.contains('hidden') || !block.offsetParent) return;
+  if (document.hidden || !box || !modal || modal.classList.contains('hidden') || !block || block.classList.contains('hidden') || !block.offsetParent) return;
   const st = await fetch('/api/calls/status').then(r => r.json()).catch(() => null);
   if (st) {
     // Program names as people know them: "chrome.exe" -> "chrome", no store package suffixes

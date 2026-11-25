@@ -301,20 +301,15 @@ def _run_asr(m: Dict[str, Any], models: List[str], clip_sec: int) -> Dict[str, A
     lang = m.get("language") if m.get("language") not in (None, "", "auto", "mixed") else None  # found by the transcription
     _set(stage="Подготовка звука…")
     with tempfile.TemporaryDirectory(prefix="vs_bench_") as tmp:
-        full = Path(tmp) / "full.wav"
-        extract_audio_16k_mono(m["media_path"], full, enhance_audio=False)
         import wave
 
-        with wave.open(str(full), "rb") as w:
-            w.setpos(min(w.getnframes(), int(start * 16000)))
+        # only the fragment compared is decoded: a three-hour recording was made a WAV whole for a minute of it
+        # (audit В21: a minute of ffmpeg and 345 MB on the disk)
+        clip = Path(tmp) / "clip.wav"
+        extract_audio_16k_mono(m["media_path"], clip, enhance_audio=False, start=start, duration=end - start + 0.5)
+        with wave.open(str(clip), "rb") as w:
             frames = w.readframes(int((end - start) * 16000) + 16000 // 2)
         audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-        clip = Path(tmp) / "clip.wav"
-        with wave.open(str(clip), "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(16000)
-            w.writeframes(frames)
         dur = len(audio) / 16000
         for mid in models:
             _check()
