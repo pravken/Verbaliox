@@ -67,6 +67,7 @@ function switchAppView(view) {
   updateRecordButtonState();
   renderTopbar();
   navRecord();
+  if (document.getElementById('toast')?.children.length) liftToasts();  // a notice shown stays clear of the new view
 }
 
 // --- «Назад» / «Вперёд» of the mouse (and Alt+← / Alt+→) inside the app (reported by the user: the window

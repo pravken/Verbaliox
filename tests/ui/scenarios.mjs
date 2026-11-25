@@ -2796,6 +2796,25 @@ await step('column dropped on itself stays', async () => {
   expect(r.before === r.after, `the order changed: ${r.before} → ${r.after}`);
 });
 
+// The notices stand clear of the player's controls and the assistant's question (the notice of an update covered them)
+await step('notices clear of the player and the question', async () => {
+  const covered = async (sel) => page.evaluate((sel) => [...document.querySelectorAll(sel)].filter(b => b.getClientRects().length).filter(b => {
+    const r = b.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('#toast');
+  }).map(b => b.id || b.className), sel);
+  const notice = () => page.evaluate(() => { document.getElementById('toast').innerHTML = ''; showToast('Доступна версия 9.9.9', { label: 'Подробнее', onClick: () => {} }); });
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); });
+  await sleep(600);
+  await notice();
+  await sleep(400);
+  const player = await covered('.rp-right button, .rp-right input');
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(400);
+  const ask = await covered('#library-ask-btn, #library-question');
+  await page.evaluate(() => { document.getElementById('toast').innerHTML = ''; switchAppView('library'); });
+  expect(!player.length && !ask.length, `covered by a notice: ${[...player, ...ask]}`);
+});
+
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));
