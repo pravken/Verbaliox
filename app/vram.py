@@ -521,12 +521,12 @@ def vram_snapshot() -> Dict[str, Any]:
     writing = set(analysis_running())
     for name in names:
         m = loaded_ollama.get(name)
-        busy = bool(m) and name in writing  # an overview or an answer is being written with it
+        in_use = bool(m) and name in writing  # an overview or an answer is being written with it (not `busy`: the job)
         chips.append({
             "kind": "ollama", "name": name, "label": format_llm_model_name(name), "default": name == wanted_llm,
             "loaded": bool(m), "size_gb": m["size_vram_gb"] if m else None,
             "loading": not m and loading_llm == name,
-            "can_unload": bool(m) and not busy, "in_use": busy,
+            "can_unload": bool(m) and not in_use, "in_use": in_use,
             "can_preload": not m and not _ollama_loading.is_set(),
         })
 
