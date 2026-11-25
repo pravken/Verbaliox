@@ -126,7 +126,7 @@ class StaticUiTest(unittest.TestCase):
             + (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
         defined = {c.replace("\\", "") for c in re.findall(r"\.((?:\\.|[A-Za-z0-9_-])+)", css)}
         # Names the scripts look for, with no style of their own
-        hooks = {"dark", "rec-app-video", "ask-body", "cap-o-tag", "cap-t-tag", "del-opt", "row-more", "tr-word", "tx-chunk"}
+        hooks = {"dark", "rec-app-video", "ask-body", "cap-o-tag", "cap-t-tag", "cap-w", "del-opt", "row-more", "tr-word", "tx-chunk"}
         used = {c for m in re.finditer(r'\sclass="([^"]*)"', HTML) for c in m.group(1).split() if "${" not in c}
         for f in sorted((ROOT / "static" / "js").glob("*.js")):
             for m in re.finditer(r"""class(?:Name)?\s*=\s*["']([^"'$]*)["']""", f.read_text(encoding="utf-8")):
@@ -154,8 +154,8 @@ class StaticUiTest(unittest.TestCase):
         syntax = {"if", "for", "while", "switch", "catch", "function", "return", "async", "await", "of", "constructor",
                   "typeof", "super", "import"}
         # Parameters and object methods called by their short name
-        local = {"change", "commit", "endOf", "get", "jump", "onSeek", "preventDefault", "reject", "render", "resolve",
-                 "restore", "startOf", "stopPropagation"}
+        local = {"change", "commit", "endOf", "flush", "get", "jump", "onSeek", "pace", "preventDefault", "reject", "render", "resolve",
+                 "restore", "reveal", "startOf", "stopPropagation"}
         files = sorted((ROOT / "static" / "js").glob("*.js")) + [ROOT / "static" / "i18n.js", ROOT / "static" / "server_text.js"]
         defined, calls = set(), {}
         for f in files:
