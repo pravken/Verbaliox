@@ -730,6 +730,9 @@ async function transcribeWithPickedModel() {
     if (await confirmDialog(t('txMeetingNowTitle'), t('txMeetingNowText'), t('txMeetingNowYes'), false)) {
       const r = await fetch(`/api/queue/${m.id}/run-now`, { method: 'POST' }).catch(() => null);
       if (r && r.ok) { showToast(t('txMeetingNowStarted')); return; }
+      // refused: why, as «Начать сейчас» of the queue says it (not «начнётся после встречи»)
+      showToast(r ? errorText(await readJson(r), r) : t('errorGeneric'));
+      return;
     }
     showToast(t('txMeetingLater'));
     return;

@@ -1238,6 +1238,26 @@ await step('live draft grows word by word without jumps', async () => {
   await page.evaluate(() => { liveCap.lines.clear(); capReset(); syncStudioCaptions(); switchAppView('library'); });
 });
 
+// Two hours of captions: the page keeps the last 300 lines (found in review: thousands, all sorted at each
+// update), the document shows 150, the text let go stays for «Спросить» of a restarted session
+await step('captions keep the last lines', async () => {
+  const got = await page.evaluate(() => {
+    liveCap.lines.clear();
+    capReset();
+    for (let id = 1; id <= 420; id++) liveCap.lines.set(id, { id, text: `Строка ${id}`, lang: 'ru', translation: '', at: id });
+    syncStudioCaptions();
+    const out = { kept: liveCap.lines.size, first: Math.min(...liveCap.lines.keys()), rows: document.querySelectorAll('#studio-cap-rows > .cap-row').length,
+      gone: (liveCap.gone || []).length, goneFirst: ((liveCap.gone || [])[0] || {}).text };
+    liveCap.lines.clear();
+    liveCap.gone = [];
+    capReset();
+    syncStudioCaptions();
+    return out;
+  });
+  expect(got.kept === 300 && got.first === 121 && got.rows === 150, `the lines kept: ${JSON.stringify(got)}`);
+  expect(got.gone === 120 && got.goneFirst === 'Строка 1', `the text let go is lost: ${JSON.stringify(got)}`);
+});
+
 await step('captions do not start by themselves', async () => {
   // «Не мешать на встречах» holds them on a meeting only: a voice note recorded by hand starts with them
   const held = await page.evaluate(() => [
@@ -1427,6 +1447,41 @@ await step('studio choices kept', async () => {
   await page.unroute('**/api/live/models');
 });
 
+// A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
+// fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
+await step('a choice in flight survives a settings read', async () => {
+  const cur = await page.evaluate(() => liveSettings().live_speed || 'quality');
+  const other = cur === 'fast' ? 'quality' : 'fast';
+  let release, held = 0, passed = 0;
+  const gate = new Promise(r => { release = r; });
+  await page.route('**/api/settings', async route => {
+    if (route.request().method() === 'POST' && /live_speed/.test(route.request().postData() || '')) { held++; await gate; }
+    await route.continue().catch(() => {});  // the held one may be reported handled already: it reaches the server all the same
+    passed++;
+  });
+  try {
+    await page.evaluate(s => studioSetSpeed(s), other);
+    for (let i = 0; i < 30 && !held; i++) await sleep(100);
+    expect(held === 1, 'the save was not held');
+    await page.evaluate(() => fillSystemInfo());
+    const mid = await page.evaluate(() => [liveSettings().live_speed, studio.speed]);
+    expect(mid.every(v => v === other), `the settings read put the old choice back: ${mid}`);
+  } finally {
+    release();
+    for (let i = 0; i < 30 && passed < held; i++) await sleep(100);
+    await page.unroute('**/api/settings');
+  }
+  let saved = '';
+  for (let i = 0; i < 30 && saved !== other; i++) {
+    await sleep(100);
+    saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.live_speed));
+  }
+  expect(saved === other, `the choice did not reach the server: ${saved}`);
+  await page.evaluate(() => fillSystemInfo());
+  expect(await page.evaluate(() => liveSettings().live_speed) === other, 'a later read lost the choice');
+  await page.evaluate(s => studioSetSpeed(s), cur);
+});
+
 // The dashboard: the first page, its widgets, «Настроить» adds and removes one, a period changes the numbers
 await step('dashboard', async () => {
   await page.evaluate(() => { resetDashboard(); switchAppView('dashboard'); });  // the default layout, whatever was arranged before
@@ -1514,8 +1569,10 @@ await step('dashboard', async () => {
   await sleep(300);
 });
 
-// «Обзор» of a year and of any past period (asked by the user): ‹ goes back, the name says which one, «Сегодня»
-// returns; the figures compared with the period before or the same days a year earlier
+// «Обзор» of a year and of any past period (asked by the user): ‹ goes back, the name says which one, «Текущий
+// период» returns; the figures compared with the period before or the same days a year earlier. A year with no
+// data has no time without meetings («—», found in review: 2088 h made up); «Нагрузка недели» and «Рабочий
+// день» of a past period show its last week, named, not the current one (found in review)
 await step('dashboard: a past year, the comparison', async () => {
   const until = async (fn, what) => {
     for (let k = 0; k < 50; k++) { if (await page.evaluate(fn)) return; await sleep(100); }
@@ -1526,7 +1583,7 @@ await step('dashboard: a past year, the comparison', async () => {
   await page.click('#db-periods button >> nth=3');
   await until(() => DB.data && DB.data.period === 'year', 'the year did not come');
   expect(await name() === String(year), `the current year is not named: ${await name()}`);
-  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Сегодня» on the current period');
+  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Текущий период» on the current period');
   expect(await page.isDisabled('#db-nav button[data-click="dbShiftPeriod"] >> nth=1'), '› is open on the current period');
   expect(await page.evaluate(() => DB.data.buckets.length === 12 && DB.data.buckets[0].kind === 'month'), 'the year is not by month');
   await page.click('#db-nav button[data-click="dbShiftPeriod"] >> nth=0');
@@ -1534,11 +1591,34 @@ await step('dashboard: a past year, the comparison', async () => {
   expect(await name() === String(year - 1), `the year before is not named: ${await name()}`);
   expect(await page.evaluate(() => DB.data.start) === `${year - 1}-01-01`, 'not the year before');
   expect(!(await page.isDisabled('#db-nav button[data-click="dbShiftPeriod"] >> nth=1')), '› is shut on a past period');
+  expect(await page.textContent('#db-nav button[data-click="dbToCurrent"]') === 'Текущий период', 'the way back is not «Текущий период»');
+  // the seed has nothing in the year before: «Время без встреч» is «—» with no comparison under it
+  const focus = () => page.evaluate(() => {
+    const i = dbPrefs().kpis.indexOf('focus'), el = document.querySelectorAll('#db-grid .db-kts .db-kt')[i];
+    return el ? [el.querySelector('.db-kt-n').textContent, el.querySelector('.db-kt-d').textContent] : null;
+  });
+  await until(() => document.querySelectorAll('#db-grid .db-kts .db-kt').length > 0, 'no tiles on the year before');
+  expect(JSON.stringify(await focus()) === JSON.stringify(['—', '']), `the time without meetings of a year with no data: ${JSON.stringify(await focus())}`);
+  // the week widgets: the last week of that year, named; nothing ahead in it
+  const weeks = await page.evaluate(y => [calKey(dbWeekMonday()), calKey(dbMonday(new Date(y, 11, 31)))], year - 1);
+  expect(weeks[0] === weeks[1], `not the last week of the year: ${weeks}`);
+  await until(() => DB.past && DB.past.week && document.querySelector('#db-grid .db-w-load .db-week-name'), 'the week of «Нагрузка недели» is not named');
+  expect(await page.evaluate(() => document.querySelector('#db-grid .db-w-load .db-week-name').textContent === dbWeekName(dbWeekMonday())), 'another week named');
+  expect(await page.locator('#db-grid .db-w-load .k-plan').count() === 0, '«план» in the key of a past week');
   if (shots) await page.screenshot({ path: `${shots}/db-year-before.png` });
+  // the period only redrawn (another comparison, the same week): the week is not asked again
+  let asked = 0;
+  const count = r => { if (/\/api\/(calendar\/range|worktime\?)/.test(r.url())) asked++; };
+  page.on('request', count);
+  await page.evaluate(() => dbReload());
+  await sleep(500);
+  page.off('request', count);
+  expect(asked === 0, `the same week asked again: ${asked}`);
   await page.click('#db-nav button[data-click="dbToCurrent"]');
-  await until(() => DB.data && !DB.data.past && DB.data.period === 'year', '«Сегодня» did not return');
-  expect(await name() === String(year), '«Сегодня» did not name the current year');
-  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Сегодня» stayed');
+  await until(() => DB.data && !DB.data.past && DB.data.period === 'year', '«Текущий период» did not return');
+  expect(await name() === String(year), '«Текущий период» did not name the current year');
+  expect(await page.locator('#db-nav button[data-click="dbToCurrent"]').count() === 0, '«Текущий период» stayed');
+  expect(await page.locator('#db-grid .db-w-load .db-week-name').count() === 0, 'the current week is named as a past one');
   // the week: «год назад» says so under the figures, «С предыдущим» back to the week before
   await page.click('#db-periods button >> nth=0');
   await until(() => DB.data && DB.data.period === 'week', 'the week did not come');
@@ -1551,6 +1631,15 @@ await step('dashboard: a past year, the comparison', async () => {
   await until(() => DB.data && DB.data.compare === 'prev', 'the comparison did not return');
   await sleep(200);
   expect(!/год назад/.test(await lines()), `still a year ago: ${await lines()}`);
+  // the week before: «Нагрузка недели» of that week, named
+  await page.click('#db-nav button[data-click="dbShiftPeriod"] >> nth=0');
+  await until(() => DB.data && DB.data.past && DB.data.period === 'week', 'the week before did not come');
+  await until(() => DB.past && DB.past.week && document.querySelector('#db-grid .db-w-load .db-week-name'), 'the week before is not named in «Нагрузка недели»');
+  expect(await page.evaluate(() => DB.past.monday === DB.data.start && document.querySelector('#db-grid .db-w-load .db-week-name').textContent === dbSpanName()),
+    '«Нагрузка недели» is not of the week shown');
+  if (shots) await page.screenshot({ path: `${shots}/db-load-past-week.png` });
+  await page.click('#db-nav button[data-click="dbToCurrent"]');
+  await until(() => DB.data && !DB.data.past, 'the current week did not return');
 });
 
 // The templates editor: a click beside it asks before dropping unsaved edits, and closes at once when

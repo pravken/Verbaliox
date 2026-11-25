@@ -225,16 +225,18 @@ def _history(period: str, start: date, today: date, meetings: List[Dict[str, Any
     """«Статистика»: the figures (_figures) of the last HISTORY_N periods up to the one starting at `start`,
     oldest first; the years only from the first one with a recording or a task."""
     spans = _periods_back(period, start)
+    first = _first_day(meetings, tasks)
     if period == "year":
-        days = [d for d in (_day(m) for m in meetings) if d] + [
-            date.fromisoformat(str(t.get("created_at"))[:10]) for t in tasks if _iso_day(t.get("created_at"))]
-        if days:
-            first = min(days)
-            spans = [s for s in spans if s[1] > first] or spans[-1:]
-        else:
-            spans = spans[-1:]
-    values = _figures(spans, today, meetings, tasks, me, people_of)
+        spans = [s for s in spans if first and s[1] > first] or spans[-1:]
+    values = _figures(spans, today, meetings, tasks, me, people_of, first)
     return {"starts": [a.isoformat() for a, _e in spans], "norm": values.pop("_norm"), "values": values}
+
+
+def _first_day(meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]]) -> Optional[date]:
+    """The first day with a recording or a task (None with neither): the working time before it is unknown."""
+    days = [d for d in (_day(m) for m in meetings) if d] + [
+        date.fromisoformat(str(t.get("created_at"))[:10]) for t in tasks if _iso_day(t.get("created_at"))]
+    return min(days) if days else None
 
 
 def _iso_day(v: Any) -> bool:
@@ -246,13 +248,15 @@ def _iso_day(v: Any) -> bool:
 
 
 def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[str, Any]], tasks: List[Dict[str, Any]],
-             me: set, people_of: Callable[[Dict[str, Any]], set]) -> Dict[str, Any]:
+             me: set, people_of: Callable[[Dict[str, Any]], set], first_day: Optional[date] = None) -> Dict[str, Any]:
     """Every figure of each span (start, end exclusive), in their order, from what build has loaded
     already (the library list, the tasks) and the protocols of those meetings: no transcript is read.
     «Встречи без итогов» counts the analysed meetings with no decision and no task here; build puts the
     current period's figures (with the silent meetings and the series) in the last place.
     The share of the working time: the meeting hours of the working days against the norm of a day
-    (the reminder's hours, 8 without it) times the working days gone by; the time without meetings is the rest."""
+    (the reminder's hours, 8 without it) times the working days gone by; the time without meetings is the rest.
+    A span that ends before `first_day` (the first day with a recording or a task), or any span with no data
+    at all, has neither: None, not 2088 hours «without meetings» of a year never recorded."""
     from app.database import fill_durations
     from app.features import decisions_of
 
@@ -284,7 +288,8 @@ def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[st
     for a, b in spans:
         ms = [m for m in inside if a <= _day(m) < b]
         sec = sum(float(m.get("duration") or 0) for m in ms)
-        work_h = _work_days(a, b, today, off) * norm
+        known = first_day is not None and b > first_day
+        work_h = _work_days(a, b, today, off) * norm if known else 0.0
         on_work = sum(float(m.get("duration") or 0) for m in ms
                       if _day(m).weekday() < 5 and _day(m).isoformat() not in off and _day(m) <= today) / 3600
         decided = useless = 0
@@ -298,8 +303,8 @@ def _figures(spans: List[Tuple[date, date]], today: date, meetings: List[Dict[st
             names |= people_of(m)
         values["meetings"].append(len(ms))
         values["hours"].append(round(sec / 3600, 1))
-        values["share"].append(round(min(100.0, on_work / work_h * 100)) if work_h else 0)
-        values["focus"].append(round(max(0.0, work_h - on_work), 1))
+        values["share"].append((round(min(100.0, on_work / work_h * 100)) if work_h else 0) if known else None)
+        values["focus"].append(round(max(0.0, work_h - on_work), 1) if known else None)
         values["mine"].append(sum(1 for t in mine if _open_at(t, b)))
         values["closed"].append(sum(1 for t in mine if t.get("status") == "done"
                                     and a.isoformat() <= str(t.get("done_at") or "")[:10] < b.isoformat()))
@@ -499,7 +504,7 @@ def build(period: str = "week", feature_id: Optional[int] = None, today: Optiona
     hv["decisions"][-1], hv["useless"][-1] = len(decisions), len(useless)
     # what each figure is compared with: the period before in the trend, or the same days a year earlier
     if compare == "year":
-        got = _figures([(cmp_a, cmp_b)], _year_ago(asof), meetings, tasks, me, names.people_of)
+        got = _figures([(cmp_a, cmp_b)], _year_ago(asof), meetings, tasks, me, names.people_of, _first_day(meetings, tasks))
         history["before"] = {k: v[0] for k, v in got.items() if k != "_norm"}
     else:
         history["before"] = {k: v[-2] for k, v in hv.items() if len(v) > 1}

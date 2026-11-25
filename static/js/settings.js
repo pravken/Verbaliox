@@ -83,7 +83,7 @@ async function setAccent(key) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { showError(data.detail); return; }
-  if (state.system) state.system.settings = data.settings;
+  if (state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 // Settings → General: the interface scale, applied at once and saved (ui_scale)
@@ -105,7 +105,7 @@ async function setUiScale(v) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { showError(data.detail); return; }
-  if (state.system) state.system.settings = data.settings;
+  if (state.system) state.system.settings = uiSettingsOverlay(data.settings);
 }
 
 // The computer's device in the interface language: the server names the processor in Russian
@@ -133,8 +133,10 @@ async function fillSystemInfo() {
   // a change of the last 450 ms is saved before the form is filled again from the server
   if (_settingsSaveTimer) { clearTimeout(_settingsSaveTimer); _settingsSaveTimer = null; await saveAllSettings(); }
   try {
+    const mark = uiSettingsMark();
     const res = await fetch('/api/system');
     const data = await readJson(res);
+    uiSettingsOverlay(data.settings, mark);  // a choice of the page still on its way to the server stays
     state.system = data;
     syncUiPrefsFromServer(data.settings);
     // Audit 5.5: with no scale chosen yet, the first one follows «Text size» of Windows
@@ -2291,7 +2293,7 @@ function translateMetersLine(item) {
   return `<div class="mm-line">${parts.join('')}</div>`;
 }
 
-// The lists «Качество» and «Скорость» of the captions: «Авто · <the model it takes now>», the installed
+// The lists «Качество» and «Быстро» of the captions: «Авто · <the model it takes now>», the installed
 // translators, the installed analysis models. A chosen model that is not installed (deleted) stays in its list
 // marked so; the server takes «Авто» for it (app/live_translate.choose_models)
 function renderTranslateChoices(ollama) {
@@ -2315,7 +2317,7 @@ function renderTranslateChoices(ollama) {
   }
 }
 
-// A choice of «Качество» / «Скорость» saved: the studio asks for its models again («Авто · …» follows it)
+// A choice of «Качество» / «Быстро» saved: the studio asks for its models again («Авто · …» follows it)
 document.addEventListener('change', (e) => {
   if (!/^set-live-tr-(quality|fast)$/.test(e.target?.id || '')) return;
   if (typeof studioTranslateModelsChanged === 'function') setTimeout(studioTranslateModelsChanged, 600);
@@ -2565,7 +2567,7 @@ async function saveAllSettings() {
   setSettingsSaveState('saved');
   _settingsBaseline = { ...(_settingsBaseline || values), ...changed };
   const saved = await readJson(res);
-  if (saved?.settings && state.system) state.system.settings = { ...(state.system.settings || {}), ...saved.settings };
+  if (saved?.settings && state.system) state.system.settings = uiSettingsOverlay({ ...(state.system.settings || {}), ...saved.settings });
   if ('live_captions_auto' in changed && typeof studioPrefsFromSettings === 'function') studioPrefsFromSettings();
 }
 

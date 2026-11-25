@@ -3557,6 +3557,8 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .db-app-h, .db-app-p, .db-app-d { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .db-app-p, .db-app-d { opacity: .6; }
 .db-wk-sub { color: var(--hc-dim, #A1A1A6); font-size: var(--fs-caption); margin-bottom: 10px; }
+/* «Нагрузка недели», «Рабочий день» of a past period: the week shown, under the title */
+.db-week-name { margin-top: -2px; }
 .db-wk-week { height: 96px; }
 /* the hours worked of a day in its head: the week and the calendar */
 .db-dn-wk, .cal-wk { margin-left: auto; padding: 0 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); color: #A1A1A6;

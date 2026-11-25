@@ -322,20 +322,22 @@ function holdItemText(q, meetingKey) {
   return q.hold === 'captions' ? t('jobsWaitCaptions') : '';
 }
 // Each second of the pause: the island, the queue's window, the strip and the status bar show the time left; at
-// its end the queue is asked again (the transcriptions start)
-const holdTimer = { id: null, asked: false };
+// its end the queue is asked again (the transcriptions start), and every 5 s while the server still holds them
+// (found in review: «0:00» stayed until the next poll). asked: when it was last asked, 0 during the pause
+const holdTimer = { id: null, asked: 0 };
 function holdTick() {
-  if (!holdPause()) { clearInterval(holdTimer.id); holdTimer.id = null; holdTimer.asked = false; return; }
+  if (!holdPause()) { clearInterval(holdTimer.id); holdTimer.id = null; holdTimer.asked = 0; return; }
   if (!holdTimer.id) holdTimer.id = setInterval(holdTick, 1000);
   renderJobsIsland();
   renderJobsPop();
   if (typeof renderQueuePanel === 'function') renderQueuePanel();
   if (typeof renderStatusbar === 'function') renderStatusbar();
   if (typeof strip !== 'undefined' && strip.kind === 'after' && typeof renderStrip === 'function') renderStrip();
-  if (holdLeft()) holdTimer.asked = false;  // a new pause: asked again at its end
-  else if (!holdTimer.asked && typeof loadQueue === 'function') {
-    holdTimer.asked = true;
-    setTimeout(() => loadQueue().catch(() => {}), 1500);
+  if (holdLeft()) holdTimer.asked = 0;  // a new pause: asked again at its end
+  else if (Date.now() - holdTimer.asked >= 5000 && typeof loadQueue === 'function') {
+    const first = !holdTimer.asked;
+    holdTimer.asked = Date.now();
+    setTimeout(() => loadQueue().catch(() => {}), first ? 1500 : 0);
   }
 }
 

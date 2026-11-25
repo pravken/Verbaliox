@@ -59,8 +59,8 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   (Hy-MT3 when installed, with the prompt of its model card), else with the analysis model as before.
 - **Translators are no longer listed as analysis models**: Hy-MT3 and a TranslateGemma installed in Ollama by hand
   cannot write an analysis and are listed with the translation models only. TranslateGemma (Gemma Terms of Use) is
-  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «Check the license before
-  commercial use», and it translates with the prompt of its model card.
+  never offered for download; when installed, it is marked «Local · Gemma Terms ⚠» with «The license needs checking
+  before commercial use», and it translates with the prompt of its model card.
 - **Simpler settings, nothing hidden**: no «More» to unfold; every option is a row with a short name, a line under it
   only where the effect is not obvious, and its control at the right edge, in every section. A switch with a mode
   beside it is one list with «Off» in it (the «Recording only» mode, meeting notifications, GigaAM and Parakeet on the
@@ -130,12 +130,15 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
   light tick marks the hours of the same day last week, and beside each day's hours stands the difference to it
   («+1.5», «−1», in grey); the hint reads «Tue, Nov 24: 5 h · last week 6 h (−1)». In all four looks: columns, bars,
   ring (the ticks on its legend bars) and line (last week as a faint line). The head reads «In meetings: 4.6 h · ahead
-  4 h»; under the chart, the key («passed», «planned», «last week») and which days are above the norm by fact and which
+  4 h»; under the chart, the key («so far», «planned», «last week») and which days are above the norm by fact and which
   by plan («Above the norm: Tue; planned: Fri»).
 - **Overview of a year and of any past period**: «Year» joins Week, Month and Quarter (its meeting hours by month,
   its «Statistics» trend over the years there are data for, six at most). ‹ › beside the period switch go back to any
-  past week, month, quarter or year, named in the head («October 2026», «Q3 2026», «2025»); «Today» returns to the
-  current one. A past period is counted whole: all its days gone by, the tasks open at its end.
+  past week, month, quarter or year, named in the head («October 2026», «Q3 2026», «2025»); «Current period» returns
+  to the current one. A past period is counted whole: all its days gone by, the tasks open at its end. «Load of the
+  week» and «Working day» of a past period show its last week, named under the title («17–23 November»), compared
+  with the week before it. A period before the first recording or task has no share of the working time and no time
+  without meetings: «—» instead of hours that were never recorded.
 - **Compare with a year ago**: the «Statistics» tiles compare each figure with the previous period or with the same
   period a year ago (the switch in the widget's head, kept with the layout).
 
@@ -1329,8 +1332,8 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   установлена, — промптом со своей карточки), иначе модель анализа, как раньше.
 - **Модели перевода больше не в списке моделей анализа**: Hy-MT3 и TranslateGemma, установленная в Ollama вручную,
   не пишут анализ и показываются только среди моделей перевода. TranslateGemma (Gemma Terms of Use) программа не
-  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Проверьте лицензию перед
-  коммерческим использованием» и переводит промптом со своей карточки.
+  предлагает скачать; установленная, она отмечена «Локальная · Gemma Terms ⚠» и «Лицензию модели нужно
+  проверить перед коммерческим использованием» и переводит промптом со своей карточки.
 - **Настройки проще, ничего не спрятано**: нет «Дополнительно»; каждая настройка — строка с коротким названием,
   пояснением только там, где последствие неочевидно, и переключателем у правого края, во всех разделах. Переключатель
   с режимом рядом — один список, где «Выключено» — один из вариантов (режим «Только запись», уведомления о встречах,
@@ -1404,8 +1407,10 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
 - **«Обзор» за год и за любой прошедший период**: к «Неделе», «Месяцу» и «Кварталу» добавлен «Год» (часы встреч по
   месяцам, тренд «Статистики» по годам, за которые есть данные, не больше шести). Кнопки ‹ › рядом с выбором периода
   открывают любую прошедшую неделю, месяц, квартал или год, а его название показано в заголовке («Октябрь 2026»,
-  «III квартал 2026», «2025»); «Сегодня» возвращает к текущему. Прошедший период считается целиком: все его дни прошли,
-  задачи — открытые на его конец.
+  «III квартал 2026», «2025»); «Текущий период» возвращает к текущему. Прошедший период считается целиком: все его дни
+  прошли, задачи — открытые на его конец. «Нагрузка недели» и «Рабочий день» прошедшего периода показывают его
+  последнюю неделю с её названием под заголовком («17–23 ноября») и сравнивают её с неделей перед ней. У периода до
+  первой записи или задачи нет доли рабочего времени и времени без встреч: вместо часов, которые не записывались, — «—».
 - **Сравнение с прошлым годом**: плитки «Статистики» сравнивают каждый показатель с предыдущим периодом или с тем же
   периодом год назад (переключатель в заголовке виджета, сохраняется вместе с раскладкой).
 
