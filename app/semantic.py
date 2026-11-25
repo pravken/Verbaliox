@@ -211,6 +211,8 @@ _skip: set = set()  # recordings that failed to index in this run of the app
 
 
 def _run() -> None:
+    import httpx
+
     while True:
         _wake.wait(IDLE_RECHECK_SEC)
         _wake.clear()
@@ -224,8 +226,11 @@ def _run() -> None:
                 _state.update(running=True, current=mid)
                 try:
                     index_meeting(mid, settings)
-                except RuntimeError:
-                    raise  # the model itself is not available: nothing else can be indexed now
+                except (RuntimeError, httpx.TransportError):
+                    # the model itself is not available, or Ollama did not answer (restarted, a timeout): nothing
+                    # else can be indexed now, and this recording is tried again later — skipped till the app
+                    # ended, every recording of the library was left out of the search (found in an audit)
+                    raise
                 except Exception:
                     traceback.print_exc()  # one bad recording must not stop the others
                     _skip.add(mid)
@@ -233,7 +238,7 @@ def _run() -> None:
         except Exception as e:
             # Reported once, not every two minutes (a model that is not downloaded is the usual case)
             if str(e)[:300] != _state["error"]:
-                if isinstance(e, RuntimeError):
+                if isinstance(e, (RuntimeError, httpx.TransportError)):
                     print(f"[semantic] {e}", flush=True)
                 else:
                     traceback.print_exc()
