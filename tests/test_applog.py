@@ -53,10 +53,11 @@ class ScrubTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(applog, "LOG_DIR", Path(tmp)), mock.patch.object(applog, "LOG_FILE", Path(tmp) / "v.log"), \
                 mock.patch.object(applog.sys, "executable", r"C:\Users\Test User\Verbaliox\.venv\Scripts\python.exe"), \
-                mock.patch.object(applog, "_file", None), mock.patch.object(applog.faulthandler, "enable"), \
+                mock.patch.object(applog, "_file", None), mock.patch.object(applog.faulthandler, "enable") as crash, \
                 mock.patch.object(applog.sys, "stdout"), mock.patch.object(applog.sys, "stderr"):
             applog.start_file_log()
             applog._file.close()
+            crash.call_args.kwargs["file"].close()  # Windows does not delete a folder with an open file
             head = (Path(tmp) / "v.log").read_text(encoding="utf-8")
         self.assertNotIn("Test User", head)
         self.assertIn(r"C:\Users\<user>", head)
