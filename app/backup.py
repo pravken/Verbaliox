@@ -131,6 +131,10 @@ def _check(z: zipfile.ZipFile) -> Dict[str, Any]:
 
 
 def _inside(path: Path, roots: List[Path]) -> bool:
+    from app.paths import is_network_path
+
+    if is_network_path(path):  # resolving it would connect to that server, with the user's Windows login
+        return False
     try:
         p = path.resolve()
     except OSError:

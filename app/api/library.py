@@ -514,7 +514,9 @@ def api_import_folder_files(payload: FolderFilesPayload) -> Dict[str, Any]:
     from itertools import islice
 
     raw_path = payload.path.strip().strip('"').strip("'")
-    if raw_path.startswith(("\\\\", "//")):
+    from app.paths import is_network_path
+
+    if is_network_path(raw_path):
         return {"is_dir": False, "count": 0, "files": [], "error": "Сетевые пути не открываются"}
     target = Path(raw_path) if raw_path else None
     try:

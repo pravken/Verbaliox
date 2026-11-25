@@ -409,6 +409,12 @@ def explorer_command(path: Path, select: bool = True) -> str:
     return f'explorer.exe /select,"{p}"' if select else f'explorer.exe "{p}"'
 
 
+def is_network_path(path) -> bool:
+    """\\\\host\\share in any spelling of its slashes ("//host", "/\\host", "\\/host"): Windows reads them
+    all as a network path, and touching one connects to that server (sending the user's Windows login)."""
+    return str(path or "").strip().strip('"').replace("/", "\\").startswith("\\\\")
+
+
 def reveal_in_explorer(path: Path) -> None:
     """Windows Explorer with the file selected in its folder, or the folder itself opened."""
     import subprocess

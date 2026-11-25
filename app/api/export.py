@@ -81,7 +81,9 @@ class RevealPayload(BaseModel):
 @router.post("/api/reveal")
 def api_reveal_path(payload: RevealPayload) -> Dict[str, Any]:
     """Highlights a saved file (or opens a folder) in Windows Explorer."""
-    if payload.path.startswith(("\\\\", "//")):  # a network path: only folders of this computer are shown
+    from app.paths import is_network_path
+
+    if is_network_path(payload.path):  # a network path: only folders of this computer are shown
         raise HTTPException(status_code=400, detail="Сетевые пути не открываются")
     try:
         p = Path(payload.path).resolve(strict=True)  # a full path without "..": Explorer is never handed a relative one
