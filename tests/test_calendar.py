@@ -71,6 +71,29 @@ class CalendarRobustnessTest(unittest.TestCase):
         with mock.patch.object(calendar_ics, "events", return_value=evs):
             return calendar_ics.window(start, start + timedelta(days=days))
 
+    def test_repeated_days_and_many_exceptions_stay_cheap(self):
+        """A published calendar with «MO» repeated thousands of times in one rule (found in the audit: as many
+        meetings each Monday, memory running out), and thousands of exceptions and moved meetings."""
+        import time
+
+        ev = calendar_ics.parse("BEGIN:VEVENT\nUID:s\nSUMMARY:X\nDTSTART:20260105T100000\nDTEND:20260105T103000\n"
+                                "RRULE:FREQ=WEEKLY;BYDAY=" + ",".join(["MO"] * 10000) + "\nEND:VEVENT")[0]
+        occ = calendar_ics.occurrences(ev, datetime(2026, 10, 1), datetime(2026, 11, 1))
+        self.assertEqual(len(occ), 4)  # the Mondays of October, once each
+        month = calendar_ics.parse("BEGIN:VEVENT\nUID:m\nSUMMARY:X\nDTSTART:20260105T100000\nDTEND:20260105T103000\n"
+                                   "RRULE:FREQ=MONTHLY;BYDAY=" + ",".join(["1MO"] * 10000) + "\nEND:VEVENT")[0]
+        self.assertEqual(len(calendar_ics.occurrences(month, datetime(2026, 10, 1), datetime(2026, 11, 1))), 1)
+        moved = "".join(f"BEGIN:VEVENT\nUID:d\nSUMMARY:X\nRECURRENCE-ID:2026{1 + k // 28:02d}{1 + k % 28:02d}T090000\n"
+                        f"DTSTART:2026{1 + k // 28:02d}{1 + k % 28:02d}T150000\nEND:VEVENT\n" for k in range(300))
+        text = ("BEGIN:VEVENT\nUID:d\nSUMMARY:X\nDTSTART:20260101T090000\nDTEND:20260101T093000\nRRULE:FREQ=DAILY\n"
+                + "".join(f"EXDATE:2025{1 + k // 28 % 12:02d}{1 + k % 28:02d}T{k % 24:02d}0000\n" for k in range(3000))
+                + "END:VEVENT\n" + moved)
+        t0 = time.perf_counter()
+        daily = next(e for e in calendar_ics.parse(text) if e["rrule"])
+        occ = calendar_ics.occurrences(daily, datetime(2026, 1, 1), datetime(2026, 12, 31))
+        self.assertLess(time.perf_counter() - t0, 5)
+        self.assertEqual(len(occ), 364 - 300)  # the moved ones are no longer at their usual time
+
     def test_odd_rules_do_not_break_the_calendar(self):
         good = _event("FREQ=WEEKLY;BYDAY=MO", start="20261019T100000", end="20261019T103000")
         for rule in ("FREQ=DAILY;INTERVAL=abc", "FREQ=DAILY;INTERVAL=99999999999", "FREQ=MONTHLY;INTERVAL=100000",
