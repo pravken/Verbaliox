@@ -65,6 +65,17 @@ def ensure_package() -> None:
     asr_onnx.install_pinned(PACKAGE)
 
 
+def _is_own_download(path: Path, stem: str) -> bool:
+    """A file of this download: in the uploads folder, named as its template makes it, sound or video."""
+    from app.paths import MEDIA_EXTENSIONS
+
+    try:
+        p = path.resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return p.parent == UPLOADS_DIR.resolve() and p.name.startswith(f"{stem}_") and p.suffix.lower() in MEDIA_EXTENSIONS
+
+
 def valid_url(url: str) -> bool:
     u = urlparse((url or "").strip())
     return u.scheme in ("http", "https") and bool(u.netloc)
@@ -275,6 +286,9 @@ def _download_one(meeting_id: int, url: str, stop: threading.Event) -> None:
             info = next((e for e in info["entries"] if e), info)
         downloads = (info or {}).get("requested_downloads") or []
         path = Path(downloads[0]["filepath"]) if downloads and downloads[0].get("filepath") else None
+        # Only the file this download wrote: a path the site's answer named elsewhere is not taken
+        if path is not None and not _is_own_download(path, stem):
+            path = None
         if not path or not path.is_file():
             found = sorted(UPLOADS_DIR.glob(f"{stem}_*"))
             path = found[0] if found else None

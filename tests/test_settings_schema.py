@@ -24,6 +24,19 @@ class SettingsSchemaTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 clean(key, bad)
 
+    def test_ollama_in_clear_text_only_on_this_computer_or_the_local_network(self):
+        for ok in ("http://127.0.0.1:11434", "http://localhost:11434", "http://10.0.0.7:11434", "http://nas:11434",
+                   "http://ollama.lan:11434", "http://box.local:11434", "https://ollama.example.com"):
+            self.assertEqual(clean("ollama_url", ok), ok)
+        for bad in ("http://ollama.example.com:11434", "http://8.8.8.8:11434"):  # the transcripts would cross the internet unencrypted
+            with self.assertRaises(ValueError):
+                clean("ollama_url", bad)
+
+    def test_keys_the_program_writes_itself_are_refused(self):
+        for key in ("clean_exit", "interrupted_job_runs", "economy_until", "summary_templates"):
+            with self.assertRaises(ValueError):
+                clean(key, "1")
+
     def test_calendar_and_folders(self):
         ics = tests.temp_dir(self) / "c.ics"
         ics.write_text("BEGIN:VCALENDAR\nEND:VCALENDAR\n")

@@ -91,6 +91,18 @@ class SessionAndSearchApiTest(unittest.TestCase):
             self.assertEqual(c.get("/api/meetings").status_code, 200)
             self.assertEqual(c.get("/static/js/app.js", headers={"Sec-Fetch-Site": "cross-site"}).status_code, 200)
 
+    def test_settings_the_program_writes_itself_are_not_taken_from_the_page(self):
+        from app.database import get_all_settings
+
+        with self._client(8790) as c:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            before = get_all_settings().get("summary_templates")
+            r = c.post("/api/settings", json={"settings": {"clean_exit": "1", "summary_templates": "x", "auto_title": True}})
+            self.assertEqual(r.status_code, 200)
+        after = get_all_settings()
+        self.assertEqual(after.get("summary_templates"), before)  # its own route checks the templates
+        self.assertEqual(after.get("auto_title"), "true")
+
     def test_search_endpoint_and_static_revalidation(self):
         with self._client(8790) as c:
             c.get(f"/?token={main.SESSION_TOKEN}")
