@@ -799,8 +799,8 @@ def live_window_app(root: Path, job: Dict[str, Any], audio, segs, total: float) 
     if not job["spin"]:
         orig_opts = asr_onnx._cpu_options
 
-        def opts():
-            so = orig_opts()
+        def opts(*a, **k):  # the app passes the threads of the copy (asr_onnx._load)
+            so = orig_opts(*a, **k)
             so.add_session_config_entry("session.intra_op.allow_spinning", "0")
             so.add_session_config_entry("session.inter_op.allow_spinning", "0")
             return so
