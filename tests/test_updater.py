@@ -232,12 +232,44 @@ class ApplyUpdateTest(unittest.TestCase):
         frozen = self.data / "updates" / "packages-before-update.txt"
         frozen.write_text("torch==2.6.0\n")
         (self.data / "logs").mkdir()
-        with mock.patch.object(updater.subprocess, "run") as run:
+        with mock.patch.object(updater.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
             updater._reinstall(self.app / "python.exe", "uv.exe", frozen, self.data / "logs", backup)
         cmd = [str(x) for x in run.call_args.args[0]]
         self.assertIn(str(frozen), cmd)
         self.assertNotIn("--require-hashes", cmd)
         self.assertIn("without hashes", (self.data / "logs" / "update.log").read_text(encoding="utf-8"))
+
+    def test_packages_not_put_back_are_reported_as_broken(self):
+        """Found in an audit: the exit code of the rollback's install was not read, and a broken environment was
+        reported as the previous version put back. The launcher is told to install the libraries again."""
+        _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
+        with mock.patch.object(updater.subprocess, "run", return_value=mock.Mock(returncode=1, stdout="")), \
+                mock.patch.object(updater, "find_uv", return_value="uv.exe"):
+            with self.assertRaises(updater.UpdateFailed) as cm:
+                updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
+        self.assertEqual(cm.exception.outcome, "broken")
+        self.assertEqual((self.app / ".venv" / "verbaliox-requirements.sha256").read_text(), "interrupted-update")
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+
+    def test_a_file_cut_off_midway_keeps_the_previous_one(self):
+        """Found in an audit: the files were written in place, and a write cut off left run.py or updater.py
+        truncated — nothing could put the previous version back."""
+        _release_zip(self.zip, {"app/main.py": "new main " * 1000, "requirements.txt": "same"})
+
+        real = updater.shutil.copyfileobj
+
+        def cut(src, out, *a, **k):
+            if not str(getattr(out, "name", "")).endswith("main.py.upd.tmp"):
+                return real(src, out, *a, **k)  # the backup, other files
+            out.write(src.read(10))
+            raise OSError("power loss")
+
+        with mock.patch.object(updater.shutil, "copyfileobj", side_effect=cut), \
+                mock.patch.object(updater, "_restore", return_value=[]):
+            with self.assertRaises(updater.UpdateFailed):
+                updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
+        self.assertEqual((self.app / "app" / "main.py").read_text(), "old main")
+        self.assertEqual(list((self.app / "app").glob("*.upd.tmp")), [])
 
     def test_failed_restore_is_reported_as_broken(self):
         _release_zip(self.zip, {"app/main.py": "new main", "requirements.txt": "changed"})
@@ -260,7 +292,7 @@ class ApplyUpdateTest(unittest.TestCase):
         real_open = open
 
         def locked(path, *a, **k):
-            if str(path).endswith("Verbaliox.exe") and "w" in (a[0] if a else k.get("mode", "r")):
+            if "Verbaliox.exe" in str(path) and "w" in (a[0] if a else k.get("mode", "r")):
                 raise PermissionError("in use")
             return real_open(path, *a, **k)
 
@@ -353,7 +385,11 @@ class ApplyUpdateTest(unittest.TestCase):
 
         (self.app / "app" / "gone.py").write_text("old module")
         _release_zip(self.zip, {"app/main.py": "newer main", "requirements.txt": "changed"})
-        with mock.patch.object(updater.subprocess, "run", return_value=mock.Mock(returncode=1)):
+
+        def run(cmd, *a, **k):  # the new libraries fail, the previous ones are put back
+            return mock.Mock(returncode=0 if "requirements-before-update.txt" in " ".join(map(str, cmd)) else 1, stdout="")
+
+        with mock.patch.object(updater.subprocess, "run", side_effect=run):
             with self.assertRaises(updater.UpdateFailed) as cm:
                 updater.apply_update(self.zip, self.app, self.data, lambda _m: None)
         self.assertEqual(cm.exception.outcome, "restored")
