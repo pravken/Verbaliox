@@ -248,7 +248,8 @@ def app_url(host: str, port: int) -> str:
 
     base = f"http://{host}:{port}/"
     token = read_session_token()
-    if not token:
+    # Sent only to our own server: another program on the port (or another user's Verbaliox) would get it
+    if not token or not probe_server(host, port):
         return base
     try:
         conn = http.client.HTTPConnection(host, port, timeout=5)
