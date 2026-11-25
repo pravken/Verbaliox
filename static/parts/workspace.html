@@ -708,8 +708,9 @@
 
             <!-- Right: Transcript Editing, Auto-Scroll & Search Tools -->
             <div id="tx-tools" class="flex items-center gap-1.5 shrink-0 ml-auto">
-              <!-- Again, with the choice of the model, the language and the number of speakers (the dialog of the recording's menu) -->
-              <button data-click="recReconfigure" class="ui-btn ui-btn-subtle shrink-0" data-i18n-title="recRedoTip" title="Расшифровать заново с выбором модели, языка и числа говорящих">
+              <!-- Again, with the choice of the model, the language and the number of speakers (the dialog of the recording's menu);
+                   hidden while «Расшифровать заново» of the short row is there (two buttons of one name: audit), its «⋯» has it -->
+              <button data-click="recReconfigure" id="tx-reconfig-btn" class="ui-btn ui-btn-subtle shrink-0" data-i18n-title="recRedoTip" title="Расшифровать заново с выбором модели, языка и числа говорящих">
                 <span aria-hidden="true">↻</span><span class="tx-tool-label" data-i18n="recRedo">Расшифровать заново…</span></button>
               <!-- The look of the text: a chat (a bubble for each phrase) or the text as before (setTxLayout in workspace.js) -->
               <div class="tx-layout" role="radiogroup" data-i18n-aria="txLayoutAria" aria-label="Вид расшифровки">

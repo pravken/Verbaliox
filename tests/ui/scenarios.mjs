@@ -2796,6 +2796,22 @@ await step('column dropped on itself stays', async () => {
   expect(r.before === r.after, `the order changed: ${r.before} → ${r.after}`);
 });
 
+// One «Расшифровать заново» in the toolbar of the text; the one with the choices is in «⋯»
+await step('one transcribe-again button', async () => {
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); switchWorkspaceTab('transcript'); });
+  await sleep(500);
+  const r = await page.evaluate(() => {
+    const shown = [...document.querySelectorAll('#tx-subbar button')].filter(b => b.getClientRects().length && /txRedo|recReconfigure/.test(b.dataset.click || ''));
+    return shown.map(b => b.dataset.click);
+  });
+  expect(r.length === 1, `the buttons: ${r}`);
+  await page.click('#tx-more-btn');
+  await sleep(300);
+  const menu = (await page.$$eval('#text-menu button', els => els.map(e => e.textContent))).join(' | ');
+  await page.keyboard.press('Escape');
+  expect(menu.includes('Расшифровать заново…'), `«Расшифровать заново…» is not in «⋯»: ${menu}`);
+});
+
 // The notices stand clear of the player's controls and the assistant's question (the notice of an update covered them)
 await step('notices clear of the player and the question', async () => {
   const covered = async (sel) => page.evaluate((sel) => [...document.querySelectorAll(sel)].filter(b => b.getClientRects().length).filter(b => {

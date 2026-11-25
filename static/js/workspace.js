@@ -269,6 +269,8 @@ function renderTxModelBar() {
   const redo = document.getElementById('tx-redo-btn');
   redo.disabled = busy || !!m.media_removed || shown === 'teams' || shown === 'merged';
   redo.classList.toggle('hidden', shown === 'teams' || shown === 'merged');
+  // one «Расшифровать заново» in the toolbar: the one with the choices stays when the short row has none
+  document.getElementById('tx-reconfig-btn')?.classList.toggle('hidden', !!shown && !redo.classList.contains('hidden'));
   const qs = document.getElementById('tx-quick-status');
   qs.textContent = busy ? '' : m.transcript_at ? `✓ ${txShortDate(m.transcript_at)}` : '';
   qs.title = m.transcript_at ? `${t('txModelDone')} · ${formatDateTime(m.transcript_at)}` : '';
@@ -468,7 +470,7 @@ function openTxMoreMenu(el) {
   const shown = m.transcript_model || '';
   const busy = !DONE_STATUSES.includes(m.status);
   const pickShown = () => { document.getElementById('tx-model-select').value = shown; state.txModelPick = shown; };
-  const items = [];
+  const items = [{ label: t('recRedo'), disabled: busy || !!m.media_removed, run: () => recReconfigure() }];
   if (shown && shown !== 'teams' && !m.media_removed && (m.segments || []).length) items.push({ label: t('txResplit'), disabled: busy, run: () => openResplitDialog() });
   items.push({ label: t('txProcBtnLong'), disabled: busy || shown === 'merged' || shown === 'teams',
     run: () => { pickShown(); toggleTxModelBar(true); setTimeout(() => document.getElementById('tx-proc-btn')?.click(), 0); } });
