@@ -24,6 +24,7 @@ from app.audio_utils import extract_audio_16k_mono, format_timestamp, get_media_
 from app.database import (
     AUDIO_DIR,
     MODELS_DIR,
+    add_export_path,
     edit_meeting,
     get_all_settings,
     get_meeting,
@@ -655,7 +656,7 @@ def enqueue_dub_job(meeting_id: int, target_lang: str) -> bool:
         _cancel_requested.discard(meeting_id)
         token = _queue_add(meeting_id, "dub", target_lang, back)
     update_meeting_progress(
-        meeting_id, status="dubbing", progress=0, stage_text="Дубляж в очереди...", error_message=""
+        meeting_id, status="dubbing", progress=0, stage_text="Дубляж в очереди...", error_message="", return_status=back
     )
     _submit_job(token, _run_dub_job, meeting_id, target_lang, back)
     _publish_queue_changed()
@@ -720,7 +721,7 @@ def _enqueue_side_job(meeting_id: int, kind: str, lang: str, status: str, queued
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
         token = _queue_add(meeting_id, kind, lang, back)
-    update_meeting_progress(meeting_id, status=status, progress=0, stage_text=queued_text, error_message="")
+    update_meeting_progress(meeting_id, status=status, progress=0, stage_text=queued_text, error_message="", return_status=back)
     _submit_job(token, _run_side_job, meeting_id, back, runner, *args)
     _publish_queue_changed()
     return True
@@ -771,7 +772,7 @@ def _translate_runner(meeting_id: int, target_lang: str, model: Optional[str], o
     return f"Перевод ({target_lang.upper()}) готов: {res['translated']} реплик, модель {res.get('model')}"
 
 
-def _burn_runner(meeting_id: int, lang: str, srt_text: str, out_path: str) -> str:
+def _burn_runner(meeting_id: int, lang: str, srt_text: str, out_path: str, remember: bool = False) -> str:
     from app.video_subtitles import burn_subtitles, probe_media
 
     meeting = get_meeting(meeting_id)
@@ -792,6 +793,8 @@ def _burn_runner(meeting_id: int, lang: str, srt_text: str, out_path: str) -> st
         lambda pct, text: update_meeting_progress(meeting_id, progress=pct, stage_text=text),
         lambda: _check_cancel(meeting_id),
     )
+    if remember:  # listed with the recording once written, never before (app/main._remember_export_dir)
+        add_export_path(meeting_id, str(out))
     return f"Видео с субтитрами ({lang.upper()}) готово: {out}"
 
 
@@ -810,6 +813,7 @@ def _cut_runner(meeting_id: int, kind: str, intervals: List[Tuple[float, float]]
     out = run_cut(tool_cmd("ffmpeg"), media, intervals, has_video, Path(out_path),
                   lambda r: update_meeting_progress(meeting_id, progress=max(1, int(99 * r)), stage_text=f"{label}: {int(100 * r)}%"),
                   lambda: _check_cancel(meeting_id), afilter=DENOISE_FILTER if kind == "denoise" else "")
+    add_export_path(meeting_id, str(out))  # listed with the recording once written, never before
     return f"{label} готова: {out}"
 
 
@@ -1132,10 +1136,11 @@ def enqueue_translate_job(meeting_id: int, target_lang: str, model: Optional[str
     )
 
 
-def enqueue_burn_subtitles_job(meeting_id: int, lang: str, srt_text: str, out_path: str) -> bool:
+def enqueue_burn_subtitles_job(meeting_id: int, lang: str, srt_text: str, out_path: str, remember: bool = False) -> bool:
+    """remember: the file is listed with the recording once written (an export the user saved)."""
     return _enqueue_side_job(
         meeting_id, "burn_subs", lang, "rendering", "Встраивание субтитров в очереди...",
-        _burn_runner, lang, srt_text, out_path,
+        _burn_runner, lang, srt_text, out_path, remember,
     )
 
 
@@ -1168,11 +1173,16 @@ def _load_whisper_with_fallback(model_name: str, device: str, compute_type: str)
         try:
             from faster_whisper import WhisperModel
 
+            # on the processor with the threads of «Потоки процессора» and the live captions' share (the ONNX
+            # models had them, Whisper took its own default: audit В22)
+            from app.asr_onnx import queue_threads
+
             model = WhisperModel(
                 model_or_path,
                 device=dev,
                 compute_type=ctype,
                 download_root=str(whisper_cache),
+                cpu_threads=queue_threads() if dev == "cpu" else 0,
             )
             if (dev, ctype) != (device, compute_type):
                 print(f"[transcriber] Whisper {model_name} loaded as {dev}/{ctype} instead of {device}/{compute_type}", flush=True)
@@ -1336,6 +1346,10 @@ def enqueue_whisper_preload(model_name: Optional[str] = None) -> bool:
     from app import economy
 
     if economy.on():  # recording only: no model is loaded ahead
+        return False
+    if _paused[0] or _meeting_holds():
+        # the worker would not take it until the queue goes on, and the load waiting counted as work all that
+        # time: no model was unloaded for idleness, memory or «Только запись» (found in an audit)
         return False
     with _jobs_lock:
         if _queue or _preloading:

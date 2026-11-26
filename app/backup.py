@@ -131,6 +131,10 @@ def _check(z: zipfile.ZipFile) -> Dict[str, Any]:
 
 
 def _inside(path: Path, roots: List[Path]) -> bool:
+    from app.paths import is_network_path
+
+    if is_network_path(path):  # resolving it would connect to that server, with the user's Windows login
+        return False
     try:
         p = path.resolve()
     except OSError:
@@ -203,8 +207,9 @@ def _clean_paths(conn: sqlite3.Connection, roots: List[Path], restored: Dict[int
 
 
 def _clean_dubs(raw: Any) -> Optional[str]:
-    """Dub files are stored relative to the data folder (database._dub_paths_to_storage): an entry with
-    an absolute path or one that leaves the folder is dropped. None: nothing to change."""
+    """Dub files are stored relative to the data folder (database._dub_paths_to_storage), in its dubs/: an
+    entry with any other path (absolute, leaving the folder, or another file of it such as meetings.db or
+    bin/ffmpeg.exe, which deleting the dub would delete) is dropped. None: nothing to change."""
     try:
         dubs = json.loads(raw or "[]")
     except (TypeError, ValueError):
@@ -216,10 +221,42 @@ def _clean_dubs(raw: Any) -> Optional[str]:
         if not p:
             return True
         q = Path(str(p).replace("\\", "/"))
-        return not q.is_absolute() and not q.drive and ".." not in q.parts
+        return (not q.is_absolute() and not q.drive and ".." not in q.parts and len(q.parts) > 1
+                and q.parts[0].lower() == "dubs")
 
     kept = [d for d in dubs if isinstance(d, dict) and all(fine(d.get(k)) for k in ("path", "srt_path"))]
     return None if len(kept) == len(dubs) else json.dumps(kept, ensure_ascii=False)
+
+
+def _clean_settings(conn: sqlite3.Connection) -> None:
+    """The copy's settings go through the checks a setting saved by the page goes through
+    (app/settings_schema.py): a value no page could have saved (a model that is no model of the catalog, a
+    number out of its range, a list of the wrong form) is corrected or dropped, and the default is used."""
+    from app.settings_schema import SERVER_KEYS, clean
+
+    for key, value in conn.execute("SELECT key, value FROM settings").fetchall():
+        if key in LOCAL_SETTINGS or key in SERVER_KEYS:  # this computer's (just below) and the program's own
+            continue
+        try:
+            fixed = clean(str(key), value)
+        except ValueError:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            continue
+        if fixed != value:
+            conn.execute("UPDATE settings SET value = ? WHERE key = ?", (fixed, key))
+
+
+ROOM_MARGIN = 512 * 2**20  # left free on the disk after a file of the copy is written
+
+
+def _check_room(size: int, folder: Path) -> None:
+    """A file of the copy is written only when the disk holds it: a small zip can unpack to any size."""
+    try:
+        free = shutil.disk_usage(folder).free
+    except OSError:
+        return
+    if size + ROOM_MARGIN > free:
+        raise ValueError("Недостаточно места на диске для восстановления копии")
 
 
 def _keep_local_settings(conn: sqlite3.Connection) -> None:
@@ -255,6 +292,7 @@ def _restore(src: Path) -> Dict[str, Any]:
         manifest = _check(z)
         names = set(z.namelist())
         with tempfile.TemporaryDirectory(prefix="vs_restore_") as tmp:
+            _check_room(z.getinfo("meetings.db").file_size * 2, Path(tmp))  # unpacked, then staged next to the database
             db = Path(z.extract("meetings.db", tmp))
             conn = sqlite3.connect(str(db))
             try:
@@ -264,8 +302,10 @@ def _restore(src: Path) -> Dict[str, Any]:
                 conn.commit()
                 n = conn.execute("SELECT COUNT(*) FROM meetings").fetchone()[0]
                 known = {int(r[0]): str(r[1] or "") for r in conn.execute("SELECT id, media_path FROM meetings")}
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(meetings)").fetchall()}
                 restored = skipped = 0
                 put_back: Dict[int, str] = {}
+                here: List[int] = []  # recordings whose sound the restore put back or found in place
                 for f in manifest.get("media") or []:
                     name = str(f.get("name") or "")
                     try:
@@ -280,8 +320,16 @@ def _restore(src: Path) -> Dict[str, Any]:
                         continue
                     if target.exists():
                         skipped += 1
+                        here.append(mid)
+                        if (target.parent == restored_dir and str(target) != original
+                                and target.stat().st_size == z.getinfo(name).file_size):
+                            # put there by an earlier restore of this copy: the recording points to it (it kept
+                            # the place it had on the other computer, found in an audit)
+                            _point_to(conn, mid, target, cols)
+                            put_back[mid] = str(target)
                         continue
                     target.parent.mkdir(parents=True, exist_ok=True)
+                    _check_room(z.getinfo(name).file_size, target.parent)
                     # written aside and renamed: a restore cut off midway left a truncated file at the
                     # place, which the next restore skipped as already there (found in review)
                     part = target.with_name(target.name + ".partial")
@@ -289,10 +337,13 @@ def _restore(src: Path) -> Dict[str, Any]:
                         shutil.copyfileobj(fin, fout)
                     part.replace(target)
                     if str(target) != original:  # moved into the recordings folder: the app owns this copy
-                        conn.execute("UPDATE meetings SET media_path = ?, owns_media = 1 WHERE id = ?", (str(target), mid))
+                        _point_to(conn, mid, target, cols)
                     put_back[mid] = str(target)
+                    here.append(mid)
                     restored += 1
                 _clean_paths(conn, roots, put_back)
+                _restored_now(conn, here, cols)
+                _clean_settings(conn)
                 _keep_local_settings(conn)
                 conn.execute("DROP TABLE IF EXISTS secrets")  # the API keys of a copy of an earlier version
                 # the minutes worked and «Мои программы» (a copy of an older version may still have them)
@@ -313,6 +364,28 @@ def _restore(src: Path) -> Dict[str, Any]:
             (DATA_DIR / "bench.json").write_bytes(z.read("bench.json"))
     return {"recordings": n, "media_restored": restored, "media_kept": skipped, "created": manifest.get("created", ""),
             "restart_needed": True}
+
+
+def _point_to(conn: sqlite3.Connection, mid: int, target: Path, cols: set) -> None:
+    """The recording's sound is the file put into the recordings folder, which the app owns (a copy made
+    before owns_media existed has no such column: the restore failed with «База в копии повреждена»)."""
+    if "owns_media" in cols:
+        conn.execute("UPDATE meetings SET media_path = ?, owns_media = 1 WHERE id = ?", (str(target), mid))
+    else:
+        conn.execute("UPDATE meetings SET media_path = ? WHERE id = ?", (str(target), mid))
+
+
+def _restored_now(conn: sqlite3.Connection, ids: List[int], cols: set) -> None:
+    """The sound of these recordings came back now: «keep the sound N days» counts from the restore, not from
+    when they were recorded (the retention deleted an old recording's sound right after the restart that put
+    the copy in place: found in an audit)."""
+    if not ids:
+        return
+    if "media_restored_at" not in cols:  # init_db adds it otherwise; the copy's database is older
+        conn.execute("ALTER TABLE meetings ADD COLUMN media_restored_at TEXT DEFAULT ''")
+        cols.add("media_restored_at")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.executemany("UPDATE meetings SET media_restored_at = ? WHERE id = ?", [(now, mid) for mid in ids])
 
 
 def _carry_local_tables(old_db: Path, new_db: Path) -> None:

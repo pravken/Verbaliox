@@ -17,8 +17,6 @@ from typing import Any, Dict, List
 CONTEXT_MAX_CHARS = 3000
 TASKS_MAX = 30
 
-_ANY_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s|\*\*[^*]+\*\*:?\s*$)")
-_BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
 # The protocol's sections that are its result (app/ollama_client.SUMMARY_TEMPLATES["protocol"])
 _RESULT_HEADS = {
     "decisions": re.compile(r"^\s{0,3}(#{1,6}\s*|\*\*).*(решени|договор|decision|agreed)", re.I),
@@ -29,17 +27,11 @@ _LABELS = {"decisions": "Решения", "open": "Открытые вопрос
 
 
 def protocol_points(protocol_md: str) -> Dict[str, List[str]]:
-    """The points of the protocol's result sections: {"decisions": [...], "open": [...], "next": [...]}."""
-    out: Dict[str, List[str]] = {k: [] for k in _RESULT_HEADS}
-    inside = None
-    for line in str(protocol_md or "").splitlines():
-        if _ANY_HEAD.match(line):
-            inside = next((k for k, rx in _RESULT_HEADS.items() if rx.match(line)), None)
-            continue
-        m = _BULLET.match(line) if inside else None
-        if m:
-            out[inside].append(m.group(1).strip())
-    return out
+    """The points of the protocol's result sections: {"decisions": [...], "open": [...], "next": [...]}, read as the
+    analysis reads them (app/analysis_chain.section_points: a topic «### Решение …» is not the decisions)."""
+    from app.analysis_chain import section_points
+
+    return {k: section_points(str(protocol_md or ""), k) for k in _RESULT_HEADS}
 
 
 def _protocol_note(meeting: Dict[str, Any], keys=("decisions", "open", "next")) -> str:

@@ -230,7 +230,7 @@ function queueKindLabel(q) {
 
 function renderQueuePanel() {
   const panel = document.getElementById('queue-panel');
-  if (!panel) return;
+  if (!panel || !sidebarShown()) return;
   const items = state.queue || [];
   panel.classList.toggle('hidden', items.length === 0);
   document.getElementById('queue-count').textContent = items.length ? `(${items.length})` : '';
@@ -493,6 +493,13 @@ function askNeedsModel() {
   return true;
 }
 
+// A brief or a digest answered: shown, and kept with its conversation (it was lost on a reload: the save waited
+// for the item to come through askThread again, which it never does once it is in the conversation)
+function askItemDone(item) {
+  renderAskThread();
+  if (item.status === 'done' && !item._saved && typeof assistantSaveSoon === 'function') { item._saved = true; assistantSaveSoon(); }
+}
+
 async function makeBrief() {
   if (askNeedsModel()) return;
   const scope = { ...state.askScope };
@@ -513,7 +520,7 @@ async function makeBrief() {
     item.error = e.message;
     item.status = 'error';
   }
-  renderAskThread();
+  askItemDone(item);
 }
 
 async function makeDigest(days) {
@@ -537,7 +544,7 @@ async function makeDigest(days) {
     item.error = e.message;
     item.status = 'error';
   }
-  renderAskThread();
+  askItemDone(item);
 }
 
 // The citations of an answer: [2], [1, 3] and the ranges [1-3] / [11–12] / [2, 4-5] the models also write (read as
@@ -932,7 +939,7 @@ function meetingRowHtml(m, depth) {
         class="w-12 h-[27px] rounded object-cover bg-black/60 shrink-0 border border-white/10" />`
     : '';
   const status = m.status === 'failed' ? t('statusFailed') : m.status === 'cancelled' ? t('statusCancelled') : m.status === 'cleared' ? t('statusClearedShort') : m.status === 'added' ? t('statusAddedShort')
-    : [spkCount ? `${spkCount} ${t('spkShort')}` : '', m.language && m.language !== 'auto' ? m.language.toUpperCase() : ''].filter(Boolean).join(' · ');
+    : [spkCount ? plural(spkCount, t('hmPeopleForms')) : '', m.language && m.language !== 'auto' ? m.language.toUpperCase() : ''].filter(Boolean).join(' · ');
   return `
     <div data-click="libRowClick" data-click-args='[{"$": "event"}, ${m.id}]' data-mid="${m.id}" tabindex="0" role="button"
          data-contextmenu="openRecordingContextMenu" data-contextmenu-args='[{"$": "event"}, ${m.id}]'
@@ -1381,9 +1388,11 @@ function libSelectionShown() {
   return state.multi.size > 0 || !state.appView || state.appView === 'library';
 }
 
-// The recordings in the order on screen: the rows of «Записи» (the list of the old sidebar is hidden)
+// The recordings in the order on screen: the rows of «Записи», drawn or not yet (the list of the old sidebar is
+// hidden); away from «Записи», in its order all the same
 function libVisibleIds() {
   if (state.appView === 'libtable' && typeof LT !== 'undefined') return [...LT.ids];
+  if (!sidebarShown() && typeof ltOrderIds === 'function') return ltOrderIds();
   return [...document.querySelectorAll('#meetings-list [data-mid]')].map(el => Number(el.dataset.mid));
 }
 
@@ -1512,34 +1521,44 @@ async function bulkRename() {
   const tpl = await askText(t('bulkRenamePrompt'), `${list[0].title} {n}`);
   if (!tpl || !tpl.trim()) return;
   const width = String(list.length).length;
-  let failed = 0;
+  let failed = 0, why = '';
   for (const [i, m] of list.entries()) {
     const d = meetingDate(m);
     const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const title = tpl.replaceAll('{n}', String(i + 1).padStart(width, '0')).replaceAll('{title}', m.title || '').replaceAll('{date}', ymd).trim();
     const res = await fetch(`/api/meetings/${m.id}/title`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
-    });
-    if (!res.ok) failed++;
+    }).catch(() => null);
+    if (!res || !res.ok) { failed++; why = why || await bulkWhy(res); }
   }
   await loadMeetingsList();
   libRefreshActiveIn(state.multi);
-  if (failed) showError(t('bulkSomeFailed').replace('{n}', () => failed));
+  if (failed) showError(bulkFailedText(failed, why));
 }
 
 // Titles made by the analysis model from each transcript
 async function bulkAutoTitles() {
   const list = libSelectedInOrder().filter(m => m.status === 'completed');
   if (!list.length) { showWarning(t('bulkNoTranscripts')); return; }
-  let failed = 0;
+  let failed = 0, why = '';
   for (const [i, m] of list.entries()) {
     showToast(t('bulkAutoTitleWorking').replace('{i}', () => i + 1).replace('{n}', () => list.length));
-    const res = await fetch(`/api/meetings/${m.id}/title/generate`, { method: 'POST' });
-    if (!res.ok) failed++;
+    const res = await fetch(`/api/meetings/${m.id}/title/generate`, { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) { failed++; why = why || await bulkWhy(res); }
     await loadMeetingsList();
   }
   libRefreshActiveIn(state.multi);
-  showToast(failed ? t('bulkSomeFailed').replace('{n}', () => failed) : t('bulkAutoTitleDone'));
+  if (failed) showError(bulkFailedText(failed, why));
+  else showToast(t('bulkAutoTitleDone'));
+}
+
+// A bulk action (not a deletion) that failed for some recordings: how many, and the reason of the first one
+// (they all said «Не удалось удалить записей», whatever the action was: found in the audit)
+async function bulkWhy(res) {
+  return res ? errorText(await readJson(res), res) : t('errorGeneric');
+}
+function bulkFailedText(n, why) {
+  return t('bulkOpFailed').replace('{n}', () => n).replace('{why}', () => why || t('errorGeneric'));
 }
 
 // Ctrl+A selects recordings only after a click in the library (elsewhere it selects text as usual)
@@ -1706,9 +1725,21 @@ function openLiveStudio() {
   studioTab('text');
 }
 
+// The old sidebar is hidden for good (styles.css, #app-sidebar): its list of recordings and its queue are not
+// drawn. For a library of 1200 recordings the list was 22 000 elements, drawn at the start and again at each
+// change of the selection, each progress and each second of the queue (audit K19)
+function sidebarShown() {
+  const aside = document.getElementById('app-sidebar');
+  return !!aside && aside.getClientRects().length > 0;
+}
+
 function renderMeetingsSidebar() {
   (state.libPendingHides || []).forEach(hide => hide());  // removals still waiting on «Отменить»
   const listEl = document.getElementById('meetings-list');
+  if (!sidebarShown()) {
+    if (listEl && listEl.firstChild) { listEl._keyed = false; listEl.innerHTML = ''; }
+    return;
+  }
   renderLibFilterUi();
 
   const filtering = libFilterCount() > 0;

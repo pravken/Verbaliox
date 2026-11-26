@@ -26,6 +26,16 @@ class CleanFillersTest(unittest.TestCase):
         self.assertEqual(cleaned[0]["text"], "Мы начинаем сейчас.")
         self.assertEqual("".join(w["word"] for w in cleaned[0]["words"]).strip(), cleaned[0]["text"])
 
+    def test_millimetres_after_a_number_are_kept(self):
+        """Found in an audit: «5 мм» lost its unit as a hesitation."""
+        seg = {"id": 1, "start": 0.0, "end": 3.0, "text": "Зазор 5 мм, мм, не больше.",
+               "words": _words((" Зазор", 0.0, 0.4), (" 5", 0.5, 0.7), (" мм,", 0.8, 1.0), (" мм,", 1.2, 1.5), (" не", 1.6, 1.8),
+                               (" больше.", 1.9, 2.4))}
+        cleaned, removed = clean_filler_words_in_segments([seg])
+        self.assertEqual((cleaned[0]["text"], removed), ("Зазор 5 мм, не больше.", 1))
+        cleaned, _ = clean_filler_words_in_segments([{"id": 2, "start": 0, "end": 1, "text": "Зазор 5 мм, мм, не больше."}])
+        self.assertEqual(cleaned[0]["text"], "Зазор 5 мм, не больше.")
+
     def test_keeps_intentional_repeats_and_meaningful_phrases(self):
         text = " Да да, как бы то ни было, очень очень важно."
         seg = {

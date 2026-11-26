@@ -34,6 +34,7 @@ NEW_ENV, OLD_ENV = ".venv-new", ".venv-old"
 FAILED_MARK = "envmove-failed.txt"  # in <data>/updates: when the last try failed
 RETRY_AFTER = 24 * 3600
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+WINGET_TIMEOUT_SEC = 900  # Python from python.org: a download of about 30 MB and its installer
 
 
 def _log(data_dir: Path, line: str) -> None:
@@ -110,9 +111,12 @@ def prepare(app_dir: Path, data_dir: Path) -> str:
         py = signed_python()
         if not py:
             _log(data_dir, "Smart App Control is on: installing Python 3.11 from python.org with winget")
-            subprocess.run(["winget", "install", "--id=Python.Python.3.11", "-e", "--scope", "user",
-                            "--accept-source-agreements", "--accept-package-agreements"],
-                           capture_output=True, creationflags=_NO_WINDOW)
+            try:  # a winget waiting on something (its sources, a prompt) held the move for good
+                subprocess.run(["winget", "install", "--id=Python.Python.3.11", "-e", "--scope", "user",
+                                "--accept-source-agreements", "--accept-package-agreements"],
+                               capture_output=True, creationflags=_NO_WINDOW, timeout=WINGET_TIMEOUT_SEC)
+            except (OSError, subprocess.SubprocessError) as e:
+                _log(data_dir, f"winget did not install Python 3.11: {e}")
             py = signed_python()
         if not py:
             raise RuntimeError("Не удалось найти или установить Python 3.11 с python.org")
@@ -188,11 +192,11 @@ def move(app_dir: Path, data_dir: Path, report) -> None:
     probe = app_dir / ".venv-move-probe"
     try:
         cur.rename(probe)
-        probe.rename(cur)
     except OSError:
-        if probe.exists() and not cur.exists():
-            probe.rename(cur)
         raise RuntimeError("Окружение Python занято другой программой — закройте её и запустите Verbaliox снова")
+    # its name back, again while an antivirus looks into the folder just renamed: one failed try left the program
+    # without its environment (found in an audit)
+    _rename(probe, cur)
     report("Установка библиотек Python 3.11 (несколько гигабайт, обычно 5–15 минут)…")
     uv = find_uv()
     req = str(app_dir / "requirements.txt")

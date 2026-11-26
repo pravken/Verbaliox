@@ -38,7 +38,10 @@ class _NvmlMemory(ctypes.Structure):
 _nvml_lock = threading.Lock()
 _ollama_loading = threading.Event()  # set while the preload button loads an Ollama model
 _ollama_loading_name: List[Optional[str]] = [None]
-_nvml: Dict[str, Any] = {"lib": None, "handle": None, "failed": False}
+_nvml: Dict[str, Any] = {"lib": None, "handle": None, "failed": False, "failed_at": 0.0}
+# NVML that failed is tried again after this pause, not never: a driver not ready after the PC woke up, or reset
+# after a hang of the video card, left the video memory unknown until the app was restarted (audit В22)
+NVML_RETRY_SEC = 300.0
 
 
 def _nvml_memory() -> Optional[Tuple[int, int]]:
@@ -46,9 +49,13 @@ def _nvml_memory() -> Optional[Tuple[int, int]]:
     (used, total) bytes of GPU 0 from the driver's NVML library, loaded once into this process.
     Faster than starting nvidia-smi on every poll, and nothing is left hanging if the driver stalls.
     """
+    import time
+
     with _nvml_lock:
         if _nvml["failed"]:
-            return None
+            if time.monotonic() - _nvml["failed_at"] < NVML_RETRY_SEC:
+                return None
+            _nvml.update(lib=None, handle=None, failed=False)  # loaded again: the old handle may be dead
         try:
             if _nvml["lib"] is None:
                 lib = ctypes.CDLL("nvml.dll") if sys.platform == "win32" else ctypes.CDLL("libnvidia-ml.so.1")
@@ -60,10 +67,12 @@ def _nvml_memory() -> Optional[Tuple[int, int]]:
                 _nvml.update(lib=lib, handle=handle)
             mem = _NvmlMemory()
             if _nvml["lib"].nvmlDeviceGetMemoryInfo(_nvml["handle"], ctypes.byref(mem)) != 0:
+                _nvml.update(lib=None, handle=None)  # the next poll starts NVML again (a handle dead after a reset)
                 return None
             return int(mem.used), int(mem.total)
         except Exception:
-            _nvml["failed"] = True  # no NVIDIA driver: do not try again on every poll
+            # no NVIDIA driver, or it stopped answering: not tried again on every poll
+            _nvml.update(failed=True, failed_at=time.monotonic())
             return None
 
 
@@ -338,7 +347,9 @@ def _stop_ollama_runners(names: List[str]) -> None:
         match = " -or ".join(f"$_.CommandLine -match '{b}'" for b in blobs)
         script = ("Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'ollama.exe' -or $_.Name -eq 'ollama_llama_server.exe') "
                   f"-and ({match}) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}")
-        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=30, creationflags=flags)
+        from app.paths import powershell_exe
+
+        subprocess.run([powershell_exe(), "-NoProfile", "-Command", script], capture_output=True, timeout=30, creationflags=flags)
     else:
         for b in blobs:
             subprocess.run(["pkill", "-f", f"ollama.*{b}"], capture_output=True, timeout=30)
@@ -521,12 +532,12 @@ def vram_snapshot() -> Dict[str, Any]:
     writing = set(analysis_running())
     for name in names:
         m = loaded_ollama.get(name)
-        busy = bool(m) and name in writing  # an overview or an answer is being written with it
+        in_use = bool(m) and name in writing  # an overview or an answer is being written with it (not `busy`: the job)
         chips.append({
             "kind": "ollama", "name": name, "label": format_llm_model_name(name), "default": name == wanted_llm,
             "loaded": bool(m), "size_gb": m["size_vram_gb"] if m else None,
             "loading": not m and loading_llm == name,
-            "can_unload": bool(m) and not busy, "in_use": busy,
+            "can_unload": bool(m) and not in_use, "in_use": in_use,
             "can_preload": not m and not _ollama_loading.is_set(),
         })
 

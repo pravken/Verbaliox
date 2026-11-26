@@ -47,8 +47,16 @@ if defined VS_RUNNING (
 )
 
 set "BRANCH=%~1"
-if "%BRANCH%"=="" for /f "delims=" %%b in ('git branch --show-current') do set "BRANCH=%%b"
-if "%BRANCH%"=="" set "BRANCH=main"
+if "!BRANCH!"=="" for /f "delims=" %%b in ('git branch --show-current') do set "BRANCH=%%b"
+if "!BRANCH!"=="" set "BRANCH=main"
+rem The name goes into the commands below: letters, digits and . _ / - only (git allows & and | in a name,
+rem which cmd would run as commands). Whatever is left once those are taken out as separators is a bad character.
+set "BAD_BRANCH="
+for /f "delims=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-" %%c in ("x!BRANCH!") do set "BAD_BRANCH=1"
+if defined BAD_BRANCH (
+    echo The branch name has characters other than letters, digits and . _ / - : it is not used.
+    goto :fail
+)
 for /f "delims=" %%h in ('git rev-parse HEAD') do set "OLD=%%h"
 
 echo [1/4] Downloading branch %BRANCH%...

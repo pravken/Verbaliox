@@ -25,6 +25,9 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # Outlook's Restrict wants the dates in the user's own short format, which PowerShell's ToString('g') gives.
 # MeetingStatus 5 / 7: the meeting was cancelled (by the organizer / received cancelled).
+# Sorted by start before IncludeRecurrences, as Outlook's documentation asks: the other way round the occurrences
+# of a recurring meeting are not expanded reliably (found in an audit). One appointment Outlook cannot read (a
+# property refused by its security prompt) is left out, not the whole calendar.
 _SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -33,13 +36,14 @@ $ns = $ol.GetNamespace('MAPI')
 $me = ''
 try { $me = $ns.CurrentUser.Name } catch {}
 $items = $ns.GetDefaultFolder(9).Items
-$items.IncludeRecurrences = $true
 $items.Sort('[Start]')
+$items.IncludeRecurrences = $true
 $from = (Get-Date).Date.AddDays(-__BACK__).ToString('g')
 $to = (Get-Date).Date.AddDays(__AHEAD__).ToString('g')
 $found = $items.Restrict("[Start] >= '$from' AND [Start] <= '$to'")
 $out = @()
 foreach ($a in $found) {
+  try {
   if ($a.AllDayEvent) { continue }
   if ($a.MeetingStatus -eq 5 -or $a.MeetingStatus -eq 7) { continue }
   $people = @()
@@ -55,6 +59,7 @@ foreach ($a in $found) {
     join = ([regex]::Match(([string]$a.Location + ' ' + [string]$a.Body), 'https://(teams\.microsoft\.com/l/meetup-join|teams\.microsoft\.com/meet|teams\.live\.com/meet|([\w-]+\.)?zoom\.us/[jw]/|meet\.google\.com/|[\w-]+\.webex\.com/)[^\s<>]*')).Value  # no double quote here: the script is a command-line argument
     attendees = @($people)
   }
+  } catch { continue }
   if ($out.Count -ge 300) { break }
 }
 ConvertTo-Json -InputObject @($out) -Depth 4 -Compress
@@ -167,8 +172,10 @@ def fetch() -> List[Dict[str, Any]]:
         raise RuntimeError(NO_PROFILE)
     before = _outlook_pids()
     script = _SCRIPT.replace("__BACK__", str(DAYS_BACK)).replace("__AHEAD__", str(DAYS_AHEAD))
+    from app.paths import powershell_exe
+
     try:
-        res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        res = subprocess.run([powershell_exe(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
                              creationflags=_NO_WINDOW)
     except subprocess.TimeoutExpired:

@@ -91,6 +91,37 @@ class SessionAndSearchApiTest(unittest.TestCase):
             self.assertEqual(c.get("/api/meetings").status_code, 200)
             self.assertEqual(c.get("/static/js/app.js", headers={"Sec-Fetch-Site": "cross-site"}).status_code, 200)
 
+    def test_every_answer_says_its_type_and_is_never_framed(self):
+        with self._client(8790) as c:
+            locked = c.get("/")  # the sign-in page, before the session
+            self.assertEqual(locked.status_code, 401)
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            for r in (locked, c.get("/api/meetings"), c.get("/static/js/app.js")):
+                self.assertEqual(r.headers.get("x-content-type-options"), "nosniff")
+                self.assertEqual(r.headers.get("x-frame-options"), "DENY")
+
+    def test_a_mail_link_with_raw_line_breaks_or_quotes_is_refused(self):
+        from unittest import mock
+
+        with self._client(8790) as c, mock.patch("webbrowser.open") as web, mock.patch("os.startfile", create=True) as start:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            for bad in ('mailto:?subject=a"b', "mailto:?subject=a\r\nbcc:x@example.com", "mailto:?body=<x>"):
+                self.assertEqual(c.post("/api/open-url", json={"url": bad}).status_code, 400, bad)
+            self.assertEqual(c.post("/api/open-url", json={"url": "mailto:?subject=%D0%90&body=a%0Ab"}).status_code, 200)
+        self.assertEqual(web.call_count + start.call_count, 1)
+
+    def test_settings_the_program_writes_itself_are_not_taken_from_the_page(self):
+        from app.database import get_all_settings
+
+        with self._client(8790) as c:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            before = get_all_settings().get("summary_templates")
+            r = c.post("/api/settings", json={"settings": {"clean_exit": "1", "summary_templates": "x", "auto_title": True}})
+            self.assertEqual(r.status_code, 200)
+        after = get_all_settings()
+        self.assertEqual(after.get("summary_templates"), before)  # its own route checks the templates
+        self.assertEqual(after.get("auto_title"), "true")
+
     def test_search_endpoint_and_static_revalidation(self):
         with self._client(8790) as c:
             c.get(f"/?token={main.SESSION_TOKEN}")
@@ -272,6 +303,10 @@ class ConcurrentEditsTest(unittest.TestCase):
             api_unmerge_segment(mid, 3, UnmergePayload(first=first, second=second))
         self.assertEqual(e.exception.status_code, 409)
         self.assertEqual(len(main.get_meeting(mid)["segments"]), 29)
+        for bad in ("abc", "nan", float("inf"), -1):  # a time that is no time: refused, never stored
+            with self.assertRaises(HTTPException) as e:
+                api_unmerge_segment(mid, 3, UnmergePayload(first={**first, "start": bad}, second=second))
+            self.assertEqual(e.exception.status_code, 400)
 
 
 @unittest.skipIf(main is None, "fastapi and app dependencies not installed")

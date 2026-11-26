@@ -12,6 +12,7 @@ import re
 import sys
 import webbrowser
 from typing import Optional
+from urllib.parse import urlsplit, urlunsplit
 
 _JOIN_RE = re.compile(
     r"https://(?:"
@@ -32,15 +33,23 @@ def find(text: str) -> str:
     return m.group(0).rstrip(".,;)>]") if m else ""
 
 
+def _host(url: str) -> str:
+    try:
+        return (urlsplit((url or "").strip()).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
 def service(url: str) -> str:
-    u = (url or "").lower()
-    if "teams." in u:
+    """By the link's host only: «teams.microsoft.com» in the query of a Zoom link is no Teams link."""
+    host = _host(url)
+    if host in ("teams.microsoft.com", "teams.live.com"):
         return "Teams"
-    if "zoom.us" in u:
+    if host == "zoom.us" or host.endswith(".zoom.us"):
         return "Zoom"
-    if "meet.google.com" in u:
+    if host == "meet.google.com":
         return "Google Meet"
-    if "webex.com" in u:
+    if host.endswith(".webex.com"):
         return "Webex"
     return ""
 
@@ -63,8 +72,10 @@ def launch_target(url: str) -> Optional[str]:
     link = find(url)
     if not link or link != (url or "").strip().rstrip(".,;)>]"):
         return None
-    if service(link) == "Teams" and "teams.microsoft.com" in link.lower() and _teams_app():
-        return "msteams:" + link.split("teams.microsoft.com", 1)[1]
+    if _host(link) == "teams.microsoft.com" and _teams_app():
+        u = urlsplit(link)
+        if u.path.startswith(("/l/meetup-join/", "/meet/")):
+            return "msteams:" + urlunsplit(("", "", u.path, u.query, u.fragment))
     return link
 
 

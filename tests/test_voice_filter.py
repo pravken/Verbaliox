@@ -18,6 +18,22 @@ class VoiceFilterTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_only_the_downloaded_and_checked_filter_is_run(self):
+        """A deep-filter on PATH or in the current folder skipped the SHA-256 check of the download."""
+        with mock.patch.object(vf, "exe_path", return_value=Path(tempfile.gettempdir()) / "no-such-deep-filter.exe"), \
+                mock.patch("shutil.which", return_value=r"C:\Tools\deep-filter.exe"):
+            self.assertIsNone(vf.find_exe())
+
+    def test_powershell_is_run_by_its_full_path(self):
+        from app.paths import powershell_exe
+
+        with tempfile.TemporaryDirectory() as root:
+            exe = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+            exe.parent.mkdir(parents=True)
+            exe.write_bytes(b"")
+            with mock.patch.dict("os.environ", {"SystemRoot": root}):
+                self.assertEqual(powershell_exe(), str(exe))
+
     def test_nothing_is_done_without_the_filter(self):
         with mock.patch.object(vf, "find_exe", return_value=None):
             self.assertFalse(vf.clean("ffmpeg", self.src, self.dir / "out.wav"))

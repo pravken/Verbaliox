@@ -47,6 +47,23 @@ class ImportInPlaceTest(unittest.TestCase):
         self.assertEqual(Path(m["media_path"]), self.src.resolve())
         self.assertFalse(m["owns_media"])
 
+    def test_an_empty_path_scans_nothing(self):
+        """Found in an audit: an empty path was the current folder (the program's), whose files were added."""
+        import os
+
+        from fastapi import HTTPException
+
+        cwd = os.getcwd()
+        os.chdir(self.tmp.name)  # a folder with a recording in it
+        try:  # back before tearDown: Windows does not delete the current folder
+            for path in ("", "  ", '""'):
+                with mock.patch.object(library, "enqueue_meeting_job") as job, self.assertRaises(HTTPException) as err:
+                    library.api_add_local_path(library.LocalPathPayload(path=path))
+                self.assertEqual(err.exception.status_code, 400)
+                job.assert_not_called()
+        finally:
+            os.chdir(cwd)
+
     def test_the_same_file_is_not_added_twice(self):
         from fastapi import HTTPException
 

@@ -3,9 +3,6 @@ import json
 import re
 from typing import Any, Dict, Tuple
 
-from docx import Document
-from docx.shared import Pt, RGBColor
-
 from app.audio_utils import format_timestamp
 from app.grounding import readable_summaries
 
@@ -220,6 +217,10 @@ def _xml_safe(value: Any) -> Any:
 
 
 def export_docx(meeting: Dict[str, Any]) -> bytes:
+    # python-docx (and lxml) loaded at the first Word export, not at every start of the app (audit В22: ~0.1 s)
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+
     meeting = _xml_safe(meeting)
     times, names = _shown(meeting)
     doc = Document()

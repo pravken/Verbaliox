@@ -269,6 +269,8 @@ function renderTxModelBar() {
   const redo = document.getElementById('tx-redo-btn');
   redo.disabled = busy || !!m.media_removed || shown === 'teams' || shown === 'merged';
   redo.classList.toggle('hidden', shown === 'teams' || shown === 'merged');
+  // one «Расшифровать заново» in the toolbar: the one with the choices stays when the short row has none
+  document.getElementById('tx-reconfig-btn')?.classList.toggle('hidden', !!shown && !redo.classList.contains('hidden'));
   const qs = document.getElementById('tx-quick-status');
   qs.textContent = busy ? '' : m.transcript_at ? `✓ ${txShortDate(m.transcript_at)}` : '';
   qs.title = m.transcript_at ? `${t('txModelDone')} · ${formatDateTime(m.transcript_at)}` : '';
@@ -468,7 +470,7 @@ function openTxMoreMenu(el) {
   const shown = m.transcript_model || '';
   const busy = !DONE_STATUSES.includes(m.status);
   const pickShown = () => { document.getElementById('tx-model-select').value = shown; state.txModelPick = shown; };
-  const items = [];
+  const items = [{ label: t('recRedo'), disabled: busy || !!m.media_removed, run: () => recReconfigure() }];
   if (shown && shown !== 'teams' && !m.media_removed && (m.segments || []).length) items.push({ label: t('txResplit'), disabled: busy, run: () => openResplitDialog() });
   items.push({ label: t('txProcBtnLong'), disabled: busy || shown === 'merged' || shown === 'teams',
     run: () => { pickShown(); toggleTxModelBar(true); setTimeout(() => document.getElementById('tx-proc-btn')?.click(), 0); } });
@@ -1580,6 +1582,10 @@ async function requestVideoSubtitles(lang, variant, mode, askPath) {
   return true;
 }
 
+// The translation icon of the studio's chip («Перевод» of the captions): on the quick buttons of the transcript too,
+// so «EN» reads as a translation, not as the language of the program (found in the audit)
+const TX_TR_IC = '<svg class="quick-lang-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802"/></svg>';
+
 // Transcript view: original / translation / both
 function renderTxQuickLangs() {
   const m = state.activeMeeting;
@@ -1594,7 +1600,7 @@ function renderTxQuickLangs() {
     const on = ready && showing === c;
     return `<button ${on ? pageCall('click', 'setTranscriptView', ['orig']) : pageCall('click', 'quickTranslate', [c])}
       title="${escapeHtml(on ? t('subsLangOriginal') : ready ? t('translateQuickShow').replace('{lang}', () => langName(c)) : t('translateQuickMake').replace('{lang}', () => langName(c)))}"
-      class="quick-lang ${on ? 'on' : ''}">${ready && !on ? '✓ ' : ''}${escapeHtml(langCode(c))}</button>`;
+      class="quick-lang quick-lang-tr ${on ? 'on' : ''}">${TX_TR_IC}${ready && !on ? '✓ ' : ''}${escapeHtml(langCode(c))}</button>`;
   }).join('');
 }
 
@@ -1729,13 +1735,19 @@ async function saveMeetingTitle() {
   if (!state.activeMeeting) return;
   const newTitle = document.getElementById('meeting-title-input').value.trim();
   if (!newTitle || newTitle === state.activeMeeting.title) return;
-
-  await fetch(`/api/meetings/${state.activeMeeting.id}/title`, {
+  const m = state.activeMeeting;
+  const res = await fetch(`/api/meetings/${m.id}/title`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: newTitle })
-  });
-  state.activeMeeting.title = newTitle;
+  }).catch(() => null);
+  // refused: said, and the title shown is the one kept (it took the new one whatever the answer: audit)
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    if (state.activeMeeting === m) document.getElementById('meeting-title-input').value = m.title || '';
+    return;
+  }
+  m.title = newTitle;
   await loadMeetingsList();
 }
 
@@ -2167,7 +2179,7 @@ function transcriptGroupHtml(group) {
         <div class="flex items-center min-w-0 mb-0.5">
           <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
             title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
-            style="color: ${escapeHtml(spk.color)}"
+            style="color: ${cssColor(spk.color, '#0A84FF')}"
             class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">
             ${options}
           </select>
@@ -2266,6 +2278,9 @@ function findActiveItem(items, t, pad, startOf = x => x.s, endOf = x => x.e) {
     if (startOf(items[mid]) <= t) { found = mid; lo = mid + 1; } else { hi = mid - 1; }
   }
   if (found >= 0 && t <= endOf(items[found]) + pad) return found;
+  // a short phrase said over a longer one (a «да» inside a long answer) ends before it: the longer one, a few
+  // phrases back, is still under the playhead (the highlight went off until the next phrase: audit)
+  for (let i = found - 1; i >= 0 && i >= found - 8; i--) if (t <= endOf(items[i]) + pad) return i;
   return -1;
 }
 
@@ -2668,7 +2683,7 @@ document.addEventListener('DOMContentLoaded', syncTxLayoutButtons);
 function txChatAvatar(spk) {
   const name = String(spk.name || '');
   const face = typeof personPhotoUrl === 'function' ? personPhotoUrl(name) : '';
-  const color = spk.color || '#0A84FF';
+  const color = cssColor(spk.color, '#0A84FF');
   return face
     ? `<span class="ch-av"><img class="sp-photo" src="${escapeHtml(face)}" alt=""></span>`
     : `<span class="ch-av" style="background:${escapeHtml(rpHexA(color, 0.22))};color:${escapeHtml(color)}">${escapeHtml(capInitials(name))}</span>`;
@@ -2697,13 +2712,13 @@ function transcriptChatGroupHtml(group) {
       + '</div>';
   };
   return `
-    <div class="segment-group ch-group" data-start="${Number(first.start) || 0}" style="--pc:${escapeHtml(spk.color || '#0A84FF')}">
+    <div class="segment-group ch-group" data-start="${Number(first.start) || 0}" style="--pc:${cssColor(spk.color, '#0A84FF')}">
       ${txChatAvatar(spk)}
       <div class="ch-body">
         <div class="ch-h">
           <select data-change="changeBlockSpeaker" data-change-args='[${JSON.stringify(ids)}, {"$": "value"}]'
             title="${escapeHtml(t(ids.length > 1 ? 'tipChangeBlockSpeaker' : 'tipChangeSegSpeaker'))}"
-            style="color: ${escapeHtml(spk.color)}"
+            style="color: ${cssColor(spk.color, '#0A84FF')}"
             class="seg-spk bg-transparent text-xs font-semibold focus:outline-none cursor-pointer">${options}</select>
           ${speakers[first.speaker] ? `<button data-click="startInlineSpeakerRename" data-click-args='[${ids[0]}]' class="seg-icon-btn"
             title="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}" aria-label="${escapeHtml(t('spkRenameOption').replace('{name}', () => speakers[first.speaker].name))}">${SVG_ICONS.pencil}</button>` : ''}

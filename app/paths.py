@@ -80,8 +80,10 @@ def _log(msg: str) -> None:
     print(f"[data] {msg}", flush=True)
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        from app.applog import scrub  # the Windows user's name in the paths it moves
+
         with (DATA_DIR / "migration.log").open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
+            f.write(scrub(line) + "\n")
     except OSError:
         pass
 
@@ -407,6 +409,20 @@ def explorer_command(path: Path, select: bool = True) -> str:
     whole of it, Explorer did not understand them and opened «Documents» instead."""
     p = str(path).replace('"', "")
     return f'explorer.exe /select,"{p}"' if select else f'explorer.exe "{p}"'
+
+
+def powershell_exe() -> str:
+    """Windows PowerShell by its full path: a bare "powershell" is looked for in the program's own folders
+    and the current one before System32, where a file of that name would run instead."""
+    root = os.environ.get("SystemRoot") or os.environ.get("WINDIR") or r"C:\Windows"
+    exe = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    return str(exe) if exe.is_file() else "powershell"
+
+
+def is_network_path(path) -> bool:
+    """\\\\host\\share in any spelling of its slashes ("//host", "/\\host", "\\/host"): Windows reads them
+    all as a network path, and touching one connects to that server (sending the user's Windows login)."""
+    return str(path or "").strip().strip('"').replace("/", "\\").startswith("\\\\")
 
 
 def reveal_in_explorer(path: Path) -> None:

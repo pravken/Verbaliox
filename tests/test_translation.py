@@ -61,6 +61,26 @@ class StalenessTest(unittest.TestCase):
         self.assertEqual((r2["translated"], r2["stale"], r2["missing"]), (3, 0, 0))
         self.assertEqual(sorted(entry2["items"]), ["1", "2", "3"])
 
+    def test_a_long_edited_transcript_is_matched_by_its_starts(self):
+        """Audit В20: each line whose translation was not found by its number looked through every item for one
+        starting near it (2700 x 2700 for a three-hour meeting, under the database lock). The same answer, by the
+        items grouped by their start; the first item near a start in their order still wins."""
+        import time
+
+        segs = _segs([f"фраза {i}" for i in range(3000)], step=3.6)
+        entry = _translated(segs)
+        edited = [dict(s, id=s["id"] + 5000, text=s["text"] + " правка", start=s["start"] + (0.04 if s["id"] % 2 else -0.04))
+                  for s in segs]
+        t = time.perf_counter()
+        r = resolve_translation(edited, entry)
+        took = time.perf_counter() - t
+        self.assertEqual((r["stale"], r["missing"]), (3000, 0))
+        self.assertEqual(r["segments"]["5007"], {"text": "EN фраза 6", "stale": True})
+        self.assertLess(took, 1.0)
+        # two items near one start: the first of them, as before
+        two = {"items": {"1": {"src": "x", "start": 10.0, "text": "первый"}, "2": {"src": "y", "start": 10.03, "text": "второй"}}}
+        self.assertEqual(resolve_translation([{"id": 9, "start": 10.02, "text": "z"}], two)["segments"]["9"]["text"], "первый")
+
     def test_new_segment_is_missing(self):
         segs = _segs(["один", "два"])
         entry = _translated(segs)

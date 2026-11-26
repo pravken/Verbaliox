@@ -168,7 +168,8 @@ function renderTasks() {
 function tkMatchesPeopleAndSearch(task) {
   if (TK.people.length && !TK.people.includes((task.who || '').toLocaleLowerCase())) return false;
   const q = TK.q.trim().toLocaleLowerCase();
-  if (q && !`${task.what} ${task.who} ${task.meeting_title} ${task.quote}`.toLocaleLowerCase().includes(q)) return false;
+  // the fields there are (an empty one was «null» in the text searched: «null» found every task without a quote)
+  if (q && ![task.what, task.who, task.meeting_title, task.quote].filter(Boolean).join(' ').toLocaleLowerCase().includes(q)) return false;
   return true;
 }
 
@@ -349,7 +350,7 @@ function renderTasksList() {
     const over = TK.by === 'due' && g.key === 'over';
     const icon = g.person ? tkAvatar(g.name, g.kind, 24)
       : `<span class="pcd-ic">${pultIcon(over ? 'over' : TK.by === 'due' ? 'meet' : TK.by === 'feature' ? 'tag' : 'rec')}</span>`;
-    const dot = TK.by === 'feature' ? `<span class="tk-dot" style="background:${escapeHtml(g.color)}"></span>` : '';
+    const dot = TK.by === 'feature' ? `<span class="tk-dot" style="background:${cssColor(g.color, '#8E8E93')}"></span>` : '';
     const title = g.featureId ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openFeaturePage', [g.featureId])} title="${escapeHtml(t('fpOpenTip'))}">${escapeHtml(g.title)} ↗</button>`
       : g.person && g.key ? `<button class="tk-group-title fp-title-link" ${pageCall('click', 'openPersonCard', [g.name])} title="${escapeHtml(t('pcOpenTip'))}">${escapeHtml(g.title)}</button>`
       : `<span class="tk-group-title">${escapeHtml(g.title)}</span>`;
@@ -696,7 +697,8 @@ function openTaskMenu(id, e) {
 }
 
 function editTaskText(id) {
-  const row = document.querySelector(`.tk-row[data-tid="${id}"] .tk-row-text`);
+  // a row of the list or a card of «Карточки» (only the rows were looked for: «Изменить текст» did nothing there)
+  const row = document.querySelector(`:is(.tk-row, .tk-tcard)[data-tid="${id}"] .tk-row-text`);
   const x = tkTask(id);
   if (!row || !x) return;
   const input = document.createElement('input');
@@ -1073,7 +1075,7 @@ function renderTasksReport() {
     return { k, name: l[0].who || t('tkNobody'), kind: l[0].who_kind, n: l.length, d, o, w: l.length - d - o };
   }).sort((a, b) => b.n - a.n || b.o - a.o);
   const max = Math.max(1, ...who.map(r => r.n));
-  const scopeText = TK.people.length ? (TK.people.length === 1 ? (tkPerson(TK.people[0])?.name || t('tkNobody')) : t('tkNPeople').replace('{n}', () => TK.people.length)) : t('tkAllPeopleLow');
+  const scopeText = TK.people.length ? (TK.people.length === 1 ? (tkPerson(TK.people[0])?.name || t('tkNobody')) : plural(TK.people.length, t('pvPeopleForms'))) : t('tkAllPeopleLow');
   const chip = (on, fn, args, label) => `<button class="tk-chip${on ? ' tk-on' : ''}" aria-pressed="${on}" ${pageCall('click', fn, args)}>${escapeHtml(label)}</button>`;
   const periods = [['week', t('tkPWeek')], ['month', t('tkPMonth')], ['custom', t('tkPCustom')]];
   const incl = [['done', t('tkIDone')], ['open', t('tkIOpen')], ['over', t('tkIOver')]];

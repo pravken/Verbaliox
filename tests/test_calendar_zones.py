@@ -125,5 +125,18 @@ class SeriesTest(unittest.TestCase):
         self.assertEqual(len(got), 3)
 
 
+
+class FileZoneChangeTest(unittest.TestCase):
+    """The yearly change of a zone described in the file (VTIMEZONE): «-2SU» is the last Sunday but one, not the
+    last (found in an audit)."""
+
+    def test_counted_from_the_end_of_the_month(self):
+        change = calendar_ics._FileZone._change
+        self.assertEqual(change(2026, (10, -1, 6, 3, 0)), datetime(2026, 10, 25, 3, 0))  # the last Sunday
+        self.assertEqual(change(2026, (10, -2, 6, 3, 0)), datetime(2026, 10, 18, 3, 0))  # the last but one
+        self.assertEqual(change(2026, (3, 2, 6, 2, 0)), datetime(2026, 3, 8, 2, 0))  # the second
+        self.assertEqual(change(2026, (3, 5, 6, 2, 0)), datetime(2026, 3, 29, 2, 0))  # no fifth Sunday: the last
+
+
 if __name__ == "__main__":
     unittest.main()

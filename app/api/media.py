@@ -14,7 +14,7 @@ from app.transcriber import enqueue_burn_subtitles_job, enqueue_dub_job, enqueue
 from fastapi import APIRouter
 
 from app.main import (  # noqa: E402 - shared helpers live in app/main.py
-    _EXPORT_VARIANTS, _ensure_not_processing, _pick_export_path, _remember_export,
+    _EXPORT_VARIANTS, _ensure_not_processing, _pick_export_path, _remember_export, _remember_export_dir,
 )
 
 router = APIRouter()
@@ -462,9 +462,9 @@ def api_meeting_cut(meeting_id: int, payload: CutPayload) -> Dict[str, Any]:
         out = out.with_name(out.name + ext)
     if out.resolve() == media.resolve():
         raise HTTPException(status_code=400, detail="Нельзя сохранить результат поверх исходного файла")
-    _remember_export(meeting_id, out)
     if not enqueue_cut_job(meeting_id, payload.kind, intervals, has_video, str(out)):
         raise HTTPException(status_code=409, detail="Запись сейчас обрабатывается")
+    _remember_export_dir(out)  # the file is listed with the recording by the job, once written
     return {"ok": True, "queued": True, "filename": out.name, "path": str(out), "kept_seconds": round(kept_seconds(intervals), 1),
             "duration": duration, "moments": moments}
 
@@ -521,9 +521,6 @@ def api_video_subtitles(meeting_id: int, payload: SubtitlesRequestPayload) -> Di
         check_output_path(media, out_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    if payload.ask_path:  # only a path that passed: the source picked by mistake is never listed as a copy
-        _remember_export(meeting_id, out_path)
-
     title = (
         f"{track_lang.upper()} + {(m.get('language') or '').upper()} (AI translation)" if variant == "bilingual"
         else f"{track_lang.upper()} (AI translation)" if lang else (track_lang.upper() or "Subtitles")
@@ -533,10 +530,14 @@ def api_video_subtitles(meeting_id: int, payload: SubtitlesRequestPayload) -> Di
             mux_soft_subtitles(media, srt_text, track_lang, title, out_path)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)[:600])
+        if payload.ask_path:  # only a file written at a path that passed: the source picked by mistake is never listed
+            _remember_export(meeting_id, out_path)
         return {"ok": True, "queued": False, "path": str(out_path), "filename": out_path.name, "folder": str(out_path.parent)}
 
-    if not enqueue_burn_subtitles_job(meeting_id, track_lang or "orig", srt_text, str(out_path)):
+    if not enqueue_burn_subtitles_job(meeting_id, track_lang or "orig", srt_text, str(out_path), remember=payload.ask_path):
         raise HTTPException(status_code=409, detail="Запись уже обрабатывается")
+    if payload.ask_path:
+        _remember_export_dir(out_path)
     return {"ok": True, "queued": True, "path": str(out_path), "filename": out_path.name, "folder": str(out_path.parent)}
 
 @router.get("/api/meetings/{meeting_id}/peaks")

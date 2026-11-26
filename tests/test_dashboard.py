@@ -83,13 +83,13 @@ class DashboardTest(unittest.TestCase):
 
         folder = tests.temp_dir(self)
         ids = []
-        for title, status in (("В очереди", "queued"), ("Отменённая", "cancelled"), ("Сломанная", "failed")):
+        for title, status, at in (("В очереди", "queued", "10:00"), ("Отменённая", "cancelled", "12:00"), ("Сломанная", "failed", "14:00")):
             media = folder / f"{status}.wav"
             media.write_bytes(b"x")
             m = database.create_meeting(title, media.name, str(media))
             with database._db_lock:
                 conn = database.get_connection()
-                conn.execute("UPDATE meetings SET recorded_at = ?, duration = 0 WHERE id = ?", ("2026-11-18 10:00:00", m["id"]))
+                conn.execute("UPDATE meetings SET recorded_at = ?, duration = 0 WHERE id = ?", (f"2026-11-18 {at}:00", m["id"]))
                 conn.commit()
                 conn.close()
             database.update_meeting_progress(m["id"], status=status, progress=0)
@@ -162,6 +162,41 @@ class DashboardTest(unittest.TestCase):
         person = dashboard.detail("person", person="Мария", today=self.TODAY)
         self.assertEqual({m["id"] for m in person["meetings"]}, {good, empty})
         self.assertEqual([t["what"] for t in person["owes_me"]], ["Прислать смету"])
+
+    def test_a_person_reads_the_directory_once(self):
+        """Audit K21: «a person» named each speaker of each recording and each task by the directory, read anew
+        (two connections) each time: thousands of connections for a large library. A variant still finds them."""
+        from unittest import mock
+
+        from app import people
+
+        ids = [self._meeting(f"Встреча {i}", f"2026-11-{10 + i:02d}", names=("Олег", "Маша" if i % 2 else "Мария")) for i in range(6)]
+        people.merge(["Мария", "Маша"])
+        self.addCleanup(lambda: [people.remove(n) for n in ("Мария", "Маша")])
+        commitments.create("Прислать смету", "Маша", meeting_id=ids[1])
+        real = database.get_connection
+        with mock.patch("app.people.get_connection", side_effect=real) as conn:
+            d = dashboard.detail("person", "week", person="Маша", today=self.TODAY)
+        self.assertEqual(d["person"], "Мария")
+        self.assertEqual({m["id"] for m in d["meetings"]}, set(ids))
+        self.assertEqual([t["what"] for t in d["owes_me"]], ["Прислать смету"])
+        self.assertLessEqual(conn.call_count, 1)  # was 2 per speaker and per task
+
+    def test_dull_series_reads_no_transcripts(self):
+        """Audit K21: «Серии без результатов» needs no share of the talk: the lines of its meetings are not read."""
+        from unittest import mock
+
+        from app import series
+
+        sid = series.create_series("Синк")
+        for i in (2, 3, 4):
+            database.update_meeting_fields(self._meeting(f"Синк {i}", f"2026-11-{9 + i:02d}", protocol="## Обзор\n- Ок\n"), series_id=sid)
+        seen = []
+        real = dashboard._outcomes
+        with mock.patch("app.dashboard._outcomes", side_effect=lambda ids, me: seen.append(bool(me)) or real(ids, me)):
+            got = dashboard._dull_series(database.list_meetings(), {})
+        self.assertEqual([x["streak"] for x in got], [3])
+        self.assertEqual(seen, [False])
 
     def test_meetings_are_read_without_their_transcripts(self):
         """The period's meetings: the protocol and each speaker's talk are read in one query, not a
@@ -314,6 +349,23 @@ class DashboardTest(unittest.TestCase):
         self.assertIsNone(week["history"]["before"]["focus"])
         self.assertIsNone(year_ago["history"]["before"]["focus"])
 
+    def test_time_without_meetings_against_the_same_days(self):
+        """Found in the audit: on a Wednesday the 24 working hours gone by were set against the whole week before (40 h),
+        and «рабочего времени без встреч» said «−16 ч» in red. The period before counts the same days (Monday to
+        Wednesday); a past period is complete and is set against the whole one."""
+        from unittest import mock
+
+        self._meeting("Сейчас", "2026-11-17")
+        self._meeting("Вторник до", "2026-11-10")
+        self._meeting("Четверг до", "2026-11-12")  # after the same days: not in the comparison
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("week", today=self.TODAY)
+            past = dashboard.build("week", today=self.TODAY, at=date(2026, 11, 11))
+        self.assertEqual(d["history"]["values"]["focus"][-1], 23.5)
+        self.assertEqual(d["history"]["before"]["focus"], 23.5)  # 24 h of 9–11 November, half an hour in a meeting
+        self.assertEqual(d["history"]["values"]["focus"][-2], 39.0)  # the trend keeps the whole week
+        self.assertEqual(past["history"]["values"]["focus"][-1], 39.0)
+
     def test_compared_with_the_same_days_a_year_earlier(self):
         """Asked by the user: the figures against the period before or the same days a year earlier."""
         from unittest import mock
@@ -385,6 +437,64 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual((week["start"], week["end"]), ("2028-02-28", "2028-03-06"))
         self.assertEqual(week["history"]["compare"], {"kind": "year", "start": "2027-02-28", "end": "2027-03-06"})
         self.assertEqual((week["kpi"]["meetings"], week["kpi"]["meetings_before"]), (1, 2))
+
+    def _recording(self, title, at, seconds):
+        m = database.create_meeting(title, "a.wav", "a.wav")
+        with database._db_lock:
+            conn = database.get_connection()
+            conn.execute("UPDATE meetings SET recorded_at = ?, duration = ? WHERE id = ?", (at, seconds, m["id"]))
+            conn.commit()
+            conn.close()
+        database.update_meeting_progress(m["id"], status="completed", progress=100)
+        return m["id"]
+
+    def test_time_in_meetings_counts_overlaps_once(self):
+        """Found in the audit: «Время во встречах» summed the recordings (three of a minute at once: «0,1 ч») while
+        «Нагрузка недели» beside it counted them once («0 ч»). One rule now (busy_days): overlaps once, in
+        «Статистика», its trend, the hours by day and the share of the working time."""
+        from unittest import mock
+
+        self._recording("Первая", "2026-11-17 10:00:00", 3600)
+        self._recording("Вторая, поверх первой", "2026-11-17 10:30:00", 3600)  # 10:30–11:30: half an hour more
+        self._recording("Третья, внутри", "2026-11-17 10:15:00", 600)
+        self._recording("Отдельно", "2026-11-18 09:00:00", 1800)
+        with mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("week", today=self.TODAY)
+        self.assertEqual(d["kpi"]["meetings"], 4)
+        self.assertEqual(d["kpi"]["hours"], 2.0)  # 1.5 h on Tuesday, 0.5 h on Wednesday; not 3.17 h
+        self.assertEqual(d["history"]["values"]["hours"][-1], 2.0)
+        self.assertEqual({b["key"]: b["hours"] for b in d["buckets"]}["2026-11-17"], 1.5)
+        self.assertEqual(d["history"]["values"]["focus"][-1], 22.0)  # 24 working hours gone by, 2 of them in meetings
+        # three recordings of a minute begun together: one minute, written in minutes by the page
+        busy = dashboard.busy_days([{"recorded_at": "2026-11-17 10:00:00", "duration": 60}] * 3,
+                                   date(2026, 11, 16), date(2026, 11, 23), self.TODAY, calendar=False)
+        self.assertEqual(busy, {date(2026, 11, 17): 60.0})
+        self.assertEqual(dashboard._hours(busy, date(2026, 11, 16), date(2026, 11, 23)), 0.02)
+
+    def test_time_in_meetings_takes_the_calendar_as_the_week_load(self):
+        """The calendar's meetings count with the recordings (as «Нагрузка недели»), a recording made during one only
+        by what lies outside it; an ignored meeting, a block of six hours and the part still ahead do not count.
+        With a feature chosen only its recordings count (the calendar knows no features)."""
+        from datetime import datetime
+        from unittest import mock
+
+        from app import calendar_ics
+
+        self._recording("Во время встречи", "2026-11-17 10:20:00", 3600)  # 10:20–11:20, the meeting 10:00–11:00
+        events = [{"uid": "a", "title": "Планёрка", "start": datetime(2026, 11, 17, 10), "end": datetime(2026, 11, 17, 11)},
+                  {"uid": "b", "title": "Не встреча", "start": datetime(2026, 11, 17, 14), "end": datetime(2026, 11, 17, 15)},
+                  {"uid": "c", "title": "Ночь", "start": datetime(2026, 11, 17, 18), "end": datetime(2026, 11, 18, 8)},
+                  {"uid": "d", "title": "Завтра", "start": datetime(2026, 11, 19, 10), "end": datetime(2026, 11, 19, 11)}]
+        database.update_settings({"meet_ignore": '[{"id": "b"}]'})
+        self.addCleanup(database.update_settings, {"meet_ignore": "[]"})
+        with mock.patch.object(calendar_ics, "_source", return_value="demo.ics"), \
+                mock.patch.object(calendar_ics, "window", side_effect=lambda a, b, cached=False: [e for e in events if a <= e["start"] < b]), \
+                mock.patch("app.worktime.remind_hours", return_value=8.0), mock.patch("app.holidays_cal.between", return_value={}):
+            d = dashboard.build("week", today=self.TODAY)
+            f = features.create_feature("Отчёты", "#FF9F0A")
+            only = dashboard.build("week", today=self.TODAY, feature_id=f["id"])
+        self.assertEqual(round(d["kpi"]["hours"] * 60), 80)  # 10:00–11:20
+        self.assertEqual(only["kpi"]["hours"], 0)
 
 
 if __name__ == "__main__":

@@ -331,6 +331,8 @@ def init_db() -> None:
         )
         cur.execute(_FTS_ROWS_DDL)
         cur.execute(_FTS_ROWS_INDEX)
+        for ddl in _MEETING_INDEXES:  # made once on a database of an earlier version
+            cur.execute(ddl)
         # The transcript: one row per line (see _write_segments), not one JSON in the recording's row
         cur.execute(_SEGMENTS_DDL)
         cur.execute(_VERSIONS_DDL)
@@ -383,6 +385,16 @@ def init_db() -> None:
 
 
 _FTS_SCHEMA_VERSION = 1
+
+# The recordings by what is looked up among them (audit В20): the state polled every few seconds (a download
+# going on), a folder's recordings, a series', the others using the same file before it is deleted. Under a
+# millisecond without them for a library of 1200 recordings, but each lookup read the whole table
+_MEETING_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS meetings_status ON meetings (status)",
+    "CREATE INDEX IF NOT EXISTS meetings_folder ON meetings (folder_id)",
+    "CREATE INDEX IF NOT EXISTS meetings_series ON meetings (series_id)",
+    "CREATE INDEX IF NOT EXISTS meetings_media ON meetings (media_path)",
+)
 
 # Where each line of a recording is in segments_fts (its rowid): the index stores meeting_id and
 # segment_id UNINDEXED, so deleting by them scanned the whole index (an edit of 300 lines took 16 s
@@ -479,6 +491,11 @@ _MEETING_EXTRA_COLUMNS = {
     # How the transcript shown was made (language, sound processing, speakers): a precise run reuses it
     # only when nothing of that changed since ('' — made before this was kept, or a version switched in)
     "transcript_made_with": "TEXT DEFAULT ''",
+    # The status a job on a finished recording (dub, translation, cut, subtitles) gives back when it ends: kept
+    # here too, so a start after a crash in the middle of it gives it back as well ('' — none running)
+    "return_status": "TEXT DEFAULT ''",
+    # When a backup's restore put the sound back (app/backup.py): the retention counts its days from then too
+    "media_restored_at": "TEXT DEFAULT ''",
 }
 
 _HAS_TRANSCRIPT = "(COALESCE({row}.segments_json, '') NOT IN ('', '[]'))"  # recordings stored before the segments table
@@ -552,11 +569,13 @@ def _write_segments(conn: sqlite3.Connection, meeting_id: int, segments: List[Di
     only the lines that changed are written (an edit of one line writes one row)."""
     _speaker_seconds_cache.pop(meeting_id, None)
     rows = _segment_rows(segments)
+    whole = True
     if before is not None and len(before) == len(segments):
-        old = before
-        conn.executemany("UPDATE segments SET data = ? WHERE meeting_id = ? AND pos = ?",
-                         [(r, meeting_id, i) for i, (r, o) in enumerate(zip(rows, old)) if r != o])
-    else:
+        changed = [(r, meeting_id, i) for i, (r, o) in enumerate(zip(rows, before)) if r != o]
+        # A line whose row is not at its place (a transcript moved from an older version's JSON skipped its empty
+        # entries) was not written, and its edit lost without a word (found in an audit): written whole then
+        whole = conn.executemany("UPDATE segments SET data = ? WHERE meeting_id = ? AND pos = ?", changed).rowcount != len(changed)
+    if whole:
         conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
         conn.executemany("INSERT INTO segments (meeting_id, pos, data) VALUES (?, ?, ?)",
                          [(meeting_id, i, r) for i, r in enumerate(rows)])
@@ -918,9 +937,13 @@ def update_meeting_progress(
     error_message: Optional[str] = None,
     duration: Optional[float] = None,
     audio_path: Optional[str] = None,
+    return_status: Optional[str] = None,
 ) -> None:
     fields = []
     values = []
+    if return_status is not None:
+        fields.append("return_status = ?")
+        values.append(return_status)
     if status is not None:
         fields.append("status = ?")
         values.append(status)
@@ -1015,6 +1038,10 @@ def save_meeting_results(
     values.append(meeting_id)
     with _db_lock:
         conn = get_connection()
+        if segments is not None and not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            # deleted while it was transcribed: its lines would stay in the search for good (found in an audit)
+            conn.close()
+            return
         if summaries is not None or (speakers is not None and segments is not None and reindex):
             row = conn.execute("SELECT speakers_json FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
             stored = _loads_dict(row[0]) if row else {}
@@ -1565,6 +1592,15 @@ def relink_media(meeting_id: int, path: str) -> None:
 _DUB_PATH_KEYS = ("path", "srt_path")
 
 
+def _is_dub_file(p: Path) -> bool:
+    """A file a dub made: in the data folder's dubs/ (app/dubbing.DUBS_DIR). Only these are deleted with
+    a dub; a path of a restored database naming the database itself or bin/ffmpeg.exe is left alone."""
+    try:
+        return bool(p.name) and (DATA_DIR / "dubs").resolve() in p.resolve().parents
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def _dub_paths_to_storage(entry: Dict[str, Any]) -> Dict[str, Any]:
     """Dub files live in the data folder; store them relative to it so moving the folder keeps them."""
     out = dict(entry)
@@ -1605,7 +1641,7 @@ def save_meeting_dub(meeting_id: int, entry: Dict[str, Any]) -> None:
     for old in replaced:
         for key in ("path", "srt_path"):
             p = Path(old.get(key) or "")
-            if p.name and p.exists() and DATA_DIR in p.resolve().parents and p.resolve() != Path(entry.get(key) or "").resolve():
+            if p.exists() and _is_dub_file(p) and p.resolve() != Path(entry.get(key) or "").resolve():
                 try:
                     p.unlink()
                 except Exception:
@@ -1632,7 +1668,7 @@ def delete_meeting_dub(meeting_id: int, lang: str) -> bool:
     for old in gone:
         for key in _DUB_PATH_KEYS:
             p = Path(old.get(key) or "")
-            if p.name and p.exists() and DATA_DIR in p.resolve().parents:
+            if p.exists() and _is_dub_file(p):
                 delete_file(str(p))
     events.publish({"type": "list"})
     return bool(gone)
@@ -1783,9 +1819,11 @@ def speaker_seconds(meeting_ids: Iterable[int]) -> Dict[int, Dict[str, float]]:
 def get_meeting(meeting_id: int) -> Optional[Dict[str, Any]]:
     with _db_lock:
         conn = get_connection()
-        row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
-        m = _deserialize_meeting(dict(row), conn) if row else None
-        conn.close()
+        try:  # closed also when a damaged row fails to read (audit В20: the connection stayed open)
+            row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+            m = _deserialize_meeting(dict(row), conn) if row else None
+        finally:
+            conn.close()
     if m is not None:
         try:
             from app.features import feature_map, suggestion_map
@@ -1998,7 +2036,8 @@ def remove_media(meeting_id: int) -> bool:
 
 def expired_media_ids(days: int) -> List[int]:
     """Completed recordings that still keep their sound, older than `days` both by when they were made and
-    by when they came into the app: an old file imported today keeps its sound for `days` too."""
+    by when they came into the app: an old file imported today keeps its sound for `days` too, and so does
+    the sound a backup's restore put back today."""
     if days <= 0:
         return []
     from datetime import datetime, timedelta
@@ -2008,8 +2047,9 @@ def expired_media_ids(days: int) -> List[int]:
         conn = get_connection()
         rows = conn.execute(
             "SELECT id FROM meetings WHERE status = 'completed' AND owns_media = 1 AND COALESCE(media_removed, 0) = 0 "
-            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ? AND created_at < ?",
-            (cutoff, cutoff)).fetchall()
+            "AND media_path != '' AND COALESCE(NULLIF(recorded_at, ''), created_at) < ? AND created_at < ? "
+            "AND COALESCE(media_restored_at, '') < ?",
+            (cutoff, cutoff, cutoff)).fetchall()
         conn.close()
     return [int(r["id"]) for r in rows]
 
@@ -2137,8 +2177,11 @@ def delete_meeting(meeting_id: int, with_source: bool = False, with_exports: boo
             print(f"[delete] source file of meeting {meeting_id}: {e}", flush=True)
 
     dub_paths = [d.get(k) for d in meeting.get("dubs") or [] for k in ("path", "srt_path")]
+    for p_str in dub_paths:
+        if p_str and Path(p_str).exists() and _is_dub_file(Path(p_str)):
+            delete_file(p_str)
     owned = [meeting.get("media_path")] if meeting.get("owns_media") else []
-    for p_str in [meeting.get("media_path"), meeting.get("audio_path"), *dub_paths]:
+    for p_str in [meeting.get("media_path"), meeting.get("audio_path")]:
         if p_str:
             p = Path(p_str)
             # Files in the data folder, and the app's own recordings wherever the recordings folder is;
@@ -2182,7 +2225,7 @@ def clear_results(meeting_id: int) -> bool:
     for d in m.get("dubs") or []:
         for key in _DUB_PATH_KEYS:
             p = Path(d.get(key) or "")
-            if p.name and p.exists() and DATA_DIR in p.resolve().parents:
+            if p.exists() and _is_dub_file(p):
                 delete_file(str(p))
     with _db_lock:
         conn = get_connection()

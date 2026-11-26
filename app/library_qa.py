@@ -328,6 +328,33 @@ def _transcript_chars(m: Dict[str, Any]) -> int:
     return sum(len(s.get("text") or "") + 24 for s in m.get("segments") or [])
 
 
+def _scope(meeting_ids: List[int]) -> List[Dict[str, Any]]:
+    """The chosen recordings that have a transcript, in their order: the title, the date, the overview and how long
+    the transcript is (as _transcript_chars counts it), read by SQLite. A folder of 300 recordings was read whole,
+    every line with its words, only to learn that it is too long to be given in full (audit K21)."""
+    from app.speaker_refs import resolve_raw
+
+    ids = list(dict.fromkeys(int(i) for i in meeting_ids))
+    found: Dict[int, Dict[str, Any]] = {}
+    with _db_lock:
+        conn = get_connection()
+        try:
+            for k in range(0, len(ids), 500):  # SQLite's limit on the number of parameters
+                part = ids[k:k + 500]
+                marks = ",".join("?" * len(part))
+                for r in conn.execute(
+                        "SELECT m.id, m.title, m.recorded_at, m.created_at, m.summaries_json, m.speakers_json, s.chars "
+                        "FROM meetings m JOIN (SELECT meeting_id, SUM(COALESCE(length(json_extract(data, '$.text')), 0) + 24) AS chars "
+                        f"FROM segments WHERE meeting_id IN ({marks}) AND json_valid(data) GROUP BY meeting_id) s "
+                        "ON s.meeting_id = m.id", part):
+                    found[int(r["id"])] = {"id": int(r["id"]), "title": r["title"], "recorded_at": r["recorded_at"],
+                                           "created_at": r["created_at"], "chars": int(r["chars"] or 0),
+                                           "summaries": resolve_raw(r["summaries_json"], r["speakers_json"])}
+        finally:
+            conn.close()
+    return [found[i] for i in ids if i in found]
+
+
 def ask_library(
     question: str,
     answer_lang: str = "ru",
@@ -360,10 +387,12 @@ def ask_library(
     fragments: List[Dict[str, Any]] = []
     scope_meetings: List[Dict[str, Any]] = []
     if chosen:
-        scope_meetings = [m for m in (get_meeting(i) for i in meeting_ids) if m and m.get("segments")]
+        scope_meetings = _scope(meeting_ids)
         if not scope_meetings:
             return {"answer": "", "sources": [], "found": False, "mode": mode}
-        if sum(_transcript_chars(m) for m in scope_meetings) <= FULL_MODE_MAX_CHARS:
+        if sum(m["chars"] for m in scope_meetings) <= FULL_MODE_MAX_CHARS:
+            # small enough to be given in full: only now the transcripts themselves are read
+            scope_meetings = [m for m in (get_meeting(s["id"]) for s in scope_meetings) if m and m.get("segments")]
             mode = "full"
             # the conversation takes its room from the fragments: with both, the prompt ran over the model's
             # context and Ollama dropped its start (the instructions)

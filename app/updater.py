@@ -55,8 +55,10 @@ DOWNLOAD_PREFIX = f"https://github.com/{GITHUB_REPO}/releases/download/"
 # checksum alone is checked, as before the key existed.
 RELEASE_PUBLIC_KEY = "RWT8fmjh8HjA/sAFcnc7vHWhzK+i+OircfoKXDPiKs5QnNnrGdiRRIpB"
 # Never replaced by an update: user data, models and the Python environments
-# .venv-new and .venv-old: the move to Python 3.11 (app/envmove.py)
-PROTECTED = {".venv", ".venv-new", ".venv-old", ".venv-dub", ".python", "models", "data", "node_modules", ".git"}
+# .venv-new and .venv-old: the move to Python 3.11 (app/envmove.py); python and .uv-cache: the Python uv installs for
+# the program and its downloads (setup.bat, app/paths.py: «.python» was written here, which is no folder of it: an audit)
+PROTECTED = {".venv", ".venv-new", ".venv-old", ".venv-dub", ".python", "python", ".uv-cache", "models", "data",
+             "node_modules", ".git"}
 
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
@@ -480,8 +482,11 @@ def launch_git_update() -> None:
     if not is_git_checkout() or not script.is_file():
         raise RuntimeError("Это не клон git с update.bat: обновите программу из «Настройки → Общие → Обновления»")
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(f'cmd.exe /c "timeout /t 3 /nobreak >nul & call "{script}""', cwd=str(APP_DIR),
-                     creationflags=flags, close_fds=True)
+    # The path goes through the environment: written into the command line, a "%" of a folder's name
+    # would be expanded by cmd
+    env = {**os.environ, "VERBALIOX_UPDATE_BAT": str(script)}
+    subprocess.Popen('cmd.exe /c "timeout /t 3 /nobreak >nul & call "%VERBALIOX_UPDATE_BAT%""', cwd=str(APP_DIR),
+                     creationflags=flags, close_fds=True, env=env)
 
 
 def launch_installer(restart: bool = True, minimized: bool = False) -> None:
@@ -651,7 +656,7 @@ def _reinstall(py: Path, uv: Optional[str], frozen_file: Optional[Path], log_dir
     with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
         if req is None:
             lf.write("restore of the Python packages: no previous requirements.txt and no list of the installed ones\n")
-            return
+            raise RuntimeError("nothing to put the previous Python packages back from")
         if not hashes:
             lf.write("restore of the Python packages: no previous requirements.txt in the backup, "
                      "installing the list of the packages that were installed (without hashes)\n")
@@ -659,7 +664,26 @@ def _reinstall(py: Path, uv: Optional[str], frozen_file: Optional[Path], log_dir
         cmd = ([uv, "pip", "install", "--python", str(py), "-r", str(req), *hashes,
                 "--index-strategy", "unsafe-best-match", *indexes]
                if uv else [str(py), "-m", "pip", "install", "-r", str(req), *hashes, *indexes])
-        subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, creationflags=_NO_WINDOW)
+        res = subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, creationflags=_NO_WINDOW)
+    if res.returncode != 0:  # said «restored» over a broken environment (found in an audit)
+        raise RuntimeError(f"the previous Python packages were not put back (exit code {res.returncode})")
+
+
+def _write_member(src, dest: Path) -> None:
+    """A file of the program written whole or not at all: beside it, then put in its place. Cut off midway (the
+    computer switched off), run.py or updater.py itself was left truncated, and nothing could put the previous
+    version back (found in an audit)."""
+    tmp = dest.with_name(dest.name + ".upd.tmp")
+    try:
+        with open(tmp, "wb") as out:
+            shutil.copyfileobj(src, out)
+        os.replace(tmp, dest)
+    except BaseException:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def archive_files(names: List[str], app_dir: Path) -> List[Tuple[str, str]]:
@@ -703,8 +727,8 @@ def _restore(backup: Path, app_dir: Path, added: List[str], log_dir: Path) -> Li
             for attempt in range(5):
                 try:
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    with bz.open(info) as src, open(dest, "wb") as out:
-                        shutil.copyfileobj(src, out)
+                    with bz.open(info) as src:
+                        _write_member(src, dest)
                     break
                 except OSError:
                     if attempt == 4:
@@ -883,8 +907,8 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 for attempt in range(10):  # the launcher may still be closing its splash window
                     try:
-                        with z.open(n) as src, open(dest, "wb") as out:
-                            shutil.copyfileobj(src, out)
+                        with z.open(n) as src:
+                            _write_member(src, dest)
                         break
                     except PermissionError:
                         if attempt == 9:
@@ -939,6 +963,13 @@ def apply_update(zip_path: Path, app_dir: Path, data_dir: Path, report: Callable
                     outcome = "broken"
                     with open(log_dir / "update.log", "a", encoding="utf-8") as lf:
                         lf.write("restore of the Python packages failed:\n" + traceback.format_exc())
+                    # the launcher installs the libraries of the version put back at its next start
+                    mark = app_dir / ".venv" / "verbaliox-requirements.sha256"
+                    try:
+                        if mark.parent.is_dir():
+                            mark.write_text("interrupted-update", encoding="ascii")
+                    except OSError:
+                        pass
             marker.unlink(missing_ok=True)  # put back here (or told broken): nothing for the next start
             raise UpdateFailed(str(e), outcome) from e
 

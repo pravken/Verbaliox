@@ -24,7 +24,10 @@ function renderFfmpegStatus(st) {
 }
 
 async function installFfmpeg() {
-  let st = await (await fetch('/api/ffmpeg/install', { method: 'POST' })).json();
+  // a refused download is said (the button looked pressed and nothing happened: audit)
+  const res = await fetch('/api/ffmpeg/install', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  let st = await readJson(res);
   renderFfmpegStatus(st);
   while (st.download && st.download.active) {
     await new Promise(r => setTimeout(r, 1000));
@@ -52,7 +55,9 @@ async function refreshVoiceFilterStatus() {
 }
 
 async function installVoiceFilter() {
-  let st = await fetch('/api/voice-filter/install', { method: 'POST' }).then(r => r.json()).catch(() => null);
+  const res = await fetch('/api/voice-filter/install', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  let st = await readJson(res);
   renderVoiceFilterStatus(st);
   while (st && st.download && st.download.active) {
     await new Promise(r => setTimeout(r, 1000));
@@ -606,7 +611,7 @@ function renderModelsPop() {
         <span class="mp-dl-toggle">${escapeHtml(t(modelsPop.dlOpen ? 'mpHide' : 'mpShow'))}</span></button>
       ${modelsPop.dlOpen ? `<div class="mp-dl-list">${dlRows}</div>` : ''}</section>` : ''}
     <div class="mp-idle"><span>${escapeHtml(t('mpIdleLabel'))}</span>
-      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? idle.minutes ?? 10))}</button></div>`;
+      <button data-click="openIdleUnloadMenu" data-click-args='[{"$": "el"}]' class="mp-idle-btn" title="${escapeHtml(t('a11yIdleUnload'))}">${MODEL_TIMER_ICON}${escapeHtml(idleUnloadText(((state.system || {}).settings || {}).idle_unload_minutes ?? vram.data?.idle?.minutes ?? 10))}</button></div>`;
   placeModelsPop();
 }
 
@@ -831,6 +836,7 @@ function updateWhisperModelsUI(models) {
   state.whisperInstalled = whisperList.filter(i => i.installed && i.engine !== 'onnx').map(i => i.id);
   state.onnxInstalled = whisperList.filter(i => i.installed && i.engine === 'onnx').map(i => i.id);
   state.whisperCatalog = whisperList;
+  if (capDl.pending.length) setTimeout(capDlTick, 0);  // a caption model chosen while not downloaded: done yet?
   fillRecognitionSelects(whisperList, activeModel);
   renderLiveModelSelect();
   renderTxModelBar();
@@ -1219,7 +1225,7 @@ function openFirstRunWizard(data) {
     const dots = list.map((_, i) => `<span class="frw-dot${i === at ? ' is-on' : ''}"></span>`).join('');
     vxRedraw(wrap);
     wrap.innerHTML = `<div class="frw" id="first-run-dialog">
-      <div class="frw-head"><span class="vx-head-ic" aria-hidden="true">${pultIcon(FRW_IC[st.page] || 'set')}</span><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots" aria-label="${at + 1} / ${list.length}">${dots}</span></div>
+      <div class="frw-head"><span class="vx-head-ic" aria-hidden="true">${pultIcon(FRW_IC[st.page] || 'set')}</span><h2 class="frw-title">${escapeHtml(title)}</h2><span class="frw-dots"><span class="frw-step">${escapeHtml(t('frwStepOf').replace('{n}', () => at + 1).replace('{m}', () => list.length))}</span><span class="frw-dots-row" aria-hidden="true">${dots}</span></span></div>
       <p class="frw-sub">${escapeHtml(sub)}</p>${extra}
       <div class="frw-body">${body}</div>
       <div class="frw-foot">
@@ -1373,12 +1379,13 @@ async function runFirstRunSetup(data, chosen, ai, picks, mainPick, ensemble = fa
 async function selectActiveWhisperModel(modelId) {
   document.getElementById('set-whisper-model').value = modelId;
   document.getElementById('upload-model').value = modelId;
-  await fetch('/api/settings', {
+  const res = await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { whisper_model: modelId } })
-  });
-  await loadSystemInfo();
+  }).catch(() => null);
+  await loadSystemInfo();  // the lists show the model kept either way
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
   const pretty = formatModelName(modelId);
   showToast(t('modelSpeechPicked').replace('{name}', () => pretty));
 }
@@ -1465,7 +1472,7 @@ async function startWhisperModelDownload(modelId, keepMain = false) {
   document.getElementById('whisper-pull-pct').textContent = '1%';
   document.getElementById('whisper-pull-bar').style.width = '2%';
 
-  await fetch('/api/models/setup', {
+  const res = await fetch('/api/models/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1473,7 +1480,16 @@ async function startWhisperModelDownload(modelId, keepMain = false) {
       install_diarizer: true,
       select: !keepMain
     })
-  });
+  }).catch(() => null);
+  // refused (another download runs, no space): said, and the panel of the download goes (it showed 1 % for ever)
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    state.whisperPullState = { active: false, logs: [] };
+    syncSidebarDownloadWidget();
+    if (dlPanel) dlPanel.classList.add('hidden');
+    await loadSystemInfo();
+    return;
+  }
 
   if (!keepMain) {
     fetch('/api/settings', {
@@ -1832,7 +1848,7 @@ async function refreshCallMicNow() {
   const modal = document.getElementById('modal-settings');
   const block = document.getElementById('call-record-block');
   // Only while the recording settings are on screen
-  if (!box || !modal || modal.classList.contains('hidden') || !block || block.classList.contains('hidden') || !block.offsetParent) return;
+  if (document.hidden || !box || !modal || modal.classList.contains('hidden') || !block || block.classList.contains('hidden') || !block.offsetParent) return;
   const st = await fetch('/api/calls/status').then(r => r.json()).catch(() => null);
   if (st) {
     // Program names as people know them: "chrome.exe" -> "chrome", no store package suffixes
@@ -2044,7 +2060,7 @@ function modelMetersLine(id) {
   const cell = html => html.replace(/^<td/, '<span').replace(/<\/td>$/, '</span>');
   const part = (label, html) => `<span class="mm-part"><span class="mm-lbl">${escapeHtml(label)}</span>${cell(html)}</span>`;
   const quality = !m.quality
-    ? part(`${t('mmAccuracy')} ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
+    ? part(`${t('mmAccuracy')}: ${t('mmRu')}`, meterAccCell(m, 'ru')) + part(t('mmEn'), meterAccCell(m, 'en'))
     : part(t('mmQuality'), meterQualityCell(m));
   return `<div class="mm-line">${quality}${part(t('mmSpeed'), meterSpeedCell(m))}${part(t('mmLoad'), meterLoadCell(m))}</div>`;
 }
@@ -2294,34 +2310,204 @@ function translateMetersLine(item) {
 }
 
 // The lists «Качество» and «Быстро» of the captions: «Авто · <the model it takes now>», the installed
-// translators, the installed analysis models. A chosen model that is not installed (deleted) stays in its list
-// marked so; the server takes «Авто» for it (app/live_translate.choose_models)
+// translators, the installed analysis models, then the models not downloaded yet that fit this computer (chosen:
+// asked, downloaded, then taken for that mode; capDlChoose). A chosen model that is not installed (deleted) stays in
+// its list marked so; the server takes «Авто» for it (app/live_translate.choose_models)
 function renderTranslateChoices(ollama) {
+  ollama = ollama || state.lastOllama || (state.system || {}).ollama || {};
   const s = (state.system && state.system.settings) || {};
   const trs = (ollama.translate_catalog || []).filter(m => m.installed).map(m => m.installed_as || m.id);
   const general = ollama.chat_models || [];
   const auto = (ollama.live_translate || {}).auto || {};
+  const toGet = trDownloadables([...trs, ...general]);
   for (const [kind, key] of [['quality', 'live_translate_model_quality'], ['fast', 'live_translate_model_fast']]) {
     const sel = document.getElementById(`set-live-tr-${kind}`);
     if (!sel) continue;
-    const value = sel.dataset.ready ? sel.value : (s[key] || '');
+    const pending = capDlPending(key);
+    const shown = sel.dataset.ready && !sel.value.startsWith(CAP_DL) ? sel.value : (s[key] || '');
+    const value = pending ? CAP_DL + pending.id : shown;
     const opt = (v, label) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`;
     const group = (label, list) => list.length ? `<optgroup label="${escapeHtml(label)}">${list.map(m => opt(m, formatModelName(m))).join('')}</optgroup>` : '';
     const known = [...trs, ...general];
+    const dlGroup = toGet.length ? `<optgroup label="${escapeHtml(t('capDlGroup'))}">${toGet.map(m => opt(CAP_DL + m.id, capDlLabel(m, pending))).join('')}</optgroup>` : '';
     const html = opt('', auto[kind] ? `${t('liveAutoShort')} · ${formatModelName(auto[kind])}` : t('liveAutoShort'))
       + group(t('trGroupTranslators'), trs) + group(t('trGroupGeneral'), general)
-      + (value && !known.includes(value) ? opt(value, t('trNotInstalled').replace('{name}', () => formatModelName(value))) : '');
+      + (shown && !known.includes(shown) ? opt(shown, t('trNotInstalled').replace('{name}', () => formatModelName(shown))) : '')
+      + dlGroup;
     if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
     sel.value = value;
     sel.dataset.ready = '1';
   }
 }
 
-// A choice of «Качество» / «Быстро» saved: the studio asks for its models again («Авто · …» follows it)
-document.addEventListener('change', (e) => {
-  if (!/^set-live-tr-(quality|fast)$/.test(e.target?.id || '')) return;
+// A choice of «Качество» / «Быстро» saved: the studio asks for its models again («Авто · …» follows it). A model not
+// downloaded: the list keeps the value it had while the question is asked (never saved as a setting), then shows
+// the download
+document.addEventListener('change', async (e) => {
+  const m = /^set-live-tr-(quality|fast)$/.exec(e.target?.id || '');
+  if (!m) return;
+  const sel = e.target;
+  if (sel.value.startsWith(CAP_DL)) {
+    const id = sel.value.slice(CAP_DL.length);
+    const key = m[1] === 'fast' ? 'live_translate_model_fast' : 'live_translate_model_quality';
+    sel.value = ((state.system && state.system.settings) || {})[key] || '';
+    await capDlChoose('tr', id, key);
+    renderTranslateChoices();
+    return;
+  }
   if (typeof studioTranslateModelsChanged === 'function') setTimeout(studioTranslateModelsChanged, 600);
 });
+
+// --- The caption models not downloaded yet: offered in the studio's lists and in «Модели перевода» ---
+// Chosen there: a question with the size, the download by the same calls as «Скачать» of the settings, its percent
+// in the list, and once it is downloaded it becomes the choice it was picked for (a mode of the translation, or the
+// recognition of the captions)
+const CAP_DL = 'dl:';  // the value of a list's option for a model not downloaded
+const TR_FAST_MODEL = 'hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M';  // app/ollama_client.HYMT_1_8B: the model «Быстро» takes first
+const capDl = { pending: [], timer: null };
+
+// Does a model of a catalog fit this computer: the analysis models and translators as the settings' cards tell
+// (llmFits; one without a minimum fits any); the speech models: GigaAM and Parakeet always, Whisper on a video card
+// with the memory its card asks («4+ GB VRAM»)
+function capModelFits(item, kind) {
+  const hw = (state.system || {}).hardware || {};
+  if (kind === 'cap') {
+    if (item.engine === 'onnx') return true;
+    const vram = hw.cuda_available ? Number(hw.vram_total_gb || 0) : 0;
+    return vram > 0 && vram >= (parseFloat(item.vram) || 0);
+  }
+  return !Number(item.min_vram_gb || 0) || llmFits(item, hw);
+}
+
+// The translators and analysis models the program offers (commercial use allowed: the catalogs' own entries, never
+// a model installed by hand) that are not among `installed` (the names of the installed ones) and fit this computer
+function trDownloadables(installed) {
+  const ollama = state.lastOllama || (state.system || {}).ollama || {};
+  const names = new Set((installed || []).map(m => formatModelName(m)));
+  return [...(ollama.translate_catalog || []).filter(m => m.offered !== false), ...(ollama.catalog || []).filter(m => m.good_ru)]
+    .filter(m => !m.installed && !names.has(formatModelName(m.id)) && capModelFits(m, 'tr'));
+}
+
+// The speech models of the catalog not downloaded that fit this computer (state.onnxInstalled / whisperInstalled:
+// the installed ones)
+function capDownloadables() {
+  const have = new Set([...(state.onnxInstalled || []), ...(state.whisperInstalled || [])]);
+  return (state.whisperCatalog || []).filter(m => !m.installed && !have.has(m.id) && capModelFits(m, 'cap'));
+}
+
+// «Hy-MT3 1.8B · 1,3 ГБ»; while it downloads for this list, its percent after
+function capDlLabel(item, pending) {
+  const base = `${formatModelName(item.id)} · ${modelSizeLabel(item)}`;
+  return pending && pending.id === item.id ? `${base} · ${capDlPct(pending)}%` : base;
+}
+
+function capDlItem(kind, id) {
+  const ollama = state.lastOllama || (state.system || {}).ollama || {};
+  const list = kind === 'cap' ? (state.whisperCatalog || []) : [...(ollama.translate_catalog || []), ...(ollama.catalog || [])];
+  return list.find(m => m.id === id) || null;
+}
+
+function capDlPending(key) {
+  return capDl.pending.find(p => p.key === key) || null;
+}
+
+function capDlPct(p) {
+  const now = modelDownloadsNow().find(d => d.id === p.id);
+  return Math.max(1, (now && now.pct) || p.pct || 1);
+}
+
+// The mode a translation setting is for, as the studio names it
+function capDlModeName(key) {
+  return t(key === 'live_translate_model_fast' ? 'studioSpeedFast' : 'studioSpeedQuality');
+}
+
+// A model not downloaded chosen for `key` (live_translate_model_quality / _fast, live_whisper_model): asked with its
+// size, then downloaded; one already downloading is not downloaded twice (its percent is shown). False: not started
+async function capDlChoose(kind, id, key) {
+  const item = capDlItem(kind, id);
+  if (!item) return false;
+  const name = formatModelName(id);
+  const running = modelDownloadsNow().some(d => d.id === id);
+  if (!running) {
+    // one download at a time in Ollama, and one Whisper model at a time
+    const busy = kind === 'tr' ? (state.ollamaPullState || {}).active && state.ollamaPullState.model
+      : item.engine !== 'onnx' && (state.whisperPullState || {}).active && state.whisperPullState.model_id;
+    if (busy) {
+      showWarning(t('capDlBusy').replace('{name}', () => formatModelName(busy)));
+      return false;
+    }
+    const ask = (kind === 'tr' ? t('capDlAskTr').replace('{mode}', () => capDlModeName(key)) : t('capDlAskCap'))
+      .replace('{name}', () => name).replace('{size}', () => modelSizeLabel(item));
+    if (!(await askConfirm(ask, false, t('uiDownload')))) return false;
+    if (kind === 'tr') {
+      // false: Ollama not installed and its install declined (a status read meanwhile may say «not downloading»
+      // before the download's own poll does: not asked of the state)
+      if (!(await pullTranslateModel(id))) return false;
+    } else if (item.engine === 'onnx') {
+      await startOnnxModelDownload(id);
+    } else {
+      await startWhisperModelDownload(id, true);  // the main model of the recordings stays as it is
+    }
+  }
+  capDl.pending = capDl.pending.filter(p => p.key !== key);
+  capDl.pending.push({ kind, id, key, pct: 1, goneSince: 0 });
+  if (!capDl.timer) capDl.timer = setInterval(capDlTick, 1000);
+  capDlTick();
+  return true;
+}
+
+// Installed now: the name it is installed under, else ''
+function capDlInstalledAs(p) {
+  const item = capDlItem(p.kind, p.id) || {};
+  if (p.kind === 'cap') {
+    const have = item.installed || [...(state.onnxInstalled || []), ...(state.whisperInstalled || [])].includes(p.id);
+    return have ? p.id : '';
+  }
+  if (item.installed) return item.installed_as || p.id;
+  const llm = (typeof studio !== 'undefined' && studio.llmModels) || [];
+  return llm.find(m => formatModelName(m) === formatModelName(p.id)) || '';
+}
+
+// The downloads chosen from the lists: the percent, and at the end the model becomes the choice it was picked for.
+// A download that ended without the model (an error, said by the download itself) leaves the choice as it was.
+// One reading without the download is not its end: the status read with the settings (/api/system) can be older
+// than the download's own poll and say «not downloading» for a moment (the choice was lost so); the download is
+// taken as gone (ended with an error, said by the download itself) once it stays away for CAP_DL_GONE_MS
+const CAP_DL_GONE_MS = 8000;
+function capDlTick() {
+  const now = Date.now();
+  for (const p of [...capDl.pending]) {
+    const dl = modelDownloadsNow().find(d => d.id === p.id);
+    if (dl) { p.pct = dl.pct || p.pct; p.goneSince = 0; continue; }
+    const as = capDlInstalledAs(p);
+    if (as) {
+      capDl.pending = capDl.pending.filter(x => x !== p);
+      capDlApply(p, as);
+      continue;
+    }
+    if (!p.goneSince) p.goneSince = now;
+    if (now - p.goneSince > CAP_DL_GONE_MS) capDl.pending = capDl.pending.filter(x => x !== p);
+  }
+  if (!capDl.pending.length && capDl.timer) { clearInterval(capDl.timer); capDl.timer = null; }
+  renderTranslateChoices();
+  if (typeof renderStudioCapBar === 'function') renderStudioCapBar();
+}
+
+function capDlApply(p, value) {
+  if (p.kind === 'cap') {
+    if (typeof studioSetModels === 'function') studioSetModels({ caption_model: value });
+    else saveUiSetting(p.key, value);
+  } else {
+    const sel = document.getElementById(p.key === 'live_translate_model_fast' ? 'set-live-tr-fast' : 'set-live-tr-quality');
+    if (sel) delete sel.dataset.ready;  // the list shows the setting again
+    if (typeof liveCap !== 'undefined' && liveCap.session && typeof studio !== 'undefined' && p.key === studioTrSettingKey(studio.speed)) {
+      studioSetModels({ translate_model: value });
+    } else if (typeof studioKeepSetting === 'function') studioKeepSetting(p.key, value);
+    else saveUiSetting(p.key, value);
+    if (typeof studioTranslateModelsChanged === 'function') studioTranslateModelsChanged();
+  }
+  showToast(t('capDlChosen').replace('{name}', () => formatModelName(p.id)), null, 'success');
+}
 
 // A translator is downloaded without becoming the analysis model (the server does not select it either)
 function pullTranslateModel(id) {
@@ -2394,12 +2580,13 @@ async function selectActiveOllamaModel(modelId) {
   const summarySelect = document.getElementById('summary-llm-select');
   if (summarySelect) summarySelect.value = modelId;
 
-  await fetch('/api/settings', {
+  const res = await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ settings: { ollama_model: modelId } })
-  });
+  }).catch(() => null);
   await loadSystemInfo();
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
   const pretty = formatModelName(modelId);
   showToast(t('llmPickedToast').replace('{name}', () => pretty));
 }
@@ -2500,8 +2687,8 @@ function settingsFormValues() {
     dictation_language: document.getElementById('set-dictation-language')?.value || 'auto',
     dictation_translate_hotkey: document.getElementById('set-translate-hotkey')?.value.trim() || '',
     dictation_translate_to: document.getElementById('set-dictation-translate-to')?.value || 'en',
-    live_translate_model_quality: document.getElementById('set-live-tr-quality')?.value ?? '',
-    live_translate_model_fast: document.getElementById('set-live-tr-fast')?.value ?? '',
+    live_translate_model_quality: trChoiceValue('set-live-tr-quality', 'live_translate_model_quality'),
+    live_translate_model_fast: trChoiceValue('set-live-tr-fast', 'live_translate_model_fast'),
     dictation_save: document.getElementById('set-dictation-save')?.checked ? 'true' : 'false',
     calendar_ics: document.getElementById('set-calendar-ics')?.value.trim() || '',
     onnx_gpu: onnxGpuSetting(),
@@ -2612,7 +2799,7 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   let allowInstall = false;
   if (state.system && state.system.ollama && !state.system.ollama.installed) {
     allowInstall = await askConfirm(t('uiOllamaIsNotInstalled'), false, t('cfInstall'));
-    if (!allowInstall) return;
+    if (!allowInstall) return false;
   }
   if (makeActive) document.getElementById('set-ollama-model').value = model;  // not for the embedding model
   const pretty = formatModelName(model);
@@ -2632,13 +2819,21 @@ async function pullOllamaModel(modelArg, makeActive = true) {
   document.getElementById('ollama-pull-pct').textContent = '1%';
   document.getElementById('ollama-pull-bar').style.width = '2%';
 
-  await fetch('/api/ollama/pull', {
+  const res = await fetch('/api/ollama/pull', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, allow_install: allowInstall })
-  });
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    showError(res ? errorText(await readJson(res), res) : t('errorGeneric'));
+    state.ollamaPullState = { active: false, logs: [] };
+    syncSidebarDownloadWidget();
+    if (dlPanel) dlPanel.classList.add('hidden');
+    return false;
+  }
 
   startOllamaPollingLoop(model);
+  return true;  // started (false: Ollama is not installed and its install was declined)
 }
 
 // The models of the precise mode (app/transcriber.ensemble_models): the speech models of the catalog; one not
@@ -3004,6 +3199,12 @@ function setSettingsSaveState(kind) {
   el.classList.toggle('sx-failed', kind === 'failed');
   el.textContent = t(kind === 'saved' ? 'rdSasSaved' : kind === 'failed' ? 'rdSasSaveFailed' : 'rdSasAutoNote');
   if (kind === 'saved') setSettingsSaveState.timer = setTimeout(() => setSettingsSaveState(''), 1800);
+}
+
+// A list of «Модели перевода»: a model not downloaded is never the setting (the saved one stays while it downloads)
+function trChoiceValue(id, key) {
+  const v = document.getElementById(id)?.value ?? '';
+  return v.startsWith(CAP_DL) ? (((state.system && state.system.settings) || {})[key] || '') : v;
 }
 
 // The controls of the payload of saveAllSettings: their ids start with "set-" (and the list of call apps)

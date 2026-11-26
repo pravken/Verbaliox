@@ -1898,7 +1898,7 @@ input[type="range"].rp-volume::-webkit-slider-thumb { -webkit-appearance: none; 
 .tk-ava-none { border: 1.5px dashed rgba(255, 255, 255, 0.2); color: var(--hc-dim, #8E8E93); }
 .tk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto auto 26px; align-items: center; gap: 14px; min-height: 46px; padding: 6px 10px 6px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.05)); }
 .tk-row:hover { background: rgba(255, 255, 255, 0.055); }
-.tk-check { width: 18px; height: 18px; margin: 3px; accent-color: #30D158; cursor: pointer; }
+.tk-check { width: 18px; height: 18px; margin: 0; accent-color: #30D158; cursor: pointer; }
 .tk-row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tk-row-text { font-size: var(--fs-body); color: #F5F5F7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-done .tk-row-text { color: var(--hc-dim, #8E8E93); text-decoration: line-through; }
@@ -2754,7 +2754,7 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .an-tasks { display: flex; flex-direction: column; gap: 8px; }
 .an-task { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.07)); }
 .an-task:hover { background: rgba(255, 255, 255, 0.06); }
-.an-task .tk-check { margin-top: 1px; }
+.an-task .tk-check { margin-top: -2px; }
 .an-task-main { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
 .an-task-what { font-size: var(--fs-body); line-height: 1.4; font-weight: 500; color: #F5F5F7; overflow-wrap: anywhere; }
 .an-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--fs-caption); line-height: 1.35; color: var(--hc-dim, #8E8E93); }
@@ -2947,6 +2947,8 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-fadd { color: var(--hc-dim, #AEAEB2); }
 .lt-fmain { min-width: 0; }
 .lt-none { padding: 12px 8px; color: var(--hc-dim, #8E8E93); }
+/* the mark after the last row drawn: the next rows are drawn when it comes near (libtable.js, ltWatchEnd) */
+.lt-more { height: 1px; }
 .lt-empty { padding: 48px 16px; text-align: center; color: var(--hc-dim, #8E8E93); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .lt-empty.hidden { display: none; }
 /* A narrow window (as «Задачи», the same width: the bar of either does not fit there in one line): the views on
@@ -3087,7 +3089,10 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only).text-apple-red:checked
        border-radius: 18px; box-shadow: var(--shadow-dialog); overflow: hidden; }
 .frw-head { display: flex; align-items: center; gap: 12px; padding: 22px 24px 0; }
 .frw-title { font-size: 18px; font-weight: 600; color: #F5F5F7; margin: 0; }
-.frw-dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.frw-dots { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+/* «Шаг 2 из 5» beside the dots (found in the audit: the dots alone did not say how many steps are left) */
+.frw-step { font-size: var(--fs-caption); color: var(--hc-dim, #8E8E93); white-space: nowrap; }
+.frw-dots-row { display: flex; gap: 6px; align-items: center; }
 .frw-dot { width: 7px; height: 7px; border-radius: 4px; background: #3A3A3C; transition: width var(--dur) var(--ease-out); }
 .frw-dot.is-on { width: 20px; background: var(--accent); }
 .frw-sub { margin: 6px 24px 14px; font-size: 13px; line-height: 1.45; color: #A1A1A6; }
@@ -4155,7 +4160,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-group .tk-row:hover { background: rgba(255, 255, 255, 0.03); }
 .tk-group .tk-group-head + .tk-row { border-top: 0; }
 .tk-group .tk-who, .tk-group .tk-due { justify-self: start; max-width: 100%; }
-.tk-row .tk-check { margin: 0; width: 16px; height: 16px; }
+.tk-row .tk-check { margin: -3px; }
 .tk-kindic { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; background: none; color: var(--hc-dim, #8E8E93); cursor: pointer; }
 .tk-kindic:hover { color: #F5F5F7; }
 .tk-kindic-none { cursor: default; }
@@ -4173,7 +4178,7 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .tk-tcard-over { border-color: rgba(255, 69, 58, 0.45); }
 .tk-tcard-t { display: flex; align-items: flex-start; gap: 8px; }
 .tk-tcard-t .tk-row-text { flex: 1; min-width: 0; white-space: normal; font-weight: 500; line-height: 1.35; }
-.tk-tcard-t .tk-check { margin: 1px 0 0; width: 16px; height: 16px; }
+.tk-tcard-t .tk-check { margin: -2px -3px -3px; }
 .tk-tcard-f { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-caption); min-width: 0; }
 .tk-tcard-f .tk-who, .tk-tcard-f .tk-due { max-width: 70%; }
 .tk-tcard.tk-done .tk-row-text { color: var(--hc-dim, #8E8E93); text-decoration: line-through; }
@@ -4268,12 +4273,11 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .pv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); border-top: 1px solid var(--line); }
 .pv-side { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .pv-side-top { display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 8px; }
-.pv-search { width: auto; border-radius: 8px; }
 .pv-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
 .pv-row { display: grid; grid-template-columns: 22px 30px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
 .pv-row:hover { background: rgba(255, 255, 255, 0.04); }
 .pv-row.pv-sel { background: rgb(var(--accent-rgb) / 0.14); }
-.pv-row .tk-check { margin: 0; width: 16px; height: 16px; }
+.pv-row .tk-check { margin: -3px; }
 .pv-row-t { min-width: 0; display: flex; flex-direction: column; }
 .pv-row-t b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv-row-t b em { font-style: normal; font-size: var(--fs-label); color: var(--accent-text); }
@@ -5032,6 +5036,9 @@ button.sc-at:hover { color: var(--accent-text); }
   background: rgba(255, 255, 255, 0.14); color: #FFFFFF; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); outline: none; border-color: transparent; }
 #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active, #workspace-header .tb-rec-tabs.has-ind .tb-subtab.tb-active:hover { background: transparent; box-shadow: none; }
 #workspace-header .tb-rec-tabs .tb-ind { border-radius: 6px; background: rgba(255, 255, 255, 0.14); outline: none; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+/* The tab chosen keeps the keyboard's ring: its «outline: none» above hid it (found in the audit: «Расшифровка» under Tab) */
+#workspace-header .tb-rec-tabs .tb-subtab.tb-active:focus-visible, .tb-group.has-ind .tb-tab.tb-active:focus-visible,
+.tb-group.has-ind .tb-subtab.tb-active:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 #workspace-header .tb-rec-tabs .tb-active .tb-ai { fill: url(#vs-ai-grad); }
 #workspace-header .tb-rec-tabs .tb-badge, #workspace-header .tb-rec-tabs .tb-active .tb-badge { background: rgba(255, 255, 255, 0.1); color: var(--hc-dim, #AEAEB2); font-weight: 500; }
 #workspace-header .tb-rec-tabs .tb-active .tb-badge { color: #FFFFFF; }
@@ -5217,8 +5224,12 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 #rec-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
 #rec-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
 
-/* The search of a section's head: one width in «Записи», «Задачи», «Словарь» and the list of «Люди» */
-.tk-search, .lt-search, .pv-search { width: 280px; max-width: 100%; }
+/* The search of a section's head: one place, width and height in «Записи», «Задачи», «Словарь» and «Люди» (found in the
+   audit: 280px at four places, in «Люди» in the list on the left). The last control of the head, at its right edge
+   (24px from the view's), 236px wide, 32px high; the actions of the section stand before it. Checked by
+   tests/ui/scenarios.mjs «one place for the search» */
+.tk-search, .lt-search { width: 280px; max-width: 100%; }
+:is(#libtable-view, #tasks-view, #dict-view, #people-view) .vx-shead :is(.tk-search, .lt-search) { flex: none; width: 236px; height: var(--ctl-h); }
 
 /* «Люди» as the other sections: the list from x=96 under the head's tile, no line under the head */
 .pv-body { border-top: 0; padding-left: 24px; }
@@ -5438,6 +5449,37 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 /* the translator offered for this computer: its name under the lists, the size in line, «Скачать» in the state column */
 .st-moffer { font-size: var(--fs-label); line-height: 1.35; color: var(--hc-dim, #AEAEB2); }
 .st-moffer-btn { justify-self: start; }
+/* the model of the translation mode missing: the attention colour (orange: needs attention, CLAUDE.md), an «!» in a
+   circle before the line, on «Скачать», on the chip of the models and in the callout under it */
+.st-attn-ic { width: 14px; height: 14px; flex: none; }
+.st-moffer.is-attn { display: inline-flex; align-items: flex-start; gap: 6px; color: #FFB340; }
+.st-moffer.is-attn .st-attn-ic { margin-top: 1px; }
+/* the line of the missing model takes the popover's whole width (it wrapped to four lines in the select's column);
+   its size and «Скачать» go under it, in the columns of the rows above */
+#st-tr-offer { row-gap: 6px; }
+#st-tr-offer > .st-mlabel { display: none; }
+#st-tr-offer > .st-moffer { grid-column: 1 / -1; }
+#st-tr-offer > .st-mgb { grid-column: 3; }
+#st-tr-offer > .st-moffer-btn { grid-column: 4; }
+.st-attn-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; font-size: var(--fs-label);
+  font-weight: 600; color: #FFB340; background: rgba(255, 159, 10, 0.14); border: 1px solid rgba(255, 159, 10, 0.6); cursor: pointer; white-space: nowrap; }
+.st-attn-btn:hover:not(:disabled) { background: rgba(255, 159, 10, 0.24); color: #FFC56B; }
+.st-attn-btn:disabled { opacity: 0.7; cursor: default; }
+.st-attn-btn .st-attn-ic { width: 13px; height: 13px; }
+.st-mstate.is-dl { color: var(--accent-text, #8FB2F0); font-variant-numeric: tabular-nums; }
+.st-mstate.is-dl::before { border: 1.5px solid currentColor; }
+#st-models-pill { position: relative; }
+#st-models-pill.has-need { border-color: rgba(255, 159, 10, 0.55); }
+/* captions off dim the chips; the mark of a missing model stays bright */
+.st-pill.is-dim.has-need { opacity: 1; color: var(--hc-dim, #8E8E93); }
+.st-pill-badge { top: -7px; left: auto; right: -6px; min-width: 15px; padding: 0 3px; line-height: 15px; font-size: 10.5px; font-weight: 700; }
+.st-pill-badge.hidden { display: none; }
+.tb-rec-hint.st-need-hint { top: calc(100% + 10px); border-color: rgba(255, 159, 10, 0.6); border-left: 3px solid #FF9F0A; padding-left: 10px;
+  white-space: normal; width: max-content; max-width: min(460px, calc(100vw - 32px)); }
+.tb-rec-hint.st-need-hint::before { border-color: rgba(255, 159, 10, 0.6); }
+.st-need-hint > .st-attn-ic { color: #FF9F0A; width: 16px; height: 16px; }
+.st-need-hint-t { min-width: 0; line-height: 1.35; }
+.st-need-hint .st-attn-btn { flex: none; }
 .st-pop-note { margin: 0; width: 100%; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-label); line-height: 1.45; color: var(--hc-dim, #8E8E93); white-space: pre-line; }
 .st-pop-note:empty { display: none; }
 /* what the captions are doing when it needs saying (the translation model loading, an error), under the row */
@@ -5607,3 +5649,32 @@ label.sx-row:has(.vs-switch:disabled) { cursor: default; }
 .sx-input.sx-ctl-w { width: 260px; }
 .sx-row-ctl.sx-range { width: 260px; }
 .settings-card > :is(.sx-row, .sx-block):has(+ .hidden:last-child) { padding-bottom: 0; }
+
+/* Targets of 24px at least (found in the audit: the moment of a task 18×18, the looks of a chart 24×20, the period
+   switches 20px high, the links of the widgets 17px): the area that takes the click grows, the drawing stays.
+   - a task's or a person's box: 18px drawn in a 24px box (a transparent border of 3px, the frame an inner shadow),
+     its place in the row kept by its margins (−3px in a row, 0 where it had 3px around it);
+   - the round box of a task on «Обзор»: 16px drawn in 24px, a margin of −4px;
+   - the moment of a task: 24px around its 18px icon, a margin of −3px;
+   - the segments of a widget's switches: 24px high in a frame of 1px inside (2px higher than before);
+   - the text links (a widget's «Все →», «Подробнее», the moment of a phrase, «+ фича»): padding above and under,
+     taken back by a negative margin, so the line keeps its height */
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check { width: 24px; height: 24px; border: 3px solid transparent; border-radius: 9px;
+  background-clip: padding-box; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.3); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:hover { border-color: transparent; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.5); }
+html input[type="checkbox"]:not(.vs-switch):not(.sr-only).tk-check:checked { border-color: transparent; box-shadow: none; }
+.db-ck { width: 24px; height: 24px; margin: -4px; flex: none; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1.5px #6E6E73; }
+.db-ck:hover { border-color: transparent; box-shadow: inset 0 0 0 1.5px #30D158; }
+.tk-kindic { width: 24px; height: 24px; margin: -3px; }
+.db-chsw, .db-wp { padding: 1px; }
+.db-chsw button, .db-wp button { height: 24px; }
+.db-more, .ch-tm { padding-top: 4px; padding-bottom: 4px; margin-top: -4px; margin-bottom: -4px; }
+.dc-more { padding-top: 4px; padding-bottom: 4px; }
+.ft-add { padding-top: 2px; padding-bottom: 2px; margin-top: -1px; margin-bottom: -1px; }
+/* The decisions and the tasks of a meeting in «Встречи периода»: 30px columns, an icon each with its full name in the
+   tooltip (they were «Реш.» and «Зад.») */
+.db-dt-hic { display: inline-flex; justify-content: center; }
+.db-dt-hic svg { width: 14px; height: 14px; }
+/* The quick translation of the transcript: the icon of translation before the language («文A EN») */
+.quick-lang-tr { display: inline-flex; align-items: center; gap: 5px; }
+.quick-lang-ic { width: 14px; height: 14px; flex: none; }

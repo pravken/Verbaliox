@@ -251,6 +251,49 @@ await step('scrub the wave', async () => {
   await page.evaluate(() => document.getElementById('media-player').pause());
 });
 
+// While the recording plays a frame copies the bars and the ribbon drawn once and asks no layout of the page (audit
+// K20: every frame drew every phrase and read the canvas's box); a change of the speakers' filter draws them again
+await step('player frames reuse their layers', async () => {
+  const r = await page.evaluate(() => {
+    rpRender();
+    const drawn = rp.layersDrawn;
+    let rects = 0;
+    const orig = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () { rects++; return orig.call(this); };
+    rp.drag = true;
+    try { for (let i = 0; i < 30; i++) { rp.dragTime = i; rpRender(); } } finally { rp.drag = false; rp.dragTime = null; Element.prototype.getBoundingClientRect = orig; }
+    const same = rp.layersDrawn - drawn;
+    const spk = Object.keys(state.activeMeeting.speakers || {})[0];
+    state.speakerFilter = spk;
+    rpRender();
+    const filtered = rp.layersDrawn - drawn - same;
+    state.speakerFilter = null;
+    rpRender();
+    return { same, rects, filtered };
+  });
+  expect(r.same === 0, `the layers were drawn again ${r.same} times in 30 frames`);
+  expect(r.rects === 0, `the frames read the layout ${r.rects} times`);
+  expect(r.filtered === 1, `the speakers' filter did not draw the layers again: ${r.filtered}`);
+});
+
+// «Как прошёл разговор» (a bar per phrase) is drawn when the speakers' tab is shown, not into the hidden tab at
+// each opening of a recording (audit В22)
+await step('talk analytics wait for their tab', async () => {
+  await page.evaluate(() => openRecordTab('transcript'));
+  const asked = [];
+  const seen = r => { if (/\/analytics$/.test(r.url())) asked.push(r.url()); };
+  page.on('request', seen);
+  await page.evaluate(() => renderSpeakersPanel());
+  await sleep(300);
+  const hidden = await page.evaluate(() => document.querySelectorAll('#talk-analytics .sp-lane').length);
+  await page.evaluate(() => openRecordTab('speakers'));
+  await until(() => document.querySelectorAll('#talk-analytics .sp-lane').length > 0, 'the speakers tab has no lanes');
+  page.off('request', seen);
+  await page.evaluate(() => openRecordTab('transcript'));
+  expect(hidden === 0, `the hidden tab was drawn: ${hidden} lanes`);
+  expect(asked.length === 1, `the analytics were asked ${asked.length} times`);
+});
+
 // «Сведения»: four cards of «key — value» rows, the actions of each under a line (only the program's own)
 await step('recording details', async () => {
   await page.evaluate(() => openRecordTab('info'));
@@ -613,9 +656,16 @@ await step('first run wizard', async () => {
   await page.evaluate(() => { document.querySelectorAll('.modal-backdrop').forEach(m => m.id === 'first-run-wizard' && m.remove()); openFirstRunWizard(state.system); });
   await sleep(300);
   // One topic a step: the AI analysis, the sound, (calls: Windows only), the calendar, then what downloads (the language is not asked:
-  // the recommended set)
+  // the recommended set). The head says which step of how many (found in the audit: the dots alone did not)
+  const stepOf = () => page.evaluate(() => {
+    const m = document.querySelector('#first-run-wizard .frw-step')?.textContent.match(/(\d+)\D+(\d+)/);
+    return m ? [+m[1], +m[2], document.querySelectorAll('#first-run-wizard .frw-dot').length] : null;
+  });
+  const s1 = await stepOf();
   await page.click('#first-run-wizard button[data-pick="ai:none"]');
   await page.click('#first-run-wizard button[data-a="next"]');
+  const s2 = await stepOf();
+  expect(s1 && s2 && s1[0] === 1 && s2[0] === 2 && s1[1] === s1[2] && s2[1] === s1[1], `the step in the head: ${JSON.stringify([s1, s2])}`);
   // Where the sound comes from: the microphone only
   await page.click('#first-run-wizard button[data-src="mic"]');
   await page.click('#first-run-wizard button[data-a="next"]');
@@ -1473,6 +1523,147 @@ await step('studio choices kept', async () => {
   await page.unroute('**/api/live/models');
 });
 
+// The caption models not downloaded (asked by the user): the lists offer every model that fits the computer, the ones
+// not downloaded in their own group with the size; choosing one asks, downloads (Ollama's pull) with its percent in the
+// row, and the mode takes it when it is there; «Отмена» leaves the choice as it was. The mode's model missing: the line
+// of the popover names it for «Быстро», the chip has an orange «!», a callout under it until ✕, its «Скачать» downloads
+await step('caption models not downloaded', async () => {
+  const FAST = 'hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M';
+  const BIG = 'hf.co/tencent/Hy-MT3-7B-GGUF:Q4_K_M';
+  const fake = { installed: [BIG], pulls: [], progress: 0, done: false };
+  await page.route('**/api/live/models', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ installed: fake.installed, quality: BIG, fast: fake.installed.includes('hy-mt3-1.8b') ? 'hy-mt3-1.8b' : BIG,
+      auto: { quality: BIG, fast: fake.installed.includes('hy-mt3-1.8b') ? 'hy-mt3-1.8b' : BIG } }) }));
+  await page.route('**/api/ollama/pull', r => { fake.pulls.push(JSON.parse(r.request().postData() || '{}').model); fake.progress = 1;
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"active": true}' }); });
+  await page.route('**/api/ollama/status', async r => {
+    const res = await r.fetch();
+    const d = await res.json().catch(() => ({}));
+    d.installed = true;
+    d.pull_state = fake.done ? { active: false, model: FAST, progress: 100, logs: [] }
+      : { active: fake.progress > 0, model: FAST, progress: fake.progress, logs: [] };
+    d.translate_catalog = (d.translate_catalog || []).map(m => m.id === FAST && fake.done ? { ...m, installed: true, installed_as: 'hy-mt3-1.8b' } : m);
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d) });
+  });
+  // a settings read replaces state.system: Ollama stays «installed» in it too, or «Скачать» asks to install it
+  await page.route('**/api/system', async r => {
+    const res = await r.fetch();
+    const d = await res.json().catch(() => ({}));
+    if (d.ollama) d.ollama.installed = true;
+    await r.fulfill({ status: res.status(), contentType: 'application/json', body: JSON.stringify(d) });
+  });
+  try {
+    await page.evaluate(() => {
+      state.system.ollama.installed = true;  // no question about installing Ollama
+      saveUiSetting('live_translate_model_fast', '');
+      switchAppView('studio');
+    });
+    await sleep(600);
+    await page.evaluate(() => {
+      document.getElementById('live-translate-select').value = 'en';
+      studioConfigure();
+      studioSetSpeed('fast');
+      studioNeedSeen.dismissed = {};
+      studioTranslateModelsChanged();
+    });
+    await until(() => !document.getElementById('st-need-hint').classList.contains('hidden'), 'the callout of the missing model is not shown');
+    const hint = await page.evaluate(() => [document.getElementById('st-need-hint-text').textContent,
+      !document.getElementById('st-models-need').classList.contains('hidden'), document.getElementById('st-models-pill').title]);
+    expect(hint[0].includes('Hy-MT3 1.8B') && hint[1] && hint[2].includes('Hy-MT3 1.8B'), `the callout or the chip's mark is wrong: ${hint}`);
+    await page.click('#st-need-hint .tb-rec-hint-x');
+    await sleep(200);
+    expect(!(await page.isVisible('#st-need-hint')) && await page.isVisible('#st-models-need'), '✕ did not hide the callout, or the mark went with it');
+
+    await page.click('#st-models-pill');
+    await until(() => [...document.getElementById('studio-tr-model').options].some(o => o.value === `dl:${'hf.co/tencent/Hy-MT3-1.8B-GGUF:Q4_K_M'}`),
+      'the translation list does not offer the 1.8B not downloaded');
+    const listed = await page.evaluate((id) => {
+      const o = [...document.getElementById('studio-tr-model').options].find(x => x.value === `dl:${id}`);
+      return [o.textContent, o.parentElement.label, document.getElementById('st-tr-offer-text').textContent,
+        !document.getElementById('st-tr-offer').classList.contains('hidden'), t('capDlGroup'), t('studioSpeedFast')];
+    }, FAST);
+    expect(listed[0].includes('Hy-MT3 1.8B') && /1[,.]3/.test(listed[0]) && listed[1] === listed[4], `the 1.8B is listed without its size or group: ${listed}`);
+    expect(listed[3] && listed[2].includes(listed[5]) && listed[2].includes('Hy-MT3 1.8B'), `the offer line does not name the model of «Быстро»: ${listed}`);
+
+    // cancelled: the choice stays, nothing is downloaded
+    await page.selectOption('#studio-tr-model', `dl:${FAST}`);
+    await until(() => !!document.querySelector('.vx-dlg-foot button[data-a="yes"]'), 'choosing a model not downloaded asked nothing');
+    const ask = await page.evaluate(() => [document.querySelector('.vx-dlg').textContent, t('studioSpeedFast')]);
+    expect(ask[0].includes('Hy-MT3 1.8B') && ask[0].includes(ask[1]), `the question does not name the model and the mode: ${ask[0]}`);
+    await page.click('.vx-dlg-foot button[data-a="no"]');
+    await until(() => document.getElementById('studio-tr-model').value === '', 'cancel did not restore the choice');
+    expect(fake.pulls.length === 0, 'cancel started a download');
+
+    // confirmed: the pull, the percent in the row, then the mode takes the model
+    if (!(await page.isVisible('#st-models-pop'))) await page.click('#st-models-pill');
+    await page.selectOption('#studio-tr-model', `dl:${FAST}`);
+    await until(() => !!document.querySelector('.vx-dlg-foot button[data-a="yes"]'), 'the question did not come again');
+    await page.click('.vx-dlg-foot button[data-a="yes"]');
+    for (let i = 0; i < 80 && !fake.pulls.length; i++) await sleep(100);
+    expect(fake.pulls[0] === FAST, `the pull was not asked for the 1.8B: ${fake.pulls}`);
+    // a status read older than the download (the settings' /api/system) says «not downloading» for a moment: the
+    // choice waits for the download, it is not dropped (it was: the model would never have become the mode's)
+    await until(() => capDl.pending.length === 1, 'the chosen download is not followed');
+    const kept = await page.evaluate(() => {
+      updateOllamaUI({ ...(state.system.ollama || {}), pull_state: { active: false, progress: 0, logs: [] } });
+      capDlTick();
+      return capDl.pending.map(p => p.key).join();
+    });
+    expect(kept === 'live_translate_model_fast', `a stale status read dropped the chosen download: «${kept}»`);
+    fake.progress = 37;
+    let row = null;
+    for (let i = 0; i < 50 && !(row && row[0] === '37%' && row[1] === `dl:${FAST}`); i++) {
+      await sleep(150);
+      // the popover may be closed by a redraw of the studio meanwhile: the row is read with it open
+      row = await page.evaluate(() => {
+        if (document.getElementById('st-models-pop').classList.contains('hidden')) toggleStudioModelsPop();
+        return [document.getElementById('st-tr-model-state').textContent, document.getElementById('studio-tr-model').value,
+          JSON.stringify(capDl.pending.map(p => [p.key, p.id, p.pct])), JSON.stringify(state.ollamaPullState || {})];
+      });
+    }
+    expect(row[0] === '37%' && row[1] === `dl:${FAST}`, `the row does not show the download: ${row}`);
+    const slots = await page.evaluate(() => ['st-cap-model-gb', 'st-tr-model-gb', 'st-tr-offer-gb'].map(id => {
+      const r = document.getElementById(id).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
+    expect(slots.every(s => s[0] === slots[0][0] && s[1] === slots[0][1]), `the size slots moved: ${JSON.stringify(slots)}`);
+    if (shots) await page.locator('#st-models-pop').screenshot({ path: `${shots}/capmodels-download.png` });
+    fake.installed = [BIG, 'hy-mt3-1.8b'];
+    fake.done = true;
+    let saved = '';
+    for (let i = 0; i < 60 && saved !== 'hy-mt3-1.8b'; i++) {
+      await sleep(150);
+      saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings.live_translate_model_fast || ''));
+    }
+    expect(saved === 'hy-mt3-1.8b', `the downloaded model did not become the choice of «Быстро»: «${saved}»`);
+
+    // the callout's «Скачать» downloads the mode's model
+    fake.installed = [BIG];
+    fake.done = false;
+    fake.progress = 0;
+    await page.evaluate(() => { closeStudioModelsPop(); state.system.ollama.installed = true; saveUiSetting('live_translate_model_fast', ''); studioNeedSeen.dismissed = {}; studioTranslateModelsChanged(); });
+    await until(() => !document.getElementById('st-need-hint').classList.contains('hidden'), 'the callout did not come back');
+    await page.click('#st-need-hint .st-attn-btn');
+    for (let i = 0; i < 80 && fake.pulls.length < 2; i++) await sleep(100);
+    expect(fake.pulls.length === 2 && fake.pulls[1] === FAST && !(await page.isVisible('#st-need-hint')), `the callout's «Скачать» did not download: ${fake.pulls}`);
+    fake.done = true;
+    await sleep(1500);
+  } finally {
+    await page.unroute('**/api/ollama/pull');
+    await page.unroute('**/api/ollama/status');
+    await page.unroute('**/api/live/models');
+    await page.unroute('**/api/system');
+    await page.evaluate(() => {
+      closeStudioModelsPop();
+      saveUiSetting('live_translate_model_fast', '');
+      document.getElementById('live-translate-select').value = '';
+      studioConfigure();
+      studioSetSpeed('quality');
+      studioTranslateModelsChanged();
+      switchAppView('library');
+    });
+    await sleep(300);
+  }
+});
+
 // A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
 // fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
 await step('a choice in flight survives a settings read', async () => {
@@ -1711,13 +1902,56 @@ await step('library poll is cheap', async () => {
   await sleep(300);
   page.off('response', seen);
   expect(statuses[0] === 304 && statuses[1] === 200, `poll ${statuses[0]}, full ${statuses[1]}`);
-  expect(await page.locator('#meetings-list [data-mid]').count() > 0, 'the list is empty after the poll');
+  expect(await page.evaluate(() => state.meetings.length) > 0, 'the list is empty after the poll');
 });
 
-// A progress event redraws only that recording's row, not the sorted list of every recording (audit:
-// each event rebuilt all rows); a change of its status still draws the whole list
+// A large library (audit K19): «Записи» draws its rows in parts as it is scrolled, every recording still selectable
+// (Ctrl+A, the keys); the hidden list of the old sidebar is not drawn at all
+await step('a large library is drawn in parts', async () => {
+  const r = await page.evaluate(async () => {
+    const wait = (ms) => new Promise(res => setTimeout(res, ms));
+    const real = state.meetings;
+    const base = real[0];
+    state.meetings = [...real, ...Array.from({ length: 400 }, (_, i) => ({ ...base, id: 50000 + i, title: `Демо ${i}`,
+      recorded_at: `2025-0${1 + (i % 9)}-1${i % 10} 10:00:00`, created_at: `2025-0${1 + (i % 9)}-1${i % 10} 10:00:00` }))];
+    try {
+      switchAppView('libtable');
+      renderLibTable();
+      await wait(100);
+      const rows = () => document.querySelectorAll('#lt-body [data-mid]').length;
+      const first = rows(), ids = LT.ids.length;
+      const sidebar = document.querySelectorAll('#meetings-list [data-mid]').length;
+      const order = libVisibleIds().length;
+      // the keys reach a row not drawn yet
+      const scroll = document.getElementById('lt-scroll');
+      LT.cur = LT.ids[first - 1];
+      scroll.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      await wait(50);
+      const next = LT.ids[first];
+      const keyed = !!document.querySelector(`#lt-body [data-mid="${next}"].lt-cur`);
+      scroll.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', ctrlKey: true, bubbles: true }));
+      const picked = state.multi.size;
+      state.multi.clear();
+      ltPaintPick();
+      for (let i = 0; i < 30 && LT.rest.length; i++) { scroll.scrollTop = scroll.scrollHeight; await wait(80); }
+      return { first, ids, sidebar, order, keyed, picked, all: rows(), more: !!document.getElementById('lt-more') };
+    } finally {
+      state.meetings = real;
+      renderLibTable();
+    }
+  });
+  expect(r.ids === r.order && r.ids > 400, `not every recording is in the table's order: ${JSON.stringify(r)}`);
+  expect(r.first <= 160, `the first drawing drew ${r.first} rows`);
+  expect(r.sidebar === 0, `the hidden sidebar drew ${r.sidebar} rows`);
+  expect(r.keyed, 'the arrow key did not reach the next row, not drawn yet');
+  expect(r.picked === r.ids, `Ctrl+A picked ${r.picked} of ${r.ids}`);
+  expect(r.all === r.ids && !r.more, `scrolled to the end, ${r.all} of ${r.ids} rows drawn`);
+});
+
+// A progress event redraws only that recording's row of «Записи», not the sorted table of every recording
+// (audit: each event rebuilt all rows); a change of its status still draws the whole table
 await step('progress redraws one row', async () => {
-  await page.evaluate(() => switchAppView('library'));
+  await page.evaluate(() => switchAppView('libtable'));
   await sleep(300);
   const r = await page.evaluate(async () => {
     const frame = () => new Promise(res => requestAnimationFrame(() => setTimeout(res, 0)));
@@ -1725,18 +1959,18 @@ await step('progress redraws one row', async () => {
     const was = m.status;
     m.status = 'transcribing';
     m.progress = 10;
-    renderMeetingsSidebar();
+    renderLibTable();
     let full = 0;
-    const real = window.renderMeetingsSidebar;
-    window.renderMeetingsSidebar = (...a) => { full++; return real(...a); };
+    const real = window.renderLibTable;
+    window.renderLibTable = (...a) => { full++; return real(...a); };
     handleLiveEvent({ type: 'progress', id: m.id, progress: 37, stage_text: 'x' });
     await frame();
-    const row = document.querySelector(`#meetings-list [data-mid="${m.id}"]`);
+    const row = document.querySelector(`#lt-body [data-mid="${m.id}"]`);
     const shown = row ? row.textContent.includes('37%') : false;
     const afterRow = full;
     handleLiveEvent({ type: 'progress', id: m.id, status: was, progress: 100 });
     await frame();
-    window.renderMeetingsSidebar = real;
+    window.renderLibTable = real;
     return { shown, afterRow, afterStatus: full };
   });
   expect(r.shown, 'the row does not show the new progress');
@@ -2193,8 +2427,17 @@ await step('mix wait countdown', async () => {
   expect((await page.textContent('#tx-rc-title')) === 'Сведение дорожек', 'the card is not the mix');
   expect(!(await page.textContent('#tx-rc-pct')), 'the card still shows a percent');
   await until(f => (document.getElementById('tx-rc-sub')?.textContent || '') !== f, 'the countdown does not move', 5000, first);
-  const slot = await page.evaluate(() => document.querySelector('#meetings-list [data-mid="9902"] [data-mix-until]')?.textContent || '');
-  expect(/^1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
+  // the row of «Записи» counts down too (the old sidebar's list is not drawn: audit K19)
+  const slot = await page.evaluate(async () => {
+    const back = state.appView;
+    switchAppView('libtable');
+    await new Promise(r => setTimeout(r, 300));
+    const text = document.querySelector('#lt-body [data-mid="9902"] [data-mix-until]')?.textContent || '';
+    switchAppView(back);
+    await new Promise(r => setTimeout(r, 300));
+    return text;
+  });
+  expect(/^Сведение · 1:[34]\d$/.test(slot), `the row shows no time left: «${slot}»`);
   // a meeting going on: no countdown, the reason
   await page.evaluate(() => {
     for (const m of [state.activeMeeting, state.meetings.find(x => x.id === 9902)]) m.mix_wait = 0;
@@ -2468,6 +2711,388 @@ await step('load of the week: plan', async () => {
     await p2.evaluate(() => { setDashChart('load', 'col'); setUILanguage('ru'); });
     await p2.waitForTimeout(800);  // the language is kept on the server before the page closes
   } finally { await p2.close(); }
+});
+
+// Stored markup (the dashboard's saved summary, a translation's language from a restored backup) cannot run
+// a page function: the summary is sanitized again when shown, and a failed image may only call its fallback;
+// a stored colour goes into a style only as a colour
+await step('stored markup runs nothing', async () => {
+  const r = await page.evaluate(async () => {
+    window.vxProbeHit = 0;
+    window.vxProbe = function vxProbe() { window.vxProbeHit += 1; };
+    const html = sanitizedHtml('<p>ok</p><img src="/nope.png" data-error="vxProbe"><button data-click="vxProbe">x</button>');
+    const box = document.createElement('div');
+    box.innerHTML = '<img src="/nope-2.png" data-error="vxProbe"><img class="vx-fb" src="/nope-3.png" data-error="removeElement" data-error-args=\'[{"$": "el"}]\'>';
+    document.body.appendChild(box);
+    await new Promise(res => setTimeout(res, 800));
+    const left = box.querySelectorAll('img').length, fallback = !box.querySelector('.vx-fb');
+    box.remove();
+    const colors = [cssColor('#0A84FF'), cssColor('red;background:url(//x)', '#8E8E93'), cssColor('#abc')];
+    return { html, hit: window.vxProbeHit, left, fallback, colors };
+  });
+  expect(JSON.stringify(r.colors) === '["#0A84FF","#8E8E93","#abc"]', `a stored colour went into a style as it was: ${r.colors}`);
+  expect(!/data-|<img|<button/.test(r.html) && r.html.includes('<p>ok</p>'), `the saved summary keeps markup: ${r.html}`);
+  expect(r.hit === 0, 'a failed image ran a page function that is no fallback');
+  expect(r.fallback && r.left === 1, 'the fallback of a failed image did not run');
+});
+
+// --- The audit of the page (a review by another assistant): each finding fixed is held here ---
+
+// A brief or a digest is kept with its conversation: it was never saved and was gone after a reload
+await step('digest is saved with its conversation', async () => {
+  let saved = '';
+  const digest = /\/api\/library\/digest$/, chats = /\/api\/assistant\/chats$/;
+  await page.route(digest, r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ found: true, mode: 'digest', answer: 'Итог недели: решения приняты.', sources: [] }) }));
+  await page.route(chats, r => {
+    if (r.request().method() !== 'PUT') return r.continue();
+    saved = r.request().postData() || '';
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok": true}' });
+  });
+  try {
+    await page.evaluate(async () => {
+      switchAppView('ask');
+      await assistantLoad();
+      const off = window.assistantModelOff;
+      window.assistantModelOff = () => false;
+      try { await makeDigest(7); } finally { window.assistantModelOff = off; }
+    });
+    const end = Date.now() + 4000;
+    while (!saved.includes('Итог недели') && Date.now() < end) await sleep(100);
+  } finally { await page.unroute(digest); await page.unroute(chats); }
+  expect(saved.includes('Итог недели: решения приняты.'), 'the digest was not saved');
+});
+
+// A bulk action that is not a deletion says what failed, not «Не удалось удалить записей»
+await step('bulk action errors name no deletion', async () => {
+  const route = /\/api\/meetings\/1\/title$/;
+  await page.route(route, r => r.request().method() === 'PATCH'
+    ? r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ detail: 'Название слишком длинное' }) }) : r.continue());
+  let toast = '';
+  try {
+    toast = await page.evaluate(async () => {
+      const ask = window.askText, sel = window.libSelectedInOrder;
+      window.askText = async () => 'Итоги {n}';
+      window.libSelectedInOrder = () => state.meetings.filter(m => m.id === 1);
+      document.getElementById('toast').innerHTML = '';
+      try { await bulkRename(); } finally { window.askText = ask; window.libSelectedInOrder = sel; }
+      return document.getElementById('toast').textContent;
+    });
+  } finally { await page.unroute(route); }
+  expect(toast.includes('Не выполнено для записей: 1. Название слишком длинное') && !toast.includes('удалить'), `the message: «${toast}»`);
+});
+
+// The models popover before the setting of unloading is read: it threw «idle is not defined»
+await step('models popover without the unload setting', async () => {
+  const r = await page.evaluate(() => {
+    const s = (state.system && state.system.settings) || {};
+    const had = s.idle_unload_minutes;
+    delete s.idle_unload_minutes;
+    let err = '';
+    try { toggleModelsPop(); } catch (e) { err = e.message; } finally { s.idle_unload_minutes = had; }
+    const text = document.querySelector('#models-pop .mp-idle-btn')?.textContent || '';
+    closeModelsPop();
+    return { err, text };
+  });
+  expect(!r.err && r.text, `the popover: ${JSON.stringify(r)}`);
+});
+
+// Captions switched off while they start: what the start gets is stopped (a server session, a worklet and a timer
+// went on for the rest of the recording)
+await step('captions stopped while they start', async () => {
+  const calls = [];
+  const start = /\/api\/live\/start$/, sess = /\/api\/live\/audit-race\//;
+  await page.route(start, async r => {
+    await new Promise(res => setTimeout(res, 700));
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session: 'audit-race' }) });
+  });
+  await page.route(sess, r => { calls.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+  let r;
+  try {
+    r = await page.evaluate(async () => {
+      const ctx = new AudioContext();
+      const stream = ctx.createMediaStreamDestination().stream;
+      const run = startLiveCaptions(ctx, stream).catch(e => e.message);
+      stopLiveCaptions();
+      const err = await run;
+      await new Promise(res => setTimeout(res, 300));
+      const out = { err: err || '', session: liveCap.session, timer: liveCap.timer, node: !!liveCap.node, starting: !!liveCap.starting };
+      ctx.close();
+      return out;
+    });
+  } finally { await page.unroute(start); await page.unroute(sess); }
+  expect(!r.session && !r.timer && !r.node && !r.starting && !r.err, `the captions after the stop: ${JSON.stringify(r)}`);
+  expect(calls.some(u => u.endsWith('/audit-race/stop')), `the server session was not stopped: ${calls.join(', ')}`);
+});
+
+// A refusal is said: «Расшифровать заново…» and a new title showed success whatever the server answered
+await step('refusals are not shown as success', async () => {
+  const re = /\/api\/meetings\/1\/(reconfigure|title)$/;
+  await page.route(re, r => ['POST', 'PATCH'].includes(r.request().method())
+    ? r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Запись обрабатывается' }) }) : r.continue());
+  let r;
+  try {
+    r = await page.evaluate(async () => {
+      switchAppView('library');
+      await openMeeting(1);
+      document.getElementById('toast').innerHTML = '';
+      state.contextMeetingId = 1;
+      ctxOpenReconfigureModal();
+      await submitReconfigure();
+      const open = !document.getElementById('modal-reconfigure').classList.contains('hidden');
+      const toast1 = document.getElementById('toast').textContent;
+      closeModal('reconfigure');
+      const before = state.activeMeeting.title;
+      document.getElementById('meeting-title-input').value = `${before} (правка)`;
+      await saveMeetingTitle();
+      return { open, toast1, kept: state.activeMeeting.title === before, input: document.getElementById('meeting-title-input').value === before,
+        toast2: document.getElementById('toast').textContent };
+    });
+  } finally { await page.unroute(re); }
+  expect(r.open && r.toast1.includes('Запись обрабатывается') && !r.toast1.includes('Запущена'), `reprocessing: ${JSON.stringify(r)}`);
+  expect(r.kept && r.input, `the title: ${JSON.stringify(r)}`);
+});
+
+// The period of the assistant is read by the day of the meeting (it read a field that does not exist, then the import)
+await step('assistant period by the meeting day', async () => {
+  const r = await page.evaluate(() => {
+    const m0 = state.meetings[0], was = [m0.recorded_at, m0.created_at];
+    m0.recorded_at = '2020-01-02 10:00:00'; m0.created_at = '2026-11-20 10:00:00';
+    const found = assistantScopeIds({ type: 'period', from: '2020-01-01', to: '2020-01-03' }).includes(m0.id);
+    [m0.recorded_at, m0.created_at] = was;
+    return found;
+  });
+  expect(r, 'the period of the assistant reads the day of the import');
+});
+
+// The phrase under the playhead stays lit when a short one said inside it has ended
+await step('phrase under the playhead over a short one', async () => {
+  const r = await page.evaluate(() => {
+    const items = [{ s: 0, e: 10 }, { s: 5, e: 6 }, { s: 20, e: 25 }];
+    return [findActiveItem(items, 7, 0), findActiveItem(items, 5.5, 0), findActiveItem(items, 15, 0)];
+  });
+  expect(JSON.stringify(r) === '[0,1,-1]', `the phrase under the playhead: ${JSON.stringify(r)}`);
+});
+
+// Recordings of one name in one export do not write over each other
+await step('export names of one export', async () => {
+  const r = await page.evaluate(() => { const used = new Set(); return ['Итоги.docx', 'итоги.docx', 'Итоги.docx', 'План'].map(n => ltUniqueName(n, used)); });
+  expect(JSON.stringify(r) === '["Итоги.docx","итоги (2).docx","Итоги (3).docx","План"]', `the names: ${JSON.stringify(r)}`);
+});
+
+// The toast of a saved recording says what waits: «Только запись» or the paused queue
+await step('saved recording says what waits', async () => {
+  const r = await page.evaluate(() => {
+    const out = {};
+    const eco = window.economyOn, paused = state.queuePaused;
+    window.economyOn = () => true; out.eco = recordSavedKey();
+    window.economyOn = () => false; state.queuePaused = true; out.paused = recordSavedKey();
+    state.queuePaused = false; out.queued = recordSavedKey();
+    window.economyOn = eco; state.queuePaused = paused;
+    return out;
+  });
+  expect(r.eco === 'recordSavedEconomy' && r.paused === 'recordSavedPaused' && r.queued === 'recordSavedQueued', `the saved toast: ${JSON.stringify(r)}`);
+});
+
+// The search of the tasks does not find the empty fields («null»); the names of people have no Latin letter in a
+// Russian one
+await step('task search and given names', async () => {
+  const r = await page.evaluate(() => {
+    const q = TK.q;
+    TK.q = 'null';
+    const nullFound = tkMatchesPeopleAndSearch({ what: 'Прислать смету', who: null, meeting_title: null, quote: undefined });
+    TK.q = q;
+    return { nullFound, mixed: [...GIVEN_NAMES].filter(n => /[а-яё]/.test(n) && /[a-z]/.test(n)) };
+  });
+  expect(!r.nullFound, '«null» finds a task with empty fields');
+  expect(!r.mixed.length, `names with Latin letters: ${r.mixed}`);
+});
+
+// «Изменить текст» of a task works in «Карточки» too (it looked for a row of the list only)
+await step('task text edited in the cards', async () => {
+  await page.evaluate(() => switchAppView('tasks'));
+  await until(() => (TK.data.tasks || []).length > 0, 'no tasks', 5000);
+  const r = await page.evaluate(() => {
+    const view = TK.view;
+    setTasksView('cards');
+    const id = TK.data.tasks[0].id;
+    editTaskText(id);
+    const input = document.querySelector(`.tk-tcard[data-tid="${id}"] input.tk-row-edit`);
+    const ok = !!input && document.activeElement === input;
+    if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    setTasksView(view);
+    return ok;
+  });
+  expect(r, 'no field to edit the text of a card');
+});
+
+// A column of «Записи» dropped on itself stays where it was (it went one place before the last)
+await step('column dropped on itself stays', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await page.click('[data-lt-cols]');
+  const r = await page.evaluate(() => {
+    const before = ltPrefs().order.join(',');
+    const row = document.querySelector('#lt-cols-pop [data-colrow]');
+    const dt = new DataTransfer();
+    row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    row.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+    return { before, after: ltPrefs().order.join(',') };
+  });
+  await page.evaluate(() => closeLibTableColumnsMenu());
+  expect(r.before === r.after, `the order changed: ${r.before} → ${r.after}`);
+});
+
+// One «Расшифровать заново» in the toolbar of the text; the one with the choices is in «⋯»
+await step('one transcribe-again button', async () => {
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); switchWorkspaceTab('transcript'); });
+  await sleep(500);
+  const r = await page.evaluate(() => {
+    const shown = [...document.querySelectorAll('#tx-subbar button')].filter(b => b.getClientRects().length && /txRedo|recReconfigure/.test(b.dataset.click || ''));
+    return shown.map(b => b.dataset.click);
+  });
+  expect(r.length === 1, `the buttons: ${r}`);
+  await page.click('#tx-more-btn');
+  await sleep(300);
+  const menu = (await page.$$eval('#text-menu button', els => els.map(e => e.textContent))).join(' | ');
+  await page.keyboard.press('Escape');
+  expect(menu.includes('Расшифровать заново…'), `«Расшифровать заново…» is not in «⋯»: ${menu}`);
+});
+
+// The notices stand clear of the player's controls and the assistant's question (the notice of an update covered them)
+await step('notices clear of the player and the question', async () => {
+  const covered = async (sel) => page.evaluate((sel) => [...document.querySelectorAll(sel)].filter(b => b.getClientRects().length).filter(b => {
+    const r = b.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('#toast');
+  }).map(b => b.id || b.className), sel);
+  const notice = () => page.evaluate(() => { document.getElementById('toast').innerHTML = ''; showToast('Доступна версия 9.9.9', { label: 'Подробнее', onClick: () => {} }); });
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); });
+  await sleep(600);
+  await notice();
+  await sleep(400);
+  const player = await covered('.rp-right button, .rp-right input');
+  await page.evaluate(() => switchAppView('ask'));
+  await sleep(400);
+  const ask = await covered('#library-ask-btn, #library-question');
+  await page.evaluate(() => { document.getElementById('toast').innerHTML = ''; switchAppView('library'); });
+  expect(!player.length && !ask.length, `covered by a notice: ${[...player, ...ask]}`);
+});
+
+// The hint of the strip without a calendar gives way with «…» (it was cut mid-word at 1100 px)
+await step('strip hint ends with an ellipsis', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await sleep(500);
+  const r = await page.evaluate(() => {
+    const g = document.getElementById('strip-grow'), meta = document.getElementById('strip-meta');
+    return { text: g.textContent, cut: g.scrollWidth > g.clientWidth, ell: getComputedStyle(g).textOverflow, meta: meta.textContent,
+      kind: strip.kind };
+  });
+  await page.setViewportSize({ width: 1300, height: 860 });
+  if (r.kind !== 'free') return;  // a calendar in the data: no hint
+  expect(r.text.includes('календар') && !r.meta && r.ell === 'ellipsis', `the hint: ${JSON.stringify(r)}`);
+});
+
+// The tab chosen shows the keyboard's ring
+await step('the chosen tab shows the focus', async () => {
+  await page.evaluate(async () => { switchAppView('library'); await openMeeting(1); switchWorkspaceTab('transcript'); });
+  await sleep(300);
+  await page.focus('#nav-transcript');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const r = await page.evaluate(() => { const e = document.activeElement; const s = getComputedStyle(e); return { id: e.id, outline: s.outlineStyle, w: s.outlineWidth }; });
+  expect(r.id !== 'nav-transcript' || (r.outline !== 'none' && r.w !== '0px'), `no ring: ${JSON.stringify(r)}`);
+});
+
+// «Выбрать своё имя» is one button in one place on the cards of «Сегодня» (a link in one, a button in the other)
+await step('set my name: one button on the cards', async () => {
+  await page.evaluate(() => switchAppView('home'));
+  await sleep(1200);
+  const r = await page.evaluate(() => [...document.querySelectorAll('#home-view [data-click="hmSetMyName"]')].filter(b => b.getClientRects().length).map(b => {
+    const r = b.getBoundingClientRect(), card = b.closest('.db-w, .td-card, section, [class*="card"]')?.getBoundingClientRect();
+    return { cls: b.className, h: Math.round(r.height), w: Math.round(r.width), dx: card ? Math.round(r.left - card.left) : null };
+  }));
+  if (r.length < 2) return;  // the name is set in the data: nothing to compare
+  expect(new Set(r.map(x => `${x.cls}|${x.h}|${x.w}|${x.dx}`)).size === 1, `the buttons differ: ${JSON.stringify(r)}`);
+});
+
+// Esc in the window of an update over the settings closes that window only; the deletion question is a dialog
+await step('esc over the settings closes the top window', async () => {
+  await page.evaluate(async () => {
+    openModal('settings', 'general');
+    updateState.info = updateState.info || { current: '0.0.0', latest: { version: '0.0.1', notes: '' }, download: {} };
+    await openUpdateDialog();
+  });
+  await sleep(300);
+  await page.evaluate(() => document.body.focus());
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  const r = await page.evaluate(() => ({ dlg: !!document.getElementById('upd-dlg'), settings: !document.getElementById('modal-settings').classList.contains('hidden') }));
+  await page.evaluate(() => { document.getElementById('upd-dlg')?.remove(); closeModal('settings'); });
+  expect(!r.dlg && r.settings, `after Esc: ${JSON.stringify(r)}`);
+  const role = await page.evaluate(async () => {
+    const ask = confirmDeleteDialog(state.meetings[0]);
+    const w = document.querySelector('[aria-labelledby="del-dlg-title"]');
+    const out = w ? `${w.getAttribute('role')}|${w.getAttribute('aria-modal')}` : '';
+    w?.querySelector('button[data-a="no"]')?.click();
+    await ask;
+    return out;
+  });
+  expect(role === 'dialog|true', `the deletion question: «${role}»`);
+});
+
+// The assistant's conversations as the window closes (found in the audit: what changed in the last half-second was
+// lost): pagehide sends what changed since the last save at once, with keepalive, and the server has it
+await step('assistant chats saved on window close', async () => {
+  await page.evaluate(() => { switchAppView('ask'); return assistantLoad(); });
+  await until(() => ASSIST.ready, 'the conversations did not load');
+  const sent = [];
+  const seen = r => { if (r.url().includes('/api/assistant/chats')) sent.push(`${r.method()} ${r.url().replace(/^.*\/api/, '/api')}`); };
+  page.on('request', seen);
+  const id = await page.evaluate(() => {
+    const chat = newChatObject();
+    chat.title = 'Проверка при закрытии окна';
+    chat.items.push({ id: 1, question: 'Что решили?', status: 'done', data: { answer: 'План согласован.' } });
+    ASSIST.chats.unshift(chat);
+    assistantSaveSoon();  // the save of half a second later never comes: the window closes first
+    window.dispatchEvent(new Event('pagehide'));
+    return chat.id;
+  });
+  await sleep(900);
+  page.off('request', seen);
+  const stored = await page.evaluate(id => fetch('/api/assistant/chats').then(r => r.json()).then(d => d.chats.some(c => c.id === id && c.title === 'Проверка при закрытии окна')), id);
+  await page.evaluate(id => { ASSIST.chats = ASSIST.chats.filter(c => c.id !== id); window.dispatchEvent(new Event('pagehide')); }, id);
+  await sleep(300);
+  const gone = await page.evaluate(id => fetch('/api/assistant/chats').then(r => r.json()).then(d => !d.chats.some(c => c.id === id)), id);
+  expect(stored && gone && sent.includes('POST /api/assistant/chats/merge') && !sent.some(x => x.startsWith('PUT')),
+    `the conversation on closing: ${JSON.stringify({ stored, gone, sent })}`);
+});
+
+// The search of a section (found in the audit: 280px at four places, in «Люди» in the list on the left): the last control of
+// the head in «Записи», «Задачи», «Словарь» and «Люди», at one x, y and width, 32px high, at the window's minimum too
+await step('one place for the search', async () => {
+  const boxes = {};
+  for (const [w, h] of [[1300, 860], [1100, 700]]) {
+    await page.setViewportSize({ width: w, height: h });
+    for (const v of ['libtable', 'tasks', 'dict', 'people']) {
+      await page.evaluate(x => switchAppView(x), v);
+      await until(x => !document.getElementById(`${x}-view`).classList.contains('hidden'), `${v} did not open`, 5000, v);
+      await sleep(400);  // the section fades in
+      boxes[`${v}@${w}`] = await page.evaluate(x => {
+        const head = document.querySelector(`#${x}-view .vx-shead`);
+        const s = head && head.querySelector('.tk-search');
+        if (!s) return null;
+        const b = s.getBoundingClientRect(), view = document.getElementById(`${x}-view`).getBoundingClientRect();
+        const last = [...head.querySelectorAll('button, label, input')].filter(e => e.offsetParent && !s.contains(e))
+          .every(e => e.getBoundingClientRect().right <= b.left + 1 || e.getBoundingClientRect().bottom <= b.top + 1);
+        return { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), gap: Math.round(view.right - b.right), last };
+      }, v);
+    }
+    const list = Object.entries(boxes).filter(([k]) => k.endsWith(`@${w}`));
+    const bad = list.filter(([, b]) => !b || Math.abs(b.w - 236) > 1 || Math.abs(b.h - 32) > 1 || Math.abs(b.gap - 24) > 1 || !b.last
+      || Math.abs(b.x - list[0][1].x) > 1 || Math.abs(b.y - list[0][1].y) > 1);
+    expect(!bad.length, `the search is not in one place at ${w}px: ${JSON.stringify(Object.fromEntries(list))}`);
+  }
+  await page.setViewportSize({ width: 1300, height: 860 });
 });
 
 await browser.close();

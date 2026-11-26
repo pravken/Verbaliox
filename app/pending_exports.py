@@ -9,6 +9,7 @@ the page ({"type": "exported"} event); exports whose job failed are dropped and 
 """
 
 import shutil
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -20,6 +21,9 @@ from app.export_build import DOC_FORMATS, EXPORT_VARIANTS, build_export_bytes, d
 
 KINDS = ("doc", "video_soft", "video_burn", "dub_media", "dub_srt", "obsidian")
 MAX_TRIES = 1  # a job that failed is not started again for the same export
+# The list of a recording is read and written back under it: an export asked while process() wrote the others
+# (an Obsidian note, a video: minutes) was overwritten with the list read before (found in an audit)
+_lock = threading.Lock()
 
 
 def normalize(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -37,6 +41,9 @@ def normalize(item: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Не указан язык дубляжа")
     if kind == "doc" and lang and fmt == "json":
         raise ValueError("Перевод экспортируется в DOCX, MD, TXT, SRT или VTT")
+    if kind == "doc" and lang and variant == "bilingual" and fmt not in ("srt", "vtt", "docx"):
+        # refused by build_export_bytes after the translation was made: refused before it (found in an audit)
+        raise ValueError("Двуязычный экспорт доступен в SRT, VTT и DOCX")
     raw_opts = item.get("opts") if isinstance(item.get("opts"), dict) else {}
     # The options of the export menu (time stamps, names, without fillers), applied when the file is written
     opts = {"times": raw_opts.get("times", True) is not False, "names": raw_opts.get("names", True) is not False,
@@ -80,9 +87,10 @@ def _job_running_for(meeting_id: int, kind: Optional[str] = None, lang: Optional
 
 
 def _remember(meeting_id: int, item: Dict[str, Any]) -> None:
-    items = [x for x in get_pending_exports(meeting_id) if {**x, "tries": 0} != {**item, "tries": 0}]
-    items.append(item)
-    set_pending_exports(meeting_id, items)
+    with _lock:
+        items = [x for x in get_pending_exports(meeting_id) if {**x, "tries": 0} != {**item, "tries": 0}]
+        items.append(item)
+        set_pending_exports(meeting_id, items)
 
 
 def request(meeting_id: int, raw: Dict[str, Any], model: Optional[str] = None) -> Dict[str, Any]:
@@ -169,11 +177,12 @@ def _video_subtitles(m: Dict[str, Any], item: Dict[str, Any], folder: Path) -> O
     check_output_path(media, out)
     from app.database import add_export_path
 
-    add_export_path(int(m["id"]), str(out))
     if mode == "soft":
         title = f"{track_lang.upper()} (AI translation)" if lang else (track_lang.upper() or "Subtitles")
-        return mux_soft_subtitles(media, srt_text, track_lang, title, out)
-    if not enqueue_burn_subtitles_job(int(m["id"]), track_lang or "orig", srt_text, str(out)):
+        written = mux_soft_subtitles(media, srt_text, track_lang, title, out)
+        add_export_path(int(m["id"]), str(out))  # listed once written, never before (app/main._remember_export_dir)
+        return written
+    if not enqueue_burn_subtitles_job(int(m["id"]), track_lang or "orig", srt_text, str(out), remember=True):
         raise RuntimeError("Не удалось поставить встраивание субтитров в очередь")
     return None
 
@@ -212,7 +221,9 @@ def process(meeting_id: int) -> None:
         except Exception as e:
             traceback.print_exc()
             errors.append(str(e)[:200])
-    set_pending_exports(meeting_id, remaining)
+    with _lock:  # exports asked meanwhile stay
+        added = [x for x in get_pending_exports(meeting_id) if x not in items]
+        set_pending_exports(meeting_id, remaining + added)
     if done or errors or queued:
         events.publish(
             {"type": "exported", "id": meeting_id, "files": done, "queued": queued, "errors": errors,
@@ -228,5 +239,6 @@ def _failure_text(step: str, item: Dict[str, Any]) -> str:
 
 
 def cancel_all(meeting_id: int) -> None:
-    set_pending_exports(meeting_id, [])
+    with _lock:
+        set_pending_exports(meeting_id, [])
 

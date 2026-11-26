@@ -40,11 +40,22 @@ def _init(conn) -> None:
     # a suggestion the user turned down is not made again for that meeting
     conn.execute("CREATE TABLE IF NOT EXISTS feature_declined (meeting_id INTEGER NOT NULL, feature_id INTEGER NOT NULL, "
                  "PRIMARY KEY (meeting_id, feature_id))")
+    # the meetings and series of a feature (its card, its delete): the keys above start with the meeting or series
+    conn.execute("CREATE INDEX IF NOT EXISTS meeting_features_feature ON meeting_features (feature_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS series_features_feature ON series_features (feature_id)")
+
+
+_READY_AT: List[int] = []  # database.schema_epoch when the tables were made: they were made before every reading
 
 
 def _conn():
+    from app import database
+
     conn = get_connection()
-    _init(conn)
+    if not (_READY_AT and _READY_AT[0] == database.schema_epoch):
+        _init(conn)
+        conn.commit()
+        _READY_AT[:] = [database.schema_epoch]
     return conn
 
 
@@ -70,7 +81,11 @@ def list_features() -> List[Dict[str, Any]]:
             "LEFT JOIN meeting_features mf ON mf.feature_id = f.id LEFT JOIN meetings m ON m.id = mf.meeting_id "
             "GROUP BY f.id ORDER BY f.name COLLATE NOCASE").fetchall()
         conn.close()
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    for i, f in enumerate(out):  # the page puts it into a style: a restored backup's table may hold anything
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", f.get("color") or ""):
+            f["color"] = COLORS[i % len(COLORS)]
+    return out
 
 
 def create_feature(name: str, color: str = "") -> Dict[str, Any]:
@@ -301,6 +316,9 @@ def suggest_by_title(meeting_id: int) -> List[int]:
 def _keep_suggestions(meeting_id: int, ids: List[int]) -> List[int]:
     with _db_lock:
         conn = _conn()
+        if not conn.execute("SELECT 1 FROM meetings WHERE id = ?", (meeting_id,)).fetchone():
+            conn.close()  # deleted while the model was asked (found in an audit)
+            return []
         declined = {r[0] for r in conn.execute("SELECT feature_id FROM feature_declined WHERE meeting_id = ?", (meeting_id,)).fetchall()}
         ids = [f for f in ids if f not in declined]
         conn.execute("DELETE FROM feature_suggestions WHERE meeting_id = ?", (meeting_id,))
@@ -392,24 +410,16 @@ def suggest(meeting_id: int, model_name: Optional[str] = None) -> List[int]:
 
 
 # --- The page of a feature: its meetings, the decisions written in their summaries, its tasks ---
-_DECISION_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s*|\*\*).*(решени|договор|decision|agreed)", re.I)
-_ANY_HEAD = re.compile(r"^\s{0,3}(#{1,6}\s|\*\*[^*]+\*\*:?\s*$)")  # «## Решения» or a line «**Решения**»
-_BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
 DECISIONS_PER_MEETING = 12
 
 
 def decisions_of(summary_md: str) -> List[str]:
-    """The points under a «Решения» / «Договорённости» / «Decisions» heading of a summary."""
-    out: List[str] = []
-    inside = False
-    for line in str(summary_md or "").splitlines():
-        if _ANY_HEAD.match(line):
-            inside = bool(_DECISION_HEAD.match(line))
-            continue
-        m = _BULLET.match(line) if inside else None
-        if m:
-            out.append(m.group(1).strip())
-    return out[:DECISIONS_PER_MEETING]
+    """The points under a «Решения» / «Договорённости» / «Decisions» heading of a summary. Read as the analysis
+    reads its sections (app/analysis_chain.section_points): a topic «### Решение проблемы с кэшем» of the
+    discussion was taken for the decisions, and «## Решения / ### Бюджет / - Утвердили» gave none (found in an audit)."""
+    from app.analysis_chain import section_points
+
+    return section_points(str(summary_md or ""), "decisions")[:DECISIONS_PER_MEETING]
 
 
 def overview(feature_id: int, today=None) -> Optional[Dict[str, Any]]:

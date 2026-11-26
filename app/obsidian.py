@@ -22,6 +22,7 @@ from app.audio_utils import format_timestamp
 
 _INVALID = re.compile(r'[\\/:*?"<>|\x00-\x1f#^\[\]]')
 _lock = threading.Lock()
+_gen_lock = threading.Lock()  # the overview and tasks of a note made by the model, one recording at a time
 
 _LABELS = {
     "ru": {"summary": "Резюме", "overview": "Обзор", "tasks": "Задачи", "chapters": "Главы", "transcript": "Расшифровка",
@@ -517,7 +518,7 @@ def follow_now(meeting_id: int) -> Optional[Path]:
             shutil.move(str(old), str(target))
             update_meeting_fields(meeting_id, obsidian_path=str(target))
             _drop_empty(old.parent, root)
-            print(f"[obsidian] note of meeting {meeting_id} moved to {target}", flush=True)
+            print(f"[obsidian] note of meeting {meeting_id} moved to its folder", flush=True)  # its name is the meeting's title
     if _on(settings, "obsidian_auto", "false") and m.get("status") == "completed":
         export_meeting(meeting_id, explicit=False)  # its properties and title as they are now
     return target
@@ -586,8 +587,14 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
     folder = vault_dir(settings)
     if folder is None:
         raise ValueError("Папка хранилища Obsidian не выбрана в настройках")
+    if generate and _on(settings, "obsidian_generate"):
+        # The overview and the tasks the note lacks are made first, outside _lock: the model takes minutes, and
+        # every other note (an automatic update, a move after a rename) waited for it (audit K22). One such
+        # generation at a time: a second export of the same recording finds them made
+        with _gen_lock:
+            _prepare(meeting_id, True, settings)
     with _lock:
-        m = _prepare(meeting_id, generate and _on(settings, "obsidian_generate"), settings)
+        m = get_meeting(meeting_id) or {}  # read under the lock: an export running now changes the note's path
         if not m:
             raise LookupError("Встреча не найдена")
         if (m.get("status") != "completed" and not in_job) or not m.get("segments"):
@@ -606,14 +613,17 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
             else:
                 target = _unique(target)
         if moving and not target.exists():
-            # The title (or the template) changed: move the note instead of leaving the old one
-            old.replace(target)
+            # The title (or the template) changed: move the note instead of leaving the old one. Moved (not
+            # renamed: a vault moved to another drive left its notes there) and the recording told at once: a note
+            # edited in Obsidian is left as it is below, and the next export made a second one (found in an audit)
+            shutil.move(str(old), str(target))
+            update_meeting_fields(meeting_id, obsidian_path=str(target))
             moving = False
         existing = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
         ours, notes = split_user_notes(existing)
         if in_job is False and not explicit and existing and m.get("obsidian_hash") and _hash(ours) != m["obsidian_hash"]:
             # Changed in Obsidian above the user's section: an automatic update must not undo that
-            print(f"[obsidian] {target.name} was edited in Obsidian: not updated automatically", flush=True)
+            print(f"[obsidian] note of meeting {meeting_id} was edited in Obsidian: not updated automatically", flush=True)
             return target
         if moving:
             # A note of this recording is already at the new name (left by an earlier export): the old
@@ -625,9 +635,9 @@ def export_meeting(meeting_id: int, generate: bool = False, in_job: bool = False
         if moving:
             try:
                 old.unlink()
-                print(f"[obsidian] {old.name}: its notes moved into {target.name}, the old note removed", flush=True)
+                print(f"[obsidian] meeting {meeting_id}: the user's notes moved into the renamed note, the old one removed", flush=True)
             except OSError as e:
-                print(f"[obsidian] {old.name} could not be removed after moving its notes: {e}", flush=True)
+                print(f"[obsidian] meeting {meeting_id}: the old note could not be removed after moving its notes: {e}", flush=True)
         return target
 
 

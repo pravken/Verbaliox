@@ -76,13 +76,16 @@ async function openUpdateDialog(after = false) {
         ${canGo ? `<button data-a="go" class="an-btn an-btn-primary">${escapeHtml(goLabel)}</button>` : ''}
       </div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('keydown', e => { if (e.key === 'Escape') wrap.remove(); });
+  // Esc closes this window only, wherever the focus is (over the settings it closed them too, or only them: audit)
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape' && wrap.isConnected) { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
   wrap.addEventListener('click', e => {
     const b = e.target.closest('button');
-    if (e.target === wrap || (b && b.dataset.a === 'close')) { wrap.remove(); return; }
+    if (e.target === wrap || (b && b.dataset.a === 'close')) { close(); return; }
     if (!b) return;
     if (b.dataset.a === 'page') { openExternal(latest.url); return; }
-    if (b.dataset.a === 'go') { wrap.remove(); installUpdate(); }
+    if (b.dataset.a === 'go') { close(); installUpdate(); }
   });
 }
 
@@ -129,13 +132,16 @@ async function checkForUpdates(force) {
 async function followUpdateDownload() {
   if (updateState.polling) return;
   updateState.polling = true;
-  while (true) {
-    await new Promise(res => setTimeout(res, 1500));
-    try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
-    renderUpdateStatus();
-    if (!updateState.info.download.active) break;
-  }
-  updateState.polling = false;
+  // released whatever happens: an answer without its download part left it set, and no download could start again
+  try {
+    while (true) {
+      await new Promise(res => setTimeout(res, 1500));
+      try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
+      renderUpdateStatus();
+      if (!(updateState.info.download || {}).active) break;
+    }
+  } finally { updateState.polling = false; }
+  if (!updateState.info.download) return;
   const info = updateState.info;
   if (info.download.done && !updateState.notified) {
     updateState.notified = true;
@@ -155,14 +161,15 @@ async function installUpdate() {
     updateState.info = await r.json();
     renderUpdateStatus();
     updateState.polling = true;
-    while (true) {
-      await new Promise(res => setTimeout(res, 700));
-      try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
-      renderUpdateStatus();
-      if (!updateState.info.download.active) break;
-    }
-    updateState.polling = false;
-    if (!updateState.info.download.done) return;
+    try {
+      while (true) {
+        await new Promise(res => setTimeout(res, 700));
+        try { updateState.info = await (await fetch('/api/update')).json(); } catch (e) { continue; }
+        renderUpdateStatus();
+        if (!(updateState.info.download || {}).active) break;
+      }
+    } finally { updateState.polling = false; }
+    if (!(updateState.info.download || {}).done) return;
   }
   const ok = await askConfirm(t('updInstallConfirm').replace('{v}', () => info.latest.version), false, t('cfInstall'));
   if (!ok) return;
@@ -1322,13 +1329,18 @@ function renderMyNotesEditor(box) {
 const MARKDOWN_TAGS = ['p', 'br', 'hr', 'strong', 'b', 'em', 'i', 'del', 's', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'sup', 'sub'];
 function sanitizedMarkdown(md) {
-  const html = DOMPurify.sanitize(marked.parse(md || ''), {
+  return sanitizedHtml(marked.parse(md || ''));
+}
+
+// HTML kept from an earlier sanitizedMarkdown (a card's saved summary): sanitized again when shown, since
+// what is stored (the settings, a restored backup) may hold anything
+function sanitizedHtml(html) {
+  return DOMPurify.sanitize(String(html || ''), {
     ALLOWED_TAGS: MARKDOWN_TAGS, ALLOWED_ATTR: ['href', 'title', 'start', 'align', 'colspan', 'rowspan'],
     ALLOWED_URI_REGEXP: /^https?:\/\//i, ALLOW_DATA_ATTR: false,
     // not addresses: DOMPurify would hold them to the URI rule above and drop them («3.» shown as «1.»)
     ADD_URI_SAFE_ATTR: ['start', 'align', 'colspan', 'rowspan'],
   });
-  return html;
 }
 
 function renderMarkdownWithTimestamps(box, md, durationSec) {
@@ -1843,6 +1855,13 @@ function openExportDir() {
 // The language model the first-run wizard picks, downloaded from its card
 function pullFirstRunLlm() {
   pullOllamaModel(firstRunPicks(state.system || {}, state.uiLang).llm, true);
+}
+
+// A colour of stored data (a speaker's, a feature's) put into a style attribute: only #rgb / #rrggbb(aa).
+// Escaping keeps it inside the attribute but not inside the property: «red;background:url(…)» passed
+function cssColor(c, fallback = '') {
+  const s = String(c || '').trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ? s : fallback;
 }
 
 function escapeHtml(str) {

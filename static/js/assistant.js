@@ -4,7 +4,8 @@
 // a series, a person or chosen recordings. The scope helpers of library.js (askScopeLabel,
 // askScopePayload) stay in use; the functions below replace the old view of library.js.
 
-const ASSIST = { chats: [], loaded: false, chatId: null, query: '', saveTimer: null, aborts: new Map() };
+// saved: each conversation as the server has it (its id → its JSON), so the window closing sends only what changed
+const ASSIST = { chats: [], loaded: false, chatId: null, query: '', saveTimer: null, aborts: new Map(), saved: new Map(), ready: false };
 
 // --- Conversations: loaded once, saved a moment after each change ---
 async function assistantLoad() {
@@ -14,21 +15,68 @@ async function assistantLoad() {
   ASSIST.chats = Array.isArray(data.chats) ? data.chats : [];
   for (const c of ASSIST.chats) if (c && c.model === 'cloud') c.model = '';  // the cloud model of earlier versions
   ASSIST.chatId = ASSIST.chats[0]?.id || null;
+  ASSIST.saved = assistantSavedMap(assistantToSave());
+  ASSIST.ready = true;  // the list is the server's: what changes from now on is compared with it
   renderAssistant();
+}
+
+// What is stored: only answers are kept (a question that failed or was stopped is not saved), nor a conversation of
+// nothing else (an empty new one included)
+function assistantToSave() {
+  return ASSIST.chats.map(c => ({ ...c, items: c.items.filter(i => i.status === 'done') })).filter(c => c.items.length);
+}
+
+// A conversation as text to compare, without the page's own marks (keys starting with «_»)
+function assistantJson(c) {
+  return JSON.stringify(c, (k, v) => (k.startsWith('_') ? undefined : v));
+}
+
+function assistantSavedMap(chats) {
+  return new Map(chats.map(c => [c.id, assistantJson(c)]));
 }
 
 function assistantSaveSoon() {
   clearTimeout(ASSIST.saveTimer);
   ASSIST.saveTimer = setTimeout(async () => {
-    // only answers are kept: a question that failed or was stopped is not saved, nor a conversation of
-    // nothing else (an empty new one included)
-    const chats = ASSIST.chats.map(c => ({ ...c, items: c.items.filter(i => i.status === 'done') })).filter(c => c.items.length);
+    ASSIST.saveTimer = null;
+    const chats = assistantToSave();
     const res = await fetch('/api/assistant/chats', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chats }),
     }).catch(() => null);
-    if (res && !res.ok) showToast(errorText(await readJson(res), res));
+    if (res && res.ok) ASSIST.saved = assistantSavedMap(chats);
+    else if (res) showToast(errorText(await readJson(res), res));
   }, 500);
 }
+
+// The window closing (found in the audit: an answer, a rename or a removal of the last half-second was lost with the
+// window): what changed since the last save is sent at once with keepalive, which outlives the page. A keepalive
+// request carries 64 KB at most (all of them together), so the whole list is not sent: only the conversations that
+// changed, the newest first, as many as fit in 60 KB, and the ids of those removed; the server puts them into the
+// stored list (POST /api/assistant/chats/merge). A larger change waits for the next save as before
+const ASSIST_KEEPALIVE_MAX = 60 * 1024;
+function assistantFlush() {
+  if (!ASSIST.ready) return;
+  const chats = assistantToSave(), ids = new Set(chats.map(c => c.id));
+  const changed = chats.filter(c => ASSIST.saved.get(c.id) !== assistantJson(c))
+    .sort((a, b) => String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || '')));
+  const deleted = [...ASSIST.saved.keys()].filter(id => !ids.has(id));
+  if (!changed.length && !deleted.length) return;
+  const size = body => new TextEncoder().encode(body).length;
+  const sent = [];
+  for (const c of changed) {
+    if (size(JSON.stringify({ chats: [...sent, c], deleted })) <= ASSIST_KEEPALIVE_MAX) sent.push(c);
+  }
+  const body = JSON.stringify({ chats: sent, deleted });
+  if (size(body) > ASSIST_KEEPALIVE_MAX) return;
+  clearTimeout(ASSIST.saveTimer);
+  ASSIST.saveTimer = null;
+  fetch('/api/assistant/chats/merge', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body }).catch(() => null);
+  // a page kept in memory (back and forward) comes back with this as saved
+  for (const c of sent) ASSIST.saved.set(c.id, assistantJson(c));
+  for (const id of deleted) ASSIST.saved.delete(id);
+  if (sent.length < changed.length) assistantSaveSoon();
+}
+window.addEventListener('pagehide', assistantFlush);
 
 function currentChat() {
   return ASSIST.chats.find(c => c.id === ASSIST.chatId) || null;
@@ -296,8 +344,10 @@ async function assistantSaveChat() {
 }
 
 // --- Where to look: the scopes of library.js and two more, a period and chosen recordings ---
+// The day of the meeting (recorded_at, as everywhere else: the field read before does not exist, so the period
+// took the day a file was imported, not the day of the meeting: audit)
 function assistantMeetingDate(m) {
-  return String(m.meeting_at || m.created_at || '').slice(0, 10);
+  return String(m.recorded_at || m.created_at || '').slice(0, 10);
 }
 
 function assistantScopeIds(scope) {

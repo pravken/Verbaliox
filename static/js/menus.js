@@ -56,8 +56,8 @@ function renderExportMenu() {
       + item({ kind: 'video_burn' }, t('exportVideoBurn'), t('exportTagVideo'), t('tipSubsBurn'));
   }
 
-  const trOptions = (have.length ? `<optgroup label="${escapeHtml(t('exportLangReady'))}">${have.map(c => `<option value="${c}" ${c === trLang ? 'selected' : ''}>✓ ${escapeHtml(langName(c))}</option>`).join('')}</optgroup>` : '')
-    + `<optgroup label="${escapeHtml(t('exportLangNew'))}">${others.map(o => `<option value="${o.c}" ${o.c === trLang ? 'selected' : ''}>${escapeHtml(o.n)}</option>`).join('')}</optgroup>`;
+  const trOptions = (have.length ? `<optgroup label="${escapeHtml(t('exportLangReady'))}">${have.map(c => `<option value="${escapeHtml(c)}" ${c === trLang ? 'selected' : ''}>✓ ${escapeHtml(langName(c))}</option>`).join('')}</optgroup>` : '')
+    + `<optgroup label="${escapeHtml(t('exportLangNew'))}">${others.map(o => `<option value="${escapeHtml(o.c)}" ${o.c === trLang ? 'selected' : ''}>${escapeHtml(o.n)}</option>`).join('')}</optgroup>`;
   html += sep + header(t('exportGroupTr'), langSelect('export-tr-lang', 'setExportLang', trOptions));
   if (!trReady) html += note(t('exportTrWillRun').replace('{lang}', () => langName(trLang)));
   const tr = (fmt, variant, label, tag) => item({ kind: 'doc', fmt, lang: trLang, variant }, label, tag);
@@ -70,7 +70,7 @@ function renderExportMenu() {
       + item({ kind: 'video_burn', lang: trLang, variant: 'translated' }, t('exportVideoBurnTr'), t('exportTagVideo'), t('tipSubsBurn'));
   }
 
-  const dubOptions = dubLangs.map(c => `<option value="${c}" ${c === dubLang ? 'selected' : ''}>${dubs.includes(c) ? '✓ ' : ''}${escapeHtml(dubLangName(c))}</option>`).join('');
+  const dubOptions = dubLangs.map(c => `<option value="${escapeHtml(c)}" ${c === dubLang ? 'selected' : ''}>${dubs.includes(c) ? '✓ ' : ''}${escapeHtml(dubLangName(c))}</option>`).join('');
   html += sep + header(t('exportGroupDub'), langSelect('export-dub-lang', 'setExportDubLang', dubOptions));
   if (!dubReady) html += note(t('exportDubWillRun'));
   const dubExt = dubReady ? String((availableDubs(m).find(d => d.lang === dubLang) || {}).path || '').split('.').pop().toUpperCase() : (isVideo ? 'MP4' : 'M4A');
@@ -285,7 +285,7 @@ function openBulkMenu(e) {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
     menu.remove();
-    window[b.dataset.fn]();
+    callPage(b.dataset.fn);
   });
   document.body.appendChild(menu);
   placeMenuAt(menu, e);
@@ -438,9 +438,7 @@ function ctxOpenReconfigureModal() {
 async function submitReconfigure() {
   const id = state.contextMeetingId;
   if (!id) return;
-  closeModal('reconfigure');
-
-  await fetch(`/api/meetings/${id}/reconfigure`, {
+  const res = await fetch(`/api/meetings/${id}/reconfigure`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -448,7 +446,11 @@ async function submitReconfigure() {
       language: document.getElementById('reconfig-language').value,
       num_speakers_hint: Number(document.getElementById('reconfig-speakers').value || 0),
     })
-  });
+  }).catch(() => null);
+  // refused (the recording is busy, no model): said, and the window stays with its choices (it said «Запущена
+  // повторная обработка» whatever the answer: audit)
+  if (!res || !res.ok) { showError(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
+  closeModal('reconfigure');
   await loadMeetingsList();
   await selectMeeting(id, false);
   showToast(t('uiReProcessingStarted'));
@@ -510,8 +512,12 @@ function confirmDeleteDialog(list) {
     const what = list.length === 1 ? t('confirmDeleteOne').replace('{title}', () => list[0].title) : t('confirmDeleteMany').replace('{n}', () => list.length);
     const wrap = document.createElement('div');
     wrap.className = 'fixed inset-0 modal-backdrop z-[70] flex items-center justify-center p-4';
+    // a dialog for screen readers and the focus trap of the page (it was a plain block: audit)
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-labelledby', 'del-dlg-title');
     wrap.innerHTML = `<div class="w-full max-w-md bg-apple-card border apple-border rounded-2xl shadow-2xl p-5 space-y-4 modal-card">
-      <div class="text-sm font-semibold text-white">${escapeHtml(t('deleteTitle'))}</div>
+      <div id="del-dlg-title" class="text-sm font-semibold text-white">${escapeHtml(t('deleteTitle'))}</div>
       <p class="text-xs text-apple-secondary leading-relaxed">${escapeHtml(what)}</p>
       <p class="text-[11.5px] text-apple-tertiary leading-relaxed">${escapeHtml(t('deleteAlways'))}</p>
       ${options.length ? `<div class="space-y-2.5"><div class="text-[11.5px] text-apple-secondary">${escapeHtml(t('deleteAlsoFiles'))}</div>${options.join('')}</div>` : ''}

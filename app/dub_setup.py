@@ -240,7 +240,8 @@ def _install() -> None:
             )
         else:
             ensure_pip(str(DUB_PYTHON))
-            _run([str(DUB_PYTHON), "-m", "pip", "install", "--upgrade", "pip"], 8, 10, env)
+            # pip pinned with its hashes (requirements-pip.txt), not the newest one PyPI has
+            _run([str(DUB_PYTHON), "-m", "pip", "install", "--require-hashes", "-r", str(APP_DIR / "requirements-pip.txt")], 8, 10, env)
             rc = _run(
                 [str(DUB_PYTHON), "-m", "pip", "install", "--require-hashes", "-r", str(REQUIREMENTS),
                  "--extra-index-url", TORCH_INDEX],

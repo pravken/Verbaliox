@@ -453,6 +453,15 @@ async function renderTalkAnalytics() {
   const box = document.getElementById('talk-analytics');
   const m = state.activeMeeting;
   if (!box || !m || !(m.segments || []).length) { if (box) box.innerHTML = ''; return; }
+  // drawn when the tab is shown (switchWorkspaceTab): each opening of a recording asked for its analytics and drew a
+  // bar for each of its phrases, 2700 for a three-hour meeting, into the hidden tab (audit В22)
+  if (state.activeWorkspaceTab !== 'speakers') {
+    if (box.dataset.mid !== String(m.id)) box.innerHTML = '';
+    box.dataset.stale = '1';
+    return;
+  }
+  box.dataset.stale = '';
+  box.dataset.mid = String(m.id);
   const a = await fetch(`/api/meetings/${m.id}/analytics`).then(r => r.ok ? r.json() : null).catch(() => null);
   if (!a || state.activeMeeting !== m) return;
   const segs = m.segments || [];
@@ -494,8 +503,8 @@ async function renderTalkAnalytics() {
       ${metric(String(questions), t('spQuestions'))}${metric(longest ? spMinutes(longest.seconds) : '—', t('spLongest'))}
     </div>
     <div class="sp-card2"><span class="sp-cap">${escapeHtml(t('spShare'))}</span>
-      <div class="sp-sharebar">${a.speakers.map(r => `<span style="width:${Number(r.share) || 0}%;background:${escapeHtml(r.color)}" title="${escapeHtml(r.name)} ${Number(r.share) || 0}%"></span>`).join('')}</div>
-      <div class="sp-legend">${a.speakers.map(r => `<span><i style="background:${escapeHtml(r.color)}"></i>${escapeHtml(r.name)} <em>${Number(r.share) || 0}%</em></span>`).join('')}</div>
+      <div class="sp-sharebar">${a.speakers.map(r => `<span style="width:${Number(r.share) || 0}%;background:${cssColor(r.color, '#8E8E93')}" title="${escapeHtml(r.name)} ${Number(r.share) || 0}%"></span>`).join('')}</div>
+      <div class="sp-legend">${a.speakers.map(r => `<span><i style="background:${cssColor(r.color, '#8E8E93')}"></i>${escapeHtml(r.name)} <em>${Number(r.share) || 0}%</em></span>`).join('')}</div>
     </div>
     <div class="sp-card2"><span class="sp-cap">${escapeHtml(t('spWhoWhen'))} <em>· ${escapeHtml(t('spWhoWhenHint'))}</em></span>
       ${lanes}<div class="sp-lane-row sp-ticks"><span></span><span class="sp-tickline">${ticks}</span></div>
@@ -694,7 +703,7 @@ async function openPersonCard(name) {
       const newName = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
       if (newName === null || !newName.trim()) return;
       const role = await askText(t('spDirRole').replace('{name}', () => newName.trim()), p.role || '');
-      await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) });
+      if (!(await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) }))) return;
       openPersonCard(newName.trim());
       return;
     }
@@ -747,10 +756,11 @@ async function dirAdd(name) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, kind: dir.tab }),
   });
   const data = await readJson(res);
-  if (!res.ok) { showError(serverText(data.detail)); return; }
+  if (!res.ok) { showError(serverText(data.detail)); return false; }
   dir.adding = false;
   await loadDirectory();
   spCtx.data = null;
+  return true;
 }
 
 async function dirUpdate(body) {
@@ -758,10 +768,11 @@ async function dirUpdate(body) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await readJson(res);
-  if (!res.ok) { showError(serverText(data.detail)); return; }
+  if (!res.ok) { showError(serverText(data.detail)); return false; }
   if (body.is_me !== undefined || body.new_name) await spRefreshSettings();
   await loadDirectory();
   spCtx.data = null;
+  return true;
 }
 
 // «Это я» writes the setting my_name on the server (the home page and the tasks read it): fetch it back
@@ -909,7 +920,7 @@ async function openPersonRecord(id, at) { switchAppView('library'); await select
 async function peopleAdd() {
   const name = await askText(t(dir.tab === 'dept' ? 'spNewDeptPh' : 'spNamePh'), '');
   if (!name || !name.trim()) return;
-  await dirAdd(name.trim());
+  if (!(await dirAdd(name.trim()))) return;  // refused: the selection stays where it was
   PV.sel = name.trim();
   renderPeopleView();
 }
@@ -932,7 +943,7 @@ async function peopleCardEdit() {
   const newName = await askText(t('spDirRename').replace('{name}', () => p.name), p.name);
   if (newName === null || !newName.trim()) return;
   const role = await askText(t('spDirRole').replace('{name}', () => newName.trim()), p.role || '');
-  await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) });
+  if (!(await dirUpdate({ name: p.name, ...(newName.trim() !== p.name ? { new_name: newName.trim() } : {}), ...(role !== null ? { role } : {}) }))) return;
   PV.sel = newName.trim();
   renderPeopleView();
 }

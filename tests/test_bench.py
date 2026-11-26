@@ -39,7 +39,10 @@ class BenchRunTest(unittest.TestCase):
         save_meeting_results(m["id"], segments=[{"start": 0.0, "end": 2.0, "text": "Привет, мир. Как дела?", "speaker": "S1"}])
         done = {**get_meeting(m["id"]), "status": "completed"}
 
-        def fake_extract(src, dst, enhance_audio=True):
+        cuts = []
+
+        def fake_extract(src, dst, enhance_audio=True, start=None, duration=None):
+            cuts.append((start, duration))  # only the fragment is decoded (audit В21), not the whole recording
             Path(dst).write_bytes(Path(src).read_bytes())
 
         def fake_one(mid, clip, audio, dur, lang):
@@ -49,7 +52,11 @@ class BenchRunTest(unittest.TestCase):
         bench.clear_history()
         with mock.patch("app.audio_utils.extract_audio_16k_mono", fake_extract), \
              mock.patch.object(bench, "_asr_one", fake_one), mock.patch.object(bench, "busy_reason", return_value=""), \
+             mock.patch.object(bench, "asr_choices", return_value=[{"id": "good", "name": "Good"}, {"id": "bad", "name": "Bad"}]), \
              mock.patch("app.database.get_meeting", return_value=done):
+            # a model the page does not offer (not downloaded, or any Hugging Face repository) is refused
+            with self.assertRaises(ValueError):
+                bench.start("asr", m["id"], ["good", "some-org/some-repo"], 60)
             bench.start("asr", m["id"], ["good", "bad"], 60)
             for _ in range(100):
                 if not bench.status()["running"]:
@@ -61,6 +68,7 @@ class BenchRunTest(unittest.TestCase):
         self.assertEqual(by["good"]["wer"], 0.0)
         self.assertAlmostEqual(by["bad"]["wer"], 0.75)
         self.assertEqual(st["history"][0]["ref_words"], 4)
+        self.assertEqual(cuts, [(0.0, 2.5)])
 
     def test_rejects_unfinished_recording(self):
         from app.database import create_meeting, init_db
@@ -71,6 +79,18 @@ class BenchRunTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             bench.start("asr", m["id"], ["a"])
 
+
+
+class WhisperPathTest(unittest.TestCase):
+    def test_only_catalog_models_and_never_a_download_by_faster_whisper(self):
+        from app import model_manager
+
+        with self.assertRaises(ValueError):  # faster-whisper would download any repository by this name
+            model_manager.get_whisper_model_path("some-org/some-repo")
+        with mock.patch.object(model_manager, "ensure_whisper_model") as ensure:
+            with self.assertRaises(ValueError):  # not downloaded: a pinned download first, never the newest commit
+                model_manager.get_whisper_model_path("large-v3-turbo")
+        ensure.assert_called_once_with("large-v3-turbo")
 
 
 class GroundingLanguageTest(unittest.TestCase):

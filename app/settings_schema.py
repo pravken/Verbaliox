@@ -49,10 +49,21 @@ FOLDERS = {"recordings_dir", "export_dir", "obsidian_vault", "watch_folder"}
 # Ollama models chosen by name (app/live_translate.CHOICE_KEYS): empty is «Авто»
 OLLAMA_MODELS = {"live_translate_model_quality", "live_translate_model_fast"}
 OLLAMA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$")
+# Written by the program itself, never by the page: what it counts (crashes, interrupted jobs, the speed of
+# the voice filter), what it told already, and the summary templates, which have their own checked route
+# (/api/summary-templates). POST /api/settings leaves them alone
+SERVER_KEYS = frozenset({"clean_exit", "interrupted_job_runs", "economy_until", "voice_filter_rate", "update_notified",
+                         "update_ready_notified", "tray_told", "work_reminded_day", "watch_folder_baseline",
+                         "summary_templates", "diarizer_engine"})
+# Names of a computer of the local network (http is fine there): one word ("nas") or a local suffix
+_LOCAL_SUFFIXES = (".local", ".lan", ".home", ".home.arpa", ".internal", ".localdomain")
 
 
 def _is_local_host(host: str) -> bool:
-    if host in ("localhost",):
+    host = (host or "").lower().rstrip(".")
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(_LOCAL_SUFFIXES):
+        return True
+    if host and "." not in host and ":" not in host and not host.strip("[]").replace(".", "").isdigit():
         return True
     try:
         ip = ipaddress.ip_address(host.strip("[]"))
@@ -92,7 +103,7 @@ def _calendar(value: str) -> str:
 
 def clean(key: str, value: Any) -> str:
     """The value to store, or ValueError with a message for the user."""
-    if not KEY_RE.match(str(key)):
+    if not KEY_RE.match(str(key)) or key in SERVER_KEYS:
         raise ValueError(f"Неизвестная настройка: {str(key)[:40]}")
     if isinstance(value, bool):
         text = "true" if value else "false"
@@ -147,8 +158,8 @@ def clean(key: str, value: Any) -> str:
         if text_s not in TEXT_LANGUAGES:
             raise ValueError(f"{key}: недопустимое значение")
         return text_s
-    if key == "ollama_url":
-        return _url(text_s, key, "any") if text_s else ""
+    if key == "ollama_url":  # the transcripts go there: over the internet only encrypted
+        return _url(text_s, key, "local") if text_s else ""
     if key == "calendar_ics":
         return _calendar(text_s) if text_s else ""
     if key in FOLDERS:

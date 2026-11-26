@@ -137,6 +137,12 @@ def _busy() -> bool:
 
     if analysis_running():  # an overview or an answer asked on the page is being written
         return True
+    from app import bench, dictation
+
+    # a dictation spoken or being recognized, a model comparison: neither goes through the queue, and their model
+    # was unloaded under them (found in an audit)
+    if dictation._state.get("active") or dictation._state.get("busy") or bench._state.get("running"):
+        return True
     return live.has_sessions()
 
 

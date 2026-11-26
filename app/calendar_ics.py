@@ -13,6 +13,7 @@ A small parser on purpose (no dependency): events, folded lines, UTC / floating 
 rules (DAILY / WEEKLY / MONTHLY with INTERVAL, BYDAY, COUNT, UNTIL, EXDATE).
 """
 
+import bisect
 import re
 import threading
 import time
@@ -132,7 +133,8 @@ class _FileZone(tzinfo):
 
         month, nth, wd, hour, minute = rule
         days = [d for d in range(1, calendar.monthrange(year, month)[1] + 1) if calendar.weekday(year, month, d) == wd]
-        day = days[nth - 1] if 0 < nth <= len(days) else days[-1]
+        # «-2SU»: the last but one (it was taken for the last: an audit); a place the month has not: the last
+        day = days[nth - 1] if 0 < nth <= len(days) else days[nth] if -len(days) <= nth < 0 else days[-1]
         return datetime(year, month, day, hour, minute)
 
     def _summer(self, dt: datetime) -> bool:
@@ -337,12 +339,15 @@ def parse(text: str) -> List[Dict[str, Any]]:
                 cur["attendees"].append(who)
     # A meeting of a series moved to another time (or cancelled) comes as its own event with the
     # series' UID: the series no longer has it at its usual time
+    series: Dict[str, List[Dict[str, Any]]] = {}  # by UID: one pass, not every event for every moved one
+    for ev in events:
+        if ev["rrule"] and not ev.get("recurrence_id"):
+            series.setdefault(ev["uid"], []).append(ev)
     for uid, when in moved:
         if when is None:
             continue
-        for ev in events:
-            if ev["uid"] == uid and ev["rrule"] and not ev.get("recurrence_id"):
-                ev["exdates"].append(when)
+        for ev in series.get(uid, ()):
+            ev["exdates"].append(when)
     return events
 
 
@@ -363,7 +368,8 @@ def _month_rule(rule: Dict[str, str]):
             parsed.append((int(m.group(1)) if m.group(1) else None, _DAYS[m.group(2)]))
     if not parsed:
         return None
-    setpos = [int(x) for x in rule.get("BYSETPOS", "").split(",") if re.fullmatch(r"[+-]?\d{1,3}", x.strip() or "x")]
+    parsed = list(dict.fromkeys(parsed))  # «MO,MO,MO…» repeated thousands of times is one Monday
+    setpos = sorted({int(x) for x in rule.get("BYSETPOS", "").split(",") if re.fullmatch(r"[+-]?\d{1,3}", x.strip() or "x")})
 
     def days(year: int, month: int) -> List[int]:
         total = calendar.monthrange(year, month)[1]
@@ -412,9 +418,14 @@ def occurrences(ev: Dict[str, Any], start: datetime, end: datetime) -> List[Dict
 def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[str, Any]], to_wall=None) -> None:
     """to_wall: the series is walked at its zone's wall time; UNTIL (local time here) is brought to it."""
     dur = ev["end"] - ev["start"]
+    exdates = sorted(ev["exdates"])  # looked up by bisection: thousands of them made every meeting slow
+
+    def excluded(s: datetime) -> bool:
+        i = bisect.bisect_left(exdates, s - timedelta(seconds=60))
+        return i < len(exdates) and abs((s - exdates[i]).total_seconds()) < 60
 
     def add(s: datetime) -> None:
-        if s + dur > start and s < end and not any(abs((s - x).total_seconds()) < 60 for x in ev["exdates"]):
+        if s + dur > start and s < end and not excluded(s):
             out.append({**ev, "start": s, "end": s + dur})
 
     rule = {k.upper(): v for k, v in (p.split("=", 1) for p in ev["rrule"].split(";") if "=" in p)} if ev["rrule"] else {}
@@ -435,7 +446,8 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
             until = until.replace(hour=23, minute=59, second=59)
         elif to_wall is not None and rule["UNTIL"].strip().upper().endswith("Z"):
             until = to_wall(until)
-    days = [_DAYS[d[-2:]] for d in rule.get("BYDAY", "").upper().split(",") if d[-2:] in _DAYS]
+    # each day once: «MO» repeated thousands of times in one event made as many meetings a week (found in the audit)
+    days = sorted({_DAYS[d[-2:]] for d in rule.get("BYDAY", "").upper().split(",") if d[-2:] in _DAYS})
     n = 0
     cursor = ev["start"]
     limit = min(end, until + timedelta(seconds=1)) if until else end
@@ -468,7 +480,7 @@ def _expand(ev: Dict[str, Any], start: datetime, end: datetime, out: List[Dict[s
             continue
         if freq == "WEEKLY" and days:
             week_start = cursor - timedelta(days=cursor.weekday())
-            for d in sorted(days):
+            for d in days:
                 s = week_start + timedelta(days=d)
                 s = s.replace(hour=ev["start"].hour, minute=ev["start"].minute, second=ev["start"].second)
                 if s < ev["start"] or s >= limit or (count is not None and n >= count):

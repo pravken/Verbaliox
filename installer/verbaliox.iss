@@ -286,6 +286,10 @@ begin
     // the old name's folder and a migration left halfway, files an update added after the install
     DelTree(ExpandConstant('{localappdata}\VerbaScribe'), True, True, True);
     DelTree(ExpandConstant('{localappdata}\Verbaliox.migrating'), True, True, True);
-    DelTree(ExpandConstant('{app}'), True, True, True);
+    // Only a folder of the program's own name: the folder chosen at the install may be a shared one
+    // (D:\Tools), whose other programs must stay
+    if SameText(ExtractFileName(RemoveBackslashUnlessRoot(ExpandConstant('{app}'))), 'Verbaliox') or
+       SameText(ExtractFileName(RemoveBackslashUnlessRoot(ExpandConstant('{app}'))), 'VerbaScribe') then
+      DelTree(ExpandConstant('{app}'), True, True, True);
   end;
 end;

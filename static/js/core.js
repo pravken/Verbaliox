@@ -185,6 +185,9 @@ function accentColor() { return getComputedStyle(document.documentElement).getPr
 // (el.dataset.x). A text from a recording can never become a placeholder: jsArg makes it a string.
 const PAGE_EVENTS = ['click', 'dblclick', 'change', 'input', 'keydown', 'contextmenu', 'dragstart', 'dragover', 'dragleave', 'drop'];
 const PAGE_OWN_EVENTS = { focusin: 'focus', focusout: 'blur', error: 'error' };  // of the element itself
+// A failed image runs its handler with no click at all: only these may be named there, so markup that
+// reached the page from stored data (a restored backup) cannot start any other function by itself
+const PAGE_ERROR_FNS = new Set(['removeElement', 'tileIconFallback']);
 
 // The event as an inline handler saw it: its currentTarget is the element that has the handler
 // (the listener is on the document, so the real one is the document). Methods act on the real event.
@@ -231,6 +234,10 @@ function callPage(name, ...args) {
 
 function runPageHandler(el, type, ev) {
   const name = el.getAttribute('data-' + type);
+  if (type === 'error' && !PAGE_ERROR_FNS.has(name)) {
+    console.error(`data-error: "${name}" is not a fallback of an image`);
+    return;
+  }
   const fn = pageFunction(name);
   if (!fn) {
     console.error(`data-${type}: no page function "${name}"`);
@@ -711,9 +718,26 @@ const TOAST_ICONS = {
   warning: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l6.2 11H1.8z"/><path d="M8 6.6v3M8 11.4v.1"/></svg>',
   error: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6.2"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
 };
+// The notices stand above what lies at the bottom right of the page: the player's controls and the assistant's
+// question (the notice of an update covered «Отправить» and the player's volume for its seconds: audit)
+const TOAST_CLEAR_OF = '.rp-body, .as-compose';
+function liftToasts() {
+  const stack = document.getElementById('toast');
+  if (!stack) return;
+  let lift = 0;
+  for (const el of document.querySelectorAll(TOAST_CLEAR_OF)) {
+    if (!el.getClientRects().length) continue;
+    const r = el.getBoundingClientRect();
+    if (r.right < window.innerWidth - 480 || r.bottom < window.innerHeight - 160) continue;  // not under the notices
+    lift = Math.max(lift, zpx(window.innerHeight - r.top) + 8);
+  }
+  stack.style.bottom = lift ? `${Math.round(lift)}px` : '';
+}
+
 function showToast(msg, action, kind) {
   kind = TOAST_LIFE[kind] !== undefined ? kind : (action ? 'success' : 'status');
   const stack = document.getElementById('toast');
+  liftToasts();
   // a notice that is replaced leaves its place at once and fades where it was, so the new one takes the place
   // (asked by the user: the new one showed under the old for a moment and then jumped up)
   const leaveInPlace = (old) => {
@@ -778,6 +802,7 @@ function progressToast(text) {
   el.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICONS.status}</span><span class="toast-text"></span>`;
   const label = el.querySelector('.toast-text');
   label.textContent = text;
+  liftToasts();
   stack.appendChild(el);
   return { set: (s) => { label.textContent = s; }, done: () => removeWithExit(el) };
 }
@@ -1056,6 +1081,8 @@ function switchWorkspaceTab(tab) {
   if (typeof navRecord === 'function') navRecord();
   if (typeof renderTopbar === 'function') renderTopbar();
   if (tab === 'info') loadMeetingInfo();
+  // «Как прошёл разговор» is drawn only when its tab is shown (people.js, renderTalkAnalytics)
+  if (tab === 'speakers' && document.getElementById('talk-analytics')?.dataset.stale === '1' && typeof renderTalkAnalytics === 'function') renderTalkAnalytics();
   ['transcript', 'summary', 'speakers', 'info'].forEach(k => {
     document.getElementById(`wview-${k}`).classList.toggle('hidden', k !== tab);
     const btn = document.getElementById(`wtab-${k}`);

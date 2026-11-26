@@ -67,6 +67,7 @@ function switchAppView(view) {
   updateRecordButtonState();
   renderTopbar();
   navRecord();
+  if (document.getElementById('toast')?.children.length) liftToasts();  // a notice shown stays clear of the new view
 }
 
 // --- «Назад» / «Вперёд» of the mouse (and Alt+← / Alt+→) inside the app (reported by the user: the window
@@ -523,7 +524,7 @@ function openRecMenu(e) {
     const b = ev.target.closest('button[data-fn]');
     if (!b) return;
     menu.remove();
-    window[b.dataset.fn](...JSON.parse(b.dataset.args || '[]'));
+    callPage(b.dataset.fn, ...JSON.parse(b.dataset.args || '[]'));
   });
   document.body.appendChild(menu);
   const r = e.currentTarget.getBoundingClientRect();

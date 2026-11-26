@@ -19,7 +19,7 @@ import hashlib
 import re
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from app.audio_utils import srt_time as _format_srt_time
 
@@ -66,8 +66,18 @@ def resolve_translation(segments: List[Dict[str, Any]], entry: Dict[str, Any]) -
     """
     items: Dict[str, Dict[str, Any]] = (entry or {}).get("items") or {}
     by_src: Dict[str, List[Dict[str, Any]]] = {}
-    for it in items.values():
+    # the items by the tenth of a second they start at, in their order: the first one near a start is found among
+    # three buckets, not by a pass over all of them for each line (a re-split three-hour meeting: 2700 x 2700)
+    by_start: Dict[int, List[Tuple[int, Dict[str, Any]]]] = {}
+    for n, it in enumerate(items.values()):
         by_src.setdefault(it.get("src") or "", []).append(it)
+        by_start.setdefault(round(float(it.get("start") or 0.0) * 10), []).append((n, it))
+
+    def near(start: float) -> Optional[Dict[str, Any]]:
+        k = round(start * 10)
+        found = [(n, c) for b in (k - 1, k, k + 1) for n, c in by_start.get(b, ())
+                 if abs(float(c.get("start") or 0.0) - start) <= _START_TOLERANCE]
+        return min(found, key=lambda x: x[0])[1] if found else None
 
     out: Dict[str, Dict[str, Any]] = {}
     stale = missing = 0
@@ -88,10 +98,7 @@ def resolve_translation(segments: List[Dict[str, Any]], entry: Dict[str, Any]) -
             out[sid] = {"text": moved.get("text") or "", "stale": False}
             continue
         # Translation of an older version of this segment (edited, or merged with the next one)
-        old = next(
-            (c for c in items.values() if abs(float(c.get("start") or 0.0) - start) <= _START_TOLERANCE),
-            None,
-        ) or (it if it and abs(float(it.get("start") or 0.0) - start) <= 1.0 else None)
+        old = near(start) or (it if it and abs(float(it.get("start") or 0.0) - start) <= 1.0 else None)
         if old and (old.get("text") or "").strip():
             out[sid] = {"text": old.get("text") or "", "stale": True}
             stale += 1

@@ -77,6 +77,10 @@ def _cookie_name(request: Request) -> str:
     return f"{SESSION_COOKIE}_{request.url.port or 80}"
 SESSION_TOKEN = os.environ.get("VERBALIOX_TOKEN") or secrets.token_urlsafe(32)
 SESSION_TOKEN_FILE.write_text(SESSION_TOKEN, encoding="utf-8")
+try:  # readable by this user only (on Windows the data folder in the profile already is)
+    os.chmod(SESSION_TOKEN_FILE, 0o600)
+except OSError:
+    pass
 
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]"} | {
     h.strip().lower() for h in os.environ.get("VERBALIOX_ALLOWED_HOSTS", "").split(",") if h.strip()
@@ -256,6 +260,17 @@ def _interrupted_to_resume(meetings: List[Dict[str, Any]]) -> set:
     return resume
 
 
+def _status_before_side_job(meeting_id: int) -> str:
+    """The status a dub, translation, cut or subtitles job cut off by a crash gives back: the one the recording had
+    before it (app/transcriber._status_to_return). Set «completed» unasked, a cancelled or not yet transcribed
+    recording looked finished, and the retention setting deleted its sound (found in an audit)."""
+    from app.database import get_meeting
+    from app.transcriber import FINISHED_STATUSES
+
+    back = str((get_meeting(meeting_id) or {}).get("return_status") or "")
+    return back if back in FINISHED_STATUSES else "completed"
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _quiet_windows_connection_resets()
@@ -327,7 +342,8 @@ async def lifespan(_app: FastAPI):
                 enqueue_meeting_job(int(m["id"]))
         elif m.get("status") == "dubbing":
             # A dub interrupted by a restart is simply dropped; the transcript itself is complete
-            update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Дубляж прерван перезапуском")
+            update_meeting_progress(int(m["id"]), status=_status_before_side_job(int(m["id"])), progress=100,
+                                    stage_text="Дубляж прерван перезапуском")
         elif m.get("status") == "downloading":
             update_meeting_progress(int(m["id"]), status="failed", progress=0, stage_text="",
                                     error_message="Скачивание по ссылке прервано перезапуском — нажмите «Повторить»")
@@ -347,7 +363,8 @@ async def lifespan(_app: FastAPI):
                 delete_meeting(int(m["id"]))
         elif m.get("status") in ("translating", "rendering", "merging", "splitting"):
             # Partial translations are kept and can be completed with "Update translation"
-            update_meeting_progress(int(m["id"]), status="completed", progress=100, stage_text="Задача прервана перезапуском")
+            update_meeting_progress(int(m["id"]), status=_status_before_side_job(int(m["id"])), progress=100,
+                                    stage_text="Задача прервана перезапуском")
     yield
     # the server stops by itself (the window's process ends with os._exit after run.py _stop_work, which marks
     # the clean end; this covers a server started on its own): the next start counts no crash
@@ -480,6 +497,17 @@ async def slow_request_log(request: Request, call_next):
     took = _time.perf_counter() - t0
     if took >= SLOW_REQUEST_SEC and request.url.path.startswith("/api/"):
         print(f"[slow] {request.method} {request.url.path} {took:.1f} s", flush=True)
+    return response
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Registered last, so it wraps the others: every answer (the sign-in page, a refusal, the API, a
+    file) is never read as another type than it says, nor shown inside a frame of another page."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
     return response
 
 
@@ -795,8 +823,15 @@ def _remember_export(meeting_id: int, path: Path) -> None:
     """The folder is offered next time; the file is listed with the recording (deleted with it on request)."""
     from app.database import add_export_path
 
-    update_settings({"export_dir": str(_export_base(path.parent))})
+    _remember_export_dir(path)
     add_export_path(meeting_id, str(path))
+
+
+def _remember_export_dir(path: Path) -> None:
+    """The folder of a file a queued job writes: offered next time. The file itself is listed with the recording
+    by the job once written (listed before, a job refused or failed left the path of a file the user already had
+    there, which «delete with its copies» then deleted: found in an audit)."""
+    update_settings({"export_dir": str(_export_base(path.parent))})
 
 
 def _export_base(folder: Path) -> Path:

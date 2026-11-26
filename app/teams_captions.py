@@ -399,7 +399,7 @@ class Reader:
     def _label(el) -> str:
         try:
             c = el.Current
-            return f"name={c.Name[:60]!r} id={c.AutomationId[:60]!r}"
+            return f"name={len(c.Name or '')} chars id={c.AutomationId[:60]!r}"  # a name can be a caption (what was said)
         except Exception:
             return "?"
 

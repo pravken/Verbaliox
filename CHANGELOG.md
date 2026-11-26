@@ -6,6 +6,149 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.5 — English
+
+
+### Security
+
+- **A backup from someone else cannot act on this computer**: the saved summary of «Overview» is cleaned again
+  when shown and an image of stored text can call no function of the page; a dub's entry deletes only files in
+  `dubs/` (not the database or `ffmpeg.exe`); the settings of a copy are checked as the settings page checks them;
+  a speaker's or a feature's colour is used only as a colour; network paths of a copy are not opened; a copy is
+  unpacked only when the disk holds it.
+- **Ollama over plain `http://` only on this computer or the local network**: an address on the internet needs
+  `https://` (the transcripts are sent there). The settings page can no longer write the program's own keys.
+- **Only models of the catalog**: Whisper loads only a model of the catalog at its checked commit, and the model
+  comparison takes only downloaded models. The microphone filter runs only the `deep-filter.exe` the program
+  downloaded and checked; pip itself is installed pinned with its hashes.
+- **A calendar or an invitation cannot slow or redirect the program**: a published calendar with a day repeated
+  thousands of times in one rule no longer fills the memory; a Zoom link that mentions Teams opens Zoom.
+- **Deleted tasks of a dictation stay out of the analysis of other recordings**, and their text cannot add
+  instructions to it.
+- **The logs leave out more**: the Windows user name in the first line and in `migration.log`, one-time sign-in
+  addresses, session cookies, and the names of notes and files (the recording's number instead).
+- **Releases are signed on a runner without third-party packages**: the tests (with packages pinned by their
+  hashes), the build and the signature run on separate machines; the release key reaches only the last one,
+  which checks the built files against their checksums before signing them.
+- **Smaller fixes**: network paths in any spelling of their slashes are refused by «Show in folder»; the browser
+  mode sends the session key only to a server that proves it is Verbaliox; the window grants the page only the
+  permissions it uses; the scripts never run a folder or branch name as a command, and removing the installed
+  program with its data deletes the install folder only when it is named Verbaliox.
+
+### Live captions
+
+- **The caption models are offered whether downloaded or not**: the lists of the studio's «Caption models» and of
+  Settings → «Translation models» show the downloaded models first, then, in a group «Not downloaded», every
+  recognition, translation and analysis model the program offers that fits the computer, with its size. Choosing one
+  asks to download it, the row shows the percent, and once it is downloaded the model becomes the choice of the mode
+  (or of the captions' recognition); a cancel leaves the choice as it was.
+- **The model of the translation mode is named when it is missing**: under the translation list «The “Fast” mode needs
+  the Hy-MT3 1.8B model» (for “Quality”: the translator for the computer) with its size and «Download», in the
+  attention colour. The chip of the models has an orange «!» while the model is missing, a callout under it offers
+  the download until it is closed, and captions translating without the mode's model say once per mode and run which
+  model they use instead.
+
+### Fixes of the page
+
+- **The Assistant keeps briefs and digests**: a brief or a digest is saved with its conversation (it was gone after a
+  restart of the program).
+- **Bulk actions say what failed**: renaming, titles, features, export and transcription of the selected recordings
+  report «Not done for N recordings» with the reason (they said «Recordings not deleted»).
+- **No false success**: «Transcribe again…», a new title of a recording, the choice and download of a model and the
+  downloads of FFmpeg and of the voice filter say the server's refusal (they reported success whatever the answer).
+- **Captions switched off while they start** stop at once: the session of the captions on the server, the sound
+  capture and the timer no longer go on to the end of the recording.
+- **The models panel** opens before the settings are read (it stopped with an error).
+- **Notices** stand above the player's controls and the Assistant's question, which they covered.
+- **One «Transcribe again» in the toolbar of the text**; the one with the choice of the model, the language and the
+  speakers is in its «⋯».
+- **«Overview»: the working time without meetings** is compared with the same days of the period before (on a
+  Wednesday it was set against the whole week before and showed «−16 h» in red).
+- Also: the Assistant's period counts the day of the meeting, not of the import; «Edit text» of a task works in
+  «Cards»; a column dropped on itself stays in place; recordings of the same name are exported as «Name (2)»; a short
+  phrase inside a longer one no longer takes the highlight off it; «Save as» opens for a title that begins with «-»;
+  the toast of a saved recording says when transcription waits for «Recording only» or a paused queue; Esc in the
+  window of an update closes that window only; the hint of the strip without a calendar ends with «…»; the tab chosen
+  shows the keyboard focus; «Choose your name» is one button on both cards of «Today»; the search of tasks no longer
+  finds «null»; tooltips name the real speed range (0.25× to 3×) and the queue in the status bar.
+
+
+### Design
+
+- **One definition of the time in meetings on «Overview»**: «Statistics» and «Load of the week» count the same way —
+  the recordings and the calendar's meetings, overlaps counted once, only the time gone by (three recordings of a
+  minute made together read «0.1 h» beside «0 h»). Less than 0.1 h is written in minutes («6 min»).
+- **One place for the search**: in «Recordings», «Tasks», «Glossary» and «People» the search is the last control of
+  the head, at its right edge, of one width and height; «People» has it in the head instead of the list.
+- **Targets of 24 px at least**: the moment of a task, the task and person boxes, the switches of the widgets'
+  charts and periods, the links of the widgets, «More», the moment of a phrase and «+ add» take the click on
+  24 px or more; their drawing is unchanged.
+- **No abbreviated words**: «3 participants», «5 days ago», «2 people», «Russian» and «English» of the model
+  comparison; the decisions and tasks columns of the «Meetings» list of «Overview» are icons with their full names.
+- **Glossary: one way to add a word** — the row at the top of «Words»; the head's «Add word» is gone.
+- **The first-run window says «Step 2 of 4»** beside its dots.
+- **The features' keywords** are described as found in the title of any meeting (it said a Teams meeting).
+- **The Assistant's conversations are saved when the window closes**: what changed in the last half-second is
+  sent as the window closes (it was lost).
+- **The quick translation button of the transcript** carries the translation icon («文A EN»): it looked like the
+  switch of the program's language.
+
+### Fixes
+
+- **No sound deleted by mistake**: after a restore from a backup, «Keep the sound N days» counts from the restore
+  (the sound of old recordings just put back was deleted at the next start); a dub, translation, cut or subtitles
+  job cut off by a crash gives the recording back its own status instead of «completed», so the retention no longer
+  takes the sound of a cancelled or not transcribed recording.
+- **No other file deleted with a recording's copies**: a cut or a video with subtitles is listed with its recording
+  once written; a job refused or failed left the path of a file already there.
+- **The settings page no longer hangs** on a second «Install» of the GPU build of ONNX Runtime or of Nemotron while
+  the first install runs.
+- **Dictation**: no crash and no memory leak when the clipboard is busy or memory runs out; two quick presses of the
+  hotkey stop it once.
+- **Obsidian**: a note edited in Obsidian and moved after a rename keeps its link (the next export wrote a second
+  note), also when the vault moved to another drive.
+- **Exports**: one asked while others are written is kept; a bilingual MD or TXT export is refused at once instead
+  of after the translation. Tasks keep a date set by hand in the MD, CSV and Todoist exports, and the Todoist CSV
+  cells open as text in Excel.
+- **Search by meaning** goes on after Ollama did not answer for a moment (the whole library waited for a restart).
+- **Decisions** in «Обзор», a feature's card and the agent's list are those of the protocol's «Решения» section: a
+  discussion topic «### Решение …» no longer counts, decisions under their own sub-headings do.
+- A recording deleted while transcribed or analysed leaves no lines in the search and no tasks behind.
+- An edit of a line of a transcript stored by an older version is no longer lost after a gap in its lines.
+- The system sound recorded across a change of the system clock (after sleep) no longer gets hours of silence or
+  fails; a cancelled cut no longer reports a Windows file error instead of the cancel.
+- Update: a program file is written whole or not at all, a rollback that could not put the Python libraries back
+  says so, the Python the program installs for itself is never written by an update; a backup made by an older
+  version restores, a second restore of one copy points to the file it put back.
+- Classic Outlook: recurring meetings are read in the order Outlook asks, and one unreadable appointment no longer
+  fails the calendar. The idle unload waits for a dictation and a model comparison; a Whisper load asked on a
+  paused queue is refused instead of blocking unloads. Voice prints learnt twice at once, «5 мм» in «Без запинок»,
+  a zone changing on «-2SU», control characters in a meeting toast and an empty path in «Add by path» are handled.
+
+
+### Speed with a large library
+
+- **«Recordings» opens about five times faster with a large library**: the table draws its first 150 rows and the
+  next ones as it is scrolled, every recording still selectable (Ctrl+A, Shift, the arrow keys, the actions of the
+  selection). The hidden list of the former sidebar is no longer drawn. Measured on 1200 recordings: the page at the
+  start holds 4 200 elements instead of 27 600, «Recordings» opens in 0.18 s instead of 0.95 s, a click on a check box
+  answers in 0.02 s instead of 0.16 s.
+- **The player costs almost nothing while a long recording plays**: the bars and the speakers' ribbon are drawn once
+  and copied at each frame (a three-hour meeting: 0.06 ms a frame instead of 1.4 ms, with «Skip silence» 0.09 ms
+  instead of 7.8 ms). «Course of the discussion» of the speakers' tab is drawn when the tab is opened.
+- **A person on the dashboard opens at once**: 0.07 s instead of 4.4 s for 1200 recordings. A contact's card finds
+  the mentions of the person through the search index (0.05 s instead of 0.14 s), including a name written in small
+  letters. A question about a folder learns its length without reading every transcript (0.04 s instead of 0.56 s for
+  235 recordings). The agent's decisions and tasks (MCP) answer in 0.04 s and 0.02 s instead of 2.8 s and 1.3 s, at
+  most 500 items with their total.
+- **Less memory for long recordings**: the levelling of quiet speech takes 0.7 GB instead of 2.1 GB besides a
+  three-hour recording, the waveform 11 MB instead of 1.4 GB; the speed test decodes only the minute it compares.
+  A full disk is named in the error of the sound extraction.
+- The Ollama status no longer waits for the Hy-MT3 1.8B repair, and an Obsidian note being written by the model no
+  longer holds the other notes. Whisper on the processor also keeps to «Processor load». The video memory is read again
+  after the computer wakes up or the video card resets. The app starts without loading the Word export.
+
+
 ## 0.9.4 — English
 
 
@@ -1295,6 +1438,151 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.5
+
+
+### Безопасность
+
+- **Чужая резервная копия ничего не делает на этом компьютере**: сохранённая сводка «Обзора» очищается заново при
+  показе, а картинка из сохранённого текста не может вызвать функцию страницы; запись дубляжа удаляет только файлы
+  в `dubs/` (не базу и не `ffmpeg.exe`); настройки копии проверяются так же, как на странице настроек; цвет
+  говорящего или фичи используется только как цвет; сетевые пути копии не открываются; копия распаковывается,
+  только если на диске хватает места.
+- **Ollama по открытому `http://` — только на этом компьютере или в локальной сети**: для адреса в интернете нужен
+  `https://` (туда уходят расшифровки). Страница настроек больше не записывает служебные ключи программы.
+- **Только модели из каталога**: Whisper загружает только модель каталога на проверенном коммите, а сравнение
+  моделей принимает только скачанные модели. Фильтр микрофона запускает только `deep-filter.exe`, скачанный и
+  проверенный программой; сам pip ставится закреплённой версии с хешами.
+- **Календарь или приглашение не замедляют программу и не подменяют ссылку**: опубликованный календарь с днём,
+  повторённым тысячи раз в одном правиле, больше не занимает всю память; ссылка Zoom, в которой упомянут Teams,
+  открывает Zoom.
+- **Удалённые задачи диктовок не попадают в анализ других записей**, а их текст не может добавить в него
+  указания.
+- **Журналы скрывают больше**: имя пользователя Windows в первой строке и в `migration.log`, одноразовые адреса
+  входа, cookie сессии, названия заметок и файлов (вместо них — номер записи).
+- **Релизы подписываются на машине без сторонних пакетов**: тесты (с пакетами, закреплёнными по хешам), сборка
+  и подпись идут на отдельных машинах; ключ релиза попадает только на последнюю, и она сверяет собранные файлы
+  с их контрольными суммами перед подписью.
+- **Мелкие исправления**: «Показать в папке» отклоняет сетевые пути при любом написании косых черт; режим браузера
+  отправляет ключ сессии только серверу, который подтвердил, что он Verbaliox; окно выдаёт странице только те
+  разрешения, которыми она пользуется; скрипты не выполняют название папки или ветки как команду, а удаление
+  установленной программы вместе с данными удаляет папку установки, только если она называется Verbaliox.
+
+### Живые субтитры
+
+- **Модели субтитров предлагаются и скачанные, и нескачанные**: списки «Модели субтитров» в студии и «Настройки →
+  Модели перевода» показывают сначала скачанные модели, затем в группе «Не скачаны» — все модели распознавания,
+  перевода и анализа, которые предлагает программа и которые подходят компьютеру, с размером. Выбор такой модели
+  запрашивает скачивание, строка показывает процент, после скачивания модель становится выбранной для режима (или для
+  распознавания субтитров); отмена оставляет прежний выбор.
+- **Отсутствие модели режима перевода видно сразу**: под списком перевода — «Для режима «Быстро» нужна модель
+  Hy-MT3 1.8B» (для режима «Качество» — модель перевода для этого компьютера) с размером и кнопкой «Скачать», в цвете
+  внимания. Пока модели нет, на кнопке моделей — оранжевый «!», под ней — подсказка со скачиванием до закрытия, а
+  субтитры с переводом без модели режима один раз за запуск сообщают, какая модель используется вместо неё.
+
+### Исправления страницы
+
+- **Ассистент сохраняет брифинги и дайджесты**: брифинг или дайджест сохраняется вместе с беседой (после перезапуска
+  программы он пропадал).
+- **Массовые действия называют, что не выполнено**: переименование, названия, фичи, экспорт и расшифровка выбранных
+  записей сообщают «Не выполнено для записей: N» с причиной (раньше — «Не удалось удалить записей»).
+- **Без ложного успеха**: «Расшифровать заново…», новое название записи, выбор и скачивание модели, скачивание FFmpeg и
+  фильтра голоса сообщают об отказе сервера (раньше сообщали об успехе при любом ответе).
+- **Субтитры, выключенные во время запуска**, останавливаются сразу: сеанс субтитров на сервере, захват звука и таймер
+  больше не работают до конца записи.
+- **Панель моделей** открывается и до чтения настроек (раньше останавливалась с ошибкой).
+- **Уведомления** располагаются над элементами плеера и полем вопроса Ассистента (раньше закрывали их).
+- **Одна кнопка «Расшифровать заново» на панели текста**; вариант с выбором модели, языка и числа говорящих — в её
+  меню «⋯».
+- **«Обзор»: рабочее время без встреч** сравнивается с теми же днями прошлого периода (в среду сравнивалось со всей
+  прошлой неделей и показывало «−16 ч» красным).
+- Также: период Ассистента считается по дате встречи, а не импорта; «Изменить текст» задачи работает в режиме
+  «Карточки»; колонка, перетащенная на своё место, остаётся на месте; записи с одинаковыми названиями экспортируются
+  как «Название (2)»; короткая реплика внутри длинной больше не снимает с неё подсветку; «Сохранить как» открывается
+  для названия, начинающегося с «-»; уведомление о сохранённой записи сообщает, что распознавание ждёт выключения
+  режима «Только запись» или продолжения очереди; Esc в окне обновления закрывает только это окно; подсказка полосы
+  без календаря заканчивается многоточием; выбранная вкладка показывает фокус клавиатуры; «Выбрать своё имя» — одна и
+  та же кнопка на обеих карточках «Сегодня»; поиск задач больше не находит «null»; подсказки называют настоящий
+  диапазон скорости (от 0,25× до 3×) и очередь в строке состояния.
+
+
+### Оформление
+
+- **Одно определение времени во встречах в «Обзоре»**: «Статистика» и «Нагрузка недели» считают одинаково — записи
+  и встречи календаря, пересечения один раз, только прошедшее время (три записи по минуте, сделанные одновременно,
+  давали «0,1 ч» рядом с «0 ч»). Меньше 0,1 ч пишется в минутах («6 мин»).
+- **Одно место для поиска**: в «Записях», «Задачах», «Словаре» и «Людях» поле поиска — последний элемент шапки, у её
+  правого края, одной ширины и высоты; в «Людях» оно перенесено из списка в шапку.
+- **Размер нажатия не меньше 24 px**: момент задачи, флажки задач и людей, переключатели вида и периода виджетов,
+  ссылки виджетов, «Подробнее», время реплики и «+ добавить» у фичи принимают нажатие на площади от 24 px; их
+  рисунок не изменился.
+- **Без сокращений слов**: «3 участника», «5 дней назад», «2 человека», «русский» и «английский» в сравнении
+  моделей; столбцы решений и задач в списке «Встречи» «Обзора» — значки с полными названиями в подсказке.
+- **Словарь: один способ добавить слово** — строка вверху «Слов»; кнопка «Добавить слово» в шапке убрана.
+- **Окно первого запуска показывает «Шаг 2 из 4»** рядом с точками.
+- **Ключевые слова фич** находят фичу в названии любой встречи (в описании была только встреча Teams).
+- **Беседы Ассистента сохраняются при закрытии окна**: изменения последних полсекунды отправляются при закрытии
+  (раньше пропадали).
+- **Кнопка быстрого перевода расшифровки** получила значок перевода («文A EN»): она была похожа на переключатель языка
+  программы.
+
+### Исправления
+
+- **Звук не удаляется по ошибке**: после восстановления из резервной копии «Хранить звук N дней» считается от
+  восстановления (звук только что возвращённых старых записей удалялся при следующем запуске); дубляж, перевод,
+  нарезка или субтитры, прерванные сбоем, возвращают записи её прежнее состояние, а не «готово», поэтому хранение больше
+  не удаляет звук отменённой или не расшифрованной записи.
+- **Вместе с копиями записи не удаляется чужой файл**: нарезка и видео с субтитрами вносятся в список копий записи
+  после того, как файл записан; задача, которую не приняли или которая не удалась, оставляла путь уже существующего файла.
+- **Страница настроек не зависает** при повторном нажатии «Установить» для GPU-сборки ONNX Runtime или Nemotron, пока
+  идёт первая установка.
+- **Диктовка**: нет падения и утечки памяти при занятом буфере обмена или нехватке памяти; два быстрых нажатия
+  сочетания клавиш останавливают её один раз.
+- **Obsidian**: заметка, изменённая в Obsidian и перенесённая после переименования, сохраняет связь с записью
+  (следующий экспорт создавал вторую заметку), в том числе когда хранилище перенесено на другой диск.
+- **Экспорт**: экспорт, запрошенный во время записи других, сохраняется; двуязычный экспорт в MD или TXT отклоняется
+  сразу, а не после перевода. Задачи сохраняют дату, заданную вручную, в экспорте MD, CSV и Todoist, а ячейки CSV для
+  Todoist открываются в Excel как текст.
+- **Поиск по смыслу** продолжается после кратковременной недоступности Ollama (вся библиотека ждала перезапуска).
+- **Решения** в «Обзоре», карточке фичи и списке для агента — это пункты раздела «Решения» протокола: тема обсуждения
+  «### Решение …» больше не считается решением, решения под собственными подзаголовками учитываются.
+- Запись, удалённая во время расшифровки или анализа, не оставляет строк в поиске и задач.
+- Правка строки в расшифровке, сохранённой старой версией, больше не теряется после пропуска в строках.
+- Системный звук при смене системного времени (после сна) больше не получает часы тишины и не прерывается с ошибкой;
+  отменённая нарезка больше не сообщает об ошибке файла Windows вместо отмены.
+- Обновление: файл программы записывается целиком или не записывается вовсе, неудачный возврат библиотек Python
+  сообщается как неудачный, Python, который программа устанавливает для себя, не перезаписывается обновлением;
+  резервная копия старой версии восстанавливается, повторное восстановление той же копии указывает на возвращённый файл.
+- Классический Outlook: повторяющиеся встречи читаются в порядке, который требует Outlook, а одна нечитаемая встреча
+  больше не прерывает чтение календаря. Выгрузка после простоя ждёт диктовку и сравнение моделей; загрузка Whisper при
+  приостановленной очереди отклоняется и больше не мешает выгрузке. Обработаны одновременное обучение голосового
+  профиля, «5 мм» в режиме «Без запинок», смена часового пояса по правилу «-2SU», управляющие символы в уведомлении о
+  встрече и пустой путь в «Добавить по пути».
+
+
+### Скорость на большой медиатеке
+
+- **«Записи» открываются примерно в пять раз быстрее на большой медиатеке**: таблица рисует первые 150 строк, а
+  следующие — по мере прокрутки; выбрать по-прежнему можно любую запись (Ctrl+A, Shift, стрелки, действия с
+  выбранными). Скрытый список прежней боковой панели больше не рисуется. Замер на 1200 записях: на странице при
+  запуске 4 200 элементов вместо 27 600, «Записи» открываются за 0,18 с вместо 0,95 с, щелчок по флажку — 0,02 с
+  вместо 0,16 с.
+- **Плеер почти не нагружает компьютер при воспроизведении длинной записи**: столбики и полоса говорящих рисуются один
+  раз и копируются в каждом кадре (встреча на три часа: 0,06 мс на кадр вместо 1,4 мс, с «Пропускать тишину» —
+  0,09 мс вместо 7,8 мс). Блок «Ход обсуждения» вкладки участников рисуется при открытии вкладки.
+- **Человек в дэшборде открывается сразу**: 0,07 с вместо 4,4 с на 1200 записях. Карточка контакта находит упоминания
+  человека через поисковый индекс (0,05 с вместо 0,14 с), в том числе имя, написанное со строчной буквы. Вопрос по
+  папке определяет её объём без чтения всех расшифровок (0,04 с вместо 0,56 с на 235 записях). Решения и задачи для
+  агента (MCP) — 0,04 с и 0,02 с вместо 2,8 с и 1,3 с, не больше 500 пунктов с общим числом.
+- **Меньше памяти на длинных записях**: выравнивание тихой речи занимает 0,7 ГБ вместо 2,1 ГБ сверх трёхчасовой
+  записи, волна плеера — 11 МБ вместо 1,4 ГБ; проверка скорости распознавания декодирует только сравниваемую минуту.
+  Ошибка извлечения звука сообщает о заполненном диске.
+- Состояние Ollama больше не ждёт исправления шаблона Hy-MT3 1.8B, а заметка Obsidian, которую пишет модель, не
+  задерживает остальные заметки. Whisper на процессоре тоже соблюдает настройку «Нагрузка на процессор». Сведения о видеопамяти
+  снова читаются после выхода компьютера из сна или сброса видеокарты. Программа запускается без загрузки экспорта
+  в Word.
+
 
 ## 0.9.4
 

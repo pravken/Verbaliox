@@ -210,6 +210,9 @@ def work_day(at: datetime) -> date:
     return (at - timedelta(hours=DAY_START_HOUR)).date()
 
 
+_READY_AT: List[int] = []  # database.schema_epoch when the table was made
+
+
 @contextmanager
 def _conn():
     """A connection with the table there; committed and closed after use."""
@@ -218,7 +221,11 @@ def _conn():
     with _db_lock:  # the database's own writers take it too: no wait on the busy timeout
         conn = get_connection()
         try:
-            conn.execute(_DDL)
+            from app import database
+
+            if not (_READY_AT and _READY_AT[0] == database.schema_epoch):  # once per database, not at each reading
+                conn.execute(_DDL)
+                _READY_AT[:] = [database.schema_epoch]
             yield conn
             conn.commit()
         finally:

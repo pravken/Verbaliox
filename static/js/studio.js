@@ -1107,11 +1107,14 @@ function studioPrefsFromSettings() {
   if (document.getElementById('studio-speed-quality')) renderStudioControls();
 }
 
-// The model pickers above the captions: "Auto · <model in use>" and the downloaded models
-function fillModelSelect(sel, options, value) {
-  const html = options.map(([v, label]) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`).join('');
+// The model pickers above the captions: "Auto · <model in use>" and the downloaded models, then the ones not
+// downloaded in a group of their own (`toGet`: [value, label])
+function fillModelSelect(sel, options, value, toGet = []) {
+  const opt = ([v, label]) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`;
+  const html = options.map(opt).join('')
+    + (toGet.length ? `<optgroup label="${escapeHtml(t('capDlGroup'))}">${toGet.map(opt).join('')}</optgroup>` : '');
   if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
-  if (document.activeElement !== sel) sel.value = options.some(o => o[0] === value) ? value : options[0][0];
+  if (document.activeElement !== sel) sel.value = [...options, ...toGet].some(o => o[0] === value) ? value : options[0][0];
 }
 
 // The Ollama models the translation can use, and the ones «Качество» and «Быстро» take (asked once)
@@ -1223,42 +1226,52 @@ function renderStudioModels(target) {
   if (target) studioLoadLlmModels();
   const pill = document.getElementById('st-models-gb');
   if (pill.textContent !== pillText) pill.textContent = pillText;
+  studioRenderNeed(target);
   const pop = document.getElementById('st-models-pop');
   if (pop.classList.contains('hidden')) return;
   const auto = t('liveAutoShort');
   const capSel = document.getElementById('studio-cap-model');
   const capId = models[0].id;
   const capChoice = studioCapChoice();
+  // a model not downloaded chosen here: its download takes the row (capDlChoose, settings.js)
+  const capPending = capDlPending('live_whisper_model');
   fillModelSelect(capSel, [
     ['auto', capChoice === 'auto' && capId ? `${auto} · ${formatModelName(capId)}` : auto],
     ...(state.onnxInstalled || []).map(id => [id, formatModelName(id)]),
     ...(state.whisperInstalled || []).map(id => [id, formatModelName(id)]),
-  ], capChoice);
+  ], capPending ? CAP_DL + capPending.id : capChoice, capDownloadables().map(m => [CAP_DL + m.id, capDlLabel(m)]));
   // chosen before the captions start too: saved, they start with it
-  const row = (kind, m) => {
+  const row = (kind, m, pending) => {
     const info = m && m.info;
     const gb = document.getElementById(`st-${kind}-model-gb`);
-    const gbLabel = info && info.gb != null ? studioGb(info.gb) + (info.where === 'cpu' ? ` · ${t('stModelRam')}` : '') : '';
+    // downloading: the size of the model coming and its percent in the state slot
+    const dlItem = pending && capDlItem(pending.kind, pending.id);
+    const dlGb = dlItem ? studioSizeGb(dlItem.size) ?? (dlItem.size_mb ? dlItem.size_mb / 1024 : null) : null;
+    const gbLabel = pending ? (dlGb != null ? studioGb(dlGb) : '')
+      : info && info.gb != null ? studioGb(info.gb) + (info.where === 'cpu' ? ` · ${t('stModelRam')}` : '') : '';
     if (gb.textContent !== gbLabel) gb.textContent = gbLabel;
-    gb.title = info && info.gb != null && info.where === 'cpu' ? t('tipStModelRam') : '';
+    gb.title = !pending && info && info.gb != null && info.where === 'cpu' ? t('tipStModelRam') : '';
     const st = document.getElementById(`st-${kind}-model-state`);
-    const s = info && m.id ? info.state : '';
-    const label = s ? t({ loaded: 'stModelInMemory', ready: 'stModelWillLoad', missing: 'stModelNotDownloaded' }[s]) : '';
+    const s = pending ? 'dl' : info && m.id ? info.state : '';
+    const label = pending ? `${capDlPct(pending)}%`
+      : s ? t({ loaded: 'stModelInMemory', ready: 'stModelWillLoad', missing: 'stModelNotDownloaded' }[s]) : '';
     if (st.textContent !== label) st.textContent = label;
     st.className = `st-mstate${s ? ` is-${s}` : ''}`;
+    st.title = pending ? t('stModelDownloading') : '';
   };
-  row('cap', models[0]);
+  row('cap', models[0], capPending);
   document.getElementById('studio-tr-model-wrap').classList.toggle('hidden', !target);
   document.getElementById('st-speed-row').classList.toggle('hidden', !target);
   if (target) {
     const trSel = document.getElementById('studio-tr-model');
     const trChoice = studioTrChoice();
     const trId = models[1] && models[1].id;
+    const trPending = capDlPending(studioTrSettingKey(studio.speed));
     fillModelSelect(trSel, [
       ['', !trChoice && trId ? `${auto} · ${formatModelName(trId)}` : auto],
       ...(studio.llmModels || []).map(m => [m, formatModelName(m)]),
-    ], trChoice);
-    row('tr', models[1]);
+    ], trPending ? CAP_DL + trPending.id : trChoice, trDownloadables(studio.llmModels || []).map(m => [CAP_DL + m.id, capDlLabel(m)]));
+    row('tr', models[1], trPending);
   }
   studioRenderTrOffer(target);
   // the video memory once the models not loaded yet are in it, when there is a video card
@@ -1275,37 +1288,139 @@ function renderStudioModels(target) {
   if (note.textContent !== text) note.textContent = text;
 }
 
-// The translator offered for this computer (app/hardware.py by the card) while it is not downloaded: its name,
-// its size in the size column and «Скачать» in the state column, like the rows above
+// Is an Ollama model among the ones the captions can use now (any tag, the 1.8B under either name)
+function studioLlmInstalled(id) {
+  const name = formatModelName(id);
+  return (studio.llmModels || []).some(m => formatModelName(m) === name);
+}
+
+// The model a mode of the translation is meant to run (app/live_translate.choose_models): «Быстро» — Hy-MT3 1.8B,
+// «Качество» — the translator for this computer (recommendedTranslateModel: the 7B on a card from 9.5 GB, else the
+// 1.8B). Its catalog entry while it is not downloaded and the mode takes «Авто» (or a chosen model that is not
+// installed); null when the mode has its model, or chose another installed one
+function studioTrNeed(speed = studio.speed) {
+  if (typeof recommendedTranslateModel !== 'function') return null;
+  const ollama = state.lastOllama || (state.system || {}).ollama || {};
+  const id = speed === 'fast' ? TR_FAST_MODEL : (recommendedTranslateModel(ollama) || {}).id;
+  const item = (ollama.translate_catalog || []).find(m => m.id === id);
+  if (!item || item.installed || studioLlmInstalled(item.id)) return null;
+  const choice = speed === studio.speed ? studioTrChoice() : (liveSettings()[studioTrSettingKey(speed)] || '');
+  if (choice && studioLlmInstalled(choice)) return null;
+  return item;
+}
+
+// The words of the notice: «Для режима «Быстро» нужна модель Hy-MT3 1.8B»; when «Быстро» has no small model at all and
+// takes the model of «Качество»: «Режим «Быстро» использует Hy-MT3 7B: модель Hy-MT3 1.8B не скачана». `used`: the model
+// the mode runs now (its display name), '' when not known
+// (`always`: the second form whenever `used` is known, for the notice of running captions)
+function studioTrNeedText(need, speed = studio.speed, used = '', always = false) {
+  const mode = t(speed === 'fast' ? 'studioSpeedFast' : 'studioSpeedQuality');
+  const fallback = !!used && (always || (speed === 'fast' && !studioLlmInstalled('gemma4:e2b')));
+  return t(fallback ? 'stTrNeedFallback' : 'stTrNeed').replace('{mode}', () => mode)
+    .replace('{name}', () => formatModelName(need.id)).replace('{used}', () => used);
+}
+
+// The model the mode runs now, by name: the session's, else the one «Авто» takes for the mode
+function studioTrUsedName(speed = studio.speed) {
+  if (liveCap.session && liveCap.translateModel) return liveCap.translateModel;
+  const ch = studio.llmChoices || {};
+  const id = speed === 'fast' ? ch.fast : ch.quality;
+  return id ? formatModelName(id) : '';
+}
+
+// The mode's model missing, while the captions translate: an orange «!» on the chip of the models (seen with the
+// popover closed, named in its tooltip), the line in the popover with «Скачать», a callout under the chip until ✕,
+// «Скачать» or the download (✕: not again for that mode in this run), and once per mode and run a notice when the
+// captions translate without it
+const studioNeedSeen = { dismissed: {}, toasted: {} };
+function studioRenderNeed(target) {
+  const need = target ? studioTrNeed() : null;
+  const pill = document.getElementById('st-models-pill');
+  const badge = document.getElementById('st-models-need');
+  badge.classList.toggle('hidden', !need);
+  pill.classList.toggle('has-need', !!need);
+  const tip = need ? t('tipStModelsNeed').replace('{name}', () => formatModelName(need.id)) : t('tipStModelsPill');
+  if (pill.title !== tip) { pill.title = tip; pill.setAttribute('aria-label', tip); }
+  const pull = state.ollamaPullState || {};
+  const pulling = !!need && !!pull.active && pull.model === need.id;
+  const hint = document.getElementById('st-need-hint');
+  const popOpen = !document.getElementById('st-models-pop').classList.contains('hidden')
+    || !document.getElementById('st-cap-more').classList.contains('hidden');
+  const showHint = !!need && !pulling && !studioNeedSeen.dismissed[studio.speed] && !popOpen;
+  hint.classList.toggle('hidden', !showHint);
+  if (showHint) {
+    const text = `${studioTrNeedText(need, studio.speed, studioTrUsedName())} (${uiSizeText(need.size)})`;
+    const el = document.getElementById('st-need-hint-text');
+    if (el.textContent !== text) el.textContent = text;
+    studioPlaceNeedHint();
+  }
+  // the notice: the captions translate now in a mode without its model
+  if (need && !pulling && liveCap.session && !studioNeedSeen.toasted[studio.speed] && liveCap.translateModel) {
+    studioNeedSeen.toasted[studio.speed] = true;
+    showToast(studioTrNeedText(need, studio.speed, liveCap.translateModel, true), { label: t('uiDownload'), onClick: () => studioPullNeed() }, 'warning');
+  }
+}
+
+// The callout's arrow points at the chip; the callout stays inside the window (its right edge at the chip's, moved
+// left when the window is narrow)
+function studioPlaceNeedHint() {
+  const hint = document.getElementById('st-need-hint');
+  const pill = document.getElementById('st-models-pill');
+  hint.style.right = '0px';
+  const r = hint.getBoundingClientRect();
+  const over = r.left < 8 ? 8 - r.left : 0;
+  if (over) hint.style.right = `${-over}px`;
+  const p = pill.getBoundingClientRect();
+  const h = hint.getBoundingClientRect();
+  hint.style.setProperty('--arrow-r', `${Math.max(16, Math.round(h.right - (p.left + p.width / 2)))}px`);
+}
+
+function studioNeedHintClose() {
+  studioNeedSeen.dismissed[studio.speed] = true;
+  document.getElementById('st-need-hint').classList.add('hidden');
+}
+
+// The line under the translation list while the mode's model is missing: what the mode needs (or uses instead), the
+// model's size in the size column and «Скачать» in the state column, like the rows above
 function studioRenderTrOffer(target) {
-  const rec = target && typeof recommendedTranslateModel === 'function' ? recommendedTranslateModel() : null;
-  const show = !!rec && !rec.installed;
-  document.getElementById('st-tr-offer').classList.toggle('hidden', !show);
-  if (!show) return;
-  const text = t('stTrOffer').replace('{name}', () => formatModelName(rec.id));
+  const need = target ? studioTrNeed() : null;
+  document.getElementById('st-tr-offer').classList.toggle('hidden', !need);
+  if (!need) return;
+  const text = studioTrNeedText(need, studio.speed, studioTrUsedName());
   const el = document.getElementById('st-tr-offer-text');
   if (el.textContent !== text) el.textContent = text;
-  const gb = studioSizeGb(rec.size);
+  const gb = studioSizeGb(need.size);
   document.getElementById('st-tr-offer-gb').textContent = gb != null ? studioGb(gb) : '';
   const pull = state.ollamaPullState || {};
   const busy = !!pull.active;
   const btn = document.getElementById('st-tr-offer-btn');
-  const label = busy && pull.model === rec.id ? `${pull.progress || 1}%` : t('uiDownload');
-  if (btn.textContent !== label) btn.textContent = label;
+  const label = busy && pull.model === need.id ? `${pull.progress || 1}%` : t('uiDownload');
+  const lab = document.getElementById('st-tr-offer-btn-t');
+  if (lab.textContent !== label) lab.textContent = label;
   btn.disabled = busy;  // one Ollama download at a time
 }
 
-async function studioPullTranslateModel() {
-  const rec = typeof recommendedTranslateModel === 'function' ? recommendedTranslateModel() : null;
-  if (!rec || rec.installed) return;
-  await pullTranslateModel(rec.id);
+// «Скачать» of the line, the callout and the notice: the mode's model is downloaded; «Авто» takes it when it is there
+async function studioPullNeed() {
+  const need = studioTrNeed();
+  studioNeedSeen.dismissed[studio.speed] = true;
+  document.getElementById('st-need-hint').classList.add('hidden');
+  if (!need) return;
+  const pull = state.ollamaPullState || {};
+  if (pull.active) {
+    if (pull.model !== need.id) showWarning(t('capDlBusy').replace('{name}', () => formatModelName(pull.model)));
+    return;
+  }
+  await pullTranslateModel(need.id);
   studioPullProgress();
 }
+function studioPullTranslateModel() { return studioPullNeed(); }
 
-// The percent of the download on «Скачать» while the popover is open (the settings' download loop calls it)
+// The percent of a download in the popover (the settings' download loops call it); a model chosen while not
+// downloaded becomes the choice when it is there
 function studioPullProgress() {
-  if (document.getElementById('st-models-pop')?.classList.contains('hidden')) return;
-  studioRenderTrOffer(document.getElementById('live-translate-select')?.value);
+  if (capDl.pending.length) capDlTick();
+  else renderStudioCapBar();
 }
 
 // A model downloaded into Ollama: the captions' list of translation models is asked again
@@ -1366,7 +1481,13 @@ function studioPopToggle(popId, btnId) {
   closeStudioCapMore();
   pop.classList.toggle('hidden', !open);
   document.getElementById(btnId).setAttribute('aria-expanded', String(open));
+  studioNeedFollowPops();
   return open;
+}
+
+// The callout of a missing model hides while a popover of the captions is open, and comes back when it closes
+function studioNeedFollowPops() {
+  if (document.getElementById('st-need-hint')) studioRenderNeed(document.getElementById('live-translate-select')?.value);
 }
 
 function toggleStudioModelsPop() {
@@ -1379,6 +1500,7 @@ function toggleStudioModelsPop() {
 function closeStudioModelsPop() {
   document.getElementById('st-models-pop')?.classList.add('hidden');
   document.getElementById('st-models-pill')?.setAttribute('aria-expanded', 'false');
+  studioNeedFollowPops();
 }
 
 function toggleStudioCapMore() {
@@ -1388,10 +1510,29 @@ function toggleStudioCapMore() {
 function closeStudioCapMore() {
   document.getElementById('st-cap-more')?.classList.add('hidden');
   document.getElementById('st-cap-more-btn')?.setAttribute('aria-expanded', 'false');
+  studioNeedFollowPops();
 }
 
-function studioSetCaptionModel(value) { return studioSetModels({ caption_model: value }); }
-function studioSetTranslateModel(value) { return studioSetModels({ translate_model: value }); }
+// A model not downloaded chosen in a list: asked, downloaded, and taken once it is there (capDlChoose); the list shows
+// the choice it had until then (cancelled: that choice stays)
+async function studioSetCaptionModel(value) {
+  if (String(value || '').startsWith(CAP_DL)) {
+    renderStudioCapBar();
+    await capDlChoose('cap', value.slice(CAP_DL.length), 'live_whisper_model');
+    renderStudioCapBar();
+    return;
+  }
+  return studioSetModels({ caption_model: value });
+}
+async function studioSetTranslateModel(value) {
+  if (String(value || '').startsWith(CAP_DL)) {
+    renderStudioCapBar();
+    await capDlChoose('tr', value.slice(CAP_DL.length), studioTrSettingKey(studio.speed));
+    renderStudioCapBar();
+    return;
+  }
+  return studioSetModels({ translate_model: value });
+}
 
 // The models chosen in the studio are the settings (Settings → «Модель субтитров», «Модели перевода» for the mode in
 // use): saved for the next captions, and applied to the running ones by their session, which saves them too
@@ -1582,7 +1723,11 @@ async function startLiveCaptions(ctx, stream) {
   liveCap.pcmLen = 0;
   liveCap.error = '';
   liveCap.starting = true;
+  // A stop while this start waits (the captions switched off, the recording stopped) ends this run: what it
+  // started after that is stopped at once (it left a server session, its worklet and its timer running: audit)
+  const run = liveCap.run = (liveCap.run || 0) + 1;
   syncStudioCaptions();
+  let session = null;
   try {
     const res = await fetch('/api/live/start', {
       method: 'POST',
@@ -1598,11 +1743,17 @@ async function startLiveCaptions(ctx, stream) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || t('errorGeneric'));
-    liveCap.session = data.session;
+    session = data.session;
+  } catch (e) {
+    if (run !== liveCap.run) return;  // stopped meanwhile: nothing to report
+    throw e;
   } finally {
-    liveCap.starting = false;
+    if (run === liveCap.run) liveCap.starting = false;
   }
+  if (run !== liveCap.run) { liveStopSession(session); return; }
+  liveCap.session = session;
   await ctx.audioWorklet.addModule('/static/live-capture-worklet.js');
+  if (run !== liveCap.run) return;  // stopped meanwhile: stopLiveCaptions has ended the session
   liveCap.node = new AudioWorkletNode(ctx, 'pcm-capture');
   ctx.createMediaStreamSource(stream).connect(liveCap.node);
   // The worklet must be pulled by the graph; a silent gain keeps it out of the speakers
@@ -1687,14 +1838,18 @@ function renderLiveCaptionsError(msg) {
 }
 
 function stopLiveCaptions() {
+  liveCap.run = (liveCap.run || 0) + 1;  // a start still waiting stops what it gets
+  liveCap.starting = false;
   clearInterval(liveCap.timer);
   liveCap.timer = null;
   try { liveCap.node && liveCap.node.disconnect(); } catch (e) {}
   liveCap.node = null;
-  if (liveCap.session) {
-    fetch(`/api/live/${liveCap.session}/stop`, { method: 'POST' }).catch(() => {});
-    liveCap.session = null;
-  }
+  liveStopSession(liveCap.session);
+  liveCap.session = null;
+}
+
+function liveStopSession(session) {
+  if (session) fetch(`/api/live/${session}/stop`, { method: 'POST' }).catch(() => {});
 }
 
 // Whether the recording is of a meeting: a call or the calendar's meeting started it, or it follows a Teams meeting.
@@ -1851,7 +2006,7 @@ async function studioToggleCaptions(on) {
   liveCap.autoOff = false;  // the user's own choice now: it is the setting, for this recording and the next ones
   liveCap.autoStarted = false;
   studioKeepSetting('live_captions_auto', String(!!on));
-  if (on && !liveCap.session && _recAudioCtx && window._recMixedStream) {
+  if (on && !liveCap.session && !liveCap.starting && _recAudioCtx && window._recMixedStream) {
     try { await startLiveCaptions(_recAudioCtx, window._recMixedStream); } catch (e) { renderLiveCaptionsError(e.message); }
   } else if (!on) {
     stopLiveCaptions();
@@ -2854,6 +3009,14 @@ async function _finishRecording({ quiet, page, captureId, screenId, rawTitle, st
   return afterSaved(data, quiet);
 }
 
+// What happens to a saved recording now: recognized, or waiting for «Только запись» to end or the queue to go on
+// (it said «отправлена на распознавание» in both: audit)
+function recordSavedKey() {
+  if (typeof economyOn === 'function' && economyOn()) return 'recordSavedEconomy';
+  if (state.queuePaused) return 'recordSavedPaused';
+  return 'recordSavedQueued';
+}
+
 async function afterSaved(data, quiet = false) {
   const created = data.created;
   await loadMeetingsList();
@@ -2861,7 +3024,7 @@ async function afterSaved(data, quiet = false) {
   const first = created && created[0];
   if (quiet) return first || null;
   showToast(
-    t('recordSavedQueued'),
+    t(recordSavedKey()),
     first ? { label: t('recordOpen'), title: first.media_path || '', onClick: () => { switchAppView('library'); selectMeeting(first.id, true); } } : undefined
   );
   return first || null;
@@ -3201,7 +3364,8 @@ document.addEventListener('click', (e) => {
   const inside = e.target instanceof Element && e.target.closest('.st-pop-wrap');
   // a click on something drawn again under it (no longer in the page: the model lists are refilled every second
   // while the popover is open) is not a click elsewhere
-  const gone = e.target instanceof Element && !e.target.isConnected;
+  // nor is an answer in a question window opened from it (a model to download: its percent shows in the popover)
+  const gone = e.target instanceof Element && (!e.target.isConnected || !!e.target.closest('.modal-backdrop[role="dialog"]'));
   if (!gone && (!inside || !inside.querySelector('#st-models-pop'))) closeStudioModelsPop();
   if (!gone && (!inside || !inside.querySelector('#st-cap-more'))) closeStudioCapMore();
   // the rail's panels: not by a click in a panel, on a rail button (its own toggle), in a window opened from a panel,

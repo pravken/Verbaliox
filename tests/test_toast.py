@@ -25,6 +25,13 @@ class ToastTest(unittest.TestCase):
         self.assertEqual(acts[0].getAttribute("activationType"), "protocol")
         self.assertIn("Синк & <команда>", doc.getElementsByTagName("text")[0].firstChild.data)
 
+    def test_characters_xml_does_not_allow_are_left_out(self):
+        """Found in an audit: a control character in an invitation's title made the XML invalid, no toast shown."""
+        xml = toast.toast_xml("Синк\x0bкоманды\x01", "текст\x1f", [("Подключиться\x08", "https://zoom.us/j/1")])
+        doc = minidom.parseString(xml)
+        self.assertEqual(doc.getElementsByTagName("text")[0].firstChild.data, "Синккоманды")
+        self.assertEqual(doc.getElementsByTagName("action")[0].getAttribute("content"), "Подключиться")
+
     def test_the_script_keeps_quotes_and_the_balloon_is_used_off_windows(self):
         s = toast.script(toast.toast_xml("It's", "x", [("Go", "https://zoom.us/j/1")]))
         self.assertIn(toast.APP_ID, s)

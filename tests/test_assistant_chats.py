@@ -29,6 +29,33 @@ class AssistantChatsTest(unittest.TestCase):
         self.assertEqual([c["id"] for c in chats], ["b", "a"])
         self.assertEqual(chats[0]["items"][0]["question"], "Что решили?")
 
+    def test_merged_as_the_window_closes(self):
+        """Found in the audit: what changed in the last half-second was lost with the window. As it closes the page
+        sends only the changed conversations and the removed ids (a keepalive request: 64 KB at most); the others
+        stay as stored."""
+        done = [{"id": 1, "question": "Что решили?", "status": "done"}]
+        ac.save_chats([{"id": "a", "title": "Первый", "updated": "2026-10-01", "items": done},
+                       {"id": "b", "title": "Второй", "updated": "2026-10-02", "items": done},
+                       {"id": "c", "title": "Третий", "updated": "2026-10-03", "items": done}])
+        ac.merge_chats([{"id": "b", "title": "Второй, переименован", "updated": "2026-10-05", "items": done},
+                        {"id": "d", "title": "Новый", "updated": "2026-10-04", "items": done}], deleted=["c"])
+        self.assertEqual([(c["id"], c["title"]) for c in ac.load_chats()],
+                         [("b", "Второй, переименован"), ("d", "Новый"), ("a", "Первый")])
+        with self.assertRaises(ValueError):
+            ac.merge_chats([{"title": "no id"}])
+
+    def test_the_merge_route(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        c = TestClient(main.app, base_url="http://127.0.0.1:8790")
+        c.cookies.set("vs_session_8790", main.SESSION_TOKEN)
+        ac.save_chats([{"id": "a", "updated": "2026-10-01", "items": [{"id": 1, "question": "?", "status": "done"}]}])
+        r = c.post("/api/assistant/chats/merge", json={"chats": [], "deleted": ["a"]})
+        self.assertEqual((r.status_code, r.json()), (200, {"count": 0}))
+        self.assertEqual(c.post("/api/assistant/chats/merge", json={"chats": [{"items": []}]}).status_code, 400)
+
     def test_a_running_answer_is_stored_as_stopped(self):
         ac.save_chats([{"id": "a", "items": [{"id": 1, "question": "?", "status": "pending"}]}])
         self.assertEqual(ac.load_chats()[0]["items"][0]["status"], "stopped")

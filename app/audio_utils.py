@@ -48,13 +48,18 @@ def extract_audio_16k_mono(
     denoise: Optional[bool] = None,
     loudnorm: Optional[bool] = None,
     check_cancel: Optional[Callable[[], None]] = None,
+    start: Optional[float] = None,
+    duration: Optional[float] = None,
 ) -> Path:
     """
     Uses FFmpeg to convert any video/audio file into 16kHz 16-bit mono PCM WAV
     suitable for both faster-whisper and speaker diarization.
     When enhance_audio=True, applies studio voice denoising, de-clicking, and dynamic loudness leveling.
+    start / duration (seconds): only that part of the file is decoded.
     """
     in_path = Path(input_media_path)
+    seek = ["-ss", f"{max(0.0, float(start)):.3f}"] if start else []
+    cut = ["-t", f"{max(0.001, float(duration)):.3f}"] if duration else []
     out_path = Path(output_wav_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -72,8 +77,10 @@ def extract_audio_16k_mono(
         enhanced_cmd = [
             tool_cmd("ffmpeg"),
             "-y", "-hide_banner", "-loglevel", "error",
+            *seek,
             "-i",
             str(in_path),
+            *cut,
             "-vn",
             "-af",
             chain,
@@ -93,8 +100,10 @@ def extract_audio_16k_mono(
     cmd = [
         tool_cmd("ffmpeg"),
         "-y", "-hide_banner", "-loglevel", "error",
+        *seek,
         "-i",
         str(in_path),
+        *cut,
         "-vn",
         "-acodec",
         "pcm_s16le",
@@ -121,6 +130,8 @@ _FFMPEG_REASONS = (
       "Failed to read frame size", "End of file"), "файл повреждён или это не звук и не видео"),
     (("No such file", "does not exist"), "файл не найден: возможно, он перемещён или удалён"),
     (("Permission denied",), "нет доступа к файлу"),
+    # the WAV of a long recording takes 115 MB an hour: a full disk stopped it halfway (audit В21)
+    (("No space left on device", "Not enough space"), "на диске не осталось места"),
 )
 
 
@@ -184,17 +195,21 @@ def peaks_file(meeting_id: int) -> Path:
 
 
 def loudness_peaks(wav: Path, bars: int = PEAK_BARS) -> List[float]:
-    """RMS loudness of `bars` equal parts of a WAV, scaled to 0..1 (98th percentile = 1)."""
+    """RMS loudness of `bars` equal parts of a WAV, scaled to 0..1 (98th percentile = 1). Read part by part: the
+    whole file was read for 400 numbers, 1.4 GB of memory for a three-hour recording (audit В21)."""
     import numpy as np
     import soundfile as sf
 
-    data, _sr = sf.read(str(wav), dtype="float32", always_2d=False)
-    if data.ndim > 1:
-        data = data.mean(axis=1)
-    if len(data) < bars:
-        return []
-    usable = len(data) - (len(data) % bars)
-    rms = np.sqrt(np.mean(np.square(data[:usable].reshape(bars, -1)), axis=1))
+    with sf.SoundFile(str(wav)) as f:
+        frames = int(f.frames)
+        if frames < bars:
+            return []
+        per = frames // bars  # the frames of a bar (the last ones, fewer than `bars`, are left out as before)
+        rms = np.empty(bars, dtype=np.float64)
+        for i in range(bars):
+            part = f.read(per, dtype="float32", always_2d=True)
+            mono = part.mean(axis=1) if part.shape[1] > 1 else part[:, 0]
+            rms[i] = np.sqrt(np.mean(np.square(mono))) if mono.size else 0.0
     top = float(np.percentile(rms, 98)) or 1.0
     return [round(float(v), 3) for v in np.clip(rms / top, 0.0, 1.0)]
 
