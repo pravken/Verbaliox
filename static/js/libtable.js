@@ -204,6 +204,17 @@ async function ltStatusDo(kind, id) {
   if (Number(out.analyse)) showToast(t('ltAnalysisQueued'), null, 'success');
 }
 
+// «Фича»: the feature, or «—»; on hover and focus «Выбрать фичу» (or «Изменить фичу») in the same place opens the
+// menu of the features, as «Фича» of the selection bar does for one recording. Both share one cell of a grid,
+// so the wider sets the width and the hover moves nothing
+function ltFeatureCell(m) {
+  const chip = libFeatureChip(m);
+  const word = t(chip ? 'ltFtChange' : 'ltFtChoose');
+  return `<button type="button" class="lt-fpick" data-ft-pick="${m.id}" title="${escapeHtml(word)}" aria-haspopup="menu" aria-label="${escapeHtml(word)}">`
+    + `<span class="lt-fpick-v">${chip ? `<span class="lt-ft">${chip}</span>` : LT_DASH}</span>`
+    + `<span class="lt-fpick-a lt-ell" aria-hidden="true">${escapeHtml(word)}</span></button>`;
+}
+
 // The name, with the places the search found in the text under it
 function ltNameCell(m) {
   const title = libTitle(m) || m.filename || '';
@@ -221,10 +232,7 @@ function ltSnips(m) {
 function ltCell(col, m) {
   switch (col) {
     case 'name': return ltNameCell(m);
-    case 'feature': {
-      const chip = libFeatureChip(m);
-      return chip ? `<span class="lt-ft">${chip}</span>` : LT_DASH;
-    }
+    case 'feature': return ltFeatureCell(m);
     case 'date': return `<span class="lt-mono">${escapeHtml(ltDate(m.recorded_at || m.created_at, ltByDay()))}</span>`;
     case 'added': return `<span class="lt-mono">${escapeHtml(ltDate(m.created_at))}</span>`;
     case 'duration': return m.duration ? `<span class="lt-mono">${escapeHtml(formatTime(m.duration))}</span>` : LT_DASH;
@@ -965,6 +973,8 @@ function ltOpen(id) {
       renderLibTable();
       return;
     }
+    const fp = e.target.closest('[data-ft-pick]');
+    if (fp) { e.stopPropagation(); ltFeaturePick(fp, Number(fp.dataset.ftPick)); return; }
     const act = e.target.closest('[data-st-act]');
     if (act) { e.stopPropagation(); ltStatusDo(act.dataset.stAct, Number(act.dataset.stId)); return; }
     const hit = e.target.closest('.lt-snip');
@@ -1096,9 +1106,20 @@ async function ltSetFeatures(list, mode, fid) {
 
 // A feature on all of them, or off all of them when they all have it already
 function ltBulkFeature(e) {
-  const list = ltSelected();
+  ltMenuUnder(e, ltFeatureItems(ltSelected()));
+}
+
+// The same menu for one recording, under its «Фича» cell
+function ltFeaturePick(el, id) {
+  const m = (state.meetings || []).find(x => x.id === id);
+  if (!m) return;
+  const r = el.getBoundingClientRect();
+  openTextMenuAt(ltFeatureItems([m]), r.left, r.bottom + 4);
+}
+
+function ltFeatureItems(list) {
   const feats = (state.features || []).slice().sort((a, b) => _libCollator.compare(a.name, b.name));
-  ltMenuUnder(e, [
+  return [
     ...feats.map(f => {
       const all = list.every(m => (m.features || []).includes(f.id));
       return { label: f.name, on: all, run: () => ltSetFeatures(list, all ? 'remove' : 'add', f.id) };
@@ -1114,7 +1135,7 @@ function ltBulkFeature(e) {
       await ltSetFeatures(list, 'add', data.id);
     } },
     { label: t('ltFeatureClear'), disabled: !list.some(m => (m.features || []).length), run: () => ltSetFeatures(list, 'clear') },
-  ]);
+  ];
 }
 
 function ltBulkExport(e) {

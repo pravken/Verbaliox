@@ -2907,6 +2907,13 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-ft { display: flex; min-width: 0; }
 .lt-ft .lib-ft { max-width: 100%; min-width: 0; }
 .lt-ft .lib-ft .ft-chip { font-size: var(--fs-label); line-height: 18px; padding: 0 8px; }
+/* «Фича» of a row: a button whose hover and focus show «Выбрать фичу» in the place of the value (one cell of a grid) */
+.lt-fpick { display: inline-grid; justify-items: start; align-items: center; max-width: 100%; min-width: 0; padding: 0; margin: 0; border: 0; background: none; color: inherit; font-family: inherit; font-size: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.lt-fpick > * { grid-area: 1 / 1; max-width: 100%; min-width: 0; }
+.lt-fpick-v { display: flex; min-width: 0; }
+.lt-fpick-a { visibility: hidden; padding: 0 8px; border-radius: 999px; background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-size: var(--fs-label); line-height: 18px; font-weight: 600; }
+.lt-fpick:is(:hover, :focus-visible) .lt-fpick-v { visibility: hidden; }
+.lt-fpick:is(:hover, :focus-visible) .lt-fpick-a { visibility: visible; }
 .lt-people { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lt-avs { display: inline-flex; flex: none; }
 .lt-av { width: 20px; height: 20px; margin-right: -5px; border-radius: 50%; border: 2px solid var(--card); background: var(--av); color: #111; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
