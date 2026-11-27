@@ -2930,6 +2930,10 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-st-a { visibility: hidden; font-weight: 600; }
 .lt-st-act:is(:hover, :focus-visible) .lt-st-l { visibility: hidden; }
 .lt-st-act:is(:hover, :focus-visible) .lt-st-a { visibility: visible; }
+/* The keyboard's ring of the buttons in a row inside them: the cell (.lt-c, overflow hidden) is as tall as the button
+   and cut the ring drawn outside. Same weight as the ring of every control (html :is(…):not(…):focus-visible), later */
+html button:is(.lt-fpick, .lt-st-act, .lt-snip):not(.rp-scrub):focus-visible { outline-offset: -2px; }
+.lt-fpick:focus-visible { border-radius: 999px; }  /* the ring round the pill «Выбрать фичу» shown at the focus */
 /* «Карточки»: one grid, every card of one height (the empty slots keep their places) */
 .lt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding-top: 4px; }
 .lt-tile { position: relative; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--card); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); }
