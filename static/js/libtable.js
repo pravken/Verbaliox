@@ -165,11 +165,43 @@ function ltFaces(m, max = 3) {
     + (ps.length > max ? `<span class="lt-av lt-av-more">+${ps.length - max}</span>` : '') + '</span>';
 }
 
+// What the status of a recording offers on hover: «Распознать» without a text, «Анализ» for a transcript
+// without an analysis; nothing while it is processed or once analysed
+function ltStatusAction(m) {
+  if (LT_UNTRANSCRIBED.includes(m.status)) return 'transcribe';
+  if (m.status === 'completed' && m.has_transcript && !m.has_summary) return 'analyse';
+  return '';
+}
+
 function ltStatusChip(m) {
   const [label, color] = ltStatus(m);
   const tip = m.status === 'failed' && m.error_message ? humanError(m.error_message).short : label;
   const tick = mixWaiting(m) ? mixTickAttrs(m, 'chip') : '';
-  return `<span class="lt-st" style="--st:${color}" title="${escapeHtml(mixWaiting(m) ? mixWaitTip(m) : tip)}"><i></i><span class="lt-ell"${tick}>${escapeHtml(label)}</span></span>`;
+  const act = ltStatusAction(m);
+  if (!act) return `<span class="lt-st" style="--st:${color}" title="${escapeHtml(mixWaiting(m) ? mixWaitTip(m) : tip)}"><i></i><span class="lt-ell"${tick}>${escapeHtml(label)}</span></span>`;
+  // a button with both texts in one cell of a grid: the wider one sets the width, so the hover changes no width
+  const word = t(act === 'analyse' ? 'ltStAnalyse' : 'ltStTranscribe');
+  const what = t(act === 'analyse' ? 'ltStAnalyseTip' : 'ltStTranscribeTip');
+  return `<button type="button" class="lt-st lt-st-act" data-st-act="${act}" data-st-id="${m.id}" style="--st:${color}" title="${escapeHtml(`${tip} · ${what}`)}" aria-label="${escapeHtml(`${label}. ${what}`)}">`
+    + `<i></i><span class="lt-st-sw"><span class="lt-ell lt-st-l">${escapeHtml(label)}</span><span class="lt-ell lt-st-a" aria-hidden="true">${escapeHtml(word)}</span></span></button>`;
+}
+
+// The action of one recording's status: «Распознать» as «Повторить» of the recording, «Анализ» to the queue of
+// the analysis (app/pending.py, as «Обработать всё» for this one)
+async function ltStatusDo(kind, id) {
+  if (kind === 'transcribe') {
+    if (!requireRecognitionModel()) return;
+    const res = await fetch(`/api/meetings/${id}/retry`, { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) { showError(await bulkWhy(res)); return; }
+    await loadMeetingsList();
+    showToast(t('ltQueuedN').replace('{n}', () => plural(1, t('ltCountForms'))), null, 'success');
+    return;
+  }
+  const out = await ltPost('/api/library/process-pending', { ids: [id], transcribe: false });
+  if (!out) return;
+  if (Number(out.analysis_waiting)) { showWarning(t('anNeedModel')); return; }
+  await loadMeetingsList();
+  if (Number(out.analyse)) showToast(t('ltAnalysisQueued'), null, 'success');
 }
 
 // The name, with the places the search found in the text under it
@@ -933,6 +965,8 @@ function ltOpen(id) {
       renderLibTable();
       return;
     }
+    const act = e.target.closest('[data-st-act]');
+    if (act) { e.stopPropagation(); ltStatusDo(act.dataset.stAct, Number(act.dataset.stId)); return; }
     const hit = e.target.closest('.lt-snip');
     if (hit) { e.stopPropagation(); openLibraryHit(Number(hit.dataset.hit), Number(hit.dataset.at) || 0); return; }
     const row = rowOf(e);
@@ -963,6 +997,8 @@ function ltOpen(id) {
   scroll.addEventListener('pointerdown', () => scroll.classList.remove('lt-kbd'));
   scroll.addEventListener('keydown', (e) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+    // Enter and Space on a button of a row (a status's action, a place found) press that button, not the row
+    if ((e.key === 'Enter' || e.key === ' ') && e.target !== scroll && e.target.closest?.('button')) return;
     if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Home', 'End'].includes(e.key)) scroll.classList.add('lt-kbd');
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ltMove(e.key === 'ArrowDown' ? 1 : -1); }
     else if (e.key === 'Enter' && LT.cur != null) { e.preventDefault(); ltOpen(LT.cur); }
