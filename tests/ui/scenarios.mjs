@@ -975,7 +975,10 @@ await step('today open a day', async () => {
   // the week is drawn again once the calendar just saved is read: the column of that drawing is waited for
   await until(k => { const el = document.querySelector(`#td-cal .cal-col[data-daykey="${k}"]`);
     return !!el && getComputedStyle(el).cursor === 'pointer'; }, 'no hand over the day', 5000, key);
-  const box = await col.boundingBox();
+  // the week may be drawn once more meanwhile: the column of that drawing is measured
+  let box = null;
+  for (let i = 0; i < 30 && !box; i++) { box = await col.boundingBox().catch(() => null); if (!box) await sleep(100); }
+  expect(!!box, 'the column of the day is gone');
   await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
   await sleep(900);
   expect(await page.isVisible('#td-day') && !(await page.isVisible('#td-cal')), 'the click on a day did not open «День»');
@@ -3292,10 +3295,10 @@ await step('strip hint ends with an ellipsis', async () => {
   const r = await page.evaluate(() => {
     const g = document.getElementById('strip-grow'), meta = document.getElementById('strip-meta');
     return { text: g.textContent, cut: g.scrollWidth > g.clientWidth, ell: getComputedStyle(g).textOverflow, meta: meta.textContent,
-      kind: strip.kind };
+      kind: strip.kind, configured: strip.configured };
   });
   await page.setViewportSize({ width: 1300, height: 860 });
-  if (r.kind !== 'free') return;  // a calendar in the data: no hint
+  if (r.kind !== 'free' || r.configured) return;  // a calendar in the data (an earlier step adds the demo one): no hint
   expect(r.text.includes('календар') && !r.meta && r.ell === 'ellipsis', `the hint: ${JSON.stringify(r)}`);
 });
 
