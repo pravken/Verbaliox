@@ -1091,7 +1091,7 @@ def _analysis_runner(meeting_id: int, asked: bool = False) -> str:
     settings = get_all_settings()
     if meeting_guard.busy(settings):  # a meeting began while it waited in the queue
         if asked:
-            meeting_guard.defer(meeting_id)  # marked as the analysis after a transcription is: done when it ends
+            meeting_guard.defer(meeting_id, asked=True)  # done when it ends, still as asked
         return "Анализ — после окончания встречи"
     m = get_meeting(meeting_id) or {}
     segments, speakers = m.get("segments") or [], m.get("speakers") or {}
@@ -1116,6 +1116,8 @@ def _analysis_runner(meeting_id: int, asked: bool = False) -> str:
     if meeting_guard.interrupted(meeting_id):
         meeting_guard.clear_interrupted(meeting_id)
         cancel_scope.reset(threading.get_ident())
+        if asked:  # one asked for has no mark of its own yet
+            meeting_guard.defer(meeting_id, asked=True)
         return "Анализ — после окончания встречи"  # still marked: done when the meeting ends
     meeting_guard.done(meeting_id)
     notes = _after_transcription(meeting_id, segments, speakers, lang, settings, first=False)
