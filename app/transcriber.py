@@ -286,10 +286,52 @@ def _window_holds() -> bool:
     except Exception:
         kind = ""
     if kind != _window_said[0]:
+        was = _window_said[0]
         _window_said[0] = kind
         print(f"[queue] {'the automatic jobs wait: ' + kind if kind else 'the automatic jobs may start'}", flush=True)
         _publish_queue_changed()
+        if kind and not was:  # called under the queue's lock: the analyses waiting are parked on a thread of their own
+            threading.Thread(target=park_window_analyses, daemon=True, name="queue_park").start()
     return bool(kind)
+
+
+WINDOW_ANALYSIS_TEXT = "Анализ ждёт «Фоновой обработки»"
+
+
+def park_window_analyses() -> List[int]:
+    """The automatic analyses waiting in the queue while «Фоновая обработка» holds it go back to the marks of the
+    analyses to do later (app/meeting_guard.deferred_analysis), as an analysis a meeting deferred: one held in the
+    queue for hours counted as processing, and «Повторить», a new split, a cut… answered «Запись уже
+    обрабатывается» until the schedule. meeting_guard.check queues them again once nothing holds them."""
+    from app import meeting_guard
+
+    parked = []
+    with _jobs_lock:
+        for q in list(_queue):
+            mid = q["id"]
+            if (q["kind"] != "analysis" or not q.get("auto") or q.get("started_at") or _running_id == mid
+                    or mid in _forced or mid in _cancel_requested):
+                continue
+            _queue.remove(q)
+            _active_jobs.discard(mid)
+            _dropped.add(q["n"])  # its run in the executor is skipped when its turn comes
+            parked.append((mid, q.get("back") or "completed"))
+    for mid, back in parked:
+        meeting_guard.defer(mid)
+        meeting_guard.sent_again(mid)
+        update_meeting_progress(mid, status=back, progress=100, stage_text=WINDOW_ANALYSIS_TEXT, error_message="")
+        print(f"[queue] meeting {mid}: the automatic analysis waits for «Фоновая обработка» out of the queue", flush=True)
+    if parked:
+        _publish_queue_changed()
+    return [mid for mid, _back in parked]
+
+
+def waits_for_window(meeting_id: int) -> bool:
+    """The automatic transcription of this recording waits in the queue for «Фоновая обработка» (not begun)."""
+    with _jobs_lock:
+        if not _window_said[0] or _running_id == meeting_id or meeting_id in _forced or meeting_id in _manual:
+            return False
+        return any(q["id"] == meeting_id and q["kind"] == "transcribe" and not q.get("started_at") for q in _queue)
 
 
 def window_holds() -> str:
@@ -1185,7 +1227,14 @@ def enqueue_complete_job(meeting_id: int) -> bool:
 
 def enqueue_analysis_job(meeting_id: int, asked: bool = False) -> bool:
     """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time);
-    asked: one the user asked for (app/pending.py)."""
+    asked: one the user asked for (app/pending.py). An automatic one is not queued while «Фоновая обработка» holds
+    the automatic work: it stays marked (app/meeting_guard), queued when nothing holds it (see park_window_analyses)."""
+    if not asked:
+        from app import meeting_guard
+
+        if meeting_guard.window_hold():
+            meeting_guard.defer(meeting_id)
+            return False
     if not _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner, asked):
         return False
     with _jobs_lock:

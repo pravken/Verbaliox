@@ -159,6 +159,13 @@ def defer(meeting_id: int, asked: bool = False) -> None:
     print(f"[meeting_guard] meeting {meeting_id}: the analysis waits for the end of the meeting", flush=True)
 
 
+def sent_again(meeting_id: int) -> None:
+    """The recording sent to the queue came back out of it (app/transcriber.park_window_analyses): check() may send
+    it again before the next meeting."""
+    with _lock:
+        _sent.discard(int(meeting_id))
+
+
 def done(meeting_id: int) -> None:
     from app.database import _db_lock, get_connection
 
@@ -389,9 +396,14 @@ def check(now: Optional[float] = None) -> str:
     if not reason and quiet_for >= QUIET_SEC:
         from app import transcriber
 
+        window = None
         for meeting_id, asked in pending_asked():
             with _lock:
                 if meeting_id in _sent:
+                    continue
+            if not asked:  # «Фоновая обработка» holds the automatic ones: they stay marked meanwhile
+                window = window_hold(now) if window is None else window
+                if window:
                     continue
             if not transcriber.is_job_active(meeting_id) and transcriber.enqueue_analysis_job(meeting_id, asked):
                 with _lock:

@@ -290,9 +290,10 @@ def tick(now: Optional[float] = None) -> Dict[str, Any]:
     if was and not held:
         print("[queue_window] the computer is free (or the schedule began): the automatic jobs go on", flush=True)
         try:
-            from app import transcriber
+            from app import meeting_guard, transcriber
 
             transcriber.wake_queue()
+            meeting_guard.kick()  # the analyses marked meanwhile go to the queue now, not at its next look
         except Exception:
             traceback.print_exc()
     elif held and not was:

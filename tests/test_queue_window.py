@@ -317,6 +317,87 @@ class QueueTest(unittest.TestCase):
 
 
 @unittest.skipIf(transcriber is None, "app dependencies not installed")
+class HeldIsNotProcessingTest(unittest.TestCase):
+    """A job «Фоновая обработка» holds for hours is no processing: «Повторить», a new split, a cut… of the recording
+    answered «Запись уже обрабатывается» until the schedule (found in review)."""
+
+    def setUp(self):
+        init_db()
+        self.window = {}
+        for target, kw in (("app.meeting_guard.window_hold", {"side_effect": lambda now=None: dict(self.window)}),
+                           ("app.transcriber._submit_job", {}),  # queued, never run here
+                           ("app.transcriber._publish_queue_changed", {})):
+            p = mock.patch(target, **kw)
+            p.start()
+            self.addCleanup(p.stop)
+        self.addCleanup(transcriber._window_said.__setitem__, 0, "")
+        self.addCleanup(transcriber._manual.clear)
+        meeting_guard._state.update(busy="", quiet_since=0.0, looked=True, ended=0.0)
+
+    def _meeting(self):
+        from app.database import save_meeting_results, update_meeting_progress
+
+        mid = create_meeting(title="Обзор", filename="a.wav", media_path="a.wav")["id"]
+        save_meeting_results(mid, segments=[{"id": 1, "start": 0.0, "end": 2.0, "speaker": "S0", "text": "Добрый день"}])
+        update_meeting_progress(mid, status="completed", progress=100)
+        self.addCleanup(self._forget, mid)
+        return mid
+
+    def _forget(self, mid):
+        with transcriber._jobs_lock:
+            transcriber._queue[:] = [q for q in transcriber._queue if q["id"] != mid]
+            transcriber._active_jobs.discard(mid)
+        meeting_guard.done(mid)
+
+    def test_a_held_analysis_leaves_the_queue_and_comes_back_when_free(self):
+        from app.database import get_meeting
+
+        mid = self._meeting()
+        self.assertTrue(transcriber.enqueue_analysis_job(mid))  # queued while nothing held it
+        self.window = {"kind": "idle"}
+        self.assertTrue(transcriber._window_holds())  # the window begins: the waiting analysis is parked
+        for _ in range(100):
+            if not transcriber.is_job_active(mid):
+                break
+            threading.Event().wait(0.02)
+        self.assertFalse(transcriber.is_job_active(mid))
+        self.assertEqual(meeting_guard.pending_asked(), [(mid, False)])
+        m = get_meeting(mid)
+        self.assertEqual((m["status"], m["stage_text"]), ("completed", transcriber.WINDOW_ANALYSIS_TEXT))
+        # still held: queued neither by itself nor by the check after a meeting
+        self.assertFalse(transcriber.enqueue_analysis_job(mid))
+        self.assertFalse(transcriber.is_job_active(mid))
+        meeting_guard.check(now=10000.0)
+        meeting_guard.check(now=10000.0 + meeting_guard.QUIET_SEC + 1)
+        self.assertFalse(transcriber.is_job_active(mid))
+        # an asked one is not held
+        other = self._meeting()
+        self.assertTrue(transcriber.enqueue_analysis_job(other, True))
+        self.assertEqual(transcriber.park_window_analyses(), [])
+        self.window = {}
+        meeting_guard.check(now=10000.0 + meeting_guard.QUIET_SEC + 30)
+        self.assertTrue(transcriber.is_job_active(mid))
+
+    def test_a_held_transcription_says_what_it_waits_for(self):
+        from fastapi import HTTPException
+
+        from app import main
+
+        mid = self._meeting()
+        self.assertTrue(transcriber.enqueue_meeting_job(mid))
+        self.window = {"kind": "schedule"}
+        transcriber._window_holds()
+        with self.assertRaises(HTTPException) as e:
+            main._ensure_not_processing(mid)
+        self.assertIn("Фоновой обработки", e.exception.detail)
+        self.assertIn("Начать сейчас", e.exception.detail)
+        transcriber._manual.add(mid)  # asked by hand: it is no wait for the window
+        with self.assertRaises(HTTPException) as e:
+            main._ensure_not_processing(mid)
+        self.assertIn("уже обрабатывается", e.exception.detail)
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
 class MixWaitTest(unittest.TestCase):
     """The mix of the tracks waits as the queue does; «Свести сейчас» lets it go."""
 
