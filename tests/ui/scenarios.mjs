@@ -2136,7 +2136,7 @@ await step('meeting strip', async () => {
   await page.click('#strip-acts button:has-text("Подключиться")');
   await sleep(300);
   expect(sent.length === 1, 'the call was not joined');
-  await page.click('#strip-acts button:has-text("Не записывать")');
+  await page.click('#strip-acts button[aria-label^="Не записывать"]');
   expect(await pill() !== 'Идёт без записи', '«Не записывать» did not leave the meeting');
   await page.unroute('**/api/meeting/join');
   await setEvents([]);

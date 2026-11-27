@@ -3760,6 +3760,9 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .st-btn-warn:hover { background: rgba(255, 159, 10, 0.26); }
 .st-btn-ghost { background: none; }
 .st-btn-ghost:hover { background: rgba(255, 255, 255, 0.06); }
+/* «Не записывать» of the strip: a ✕ at the end of its actions (the strip keeps only what is needed) */
+.st-btn-x { width: 32px; padding: 0; justify-content: center; background: none; border-color: transparent; color: var(--hc-dim, #9A9CA1); }
+.st-btn-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
 .st-btn-sm { height: 26px; padding: 0 9px; font-size: var(--fs-caption); }
 .st-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .st-pill.stp-live i { animation: none; } }
