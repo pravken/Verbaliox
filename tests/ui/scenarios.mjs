@@ -1850,20 +1850,30 @@ await step('an online meeting waits for its call', async () => {
       return [window.__hmRec.starts, window.__hmRec.on, !!hmAutoRec, hmAutoRec && hmAutoRec.overrun];
     });
     expect(over[0] === 1 && over[1] && over[2] && over[3], `the recording stopped at the calendar end while the call went on: ${over}`);
-    // the call lets go of the microphone: it stops
+    // the call not seen for a while (let go, or the status unanswered): it stops by the clock
     const ended = await page.evaluate(async () => {
-      hmAutoRec.freeSince = Date.now() - 60e3;
+      hmAutoRec.seenAt = Date.now() - 60e3;
       await hmAutoTick();
       return [window.__hmRec.starts, window.__hmRec.on, !!hmAutoRec];
     });
     expect(ended[0] === 2 && !ended[1] && !ended[2], `the recording did not stop once the call let go: ${ended}`);
+    // a recording made by hand during a meeting and stopped: the call still on does not start a new one
+    const byHand = await page.evaluate(async () => {
+      window.__hmRec.on = true; hmAutoRec = null;
+      await hmJoinTick();
+      window.__hmRec.on = false;
+      hmJoin = { key: 'scenario|next', since: Date.now() - 60e3 };
+      await hmJoinTick(); await hmJoinTick();
+      return [window.__hmRec.starts, !!hmAutoRec, hmUserStopped().has('scenario|next')];
+    });
+    expect(byHand[0] === 2 && !byHand[1] && byHand[2], `a stop by hand was followed by a recording of the call: ${byHand}`);
   } finally {
     await page.unroute('**/api/calls/status');
     await page.evaluate(() => {
       const s = window.__hmSaved;
       shellQuickRecord = s.q; isRecording = s.rec; hmLoadEvents = s.load; hmMeetingState = s.st; autoRecordNotice = s.note;
       home.events = s.events; home.started = s.started; home.warned = s.warned;
-      hmAutoRec = null; hmJoin = null; hmCallWatch = null;
+      hmAutoRec = null; hmJoin = null; hmCallWatch = null; home.userStopped = new Set();
     });
   }
 });

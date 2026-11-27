@@ -123,17 +123,22 @@ function stripState() {
     const st = e ? hmMeetingState(e) : '';
     // its recording was made and stopped before the meeting's end: said so, not «Автозапись не началась»
     const stopped = !!e && (home.started.has(e.key) || !!e.recording);
+    // an online meeting to be recorded, its call not joined yet: the recording starts with the call (home.js hmJoinTick),
+    // not «Идёт без записи» (found in review)
+    const waiting = !!e && e.online && st === 'on' && hmCallWatch !== false && !stopped && !hmUserStopped().has(e.key);
+    // only a stop by the user takes «Записать» away: a dropped call or a voice note linked to the meeting does not
     const why = stopped ? 'stripWhyStopped'
       : { off: 'stripWhyOff', never: 'stripWhyNever', skipped: 'stripWhySkipped', on: 'stripWhyLate', ask: 'stripWhyLate' }[st] || 'stripWhyCall';
     // Only what is needed (asked by the user: the strip held too much): the state, the meeting, one action. «Подключиться»
     // only while no call holds the microphone (in the call already, it has no use); «Не записывать» is the ✕ at the end;
     // the service and the minutes went (the title says the meeting), the reason is the pill's tooltip
-    return { kind: 'unrec', pill: t(stopped ? 'stripRecStopped' : 'stripUnrec'), cls: 'amber', lead: e ? e.title || t('hmUntitled') : strip.call,
+    return { kind: 'unrec', pill: t(waiting ? 'stripWaitCall' : stopped ? 'stripRecStopped' : 'stripUnrec'), cls: waiting ? 'blue' : 'amber',
+      lead: e ? e.title || t('hmUntitled') : strip.call,
       meta: e ? '' : t('stripCall'),
-      grow: '', pillTip: t(why),  // the reason was cut to «Автозапись для…»: it is the pill's tooltip now
+      grow: '', pillTip: t(waiting ? 'stripWaitCallTip' : why),  // the reason was cut to «Автозапись для…»: it is the pill's tooltip now
       acts: [strip.call ? null : joinAct(e),
         // stopped by the user: no «Записать снова» (asked by the user: the red «Запись» is there for it)
-        stopped ? null : act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t('stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
+        e && hmUserStopped().has(e.key) ? null : act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t('stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
         { ...act('stripSkip', [e ? e.key : `call:${strip.call}`], '✕', 'x', t('stripDontRecordTip')), icon: true }].filter(Boolean) };
   }
   if (next && next.s.getTime() - now <= STRIP_SOON_MS) {
@@ -265,6 +270,8 @@ function stripHide(id) {
 // leaves the call too: else the strip came back at once with the call, and one press was not enough
 function stripSkip(key) {
   strip.skip.add(key);
+  // a meeting waiting for its call is not recorded by itself either (found in review: ✕ hid it, the call recorded it)
+  if (!String(key).startsWith('call:')) home.started.add(key);
   if (strip.call) strip.skip.add(`call:${strip.call}`);
   renderStrip();
 }
