@@ -777,11 +777,13 @@ def _wait_for_meeting_end(meeting_id: int, seconds: Optional[float] = None) -> b
                     app_status.mix_why[meeting_id] = meeting_guard.hold_reason()
                 else:
                     app_status.mix_why.pop(meeting_id, None)
-            now_shown = (until, window.get("kind") or "")
+            now_shown = (until, window.get("kind") or "", window.get("from") or "")
             if now_shown != shown:
                 if shown is None:
                     print(f"[record] meeting {meeting_id}: the mix waits ({window.get('kind') or 'meeting'})", flush=True)
-                text = ("Сведение дорожек: ждёт, пока компьютер свободен" if window.get("kind") == "idle"
+                text = (f"Сведение дорожек: ждёт, пока компьютер свободен, или расписания: с {window['from']}"
+                        if window.get("kind") == "idle" and window.get("from")
+                        else "Сведение дорожек: ждёт, пока компьютер свободен" if window.get("kind") == "idle"
                         else "Сведение дорожек: ждёт расписания" if window
                         else "Сведение дорожек: начнётся после встречи" if not until
                         else "Сведение дорожек: пауза на случай следующей встречи")

@@ -90,12 +90,75 @@ class FreeTest(unittest.TestCase):
             self.assertEqual(queue_window._state["low_since"], 175.0)
 
 
+class FreshLookTest(unittest.TestCase):
+    """Only a fresh look says the computer is free while the looks are taken."""
+
+    def setUp(self):
+        p = mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": False, "started": True,
+                                                  "sampled_at": 0.0, "held": False, "cpu": None, "gpu": None})
+        p.start()
+        self.addCleanup(p.stop)
+        queue_window._prev.update(sys=None, own={}, at=0.0, wall=0.0)
+        self.addCleanup(queue_window._prev.update, sys=None, own={}, at=0.0, wall=0.0)
+
+    def test_just_switched_from_always_it_is_not_free_until_the_first_look(self):
+        """«always» → «idle»: the look of «always» left «not measured», taken for free for up to 15 s."""
+        now = _at(10)
+        with mock.patch("app.queue_window._settings", return_value=dict(SETTINGS, queue_when="always")), \
+                mock.patch("app.transcriber.wake_queue"):
+            queue_window.tick(now)
+        self.assertEqual(queue_window.hold(now, SETTINGS), {"kind": "idle"})
+        with mock.patch("app.queue_window._cpu_other", return_value=None), \
+                mock.patch("app.queue_window._gpu_other", return_value=None), \
+                mock.patch("app.procstat.own_pids", return_value=[]), \
+                mock.patch("app.sysinfo._cpu_times", return_value=(0, 0)):
+            queue_window._prev["sys"] = (0, 0)  # readable
+            queue_window.sample(SETTINGS, now + 1)
+        self.assertEqual(queue_window.hold(now + 2, SETTINGS), {"kind": "idle"})  # measured: two minutes low first
+
+    def test_nothing_measurable_is_still_free_after_a_look(self):
+        with mock.patch("app.queue_window._cpu_other", side_effect=lambda pids: queue_window._prev.update(sys=None)), \
+                mock.patch("app.queue_window._gpu_other", return_value=None), \
+                mock.patch("app.procstat.own_pids", return_value=[]):
+            queue_window.sample(SETTINGS, _at(10))
+        self.assertEqual(queue_window.hold(_at(10) + 1, SETTINGS), {})
+
+    def test_an_old_look_after_sleep_holds_until_a_fresh_one(self):
+        queue_window._state.update(measured=True, low_since=_at(9), sampled_at=_at(10))
+        self.assertEqual(queue_window.hold(_at(10) + 5, SETTINGS), {})
+        self.assertEqual(queue_window.hold(_at(11), SETTINGS), {"kind": "idle"})  # an hour later: the computer slept
+        with mock.patch("app.queue_window._cpu_other", return_value=None), \
+                mock.patch("app.queue_window._gpu_other", return_value=None), \
+                mock.patch("app.procstat.own_pids", return_value=[]):
+            queue_window.sample(SETTINGS, _at(11))
+        self.assertEqual(queue_window._state["low_since"], 0.0)  # the run of low looks begins again
+        self.assertEqual(queue_window.hold(_at(11) + 1, SETTINGS), {"kind": "idle"})
+
+    def test_saving_the_mode_looks_at_once(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        init_db()
+        self.addCleanup(update_settings, {"queue_when": "always"})
+        with TestClient(main.app, base_url="http://127.0.0.1:8790") as c, \
+                mock.patch("app.queue_window.settings_changed") as now:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            update_settings({"queue_when": "always"})
+            self.assertEqual(c.post("/api/settings", json={"settings": {"queue_when": "idle"}}).status_code, 200)
+            now.assert_called_once()
+            c.post("/api/settings", json={"settings": {"queue_when": "idle"}})
+            now.assert_called_once()  # unchanged: no look
+
+
 class OwnLoadTest(unittest.TestCase):
     """The program's own processes (this one, ffmpeg and the workers it started, Ollama) are no user's load."""
 
     def setUp(self):
-        queue_window._prev.update(sys=None, own={}, at=0.0)
-        self.addCleanup(queue_window._prev.update, sys=None, own={}, at=0.0)
+        queue_window._prev.update(sys=None, own={}, at=0.0, wall=0.0)
+        self.addCleanup(queue_window._prev.update, sys=None, own={}, at=0.0, wall=0.0)
+        queue_window._cpu_tracker.clear()
+        self.addCleanup(queue_window._cpu_tracker.clear)
 
     def test_the_tree_of_the_program(self):
         parents = {10: 1, 11: 10, 12: 11, 20: 1, 21: 20}
@@ -105,7 +168,7 @@ class OwnLoadTest(unittest.TestCase):
         cpu = {10: 0.0, 11: 0.0, 99: 0.0}
         clock = [1000.0]
         with mock.patch("app.sysinfo._cpu_times", side_effect=[(0, 0), (40, 100)]), \
-                mock.patch("app.procstat.cpu_seconds", side_effect=lambda pid: cpu.get(pid)), \
+                mock.patch("app.procstat.cpu_times", side_effect=lambda pid: (cpu[pid], 1.0) if pid in cpu else None), \
                 mock.patch("app.queue_window.time.monotonic", side_effect=lambda: clock[0]), \
                 mock.patch("os.cpu_count", return_value=4):
             self.assertIsNone(queue_window._cpu_other({10, 11}))  # the first look: nothing to compare
@@ -113,6 +176,70 @@ class OwnLoadTest(unittest.TestCase):
             cpu.update({10: 12.0, 11: 4.0, 99: 30.0})  # 16 s of 40 processor-seconds: 40 % of the computer
             other = queue_window._cpu_other({10, 11})
         self.assertAlmostEqual(other, 20.0)  # 60 % in all, 40 % of it the program's own
+
+    def _two_looks(self, first, second, own_first, own_second, wall=(5000.0, 5010.0)):
+        """Two looks 10 s apart on 4 processors, the whole computer 60 % busy between them; first/second:
+        {pid: (processor seconds, start time)} the tracker reads at each."""
+        reads = iter([first, second])
+        walls = iter(wall)
+        clock = iter([1000.0, 1010.0])
+        tracker = mock.Mock()
+        tracker.read.side_effect = lambda pids: next(reads)
+        queue_window._cpu_tracker.append(tracker)
+        with mock.patch("app.sysinfo._cpu_times", side_effect=[(0, 0), (40, 100)]), \
+                mock.patch("app.queue_window.time.monotonic", side_effect=lambda: next(clock)), \
+                mock.patch("app.queue_window.time.time", side_effect=lambda: next(walls)), \
+                mock.patch("os.cpu_count", return_value=4):
+            self.assertIsNone(queue_window._cpu_other(own_first))
+            return queue_window._cpu_other(own_second)
+
+    def test_a_process_started_meanwhile_is_all_the_programs(self):
+        """ffmpeg started by a job between two looks: all its seconds are the program's (they were the other
+        programs' load for its whole first look, and the run of low looks broke at almost every job)."""
+        other = self._two_looks({10: (0.0, 1.0)}, {10: (4.0, 1.0), 11: (12.0, 5003.0)}, {10}, {10, 11})
+        self.assertAlmostEqual(other, 20.0)  # 60 % in all, 16 of 40 processor-seconds the program's
+
+    def test_a_process_that_ended_meanwhile_counts_to_its_end(self):
+        """The tracker gives the last seconds of an own process that ended since the previous look."""
+        other = self._two_looks({10: (0.0, 1.0), 11: (0.0, 2.0)}, {10: (4.0, 1.0), 11: (12.0, 2.0)}, {10, 11}, {10})
+        self.assertAlmostEqual(other, 20.0)
+
+    def test_an_old_process_found_now_brings_not_its_past(self):
+        """Ollama's server running for hours, found only at this look: its earlier seconds are not this look's."""
+        other = self._two_looks({10: (0.0, 1.0)}, {10: (4.0, 1.0), 12: (3600.0, 100.0)}, {10}, {10, 12})
+        self.assertAlmostEqual(other, 50.0)
+
+    def test_the_tracker_reads_the_start_of_a_process(self):
+        import os
+        import time
+
+        got = procstat.CpuTracker().read([os.getpid()])
+        sec, started = got[os.getpid()]
+        self.assertGreaterEqual(sec, 0.0)
+        if started is not None:
+            self.assertLess(started, time.time() + 1)
+
+    def test_the_ollama_processes_are_looked_up_with_the_programs(self):
+        procstat._ollama_pids.update(at=0.0, pids=[])
+        with mock.patch("app.procstat._find_by_name", side_effect=[[501], [501, 502]]) as find, \
+                mock.patch("app.procstat.parent_map", return_value={}):
+            self.assertIn(501, procstat.ollama_pids())
+            self.assertIn(502, procstat.own_pids())  # a runner started since: not 30 s later
+        self.assertEqual(find.call_count, 2)
+        procstat._ollama_pids.update(at=0.0, pids=[])
+
+    def test_ollama_on_the_video_card_is_the_programs(self):
+        """No share per process from the driver: a model Ollama holds on the card is the program's work."""
+        with mock.patch("app.vram.gpu_utilization", return_value=90), \
+                mock.patch("app.vram.gpu_process_utilization", return_value=None), \
+                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False), \
+                mock.patch("app.vram._ollama_ps", return_value=[{"name": "gemma", "size_vram": 5 * 2**30}]):
+            self.assertIsNone(queue_window._gpu_other({10}))
+        with mock.patch("app.vram.gpu_utilization", return_value=90), \
+                mock.patch("app.vram.gpu_process_utilization", return_value=None), \
+                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False), \
+                mock.patch("app.vram._ollama_ps", return_value=[]):
+            self.assertEqual(queue_window._gpu_other({10}), 90.0)
 
     def test_the_video_card_less_the_program(self):
         with mock.patch("app.vram.gpu_utilization", return_value=70), \
@@ -130,7 +257,8 @@ class OwnLoadTest(unittest.TestCase):
             self.assertIsNone(queue_window._gpu_other({10}))  # this look counts the processor only
         with mock.patch("app.vram.gpu_utilization", return_value=90), \
                 mock.patch("app.vram.gpu_process_utilization", return_value=None), \
-                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False):
+                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False), \
+                mock.patch("app.queue_window._ollama_on_gpu", return_value=False):
             self.assertEqual(queue_window._gpu_other({10}), 90.0)
 
 
@@ -145,6 +273,32 @@ class SettingsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 clean("queue_from", bad)
         self.assertEqual(clean("queue_cpu_max", "200"), "95")
+
+    def test_a_schedule_of_no_length_is_refused(self):
+        """The start equal to the end was the whole day, so «Фоновая обработка» held nothing."""
+        from app.settings_schema import check_together
+
+        stored = {"queue_from": "19:00", "queue_to": "08:00"}
+        with self.assertRaises(ValueError):
+            check_together({"queue_from": "08:00"}, stored)
+        with self.assertRaises(ValueError):
+            check_together({"queue_from": "10:00", "queue_to": "10:00"}, stored)
+        check_together({"queue_from": "09:00"}, stored)
+        check_together({"queue_when": "idle"}, {"queue_from": "08:00", "queue_to": "08:00"})  # not touched
+
+    def test_the_route_refuses_it(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        init_db()
+        self.addCleanup(update_settings, {"queue_from": "19:00", "queue_to": "08:00"})
+        with TestClient(main.app, base_url="http://127.0.0.1:8790") as c:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            update_settings({"queue_from": "19:00", "queue_to": "08:00"})
+            r = c.post("/api/settings", json={"settings": {"queue_to": "19:00"}})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("совпадают", r.json()["detail"])
 
     def test_defaults_keep_todays_behaviour(self):
         init_db()
@@ -161,9 +315,9 @@ class HoldStateTest(unittest.TestCase):
 
     def test_the_reason_for_the_page(self):
         update_settings({"queue_when": "idle"})
-        with mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": True}):
+        with mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": True, "started": False}):
             self.assertEqual(meeting_guard.hold_state(), {"kind": "idle"})
-        with mock.patch.dict(queue_window._state, {"low_since": 1.0, "measured": True}):
+        with mock.patch.dict(queue_window._state, {"low_since": 1.0, "measured": True, "started": False}):
             self.assertEqual(meeting_guard.hold_state(), {})
         update_settings({"queue_when": "schedule", "queue_from": "19:00", "queue_to": "08:00"})
         state = meeting_guard.hold_state(_at(10))
@@ -250,6 +404,88 @@ class QueueTest(unittest.TestCase):
 
 
 @unittest.skipIf(transcriber is None, "app dependencies not installed")
+class HeldIsNotProcessingTest(unittest.TestCase):
+    """A job «Фоновая обработка» holds for hours is no processing: «Повторить», a new split, a cut… of the recording
+    answered «Запись уже обрабатывается» until the schedule (found in review)."""
+
+    def setUp(self):
+        init_db()
+        self.window = {}
+        for target, kw in (("app.meeting_guard.window_hold", {"side_effect": lambda now=None: dict(self.window)}),
+                           ("app.transcriber._submit_job", {}),  # queued, never run here
+                           ("app.transcriber._publish_queue_changed", {})):
+            p = mock.patch(target, **kw)
+            p.start()
+            self.addCleanup(p.stop)
+        transcriber._window_said[0] = ""  # nothing held before the test (an earlier one may have left it)
+        self.addCleanup(transcriber._window_said.__setitem__, 0, "")
+        self.addCleanup(transcriber._manual.clear)
+        meeting_guard._state.update(busy="", quiet_since=0.0, looked=True, ended=0.0)
+
+    def _meeting(self):
+        from app.database import save_meeting_results, update_meeting_progress
+
+        mid = create_meeting(title="Обзор", filename="a.wav", media_path="a.wav")["id"]
+        save_meeting_results(mid, segments=[{"id": 1, "start": 0.0, "end": 2.0, "speaker": "S0", "text": "Добрый день"}])
+        update_meeting_progress(mid, status="completed", progress=100)
+        self.addCleanup(self._forget, mid)
+        return mid
+
+    def _forget(self, mid):
+        with transcriber._jobs_lock:
+            transcriber._queue[:] = [q for q in transcriber._queue if q["id"] != mid]
+            transcriber._active_jobs.discard(mid)
+        meeting_guard.done(mid)
+
+    def test_a_held_analysis_leaves_the_queue_and_comes_back_when_free(self):
+        from app.database import get_meeting
+
+        mid = self._meeting()
+        self.assertTrue(transcriber.enqueue_analysis_job(mid))  # queued while nothing held it
+        self.window = {"kind": "idle"}
+        self.assertTrue(transcriber._window_holds())  # the window begins: the waiting analysis is parked
+        for _ in range(150):  # parked on a thread of its own
+            if get_meeting(mid)["status"] == "completed":
+                break
+            threading.Event().wait(0.02)
+        self.assertFalse(transcriber.is_job_active(mid))
+        self.assertEqual(meeting_guard.pending_asked(), [(mid, False)])
+        m = get_meeting(mid)
+        self.assertEqual((m["status"], m["stage_text"]), ("completed", transcriber.WINDOW_ANALYSIS_TEXT))
+        # still held: queued neither by itself nor by the check after a meeting
+        self.assertFalse(transcriber.enqueue_analysis_job(mid))
+        self.assertFalse(transcriber.is_job_active(mid))
+        meeting_guard.check(now=10000.0)
+        meeting_guard.check(now=10000.0 + meeting_guard.QUIET_SEC + 1)
+        self.assertFalse(transcriber.is_job_active(mid))
+        # an asked one is not held
+        other = self._meeting()
+        self.assertTrue(transcriber.enqueue_analysis_job(other, True))
+        self.assertEqual(transcriber.park_window_analyses(), [])
+        self.window = {}
+        meeting_guard.check(now=10000.0 + meeting_guard.QUIET_SEC + 30)
+        self.assertTrue(transcriber.is_job_active(mid))
+
+    def test_a_held_transcription_says_what_it_waits_for(self):
+        from fastapi import HTTPException
+
+        from app import main
+
+        mid = self._meeting()
+        self.assertTrue(transcriber.enqueue_meeting_job(mid))
+        self.window = {"kind": "schedule"}
+        transcriber._window_holds()
+        with self.assertRaises(HTTPException) as e:
+            main._ensure_not_processing(mid)
+        self.assertIn("Фоновой обработки", e.exception.detail)
+        self.assertIn("Начать сейчас", e.exception.detail)
+        transcriber._manual.add(mid)  # asked by hand: it is no wait for the window
+        with self.assertRaises(HTTPException) as e:
+            main._ensure_not_processing(mid)
+        self.assertIn("уже обрабатывается", e.exception.detail)
+
+
+@unittest.skipIf(transcriber is None, "app dependencies not installed")
 class MixWaitTest(unittest.TestCase):
     """The mix of the tracks waits as the queue does; «Свести сейчас» lets it go."""
 
@@ -281,6 +517,30 @@ class MixWaitTest(unittest.TestCase):
         self.assertEqual(done, [True])
         self.assertIn(mock.call(mid, stage_text="Сведение дорожек: ждёт расписания"), progress.call_args_list)
         self.assertNotIn(mid, app_status.mix_wait)
+
+    def test_either_names_the_schedule_too(self):
+        from app import main  # noqa: F401 - the routers are made with the app
+        from app.api import recording
+
+        mid = 424243
+        wake = threading.Event()
+        with recording._mix_lock:
+            recording._mixes[mid] = {"wake": wake}
+        self.addCleanup(recording._mixes.pop, mid, None)
+        with mock.patch("app.meeting_guard.hold_until", return_value=None), \
+                mock.patch("app.meeting_guard.window_hold",
+                           return_value={"kind": "idle", "from": "19:00", "until": _at(19), "left": 100}), \
+                mock.patch("app.database.update_meeting_progress") as progress:
+            t = threading.Thread(target=recording._wait_for_meeting_end, args=(mid,))
+            t.start()
+            for _ in range(100):
+                if progress.call_args_list:
+                    break
+                wake.wait(0.02)
+            self.assertTrue(recording.mix_now(mid))
+            t.join(3)
+        self.assertIn(mock.call(mid, stage_text="Сведение дорожек: ждёт, пока компьютер свободен, или расписания: с 19:00"),
+                      progress.call_args_list)
 
 
 if __name__ == "__main__":

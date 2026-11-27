@@ -20,6 +20,7 @@ PACKAGE = "yt-dlp"
 MAX_BYTES = 8 * 2**30  # a link to more than this (a day-long video, a disk image) is not downloaded
 
 _cancel: Dict[int, threading.Event] = {}  # downloads running, by recording
+_restart_lock = threading.Lock()
 
 
 class _Cancelled(Exception):
@@ -146,8 +147,10 @@ def restart(meeting_id: int, url: str) -> bool:
     leave one of the two files behind."""
     from app.database import update_meeting_progress
 
-    if meeting_id in _cancel:
-        return False
+    with _restart_lock:  # registered before its thread starts: a second request meanwhile sees it running
+        if meeting_id in _cancel:
+            return False
+        _cancel[meeting_id] = threading.Event()
     update_meeting_progress(meeting_id, status="downloading", progress=1, stage_text="Скачивание по ссылке…", error_message="")
     threading.Thread(target=_download, args=(meeting_id, url), daemon=True, name=f"url_import_{meeting_id}").start()
     return True

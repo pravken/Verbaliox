@@ -40,3 +40,30 @@ class ProcStatTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CpuTrackerWindowsTest(unittest.TestCase):
+    """On Windows the tracker keeps a process's handle from one look to the next: the last seconds of an own
+    process that ended between two looks are read (GetProcessTimes answers while the handle is open)."""
+
+    def test_an_ended_process_is_read_once_and_one_no_longer_own_is_let_go(self):
+        import ctypes
+
+        times = {1: (5.0, 100.0, False), 2: (3.0, 200.0, False), 3: (1.0, 300.0, False)}
+        closed = []
+        k32 = mock.Mock()
+        k32.CloseHandle.side_effect = closed.append
+        with mock.patch.object(sys, "platform", "win32"), \
+                mock.patch.object(ctypes, "windll", mock.Mock(kernel32=k32), create=True), \
+                mock.patch("app.procstat._open", side_effect=lambda pid: f"h{pid}"), \
+                mock.patch("app.procstat._win_times", side_effect=lambda h: times[int(h[1:])]):
+            t = procstat.CpuTracker()
+            self.assertEqual(set(t.read([1, 2, 3])), {1, 2, 3})
+            times[2] = (7.0, 200.0, True)  # ffmpeg ended since: gone from the program's processes
+            got = t.read([1, 3])
+            self.assertEqual(got[2], (7.0, 200.0))
+            self.assertIn("h2", closed)
+            got = t.read([1])  # 3 alive but no longer the program's: not counted, let go
+            self.assertEqual(set(got), {1})
+            self.assertIn("h3", closed)
+            self.assertEqual(set(t.read([1])), {1})

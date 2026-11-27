@@ -95,7 +95,7 @@ class MeetingGuardTest(unittest.TestCase):
             meeting_guard.check(now=1100.0 + meeting_guard.QUIET_SEC - 1)
             enqueue.assert_not_called()  # the next meeting may start right after: a short wait first
             meeting_guard.check(now=1100.0 + meeting_guard.QUIET_SEC + 1)
-            enqueue.assert_called_once_with(mid)
+            enqueue.assert_called_once_with(mid, False)
 
     def test_a_calendar_event_alone_takes_no_model_from_the_users_work(self):
         meeting_guard.check(now=1000.0)
@@ -119,6 +119,47 @@ class MeetingGuardTest(unittest.TestCase):
                 self.assertEqual(transcriber._analysis_runner(mid), "Анализ готов")
             run.assert_called_once()
         self.assertEqual(meeting_guard.pending(), [])
+
+    @unittest.skipIf(transcriber is None, "app dependencies not installed")
+    def test_an_asked_analysis_stays_asked_across_a_meeting(self):
+        """«Обработать всё» asked for the analysis; a meeting deferred it: after the meeting it runs as asked
+        (with «Анализ после расшифровки» off it was skipped and marked done)."""
+        mid = _meeting()
+        meeting_guard.defer(mid)  # an automatic mark first: the request does not lose it, nor the reverse
+        with mock.patch.object(transcriber, "_auto_analysis") as run:
+            app_status.set_recording(True)
+            self.assertIn("после окончания встречи", transcriber._analysis_runner(mid, True))
+            run.assert_not_called()
+            meeting_guard.defer(mid)
+            self.assertEqual(meeting_guard.pending_asked(), [(mid, True)])
+            app_status.set_recording(False)
+            meeting_guard.check(now=5000.0)
+            with mock.patch("app.transcriber.enqueue_analysis_job", return_value=True) as enqueue, \
+                    mock.patch("app.transcriber.is_job_active", return_value=False):
+                meeting_guard.check(now=5000.0 + meeting_guard.QUIET_SEC + 1)
+            enqueue.assert_called_once_with(mid, True)
+            with mock.patch("app.database.get_all_settings", return_value={"auto_summary": "false"}), \
+                    mock.patch.object(transcriber, "_after_transcription", return_value=[]), \
+                    mock.patch("app.llm.available", return_value=True):
+                transcriber._analysis_runner(*enqueue.call_args.args)
+            run.assert_called_once()
+        self.assertEqual(meeting_guard.pending(), [])
+
+    def test_a_mark_of_an_older_database_gets_the_asked_column(self):
+        from app.database import _db_lock, get_connection
+
+        mid = _meeting()
+        with _db_lock:
+            conn = get_connection()
+            conn.execute("DROP TABLE IF EXISTS deferred_analysis")
+            conn.execute("CREATE TABLE deferred_analysis (meeting_id INTEGER PRIMARY KEY, since TEXT NOT NULL)")
+            conn.execute("INSERT INTO deferred_analysis VALUES (?, datetime('now'))", (mid,))
+            conn.commit()
+            conn.close()
+        self.assertEqual(meeting_guard.pending_asked(), [(mid, False)])
+        meeting_guard.defer(mid, asked=True)
+        self.assertEqual(meeting_guard.pending_asked(), [(mid, True)])
+        meeting_guard.done(mid)
 
 
 if __name__ == "__main__":

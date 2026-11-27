@@ -24,7 +24,7 @@ import threading
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 SAMPLE_SEC = 15.0
 LOW_FOR_SEC = 120.0  # the load below the thresholds this long in a row: the computer is free
@@ -34,9 +34,11 @@ DEFAULTS = {"queue_when": "always", "queue_cpu_max": "30", "queue_gpu_max": "30"
 
 _lock = threading.Lock()
 # what the last look measured: the load of the other programs (None: not known), since when it is low
+# sampled_at: when the last look was taken (0: none since the mode needs them)
 _state: Dict[str, Any] = {"cpu": None, "gpu": None, "low_since": 0.0, "measured": False, "held": False,
-                          "started": False}
-_prev: Dict[str, Any] = {"sys": None, "own": {}, "at": 0.0}
+                          "started": False, "sampled_at": 0.0}
+STALE_SEC = 2 * SAMPLE_SEC  # the last look older than this (the computer slept): what it measured holds no more
+_prev: Dict[str, Any] = {"sys": None, "own": {}, "at": 0.0, "wall": 0.0}
 
 
 # --- the settings ---
@@ -140,6 +142,11 @@ def hold(now: Optional[float] = None, settings: Optional[Dict[str, str]] = None)
         return {}
     with _lock:
         low_since, measured = float(_state["low_since"]), bool(_state["measured"])
+        sampled_at, sampling = float(_state["sampled_at"]), bool(_state["started"])
+    if sampling and mode(settings) in ("idle", "idle_or_schedule") and not (0 <= now - sampled_at <= STALE_SEC):
+        # no look yet since the mode was chosen (it was «always» a moment ago), or the last one is old (after
+        # sleep): not taken for free until a fresh look — «not measured» is free only where nothing can be measured
+        low_since, measured = 0.0, True
     out = decide(settings, now, low_since, measured)
     if "until" in out:
         out["left"] = max(0, int(round(out["until"] - now)))
@@ -160,29 +167,56 @@ def _own_busy_on_gpu() -> bool:
 
 def _cpu_other(own_pids) -> Optional[float]:
     """The processor load of the other programs since the last look, %: the whole computer's less the program's.
-    None at the first look, or where it cannot be read."""
+    None at the first look, or where it cannot be read. A process of the program that began since the last look
+    counts all its seconds as the program's (ffmpeg, deep-filter started by a job), and one that ended since is
+    counted to its end (app/procstat.CpuTracker): else each counted as the other programs' load for a part of the
+    look, and almost every job broke the run of low looks."""
     import os
 
-    from app import procstat, sysinfo
+    from app import sysinfo
 
-    mono = time.monotonic()
+    mono, wall = time.monotonic(), time.time()
     times = sysinfo._cpu_times()
-    own = {}
-    for pid in own_pids:
-        sec = procstat.cpu_seconds(pid)
-        if sec is not None:
-            own[pid] = sec
-    prev_sys, prev_own, prev_at = _prev["sys"], _prev["own"], _prev.get("at") or 0.0
-    _prev.update(sys=times, own=own, at=mono)
+    own = _tracker().read(own_pids)
+    prev_sys, prev_own, prev_at, prev_wall = _prev["sys"], _prev["own"], _prev.get("at") or 0.0, _prev.get("wall") or 0.0
+    _prev.update(sys=times, own={pid: sec for pid, (sec, _started) in own.items()}, at=mono, wall=wall)
     if times is None or prev_sys is None or mono <= prev_at:
         return None
     d_idle, d_total = times[0] - prev_sys[0], times[1] - prev_sys[1]
     if d_total <= 0:
         return None
     total = 100.0 * (1 - d_idle / d_total)
-    used = sum(max(0.0, sec - prev_own[pid]) for pid, sec in own.items() if pid in prev_own)
+    used = 0.0
+    for pid, (sec, started) in own.items():
+        if pid in prev_own:
+            used += max(0.0, sec - prev_own[pid])
+        elif started is not None and started >= prev_wall - 1.0:
+            used += max(0.0, sec)  # began since the last look: all of it in this one
+        # else: an older process that has just become the program's (Ollama found now): its past is not this look's
     mine = used / (mono - prev_at) / max(1, os.cpu_count() or 1) * 100
     return round(max(0.0, min(100.0, total - mine)), 1)
+
+
+_cpu_tracker: List[Any] = []
+
+
+def _tracker():
+    from app import procstat
+
+    if not _cpu_tracker:
+        _cpu_tracker.append(procstat.CpuTracker())
+    return _cpu_tracker[0]
+
+
+def _ollama_on_gpu() -> bool:
+    """Ollama keeps a model on the video card: its work there is the program's (the rule «Ollama is own»), and
+    the driver does not say its share."""
+    try:
+        from app import vram
+
+        return any(float(m.get("size_vram") or 0) > 0 for m in (vram._ollama_ps(timeout=0.5) or []))
+    except Exception:
+        return False
 
 
 def _gpu_other(own_pids) -> Optional[float]:
@@ -195,7 +229,7 @@ def _gpu_other(own_pids) -> Optional[float]:
         return None
     per = vram.gpu_process_utilization(int((time.time() - SAMPLE_SEC) * 1e6))  # the last look's span
     if per is None:
-        return None if _own_busy_on_gpu() else float(total)
+        return None if (_own_busy_on_gpu() or _ollama_on_gpu()) else float(total)
     mine = sum(v for pid, v in per.items() if pid in own_pids)
     return float(max(0, min(100, total - mine)))
 
@@ -206,6 +240,12 @@ def sample(settings: Optional[Dict[str, str]] = None, now: Optional[float] = Non
 
     settings = _settings() if settings is None else settings
     now = time.time() if now is None else now
+    with _lock:
+        stale = bool(_state["sampled_at"]) and not (0 <= now - _state["sampled_at"] <= STALE_SEC)
+        if stale:  # the computer slept since the last look: the run of low looks starts again, as the figures do
+            _state["low_since"] = 0.0
+    if stale:
+        _prev.update(sys=None, own={}, at=0.0, wall=0.0)
     try:
         pids = set(procstat.own_pids())
     except Exception:
@@ -216,7 +256,10 @@ def sample(settings: Optional[Dict[str, str]] = None, now: Optional[float] = Non
     except Exception:
         gpu = None
     # the processor's times readable: the load can be measured (the first look gives no figure yet)
-    return note(settings, now, cpu, gpu, readable=_prev["sys"] is not None)
+    out = note(settings, now, cpu, gpu, readable=_prev["sys"] is not None)
+    with _lock:
+        _state["sampled_at"] = now
+    return out
 
 
 def note(settings: Dict[str, str], now: float, cpu: Optional[float], gpu: Optional[float],
@@ -253,22 +296,36 @@ def tick(now: Optional[float] = None) -> Dict[str, Any]:
         sample(settings, now)
     else:  # not measured meanwhile: a run of low looks from before does not count when the mode comes back
         with _lock:
-            _state.update(low_since=0.0, measured=False, cpu=None, gpu=None)
-        _prev.update(sys=None, own={}, at=0.0)
+            _state.update(low_since=0.0, measured=False, cpu=None, gpu=None, sampled_at=0.0)
+        _prev.update(sys=None, own={}, at=0.0, wall=0.0)
+        if _cpu_tracker:
+            _cpu_tracker[0].forget()
     held = hold(now, settings)
     with _lock:
         was, _state["held"] = _state["held"], bool(held)
     if was and not held:
         print("[queue_window] the computer is free (or the schedule began): the automatic jobs go on", flush=True)
         try:
-            from app import transcriber
+            from app import meeting_guard, transcriber
 
             transcriber.wake_queue()
+            meeting_guard.kick()  # the analyses marked meanwhile go to the queue now, not at its next look
         except Exception:
             traceback.print_exc()
     elif held and not was:
         print(f"[queue_window] the automatic jobs wait: {held.get('kind')}", flush=True)
     return held
+
+
+def settings_changed() -> None:
+    """The settings of «Фоновая обработка» saved: a look now, so the page and the queue do not wait for the next one."""
+    def run() -> None:
+        try:
+            tick()
+        except Exception:
+            traceback.print_exc()
+
+    threading.Thread(target=run, daemon=True, name="queue_window_now").start()
 
 
 def _loop() -> None:

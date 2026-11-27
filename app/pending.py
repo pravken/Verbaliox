@@ -13,10 +13,14 @@ whatever «Анализ после расшифровки» says: a finished tra
 analysis model can run (app/llm.available), as after a transcription; otherwise counted and reported, not queued.
 """
 
+import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 TRANSCRIBE_STATUSES = ("added", "failed", "cancelled")
+# one «Обработать всё» at a time: two requests at once each planned before the other queued, and queued the same
+# recordings twice (a download by link started twice)
+_run_lock = threading.Lock()
 
 
 def _busy(meeting_id: int) -> bool:
@@ -80,15 +84,31 @@ def queue_transcription(meeting_id: int, m: Dict[str, Any]) -> bool:
 
     if not m.get("media_path") and url_import.valid_url(m.get("filename") or ""):
         return url_import.restart(meeting_id, m["filename"])  # a download by link that did not finish
+    if _busy(meeting_id):
+        return False
     update_meeting_progress(meeting_id, status="queued", progress=0,
                             stage_text="Повторная постановка в очередь...", error_message="")
-    return enqueue_meeting_job(meeting_id, manual=True)
+    if enqueue_meeting_job(meeting_id, manual=True):
+        return True
+    # queued meanwhile by another way: the recording keeps what it showed (the job queued says its own)
+    update_meeting_progress(meeting_id, status=m.get("status") or "added", progress=m.get("progress") or 0,
+                            stage_text=m.get("stage_text") or "", error_message=m.get("error_message") or "")
+    return False
 
 
 def run(transcribe: bool = True, analyse: bool = True, ids: Optional[Iterable[int]] = None) -> Dict[str, Any]:
     """Queues what plan() found. Returns the counts: queued for recognition, for the analysis, and the
     analyses left out because the analysis model cannot run."""
     from app import events
+
+    with _run_lock:
+        out = _run(transcribe, analyse, ids)
+    if out["transcribe"] or out["analyse"]:
+        events.publish({"type": "list"})
+    return out
+
+
+def _run(transcribe: bool, analyse: bool, ids: Optional[Iterable[int]]) -> Dict[str, Any]:
     from app.database import get_meeting
     from app.transcriber import enqueue_analysis_job
 
@@ -106,6 +126,4 @@ def run(transcribe: bool = True, analyse: bool = True, ids: Optional[Iterable[in
             for mid in p["analyse"]:
                 if enqueue_analysis_job(mid, True):
                     out["analyse"] += 1
-    if out["transcribe"] or out["analyse"]:
-        events.publish({"type": "list"})
     return out
