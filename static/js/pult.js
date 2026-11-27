@@ -132,7 +132,8 @@ function stripState() {
       meta: e ? '' : t('stripCall'),
       grow: '', pillTip: t(why),  // the reason was cut to «Автозапись для…»: it is the pill's tooltip now
       acts: [strip.call ? null : joinAct(e),
-        act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t(stopped ? 'stripRecordAgain' : 'stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
+        // stopped by the user: no «Записать снова» (asked by the user: the red «Запись» is there for it)
+        stopped ? null : act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t('stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
         { ...act('stripSkip', [e ? e.key : `call:${strip.call}`], '✕', 'x', t('stripDontRecordTip')), icon: true }].filter(Boolean) };
   }
   if (next && next.s.getTime() - now <= STRIP_SOON_MS) {
