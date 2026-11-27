@@ -3127,7 +3127,7 @@ const SETTINGS_RESET = {
     ['set-idle-unload', 'idle_unload_minutes', 'value'], ['set-mem-reserve-ram', 'mem_reserve_ram', 'value'],
     ['set-mem-reserve-vram', 'mem_reserve_vram', 'value'], ['set-quiet-mode', 'quiet_mode', 'check'],
     ['set-economy-for', 'economy_for', 'value'], ['set-queue-when', 'queue_when', 'value'],
-    ['set-queue-idle-min', 'queue_idle_min', 'value'], ['set-queue-cpu-max', 'queue_cpu_max', 'value'],
+    ['set-queue-cpu-max', 'queue_cpu_max', 'value'],
     ['set-queue-gpu-max', 'queue_gpu_max', 'value'], ['set-queue-from', 'queue_from', 'value'], ['set-queue-to', 'queue_to', 'value']],
   record: [['set-record-source', 'record_source_mode', 'value'], ['set-live-model', 'live_whisper_model', 'value'],
     ['set-call-record', 'call_auto_record', 'check'], ['set-echo-cancel', 'rec_echo_cancel', 'check'], ['set-teams-captions', 'teams_captions', 'check'], ['set-rec-sounds', 'rec_sounds', 'check'],
@@ -3154,7 +3154,7 @@ const SETTINGS_RESET = {
 const SETTINGS_DEFAULTS = {
   start_with_windows: 'false', close_to_tray: 'false', idle_unload_minutes: '10', quiet_mode: 'false', economy_mode: 'false', economy_for: '0', mcp_local_only: 'false', live_captions_auto: 'false', cpu_threads: 'auto',
   mem_reserve_ram: 'auto', mem_reserve_vram: 'auto',
-  queue_when: 'always', queue_idle_min: '5', queue_cpu_max: '30', queue_gpu_max: '30', queue_from: '19:00', queue_to: '08:00',
+  queue_when: 'always', queue_cpu_max: '30', queue_gpu_max: '30', queue_from: '19:00', queue_to: '08:00',
   record_source_mode: 'both', live_whisper_model: 'auto', call_auto_record: 'false', rec_echo_cancel: 'true', teams_captions: 'false', rec_sounds: 'true', import_copy: 'false', rec_voice_filter: 'true',
   diarization_enabled: 'true', voice_profiles: 'true', vad_filter: 'true', proc_denoise: 'true', proc_loudnorm: 'true', proc_leveling: 'true', ask_import_params: 'true', clean_fillers: 'true', onnx_gpu: 'true', onnx_gigaam_device: 'auto', onnx_parakeet_device: 'auto', asr_ensemble: 'false',
   auto_summary: 'true', analysis_after_meetings: 'true', auto_title: 'true', summary_grounding: 'true', analysis_chain: 'true', auto_commitments: 'true', semantic_search: 'false', dictionary_fuzzy: 'true', feature_suggest: 'true',
@@ -3223,7 +3223,7 @@ document.addEventListener('change', (e) => {
 });
 
 // --- «Фоновая обработка» (app/queue_window.py): when the automatic work of the queue may start ---
-const QUEUE_WHEN_DEFAULTS = { queue_when: 'always', queue_idle_min: '5', queue_cpu_max: '30', queue_gpu_max: '30',
+const QUEUE_WHEN_DEFAULTS = { queue_when: 'always', queue_cpu_max: '30', queue_gpu_max: '30',
   queue_from: '19:00', queue_to: '08:00' };
 function fillQueueWhen(s) {
   // every half hour of the day; a time saved elsewhere, not on the list, is added to it
@@ -3242,7 +3242,6 @@ function fillQueueWhen(s) {
     el.value = v;
   };
   put('set-queue-when', 'queue_when');
-  put('set-queue-idle-min', 'queue_idle_min');
   put('set-queue-cpu-max', 'queue_cpu_max');
   put('set-queue-gpu-max', 'queue_gpu_max');
   put('set-queue-from', 'queue_from');
@@ -3250,17 +3249,17 @@ function fillQueueWhen(s) {
   syncQueueWhen(false);
 }
 
-// the rows of the condition chosen: «Компьютер свободен» and/or «Расписание»
+// the rows of the condition chosen: «Компьютер свободен» (the load only) and/or «Расписание»
 function syncQueueWhen(save = true) {
   const v = document.getElementById('set-queue-when')?.value || 'always';
-  for (const id of ['queue-idle-row', 'queue-load-row']) document.getElementById(id)?.classList.toggle('hidden', !['idle', 'idle_or_schedule'].includes(v));
+  for (const id of ['queue-load-row']) document.getElementById(id)?.classList.toggle('hidden', !['idle', 'idle_or_schedule'].includes(v));
   document.getElementById('queue-schedule-row')?.classList.toggle('hidden', !['schedule', 'idle_or_schedule'].includes(v));
   if (save) scheduleSettingsSave();
 }
 
 function queueWhenPayload() {
   const v = (id, key) => document.getElementById(id)?.value || QUEUE_WHEN_DEFAULTS[key];
-  return { queue_when: v('set-queue-when', 'queue_when'), queue_idle_min: v('set-queue-idle-min', 'queue_idle_min'),
+  return { queue_when: v('set-queue-when', 'queue_when'),
     queue_cpu_max: v('set-queue-cpu-max', 'queue_cpu_max'), queue_gpu_max: v('set-queue-gpu-max', 'queue_gpu_max'),
     queue_from: v('set-queue-from', 'queue_from'), queue_to: v('set-queue-to', 'queue_to') };
 }

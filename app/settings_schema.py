@@ -29,7 +29,7 @@ BOOLS = {
 INTS = {"num_speakers": (0, 20), "idle_unload_minutes": (0, 24 * 60), "media_retention_days": (0, 3650),
         "onnx_gpu_batch": (1, 256), "work_day_start": (0, 23), "work_day_end": (0, 24),
         # when the automatic work of the queue may start (app/queue_window.py)
-        "queue_idle_min": (1, 240), "queue_cpu_max": (5, 95), "queue_gpu_max": (5, 95)}
+        "queue_cpu_max": (5, 95), "queue_gpu_max": (5, 95)}
 FLOATS = {"dub_voice_cfg": (1.0, 3.0), "work_remind_hours": (0.0, 16.0)}  # VoxCPM2 guidance (cfg_value)
 CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "record_source_mode": {"mic", "system", "both"}, "ui_scale": {"75", "90", "100", "115", "130", "150"},

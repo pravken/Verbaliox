@@ -5,19 +5,19 @@ of a recording queued by itself, the analysis that waited, and the mix of the re
 Settings → Общие → «Фоновая обработка»:
 - queue_when: "always" (as before), "idle" (the computer is free), "schedule" (from queue_from to queue_to, the
   window may cross midnight), "idle_or_schedule" (either);
-- the computer is free when nobody used it for queue_idle_min minutes (the last input, app/worktime.idle_seconds),
-  or when the load of the other programs stays below queue_cpu_max % of the processor and queue_gpu_max % of the
+- the computer is free when the load of the other programs stays below queue_cpu_max % of the processor and queue_gpu_max % of the
   video card for LOW_FOR_SEC in a row. The program's own processes (this one, everything it started — ffmpeg,
   DeepFilterNet, the caption and dub workers — and Ollama) are taken out of the load: its own work is no user's
-  load. No video card (no NVML): only the processor counts.
+  load. No video card (no NVML): only the processor counts. The keyboard and the mouse do not count (asked by the
+  user: the load is what matters, not whether someone reads or types).
 
 Only the start of the next job waits: a job running goes on when the user comes back. A meeting still holds the
 queue as before (app/meeting_guard). What the user starts by hand does not wait (app/transcriber._waits_for_window),
 and neither do «Начать сейчас» and «Свести сейчас».
 
 A light look every SAMPLE_SEC on a thread of its own (no package: app/sysinfo, app/procstat, app/vram NVML);
-the queue asks hold() under its lock, which reads only what was measured. Where nothing can be measured (no
-input time, no load), the computer is taken for free.
+the queue asks hold() under its lock, which reads only what was measured. Where the load cannot be measured,
+the computer is taken for free.
 """
 
 import threading
@@ -29,7 +29,7 @@ from typing import Any, Dict, Optional
 SAMPLE_SEC = 15.0
 LOW_FOR_SEC = 120.0  # the load below the thresholds this long in a row: the computer is free
 MODES = ("always", "idle", "schedule", "idle_or_schedule")
-DEFAULTS = {"queue_when": "always", "queue_idle_min": "5", "queue_cpu_max": "30", "queue_gpu_max": "30",
+DEFAULTS = {"queue_when": "always", "queue_cpu_max": "30", "queue_gpu_max": "30",
             "queue_from": "19:00", "queue_to": "08:00"}
 
 _lock = threading.Lock()
@@ -99,28 +99,17 @@ def next_start(at: datetime, start: int) -> datetime:
 
 
 # --- the computer free ---
-def _idle_seconds() -> Optional[float]:
-    try:
-        from app import worktime
-
-        # without the game controller: its changes are seen by one caller only (the minute loop of worktime)
-        return worktime.idle_seconds(pad=False)
-    except Exception:
-        return None
 
 
-def is_free(settings: Dict[str, str], now: float, idle: Optional[float], low_since: float, measured: bool) -> bool:
-    """Nobody used the computer for queue_idle_min minutes, or the other programs' load stayed low LOW_FOR_SEC.
-    Nothing measured at all (no input time, no load): free, as before the setting."""
-    if idle is not None and idle >= _int(settings, "queue_idle_min", 1, 240) * 60:
-        return True
+def is_free(settings: Dict[str, str], now: float, low_since: float, measured: bool) -> bool:
+    """The other programs' load stayed below the thresholds LOW_FOR_SEC. The load not measured: free, as before
+    the setting."""
     if low_since and now - low_since >= LOW_FOR_SEC:
         return True
-    return idle is None and not measured
+    return not measured
 
 
-def decide(settings: Dict[str, str], now: float, idle: Optional[float], low_since: float,
-           measured: bool = True) -> Dict[str, Any]:
+def decide(settings: Dict[str, str], now: float, low_since: float, measured: bool = True) -> Dict[str, Any]:
     """What holds the automatic work: {} — nothing; {"kind": "idle"} — waits for the computer to be free;
     {"kind": "schedule", "from": "HH:MM", "until": time} — waits for the start of the schedule;
     {"kind": "idle", "from", "until"} — waits for either."""
@@ -129,7 +118,7 @@ def decide(settings: Dict[str, str], now: float, idle: Optional[float], low_sinc
         return {}
     want_idle = m in ("idle", "idle_or_schedule")
     want_time = m in ("schedule", "idle_or_schedule")
-    if want_idle and is_free(settings, now, idle, low_since, measured):
+    if want_idle and is_free(settings, now, low_since, measured):
         return {}
     out: Dict[str, Any] = {"kind": "idle" if want_idle else "schedule"}
     if want_time:
@@ -144,15 +133,14 @@ def decide(settings: Dict[str, str], now: float, idle: Optional[float], low_sinc
 
 
 def hold(now: Optional[float] = None, settings: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    """What holds the automatic work now ({} — nothing). Fast: the input time and what the last look measured."""
+    """What holds the automatic work now ({} — nothing). Fast: what the last look measured."""
     now = time.time() if now is None else now
     settings = _settings() if settings is None else settings
     if mode(settings) == "always":
         return {}
     with _lock:
         low_since, measured = float(_state["low_since"]), bool(_state["measured"])
-    idle = _idle_seconds() if mode(settings) != "schedule" else None
-    out = decide(settings, now, idle, low_since, measured)
+    out = decide(settings, now, low_since, measured)
     if "until" in out:
         out["left"] = max(0, int(round(out["until"] - now)))
     return out
@@ -255,8 +243,7 @@ def status() -> Dict[str, Any]:
     settings = _settings()
     with _lock:
         cpu, gpu = _state["cpu"], _state["gpu"]
-    return {"mode": mode(settings), "hold": hold(settings=settings), "cpu": cpu, "gpu": gpu,
-            "idle": _idle_seconds()}
+    return {"mode": mode(settings), "hold": hold(settings=settings), "cpu": cpu, "gpu": gpu}
 
 
 def tick(now: Optional[float] = None) -> Dict[str, Any]:

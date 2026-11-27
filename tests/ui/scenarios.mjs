@@ -2479,10 +2479,10 @@ await step('background processing settings', async () => {
   try {
     await page.selectOption('#set-queue-when', 'always');
     await sleep(200);
-    expect(!(await shown('queue-idle-row')) && !(await shown('queue-schedule-row')), '«Сразу» shows no condition');
+    expect(!(await shown('queue-load-row')) && !(await shown('queue-schedule-row')), '«Сразу» shows no condition');
     await page.selectOption('#set-queue-when', 'schedule');
     await sleep(200);
-    expect(await shown('queue-schedule-row') && !(await shown('queue-idle-row')), '«По расписанию» shows the schedule alone');
+    expect(await shown('queue-schedule-row') && !(await shown('queue-load-row')), '«По расписанию» shows the schedule alone');
     await page.selectOption('#set-queue-from', '20:00');
     await page.selectOption('#set-queue-to', '07:30');
     let saved = {};
@@ -2494,9 +2494,9 @@ await step('background processing settings', async () => {
       `not saved: ${saved.queue_when} ${saved.queue_from} ${saved.queue_to}`);
     await page.selectOption('#set-queue-when', 'idle_or_schedule');
     await sleep(200);
-    expect(await shown('queue-schedule-row') && await shown('queue-idle-row') && await shown('queue-load-row'), 'either shows both conditions');
+    expect(await shown('queue-schedule-row') && await shown('queue-load-row'), 'either shows both conditions');
     // the list at the right edge as the other lists of the tab (measured, not by eye)
-    const edges = await page.evaluate(() => ['set-queue-when', 'set-economy-for', 'set-queue-idle-min', 'set-queue-to', 'set-queue-gpu-max']
+    const edges = await page.evaluate(() => ['set-queue-when', 'set-economy-for', 'set-queue-to', 'set-queue-gpu-max']
       .map(id => Math.round(document.getElementById(id).getBoundingClientRect().right)));
     expect(edges.every(x => Math.abs(x - edges[0]) <= 1), `the right edges: ${edges}`);
     // the time and the percent lists of one width, the label column of the load row not squeezed

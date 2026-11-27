@@ -182,10 +182,9 @@ def init_db() -> None:
             "live_captions_auto": "false",  # captions start with a recording; off by default (asked by the user: they load a model)
             "hint_studio_entry_seen": "false",  # the hint under «Студия ›» of the recording capsule was shown and closed (static/js/shell.js)
             # when the automatic work of the queue may start (app/queue_window.py): always, the computer free,
-            # by the schedule, or either; «free»: no input for queue_idle_min minutes, or the load of the other
-            # programs below queue_cpu_max / queue_gpu_max % for 2 minutes
+            # by the schedule, or either; «free»: the load of the other programs below queue_cpu_max /
+            # queue_gpu_max % for 2 minutes (the keyboard and the mouse do not count)
             "queue_when": "always",
-            "queue_idle_min": "5",
             "queue_cpu_max": "30",
             "queue_gpu_max": "30",
             "queue_from": "19:00",

@@ -17,7 +17,7 @@ try:
 except ImportError:  # the release CI runs without the app's packages
     transcriber = None
 
-SETTINGS = {"queue_when": "idle", "queue_idle_min": "5", "queue_cpu_max": "30", "queue_gpu_max": "30",
+SETTINGS = {"queue_when": "idle", "queue_cpu_max": "30", "queue_gpu_max": "30",
             "queue_from": "19:00", "queue_to": "08:00"}
 
 
@@ -42,39 +42,38 @@ class ScheduleTest(unittest.TestCase):
 
     def test_the_schedule_holds_until_its_start(self):
         s = dict(SETTINGS, queue_when="schedule")
-        held = queue_window.decide(s, _at(10), idle=10_000, low_since=_at(9))  # free does not count here
+        held = queue_window.decide(s, _at(10), low_since=_at(9))  # free does not count here
         self.assertEqual(held["kind"], "schedule")
         self.assertEqual(held["from"], "19:00")
         self.assertEqual(held["until"], _at(19))
-        self.assertEqual(queue_window.decide(s, _at(22), idle=0, low_since=0), {})
-        self.assertEqual(queue_window.decide(s, _at(3), idle=0, low_since=0), {})
+        self.assertEqual(queue_window.decide(s, _at(22), low_since=0), {})
+        self.assertEqual(queue_window.decide(s, _at(3), low_since=0), {})
 
 
 class FreeTest(unittest.TestCase):
     def test_always_holds_nothing(self):
-        self.assertEqual(queue_window.decide(dict(SETTINGS, queue_when="always"), _at(10), idle=0, low_since=0), {})
+        self.assertEqual(queue_window.decide(dict(SETTINGS, queue_when="always"), _at(10), low_since=0), {})
 
-    def test_free_by_input(self):
-        self.assertEqual(queue_window.decide(SETTINGS, _at(10), idle=60, low_since=0), {"kind": "idle"})
-        self.assertEqual(queue_window.decide(SETTINGS, _at(10), idle=5 * 60, low_since=0), {})
-        self.assertEqual(queue_window.decide(dict(SETTINGS, queue_idle_min="15"), _at(10), idle=5 * 60, low_since=0),
-                         {"kind": "idle"})
+    def test_the_input_does_not_count(self):
+        """Asked by the user: the load decides, not the keyboard and the mouse."""
+        self.assertFalse(hasattr(queue_window, "_idle_seconds"))
+        self.assertEqual(queue_window.decide(SETTINGS, _at(10), low_since=0), {"kind": "idle"})
 
     def test_free_by_a_low_load_for_two_minutes(self):
         now = _at(10)
-        self.assertEqual(queue_window.decide(SETTINGS, now, idle=3, low_since=now - 60), {"kind": "idle"})
-        self.assertEqual(queue_window.decide(SETTINGS, now, idle=3, low_since=now - 121), {})
+        self.assertEqual(queue_window.decide(SETTINGS, now, low_since=now - 60), {"kind": "idle"})
+        self.assertEqual(queue_window.decide(SETTINGS, now, low_since=now - 121), {})
 
     def test_nothing_measurable_is_free(self):
-        self.assertEqual(queue_window.decide(SETTINGS, _at(10), idle=None, low_since=0, measured=False), {})
-        self.assertEqual(queue_window.decide(SETTINGS, _at(10), idle=None, low_since=0, measured=True), {"kind": "idle"})
+        self.assertEqual(queue_window.decide(SETTINGS, _at(10), low_since=0, measured=False), {})
+        self.assertEqual(queue_window.decide(SETTINGS, _at(10), low_since=0, measured=True), {"kind": "idle"})
 
     def test_either_tells_both(self):
         s = dict(SETTINGS, queue_when="idle_or_schedule")
-        held = queue_window.decide(s, _at(10), idle=3, low_since=0)
+        held = queue_window.decide(s, _at(10), low_since=0)
         self.assertEqual((held["kind"], held["from"]), ("idle", "19:00"))
-        self.assertEqual(queue_window.decide(s, _at(10), idle=600, low_since=0), {})
-        self.assertEqual(queue_window.decide(s, _at(20), idle=3, low_since=0), {})
+        self.assertEqual(queue_window.decide(s, _at(10), low_since=_at(10) - 121), {})
+        self.assertEqual(queue_window.decide(s, _at(20), low_since=0), {})
 
     def test_the_run_of_low_looks(self):
         with mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": False}):
@@ -146,7 +145,6 @@ class SettingsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 clean("queue_from", bad)
         self.assertEqual(clean("queue_cpu_max", "200"), "95")
-        self.assertEqual(clean("queue_idle_min", "0"), "1")
 
     def test_defaults_keep_todays_behaviour(self):
         init_db()
@@ -163,11 +161,10 @@ class HoldStateTest(unittest.TestCase):
 
     def test_the_reason_for_the_page(self):
         update_settings({"queue_when": "idle"})
-        with mock.patch("app.queue_window._idle_seconds", return_value=10.0), \
-                mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": True}):
+        with mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": True}):
             self.assertEqual(meeting_guard.hold_state(), {"kind": "idle"})
-            with mock.patch("app.queue_window._idle_seconds", return_value=3600.0):
-                self.assertEqual(meeting_guard.hold_state(), {})
+        with mock.patch.dict(queue_window._state, {"low_since": 1.0, "measured": True}):
+            self.assertEqual(meeting_guard.hold_state(), {})
         update_settings({"queue_when": "schedule", "queue_from": "19:00", "queue_to": "08:00"})
         state = meeting_guard.hold_state(_at(10))
         self.assertEqual((state["kind"], state["from"], state["left"]), ("schedule", "19:00", 9 * 3600))
