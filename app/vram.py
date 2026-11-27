@@ -101,6 +101,52 @@ def nvml_process_memory() -> Optional[Dict[int, int]]:
             return None
 
 
+class _NvmlUtilization(ctypes.Structure):  # nvmlUtilization_t
+    _fields_ = [("gpu", ctypes.c_uint), ("memory", ctypes.c_uint)]
+
+
+class _NvmlProcessUtil(ctypes.Structure):  # nvmlProcessUtilizationSample_t
+    _fields_ = [("pid", ctypes.c_uint), ("timeStamp", ctypes.c_ulonglong), ("smUtil", ctypes.c_uint),
+                ("memUtil", ctypes.c_uint), ("encUtil", ctypes.c_uint), ("decUtil", ctypes.c_uint)]
+
+
+def gpu_utilization() -> Optional[int]:
+    """The load of GPU 0's compute units over the last moment, % (all programs); None without NVML."""
+    if not _nvml_memory():
+        return None
+    with _nvml_lock:
+        try:
+            u = _NvmlUtilization()
+            if _nvml["lib"].nvmlDeviceGetUtilizationRates(_nvml["handle"], ctypes.byref(u)) != 0:
+                return None
+            return max(0, min(100, int(u.gpu)))
+        except Exception:
+            return None
+
+
+def gpu_process_utilization(since_us: int = 0) -> Optional[Dict[int, int]]:
+    """{pid: % of the compute units} of the processes that used GPU 0 since `since_us` (the driver's clock, µs);
+    None when the driver does not tell it (Windows in its WDDM mode often does not)."""
+    if not _nvml_memory():
+        return None
+    with _nvml_lock:
+        try:
+            count = ctypes.c_uint(64)
+            samples = (_NvmlProcessUtil * 64)()
+            rc = _nvml["lib"].nvmlDeviceGetProcessUtilization(_nvml["handle"], samples, ctypes.byref(count),
+                                                               ctypes.c_ulonglong(int(since_us)))
+            if rc == 6:  # NVML_ERROR_NOT_FOUND: no process used it since then
+                return {}
+            if rc != 0:
+                return None
+            out: Dict[int, int] = {}
+            for s in samples[:min(64, count.value)]:
+                out[int(s.pid)] = max(out.get(int(s.pid), 0), min(100, int(s.smUtil)))
+            return out
+        except Exception:
+            return None
+
+
 def nvml_device() -> Optional[Tuple[str, int, int]]:
     """(name, used bytes, total bytes) of GPU 0 from NVML, or None."""
     mem = _nvml_memory()

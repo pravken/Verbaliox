@@ -563,7 +563,7 @@ class UrlImportTest(unittest.TestCase):
         self.assertEqual(got["title"], "Лекция о звуке")
         self.assertTrue(got["media_path"].endswith("Лекция.m4a"))
         self.assertTrue(str(got["recorded_at"]).startswith("2026-01-15"))
-        enq.assert_called_once_with(m["id"])
+        enq.assert_called_once_with(m["id"], manual=True)
         with self.assertRaises(ValueError):
             url_import.start("file:///etc/passwd", "x", "auto", 0)
 

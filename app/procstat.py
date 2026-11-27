@@ -150,6 +150,64 @@ def _find_by_name(prefix: str) -> List[int]:
     return out
 
 
+def parent_map() -> Dict[int, int]:
+    """{pid: parent pid} of every process (a Toolhelp snapshot on Windows, /proc elsewhere); {} when unknown."""
+    out: Dict[int, int] = {}
+    try:
+        if sys.platform == "win32":
+            k32 = ctypes.windll.kernel32
+            k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+            snap = k32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+            if not snap or snap == wintypes.HANDLE(-1).value:
+                return out
+            snap = wintypes.HANDLE(snap)
+            try:
+                entry = _ProcessEntry()
+                entry.dwSize = ctypes.sizeof(_ProcessEntry)
+                ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+                while ok:
+                    out[int(entry.th32ProcessID)] = int(entry.th32ParentProcessID)
+                    ok = k32.Process32NextW(snap, ctypes.byref(entry))
+            finally:
+                k32.CloseHandle(snap)
+            return out
+        for name in os.listdir("/proc"):
+            if not name.isdigit():
+                continue
+            try:
+                with open(f"/proc/{name}/stat", encoding="ascii", errors="replace") as f:
+                    out[int(name)] = int(f.read().rsplit(")", 1)[1].split()[1])
+            except (OSError, IndexError, ValueError):
+                continue
+    except Exception:
+        pass
+    return out
+
+
+def descendants(root: int, parents: Dict[int, int]) -> List[int]:
+    """root and every process started from it, at any depth (ffmpeg, deep-filter, the workers of the program)."""
+    children: Dict[int, List[int]] = {}
+    for pid, ppid in parents.items():
+        if pid != ppid:
+            children.setdefault(ppid, []).append(pid)
+    out, todo, seen = [], [int(root)], set()
+    while todo:
+        pid = todo.pop()
+        if pid in seen:
+            continue
+        seen.add(pid)
+        out.append(pid)
+        todo.extend(children.get(pid, []))
+    return out
+
+
+def own_pids() -> List[int]:
+    """The program's processes: this one, everything it started, and Ollama's (the analysis models)."""
+    pids = set(descendants(os.getpid(), parent_map()))
+    pids.update(ollama_pids())
+    return sorted(pids)
+
+
 def ollama_pids() -> List[int]:
     """Ollama's processes (the server and its model runners), looked up at most every 30 s."""
     now = time.monotonic()

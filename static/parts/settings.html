@@ -178,6 +178,57 @@
           </div>
         </div>
 
+        <!-- «Фоновая обработка»: when the automatic work of the queue may start — the transcription, the analysis
+             and the mix of the tracks (app/queue_window.py) -->
+        <div class="settings-card" data-sx-keys="очередь queue фоновая обработка background расписание schedule простой idle нагрузка load процессор видеокарта ночью">
+          <div class="sx-head"><h4 class="sx-card-title" data-i18n="queueWhenTitle">Фоновая обработка</h4></div>
+          <div class="sx-row">
+            <span class="sx-row-text"><label for="set-queue-when" class="sx-row-label" data-i18n="queueWhenLabel">Обрабатывать очередь</label>
+              <span class="sx-row-cap" data-i18n="queueWhenHint">Когда начинать автоматическую расшифровку, анализ и сведение дорожек. Начатая задача не прерывается; запущенное вручную идёт сразу</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-queue-when" class="sx-select" data-change="syncQueueWhen">
+                <option value="always" data-i18n="queueWhenAlways">Сразу</option>
+                <option value="idle" data-i18n="queueWhenIdle">Когда компьютер свободен</option>
+                <option value="schedule" data-i18n="queueWhenSchedule">По расписанию</option>
+                <option value="idle_or_schedule" data-i18n="queueWhenEither">Свободен или по расписанию</option>
+              </select>
+            </div>
+          </div>
+          <div id="queue-idle-row" class="sx-row sx-dep hidden">
+            <span class="sx-row-text"><label for="set-queue-idle-min" class="sx-row-label" data-i18n="queueIdleLabel">Компьютер свободен: нет ввода</label>
+              <span class="sx-row-cap" data-i18n="queueIdleHint">С клавиатуры и мыши</span></span>
+            <div class="sx-row-ctl">
+              <select id="set-queue-idle-min" class="sx-select">
+                <option value="1" data-i18n="idleMin1">1 мин</option>
+                <option value="5" data-i18n="idleMin5">5 мин</option>
+                <option value="10" data-i18n="idleMin10">10 мин</option>
+                <option value="15" data-i18n="idleMin15">15 мин</option>
+                <option value="30" data-i18n="idleMin30">30 мин</option>
+                <option value="60" data-i18n="idleMin60">60 мин</option>
+              </select>
+            </div>
+          </div>
+          <div id="queue-load-row" class="sx-row sx-dep hidden">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="queueLoadLabel">Или низкая нагрузка</span>
+              <span class="sx-row-cap" data-i18n="queueLoadHint">Других программ, 2 минуты подряд. Нагрузка самой программы не учитывается</span></span>
+            <div class="sx-row-ctl">
+              <label for="set-queue-cpu-max" class="sx-ctl-name" data-i18n="queueCpuMax">Процессор до</label>
+              <select id="set-queue-cpu-max" class="sx-select sx-time-sel"><option value="10">10 %</option><option value="20">20 %</option><option value="30">30 %</option><option value="40">40 %</option><option value="50">50 %</option><option value="60">60 %</option></select>
+              <label for="set-queue-gpu-max" class="sx-ctl-name" data-i18n="queueGpuMax">видеокарта до</label>
+              <select id="set-queue-gpu-max" class="sx-select sx-time-sel"><option value="10">10 %</option><option value="20">20 %</option><option value="30">30 %</option><option value="40">40 %</option><option value="50">50 %</option><option value="60">60 %</option></select>
+            </div>
+          </div>
+          <div id="queue-schedule-row" class="sx-row sx-dep hidden">
+            <span class="sx-row-text"><span class="sx-row-label" data-i18n="queueScheduleLabel">Расписание</span></span>
+            <div class="sx-row-ctl">
+              <label for="set-queue-from" class="sx-ctl-name" data-i18n="rdSasWorkdayFrom">С</label>
+              <select id="set-queue-from" class="sx-select sx-time-sel"><option value="19:00">19:00</option></select>
+              <label for="set-queue-to" class="sx-ctl-name" data-i18n="rdSasWorkdayTo">до</label>
+              <select id="set-queue-to" class="sx-select sx-time-sel"><option value="08:00">08:00</option></select>
+            </div>
+          </div>
+        </div>
+
         <!-- FFmpeg availability (download only on explicit click) -->
         <div id="ffmpeg-row" class="hidden settings-card" data-sx-keys="извлечение звука audio extraction">
           <div class="sx-row">

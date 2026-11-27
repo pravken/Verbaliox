@@ -82,7 +82,7 @@ def queue_transcription(meeting_id: int, m: Dict[str, Any]) -> bool:
         return url_import.restart(meeting_id, m["filename"])  # a download by link that did not finish
     update_meeting_progress(meeting_id, status="queued", progress=0,
                             stage_text="Повторная постановка в очередь...", error_message="")
-    return enqueue_meeting_job(meeting_id)
+    return enqueue_meeting_job(meeting_id, manual=True)
 
 
 def run(transcribe: bool = True, analyse: bool = True, ids: Optional[Iterable[int]] = None) -> Dict[str, Any]:

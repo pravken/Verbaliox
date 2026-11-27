@@ -315,7 +315,7 @@ def _download_one(meeting_id: int, url: str, stop: threading.Event) -> None:
             update_meeting_progress(meeting_id, status="added", progress=0, stage_text="")  # «Только добавить»
         else:
             update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
-            enqueue_meeting_job(meeting_id)
+            enqueue_meeting_job(meeting_id, manual=True)
     except Exception as e:
         _drop_files(stem)
         if stop.is_set() or isinstance(e, _Cancelled) or isinstance(getattr(e, "exc_info", [None, None])[1], _Cancelled):
