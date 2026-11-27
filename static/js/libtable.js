@@ -428,6 +428,7 @@ async function ltDropOnFolder(e, folderId) {
 // not made again under the pointer
 function renderLibTableLive(rows) {
   if (state.appView !== 'libtable') return;
+  syncLibProcessButton();
   if (LT.pressed) { LT.later = true; return; }
   if (rows && [...rows].every(ltRenderRowState)) return;
   renderLibTable({ live: true });
@@ -563,6 +564,7 @@ function ltWatchEnd() {
 
 // Beside the title: how many recordings, or what the search found in the texts
 function renderLibTableCount(all, shown) {
+  syncLibProcessButton();
   const el = document.getElementById('lt-count');
   if (!el) return;
   const q = LT.q.trim();
@@ -578,6 +580,60 @@ function renderLibTableCount(all, shown) {
   el.textContent = shown.length === all.length
     ? plural(all.length, t('ltCountForms'))
     : t('ltCountOf').replace('{n}', () => shown.length).replace('{all}', () => all.length);
+}
+
+// «Обработать всё» in the head: on while a recording has no text or a transcribed one has no analysis (the server
+// counts exactly, app/pending.py: the files that are there, the jobs already queued)
+function ltPendingCounts() {
+  let tr = 0, an = 0;
+  for (const m of state.meetings || []) {
+    if (m.status === 'added' || (['failed', 'cancelled'].includes(m.status) && !m.transcript_model)) tr++;
+    else if (m.status === 'completed' && m.has_transcript && !m.has_summary) an++;
+  }
+  return { tr, an };
+}
+
+function syncLibProcessButton() {
+  const b = document.getElementById('lt-process');
+  if (!b) return;
+  const { tr, an } = ltPendingCounts();
+  b.disabled = !(tr || an) || !!LT.processing;
+  b.title = tr || an ? t('ltProcessTip') : t('ltProcessNone');
+}
+
+async function ltPost(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  const data = res ? await readJson(res) : {};
+  if (!res || !res.ok) { showError(res ? errorText(data, res) : t('errorGeneric')); return null; }
+  return data;
+}
+
+async function ltProcessPending() {
+  if (LT.processing) return;
+  LT.processing = true;
+  syncLibProcessButton();
+  try {
+    const plan = await ltPost('/api/library/process-pending', { dry_run: true });
+    if (!plan) return;
+    const tr = Number(plan.transcribe) || 0, an = Number(plan.analyse) || 0;
+    if (!tr && !an) { showWarning(t('ltProcessNone')); return; }
+    const asr = !!document.getElementById('upload-model')?.value;  // a recognition model is downloaded
+    const ai = !!plan.analysis_ready;
+    if ((!tr || !asr) && (!an || !ai)) { showWarning(tr && !asr ? t('noModelInstalled') : t('anNeedModel')); return; }
+    const lines = [];
+    if (tr) lines.push(`${t('ltProcessTr')}: ${tr}${asr ? '' : ` (${t('ltProcessNoAsr')})`}`);
+    if (an) lines.push(`${t('ltProcessAn')}: ${an}${ai ? '' : ` (${t('ltProcessNoAi')})`}`);
+    if (!await confirmDialog(t('ltProcessQ'), lines.join('\n'), t('ltProcessGo'), false)) return;
+    const out = await ltPost('/api/library/process-pending', { transcribe: asr, analyse: ai });
+    if (!out) return;
+    await loadMeetingsList();
+    const done = t('ltProcessDone').replace('{tr}', () => Number(out.transcribe) || 0).replace('{an}', () => Number(out.analyse) || 0);
+    const left = Number(out.analysis_waiting) || 0;
+    showToast(left ? `${done}. ${t('anNeedModel')}` : done, null, left ? 'warning' : 'success');
+  } finally {
+    LT.processing = false;
+    syncLibProcessButton();
+  }
 }
 
 // --- The bar under the title: the filters and the views, or the selection in their place (one height:

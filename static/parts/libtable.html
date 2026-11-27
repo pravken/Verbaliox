@@ -6,11 +6,21 @@
         <span class="lt-head-ic vx-stile" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8"/><path d="M8 14h5"/></svg></span>
         <div class="vx-stext"><h1 class="tk-title" data-i18n="ltTitle">Записи</h1><span id="lt-count" class="tk-sub vx-ssub"></span></div>
         <span class="tk-grow"></span>
-        <label class="tk-search lt-search">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
-          <input id="lt-q" type="search" data-input="onLibTableSearch" data-input-args='[{"$": "value"}]'
-                 data-i18n-placeholder="ltSearch" placeholder="Найти запись" data-i18n-title="ltSearchTip" title="Поиск по названию, участникам, фичам и тексту расшифровок">
-        </label>
+        <div class="tk-head-actions">
+          <!-- «Обработать всё»: recognition for the recordings without a text, the analysis for the transcribed ones
+               without one (app/pending.py); off while none is left -->
+          <button id="lt-process" class="tk-btn" data-click="ltProcessPending" disabled
+                  data-i18n-title="ltProcessTip" title="Распознать записи без текста и проанализировать расшифрованные записи без анализа">
+            <svg class="vx-bic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h2l2-5 3 10 3-8 2 3h4"/></svg>
+            <span data-i18n="ltProcess">Обработать всё</span>
+          </button>
+          <!-- the search last, at the right edge of the head: one place and width in every section -->
+          <label class="tk-search lt-search">
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+            <input id="lt-q" type="search" data-input="onLibTableSearch" data-input-args='[{"$": "value"}]'
+                   data-i18n-placeholder="ltSearch" placeholder="Найти запись" data-i18n-title="ltSearchTip" title="Поиск по названию, участникам, фичам и тексту расшифровок">
+          </label>
+        </div>
         <!-- Import lives in the strip on top (one button for every section; asked by the user: two were one too many) -->
       </header>
       <div id="lt-bar" class="lt-bar"></div>
