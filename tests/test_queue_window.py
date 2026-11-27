@@ -417,6 +417,7 @@ class HeldIsNotProcessingTest(unittest.TestCase):
             p = mock.patch(target, **kw)
             p.start()
             self.addCleanup(p.stop)
+        transcriber._window_said[0] = ""  # nothing held before the test (an earlier one may have left it)
         self.addCleanup(transcriber._window_said.__setitem__, 0, "")
         self.addCleanup(transcriber._manual.clear)
         meeting_guard._state.update(busy="", quiet_since=0.0, looked=True, ended=0.0)
