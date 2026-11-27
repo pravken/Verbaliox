@@ -3738,7 +3738,7 @@ const I18N = {
     noAiCloud: 'Analysis settings',
     tipRecordingMore: 'Recording actions',
     ctxCutClean: 'Without pauses',
-    ctxCutGroup: 'Cut',
+    ctxCutGroup: 'Clips',
     ctxMore: 'More',
     ctxCutHighlights: 'Key moments',
     confirmTitle: 'Please confirm',

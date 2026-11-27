@@ -415,6 +415,99 @@ await step('recording menu submenus', async () => {
   await page.setViewportSize({ width: 1300, height: 860 });
 });
 
+// The recording's menu: a submenu does not stay behind when the menu opens again for another recording or scrolls in
+// a low window; the way from «Экспорт ›» to its items over «Нарезка ›» keeps «Экспорт ›» (review); opened from the
+// keyboard on «⋯» it stands under the button with the focus on its first item, and the focus goes back to «⋯» after
+await step('recording menu keyboard and aim', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  const shown = (id) => page.evaluate(i => !document.getElementById(i).classList.contains('hidden'), id);
+  // opened again (a right click on another recording) while «Нарезка ›» is open from the keyboard
+  await page.evaluate(() => { hideContextMenu(); openRecordingContextMenu({ clientX: 300, clientY: 120, preventDefault() {}, stopPropagation() {} }, 1); });
+  await sleep(300);
+  await page.focus('#ctx-sub-cut-btn');
+  await page.keyboard.press('ArrowRight');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), '→ did not open «Нарезка ›»', 2000);
+  await page.evaluate(() => openRecordingContextMenu({ clientX: 620, clientY: 260, preventDefault() {}, stopPropagation() {} }, 1));
+  await sleep(150);
+  expect(!(await shown('ctx-sub-cut')), '«Нарезка ›» stayed at its old place when the menu opened again');
+  // the way to the items of «Экспорт ›» over «Нарезка ›» (about half a second): «Экспорт ›» stays
+  await page.evaluate(() => hideContextMenu()); await sleep(300);
+  await page.evaluate(() => openRecordingContextMenu({ clientX: 300, clientY: 120, preventDefault() {}, stopPropagation() {} }, 1));
+  await sleep(300);
+  await page.hover('#ctx-sub-export-btn');
+  await until(() => !document.getElementById('ctx-sub-export').classList.contains('hidden'), 'hover did not open «Экспорт ›»', 2000);
+  await sleep(250);
+  const way = await page.evaluate(() => {
+    const r = document.getElementById('ctx-sub-export-btn').getBoundingClientRect();
+    const md = document.querySelector('#ctx-sub-export button[data-click-args=\'["srt"]\']').getBoundingClientRect();
+    const cut = document.getElementById('ctx-sub-cut-btn').getBoundingClientRect();
+    return { x0: r.left + 24, y0: r.top + r.height / 2, x1: md.left + 20, y1: md.top + md.height / 2, cutTop: cut.top, cutBottom: cut.bottom };
+  });
+  await page.mouse.move(way.x0, way.y0);
+  let overCut = false;
+  for (let i = 1; i <= 18; i++) {
+    const x = way.x0 + (way.x1 - way.x0) * i / 18, y = way.y0 + (way.y1 - way.y0) * i / 18;
+    await page.mouse.move(x, y);
+    if (y > way.cutTop && y < way.cutBottom) overCut = true;
+    await sleep(30);
+  }
+  expect(overCut, `the way did not cross «Нарезка ›»: ${JSON.stringify(way)}`);
+  await sleep(600);
+  expect(await shown('ctx-sub-export') && !(await shown('ctx-sub-cut')), 'the way to «Экспорт ›» over «Нарезка ›» switched to «Нарезка ›»');
+  // resting on «Нарезка ›» switches to it
+  await page.hover('#ctx-sub-cut-btn');
+  await until(() => !document.getElementById('ctx-sub-cut').classList.contains('hidden'), 'resting on «Нарезка ›» did not open it', 2000);
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => hideContextMenu()); await sleep(300);
+  // a low window: the menu scrolls, and its open submenu follows its row or closes
+  await page.setViewportSize({ width: 1100, height: 300 });
+  await page.evaluate(() => openRecordingContextMenu({ clientX: 300, clientY: 20, preventDefault() {}, stopPropagation() {} }, 1));
+  await until(() => !!document.getElementById('recording-context-menu').style.maxHeight, 'the menu does not scroll in a low window', 2000);
+  await page.focus('#ctx-sub-export-btn');
+  await page.keyboard.press('ArrowRight');
+  await until(() => !document.getElementById('ctx-sub-export').classList.contains('hidden'), '→ did not open «Экспорт ›» in a low window', 2000);
+  const moved = await page.evaluate(() => { const m = document.getElementById('recording-context-menu'), t0 = m.scrollTop; m.scrollTop = m.scrollHeight; return m.scrollHeight - m.clientHeight - t0; });
+  expect(moved > 10, `the menu did not scroll: ${moved}`);
+  // the scroll may be smooth: the submenu is looked at until it is by its row (or closed)
+  await until(() => {
+    const sub = document.getElementById('ctx-sub-export');
+    if (sub.classList.contains('hidden')) return true;
+    const r = document.getElementById('ctx-sub-export-btn').getBoundingClientRect();
+    const first = sub.querySelector('.macos-menu-item').getBoundingClientRect(), s = sub.getBoundingClientRect();
+    window.__subAt = { row: r.top, first: first.top, top: s.top, bottom: s.bottom, h: innerHeight };
+    return Math.abs(first.top - r.top) < 3;
+  }, '«Экспорт ›» stayed where it was when the menu scrolled', 2000).catch(async (e) => { throw new Error(`${e.message}: ${JSON.stringify(await page.evaluate(() => window.__subAt))}`); });
+  await page.evaluate(() => hideContextMenu()); await sleep(300);
+  await page.setViewportSize({ width: 1100, height: 700 });
+  // from the keyboard: Enter on «⋯» of the open recording
+  await page.evaluate(() => { switchAppView('library'); if (!state.activeMeeting) openMeeting(1); });
+  const dots = 'button[data-click="openActiveRecordingMenu"]';
+  await until(s => { const b = document.querySelector(s); return !!b && b.getClientRects().length > 0; }, 'no «⋯» of the recording', 5000, dots);
+  await page.focus(dots);
+  await page.keyboard.press('Enter');
+  await until(() => vxShown('recording-context-menu'), 'Enter on «⋯» did not open the menu', 2000);
+  await sleep(250);
+  const place = await page.evaluate(s => {
+    const b = document.querySelector(s).getBoundingClientRect(), m = document.getElementById('recording-context-menu').getBoundingClientRect();
+    return { b: [b.left, b.top, b.bottom], m: [m.left, m.top], focus: document.activeElement?.dataset.click || document.activeElement?.tagName };
+  }, dots);
+  expect(Math.abs(place.m[0] - place.b[0]) < 6 && (place.m[1] >= place.b[2] - 1 || place.m[1] + 10 < place.b[1]), `the menu is not at «⋯»: ${JSON.stringify(place)}`);
+  expect(place.focus === 'ctxOpenInfo', `the focus is not on the first item: ${place.focus}`);
+  await page.keyboard.press('ArrowDown');
+  expect(await page.evaluate(() => document.activeElement?.dataset.click) === 'ctxRenameRecording', '↓ did not move to «Переименовать»');
+  await page.keyboard.press('Escape');
+  await until(s => !vxShown('recording-context-menu') && document.activeElement === document.querySelector(s), 'Esc did not take the focus back to «⋯»', 2000, dots);
+  // an action from a submenu (every action closes the menu first): the focus goes back to «⋯», not to the page
+  await page.keyboard.press('Enter');
+  await until(() => document.activeElement?.dataset.click === 'ctxOpenInfo', 'Enter on «⋯» again: no focus in the menu', 2000);
+  await page.focus('#ctx-sub-cut-btn');
+  await page.keyboard.press('ArrowRight');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), '→ did not open «Нарезка ›» from «⋯»', 2000);
+  await page.evaluate(() => hideContextMenu());
+  await until(s => document.activeElement === document.querySelector(s), 'the focus did not go back to «⋯» after an action', 2000, dots);
+  await sleep(300);
+});
+
 await step('menus not looked for on a meter tick', async () => {
   const r = await page.evaluate(async () => {
     const real = window.vxSyncLayers;
