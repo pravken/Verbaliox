@@ -165,8 +165,9 @@ class CpuTracker:
                     out[int(pid)] = got
             return out
         k32 = ctypes.windll.kernel32
+        wanted = set(int(p) for p in pids)
         out = {}
-        for pid in set(int(p) for p in pids) - set(self._handles):
+        for pid in wanted - set(self._handles):
             h = _open(pid)
             if h:
                 self._handles[pid] = h
@@ -176,9 +177,10 @@ class CpuTracker:
                 got = _win_times(h)
             except Exception:
                 pass
-            if got is not None:
+            ended = got is None or got[2]
+            if got is not None and (pid in wanted or ended):  # one that ended: its last seconds, once
                 out[pid] = (got[0], got[1])
-            if got is None or got[2]:  # ended: its last seconds are read, the handle goes
+            if ended or pid not in wanted:  # ended, or no longer the program's: the handle goes
                 k32.CloseHandle(h)
                 self._handles.pop(pid, None)
         return out
