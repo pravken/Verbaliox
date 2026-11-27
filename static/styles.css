@@ -5272,6 +5272,15 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .tb-rec-wrap .tb-rec-studio.hidden, .tb-rec-wrap .tb-rec-stop.hidden { display: none; }
 .tb-rec-here .tb-rec, .tb-rec-here .tb-rec-studio { pointer-events: none; cursor: default; }
 .tb-rec-here .tb-rec-studio { opacity: 0.5; }
+/* Not recording: «Студия» is the middle segment of the capsule (● Запись | Студия | ▾), quieter than the red
+   «Запись»; in the studio it is the current place, inert */
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio { height: 24px; margin: 0 4px 0 2px; color: #E5E5EA; background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14); cursor: pointer; }
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio:hover { background: rgba(255, 255, 255, 0.12); }
+.tb-rec-wrap .tb-rec-studio:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio.is-here { pointer-events: none; cursor: default; color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.3); }
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio .st-pill-chev { display: none; }
 /* a narrow window: the chip keeps its icon and its › */
 @media (max-width: 1199px) {
   .tb-rec-studio-t { display: none; }

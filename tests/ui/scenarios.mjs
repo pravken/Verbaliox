@@ -2147,6 +2147,20 @@ await step('recording time opens the studio', async () => {
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
 });
 
+// Not recording, «Студия» stays in the capsule (asked by the user: no quick way to the studio without a recording): it
+// opens the studio, where it is the current place, inert; the capsule keeps its width
+await step('studio entry without a recording', async () => {
+  await page.evaluate(() => { switchAppView('libtable'); updateRecordButtonState(); });
+  expect(await page.isVisible('#tb-rec-studio'), 'no «Студия» in the capsule while not recording');
+  const w0 = await page.evaluate(() => document.getElementById('tb-rec-wrap').getBoundingClientRect().width);
+  await page.click('#tb-rec-studio');
+  await until(() => state.appView === 'studio', '«Студия» did not open the studio without a recording');
+  const r = await page.evaluate(() => [isRecording(), document.getElementById('tb-rec-studio').getAttribute('aria-current'),
+    document.getElementById('tb-rec-wrap').getBoundingClientRect().width]);
+  expect(!r[0] && r[1] === 'page' && Math.abs(r[2] - w0) < 1, `in the studio: recording, not current or the width moved: ${r} / ${w0}`);
+  await page.evaluate(() => switchAppView('home'));
+});
+
 // «Очередь» as the island of the top strip and the load of the status bar: each opens its window next to it, Escape
 // and a click outside close it
 await step('queue and load windows', async () => {
