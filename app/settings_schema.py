@@ -289,6 +289,16 @@ def clean_all(settings: Dict[str, Any]) -> Dict[str, str]:
     return {str(k): clean(str(k), v) for k, v in settings.items()}
 
 
+def check_together(values: Dict[str, str], stored: Dict[str, str]) -> None:
+    """The settings that make sense only together, as they would be after saving values; ValueError otherwise.
+    The schedule of «Фоновая обработка»: its start equal to its end would be the whole day, which holds nothing."""
+    if "queue_from" in values or "queue_to" in values:
+        start = values.get("queue_from", stored.get("queue_from") or "19:00")
+        end = values.get("queue_to", stored.get("queue_to") or "08:00")
+        if start == end:
+            raise ValueError("Начало и конец расписания совпадают: укажите разное время")
+
+
 def is_speech_model(name: str) -> bool:
     """A model of the catalog, "auto" or nothing (the settings decide). faster-whisper would take any
     other name as a Hugging Face repository and download it: a model nobody checked, under any license."""

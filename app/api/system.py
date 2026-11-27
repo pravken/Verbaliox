@@ -168,16 +168,17 @@ def api_mcp_config() -> Dict[str, Any]:
 @router.post("/api/settings")
 def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
     from app.database import _CLOUD_SETTINGS
-    from app.settings_schema import SERVER_KEYS, clean_all
+    from app.settings_schema import SERVER_KEYS, check_together, clean_all
 
     try:
         # the cloud settings of earlier versions are not stored again (an older page may still send them),
         # nor what the program writes itself
         values = clean_all({k: v for k, v in payload.settings.items()
                             if not str(k).startswith("llm_") and k not in _CLOUD_SETTINGS and k not in SERVER_KEYS})
+        before = get_all_settings()
+        check_together(values, before)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    before = get_all_settings()
     was_auto = (before.get("obsidian_auto") or "false") == "true"
     was_economy = (before.get("economy_mode") or "false") == "true"
     was_threads = before.get("cpu_threads") or "auto"

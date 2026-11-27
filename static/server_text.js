@@ -218,6 +218,7 @@ const SERVER_TEXT_EN = {
   "Сведение дорожек: пауза на случай следующей встречи": "Mixing the tracks: a pause in case the next meeting begins",
   "Сведение дорожек: ждёт, пока компьютер свободен": "Mixing the tracks: waits until the computer is free",
   "Сведение дорожек: ждёт расписания": "Mixing the tracks: waits for the schedule",
+  "Начало и конец расписания совпадают: укажите разное время": "The schedule starts and ends at the same time: give different times",
   "Сведение дорожек: запись удалится по окончании сведения": "Mixing the tracks: the recording will be deleted once the mix is over",
   "Сведение дорожек записи": "Mixing a recording's tracks",
   "Запись удалится, как только сведутся дорожки": "The recording will be deleted as soon as its tracks are mixed",

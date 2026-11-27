@@ -274,6 +274,32 @@ class SettingsTest(unittest.TestCase):
                 clean("queue_from", bad)
         self.assertEqual(clean("queue_cpu_max", "200"), "95")
 
+    def test_a_schedule_of_no_length_is_refused(self):
+        """The start equal to the end was the whole day, so «Фоновая обработка» held nothing."""
+        from app.settings_schema import check_together
+
+        stored = {"queue_from": "19:00", "queue_to": "08:00"}
+        with self.assertRaises(ValueError):
+            check_together({"queue_from": "08:00"}, stored)
+        with self.assertRaises(ValueError):
+            check_together({"queue_from": "10:00", "queue_to": "10:00"}, stored)
+        check_together({"queue_from": "09:00"}, stored)
+        check_together({"queue_when": "idle"}, {"queue_from": "08:00", "queue_to": "08:00"})  # not touched
+
+    def test_the_route_refuses_it(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        init_db()
+        self.addCleanup(update_settings, {"queue_from": "19:00", "queue_to": "08:00"})
+        with TestClient(main.app, base_url="http://127.0.0.1:8790") as c:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            update_settings({"queue_from": "19:00", "queue_to": "08:00"})
+            r = c.post("/api/settings", json={"settings": {"queue_to": "19:00"}})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("совпадают", r.json()["detail"])
+
     def test_defaults_keep_todays_behaviour(self):
         init_db()
         update_settings({"queue_when": "always"})
