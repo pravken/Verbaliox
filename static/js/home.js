@@ -587,6 +587,7 @@ async function hmSetMyName() {
 // tick runs then too; the browser may slow it to once a minute, which the 5-minute start window allows.
 // The question brings the window back (window.pywebview.api.show_window).
 let hmAutoRec = null;  // {key, end}: the recording started for a meeting
+const HM_OVERRUN_MS = 4 * 3600e3;  // a call held past this after its meeting ends no longer keeps the recording
 
 async function hmAutoTick() {
   await hmLoadEvents(false);
@@ -598,6 +599,18 @@ async function hmAutoTick() {
   const now = Date.now();
   if (hmAutoRec && !isRecording() && !_quickRecBusy) hmAutoRec = null;  // the user stopped it: it stays stopped
   hmAskExpire();
+  // The meeting runs over its time in the calendar while its call still holds the microphone: the recording goes on
+  // until the call lets go of it (hmCallEndTick), and the next meeting does not take its place (reported by the
+  // user: an hour and a half on one call was cut at its calendar end, and a recording of the next meeting began).
+  // Only when a call was seen (an in-person meeting ends by the clock), and at most HM_OVERRUN_MS past its end
+  if (hmAutoRec && now > hmAutoRec.end + 60e3 && hmAutoRec.app && (!hmAutoRec.freeSince || now - hmAutoRec.freeSince < HM_CALL_GONE_MS) && isRecording()
+      && now < hmAutoRec.end + HM_OVERRUN_MS) {
+    if (!hmAutoRec.overrun) {
+      hmAutoRec.overrun = true;
+      showToast(t('hmCallOverrun').replace('{title}', () => hmAutoRec.title || t('hmUntitled')));
+    }
+    return;
+  }
   if (hmAutoRec && now > hmAutoRec.end + 60e3) {
     const rec = hmAutoRec;
     hmAutoRec = null;

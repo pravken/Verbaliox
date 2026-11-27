@@ -1776,6 +1776,22 @@ await step('an online meeting waits for its call', async () => {
       return [window.__hmRec.starts, hmAutoRec && hmAutoRec.app, hmAutoRec && hmAutoRec.key];
     });
     expect(joined[0] === 1 && joined[1] === 'teams' && joined[2] === 'scenario|call', `the joined call was not recorded: ${joined}`);
+    // the call goes on past the meeting's end in the calendar: the recording goes on, the next meeting does not start
+    const over = await page.evaluate(async () => {
+      const now = Date.now();
+      home.events.push({ key: 'scenario|next', title: 'Следующая', online: true, attendees: [], s: new Date(now - 60e3), e: new Date(now + 30 * 60e3) });
+      hmAutoRec.end = now - 5 * 60e3;
+      await hmAutoTick(); await hmJoinTick();
+      return [window.__hmRec.starts, window.__hmRec.on, !!hmAutoRec, hmAutoRec && hmAutoRec.overrun];
+    });
+    expect(over[0] === 1 && over[1] && over[2] && over[3], `the recording stopped at the calendar end while the call went on: ${over}`);
+    // the call lets go of the microphone: it stops
+    const ended = await page.evaluate(async () => {
+      hmAutoRec.freeSince = Date.now() - 60e3;
+      await hmAutoTick();
+      return [window.__hmRec.starts, window.__hmRec.on, !!hmAutoRec];
+    });
+    expect(ended[0] === 2 && !ended[1] && !ended[2], `the recording did not stop once the call let go: ${ended}`);
   } finally {
     await page.unroute('**/api/calls/status');
     await page.evaluate(() => {
