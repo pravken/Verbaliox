@@ -363,9 +363,140 @@ function ctxMoveToFolder(e) {
 }
 
 function hideContextMenu() {
+  closeSubmenus();
   const menu = document.getElementById('recording-context-menu');
   if (menu) hideWithExit(menu);
 }
+
+// --- Submenus: a row of a menu with data-submenu="<id>" (and a «›» in the place of the shortcut) opens the menu
+// of that id beside it — the recording's «Экспорт ›», «Нарезка ›», «Ещё ›». It opens on a short hover, a click,
+// Enter, Space or →, which also moves the focus into it; ←, Esc (the layer «vx-submenu» in static/js/core.js) and
+// leaving it close it. It stands to the right of its menu, or to the left where there is no room, and inside the
+// window. The submenu is a separate element after its menu (not inside it: the menu scrolls in a low window and
+// would cut it off). One submenu is open at a time
+const VX_SUB_OPEN_MS = 180, VX_SUB_CLOSE_MS = 300;
+const vxSub = { trigger: null, menu: null, openT: 0, closeT: 0 };
+
+function vxSubItems(menu) {
+  return [...menu.querySelectorAll('button.macos-menu-item')].filter(b => !b.classList.contains('hidden') && !b.disabled);
+}
+
+function openSubmenu(trigger, focusFirst) {
+  clearTimeout(vxSub.openT);
+  clearTimeout(vxSub.closeT);
+  const sub = document.getElementById(trigger.dataset.submenu);
+  const parent = trigger.closest('.macos-menu');
+  if (!sub || !parent || parent.classList.contains('hidden')) return;
+  if (vxSub.trigger !== trigger) closeSubmenus();
+  sub.classList.remove('hidden');
+  trigger.setAttribute('aria-expanded', 'true');
+  vxSub.trigger = trigger;
+  vxSub.menu = sub;
+  placeSubmenu(sub, trigger, parent);
+  if (focusFirst) vxSubItems(sub)[0]?.focus();
+}
+
+// Beside the row: its first item level with the row, to the right of the menu or, where it does not fit, to the left
+function placeSubmenu(sub, trigger, parent) {
+  sub.style.maxHeight = '';
+  sub.style.overflowY = '';
+  const W = window.innerWidth, H = window.innerHeight, m = 8;
+  const p = parent.getBoundingClientRect(), t = trigger.getBoundingClientRect();
+  // the sizes of the layout, not of the box on screen: the submenu is drawn scaled down as it appears (vx-pop)
+  const z = uiZoom();
+  const size = () => ({ width: sub.offsetWidth * z, height: sub.offsetHeight * z });
+  let r = size();
+  if (r.height > H - 2 * m) {
+    sub.style.maxHeight = `${zpx(H - 2 * m)}px`;
+    sub.style.overflowY = 'auto';
+    r = size();
+  }
+  const first = sub.querySelector('.macos-menu-item');
+  const inset = first ? first.offsetTop * z : 0;
+  let left = p.right - 2, toLeft = false;
+  if (left + r.width > W - m) {
+    toLeft = p.left - r.width + 2 >= m;
+    left = toLeft ? p.left - r.width + 2 : Math.max(m, W - m - r.width);
+  }
+  const top = Math.max(m, Math.min(t.top - inset, H - m - r.height));
+  sub.style.left = `${zpx(left)}px`;
+  sub.style.top = `${zpx(top)}px`;
+  sub.style.transformOrigin = `${toLeft ? 'right' : 'left'} top`;
+}
+
+function closeSubmenus() {
+  clearTimeout(vxSub.openT);
+  clearTimeout(vxSub.closeT);
+  const { trigger, menu } = vxSub;
+  vxSub.trigger = vxSub.menu = null;
+  if (!menu) return;
+  const hadFocus = menu.contains(document.activeElement);
+  menu.classList.add('hidden');
+  if (!trigger) return;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (hadFocus && trigger.isConnected && !trigger.closest('.hidden, .is-leaving')) trigger.focus();
+}
+
+function vxSubCloseSoon() {
+  clearTimeout(vxSub.closeT);
+  vxSub.closeT = setTimeout(closeSubmenus, VX_SUB_CLOSE_MS);
+}
+
+// ↑ ↓ move along the items (of a menu or a submenu), → Enter Space on a row with a submenu open it, ← in a submenu
+// goes back to its row
+function vxMenuKeys(e, menu, trigger) {
+  const at = document.activeElement;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const items = vxSubItems(menu);
+    if (!items.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const i = items.indexOf(at), n = items.length, down = e.key === 'ArrowDown';
+    items[i < 0 ? (down ? 0 : n - 1) : (i + (down ? 1 : n - 1)) % n].focus();
+  } else if (at && at.dataset && at.dataset.submenu && menu.contains(at) && ['ArrowRight', 'Enter', ' '].includes(e.key)) {
+    e.preventDefault();
+    e.stopPropagation();
+    openSubmenu(at, true);
+  } else if (trigger && e.key === 'ArrowLeft') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeSubmenus();
+  }
+}
+
+function vxSubmenus(menu) {
+  if (!menu || menu._vxSubmenus) return;
+  menu._vxSubmenus = true;
+  menu.addEventListener('pointerover', (e) => {
+    const row = e.target.closest('.macos-menu-item');
+    if (!row || !menu.contains(row)) return;
+    clearTimeout(vxSub.openT);
+    if (row.dataset.submenu) {
+      if (vxSub.trigger === row) { clearTimeout(vxSub.closeT); return; }
+      vxSub.openT = setTimeout(() => openSubmenu(row, false), VX_SUB_OPEN_MS);
+    } else if (vxSub.menu) vxSubCloseSoon();
+  });
+  menu.addEventListener('pointerleave', (e) => {
+    clearTimeout(vxSub.openT);
+    if (vxSub.menu && !vxSub.menu.contains(e.relatedTarget)) vxSubCloseSoon();
+  });
+  menu.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-submenu]');
+    if (row && menu.contains(row)) openSubmenu(row, e.detail === 0);
+  });
+  menu.addEventListener('keydown', (e) => vxMenuKeys(e, menu, null));
+  for (const trigger of menu.querySelectorAll('[data-submenu]')) {
+    const sub = document.getElementById(trigger.dataset.submenu);
+    if (!sub || sub._vxSubmenu) continue;
+    sub._vxSubmenu = true;
+    sub.addEventListener('pointerenter', () => { clearTimeout(vxSub.closeT); clearTimeout(vxSub.openT); });
+    sub.addEventListener('pointerleave', (e) => { if (vxSub.menu === sub && !trigger.contains(e.relatedTarget)) vxSubCloseSoon(); });
+    sub.addEventListener('keydown', (e) => vxMenuKeys(e, sub, trigger));
+  }
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => vxSubmenus(document.getElementById('recording-context-menu')));
+else vxSubmenus(document.getElementById('recording-context-menu'));
 
 document.addEventListener('click', () => {
   hideContextMenu();

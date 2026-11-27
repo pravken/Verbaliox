@@ -5240,6 +5240,14 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 
 /* The recording's «⋯»: wide enough for its longest items on one line; «● Запись ▾»: the default preset by the accent */
 #recording-context-menu { width: 288px; }
+/* A row with a submenu (vxSubmenus in static/js/menus.js): «›» at the right edge, in the place of the shortcut; the
+   row stays lit while its submenu is open */
+.vx-sub-chev { flex: none; margin-left: auto; padding-left: 16px; font-size: 18px; line-height: 1; color: inherit; opacity: 0.65; }
+.macos-menu-item:hover .vx-sub-chev, .macos-menu-item[aria-expanded="true"] .vx-sub-chev { opacity: 1; }
+.macos-menu-item[data-submenu][aria-expanded="true"] {
+  background: var(--fill-bg); color: var(--fill-fg); outline: 1.5px solid var(--fill-ring); outline-offset: -1.5px;
+}
+.vx-submenu { min-width: 180px; max-width: 320px; }
 #rec-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
 #rec-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
 

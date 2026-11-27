@@ -33,6 +33,8 @@
 
   <!-- =========================================================================
        RIGHT-CLICK CONTEXT MENU (Sidebar Recording Items)
+       Four groups: the recording · its text (with «Экспорт ›» and «Нарезка ›») · «Ещё ›» · delete. The submenus
+       stand after the menu and are wired by vxSubmenus (static/js/menus.js) through data-submenu on their rows.
        ========================================================================= -->
   <div id="recording-context-menu" class="hidden fixed w-56 macos-menu z-50" data-click="stopEvent" data-click-args='[{"$": "event"}]'>
     <div id="ctx-title-header" class="px-2.5 py-1 text-[11.5px] font-semibold text-apple-secondary truncate border-b border-white/10 mb-1"></div>
@@ -46,6 +48,11 @@
     <button data-click="ctxMoveToFolder" data-click-args='[{"$": "event"}]' data-i18n-title="tbRecMove" title="Переместить в папку" class="macos-menu-item">
       <span data-i18n="tbRecMove">Переместить в папку</span>
     </button>
+    <button data-click="openSeriesMenu" data-click-args='[{"$": "event"}]' class="macos-menu-item" data-i18n-title="tipSeriesMenu" title="Серия повторяющихся встреч: те же люди, та же тема">
+      <span data-i18n="ctxSeries">Серия встреч…</span><span id="ctx-series-name" class="text-[11px] opacity-80 truncate max-w-[90px]"></span>
+    </button>
+
+    <div class="macos-menu-sep"></div>
     <button data-click="ctxOpenReconfigureModal" data-i18n-title="tipCtxReconfigure" title="Изменить модель Whisper или число участников и запустить заново" class="macos-menu-item">
       <span data-i18n="ctxReconfigure">Расшифровать заново…</span>
     </button>
@@ -55,39 +62,51 @@
     <button id="ctx-restore-item" data-click="ctxRestoreSegments" data-i18n-title="tipCtxRestore" title="Вернуть исходный текст распознавания" class="macos-menu-item hidden">
       <span data-i18n="ctxRestore">Вернуть текст до очистки</span>
     </button>
-    <button data-click="ctxImportTeamsVtt" data-i18n-title="tipCtxTeamsVtt" title="Расшифровка, которую Teams сохраняет после встречи: имена участников и их реплики" class="macos-menu-item">
-      <span data-i18n="ctxTeamsVtt">Добавить расшифровку Teams (.vtt)…</span>
+    <button id="ctx-sub-export-btn" data-submenu="ctx-sub-export" aria-haspopup="menu" aria-expanded="false" aria-controls="ctx-sub-export" class="macos-menu-item">
+      <span data-i18n="export">Экспорт</span><span class="vx-sub-chev" aria-hidden="true">›</span>
     </button>
-<button data-click="openSeriesMenu" data-click-args='[{"$": "event"}]' class="macos-menu-item" data-i18n-title="tipSeriesMenu" title="Серия повторяющихся встреч: те же люди, та же тема">
-      <span data-i18n="ctxSeries">Серия встреч…</span><span id="ctx-series-name" class="text-[11px] opacity-80 truncate max-w-[90px]"></span>
-    </button>
-    <button data-click="ctxClearResults" class="macos-menu-item" data-i18n-title="tipClearResults" title="Удалить расшифровку, участников, саммари, переводы и задачи; звук и ваши заметки остаются, запись можно расшифровать заново">
-      <span data-i18n="ctxClearResults">Удалить результаты</span>
-    </button>
-    <button data-click="ctxRemoveMedia" class="macos-menu-item" data-i18n-title="tipRemoveMedia" title="Удалить звук и видео записи, оставив расшифровку, анализ и заметки">
-      <span data-i18n="ctxRemoveMedia">Удалить звук, оставить текст</span>
-    </button>
-    <button data-click="ctxCut" data-click-args='["clean"]' class="macos-menu-item" data-i18n-title="tipCutClean" title="Копия записи без пауз и слов-паразитов">
-      <span data-i18n="ctxCutClean">Нарезка без пауз</span>
-    </button>
-    <button data-click="ctxCut" data-click-args='["highlights"]' class="macos-menu-item" data-i18n-title="tipCutHighlights" title="Короткая сборка из ключевых моментов: решения, выводы, задачи">
-      <span data-i18n="ctxCutHighlights">Ключевые моменты</span>
-    </button>
-    <button data-click="ctxRevealInExplorer" data-i18n-title="tipCtxReveal" title="Открыть папку с исходным медиафайлом в Проводнике Windows" class="macos-menu-item">
-      <span data-i18n="ctxReveal">Показать файл в папке</span>
+    <button id="ctx-sub-cut-btn" data-submenu="ctx-sub-cut" aria-haspopup="menu" aria-expanded="false" aria-controls="ctx-sub-cut" class="macos-menu-item">
+      <span data-i18n="ctxCutGroup">Нарезка</span><span class="vx-sub-chev" aria-hidden="true">›</span>
     </button>
 
-    <div class="my-1 border-t border-white/10"></div>
-    <div class="px-2.5 py-0.5 text-[11px] text-apple-secondary uppercase tracking-wider" data-i18n="export">Экспорт</div>
-    <div class="grid grid-cols-3 gap-1 px-1.5 py-1">
-      <button data-click="ctxExport" data-click-args='["docx"]' data-i18n-title="tipExportDocx" title="Экспортировать в Microsoft Word (.docx)" class="px-2 py-1 rounded bg-white/5 hover:bg-apple-blue text-[11.5px] text-center transition">DOCX</button>
-      <button data-click="ctxExport" data-click-args='["md"]' data-i18n-title="tipExportMd" title="Экспортировать в Markdown (.md)" class="px-2 py-1 rounded bg-white/5 hover:bg-apple-blue text-[11.5px] text-center transition">MD</button>
-      <button data-click="ctxExport" data-click-args='["srt"]' data-i18n-title="tipExportSrt" title="Экспортировать субтитры (.srt)" class="px-2 py-1 rounded bg-white/5 hover:bg-apple-blue text-[11.5px] text-center transition">SRT</button>
-    </div>
+    <div class="macos-menu-sep"></div>
+    <button id="ctx-sub-more-btn" data-submenu="ctx-sub-more" aria-haspopup="menu" aria-expanded="false" aria-controls="ctx-sub-more" class="macos-menu-item">
+      <span data-i18n="ctxMore">Ещё</span><span class="vx-sub-chev" aria-hidden="true">›</span>
+    </button>
 
-    <div class="my-1 border-t border-white/10"></div>
+    <div class="macos-menu-sep"></div>
     <button data-click="ctxDeleteRecording" data-i18n-title="tipCtxDelete" title="Безвозвратно удалить запись из списка" class="macos-menu-item macos-menu-item-danger">
       <span data-i18n="ctxDelete">Удалить запись</span>
+    </button>
+  </div>
+
+  <!-- The submenus of the recording's menu (shown beside their row by vxSubmenus in static/js/menus.js) -->
+  <div id="ctx-sub-export" role="menu" aria-labelledby="ctx-sub-export-btn" class="hidden fixed macos-menu vx-submenu z-50" data-click="stopEvent" data-click-args='[{"$": "event"}]'>
+    <button data-click="ctxExport" data-click-args='["docx"]' data-i18n-title="tipExportDocx" title="Экспортировать в Microsoft Word (.docx)" role="menuitem" class="macos-menu-item"><span>DOCX</span></button>
+    <button data-click="ctxExport" data-click-args='["md"]' data-i18n-title="tipExportMd" title="Экспортировать в Markdown (.md)" role="menuitem" class="macos-menu-item"><span>MD</span></button>
+    <button data-click="ctxExport" data-click-args='["srt"]' data-i18n-title="tipExportSrt" title="Экспортировать субтитры (.srt)" role="menuitem" class="macos-menu-item"><span>SRT</span></button>
+  </div>
+  <div id="ctx-sub-cut" role="menu" aria-labelledby="ctx-sub-cut-btn" class="hidden fixed macos-menu vx-submenu z-50" data-click="stopEvent" data-click-args='[{"$": "event"}]'>
+    <button data-click="ctxCut" data-click-args='["clean"]' data-i18n-title="tipCutClean" title="Копия записи без пауз и слов-паразитов" role="menuitem" class="macos-menu-item">
+      <span data-i18n="ctxCutClean">Без пауз</span>
+    </button>
+    <button data-click="ctxCut" data-click-args='["highlights"]' data-i18n-title="tipCutHighlights" title="Короткая сборка из ключевых моментов: решения, выводы, задачи" role="menuitem" class="macos-menu-item">
+      <span data-i18n="ctxCutHighlights">Ключевые моменты</span>
+    </button>
+  </div>
+  <div id="ctx-sub-more" role="menu" aria-labelledby="ctx-sub-more-btn" class="hidden fixed macos-menu vx-submenu z-50" data-click="stopEvent" data-click-args='[{"$": "event"}]'>
+    <button data-click="ctxImportTeamsVtt" data-i18n-title="tipCtxTeamsVtt" title="Расшифровка, которую Teams сохраняет после встречи: имена участников и их реплики" role="menuitem" class="macos-menu-item">
+      <span data-i18n="ctxTeamsVtt">Добавить расшифровку Teams (.vtt)…</span>
+    </button>
+    <button data-click="ctxRevealInExplorer" data-i18n-title="tipCtxReveal" title="Открыть папку с исходным медиафайлом в Проводнике Windows" role="menuitem" class="macos-menu-item">
+      <span data-i18n="ctxReveal">Показать файл в папке</span>
+    </button>
+    <div class="macos-menu-sep"></div>
+    <button data-click="ctxClearResults" data-i18n-title="tipClearResults" title="Удалить расшифровку, участников, саммари, переводы и задачи; звук и ваши заметки остаются, запись можно расшифровать заново" role="menuitem" class="macos-menu-item">
+      <span data-i18n="ctxClearResults">Удалить результаты</span>
+    </button>
+    <button data-click="ctxRemoveMedia" data-i18n-title="tipRemoveMedia" title="Удалить звук и видео записи, оставив расшифровку, анализ и заметки" role="menuitem" class="macos-menu-item">
+      <span data-i18n="ctxRemoveMedia">Удалить звук, оставить текст</span>
     </button>
   </div>
 

@@ -330,7 +330,7 @@ await step('menu at the bottom', async () => {
     return { bottom: r.bottom, vh: innerHeight };
   });
   expect(box.bottom <= box.vh, 'the menu leaves the window');
-  expect(await page.isVisible('#recording-context-menu button[data-click="ctxExport"]'), 'no export in the menu');
+  expect(await page.isVisible('#recording-context-menu [data-submenu="ctx-sub-export"]'), 'no export in the menu');
   await page.evaluate(() => hideContextMenu());
   await sleep(250);
   // the same menu in a low window scrolls inside it; opened again in a tall one it has its whole height back
@@ -339,7 +339,7 @@ await step('menu at the bottom', async () => {
     return new Promise(ok => setTimeout(() => { const e = document.getElementById('recording-context-menu'), r = e.getBoundingClientRect();
       ok({ bottom: r.bottom, vh: innerHeight, max: e.style.maxHeight }); }, 250));
   });
-  await page.setViewportSize({ width: 1300, height: 360 });
+  await page.setViewportSize({ width: 1300, height: 280 });
   const low = await ctxAt();
   expect(low.bottom <= low.vh && !!low.max, `the menu in a low window: ${JSON.stringify(low)}`);
   await page.evaluate(() => hideContextMenu());
@@ -353,6 +353,68 @@ await step('menu at the bottom', async () => {
 
 // The menus are looked for after a change that can open one, not after the level meter and the timer of a recording
 // (20 times a second for a whole meeting, each look going over the whole page)
+// The recording's menu in four groups with submenus «Экспорт ›», «Нарезка ›», «Ещё ›» (asked by the user: the menu held
+// too much): a hover opens a submenu, → ← Esc work from the keyboard, the menu fits a 1100×700 window opened at its bottom
+await step('recording menu submenus', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  const open = (x, y) => page.evaluate(([cx, cy]) => {
+    hideContextMenu();
+    openRecordingContextMenu({ clientX: cx, clientY: cy, preventDefault() {}, stopPropagation() {} }, 1);
+  }, [x, y]);
+  await open(300, 120); await sleep(300);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#recording-context-menu > button')]
+    .filter(b => !b.classList.contains('hidden')).map(b => b.dataset.click || b.dataset.submenu));
+  expect(JSON.stringify(rows) === JSON.stringify(['ctxOpenInfo', 'ctxRenameRecording', 'ctxMoveToFolder', 'openSeriesMenu',
+    'ctxOpenReconfigureModal', 'ctx-sub-export', 'ctx-sub-cut', 'ctx-sub-more', 'ctxDeleteRecording']), `the rows: ${rows}`);
+  // the «›» of the submenu rows and the shortcuts at the same right edge
+  const edges = await page.evaluate(() => [...document.querySelectorAll('#recording-context-menu .tm-key, #recording-context-menu .vx-sub-chev')]
+    .map(e => Math.round(e.getBoundingClientRect().right)));
+  expect(new Set(edges).size === 1, `the right edges of the keys and «›»: ${edges}`);
+  // a hover on «Экспорт ›»: DOCX beside the menu, to its right
+  await page.hover('#ctx-sub-export-btn');
+  await until(() => !document.getElementById('ctx-sub-export').classList.contains('hidden'), 'hover did not open «Экспорт ›»', 2000);
+  expect(await page.isVisible('#ctx-sub-export button:has-text("DOCX")'), 'no DOCX');
+  const side = await page.evaluate(() => [document.getElementById('recording-context-menu').getBoundingClientRect().right,
+    document.getElementById('ctx-sub-export').getBoundingClientRect().left, document.getElementById('ctx-sub-export-btn').getAttribute('aria-expanded')]);
+  expect(side[1] >= side[0] - 4 && side[2] === 'true', `«Экспорт ›» not beside the menu: ${side}`);
+  // over another row the submenu closes; over «Ещё ›» its four items
+  await page.hover('#recording-context-menu button[data-click="ctxRenameRecording"]');
+  await until(() => document.getElementById('ctx-sub-export').classList.contains('hidden'), '«Экспорт ›» stayed open over another row', 2000);
+  await page.hover('#ctx-sub-more-btn');
+  await until(() => !document.getElementById('ctx-sub-more').classList.contains('hidden'), 'hover did not open «Ещё ›»', 2000);
+  const more = await page.evaluate(() => [...document.querySelectorAll('#ctx-sub-more button')].filter(b => b.offsetParent).map(b => b.dataset.click));
+  expect(JSON.stringify(more) === JSON.stringify(['ctxImportTeamsVtt', 'ctxRevealInExplorer', 'ctxClearResults', 'ctxRemoveMedia']), `«Ещё ›»: ${more}`);
+  // the keyboard: → opens «Нарезка ›» with the focus in it, ← goes back, Esc closes the submenu and then the menu
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => { closeSubmenus(); document.getElementById('ctx-sub-cut-btn').focus(); });
+  await page.keyboard.press('ArrowRight');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), '→ did not move the focus into «Нарезка ›»', 2000);
+  expect(await page.evaluate(() => document.activeElement.dataset.clickArgs) === '["clean"]', 'the first item of «Нарезка ›» is not «Без пауз»');
+  await page.keyboard.press('ArrowDown');
+  expect(await page.evaluate(() => document.activeElement.dataset.clickArgs) === '["highlights"]', '↓ did not move to «Ключевые моменты»');
+  await page.keyboard.press('ArrowLeft');
+  await until(() => document.getElementById('ctx-sub-cut').classList.contains('hidden') && document.activeElement.id === 'ctx-sub-cut-btn', '← did not go back to the row', 2000);
+  await page.keyboard.press('Enter');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), 'Enter did not open «Нарезка ›»', 2000);
+  await page.keyboard.press('Escape'); await sleep(300);
+  expect(await page.evaluate(() => document.getElementById('ctx-sub-cut').classList.contains('hidden') && vxShown('recording-context-menu')),
+    'Esc did not close only the submenu');
+  await page.keyboard.press('Escape'); await sleep(350);
+  expect(!(await page.isVisible('#recording-context-menu')), 'the second Esc did not close the menu');
+  // at the bottom right of a 1100×700 window: the menu and its submenu inside the window, the submenu to the left
+  await open(1090, 690); await sleep(300);
+  await page.hover('#ctx-sub-more-btn');
+  await until(() => !document.getElementById('ctx-sub-more').classList.contains('hidden'), 'hover did not open «Ещё ›» at the bottom', 2000);
+  const fit = await page.evaluate(() => {
+    const a = document.getElementById('recording-context-menu').getBoundingClientRect(), b = document.getElementById('ctx-sub-more').getBoundingClientRect();
+    return { a: [a.left, a.top, a.right, a.bottom], b: [b.left, b.top, b.right, b.bottom], scroll: document.getElementById('recording-context-menu').style.maxHeight };
+  });
+  expect(fit.a[1] >= 0 && fit.a[3] <= 700 && fit.a[2] <= 1100 && !fit.scroll, `the menu at the bottom: ${JSON.stringify(fit)}`);
+  expect(fit.b[1] >= 0 && fit.b[3] <= 700 && fit.b[2] <= fit.a[0] + 4 && fit.b[0] >= 0, `«Ещё ›» at the bottom: ${JSON.stringify(fit)}`);
+  await page.evaluate(() => hideContextMenu()); await sleep(250);
+  await page.setViewportSize({ width: 1300, height: 860 });
+});
+
 await step('menus not looked for on a meter tick', async () => {
   const r = await page.evaluate(async () => {
     const real = window.vxSyncLayers;
