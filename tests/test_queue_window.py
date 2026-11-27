@@ -517,6 +517,30 @@ class MixWaitTest(unittest.TestCase):
         self.assertIn(mock.call(mid, stage_text="Сведение дорожек: ждёт расписания"), progress.call_args_list)
         self.assertNotIn(mid, app_status.mix_wait)
 
+    def test_either_names_the_schedule_too(self):
+        from app import main  # noqa: F401 - the routers are made with the app
+        from app.api import recording
+
+        mid = 424243
+        wake = threading.Event()
+        with recording._mix_lock:
+            recording._mixes[mid] = {"wake": wake}
+        self.addCleanup(recording._mixes.pop, mid, None)
+        with mock.patch("app.meeting_guard.hold_until", return_value=None), \
+                mock.patch("app.meeting_guard.window_hold",
+                           return_value={"kind": "idle", "from": "19:00", "until": _at(19), "left": 100}), \
+                mock.patch("app.database.update_meeting_progress") as progress:
+            t = threading.Thread(target=recording._wait_for_meeting_end, args=(mid,))
+            t.start()
+            for _ in range(100):
+                if progress.call_args_list:
+                    break
+                wake.wait(0.02)
+            self.assertTrue(recording.mix_now(mid))
+            t.join(3)
+        self.assertIn(mock.call(mid, stage_text="Сведение дорожек: ждёт, пока компьютер свободен, или расписания: с 19:00"),
+                      progress.call_args_list)
+
 
 if __name__ == "__main__":
     unittest.main()

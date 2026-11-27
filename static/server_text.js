@@ -384,6 +384,7 @@ const SERVER_PATTERNS_EN = [
   ["Сведение дорожек: удаление эха колонок… {}%", "Mixing the tracks: removing the speakers' echo… {0}%"],
   ["Модели не хватило памяти ({}). Закройте другие программы, выберите модель меньшего размера или уменьшите запас в «Настройки → Общие → Оставлять системе».", "The model did not have enough memory ({0}). Close other programs, choose a smaller model or lower the reserve in Settings → General → Leave to the system."],
   ["Сведение дорожек: очистка голоса… {}", "Mixing the tracks: cleaning the voice… {0}"],
+  ["Сведение дорожек: ждёт, пока компьютер свободен, или расписания: с {}", "Mixing the tracks: waits until the computer is free, or for the schedule: from {0}"],
   ["Сведение дорожек: очистка голоса… {}% · {}", "Mixing the tracks: cleaning the voice… {0}% · {1}"],
   ["Длина файла {} мин {} с, а у записи {} мин {} с. Это тот же файл?", "The file is {0} min {1} s long, the recording {2} min {3} s. Is it the same file?"],
   ["Скачивание по ссылке… ({} из {})", "Downloading from the link… ({0} of {1})"],
