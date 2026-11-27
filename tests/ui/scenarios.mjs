@@ -1050,6 +1050,87 @@ await step('records section', async () => {
   expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
 });
 
+// «Обработать всё» in the head of «Записи», the status's «Распознать» / «Анализ» and the feature cell's «Выбрать
+// фичу» on hover and focus, in the same place (no width changes). CI has no models: the routes are answered here,
+// and the recordings without a text or an analysis are made in the page only
+await step('records process pending', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await until(() => !document.getElementById('libtable-view').classList.contains('hidden') && document.querySelector('#lt-body .lt-row'), 'records did not open');
+  await until(() => document.getElementById('lt-process')?.disabled === true, 'the button is on while every recording is analysed');
+  const sent = [];
+  await page.route('**/api/library/process-pending', r => {
+    const b = r.request().postDataJSON();
+    sent.push(b);
+    r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(b.dry_run ? { transcribe: 1, analyse: 1, analysis_ready: true } : { transcribe: b.transcribe ? 1 : 0, analyse: 1, analysis_waiting: 0, analysis_ready: true }) });
+  });
+  await page.route('**/api/meetings/*/retry', r => { sent.push({ retry: r.request().url() }); r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+  const ids = await page.evaluate(() => {
+    const [a, b] = state.meetings;
+    Object.assign(a, { status: 'added', has_transcript: false, has_summary: false, features: [] });
+    Object.assign(b, { has_summary: false });
+    // a recognition model «downloaded» for «Распознать» (requireRecognitionModel)
+    const sel = document.getElementById('upload-model');
+    if (sel && !sel.value) { sel.add(new Option('test', 'test-model')); sel.value = 'test-model'; window.__ltOpt = true; }
+    window.__ltList = JSON.parse(JSON.stringify(state.meetings));
+    renderLibTable();
+    return { a: a.id, b: b.id };
+  });
+  // the list read again after an action would bring the analysed recordings back: the one made here is answered
+  const list = await page.evaluate(() => window.__ltList);
+  await page.route('**/api/meetings', r => (r.request().method() === 'GET'
+    ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(list) }) : r.continue()));
+  try {
+    await until(() => document.getElementById('lt-process')?.disabled === false, 'the button is off with work left');
+    // the search stays the last control, at the right edge
+    expect(await page.evaluate(() => document.getElementById('lt-process').getBoundingClientRect().right
+      <= document.querySelector('#libtable-view .tk-search').getBoundingClientRect().left), 'the button is not before the search');
+    await page.click('#lt-process');
+    await until(() => document.querySelector('div.modal-backdrop[role="dialog"]:not([id]) button[data-a="yes"]'), 'no confirmation with the counts');
+    const text = await page.textContent('div.modal-backdrop[role="dialog"]:not([id])');
+    const words = await page.evaluate(() => [t('ltProcessTr'), t('ltProcessAn')]);
+    expect(text.includes(`${words[0]}: 1`) && text.includes(`${words[1]}: 1`), `the confirmation does not show the counts: ${text}`);
+    await page.click('div.modal-backdrop[role="dialog"]:not([id]) button[data-a="yes"]');
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltProcessDone').split(':')[0]), 'no toast with the result');
+    expect(sent.some(b => b.dry_run) && sent.some(b => !b.dry_run && b.transcribe && b.analyse && !b.ids), `the batch was not sent: ${JSON.stringify(sent)}`);
+    // the status: «Распознать» and «Анализ» in the place of the status, the same width
+    const hoverSwap = async (sel, word) => {
+      await until(s => document.querySelector(s), `no ${sel}`, 5000, sel);
+      const w0 = await page.$eval(sel, e => e.getBoundingClientRect().width);
+      await page.hover(sel);
+      await until(([s, w]) => [...document.querySelector(s).querySelectorAll('span')].some(x => !x.children.length && x.textContent === w
+        && getComputedStyle(x).visibility === 'visible'), `${sel} does not show «${word}» on hover`, 3000, [sel, word]);
+      const w1 = await page.$eval(sel, e => e.getBoundingClientRect().width);
+      expect(Math.abs(w1 - w0) < 0.5, `${sel} changed its width on hover: ${w0} -> ${w1}`);
+    };
+    await hoverSwap(`#lt-body [data-st-act="transcribe"][data-st-id="${ids.a}"]`, await page.evaluate(() => t('ltStTranscribe')));
+    await page.click(`#lt-body [data-st-act="transcribe"][data-st-id="${ids.a}"]`);
+    await until(() => !document.getElementById('libtable-view').classList.contains('hidden'), 'a click on the status left the section');
+    await sleep(300);
+    expect(sent.some(b => b.retry && b.retry.includes(`/api/meetings/${ids.a}/retry`)), '«Распознать» did not queue the recording');
+    expect(await page.evaluate(() => state.appView) === 'libtable', 'a click on the status opened the recording');
+    await hoverSwap(`#lt-body [data-st-act="analyse"][data-st-id="${ids.b}"]`, await page.evaluate(() => t('ltStAnalyse')));
+    await page.click(`#lt-body [data-st-act="analyse"][data-st-id="${ids.b}"]`);
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltAnalysisQueued')), '«Анализ» said nothing');
+    expect(sent.some(b => !b.dry_run && JSON.stringify(b.ids) === `[${ids.b}]` && b.transcribe === false), `«Анализ» did not queue this recording: ${JSON.stringify(sent)}`);
+    // the feature cell: «Выбрать фичу» in the place of «—», and the keyboard opens the menu of the features
+    await page.mouse.move(2, 2);
+    await hoverSwap(`#lt-body [data-ft-pick="${ids.a}"]`, await page.evaluate(() => t('ltFtChoose')));
+    await page.mouse.move(2, 2);
+    await page.focus(`#lt-body [data-ft-pick="${ids.a}"]`);
+    await page.keyboard.press('Enter');
+    await until(() => document.getElementById('text-menu'), 'Enter on «Выбрать фичу» opened no menu');
+    expect(await page.evaluate(() => state.appView) === 'libtable', 'Enter on «Выбрать фичу» opened the recording');
+    await page.evaluate(() => closeTextMenu());
+  } finally {  // a failed check leaves no answered route and no model behind for the next steps
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await page.evaluate(async () => {
+      if (window.__ltOpt) { const sel = document.getElementById('upload-model'); sel.querySelector('option[value="test-model"]')?.remove(); sel.value = sel.options[0]?.value || ''; }
+      await loadMeetingsList();
+    });
+  }
+});
+
 // Import: «＋ Импорт ▾» in the strip on top is a split button; its ▾ is a menu with an icon at each way to add;
 // Ctrl+O and files dragged over the window work from any screen, with the veil «Отпустите, чтобы добавить файлы»
 await step('import menu and drop veil', async () => {
