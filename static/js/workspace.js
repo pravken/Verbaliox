@@ -159,7 +159,16 @@ function mixWaitWhy(m) {
   if (w.kind === 'recording') return t('mixWaitRecording');
   if (w.kind === 'call') return t('mixWaitCall');
   if (w.kind === 'calendar' && w.title) return t('mixWaitCalendar').replace('{title}', () => w.title).replace('{end}', () => w.end || '');
+  // «Фоновая обработка»: until the computer is free, or the schedule (app/queue_window.py)
+  if (w.kind === 'schedule') return t('mixWaitSchedule').replace('{time}', () => w.from || '');
+  if (w.kind === 'idle') return t(w.from ? 'mixWaitIdleOr' : 'mixWaitIdle').replace('{time}', () => w.from || '');
   return '';
+}
+
+// The mix waits for «Фоновая обработка», not for a meeting
+function mixWaitWindow(m) {
+  const k = (m.mix_why || {}).kind;
+  return k === 'idle' || k === 'schedule';
 }
 
 // in the place of a row's percent: the time left, or a word while a meeting goes on
@@ -169,15 +178,16 @@ function mixWaitSlot(m) {
 
 // «Сведение дорожек · 1:40» in the strip's pill; «Сведение · 1:40» in the narrow status chip of «Записи»
 function mixWaitPill(m) {
-  return `${t('status_mixing')} · ${Number(m.mix_wait) ? mixWaitClock(m.mix_wait) : t('mixWaitAfterShort')}`;
+  return `${t('status_mixing')} · ${Number(m.mix_wait) ? mixWaitClock(m.mix_wait) : mixWaitWindow(m) ? t('mixWaitSlot') : t('mixWaitAfterShort')}`;
 }
 
 function mixWaitChip(m) {
-  return Number(m.mix_wait) ? `${t('mixShort')} · ${mixWaitClock(m.mix_wait)}` : t('mixWaitChipMeeting');
+  return Number(m.mix_wait) ? `${t('mixShort')} · ${mixWaitClock(m.mix_wait)}`
+    : mixWaitWindow(m) ? `${t('mixShort')} · ${t('mixWaitSlot')}` : t('mixWaitChipMeeting');
 }
 
 function mixWaitTip(m) {
-  return Number(m.mix_wait) ? t('mixWaitTip') : `${mixWaitWhy(m) || t('mixWaitTipMeeting')}. ${t('mixWaitWhyTip')}`;
+  return Number(m.mix_wait) ? t('mixWaitTip') : `${mixWaitWhy(m) || t('mixWaitTipMeeting')}. ${t(mixWaitWindow(m) ? 'mixWaitWindowTip' : 'mixWaitWhyTip')}`;
 }
 
 // The attributes of an element that counts down (form: line, slot or chip): mixTick redraws its text every second

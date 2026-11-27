@@ -2425,6 +2425,98 @@ await step('queue window meeting states', async () => {
   }
 });
 
+// «Фоновая обработка» (app/queue_window.py): the automatic jobs wait until the computer is free or for the schedule;
+// the island, the queue window and its item say which, and «Начать сейчас» lets one go after the question
+await step('queue window background reason', async () => {
+  let win = { kind: 'schedule', from: '19:00' };
+  const ran = [];
+  const json = (r, body) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/queue', r => json(r, [{ id: 9921, state: 'waiting', kind: 'transcribe', title: 'Обзор квартала', progress: 0, position: 1, window: true },
+    { id: 9922, state: 'waiting', kind: 'translate', lang: 'en', title: 'Планёрка отдела', progress: 0, position: 2, window: false }]));
+  await page.route('**/api/queue/paused', r => json(r, { paused: false, meeting: false, hold: {}, window: win }));
+  await page.route('**/api/queue/*/run-now', r => { ran.push(r.request().url()); return json(r, { ok: true }); });
+  try {
+    await page.evaluate(() => { strip.kind = 'free'; return loadQueue(); });
+    expect((await page.textContent('#strip-island')).includes('Ждут расписания: с 19:00'), `the island: ${await page.textContent('#strip-island')}`);
+    await page.click('#strip-island');
+    await sleep(300);
+    const sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(sub.startsWith('Расшифровка и анализ ждут расписания: с 19:00'), `the window: ${sub}`);
+    const rows = await page.$$eval('#jobs-pop .vx-prow .vx-val', els => els.map(e => e.textContent.trim()));
+    expect(rows[0] === 'ждёт расписания: с 19:00', `the held item: ${rows}`);
+    expect(rows[1] !== rows[0], `the translation does not wait for the schedule: ${rows}`);
+    expect(await page.locator('#jobs-pop .vx-prow-go button').count() === 1, '«Начать сейчас» on the held item alone');
+    if (process.env.SHOTS) await page.locator('#jobs-pop').screenshot({ path: `${process.env.SHOTS}/queue-when-window-schedule.png` });
+    await page.click('#jobs-pop .vx-prow-go button');
+    await sleep(300);
+    const dlg = await page.textContent('[role="dialog"] .vx-dlg');
+    expect(dlg.includes('Фоновая обработка') && dlg.includes('Ждёт расписания'), `the question: ${dlg}`);
+    await page.click('[role="dialog"] button[data-a="yes"]');
+    await sleep(400);
+    expect(ran.length === 1 && /\/api\/queue\/9921\/run-now$/.test(ran[0]), `run-now: ${ran}`);
+    win = { kind: 'idle' };
+    await page.evaluate(() => loadQueue());
+    expect((await page.textContent('#strip-island')).includes('Ждут свободного компьютера'), 'the island while the computer is busy');
+    if (!(await page.isVisible('#jobs-pop'))) await page.click('#strip-island');
+    await sleep(300);
+    expect((await page.textContent('#jobs-pop .vx-prow .vx-val')).trim() === 'ждёт, пока компьютер свободен', 'the item while the computer is busy');
+    if (process.env.SHOTS) await page.locator('#jobs-pop').screenshot({ path: `${process.env.SHOTS}/queue-when-window-idle.png` });
+    await page.evaluate(() => closeJobsPop());
+  } finally {
+    await page.unroute('**/api/queue');
+    await page.unroute('**/api/queue/paused');
+    await page.unroute('**/api/queue/*/run-now');
+    await page.evaluate(() => loadQueue().catch(() => {}));
+  }
+});
+
+// «Настройки → Общие → Фоновая обработка»: the rows of the condition chosen, saved at once; its list sits where the
+// other lists of the tab sit
+await step('background processing settings', async () => {
+  await page.evaluate(() => openModal('settings', 'general'));
+  await sleep(400);
+  const shown = id => page.evaluate(x => { const el = document.getElementById(x); return !!el && !el.classList.contains('hidden') && !!el.offsetParent; }, id);
+  try {
+    await page.selectOption('#set-queue-when', 'always');
+    await sleep(200);
+    expect(!(await shown('queue-idle-row')) && !(await shown('queue-schedule-row')), '«Сразу» shows no condition');
+    await page.selectOption('#set-queue-when', 'schedule');
+    await sleep(200);
+    expect(await shown('queue-schedule-row') && !(await shown('queue-idle-row')), '«По расписанию» shows the schedule alone');
+    await page.selectOption('#set-queue-from', '20:00');
+    await page.selectOption('#set-queue-to', '07:30');
+    let saved = {};
+    for (let i = 0; i < 40 && !(saved.queue_when === 'schedule' && saved.queue_from === '20:00' && saved.queue_to === '07:30'); i++) {
+      await sleep(150);
+      saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+    }
+    expect(saved.queue_when === 'schedule' && saved.queue_from === '20:00' && saved.queue_to === '07:30',
+      `not saved: ${saved.queue_when} ${saved.queue_from} ${saved.queue_to}`);
+    await page.selectOption('#set-queue-when', 'idle_or_schedule');
+    await sleep(200);
+    expect(await shown('queue-schedule-row') && await shown('queue-idle-row') && await shown('queue-load-row'), 'either shows both conditions');
+    // the list at the right edge as the other lists of the tab (measured, not by eye)
+    const edges = await page.evaluate(() => ['set-queue-when', 'set-economy-for', 'set-queue-idle-min', 'set-queue-to', 'set-queue-gpu-max']
+      .map(id => Math.round(document.getElementById(id).getBoundingClientRect().right)));
+    expect(edges.every(x => Math.abs(x - edges[0]) <= 1), `the right edges: ${edges}`);
+    // the time and the percent lists of one width, the label column of the load row not squeezed
+    const w = await page.evaluate(() => ['set-queue-from', 'set-queue-to', 'set-queue-cpu-max', 'set-queue-gpu-max']
+      .map(id => Math.round(document.getElementById(id).getBoundingClientRect().width)));
+    expect(w.every(x => x === w[0]), `the widths: ${w}`);
+    const text = await page.evaluate(() => Math.round(document.querySelector('#queue-load-row .sx-row-text').getBoundingClientRect().width));
+    expect(text >= 200, `the text of the load row is squeezed to ${text}px`);
+    if (process.env.SHOTS) {
+      await page.evaluate(() => document.getElementById('set-queue-when').closest('.settings-card').scrollIntoView({ block: 'center' }));
+      await sleep(200);
+      await page.locator('#set-queue-when >> xpath=ancestor::div[contains(@class,"settings-card")]').screenshot({ path: `${process.env.SHOTS}/queue-when-settings.png` });
+    }
+  } finally {
+    await page.selectOption('#set-queue-when', 'always').catch(() => {});
+    await sleep(600);
+    await page.evaluate(() => closeModal('settings')).catch(() => {});
+  }
+});
+
 // Menus: one open at a time, a second press of the button closes its menu, Esc closes the menu on top only (one
 // Esc closed «Нагрузка» and left the settings; «Показатели» and the drawer at once)
 await step('one menu at a time', async () => {

@@ -667,7 +667,9 @@ function renderStatusbar() {
     ? `${queueKindLabel(run)} · ${pct}% — «${run.title}»${more ? ` · ${t('sbQueueMore').replace('{n}', () => more)}` : ''}`
     : state.queuePaused ? t('sbQueuePaused').replace('{n}', () => items.length)
     : holdPause() ? t('sbQueuePause').replace('{time}', () => holdClock()).replace('{n}', () => items.length)
-    : state.queueMeeting ? t('sbQueueMeeting').replace('{n}', () => items.length) : t('sbQueueWaiting').replace('{n}', () => items.length);
+    : state.queueMeeting ? t('sbQueueMeeting').replace('{n}', () => items.length)
+    : typeof windowHeld === 'function' && windowHeld() ? `${windowText('islandHold')}: ${items.length}`
+    : t('sbQueueWaiting').replace('{n}', () => items.length);
   q.classList.add('sb-queue-busy');
 }
 
