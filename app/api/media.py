@@ -76,7 +76,13 @@ def api_queue_paused() -> Dict[str, Any]:
         hold = meeting_guard.hold_state() if meeting else {}
     except Exception:
         hold = {}
-    return {"paused": queue_paused(), "meeting": meeting, "hold": hold}
+    # window: what «Фоновая обработка» holds the automatic jobs for (app/queue_window.py): {"kind": "idle"} until
+    # the computer is free, {"kind": "schedule", "from": "HH:MM", "left": seconds} until the schedule; {} — nothing
+    try:
+        window = meeting_guard.window_hold()
+    except Exception:
+        window = {}
+    return {"paused": queue_paused(), "meeting": meeting, "hold": hold, "window": window}
 
 
 @router.post("/api/queue/{meeting_id}/run-now")

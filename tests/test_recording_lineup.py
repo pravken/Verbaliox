@@ -287,7 +287,7 @@ class FinishInBackgroundTest(unittest.TestCase):
         self.assertEqual(m["status"], "queued")
         self.assertTrue(Path(m["media_path"]).is_file())
         self.assertEqual(m["user_notes"], "заметка")
-        enqueue.assert_called_once_with(mid)
+        enqueue.assert_called_once_with(mid, manual=False)
 
 
 class FinishFailureTest(unittest.TestCase):

@@ -421,7 +421,7 @@ def _queue_or_keep(meeting_id: int, processing: Optional[Dict[str, Any]]) -> Non
     if processing and str(processing.get("transcribe", True)).lower() in ("false", "0"):
         update_meeting_progress(meeting_id, status="added", progress=0, stage_text="", error_message="")
         return
-    enqueue_meeting_job(meeting_id)
+    enqueue_meeting_job(meeting_id, manual=True)  # asked for: «Фоновая обработка» does not hold it
 
 class UrlImportPayload(BaseModel):
     url: str
@@ -747,7 +747,7 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
         stage_text="Повторная постановка в очередь...",
         error_message="",
     )
-    enqueue_meeting_job(meeting_id)
+    enqueue_meeting_job(meeting_id, manual=True)
     return get_meeting(meeting_id)
 
 
@@ -826,7 +826,7 @@ def api_relink_media(meeting_id: int, payload: RelinkPayload) -> Any:
     if not m.get("segments") and m.get("status") in ("failed", "cancelled", "cleared"):
         update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание",
                                 error_message="")
-        enqueue_meeting_job(meeting_id)
+        enqueue_meeting_job(meeting_id, manual=True)
     elif m.get("status") == "failed":
         update_meeting_progress(meeting_id, status="completed", progress=100, stage_text="", error_message="")
     from app import events
@@ -891,7 +891,7 @@ def api_reconfigure_meeting(meeting_id: int, payload: MeetingReconfigurePayload)
         stage_text="Повторная обработка с новыми параметрами...",
         error_message="",
     )
-    enqueue_meeting_job(meeting_id)
+    enqueue_meeting_job(meeting_id, manual=True)
     return get_meeting(meeting_id)
 
 class TranscriptVersionPayload(BaseModel):

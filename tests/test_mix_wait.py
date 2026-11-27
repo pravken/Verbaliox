@@ -93,7 +93,7 @@ class MixWaitTest(unittest.TestCase):
         held.assert_not_called()  # the meeting going on (its own recording) is not waited for
         m = get_meeting(mid)
         self.assertEqual(m["status"], "queued")
-        enqueue.assert_called_once_with(mid)
+        enqueue.assert_called_once_with(mid, manual=False)
         self.assertNotIn(mid, app_status.mixing)
         from app.database import delete_meeting
 

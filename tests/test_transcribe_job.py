@@ -141,7 +141,7 @@ class ProcessMeetingJobTest(unittest.TestCase):
                 mock.patch.object(transcriber, "_run_pending_exports") as exports, \
                 mock.patch.object(transcriber, "release_whisper_model"):
             transcriber._run_job(self.mid)
-        again.assert_called_once_with(self.mid)
+        again.assert_called_once_with(self.mid, manual=False)
         exports.assert_not_called()  # they wait for the transcript
         self.assertIn(self.mid, transcriber._gpu_failed)  # the next run goes on the processor
         transcriber._gpu_failed.discard(self.mid)

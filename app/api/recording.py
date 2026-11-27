@@ -745,7 +745,9 @@ def _wait_for_meeting_end(meeting_id: int, seconds: Optional[float] = None) -> b
     Reported by the user: a recording ended as the next meeting began, and the computer froze during the call.
     The tracks wait on disk, a restart meanwhile recovers them (recover_sessions). A short recording
     (MIX_AT_ONCE_SEC) is mixed at once. While it waits the card counts down to the start (app_status.mix_wait).
-    Returns False when the recording was deleted meanwhile: there is nothing to mix."""
+    «Фоновая обработка» holds it the same way until the computer is free or the schedule begins
+    (meeting_guard.window_hold: mix_wait 0, mix_why says which). Returns False when the recording was deleted
+    meanwhile: there is nothing to mix."""
     from app import app_status, meeting_guard
     from app.database import update_meeting_progress
 
@@ -753,30 +755,38 @@ def _wait_for_meeting_end(meeting_id: int, seconds: Optional[float] = None) -> b
         return not _delete_asked(meeting_id)
     with _mix_lock:
         wake = (_mixes.get(meeting_id) or {}).get("wake")
-    shown: Optional[float] = None
+    shown: Optional[tuple] = None
     try:
         while True:
             until = meeting_guard.hold_until()
+            # no meeting: «Фоновая обработка» may still hold it (the computer busy, or before the schedule)
+            window = meeting_guard.window_hold() if until is None else {}
             with _mix_lock:
                 if (_mixes.get(meeting_id) or {}).get("delete") is not None:
                     return False
                 if (_mixes.get(meeting_id) or {}).get("now"):  # «Свести сейчас»: the user lets it go now
-                    print(f"[record] meeting {meeting_id}: mixed now, as asked, without waiting for the meeting", flush=True)
-                    until = None
-                if until is None:
+                    print(f"[record] meeting {meeting_id}: mixed now, as asked, without waiting", flush=True)
+                    until, window = None, {}
+                if until is None and not window:
                     app_status.mix_wait.pop(meeting_id, None)  # from now on a deletion waits for the mix
                     return True
-                app_status.mix_wait[meeting_id] = until
-                if not until:
+                app_status.mix_wait[meeting_id] = until or 0.0
+                if window:
+                    app_status.mix_why[meeting_id] = {k: v for k, v in window.items() if k in ("kind", "from")}
+                elif not until:
                     app_status.mix_why[meeting_id] = meeting_guard.hold_reason()
                 else:
                     app_status.mix_why.pop(meeting_id, None)
-            if until != shown:
+            now_shown = (until, window.get("kind") or "")
+            if now_shown != shown:
                 if shown is None:
-                    print(f"[record] meeting {meeting_id}: the mix waits for the end of the meeting", flush=True)
-                update_meeting_progress(meeting_id, stage_text="Сведение дорожек: начнётся после встречи" if not until
-                                        else "Сведение дорожек: пауза на случай следующей встречи")
-                shown = until
+                    print(f"[record] meeting {meeting_id}: the mix waits ({window.get('kind') or 'meeting'})", flush=True)
+                text = ("Сведение дорожек: ждёт, пока компьютер свободен" if window.get("kind") == "idle"
+                        else "Сведение дорожек: ждёт расписания" if window
+                        else "Сведение дорожек: начнётся после встречи" if not until
+                        else "Сведение дорожек: пауза на случай следующей встречи")
+                update_meeting_progress(meeting_id, stage_text=text)
+                shown = now_shown
             if wake is not None:
                 wake.wait(2.0)
             else:
@@ -844,7 +854,8 @@ def _mix_in_background(meeting_id: int, payload: RecordFinishPayload, page: Opti
             if (_mixes.get(meeting_id) or {}).get("delete") is None:
                 app_status.mixing.discard(meeting_id)
                 update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание")
-                enqueue_meeting_job(meeting_id)
+                # «Свести сейчас»: its transcription is not held by «Фоновая обработка» either (a meeting still holds it)
+                enqueue_meeting_job(meeting_id, manual=bool((_mixes.get(meeting_id) or {}).get("now")))
     except Exception as e:
         traceback.print_exc()
         if not (done and done.get("dest") and (get_meeting(meeting_id) or {}).get("media_path")):

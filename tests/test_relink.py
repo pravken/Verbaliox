@@ -41,7 +41,7 @@ class RelinkTest(unittest.TestCase):
             out = library.api_relink_media(self.mid, library.RelinkPayload(path=str(self.new)))
         self.assertFalse(out["media_missing"])
         self.assertEqual(Path(get_meeting(self.mid)["media_path"]), self.new.resolve())
-        enq.assert_called_once_with(self.mid)  # no transcript yet: it is made now
+        enq.assert_called_once_with(self.mid, manual=True)  # no transcript yet: it is made now
 
     def test_another_length_is_asked_about(self):
         with mock.patch("app.audio_utils.get_media_duration", return_value=60.0):

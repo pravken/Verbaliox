@@ -20,6 +20,9 @@ a job is running. What the user starts by hand in the queue (a translation, a du
 
 What the user starts by hand (the «Анализ» button, a question) is never held back.
 Settings → «Не мешать на встречах» (analysis_after_meetings, on by default).
+
+Besides a meeting, «Фоновая обработка» (app/queue_window.py, window_hold) may hold the automatic work until the
+computer is free or the schedule begins: the queue and the mix ask both.
 """
 
 import threading
@@ -290,15 +293,29 @@ def hold_until(now: Optional[float] = None) -> Optional[float]:
     return None
 
 
+def window_hold(now: Optional[float] = None) -> Dict[str, Any]:
+    """What holds the automatic work besides a meeting («Фоновая обработка», app/queue_window.py):
+    {"kind": "idle"} — until the computer is free; {"kind": "schedule", "from": "HH:MM", "until", "left"} — until
+    the schedule begins; {"kind": "idle", "from", "until", "left"} — either. {} when nothing (or not known).
+    «Только запись» holds everything by itself (app/economy)."""
+    try:
+        from app import queue_window
+
+        return queue_window.hold(now)
+    except Exception:
+        traceback.print_exc()
+        return {}
+
+
 def hold_state(now: Optional[float] = None) -> Dict[str, Any]:
     """What the queue's window says (asked by the user: «ждёт конца встречи» stood under a voice note while no
     meeting went on): {"kind": "meeting", "reason": "recording"|"call"|"calendar", …} while a meeting goes on;
     {"kind": "pause", "until": time, "left": seconds, "reason": what the meeting was} during the pause after
-    it; {} when nothing holds the queue."""
+    it; else what «Фоновая обработка» holds (window_hold: "idle" or "schedule"); {} when nothing holds the queue."""
     now = time.time() if now is None else now
     until = hold_until(now)
     if until is None:
-        return {}
+        return window_hold(now)
     if not until:
         out: Dict[str, Any] = {"kind": "meeting"}
         out.update({("reason" if k == "kind" else k): v for k, v in hold_reason().items()})
@@ -402,3 +419,6 @@ def start() -> None:
             return
         _state["started"] = True
     threading.Thread(target=_loop, daemon=True, name="meeting_guard").start()
+    from app import queue_window
+
+    queue_window.start()  # «Фоновая обработка»: the load and the schedule, looked at on a thread of their own
