@@ -1015,14 +1015,17 @@ def enqueue_resplit_job(meeting_id: int, num_speakers: int = 0) -> bool:
                              _resplit_runner, num_speakers)
 
 
-def _analysis_runner(meeting_id: int) -> str:
+def _analysis_runner(meeting_id: int, asked: bool = False) -> str:
     """The analysis that waited for the end of a meeting (app/meeting_guard.py), with what needs the model
-    after it: the title by content, the suggested features, the note in Obsidian."""
+    after it: the title by content, the suggested features, the note in Obsidian. asked: the user asked for it
+    («Обработать всё» in «Записи», app/pending.py), whatever «Анализ после расшифровки» says."""
     from app import cancel_scope, meeting_guard
     from app.database import get_all_settings
 
     settings = get_all_settings()
     if meeting_guard.busy(settings):  # a meeting began while it waited in the queue
+        if asked:
+            meeting_guard.defer(meeting_id)  # marked as the analysis after a transcription is: done when it ends
         return "Анализ — после окончания встречи"
     m = get_meeting(meeting_id) or {}
     segments, speakers = m.get("segments") or [], m.get("speakers") or {}
@@ -1031,7 +1034,7 @@ def _analysis_runner(meeting_id: int) -> str:
         return "Нет расшифровки для анализа"
     lang = m.get("language") or "ru"
     processing = m.get("processing") or {}
-    want_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true")
+    want_summary = asked or processing.get("summary", settings.get("auto_summary", "true").lower() == "true")
     if want_summary:
         from app import llm
 
@@ -1112,9 +1115,10 @@ def enqueue_complete_job(meeting_id: int) -> bool:
     return _enqueue_side_job(meeting_id, "complete", "", "summarizing", "Дополнение заметки в очереди...", _complete_runner)
 
 
-def enqueue_analysis_job(meeting_id: int) -> bool:
-    """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time)."""
-    return _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner)
+def enqueue_analysis_job(meeting_id: int, asked: bool = False) -> bool:
+    """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time);
+    asked: one the user asked for (app/pending.py)."""
+    return _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner, asked)
 
 
 # runner -> (name for error messages, text after a cancel)

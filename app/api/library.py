@@ -734,6 +734,7 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     _ensure_not_processing(meeting_id)
     from app import url_import
 
+    # the same steps for many at once: app/pending.queue_transcription («Обработать всё»)
     if not m.get("media_path") and url_import.valid_url(m.get("filename") or ""):
         # A download by link that did not finish: downloaded again
         if not url_import.restart(meeting_id, m["filename"]):
@@ -748,6 +749,25 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     )
     enqueue_meeting_job(meeting_id)
     return get_meeting(meeting_id)
+
+
+class ProcessPendingPayload(BaseModel):
+    dry_run: bool = False   # only the counts, for the confirmation
+    transcribe: bool = True
+    analyse: bool = True
+    ids: Optional[List[int]] = None  # only these (the action of one recording's status in the table)
+
+
+@router.post("/api/library/process-pending")
+def api_process_pending(payload: ProcessPendingPayload) -> Dict[str, Any]:
+    """«Обработать всё» in «Записи» (app/pending.py): the recordings without a text to recognition, the
+    transcribed ones without an analysis to the analysis. dry_run: the counts only."""
+    from app import pending
+
+    if payload.dry_run:
+        p = pending.plan(payload.ids)
+        return {"transcribe": len(p["transcribe"]), "analyse": len(p["analyse"]), "analysis_ready": p["analysis_ready"]}
+    return pending.run(transcribe=payload.transcribe, analyse=payload.analyse, ids=payload.ids)
 
 class RelinkPayload(BaseModel):
     path: str = ""      # empty: the Windows file picker asks for it

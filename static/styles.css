@@ -2907,6 +2907,13 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-ft { display: flex; min-width: 0; }
 .lt-ft .lib-ft { max-width: 100%; min-width: 0; }
 .lt-ft .lib-ft .ft-chip { font-size: var(--fs-label); line-height: 18px; padding: 0 8px; }
+/* «Фича» of a row: a button whose hover and focus show «Выбрать фичу» in the place of the value (one cell of a grid) */
+.lt-fpick { display: inline-grid; justify-items: start; align-items: center; max-width: 100%; min-width: 0; padding: 0; margin: 0; border: 0; background: none; color: inherit; font-family: inherit; font-size: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.lt-fpick > * { grid-area: 1 / 1; max-width: 100%; min-width: 0; }
+.lt-fpick-v { display: flex; min-width: 0; }
+.lt-fpick-a { visibility: hidden; padding: 0 8px; border-radius: 999px; background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-size: var(--fs-label); line-height: 18px; font-weight: 600; }
+.lt-fpick:is(:hover, :focus-visible) .lt-fpick-v { visibility: hidden; }
+.lt-fpick:is(:hover, :focus-visible) .lt-fpick-a { visibility: visible; }
 .lt-people { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lt-avs { display: inline-flex; flex: none; }
 .lt-av { width: 20px; height: 20px; margin-right: -5px; border-radius: 50%; border: 2px solid var(--card); background: var(--av); color: #111; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
@@ -2914,6 +2921,15 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-avs + .lt-ell { margin-left: 4px; color: var(--hc-dim, #A1A1A6); }
 .lt-st { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--st) 15%, transparent); color: color-mix(in srgb, var(--st) 70%, #FFFFFF); font-size: var(--fs-caption); }
 .lt-st i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--st); }
+/* A status with an action («Распознать», «Анализ»): the action's word takes the place of the status on hover and
+   focus, in the same cell of a grid (the wider of the two sets the width: the row does not move) */
+.lt-st-act { border: 0; margin: 0; font-family: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.lt-st-act:hover, .lt-st-act:focus-visible { background: color-mix(in srgb, var(--st) 30%, transparent); color: #FFFFFF; }
+.lt-st-sw { display: grid; min-width: 0; }
+.lt-st-sw > * { grid-area: 1 / 1; }
+.lt-st-a { visibility: hidden; font-weight: 600; }
+.lt-st-act:is(:hover, :focus-visible) .lt-st-l { visibility: hidden; }
+.lt-st-act:is(:hover, :focus-visible) .lt-st-a { visibility: visible; }
 /* «Карточки»: one grid, every card of one height (the empty slots keep their places) */
 .lt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding-top: 4px; }
 .lt-tile { position: relative; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--card); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); }
