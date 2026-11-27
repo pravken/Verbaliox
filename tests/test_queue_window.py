@@ -90,6 +90,67 @@ class FreeTest(unittest.TestCase):
             self.assertEqual(queue_window._state["low_since"], 175.0)
 
 
+class FreshLookTest(unittest.TestCase):
+    """Only a fresh look says the computer is free while the looks are taken."""
+
+    def setUp(self):
+        p = mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": False, "started": True,
+                                                  "sampled_at": 0.0, "held": False, "cpu": None, "gpu": None})
+        p.start()
+        self.addCleanup(p.stop)
+        queue_window._prev.update(sys=None, own={}, at=0.0, wall=0.0)
+        self.addCleanup(queue_window._prev.update, sys=None, own={}, at=0.0, wall=0.0)
+
+    def test_just_switched_from_always_it_is_not_free_until_the_first_look(self):
+        """«always» → «idle»: the look of «always» left «not measured», taken for free for up to 15 s."""
+        now = _at(10)
+        with mock.patch("app.queue_window._settings", return_value=dict(SETTINGS, queue_when="always")), \
+                mock.patch("app.transcriber.wake_queue"):
+            queue_window.tick(now)
+        self.assertEqual(queue_window.hold(now, SETTINGS), {"kind": "idle"})
+        with mock.patch("app.queue_window._cpu_other", return_value=None), \
+                mock.patch("app.queue_window._gpu_other", return_value=None), \
+                mock.patch("app.procstat.own_pids", return_value=[]), \
+                mock.patch("app.sysinfo._cpu_times", return_value=(0, 0)):
+            queue_window._prev["sys"] = (0, 0)  # readable
+            queue_window.sample(SETTINGS, now + 1)
+        self.assertEqual(queue_window.hold(now + 2, SETTINGS), {"kind": "idle"})  # measured: two minutes low first
+
+    def test_nothing_measurable_is_still_free_after_a_look(self):
+        with mock.patch("app.queue_window._cpu_other", side_effect=lambda pids: queue_window._prev.update(sys=None)), \
+                mock.patch("app.queue_window._gpu_other", return_value=None), \
+                mock.patch("app.procstat.own_pids", return_value=[]):
+            queue_window.sample(SETTINGS, _at(10))
+        self.assertEqual(queue_window.hold(_at(10) + 1, SETTINGS), {})
+
+    def test_an_old_look_after_sleep_holds_until_a_fresh_one(self):
+        queue_window._state.update(measured=True, low_since=_at(9), sampled_at=_at(10))
+        self.assertEqual(queue_window.hold(_at(10) + 5, SETTINGS), {})
+        self.assertEqual(queue_window.hold(_at(11), SETTINGS), {"kind": "idle"})  # an hour later: the computer slept
+        with mock.patch("app.queue_window._cpu_other", return_value=None), \
+                mock.patch("app.queue_window._gpu_other", return_value=None), \
+                mock.patch("app.procstat.own_pids", return_value=[]):
+            queue_window.sample(SETTINGS, _at(11))
+        self.assertEqual(queue_window._state["low_since"], 0.0)  # the run of low looks begins again
+        self.assertEqual(queue_window.hold(_at(11) + 1, SETTINGS), {"kind": "idle"})
+
+    def test_saving_the_mode_looks_at_once(self):
+        from fastapi.testclient import TestClient
+
+        from app import main
+
+        init_db()
+        self.addCleanup(update_settings, {"queue_when": "always"})
+        with TestClient(main.app, base_url="http://127.0.0.1:8790") as c, \
+                mock.patch("app.queue_window.settings_changed") as now:
+            c.get(f"/?token={main.SESSION_TOKEN}")
+            update_settings({"queue_when": "always"})
+            self.assertEqual(c.post("/api/settings", json={"settings": {"queue_when": "idle"}}).status_code, 200)
+            now.assert_called_once()
+            c.post("/api/settings", json={"settings": {"queue_when": "idle"}})
+            now.assert_called_once()  # unchanged: no look
+
+
 class OwnLoadTest(unittest.TestCase):
     """The program's own processes (this one, ffmpeg and the workers it started, Ollama) are no user's load."""
 
@@ -228,9 +289,9 @@ class HoldStateTest(unittest.TestCase):
 
     def test_the_reason_for_the_page(self):
         update_settings({"queue_when": "idle"})
-        with mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": True}):
+        with mock.patch.dict(queue_window._state, {"low_since": 0.0, "measured": True, "started": False}):
             self.assertEqual(meeting_guard.hold_state(), {"kind": "idle"})
-        with mock.patch.dict(queue_window._state, {"low_since": 1.0, "measured": True}):
+        with mock.patch.dict(queue_window._state, {"low_since": 1.0, "measured": True, "started": False}):
             self.assertEqual(meeting_guard.hold_state(), {})
         update_settings({"queue_when": "schedule", "queue_from": "19:00", "queue_to": "08:00"})
         state = meeting_guard.hold_state(_at(10))
@@ -356,8 +417,8 @@ class HeldIsNotProcessingTest(unittest.TestCase):
         self.assertTrue(transcriber.enqueue_analysis_job(mid))  # queued while nothing held it
         self.window = {"kind": "idle"}
         self.assertTrue(transcriber._window_holds())  # the window begins: the waiting analysis is parked
-        for _ in range(100):
-            if not transcriber.is_job_active(mid):
+        for _ in range(150):  # parked on a thread of its own
+            if get_meeting(mid)["status"] == "completed":
                 break
             threading.Event().wait(0.02)
         self.assertFalse(transcriber.is_job_active(mid))

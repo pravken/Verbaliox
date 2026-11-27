@@ -34,8 +34,10 @@ DEFAULTS = {"queue_when": "always", "queue_cpu_max": "30", "queue_gpu_max": "30"
 
 _lock = threading.Lock()
 # what the last look measured: the load of the other programs (None: not known), since when it is low
+# sampled_at: when the last look was taken (0: none since the mode needs them)
 _state: Dict[str, Any] = {"cpu": None, "gpu": None, "low_since": 0.0, "measured": False, "held": False,
-                          "started": False}
+                          "started": False, "sampled_at": 0.0}
+STALE_SEC = 2 * SAMPLE_SEC  # the last look older than this (the computer slept): what it measured holds no more
 _prev: Dict[str, Any] = {"sys": None, "own": {}, "at": 0.0, "wall": 0.0}
 
 
@@ -140,6 +142,11 @@ def hold(now: Optional[float] = None, settings: Optional[Dict[str, str]] = None)
         return {}
     with _lock:
         low_since, measured = float(_state["low_since"]), bool(_state["measured"])
+        sampled_at, sampling = float(_state["sampled_at"]), bool(_state["started"])
+    if sampling and mode(settings) in ("idle", "idle_or_schedule") and not (0 <= now - sampled_at <= STALE_SEC):
+        # no look yet since the mode was chosen (it was «always» a moment ago), or the last one is old (after
+        # sleep): not taken for free until a fresh look — «not measured» is free only where nothing can be measured
+        low_since, measured = 0.0, True
     out = decide(settings, now, low_since, measured)
     if "until" in out:
         out["left"] = max(0, int(round(out["until"] - now)))
@@ -233,6 +240,12 @@ def sample(settings: Optional[Dict[str, str]] = None, now: Optional[float] = Non
 
     settings = _settings() if settings is None else settings
     now = time.time() if now is None else now
+    with _lock:
+        stale = bool(_state["sampled_at"]) and not (0 <= now - _state["sampled_at"] <= STALE_SEC)
+        if stale:  # the computer slept since the last look: the run of low looks starts again, as the figures do
+            _state["low_since"] = 0.0
+    if stale:
+        _prev.update(sys=None, own={}, at=0.0, wall=0.0)
     try:
         pids = set(procstat.own_pids())
     except Exception:
@@ -243,7 +256,10 @@ def sample(settings: Optional[Dict[str, str]] = None, now: Optional[float] = Non
     except Exception:
         gpu = None
     # the processor's times readable: the load can be measured (the first look gives no figure yet)
-    return note(settings, now, cpu, gpu, readable=_prev["sys"] is not None)
+    out = note(settings, now, cpu, gpu, readable=_prev["sys"] is not None)
+    with _lock:
+        _state["sampled_at"] = now
+    return out
 
 
 def note(settings: Dict[str, str], now: float, cpu: Optional[float], gpu: Optional[float],
@@ -280,7 +296,7 @@ def tick(now: Optional[float] = None) -> Dict[str, Any]:
         sample(settings, now)
     else:  # not measured meanwhile: a run of low looks from before does not count when the mode comes back
         with _lock:
-            _state.update(low_since=0.0, measured=False, cpu=None, gpu=None)
+            _state.update(low_since=0.0, measured=False, cpu=None, gpu=None, sampled_at=0.0)
         _prev.update(sys=None, own={}, at=0.0, wall=0.0)
         if _cpu_tracker:
             _cpu_tracker[0].forget()
@@ -299,6 +315,17 @@ def tick(now: Optional[float] = None) -> Dict[str, Any]:
     elif held and not was:
         print(f"[queue_window] the automatic jobs wait: {held.get('kind')}", flush=True)
     return held
+
+
+def settings_changed() -> None:
+    """The settings of «Фоновая обработка» saved: a look now, so the page and the queue do not wait for the next one."""
+    def run() -> None:
+        try:
+            tick()
+        except Exception:
+            traceback.print_exc()
+
+    threading.Thread(target=run, daemon=True, name="queue_window_now").start()
 
 
 def _loop() -> None:

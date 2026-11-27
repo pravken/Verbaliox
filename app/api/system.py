@@ -217,6 +217,10 @@ def api_update_settings(payload: SettingsUpdatePayload) -> Dict[str, Any]:
             relayout()
         except Exception as e:
             print(f"[obsidian] moving the notes: {e}", flush=True)
+    if any(k.startswith("queue_") and values[k] != (before.get(k) or "") for k in values):
+        from app import queue_window
+
+        queue_window.settings_changed()  # «Фоновая обработка»: the load looked at now, with the new choice
     if "dictionary_fuzzy" in values:
         vocab.invalidate()
     if "start_with_windows" in values:
