@@ -1664,6 +1664,48 @@ await step('caption models not downloaded', async () => {
   }
 });
 
+// An online meeting of the calendar is recorded only once its call holds the microphone (reported by the user: the
+// computer woke from sleep at the time of a meeting nobody joined and the recording started by the clock)
+await step('an online meeting waits for its call', async () => {
+  const mic = { app: null };
+  await page.route('**/api/calls/status', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ supported: true, active: false, running: true, meeting_app: mic.app, mic_now: mic.app ? ['ms-teams.exe'] : [] }) }));
+  await page.evaluate(() => {
+    window.__hmSaved = { q: shellQuickRecord, rec: isRecording, load: hmLoadEvents, st: hmMeetingState, note: autoRecordNotice,
+      events: home.events, started: new Set(home.started), warned: new Set(home.warned) };
+    window.__hmRec = { starts: 0, on: false };
+    shellQuickRecord = async () => { window.__hmRec.starts++; window.__hmRec.on = !window.__hmRec.on; };
+    isRecording = () => window.__hmRec.on;
+    hmLoadEvents = async () => {};
+    hmMeetingState = () => 'on';
+    autoRecordNotice = () => {};
+    const now = Date.now();
+    home.events = [{ key: 'scenario|call', title: 'Планёрка', online: true, attendees: [], s: new Date(now - 30e3), e: new Date(now + 30 * 60e3) }];
+    hmAutoRec = null; hmJoin = null; hmCallWatch = null;
+  });
+  try {
+    const idle = await page.evaluate(async () => { await hmJoinTick(); await hmAutoTick(); await hmJoinTick(); return [window.__hmRec.starts, hmCallWatch]; });
+    expect(idle[0] === 0 && idle[1] === true, `the meeting was recorded by the clock without a call: ${idle}`);
+    mic.app = 'teams';
+    const first = await page.evaluate(async () => { await hmJoinTick(); return [window.__hmRec.starts, !!hmJoin]; });
+    expect(first[0] === 0 && first[1], `a moment of the microphone started the recording: ${first}`);
+    const joined = await page.evaluate(async () => {
+      hmJoin.since -= 9e3;
+      await hmJoinTick();
+      return [window.__hmRec.starts, hmAutoRec && hmAutoRec.app, hmAutoRec && hmAutoRec.key];
+    });
+    expect(joined[0] === 1 && joined[1] === 'teams' && joined[2] === 'scenario|call', `the joined call was not recorded: ${joined}`);
+  } finally {
+    await page.unroute('**/api/calls/status');
+    await page.evaluate(() => {
+      const s = window.__hmSaved;
+      shellQuickRecord = s.q; isRecording = s.rec; hmLoadEvents = s.load; hmMeetingState = s.st; autoRecordNotice = s.note;
+      home.events = s.events; home.started = s.started; home.warned = s.warned;
+      hmAutoRec = null; hmJoin = null; hmCallWatch = null;
+    });
+  }
+});
+
 // A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
 // fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
 await step('a choice in flight survives a settings read', async () => {
