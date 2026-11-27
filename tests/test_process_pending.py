@@ -127,6 +127,56 @@ class ProcessPendingTest(unittest.TestCase):
         an.assert_called_once_with(ids["plain"], True)
         self.assertEqual((out["transcribe"], out["analyse"]), (0, 1))
 
+    def test_two_requests_at_once_do_not_queue_twice(self):
+        """Two «Обработать всё» at once each planned before the other queued (found in review)."""
+        import threading
+        import time
+
+        inside, most = [0], [0]
+        real_plan = pending.plan
+
+        def slow_plan(ids=None):
+            inside[0] += 1
+            most[0] = max(most[0], inside[0])
+            time.sleep(0.1)
+            inside[0] -= 1
+            return real_plan(ids)
+
+        with mock.patch("app.pending.plan", side_effect=slow_plan), \
+                mock.patch("app.llm.available", return_value=False):
+            threads = [threading.Thread(target=pending.run) for _ in range(2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(5)
+        self.assertEqual(most[0], 1)
+
+    def test_a_download_by_link_is_started_once(self):
+        """url_import.restart registered its download only once its thread ran: two requests started two."""
+        import threading
+
+        from app import url_import
+
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        self.addCleanup(url_import._cancel.pop, 991, None)
+        with mock.patch("app.url_import._download", side_effect=lambda mid, url: gate.wait(5)) as dl, \
+                mock.patch("app.database.update_meeting_progress"):
+            self.assertTrue(url_import.restart(991, "https://example.com/v"))
+            self.assertFalse(url_import.restart(991, "https://example.com/v"))
+            gate.set()
+        self.assertEqual(dl.call_count, 1)
+
+    def test_a_recording_queued_meanwhile_keeps_its_status(self):
+        from app.database import get_meeting
+
+        mid = self._rec("Ошибка", "failed")
+        update_meeting_progress(mid, stage_text="Ошибка распознавания", error_message="нет памяти")
+        with mock.patch("app.transcriber.enqueue_meeting_job", return_value=False):
+            self.assertFalse(pending.queue_transcription(mid, get_meeting(mid)))
+        m = get_meeting(mid)
+        self.assertEqual((m["status"], m["stage_text"], m["error_message"]), ("failed", "Ошибка распознавания", "нет памяти"))
+
     def test_the_route_answers_the_counts(self):
         from fastapi.testclient import TestClient
 
