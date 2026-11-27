@@ -94,8 +94,10 @@ class OwnLoadTest(unittest.TestCase):
     """The program's own processes (this one, ffmpeg and the workers it started, Ollama) are no user's load."""
 
     def setUp(self):
-        queue_window._prev.update(sys=None, own={}, at=0.0)
-        self.addCleanup(queue_window._prev.update, sys=None, own={}, at=0.0)
+        queue_window._prev.update(sys=None, own={}, at=0.0, wall=0.0)
+        self.addCleanup(queue_window._prev.update, sys=None, own={}, at=0.0, wall=0.0)
+        queue_window._cpu_tracker.clear()
+        self.addCleanup(queue_window._cpu_tracker.clear)
 
     def test_the_tree_of_the_program(self):
         parents = {10: 1, 11: 10, 12: 11, 20: 1, 21: 20}
@@ -105,7 +107,7 @@ class OwnLoadTest(unittest.TestCase):
         cpu = {10: 0.0, 11: 0.0, 99: 0.0}
         clock = [1000.0]
         with mock.patch("app.sysinfo._cpu_times", side_effect=[(0, 0), (40, 100)]), \
-                mock.patch("app.procstat.cpu_seconds", side_effect=lambda pid: cpu.get(pid)), \
+                mock.patch("app.procstat.cpu_times", side_effect=lambda pid: (cpu[pid], 1.0) if pid in cpu else None), \
                 mock.patch("app.queue_window.time.monotonic", side_effect=lambda: clock[0]), \
                 mock.patch("os.cpu_count", return_value=4):
             self.assertIsNone(queue_window._cpu_other({10, 11}))  # the first look: nothing to compare
@@ -113,6 +115,70 @@ class OwnLoadTest(unittest.TestCase):
             cpu.update({10: 12.0, 11: 4.0, 99: 30.0})  # 16 s of 40 processor-seconds: 40 % of the computer
             other = queue_window._cpu_other({10, 11})
         self.assertAlmostEqual(other, 20.0)  # 60 % in all, 40 % of it the program's own
+
+    def _two_looks(self, first, second, own_first, own_second, wall=(5000.0, 5010.0)):
+        """Two looks 10 s apart on 4 processors, the whole computer 60 % busy between them; first/second:
+        {pid: (processor seconds, start time)} the tracker reads at each."""
+        reads = iter([first, second])
+        walls = iter(wall)
+        clock = iter([1000.0, 1010.0])
+        tracker = mock.Mock()
+        tracker.read.side_effect = lambda pids: next(reads)
+        queue_window._cpu_tracker.append(tracker)
+        with mock.patch("app.sysinfo._cpu_times", side_effect=[(0, 0), (40, 100)]), \
+                mock.patch("app.queue_window.time.monotonic", side_effect=lambda: next(clock)), \
+                mock.patch("app.queue_window.time.time", side_effect=lambda: next(walls)), \
+                mock.patch("os.cpu_count", return_value=4):
+            self.assertIsNone(queue_window._cpu_other(own_first))
+            return queue_window._cpu_other(own_second)
+
+    def test_a_process_started_meanwhile_is_all_the_programs(self):
+        """ffmpeg started by a job between two looks: all its seconds are the program's (they were the other
+        programs' load for its whole first look, and the run of low looks broke at almost every job)."""
+        other = self._two_looks({10: (0.0, 1.0)}, {10: (4.0, 1.0), 11: (12.0, 5003.0)}, {10}, {10, 11})
+        self.assertAlmostEqual(other, 20.0)  # 60 % in all, 16 of 40 processor-seconds the program's
+
+    def test_a_process_that_ended_meanwhile_counts_to_its_end(self):
+        """The tracker gives the last seconds of an own process that ended since the previous look."""
+        other = self._two_looks({10: (0.0, 1.0), 11: (0.0, 2.0)}, {10: (4.0, 1.0), 11: (12.0, 2.0)}, {10, 11}, {10})
+        self.assertAlmostEqual(other, 20.0)
+
+    def test_an_old_process_found_now_brings_not_its_past(self):
+        """Ollama's server running for hours, found only at this look: its earlier seconds are not this look's."""
+        other = self._two_looks({10: (0.0, 1.0)}, {10: (4.0, 1.0), 12: (3600.0, 100.0)}, {10}, {10, 12})
+        self.assertAlmostEqual(other, 50.0)
+
+    def test_the_tracker_reads_the_start_of_a_process(self):
+        import os
+        import time
+
+        got = procstat.CpuTracker().read([os.getpid()])
+        sec, started = got[os.getpid()]
+        self.assertGreaterEqual(sec, 0.0)
+        if started is not None:
+            self.assertLess(started, time.time() + 1)
+
+    def test_the_ollama_processes_are_looked_up_with_the_programs(self):
+        procstat._ollama_pids.update(at=0.0, pids=[])
+        with mock.patch("app.procstat._find_by_name", side_effect=[[501], [501, 502]]) as find, \
+                mock.patch("app.procstat.parent_map", return_value={}):
+            self.assertIn(501, procstat.ollama_pids())
+            self.assertIn(502, procstat.own_pids())  # a runner started since: not 30 s later
+        self.assertEqual(find.call_count, 2)
+        procstat._ollama_pids.update(at=0.0, pids=[])
+
+    def test_ollama_on_the_video_card_is_the_programs(self):
+        """No share per process from the driver: a model Ollama holds on the card is the program's work."""
+        with mock.patch("app.vram.gpu_utilization", return_value=90), \
+                mock.patch("app.vram.gpu_process_utilization", return_value=None), \
+                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False), \
+                mock.patch("app.vram._ollama_ps", return_value=[{"name": "gemma", "size_vram": 5 * 2**30}]):
+            self.assertIsNone(queue_window._gpu_other({10}))
+        with mock.patch("app.vram.gpu_utilization", return_value=90), \
+                mock.patch("app.vram.gpu_process_utilization", return_value=None), \
+                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False), \
+                mock.patch("app.vram._ollama_ps", return_value=[]):
+            self.assertEqual(queue_window._gpu_other({10}), 90.0)
 
     def test_the_video_card_less_the_program(self):
         with mock.patch("app.vram.gpu_utilization", return_value=70), \
@@ -130,7 +196,8 @@ class OwnLoadTest(unittest.TestCase):
             self.assertIsNone(queue_window._gpu_other({10}))  # this look counts the processor only
         with mock.patch("app.vram.gpu_utilization", return_value=90), \
                 mock.patch("app.vram.gpu_process_utilization", return_value=None), \
-                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False):
+                mock.patch("app.queue_window._own_busy_on_gpu", return_value=False), \
+                mock.patch("app.queue_window._ollama_on_gpu", return_value=False):
             self.assertEqual(queue_window._gpu_other({10}), 90.0)
 
 

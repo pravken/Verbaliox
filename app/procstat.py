@@ -16,7 +16,7 @@ import os
 import sys
 import threading
 import time
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 _lock = threading.Lock()
 _last_cpu: Dict[int, tuple] = {}  # pid → (cpu seconds, wall time) at the previous call
@@ -97,6 +97,97 @@ def cpu_seconds(pid: int) -> Optional[float]:
         return (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
     except Exception:
         return None
+
+
+_EPOCH_AS_FILETIME = 11644473600  # seconds from 1601-01-01 (FILETIME) to 1970-01-01
+
+
+def _boot_time() -> Optional[float]:
+    try:
+        with open("/proc/stat", encoding="ascii", errors="replace") as f:
+            for line in f:
+                if line.startswith("btime "):
+                    return float(line.split()[1])
+    except Exception:
+        pass
+    return None
+
+
+def _win_times(h) -> Optional[Tuple[float, Optional[float], bool]]:
+    """(processor seconds, start time, exited) of an open process handle. GetProcessTimes answers after the
+    process ended too, as long as the handle is open."""
+    ft = [wintypes.FILETIME() for _ in range(4)]  # created, exited, kernel, user
+    if not ctypes.windll.kernel32.GetProcessTimes(h, *[ctypes.byref(x) for x in ft]):
+        return None
+    val = lambda x: (x.dwHighDateTime << 32) | x.dwLowDateTime  # noqa: E731
+    created = val(ft[0]) / 1e7 - _EPOCH_AS_FILETIME if val(ft[0]) else None
+    return (val(ft[2]) + val(ft[3])) / 1e7, created, bool(val(ft[1]))
+
+
+def cpu_times(pid: int) -> Optional[Tuple[float, Optional[float]]]:
+    """(processor seconds so far, when the process started — seconds since the epoch, None when unknown)."""
+    try:
+        if sys.platform == "win32":
+            h = _open(pid)
+            if not h:
+                return None
+            try:
+                got = _win_times(h)
+                return (got[0], got[1]) if got else None
+            finally:
+                ctypes.windll.kernel32.CloseHandle(h)
+        with open(f"/proc/{int(pid)}/stat", encoding="ascii", errors="replace") as f:
+            fields = f.read().rsplit(")", 1)[1].split()
+        tick = os.sysconf("SC_CLK_TCK")
+        boot = _boot_time()
+        return (int(fields[11]) + int(fields[12])) / tick, (boot + int(fields[19]) / tick) if boot is not None else None
+    except Exception:
+        return None
+
+
+class CpuTracker:
+    """The processor time of a set of processes, look after look, without losing a process that ended between
+    two looks (ffmpeg, deep-filter): on Windows its handle stays open from one look to the next, so its last
+    seconds are still read once it ended (and its pid cannot be reused meanwhile). Elsewhere /proc answers
+    until the process is reaped."""
+
+    def __init__(self) -> None:
+        self._handles: Dict[int, Any] = {}
+
+    def read(self, pids: Iterable[int]) -> Dict[int, Tuple[float, Optional[float]]]:
+        """{pid: (processor seconds, start time)} of pids, and of the processes of the previous look that ended
+        since (their final seconds, once)."""
+        if sys.platform != "win32":
+            out = {}
+            for pid in pids:
+                got = cpu_times(pid)
+                if got is not None:
+                    out[int(pid)] = got
+            return out
+        k32 = ctypes.windll.kernel32
+        out = {}
+        for pid in set(int(p) for p in pids) - set(self._handles):
+            h = _open(pid)
+            if h:
+                self._handles[pid] = h
+        for pid, h in list(self._handles.items()):
+            got = None
+            try:
+                got = _win_times(h)
+            except Exception:
+                pass
+            if got is not None:
+                out[pid] = (got[0], got[1])
+            if got is None or got[2]:  # ended: its last seconds are read, the handle goes
+                k32.CloseHandle(h)
+                self._handles.pop(pid, None)
+        return out
+
+    def forget(self) -> None:
+        if sys.platform == "win32":
+            for h in self._handles.values():
+                ctypes.windll.kernel32.CloseHandle(h)
+        self._handles.clear()
 
 
 def cpu_percent(pid: int, now: Optional[float] = None) -> Optional[float]:
@@ -204,15 +295,15 @@ def descendants(root: int, parents: Dict[int, int]) -> List[int]:
 def own_pids() -> List[int]:
     """The program's processes: this one, everything it started, and Ollama's (the analysis models)."""
     pids = set(descendants(os.getpid(), parent_map()))
-    pids.update(ollama_pids())
+    pids.update(ollama_pids(fresh=True))  # a runner Ollama just started counts from this look on, not 30 s later
     return sorted(pids)
 
 
-def ollama_pids() -> List[int]:
-    """Ollama's processes (the server and its model runners), looked up at most every 30 s."""
+def ollama_pids(fresh: bool = False) -> List[int]:
+    """Ollama's processes (the server and its model runners), looked up at most every 30 s (fresh: now)."""
     now = time.monotonic()
     with _lock:
-        if now - _ollama_pids["at"] < 30 and _ollama_pids["at"]:
+        if not fresh and now - _ollama_pids["at"] < 30 and _ollama_pids["at"]:
             return list(_ollama_pids["pids"])
     pids = _find_by_name("ollama")
     with _lock:
