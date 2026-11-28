@@ -51,7 +51,11 @@ def _ensure_not_transcribing(meeting_id: int) -> None:
 
 def _ensure_not_processing(meeting_id: int) -> None:
     from app import app_status
+    from app.transcriber import waits_for_window
 
+    if waits_for_window(meeting_id):  # the automatic transcription queued: not begun, it waits for its time
+        raise HTTPException(status_code=409, detail="Запись ждёт «Фоновой обработки» в очереди: нажмите «Начать сейчас» "
+                                                    "или отмените обработку.")
     if is_job_active(meeting_id) or meeting_id in app_status.mixing:
         raise HTTPException(status_code=409, detail="Запись уже обрабатывается. Дождитесь окончания или отмените обработку.")
 

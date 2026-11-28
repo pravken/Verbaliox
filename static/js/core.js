@@ -1144,6 +1144,8 @@ const VX_LAYERS = [
   ['translate-menu', () => vxShown('translate-menu'), vxCall('hideTranslateMenu'), '#translate-menu'],
   ['export-menu', () => vxShown('export-menu'), vxCall('hideExportMenu'), '#export-menu'],
   ['recording-context-menu', () => vxShown('recording-context-menu'), vxCall('hideContextMenu'), '#recording-context-menu'],
+  // a submenu of a menu (vxSubmenus in static/js/menus.js): Esc closes it first and leaves its menu open
+  ['vx-submenu', () => !!document.querySelector('.vx-submenu:not(.hidden)'), vxCall('closeSubmenus'), '.vx-submenu:not(.hidden)', 'mode'],
   ['folder-context-menu', () => vxShown('folder-context-menu'), vxCall('hideFolderMenu'), '#folder-context-menu'],
   ['tx-view-menu', () => vxShown('tx-view-menu'), vxHide('tx-view-menu'), '#tx-view-menu'],
   ['tx-proc-menu', () => vxShown('tx-proc-menu'), vxHide('tx-proc-menu'), '#tx-proc-menu'],

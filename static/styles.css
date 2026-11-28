@@ -2907,6 +2907,13 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-ft { display: flex; min-width: 0; }
 .lt-ft .lib-ft { max-width: 100%; min-width: 0; }
 .lt-ft .lib-ft .ft-chip { font-size: var(--fs-label); line-height: 18px; padding: 0 8px; }
+/* «Фича» of a row: a button whose hover and focus show «Выбрать фичу» in the place of the value (one cell of a grid) */
+.lt-fpick { display: inline-grid; justify-items: start; align-items: center; max-width: 100%; min-width: 0; padding: 0; margin: 0; border: 0; background: none; color: inherit; font-family: inherit; font-size: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.lt-fpick > * { grid-area: 1 / 1; max-width: 100%; min-width: 0; }
+.lt-fpick-v { display: flex; min-width: 0; }
+.lt-fpick-a { visibility: hidden; padding: 0 8px; border-radius: 999px; background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-size: var(--fs-label); line-height: 18px; font-weight: 600; }
+.lt-fpick:is(:hover, :focus-visible) .lt-fpick-v { visibility: hidden; }
+.lt-fpick:is(:hover, :focus-visible) .lt-fpick-a { visibility: visible; }
 .lt-people { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lt-avs { display: inline-flex; flex: none; }
 .lt-av { width: 20px; height: 20px; margin-right: -5px; border-radius: 50%; border: 2px solid var(--card); background: var(--av); color: #111; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
@@ -2914,6 +2921,19 @@ button.cal-item:hover { background: rgba(255, 255, 255, 0.12); }
 .lt-avs + .lt-ell { margin-left: 4px; color: var(--hc-dim, #A1A1A6); }
 .lt-st { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--st) 15%, transparent); color: color-mix(in srgb, var(--st) 70%, #FFFFFF); font-size: var(--fs-caption); }
 .lt-st i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--st); }
+/* A status with an action («Распознать», «Анализ»): the action's word takes the place of the status on hover and
+   focus, in the same cell of a grid (the wider of the two sets the width: the row does not move) */
+.lt-st-act { border: 0; margin: 0; font-family: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.lt-st-act:hover, .lt-st-act:focus-visible { background: color-mix(in srgb, var(--st) 30%, transparent); color: #FFFFFF; }
+.lt-st-sw { display: grid; min-width: 0; }
+.lt-st-sw > * { grid-area: 1 / 1; }
+.lt-st-a { visibility: hidden; font-weight: 600; }
+.lt-st-act:is(:hover, :focus-visible) .lt-st-l { visibility: hidden; }
+.lt-st-act:is(:hover, :focus-visible) .lt-st-a { visibility: visible; }
+/* The keyboard's ring of the buttons in a row inside them: the cell (.lt-c, overflow hidden) is as tall as the button
+   and cut the ring drawn outside. Same weight as the ring of every control (html :is(…):not(…):focus-visible), later */
+html button:is(.lt-fpick, .lt-st-act, .lt-snip):not(.rp-scrub):focus-visible { outline-offset: -2px; }
+.lt-fpick:focus-visible { border-radius: 999px; }  /* the ring round the pill «Выбрать фичу» shown at the focus */
 /* «Карточки»: one grid, every card of one height (the empty slots keep their places) */
 .lt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding-top: 4px; }
 .lt-tile { position: relative; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--card); border: 1px solid var(--hc-line, rgba(255, 255, 255, 0.08)); }
@@ -3744,6 +3764,9 @@ body.db-dragging-now, body.db-dragging-now * { cursor: grabbing !important; }
 .st-btn-warn:hover { background: rgba(255, 159, 10, 0.26); }
 .st-btn-ghost { background: none; }
 .st-btn-ghost:hover { background: rgba(255, 255, 255, 0.06); }
+/* «Не записывать» of the strip: a ✕ at the end of its actions (the strip keeps only what is needed) */
+.st-btn-x { width: 32px; padding: 0; justify-content: center; background: none; border-color: transparent; color: var(--hc-dim, #9A9CA1); }
+.st-btn-x:hover { background: rgba(255, 255, 255, 0.08); color: #F5F5F7; }
 .st-btn-sm { height: 26px; padding: 0 9px; font-size: var(--fs-caption); }
 .st-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .st-pill.stp-live i { animation: none; } }
@@ -4602,6 +4625,9 @@ button.sc-at:hover { color: var(--accent-text); }
    (reported by the user: a bare round dot was not the button made on the try-on page) */
 .tb-rec-wrap { height: 32px; box-sizing: border-box; border-radius: 8px; }
 .tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { width: auto; height: 30px; gap: 8px; padding: 0 12px; border-radius: 7px 0 0 7px; }
+/* idle, «Студия» beside it: the hover of «Запись» is a rounded patch inside the capsule (asked by the user: its square
+   right edge stood against the rounded chip) */
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { height: 26px; margin-left: 2px; padding: 0 10px; border-radius: 6px; }
 .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) #tb-rec-label { display: inline; color: #FFD7D3; font-size: var(--fs-ui); font-weight: 600; }
 .tb-rec-wrap .tb-rec-dot { width: 10px; height: 10px; border-radius: 5px; }
 .tb-rec-more { height: 30px; width: 26px; border-radius: 0 7px 7px 0; }
@@ -5221,6 +5247,14 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 
 /* The recording's «⋯»: wide enough for its longest items on one line; «● Запись ▾»: the default preset by the accent */
 #recording-context-menu { width: 288px; }
+/* A row with a submenu (vxSubmenus in static/js/menus.js): «›» at the right edge, in the place of the shortcut; the
+   row stays lit while its submenu is open */
+.vx-sub-chev { flex: none; margin-left: auto; padding-left: 16px; font-size: 18px; line-height: 1; color: inherit; opacity: 0.65; }
+.macos-menu-item:hover .vx-sub-chev, .macos-menu-item[aria-expanded="true"] .vx-sub-chev { opacity: 1; }
+.macos-menu-item[data-submenu][aria-expanded="true"] {
+  background: var(--fill-bg); color: var(--fill-fg); outline: 1.5px solid var(--fill-ring); outline-offset: -1.5px;
+}
+.vx-submenu { min-width: 180px; max-width: 320px; }
 #rec-menu .macos-menu-item.tm-on { background: rgb(var(--accent-rgb) / 0.16); color: var(--accent-text); font-weight: 600; }
 #rec-menu .macos-menu-item.tm-on:hover { background: rgb(var(--accent-rgb) / 0.24); }
 
@@ -5272,6 +5306,15 @@ html input[type="checkbox"]:not(.vs-switch):not(.sr-only):checked { background: 
 .tb-rec-wrap .tb-rec-studio.hidden, .tb-rec-wrap .tb-rec-stop.hidden { display: none; }
 .tb-rec-here .tb-rec, .tb-rec-here .tb-rec-studio { pointer-events: none; cursor: default; }
 .tb-rec-here .tb-rec-studio { opacity: 0.5; }
+/* Not recording: «Студия» is the middle segment of the capsule (● Запись | Студия | ▾), quieter than the red
+   «Запись»; in the studio it is the current place, inert */
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio { height: 24px; margin: 0 4px 0 2px; color: #E5E5EA; background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14); cursor: pointer; }
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio:hover { background: rgba(255, 255, 255, 0.12); }
+.tb-rec-wrap .tb-rec-studio:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio.is-here { pointer-events: none; cursor: default; color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.3); }
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec-studio .st-pill-chev { display: none; }
 /* a narrow window: the chip keeps its icon and its › */
 @media (max-width: 1199px) {
   .tb-rec-studio-t { display: none; }

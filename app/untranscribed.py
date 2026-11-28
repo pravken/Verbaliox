@@ -69,7 +69,7 @@ def transcribe(ids: List[int]) -> int:
         if it["id"] not in wanted or is_job_active(it["id"]):
             continue
         update_meeting_progress(it["id"], status="queued", progress=0, stage_text="В очереди на распознавание", error_message="")
-        if enqueue_meeting_job(it["id"]):
+        if enqueue_meeting_job(it["id"], manual=True):
             n += 1
     return n
 

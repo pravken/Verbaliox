@@ -27,7 +27,9 @@ BOOLS = {
     "meet_auto_all", "meet_ask_inperson", "meet_notify", "worktime_track", "apps_track", "work_day_fit", "device_auto",
 }
 INTS = {"num_speakers": (0, 20), "idle_unload_minutes": (0, 24 * 60), "media_retention_days": (0, 3650),
-        "onnx_gpu_batch": (1, 256), "work_day_start": (0, 23), "work_day_end": (0, 24)}
+        "onnx_gpu_batch": (1, 256), "work_day_start": (0, 23), "work_day_end": (0, 24),
+        # when the automatic work of the queue may start (app/queue_window.py)
+        "queue_cpu_max": (5, 95), "queue_gpu_max": (5, 95)}
 FLOATS = {"dub_voice_cfg": (1.0, 3.0), "work_remind_hours": (0.0, 16.0)}  # VoxCPM2 guidance (cfg_value)
 CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "record_source_mode": {"mic", "system", "both"}, "ui_scale": {"75", "90", "100", "115", "130", "150"},
@@ -40,10 +42,15 @@ CHOICES = {"date_folders": {"off", "day", "month", "year_month"},
            "meet_notify_before": {"0", "30", "60", "120", "300", "600", "900"},
            # «Качество / Скорость» of the captions' translation (the studio)
            "live_speed": {"quality", "fast"},
+           # when the automatic work of the queue may start (app/queue_window.py)
+           "queue_when": {"always", "idle", "schedule", "idle_or_schedule"},
            "cpu_threads": {"auto", "2", "4", "6", "8", "12", "16", "all"},
            "onnx_gigaam_device": {"auto", "cpu"}, "onnx_parakeet_device": {"auto", "cpu"},
            "mem_reserve_ram": {"auto", "2", "3", "4", "6", "8", "12", "16"},
            "mem_reserve_vram": {"auto", "0.5", "1", "1.5", "2", "3", "4"}}
+# Times of the day, "HH:MM" (the schedule of the queue, app/queue_window.py)
+TIMES = {"queue_from", "queue_to"}
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 SPEECH_MODELS = {"whisper_model", "speech_model_ru", "live_whisper_model"}
 FOLDERS = {"recordings_dir", "export_dir", "obsidian_vault", "watch_folder"}
 # Ollama models chosen by name (app/live_translate.CHOICE_KEYS): empty is «Авто»
@@ -137,6 +144,12 @@ def clean(key: str, value: Any) -> str:
     if key in CHOICES:
         if text_s not in CHOICES[key]:
             raise ValueError(f"{key}: недопустимое значение")
+        return text_s
+    if key in TIMES:
+        if len(text_s) == 4 and text_s[1] == ":":  # "8:00"
+            text_s = "0" + text_s
+        if not TIME_RE.match(text_s):
+            raise ValueError(f"{key}: нужно время ЧЧ:ММ")
         return text_s
     if key in SPEECH_MODELS:
         if not is_speech_model(text_s):
@@ -274,6 +287,16 @@ def as_int(value: Any, default: int = 0) -> int:
 
 def clean_all(settings: Dict[str, Any]) -> Dict[str, str]:
     return {str(k): clean(str(k), v) for k, v in settings.items()}
+
+
+def check_together(values: Dict[str, str], stored: Dict[str, str]) -> None:
+    """The settings that make sense only together, as they would be after saving values; ValueError otherwise.
+    The schedule of «Фоновая обработка»: its start equal to its end would be the whole day, which holds nothing."""
+    if "queue_from" in values or "queue_to" in values:
+        start = values.get("queue_from", stored.get("queue_from") or "19:00")
+        end = values.get("queue_to", stored.get("queue_to") or "08:00")
+        if start == end:
+            raise ValueError("Начало и конец расписания совпадают: укажите разное время")
 
 
 def is_speech_model(name: str) -> bool:

@@ -120,17 +120,26 @@ function stripState() {
   const liveMeeting = live && !strip.skip.has(live.key) ? live : null;
   if (liveMeeting || (strip.call && !strip.skip.has(`call:${strip.call}`))) {
     const e = liveMeeting;
-    const min = e ? Math.max(1, Math.round((now - e.s.getTime()) / 60e3)) : 0;
     const st = e ? hmMeetingState(e) : '';
     // its recording was made and stopped before the meeting's end: said so, not «Автозапись не началась»
     const stopped = !!e && (home.started.has(e.key) || !!e.recording);
+    // an online meeting to be recorded, its call not joined yet: the recording starts with the call (home.js hmJoinTick),
+    // not «Идёт без записи» (found in review)
+    const waiting = !!e && e.online && st === 'on' && hmCallWatch !== false && !stopped && !hmUserStopped().has(e.key);
+    // only a stop by the user takes «Записать» away: a dropped call or a voice note linked to the meeting does not
     const why = stopped ? 'stripWhyStopped'
       : { off: 'stripWhyOff', never: 'stripWhyNever', skipped: 'stripWhySkipped', on: 'stripWhyLate', ask: 'stripWhyLate' }[st] || 'stripWhyCall';
-    return { kind: 'unrec', pill: t(stopped ? 'stripRecStopped' : 'stripUnrec'), cls: 'amber', lead: e ? e.title || t('hmUntitled') : strip.call,
-      meta: e ? [stripService(e) || strip.call, t('stripMinGoing').replace('{n}', () => min)].filter(Boolean).join(' · ') : t('stripCall'),
-      grow: t(why),
-      acts: [joinAct(e), act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t(stopped ? 'stripRecordAgain' : 'stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
-        act('stripSkip', [e ? e.key : `call:${strip.call}`], t('stripDontRecord'), 'ghost')].filter(Boolean) };
+    // Only what is needed (asked by the user: the strip held too much): the state, the meeting, one action. «Подключиться»
+    // only while no call holds the microphone (in the call already, it has no use); «Не записывать» is the ✕ at the end;
+    // the service and the minutes went (the title says the meeting), the reason is the pill's tooltip
+    return { kind: 'unrec', pill: t(waiting ? 'stripWaitCall' : stopped ? 'stripRecStopped' : 'stripUnrec'), cls: waiting ? 'blue' : 'amber',
+      lead: e ? e.title || t('hmUntitled') : strip.call,
+      meta: e ? '' : t('stripCall'),
+      grow: '', pillTip: t(waiting ? 'stripWaitCallTip' : why),  // the reason was cut to «Автозапись для…»: it is the pill's tooltip now
+      acts: [strip.call ? null : joinAct(e),
+        // stopped by the user: no «Записать снова» (asked by the user: the red «Запись» is there for it)
+        e && hmUserStopped().has(e.key) ? null : act(e ? 'hmRecordNow' : 'shellQuickRecord', e ? [e.key] : [], `● ${t('stripRecordRest')}`, 'warn', t('stripRecordRestTip')),
+        { ...act('stripSkip', [e ? e.key : `call:${strip.call}`], '✕', 'x', t('stripDontRecordTip')), icon: true }].filter(Boolean) };
   }
   if (next && next.s.getTime() - now <= STRIP_SOON_MS) {
     const min = Math.max(1, Math.ceil((next.s.getTime() - now) / 60e3));
@@ -157,6 +166,7 @@ function stripState() {
     const grow = mixing ? txStageParts(m).detail : running ? serverText(m.stage_text || q.stage_text || '')
       : holdPause() ? t('stripWaitPause').replace('{time}', () => holdClock())
       : state.queueMeeting && !(q && q.forced) ? t('stripWaitMeeting') : state.queuePaused ? t('stripWaitPaused')
+      : q && q.window && !q.forced ? windowText('stripWait')
       : q && q.hold === 'captions' ? t('stripWaitCaptions')
       : typeof economyOn === 'function' && economyOn() ? t('stripWaitEconomy') : q ? t('queueWaiting').replace('{n}', () => q.position) : '';
     return { kind: 'after', pill: mixWaiting(m) ? mixWaitPill(m) : mixing ? t('stripMixing').replace('{pct}', () => m.progress || 0)
@@ -194,14 +204,15 @@ function renderStrip() {
   const s = stripState();
   strip.click = s.click || null;
   strip.kind = s.kind;
-  const acts = s.acts.map(a => `<button ${pageCall('click', a.fn, a.args)} class="st-btn${a.cls ? ` st-btn-${a.cls}` : ''}"${a.title ? ` title="${escapeHtml(a.title)}"` : ''}>${escapeHtml(a.label)}</button>`).join('');
-  const sig = JSON.stringify([s.kind, s.pill, s.cls, s.lead, s.meta, s.grow, s.growLink, acts, s.tip]);
+  const acts = s.acts.map(a => `<button ${pageCall('click', a.fn, a.args)} class="st-btn${a.cls ? ` st-btn-${a.cls}` : ''}"${a.title ? ` title="${escapeHtml(a.title)}"` : ''}${a.icon ? ` aria-label="${escapeHtml(a.title)}"` : ''}>${a.icon ? `<span aria-hidden="true">${escapeHtml(a.label)}</span>` : escapeHtml(a.label)}</button>`).join('');
+  const sig = JSON.stringify([s.kind, s.pill, s.pillTip, s.cls, s.lead, s.meta, s.grow, s.growLink, acts, s.tip]);
   if (sig === strip.html) return;
   strip.html = sig;
   bar.className = `strip strip-${s.kind}`;
   const pill = document.getElementById('strip-pill');
   pill.className = `st-pill ${s.cls.split(' ').map(c => `stp-${c}`).join(' ')}`;
   document.getElementById('strip-pill-t').textContent = s.pill;
+  if (s.pillTip) pill.title = s.pillTip; else pill.removeAttribute('title');
   const put = (id, v) => { const el = document.getElementById(id); el.textContent = v || ''; el.classList.toggle('hidden', !v); };
   // the title: when it is cut, a hover scrolls it to its end and back (asked by the user, instead of a running line)
   const lead = document.getElementById('strip-lead');
@@ -259,6 +270,8 @@ function stripHide(id) {
 // leaves the call too: else the strip came back at once with the call, and one press was not enough
 function stripSkip(key) {
   strip.skip.add(key);
+  // a meeting waiting for its call is not recorded by itself either (found in review: ✕ hid it, the call recorded it)
+  if (!String(key).startsWith('call:')) home.started.add(key);
   if (strip.call) strip.skip.add(`call:${strip.call}`);
   renderStrip();
 }
@@ -284,6 +297,7 @@ function jobsHoldShort() {
   if (state.queuePaused) return t('islandHoldPaused');
   if (holdPause()) return t('islandHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('islandHoldMeeting');
+  if (windowHeld()) return windowText('islandHold');
   if (captionsHeld()) return t('islandHoldCaptions');
   return '';
 }
@@ -293,8 +307,21 @@ function jobsHold() {
   if (state.queuePaused) return t('jobsHoldPaused');
   if (holdPause()) return t('jobsHoldPause').replace('{time}', () => holdClock());
   if (state.queueMeeting) return t('jobsHoldMeeting');
+  if (windowHeld()) return windowText('jobsHold');
   if (captionsHeld()) return t('jobsHoldCaptions');
   return '';
+}
+
+// «Фоновая обработка» (app/queue_window.py): the automatic jobs wait until the computer is free ("idle"), for the
+// schedule ("schedule", from), or for either ("idle" with from). Only the jobs the server marks (q.window) wait
+function windowHeld() {
+  return !!(state.queueWindow && state.queueWindow.kind) && (state.queue || []).some(q => q.window && !q.forced && q.state !== 'running');
+}
+// The text of the reason by its prefix: «…Idle», «…Schedule» or «…IdleOr» with the time the schedule begins
+function windowText(prefix) {
+  const w = state.queueWindow || {};
+  const key = w.kind === 'schedule' ? 'Schedule' : w.from ? 'IdleOr' : 'Idle';
+  return t(prefix + key).replace('{time}', () => w.from || '');
 }
 
 // A transcription waits for the end of the live captions (the server's queue: hold "captions"): it would load a
@@ -318,9 +345,11 @@ function holdClock() {
 // The waiting text of a transcription held by a meeting (not one the user let go during it) or by the live
 // captions, or '' (the item waits for something else)
 function holdItemText(q, meetingKey) {
-  if (q.kind !== 'transcribe' || q.state === 'running') return '';
-  if (state.queueMeeting && !q.forced) return holdPause() ? t('jobsWaitPause').replace('{time}', () => holdClock()) : t(meetingKey);
-  return q.hold === 'captions' ? t('jobsWaitCaptions') : '';
+  if (q.state === 'running') return '';
+  const transcribe = q.kind === 'transcribe';
+  if (transcribe && state.queueMeeting && !q.forced) return holdPause() ? t('jobsWaitPause').replace('{time}', () => holdClock()) : t(meetingKey);
+  if (q.window && !q.forced && state.queueWindow && state.queueWindow.kind) return windowText('jobsWait');
+  return transcribe && q.hold === 'captions' ? t('jobsWaitCaptions') : '';
 }
 // Each second of the pause: the island, the queue's window, the strip and the status bar show the time left; at
 // its end the queue is asked again (the transcriptions start), and every 5 s while the server still holds them
@@ -347,11 +376,14 @@ function holdTick() {
 async function jobsRunNow(id) {
   const q = (state.queue || []).find(x => x.id === id) || {};
   const pause = holdPause();
-  // what the item says it waits for: the meeting (or the pause after it), else the live captions
-  const captions = (!state.queueMeeting || q.forced) && q.hold === 'captions';
-  const [title, text] = captions ? ['txCaptionsNowTitle', 'txCaptionsNowText']
+  // what the item says it waits for: the meeting (or the pause after it), «Фоновая обработка», else the live captions
+  const meeting = q.kind === 'transcribe' && state.queueMeeting && !q.forced;
+  const win = !meeting && !!q.window && !q.forced;
+  const captions = !meeting && !win && q.hold === 'captions';
+  const [title, text] = win ? ['txWindowNowTitle', 'txWindowNowText'] : captions ? ['txCaptionsNowTitle', 'txCaptionsNowText']
     : pause ? ['txPauseNowTitle', 'txPauseNowText'] : ['txMeetingNowTitle', 'txMeetingNowText'];
-  if (!await confirmDialog(t(title), t(text), t('txMeetingNowYes'), false)) return;
+  const why = win ? windowText('jobsWait') : '';
+  if (!await confirmDialog(t(title), win ? `${why.charAt(0).toUpperCase()}${why.slice(1)}. ${t(text)}` : t(text), t('txMeetingNowYes'), false)) return;
   const res = await fetch(`/api/queue/${Number(id) || 0}/run-now`, { method: 'POST' }).catch(() => null);
   if (!res || !res.ok) { showToast(res ? errorText(await readJson(res), res) : t('errorGeneric')); return; }
   showToast(t('txMeetingNowStarted'));
@@ -395,11 +427,12 @@ function renderJobsIsland() {
   }
   const items = state.queue || [];
   const q = items.find(x => x.state === 'running');
-  let html = '', cls = '', label = '';
+  let html = '', cls = '', label = '', tipMore = '';
   if (items.length) {
     clearTimeout(island.doneTimer);
     island.doneTimer = null;
     const others = items.filter(x => x !== q).length;
+    tipMore = others ? t('islandMoreSolo').replace('{n}', () => others) : '';  // the island shows «+N» only
     const moreText = others ? t('islandMore').replace('{n}', () => others) : '';
     const more = others ? `<span class="st-island-n">${escapeHtml(moreText)}</span>` : '';
     // the strip already says how its own recording goes: only the others then, or the ring alone
@@ -416,8 +449,8 @@ function renderJobsIsland() {
         + `<span class="st-island-t">${escapeHtml(short)}</span>${more}`;
       cls = 'st-island-wait';
     } else if (others) {
-      label = moreText;
-      html = `<span class="st-island-n st-island-solo">${escapeHtml(moreText)}</span>`;
+      label = t('islandMoreSolo').replace('{n}', () => others);  // alone, «+1» would say nothing
+      html = `<span class="st-island-n st-island-solo">${escapeHtml(label)}</span>`;
     } else {
       label = `${queueKindLabel(q)} · ${pct}%`;
       html = islandRing(pct);
@@ -439,7 +472,7 @@ function renderJobsIsland() {
   island.html = sig;
   el.innerHTML = html;
   el.className = `st-island ${cls}`;
-  el.title = label ? `${t('rlTipQueue')} · ${label}` : t('rlTipQueue');
+  el.title = [t('rlTipQueue'), label, label !== tipMore ? tipMore : ''].filter(Boolean).join(' · ');
   el.setAttribute('aria-label', el.title);
   if (appear) animateIn(el);
 }
@@ -466,7 +499,7 @@ function renderJobsPop() {
       + `<span class="vx-val ${running ? 'vx-run' : 'vx-wait'}">${escapeHtml(val)}</span>`
       + `<button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'cancelProcessing', Number(q.id) || 0])} class="vx-x${q.cancelling ? ' invisible' : ''}" title="${escapeHtml(t('tipQueueCancel'))}" aria-label="${escapeHtml(t('tipQueueCancel'))}">✕</button>`
       + (running ? `<span class="vx-pbar"><b style="width:${Math.max(3, pct)}%"></b></span>` : '')
-      + (held ? `<span class="vx-prow-go"><button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'jobsRunNow', Number(q.id) || 0])} class="st-btn st-btn-sm" title="${escapeHtml(t(state.queueMeeting && !q.forced ? 'jobsRunNowTip' : 'jobsRunNowCaptionsTip'))}">${escapeHtml(t('jobsRunNow'))}</button></span>` : '')
+      + (held ? `<span class="vx-prow-go"><button ${pageCall('click', 'stopThen', [{ $: 'event' }, 'jobsRunNow', Number(q.id) || 0])} class="st-btn st-btn-sm" title="${escapeHtml(t(q.kind === 'transcribe' && state.queueMeeting && !q.forced ? 'jobsRunNowTip' : q.window && !q.forced ? 'jobsRunNowWindowTip' : 'jobsRunNowCaptionsTip'))}">${escapeHtml(t('jobsRunNow'))}</button></span>` : '')
       + '</div>';
   }).join('');
   const foot = items.length

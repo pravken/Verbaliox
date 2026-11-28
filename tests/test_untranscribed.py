@@ -55,7 +55,7 @@ class UntranscribedTest(unittest.TestCase):
         self.assertEqual([x["id"] for x in untranscribed.items()], [a])
         with mock.patch("app.transcriber.enqueue_meeting_job", return_value=True) as enq:
             self.assertEqual(untranscribed.transcribe([a, b]), 1)  # the dismissed one is left alone
-            enq.assert_called_once_with(a)
+            enq.assert_called_once_with(a, manual=True)
 
     def test_a_notice_once_a_day_and_never_during_a_meeting(self):
         self._rec("Синк", "cancelled")

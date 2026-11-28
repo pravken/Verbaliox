@@ -421,7 +421,7 @@ def _queue_or_keep(meeting_id: int, processing: Optional[Dict[str, Any]]) -> Non
     if processing and str(processing.get("transcribe", True)).lower() in ("false", "0"):
         update_meeting_progress(meeting_id, status="added", progress=0, stage_text="", error_message="")
         return
-    enqueue_meeting_job(meeting_id)
+    enqueue_meeting_job(meeting_id, manual=True)  # asked for: «Фоновая обработка» does not hold it
 
 class UrlImportPayload(BaseModel):
     url: str
@@ -734,6 +734,7 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
     _ensure_not_processing(meeting_id)
     from app import url_import
 
+    # the same steps for many at once: app/pending.queue_transcription («Обработать всё»)
     if not m.get("media_path") and url_import.valid_url(m.get("filename") or ""):
         # A download by link that did not finish: downloaded again
         if not url_import.restart(meeting_id, m["filename"]):
@@ -746,8 +747,27 @@ def api_retry_meeting(meeting_id: int) -> Dict[str, Any]:
         stage_text="Повторная постановка в очередь...",
         error_message="",
     )
-    enqueue_meeting_job(meeting_id)
+    enqueue_meeting_job(meeting_id, manual=True)
     return get_meeting(meeting_id)
+
+
+class ProcessPendingPayload(BaseModel):
+    dry_run: bool = False   # only the counts, for the confirmation
+    transcribe: bool = True
+    analyse: bool = True
+    ids: Optional[List[int]] = None  # only these (the action of one recording's status in the table)
+
+
+@router.post("/api/library/process-pending")
+def api_process_pending(payload: ProcessPendingPayload) -> Dict[str, Any]:
+    """«Обработать всё» in «Записи» (app/pending.py): the recordings without a text to recognition, the
+    transcribed ones without an analysis to the analysis. dry_run: the counts only."""
+    from app import pending
+
+    if payload.dry_run:
+        p = pending.plan(payload.ids)
+        return {"transcribe": len(p["transcribe"]), "analyse": len(p["analyse"]), "analysis_ready": p["analysis_ready"]}
+    return pending.run(transcribe=payload.transcribe, analyse=payload.analyse, ids=payload.ids)
 
 class RelinkPayload(BaseModel):
     path: str = ""      # empty: the Windows file picker asks for it
@@ -806,7 +826,7 @@ def api_relink_media(meeting_id: int, payload: RelinkPayload) -> Any:
     if not m.get("segments") and m.get("status") in ("failed", "cancelled", "cleared"):
         update_meeting_progress(meeting_id, status="queued", progress=0, stage_text="В очереди на распознавание",
                                 error_message="")
-        enqueue_meeting_job(meeting_id)
+        enqueue_meeting_job(meeting_id, manual=True)
     elif m.get("status") == "failed":
         update_meeting_progress(meeting_id, status="completed", progress=100, stage_text="", error_message="")
     from app import events
@@ -871,7 +891,7 @@ def api_reconfigure_meeting(meeting_id: int, payload: MeetingReconfigurePayload)
         stage_text="Повторная обработка с новыми параметрами...",
         error_message="",
     )
-    enqueue_meeting_job(meeting_id)
+    enqueue_meeting_job(meeting_id, manual=True)
     return get_meeting(meeting_id)
 
 class TranscriptVersionPayload(BaseModel):

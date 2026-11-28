@@ -352,8 +352,10 @@ function renderHomeMeetings() {
         : `<span class="hm-mt-none">${escapeHtml(t('hmNoRecording'))}</span>`;
     } else if (hmAutoRec && hmAutoRec.key === e.key && isRecording()) {
       action = `<span class="hm-mt-btn hm-mt-rec" title="${escapeHtml(t('hmRecordingNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordingNow'))}</span></span>`;
-    } else if (live && now - e.s > 5 * 60e3 && !isRecording()) {
-      // half-way through: not started by itself any more (hmAutoTick), but one click records the rest
+    } else if (live && now - e.s > 5 * 60e3 && !isRecording()
+      && !(e.online && st === 'on' && hmCallWatch !== false && !home.started.has(e.key) && !hmUserStopped().has(e.key))) {
+      // half-way through: not started by itself any more (hmAutoTick), but one click records the rest; an online
+      // meeting still waiting for its call keeps its state: the call starts it (hmJoinTick)
       action = `<button ${pageCall('click', 'hmRecordNow', [e.key])} class="hm-mt-btn" title="${escapeHtml(t('hmRecordNow'))}"><i></i><span class="hm-mt-btn-t">${escapeHtml(t('hmRecordNow'))}</span></button>`;
     } else {
       const label = { on: 'hmStateOn', ask: 'hmStateAsk', skipped: 'hmStateSkipped', off: 'hmStateOff', never: 'hmStateNever', ignored: 'hmStateIgnored' }[st];
@@ -587,6 +589,7 @@ async function hmSetMyName() {
 // tick runs then too; the browser may slow it to once a minute, which the 5-minute start window allows.
 // The question brings the window back (window.pywebview.api.show_window).
 let hmAutoRec = null;  // {key, end}: the recording started for a meeting
+const HM_OVERRUN_MS = 4 * 3600e3;  // a call held past this after its meeting ends no longer keeps the recording
 
 async function hmAutoTick() {
   await hmLoadEvents(false);
@@ -596,8 +599,24 @@ async function hmAutoTick() {
   if (home.events.some(e => !home.started.has(e.key) && t0 >= e.s.getTime() - 75e3 && t0 < e.s.getTime() + 5 * 60e3
     && home.eventsAt < e.s.getTime() - 60e3)) await hmLoadEvents(true);
   const now = Date.now();
-  if (hmAutoRec && !isRecording() && !_quickRecBusy) hmAutoRec = null;  // the user stopped it: it stays stopped
+  if (hmAutoRec && !isRecording() && !_quickRecBusy) {  // the user stopped it: it stays stopped
+    hmUserStopped().add(hmAutoRec.key);
+    hmAutoRec = null;
+  }
   hmAskExpire();
+  // The meeting runs over its time in the calendar while its call still holds the microphone: the recording goes on
+  // until the call lets go of it (hmCallEndTick), and the next meeting does not take its place (reported by the
+  // user: an hour and a half on one call was cut at its calendar end, and a recording of the next meeting began).
+  // Only for an online meeting whose call was seen holding it lately (an in-person meeting ends by the clock; the
+  // status unanswered is no call: found in review, a failing status kept it 4 hours), at most HM_OVERRUN_MS past its end
+  if (hmAutoRec && now > hmAutoRec.end + 60e3 && hmAutoRec.online && hmAutoRec.seenAt && now - hmAutoRec.seenAt < HM_CALL_GONE_MS + 10e3
+      && isRecording() && now < hmAutoRec.end + HM_OVERRUN_MS) {
+    if (!hmAutoRec.overrun) {
+      hmAutoRec.overrun = true;
+      showToast(t('hmCallOverrun').replace('{title}', () => hmAutoRec.title || t('hmUntitled')));
+    }
+    return;
+  }
   if (hmAutoRec && now > hmAutoRec.end + 60e3) {
     const rec = hmAutoRec;
     hmAutoRec = null;
@@ -621,17 +640,55 @@ async function hmAutoTick() {
     if (st === 'on' && now >= s - 75e3 && now < s - 15e3 && !home.warned.has(e.key) && !isRecording()) {
       home.warned.add(e.key);
       recordSound('soon');
-      showToast(t('hmAutoSoon').replace('{title}', () => e.title || t('hmUntitled')));
+      showToast(t(e.online && hmCallWatch !== false ? 'hmAutoSoonCall' : 'hmAutoSoon').replace('{title}', () => e.title || t('hmUntitled')));
     }
-    // only near the start: a meeting half over is not recorded by surprise
-    if (st === 'on' && now >= s - 15e3 && now < s + 5 * 60e3 && !isRecording() && !hmAutoRec) {
-      home.started.add(e.key);
-      hmAutoRec = { key: e.key, end: en, title: e.title || '' };
-      await shellQuickRecord();
-      showToast(t('hmAutoStarted').replace('{title}', () => e.title || t('hmUntitled')));
-      if (isRecording()) autoRecordNotice(true, 'calendar', e.title || t('hmUntitled'));
-    }
+    // an online meeting waits for its call (hmJoinTick); an in-person one starts by the clock, only near the
+    // start: a meeting half over is not recorded by surprise
+    if (e.online && hmCallWatch !== false) continue;
+    if (st === 'on' && now >= s - 15e3 && now < s + 5 * 60e3 && !isRecording() && !hmAutoRec) await hmStartAuto(e, '');
   }
+}
+
+// The meetings whose recording the user stopped (by «Стоп» or the red button): not recorded again by themselves, and
+// the strip offers no «Записать» for them. A recording stopped by the end of its call is not one of them
+function hmUserStopped() { return home.userStopped || (home.userStopped = new Set()); }
+
+// A browser holds the microphone for many things: only an online meeting takes it for its call (found in review)
+function hmIsBrowser(app) { return /\.exe$/i.test(app || ''); }
+
+async function hmStartAuto(e, app) {
+  home.started.add(e.key);
+  hmAutoRec = { key: e.key, end: e.e.getTime(), title: e.title || '', app, online: !!e.online, seenAt: app ? Date.now() : 0 };
+  await shellQuickRecord();
+  showToast(t('hmAutoStarted').replace('{title}', () => e.title || t('hmUntitled')));
+  if (isRecording()) autoRecordNotice(true, 'calendar', e.title || t('hmUntitled'));
+}
+
+// An online meeting is recorded only once its call is joined: a call app or a browser holds the microphone for
+// HM_CALL_JOIN_MS, from two minutes before the meeting to its end (reported by the user: the computer woke from
+// sleep at the time of a meeting nobody joined, and the recording started by the clock). Where the microphone
+// cannot be read (not Windows), the clock starts it as before. hmCallWatch: null until the first status read
+const HM_CALL_JOIN_MS = 8e3;
+let hmCallWatch = null;
+let hmJoin = null;  // {key, since}: the call of this meeting holds the microphone since
+async function hmJoinTick() {
+  const now = Date.now();
+  const due = x => x.online && hmMeetingState(x) === 'on' && now >= x.s.getTime() - 2 * 60e3 && now < x.e.getTime();
+  // a recording made by hand during the meeting: its meeting is not recorded again by itself once it stops (found in
+  // review: a stop by hand mid-call was followed by a new recording seconds later)
+  if (isRecording() && !hmAutoRec) for (const x of home.events) if (due(x)) hmUserStopped().add(x.key);
+  if (hmAutoRec || isRecording() || _quickRecBusy || hmCallWatch === false) { hmJoin = null; return; }
+  const e = home.events.find(x => due(x) && !home.started.has(x.key) && !hmUserStopped().has(x.key) && !x.recording);
+  if (!e) { hmJoin = null; return; }
+  const st = await fetch('/api/calls/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  if (!st) return;
+  hmCallWatch = !!st.supported;
+  if (!hmCallWatch) return;  // the next hmAutoTick starts it by the clock
+  if (!st.meeting_app) { hmJoin = null; return; }
+  if (!hmJoin || hmJoin.key !== e.key) hmJoin = { key: e.key, since: now };
+  if (now - hmJoin.since < HM_CALL_JOIN_MS || hmAutoRec || isRecording() || _quickRecBusy) return;
+  hmJoin = null;
+  await hmStartAuto(e, st.meeting_app);
 }
 
 // A meeting over before its time in the calendar: the recording the calendar started stops when the app
@@ -642,13 +699,17 @@ async function hmCallEndTick() {
   if (!hmAutoRec || !isRecording() || _quickRecBusy) return;
   const st = await fetch('/api/calls/status').then(r => (r.ok ? r.json() : null)).catch(() => null);
   if (!st || !st.supported || !hmAutoRec) return;
-  if (st.meeting_app) { hmAutoRec.app = st.meeting_app; hmAutoRec.freeSince = 0; return; }
+  // an in-person meeting: a browser holding the microphone is not its call
+  const app = st.meeting_app && (hmAutoRec.online || !hmIsBrowser(st.meeting_app)) ? st.meeting_app : '';
+  if (app) { hmAutoRec.app = app; hmAutoRec.freeSince = 0; hmAutoRec.seenAt = Date.now(); return; }
   if (!hmAutoRec.app) return;
   hmAutoRec.freeSince = hmAutoRec.freeSince || Date.now();
   if (Date.now() - hmAutoRec.freeSince < HM_CALL_GONE_MS) return;
   const rec = hmAutoRec;
   hmAutoRec = null;
-  home.started.add(rec.key);
+  // not marked as done: the call joined again records again (found in review: a dropped call was not recorded after)
+  if (rec.online) home.started.delete(rec.key); else home.started.add(rec.key);  // in person: by the clock, once
+  hmJoin = null;
   if (isRecording()) {
     await shellQuickRecord();
     autoRecordNotice(false, 'calendar', rec.title);
@@ -831,6 +892,7 @@ function openBriefFor(kind, value) {
 document.addEventListener('DOMContentLoaded', () => {
   setInterval(hmAutoTick, 20000);
   setInterval(hmCallEndTick, 5000);
+  setInterval(hmJoinTick, 4000);
   // the clock line and the processing on the page follow by themselves
   setInterval(() => { if (state.appView === 'home' && !document.hidden) renderHomeNow(); }, 30000);  // the dashboard: dbTickNow
 });

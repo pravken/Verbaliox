@@ -435,7 +435,8 @@ function updateRecordButtonState() {
   // While recording the capsule is three buttons (asked by the user: the way to the studio was not obvious): the dot,
   // the time and the sources open the studio, «Студия ›» says so, «Стоп» stops. In the studio itself the first two
   // stay in place, inert, so the capsule keeps its width
-  const here = recording && state.appView === 'studio';
+  const inStudio = state.appView === 'studio';
+  const here = recording && inStudio;
   const wrap = document.getElementById('tb-rec-wrap');
   wrap.classList.toggle('tb-rec-live', recording);
   wrap.classList.toggle('tb-rec-here', here);
@@ -444,8 +445,13 @@ function updateRecordButtonState() {
   btn.setAttribute('aria-label', tip);  // in its idle state the button is a dot without words
   const chip = document.getElementById('tb-rec-studio');
   for (const el of [btn, chip]) { if (here) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled'); }
-  chip.classList.toggle('hidden', !recording);
-  chip.title = here ? '' : t('tbRecOpenStudio');
+  // «Студия» stays in the capsule when it does not record too (asked by the user: no quick way to the studio
+  // without starting a recording); in the studio it is the current place, inert, and keeps its width
+  chip.classList.toggle('hidden', starting);
+  chip.classList.toggle('is-here', inStudio);
+  if (inStudio) chip.setAttribute('aria-current', 'page'); else chip.removeAttribute('aria-current');
+  chip.title = inStudio ? '' : t(recording ? 'tbRecOpenStudio' : 'tbRecOpenStudioIdle');
+  chip.setAttribute('aria-label', t(recording ? 'tbRecOpenStudio' : 'tbRecOpenStudioIdle'));
   // the chip tells whether the captions are on: the accent when they are, a green outline that invites to them when not
   const captions = !!document.getElementById('live-captions-toggle')?.checked;
   chip.classList.toggle('is-on', recording && captions);
@@ -490,7 +496,8 @@ function recStudioHintClose(e) {
 
 // «Студия ›» of the capsule: the studio of the running recording
 function recStudioChip() {
-  if (!isRecording() || state.appView === 'studio') return;
+  if (state.appView === 'studio') return;
+  if (!isRecording()) { switchAppView('studio'); return; }  // its presets, sources and captions, before a recording
   recStudioHintDone();
   openRecordStudio();
 }
@@ -660,7 +667,9 @@ function renderStatusbar() {
     ? `${queueKindLabel(run)} · ${pct}% — «${run.title}»${more ? ` · ${t('sbQueueMore').replace('{n}', () => more)}` : ''}`
     : state.queuePaused ? t('sbQueuePaused').replace('{n}', () => items.length)
     : holdPause() ? t('sbQueuePause').replace('{time}', () => holdClock()).replace('{n}', () => items.length)
-    : state.queueMeeting ? t('sbQueueMeeting').replace('{n}', () => items.length) : t('sbQueueWaiting').replace('{n}', () => items.length);
+    : state.queueMeeting ? t('sbQueueMeeting').replace('{n}', () => items.length)
+    : typeof windowHeld === 'function' && windowHeld() ? `${windowText('islandHold')}: ${items.length}`
+    : t('sbQueueWaiting').replace('{n}', () => items.length);
   q.classList.add('sb-queue-busy');
 }
 

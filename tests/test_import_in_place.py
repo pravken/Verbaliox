@@ -38,7 +38,7 @@ class ImportInPlaceTest(unittest.TestCase):
             job.assert_not_called()
             self.assertEqual(get_meeting(mid)["status"], "added")
             library.api_retry_meeting(mid)
-            job.assert_called_once_with(mid)
+            job.assert_called_once_with(mid, manual=True)  # asked for: «Фоновая обработка» does not hold it
         self.assertEqual(get_meeting(mid)["status"], "queued")
 
     def test_by_default_the_file_stays_where_it_is(self):

@@ -330,7 +330,7 @@ await step('menu at the bottom', async () => {
     return { bottom: r.bottom, vh: innerHeight };
   });
   expect(box.bottom <= box.vh, 'the menu leaves the window');
-  expect(await page.isVisible('#recording-context-menu button[data-click="ctxExport"]'), 'no export in the menu');
+  expect(await page.isVisible('#recording-context-menu [data-submenu="ctx-sub-export"]'), 'no export in the menu');
   await page.evaluate(() => hideContextMenu());
   await sleep(250);
   // the same menu in a low window scrolls inside it; opened again in a tall one it has its whole height back
@@ -339,7 +339,7 @@ await step('menu at the bottom', async () => {
     return new Promise(ok => setTimeout(() => { const e = document.getElementById('recording-context-menu'), r = e.getBoundingClientRect();
       ok({ bottom: r.bottom, vh: innerHeight, max: e.style.maxHeight }); }, 250));
   });
-  await page.setViewportSize({ width: 1300, height: 360 });
+  await page.setViewportSize({ width: 1300, height: 280 });
   const low = await ctxAt();
   expect(low.bottom <= low.vh && !!low.max, `the menu in a low window: ${JSON.stringify(low)}`);
   await page.evaluate(() => hideContextMenu());
@@ -353,6 +353,161 @@ await step('menu at the bottom', async () => {
 
 // The menus are looked for after a change that can open one, not after the level meter and the timer of a recording
 // (20 times a second for a whole meeting, each look going over the whole page)
+// The recording's menu in four groups with submenus «Экспорт ›», «Нарезка ›», «Ещё ›» (asked by the user: the menu held
+// too much): a hover opens a submenu, → ← Esc work from the keyboard, the menu fits a 1100×700 window opened at its bottom
+await step('recording menu submenus', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  const open = (x, y) => page.evaluate(([cx, cy]) => {
+    hideContextMenu();
+    openRecordingContextMenu({ clientX: cx, clientY: cy, preventDefault() {}, stopPropagation() {} }, 1);
+  }, [x, y]);
+  await open(300, 120); await sleep(300);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#recording-context-menu > button')]
+    .filter(b => !b.classList.contains('hidden')).map(b => b.dataset.click || b.dataset.submenu));
+  expect(JSON.stringify(rows) === JSON.stringify(['ctxOpenInfo', 'ctxRenameRecording', 'ctxMoveToFolder', 'openSeriesMenu',
+    'ctxOpenReconfigureModal', 'ctx-sub-export', 'ctx-sub-cut', 'ctx-sub-more', 'ctxDeleteRecording']), `the rows: ${rows}`);
+  // the «›» of the submenu rows and the shortcuts at the same right edge
+  const edges = await page.evaluate(() => [...document.querySelectorAll('#recording-context-menu .tm-key, #recording-context-menu .vx-sub-chev')]
+    .map(e => Math.round(e.getBoundingClientRect().right)));
+  expect(new Set(edges).size === 1, `the right edges of the keys and «›»: ${edges}`);
+  // a hover on «Экспорт ›»: DOCX beside the menu, to its right
+  await page.hover('#ctx-sub-export-btn');
+  await until(() => !document.getElementById('ctx-sub-export').classList.contains('hidden'), 'hover did not open «Экспорт ›»', 2000);
+  expect(await page.isVisible('#ctx-sub-export button:has-text("DOCX")'), 'no DOCX');
+  const side = await page.evaluate(() => [document.getElementById('recording-context-menu').getBoundingClientRect().right,
+    document.getElementById('ctx-sub-export').getBoundingClientRect().left, document.getElementById('ctx-sub-export-btn').getAttribute('aria-expanded')]);
+  expect(side[1] >= side[0] - 4 && side[2] === 'true', `«Экспорт ›» not beside the menu: ${side}`);
+  // over another row the submenu closes; over «Ещё ›» its four items
+  await page.hover('#recording-context-menu button[data-click="ctxRenameRecording"]');
+  await until(() => document.getElementById('ctx-sub-export').classList.contains('hidden'), '«Экспорт ›» stayed open over another row', 2000);
+  await page.hover('#ctx-sub-more-btn');
+  await until(() => !document.getElementById('ctx-sub-more').classList.contains('hidden'), 'hover did not open «Ещё ›»', 2000);
+  const more = await page.evaluate(() => [...document.querySelectorAll('#ctx-sub-more button')].filter(b => b.offsetParent).map(b => b.dataset.click));
+  expect(JSON.stringify(more) === JSON.stringify(['ctxImportTeamsVtt', 'ctxRevealInExplorer', 'ctxClearResults', 'ctxRemoveMedia']), `«Ещё ›»: ${more}`);
+  // the keyboard: → opens «Нарезка ›» with the focus in it, ← goes back, Esc closes the submenu and then the menu
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => { closeSubmenus(); document.getElementById('ctx-sub-cut-btn').focus(); });
+  await page.keyboard.press('ArrowRight');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), '→ did not move the focus into «Нарезка ›»', 2000);
+  expect(await page.evaluate(() => document.activeElement.dataset.clickArgs) === '["clean"]', 'the first item of «Нарезка ›» is not «Без пауз»');
+  await page.keyboard.press('ArrowDown');
+  expect(await page.evaluate(() => document.activeElement.dataset.clickArgs) === '["highlights"]', '↓ did not move to «Ключевые моменты»');
+  await page.keyboard.press('ArrowLeft');
+  await until(() => document.getElementById('ctx-sub-cut').classList.contains('hidden') && document.activeElement.id === 'ctx-sub-cut-btn', '← did not go back to the row', 2000);
+  await page.keyboard.press('Enter');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), 'Enter did not open «Нарезка ›»', 2000);
+  await page.keyboard.press('Escape'); await sleep(300);
+  expect(await page.evaluate(() => document.getElementById('ctx-sub-cut').classList.contains('hidden') && vxShown('recording-context-menu')),
+    'Esc did not close only the submenu');
+  await page.keyboard.press('Escape'); await sleep(350);
+  expect(!(await page.isVisible('#recording-context-menu')), 'the second Esc did not close the menu');
+  // at the bottom right of a 1100×700 window: the menu and its submenu inside the window, the submenu to the left
+  await open(1090, 690); await sleep(300);
+  await page.hover('#ctx-sub-more-btn');
+  await until(() => !document.getElementById('ctx-sub-more').classList.contains('hidden'), 'hover did not open «Ещё ›» at the bottom', 2000);
+  const fit = await page.evaluate(() => {
+    const a = document.getElementById('recording-context-menu').getBoundingClientRect(), b = document.getElementById('ctx-sub-more').getBoundingClientRect();
+    return { a: [a.left, a.top, a.right, a.bottom], b: [b.left, b.top, b.right, b.bottom], scroll: document.getElementById('recording-context-menu').style.maxHeight };
+  });
+  expect(fit.a[1] >= 0 && fit.a[3] <= 700 && fit.a[2] <= 1100 && !fit.scroll, `the menu at the bottom: ${JSON.stringify(fit)}`);
+  expect(fit.b[1] >= 0 && fit.b[3] <= 700 && fit.b[2] <= fit.a[0] + 4 && fit.b[0] >= 0, `«Ещё ›» at the bottom: ${JSON.stringify(fit)}`);
+  await page.evaluate(() => hideContextMenu()); await sleep(250);
+  await page.setViewportSize({ width: 1300, height: 860 });
+});
+
+// The recording's menu: a submenu does not stay behind when the menu opens again for another recording or scrolls in
+// a low window; the way from «Экспорт ›» to its items over «Нарезка ›» keeps «Экспорт ›» (review); opened from the
+// keyboard on «⋯» it stands under the button with the focus on its first item, and the focus goes back to «⋯» after
+await step('recording menu keyboard and aim', async () => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  const shown = (id) => page.evaluate(i => !document.getElementById(i).classList.contains('hidden'), id);
+  // opened again (a right click on another recording) while «Нарезка ›» is open from the keyboard
+  await page.evaluate(() => { hideContextMenu(); openRecordingContextMenu({ clientX: 300, clientY: 120, preventDefault() {}, stopPropagation() {} }, 1); });
+  await sleep(300);
+  await page.focus('#ctx-sub-cut-btn');
+  await page.keyboard.press('ArrowRight');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), '→ did not open «Нарезка ›»', 2000);
+  await page.evaluate(() => openRecordingContextMenu({ clientX: 620, clientY: 260, preventDefault() {}, stopPropagation() {} }, 1));
+  await sleep(150);
+  expect(!(await shown('ctx-sub-cut')), '«Нарезка ›» stayed at its old place when the menu opened again');
+  // the way to the items of «Экспорт ›» over «Нарезка ›» (about half a second): «Экспорт ›» stays
+  await page.evaluate(() => hideContextMenu()); await sleep(300);
+  await page.evaluate(() => openRecordingContextMenu({ clientX: 300, clientY: 120, preventDefault() {}, stopPropagation() {} }, 1));
+  await sleep(300);
+  await page.hover('#ctx-sub-export-btn');
+  await until(() => !document.getElementById('ctx-sub-export').classList.contains('hidden'), 'hover did not open «Экспорт ›»', 2000);
+  await sleep(250);
+  const way = await page.evaluate(() => {
+    const r = document.getElementById('ctx-sub-export-btn').getBoundingClientRect();
+    const md = document.querySelector('#ctx-sub-export button[data-click-args=\'["srt"]\']').getBoundingClientRect();
+    const cut = document.getElementById('ctx-sub-cut-btn').getBoundingClientRect();
+    return { x0: r.left + 24, y0: r.top + r.height / 2, x1: md.left + 20, y1: md.top + md.height / 2, cutTop: cut.top, cutBottom: cut.bottom };
+  });
+  await page.mouse.move(way.x0, way.y0);
+  let overCut = false;
+  for (let i = 1; i <= 18; i++) {
+    const x = way.x0 + (way.x1 - way.x0) * i / 18, y = way.y0 + (way.y1 - way.y0) * i / 18;
+    await page.mouse.move(x, y);
+    if (y > way.cutTop && y < way.cutBottom) overCut = true;
+    await sleep(30);
+  }
+  expect(overCut, `the way did not cross «Нарезка ›»: ${JSON.stringify(way)}`);
+  await sleep(600);
+  expect(await shown('ctx-sub-export') && !(await shown('ctx-sub-cut')), 'the way to «Экспорт ›» over «Нарезка ›» switched to «Нарезка ›»');
+  // resting on «Нарезка ›» switches to it
+  await page.hover('#ctx-sub-cut-btn');
+  await until(() => !document.getElementById('ctx-sub-cut').classList.contains('hidden'), 'resting on «Нарезка ›» did not open it', 2000);
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => hideContextMenu()); await sleep(300);
+  // a low window: the menu scrolls, and its open submenu follows its row or closes
+  await page.setViewportSize({ width: 1100, height: 300 });
+  await page.evaluate(() => openRecordingContextMenu({ clientX: 300, clientY: 20, preventDefault() {}, stopPropagation() {} }, 1));
+  await until(() => !!document.getElementById('recording-context-menu').style.maxHeight, 'the menu does not scroll in a low window', 2000);
+  await page.focus('#ctx-sub-export-btn');
+  await page.keyboard.press('ArrowRight');
+  await until(() => !document.getElementById('ctx-sub-export').classList.contains('hidden'), '→ did not open «Экспорт ›» in a low window', 2000);
+  const moved = await page.evaluate(() => { const m = document.getElementById('recording-context-menu'), t0 = m.scrollTop; m.scrollTop = m.scrollHeight; return m.scrollHeight - m.clientHeight - t0; });
+  expect(moved > 10, `the menu did not scroll: ${moved}`);
+  // the scroll may be smooth: the submenu is looked at until it is by its row (or closed)
+  await until(() => {
+    const sub = document.getElementById('ctx-sub-export');
+    if (sub.classList.contains('hidden')) return true;
+    const r = document.getElementById('ctx-sub-export-btn').getBoundingClientRect();
+    const first = sub.querySelector('.macos-menu-item').getBoundingClientRect(), s = sub.getBoundingClientRect();
+    window.__subAt = { row: r.top, first: first.top, top: s.top, bottom: s.bottom, h: innerHeight };
+    return Math.abs(first.top - r.top) < 3;
+  }, '«Экспорт ›» stayed where it was when the menu scrolled', 2000).catch(async (e) => { throw new Error(`${e.message}: ${JSON.stringify(await page.evaluate(() => window.__subAt))}`); });
+  await page.evaluate(() => hideContextMenu()); await sleep(300);
+  await page.setViewportSize({ width: 1100, height: 700 });
+  // from the keyboard: Enter on «⋯» of the open recording
+  await page.evaluate(() => { switchAppView('library'); if (!state.activeMeeting) openMeeting(1); });
+  const dots = 'button[data-click="openActiveRecordingMenu"]';
+  await until(s => { const b = document.querySelector(s); return !!b && b.getClientRects().length > 0; }, 'no «⋯» of the recording', 5000, dots);
+  await page.focus(dots);
+  await page.keyboard.press('Enter');
+  await until(() => vxShown('recording-context-menu'), 'Enter on «⋯» did not open the menu', 2000);
+  await sleep(250);
+  const place = await page.evaluate(s => {
+    const b = document.querySelector(s).getBoundingClientRect(), m = document.getElementById('recording-context-menu').getBoundingClientRect();
+    return { b: [b.left, b.top, b.bottom], m: [m.left, m.top], focus: document.activeElement?.dataset.click || document.activeElement?.tagName };
+  }, dots);
+  expect(Math.abs(place.m[0] - place.b[0]) < 6 && (place.m[1] >= place.b[2] - 1 || place.m[1] + 10 < place.b[1]), `the menu is not at «⋯»: ${JSON.stringify(place)}`);
+  expect(place.focus === 'ctxOpenInfo', `the focus is not on the first item: ${place.focus}`);
+  await page.keyboard.press('ArrowDown');
+  expect(await page.evaluate(() => document.activeElement?.dataset.click) === 'ctxRenameRecording', '↓ did not move to «Переименовать»');
+  await page.keyboard.press('Escape');
+  await until(s => !vxShown('recording-context-menu') && document.activeElement === document.querySelector(s), 'Esc did not take the focus back to «⋯»', 2000, dots);
+  // an action from a submenu (every action closes the menu first): the focus goes back to «⋯», not to the page
+  await page.keyboard.press('Enter');
+  await until(() => document.activeElement?.dataset.click === 'ctxOpenInfo', 'Enter on «⋯» again: no focus in the menu', 2000);
+  await page.focus('#ctx-sub-cut-btn');
+  await page.keyboard.press('ArrowRight');
+  await until(() => document.getElementById('ctx-sub-cut').contains(document.activeElement), '→ did not open «Нарезка ›» from «⋯»', 2000);
+  await page.evaluate(() => hideContextMenu());
+  await until(s => document.activeElement === document.querySelector(s), 'the focus did not go back to «⋯» after an action', 2000, dots);
+  await sleep(300);
+});
+
 await step('menus not looked for on a meter tick', async () => {
   const r = await page.evaluate(async () => {
     const real = window.vxSyncLayers;
@@ -913,7 +1068,10 @@ await step('today open a day', async () => {
   // the week is drawn again once the calendar just saved is read: the column of that drawing is waited for
   await until(k => { const el = document.querySelector(`#td-cal .cal-col[data-daykey="${k}"]`);
     return !!el && getComputedStyle(el).cursor === 'pointer'; }, 'no hand over the day', 5000, key);
-  const box = await col.boundingBox();
+  // the week may be drawn once more meanwhile: the column of that drawing is measured
+  let box = null;
+  for (let i = 0; i < 30 && !box; i++) { box = await col.boundingBox().catch(() => null); if (!box) await sleep(100); }
+  expect(!!box, 'the column of the day is gone');
   await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
   await sleep(900);
   expect(await page.isVisible('#td-day') && !(await page.isVisible('#td-cal')), 'the click on a day did not open «День»');
@@ -1048,6 +1206,212 @@ await step('records section', async () => {
   await page.click('#lt-body .lt-row .lt-c-name');
   await sleep(600);
   expect(await page.evaluate(() => state.appView) === 'library', 'a click did not open the recording');
+});
+
+// «Обработать всё» in the head of «Записи», the status's «Распознать» / «Анализ» and the feature cell's «Выбрать
+// фичу» on hover and focus, in the same place (no width changes). CI has no models: the routes are answered here,
+// and the recordings without a text or an analysis are made in the page only
+await step('records process pending', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await until(() => !document.getElementById('libtable-view').classList.contains('hidden') && document.querySelector('#lt-body .lt-row'), 'records did not open');
+  await until(() => document.getElementById('lt-process')?.disabled === true, 'the button is on while every recording is analysed');
+  const sent = [];
+  await page.route('**/api/library/process-pending', r => {
+    const b = r.request().postDataJSON();
+    sent.push(b);
+    r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(b.dry_run ? { transcribe: 1, analyse: 1, analysis_ready: true } : { transcribe: b.transcribe ? 1 : 0, analyse: 1, analysis_waiting: 0, analysis_ready: true }) });
+  });
+  await page.route('**/api/meetings/*/retry', r => { sent.push({ retry: r.request().url() }); r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+  const ids = await page.evaluate(() => {
+    const [a, b] = state.meetings;
+    Object.assign(a, { status: 'added', has_transcript: false, has_summary: false, features: [] });
+    Object.assign(b, { has_summary: false });
+    // a recognition model «downloaded» for «Распознать» (requireRecognitionModel)
+    const sel = document.getElementById('upload-model');
+    if (sel && !sel.value) { sel.add(new Option('test', 'test-model')); sel.value = 'test-model'; window.__ltOpt = true; }
+    window.__ltList = JSON.parse(JSON.stringify(state.meetings));
+    renderLibTable();
+    return { a: a.id, b: b.id };
+  });
+  // the list read again after an action would bring the analysed recordings back: the one made here is answered
+  const list = await page.evaluate(() => window.__ltList);
+  await page.route('**/api/meetings', r => (r.request().method() === 'GET'
+    ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(list) }) : r.continue()));
+  try {
+    await until(() => document.getElementById('lt-process')?.disabled === false, 'the button is off with work left');
+    // the search stays the last control, at the right edge
+    expect(await page.evaluate(() => document.getElementById('lt-process').getBoundingClientRect().right
+      <= document.querySelector('#libtable-view .tk-search').getBoundingClientRect().left), 'the button is not before the search');
+    await page.click('#lt-process');
+    await until(() => document.querySelector('div.modal-backdrop[role="dialog"]:not([id]) button[data-a="yes"]'), 'no confirmation with the counts');
+    const text = await page.textContent('div.modal-backdrop[role="dialog"]:not([id])');
+    const words = await page.evaluate(() => [t('ltProcessTr'), t('ltProcessAn')]);
+    expect(text.includes(`${words[0]}: 1`) && text.includes(`${words[1]}: 1`), `the confirmation does not show the counts: ${text}`);
+    await page.click('div.modal-backdrop[role="dialog"]:not([id]) button[data-a="yes"]');
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltProcessDone').split(':')[0]), 'no toast with the result');
+    expect(sent.some(b => b.dry_run) && sent.some(b => !b.dry_run && b.transcribe && b.analyse && !b.ids), `the batch was not sent: ${JSON.stringify(sent)}`);
+    // the status: «Распознать» and «Анализ» in the place of the status, the same width
+    const hoverSwap = async (sel, word) => {
+      await until(s => document.querySelector(s), `no ${sel}`, 5000, sel);
+      const w0 = await page.$eval(sel, e => e.getBoundingClientRect().width);
+      await page.hover(sel);
+      await until(([s, w]) => [...document.querySelector(s).querySelectorAll('span')].some(x => !x.children.length && x.textContent === w
+        && getComputedStyle(x).visibility === 'visible'), `${sel} does not show «${word}» on hover`, 3000, [sel, word]);
+      const w1 = await page.$eval(sel, e => e.getBoundingClientRect().width);
+      expect(Math.abs(w1 - w0) < 0.5, `${sel} changed its width on hover: ${w0} -> ${w1}`);
+    };
+    await hoverSwap(`#lt-body [data-st-act="transcribe"][data-st-id="${ids.a}"]`, await page.evaluate(() => t('ltStTranscribe')));
+    await page.click(`#lt-body [data-st-act="transcribe"][data-st-id="${ids.a}"]`);
+    await until(() => !document.getElementById('libtable-view').classList.contains('hidden'), 'a click on the status left the section');
+    await sleep(300);
+    expect(sent.some(b => b.retry && b.retry.includes(`/api/meetings/${ids.a}/retry`)), '«Распознать» did not queue the recording');
+    expect(await page.evaluate(() => state.appView) === 'libtable', 'a click on the status opened the recording');
+    await hoverSwap(`#lt-body [data-st-act="analyse"][data-st-id="${ids.b}"]`, await page.evaluate(() => t('ltStAnalyse')));
+    await page.click(`#lt-body [data-st-act="analyse"][data-st-id="${ids.b}"]`);
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltAnalysisQueued')), '«Анализ» said nothing');
+    expect(sent.some(b => !b.dry_run && JSON.stringify(b.ids) === `[${ids.b}]` && b.transcribe === false), `«Анализ» did not queue this recording: ${JSON.stringify(sent)}`);
+    // the feature cell: «Выбрать фичу» in the place of «—», and the keyboard opens the menu of the features
+    await page.mouse.move(2, 2);
+    await hoverSwap(`#lt-body [data-ft-pick="${ids.a}"]`, await page.evaluate(() => t('ltFtChoose')));
+    await page.mouse.move(2, 2);
+    await page.focus(`#lt-body [data-ft-pick="${ids.a}"]`);
+    await page.keyboard.press('Enter');
+    await until(() => document.getElementById('text-menu'), 'Enter on «Выбрать фичу» opened no menu');
+    expect(await page.evaluate(() => state.appView) === 'libtable', 'Enter on «Выбрать фичу» opened the recording');
+    await page.evaluate(() => closeTextMenu());
+  } finally {  // a failed check leaves no answered route and no model behind for the next steps
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await page.evaluate(async () => {
+      if (window.__ltOpt) { const sel = document.getElementById('upload-model'); sel.querySelector('option[value="test-model"]')?.remove(); sel.value = sel.options[0]?.value || ''; }
+      await loadMeetingsList();
+    });
+  }
+});
+
+// The buttons of a row of «Записи» (review): Shift, Ctrl or ⌘ on the status's action or the feature cell change the
+// selection and run nothing; with several selected the feature cell is for all of them and the status's action for its
+// row only; a click there closes the menus left open; «Распознать» of a recording with a text asks first; «Анализ»
+// already queued says so; after Enter on «Распознать» the focus stays in the table; Tab stops at the current row only;
+// the ring of the focus is drawn inside the button (the cell cut it)
+await step('records row buttons', async () => {
+  await page.evaluate(() => switchAppView('libtable'));
+  await until(() => !document.getElementById('libtable-view').classList.contains('hidden') && document.querySelector('#lt-body .lt-row'), 'records did not open');
+  const sent = [];
+  let analyse = 1;
+  await page.route('**/api/library/process-pending', r => {
+    const b = r.request().postDataJSON();
+    sent.push(b);
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ transcribe: 0, analyse, analysis_waiting: 0, analysis_ready: true }) });
+  });
+  await page.route('**/api/meetings/*/retry', r => { sent.push({ retry: r.request().url() }); r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+  const ids = await page.evaluate(() => {
+    const [a, b, c] = state.meetings;
+    Object.assign(a, { status: 'failed', transcript_model: null, has_transcript: false, has_summary: false });
+    Object.assign(b, { status: 'completed', has_transcript: true, has_summary: false });
+    Object.assign(c, { status: 'cleared', has_transcript: false, has_summary: false });
+    const sel = document.getElementById('upload-model');
+    if (sel && !sel.value) { sel.add(new Option('test', 'test-model')); sel.value = 'test-model'; window.__ltOpt = true; }
+    window.__ltList = JSON.parse(JSON.stringify(state.meetings));
+    state.multi.clear();
+    LT.cur = null;
+    renderLibTable();
+    return { a: a.id, b: b.id, c: c.id };
+  });
+  const list = await page.evaluate(() => window.__ltList);
+  await page.route('**/api/meetings', r => (r.request().method() === 'GET'
+    ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(list) }) : r.continue()));
+  const st = (id) => `#lt-body [data-st-id="${id}"]`, ft = (id) => `#lt-body [data-ft-pick="${id}"]`;
+  const dialog = 'div.modal-backdrop[role="dialog"]:not([id])';
+  try {
+    await until(s => document.querySelector(s), 'no «Распознать» of the failed recording', 5000, st(ids.a));
+    // Shift and Ctrl: the selection, no action
+    await page.click(st(ids.a), { modifiers: ['Shift'] });
+    await sleep(300);
+    expect(!sent.some(b => b.retry), `Shift+click on «Распознать» queued the recording: ${JSON.stringify(sent)}`);
+    expect(await page.evaluate(id => state.multi.has(id), ids.a), 'Shift+click on the status did not select the row');
+    await page.click(ft(ids.b), { modifiers: ['Control'] });
+    await sleep(200);
+    expect(!(await page.evaluate(() => !!document.getElementById('text-menu'))), 'Ctrl+click on the feature cell opened its menu');
+    expect(await page.evaluate(id => state.multi.has(id), ids.b), 'Ctrl+click on the feature cell did not select the row');
+    // several selected: the feature cell of a selected row is for all of them, the status's action for its row only
+    await page.evaluate(([a, b]) => {
+      state.multi = new Set([a, b]); ltPaintPick();
+      window.__ltFtReal = window.ltFeatureItems;
+      window.ltFeatureItems = (l) => { window.__ltFtList = l.map(m => m.id); return window.__ltFtReal(l); };
+    }, [ids.a, ids.b]);
+    await page.click(ft(ids.a));
+    await until(() => document.getElementById('text-menu'), 'the feature cell opened no menu with a selection');
+    const forList = await page.evaluate(() => { window.ltFeatureItems = window.__ltFtReal; closeTextMenu(); return window.__ltFtList; });
+    expect(JSON.stringify((forList || []).slice().sort()) === JSON.stringify([ids.a, ids.b].sort()), `the feature menu is not for the selection: ${forList}`);
+    await page.click(st(ids.b));
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltAnalysisQueued')), '«Анализ» said nothing');
+    expect(sent.some(b => JSON.stringify(b.ids) === `[${ids.b}]`), `«Анализ» was not for its row only: ${JSON.stringify(sent)}`);
+    expect(await page.evaluate(() => state.multi.size) === 2, 'the status\'s action changed the selection');
+    await page.evaluate(() => clearLibSelection());
+    // «Анализ» queued already: said
+    analyse = 0;
+    await page.click(st(ids.b));
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltAnalysisBusy')), '«Анализ» queued already said nothing');
+    analyse = 1;
+    // a menu left open closes on a click on the status or the feature cell
+    // the menu below the row, not over its buttons
+    const ctx = (id) => page.evaluate(i => {
+      const r = document.querySelector(`#lt-body [data-mid="${i}"]`).getBoundingClientRect();
+      openRecordingContextMenu({ clientX: r.left + 30, clientY: r.bottom + 40, preventDefault() {}, stopPropagation() {} }, i);
+    }, id);
+    await ctx(ids.b);
+    await until(() => vxShown('recording-context-menu'), 'the recording menu did not open');
+    await page.click(ft(ids.b));
+    await until(() => !vxShown('recording-context-menu') && document.getElementById('text-menu'), 'the recording menu stayed open over the feature menu');
+    await page.evaluate(() => closeTextMenu());
+    await ctx(ids.b);
+    await until(() => vxShown('recording-context-menu'), 'the recording menu did not open again');
+    await page.click(st(ids.b));
+    await until(() => !vxShown('recording-context-menu'), 'the recording menu stayed open after the status\'s action');
+    // a recording whose results were deleted: asked first, «Отмена» queues nothing
+    const before = sent.filter(b => b.retry).length;
+    await page.click(st(ids.c));
+    await until(s => document.querySelector(`${s} button[data-a="no"]`), '«Распознать» of a cleared recording did not ask', 5000, dialog);
+    await page.click(`${dialog} button[data-a="no"]`);
+    await sleep(300);
+    expect(sent.filter(b => b.retry).length === before, '«Распознать» of a cleared recording queued it without asking');
+    // Tab: the buttons of the current row only
+    await page.evaluate(id => { LT.cur = id; ltPaintPick(); document.getElementById('lt-scroll').focus(); }, ids.a);
+    const tabs = await page.evaluate(id => {
+      const all = [...document.querySelectorAll('#lt-body [data-mid] button')].filter(b => b.tabIndex >= 0);
+      return { n: all.length, rows: new Set(all.map(b => b.closest('[data-mid]').dataset.mid)).size, mine: all.every(b => b.closest('[data-mid]').dataset.mid === String(id)) };
+    }, ids.a);
+    expect(tabs.n > 0 && tabs.rows === 1 && tabs.mine, `Tab stops at the buttons of many rows: ${JSON.stringify(tabs)}`);
+    await page.keyboard.press('Tab');
+    await until(id => document.activeElement?.closest('[data-mid]')?.dataset.mid === String(id), 'Tab from the table did not reach the current row', 2000, ids.a);
+    // the ring inside the button: the cell (overflow hidden) cut the one drawn outside
+    await page.focus(ft(ids.a));
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    const ring = await page.evaluate(s => { const e = document.querySelector(s); return e.matches(':focus-visible') ? getComputedStyle(e).outlineOffset : 'no focus'; }, ft(ids.a));
+    expect(ring === '-2px', `the ring of the feature cell is drawn outside: ${ring}`);
+    // Enter on «Распознать»: the list is read again and drawn, the focus stays in the table and ↓ moves the row
+    await page.focus(st(ids.a));
+    await page.keyboard.press('Enter');
+    await until(() => document.getElementById('toast')?.textContent.includes(t('ltQueuedN').split(':')[0]), '«Распознать» said nothing');
+    await sleep(200);
+    const where = await page.evaluate(() => [document.activeElement?.tagName, document.activeElement?.id, !!document.activeElement?.closest('#lt-scroll')]);
+    expect(where[2], `the focus fell out of the table after «Распознать»: ${where}`);
+    const cur0 = await page.evaluate(() => LT.cur);
+    await page.keyboard.press('ArrowDown');
+    expect(await page.evaluate(() => LT.cur) !== cur0, '↓ after «Распознать» did not move the row');
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await page.evaluate(async () => {
+      if (window.__ltFtReal) window.ltFeatureItems = window.__ltFtReal;
+      if (window.__ltOpt) { const sel = document.getElementById('upload-model'); sel.querySelector('option[value="test-model"]')?.remove(); sel.value = sel.options[0]?.value || ''; }
+      closeTextMenu();
+      hideContextMenu();
+      state.multi.clear();
+      await loadMeetingsList();
+    });
+  }
 });
 
 // Import: «＋ Импорт ▾» in the strip on top is a split button; its ▾ is a menu with an icon at each way to add;
@@ -1664,6 +2028,74 @@ await step('caption models not downloaded', async () => {
   }
 });
 
+// An online meeting of the calendar is recorded only once its call holds the microphone (reported by the user: the
+// computer woke from sleep at the time of a meeting nobody joined and the recording started by the clock)
+await step('an online meeting waits for its call', async () => {
+  const mic = { app: null };
+  await page.route('**/api/calls/status', r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ supported: true, active: false, running: true, meeting_app: mic.app, mic_now: mic.app ? ['ms-teams.exe'] : [] }) }));
+  await page.evaluate(() => {
+    window.__hmSaved = { q: shellQuickRecord, rec: isRecording, load: hmLoadEvents, st: hmMeetingState, note: autoRecordNotice,
+      events: home.events, started: new Set(home.started), warned: new Set(home.warned) };
+    window.__hmRec = { starts: 0, on: false };
+    shellQuickRecord = async () => { window.__hmRec.starts++; window.__hmRec.on = !window.__hmRec.on; };
+    isRecording = () => window.__hmRec.on;
+    hmLoadEvents = async () => {};
+    hmMeetingState = () => 'on';
+    autoRecordNotice = () => {};
+    const now = Date.now();
+    home.events = [{ key: 'scenario|call', title: 'Планёрка', online: true, attendees: [], s: new Date(now - 30e3), e: new Date(now + 30 * 60e3) }];
+    hmAutoRec = null; hmJoin = null; hmCallWatch = null;
+  });
+  try {
+    const idle = await page.evaluate(async () => { await hmJoinTick(); await hmAutoTick(); await hmJoinTick(); return [window.__hmRec.starts, hmCallWatch]; });
+    expect(idle[0] === 0 && idle[1] === true, `the meeting was recorded by the clock without a call: ${idle}`);
+    mic.app = 'teams';
+    const first = await page.evaluate(async () => { await hmJoinTick(); return [window.__hmRec.starts, !!hmJoin]; });
+    expect(first[0] === 0 && first[1], `a moment of the microphone started the recording: ${first}`);
+    const joined = await page.evaluate(async () => {
+      hmJoin.since -= 9e3;
+      await hmJoinTick();
+      return [window.__hmRec.starts, hmAutoRec && hmAutoRec.app, hmAutoRec && hmAutoRec.key];
+    });
+    expect(joined[0] === 1 && joined[1] === 'teams' && joined[2] === 'scenario|call', `the joined call was not recorded: ${joined}`);
+    // the call goes on past the meeting's end in the calendar: the recording goes on, the next meeting does not start
+    const over = await page.evaluate(async () => {
+      const now = Date.now();
+      home.events.push({ key: 'scenario|next', title: 'Следующая', online: true, attendees: [], s: new Date(now - 60e3), e: new Date(now + 30 * 60e3) });
+      hmAutoRec.end = now - 5 * 60e3;
+      await hmAutoTick(); await hmJoinTick();
+      return [window.__hmRec.starts, window.__hmRec.on, !!hmAutoRec, hmAutoRec && hmAutoRec.overrun];
+    });
+    expect(over[0] === 1 && over[1] && over[2] && over[3], `the recording stopped at the calendar end while the call went on: ${over}`);
+    // the call not seen for a while (let go, or the status unanswered): it stops by the clock
+    const ended = await page.evaluate(async () => {
+      hmAutoRec.seenAt = Date.now() - 60e3;
+      await hmAutoTick();
+      return [window.__hmRec.starts, window.__hmRec.on, !!hmAutoRec];
+    });
+    expect(ended[0] === 2 && !ended[1] && !ended[2], `the recording did not stop once the call let go: ${ended}`);
+    // a recording made by hand during a meeting and stopped: the call still on does not start a new one
+    const byHand = await page.evaluate(async () => {
+      window.__hmRec.on = true; hmAutoRec = null;
+      await hmJoinTick();
+      window.__hmRec.on = false;
+      hmJoin = { key: 'scenario|next', since: Date.now() - 60e3 };
+      await hmJoinTick(); await hmJoinTick();
+      return [window.__hmRec.starts, !!hmAutoRec, hmUserStopped().has('scenario|next')];
+    });
+    expect(byHand[0] === 2 && !byHand[1] && byHand[2], `a stop by hand was followed by a recording of the call: ${byHand}`);
+  } finally {
+    await page.unroute('**/api/calls/status');
+    await page.evaluate(() => {
+      const s = window.__hmSaved;
+      shellQuickRecord = s.q; isRecording = s.rec; hmLoadEvents = s.load; hmMeetingState = s.st; autoRecordNotice = s.note;
+      home.events = s.events; home.started = s.started; home.warned = s.warned;
+      hmAutoRec = null; hmJoin = null; hmCallWatch = null; home.userStopped = new Set();
+    });
+  }
+});
+
 // A studio choice still on its way to the server is not undone by the settings read meanwhile (found in review:
 // fillSystemInfo replaced the settings with the server's, the old «Качество» came back)
 await step('a choice in flight survives a settings read', async () => {
@@ -1997,7 +2429,7 @@ await step('meeting strip', async () => {
   await page.click('#strip-acts button:has-text("Подключиться")');
   await sleep(300);
   expect(sent.length === 1, 'the call was not joined');
-  await page.click('#strip-acts button:has-text("Не записывать")');
+  await page.click('#strip-acts button[aria-label^="Не записывать"]');
   expect(await pill() !== 'Идёт без записи', '«Не записывать» did not leave the meeting');
   await page.unroute('**/api/meeting/join');
   await setEvents([]);
@@ -2103,6 +2535,20 @@ await step('recording time opens the studio', async () => {
   await sleep(300);
   expect(await page.evaluate(() => state.appView) === 'studio', 'the «Студия» chip did not open the studio');
   await page.evaluate(() => { [window.isRecording, window.shellQuickRecord] = window.__recOrig; updateRecordButtonState(); switchAppView('home'); });
+});
+
+// Not recording, «Студия» stays in the capsule (asked by the user: no quick way to the studio without a recording): it
+// opens the studio, where it is the current place, inert; the capsule keeps its width
+await step('studio entry without a recording', async () => {
+  await page.evaluate(() => { switchAppView('libtable'); updateRecordButtonState(); });
+  expect(await page.isVisible('#tb-rec-studio'), 'no «Студия» in the capsule while not recording');
+  const w0 = await page.evaluate(() => document.getElementById('tb-rec-wrap').getBoundingClientRect().width);
+  await page.click('#tb-rec-studio');
+  await until(() => state.appView === 'studio', '«Студия» did not open the studio without a recording');
+  const r = await page.evaluate(() => [isRecording(), document.getElementById('tb-rec-studio').getAttribute('aria-current'),
+    document.getElementById('tb-rec-wrap').getBoundingClientRect().width]);
+  expect(!r[0] && r[1] === 'page' && Math.abs(r[2] - w0) < 1, `in the studio: recording, not current or the width moved: ${r} / ${w0}`);
+  await page.evaluate(() => switchAppView('home'));
 });
 
 // «Очередь» as the island of the top strip and the load of the status bar: each opens its window next to it, Escape
@@ -2269,6 +2715,98 @@ await step('queue window meeting states', async () => {
     await page.unroute('**/api/queue/paused');
     await page.unroute('**/api/queue/*/run-now');
     await page.evaluate(() => loadQueue().catch(() => {}));
+  }
+});
+
+// «Фоновая обработка» (app/queue_window.py): the automatic jobs wait until the computer is free or for the schedule;
+// the island, the queue window and its item say which, and «Начать сейчас» lets one go after the question
+await step('queue window background reason', async () => {
+  let win = { kind: 'schedule', from: '19:00' };
+  const ran = [];
+  const json = (r, body) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/queue', r => json(r, [{ id: 9921, state: 'waiting', kind: 'transcribe', title: 'Обзор квартала', progress: 0, position: 1, window: true },
+    { id: 9922, state: 'waiting', kind: 'translate', lang: 'en', title: 'Планёрка отдела', progress: 0, position: 2, window: false }]));
+  await page.route('**/api/queue/paused', r => json(r, { paused: false, meeting: false, hold: {}, window: win }));
+  await page.route('**/api/queue/*/run-now', r => { ran.push(r.request().url()); return json(r, { ok: true }); });
+  try {
+    await page.evaluate(() => { strip.kind = 'free'; return loadQueue(); });
+    expect((await page.textContent('#strip-island')).includes('Ждут расписания: с 19:00'), `the island: ${await page.textContent('#strip-island')}`);
+    await page.click('#strip-island');
+    await sleep(300);
+    const sub = await page.textContent('#jobs-pop .vx-sub');
+    expect(sub.startsWith('Расшифровка и анализ ждут расписания: с 19:00'), `the window: ${sub}`);
+    const rows = await page.$$eval('#jobs-pop .vx-prow .vx-val', els => els.map(e => e.textContent.trim()));
+    expect(rows[0] === 'ждёт расписания: с 19:00', `the held item: ${rows}`);
+    expect(rows[1] !== rows[0], `the translation does not wait for the schedule: ${rows}`);
+    expect(await page.locator('#jobs-pop .vx-prow-go button').count() === 1, '«Начать сейчас» on the held item alone');
+    if (process.env.SHOTS) await page.locator('#jobs-pop').screenshot({ path: `${process.env.SHOTS}/queue-when-window-schedule.png` });
+    await page.click('#jobs-pop .vx-prow-go button');
+    await sleep(300);
+    const dlg = await page.textContent('[role="dialog"] .vx-dlg');
+    expect(dlg.includes('Фоновая обработка') && dlg.includes('Ждёт расписания'), `the question: ${dlg}`);
+    await page.click('[role="dialog"] button[data-a="yes"]');
+    await sleep(400);
+    expect(ran.length === 1 && /\/api\/queue\/9921\/run-now$/.test(ran[0]), `run-now: ${ran}`);
+    win = { kind: 'idle' };
+    await page.evaluate(() => loadQueue());
+    expect((await page.textContent('#strip-island')).includes('Ждут свободного компьютера'), 'the island while the computer is busy');
+    if (!(await page.isVisible('#jobs-pop'))) await page.click('#strip-island');
+    await sleep(300);
+    expect((await page.textContent('#jobs-pop .vx-prow .vx-val')).trim() === 'ждёт, пока компьютер свободен', 'the item while the computer is busy');
+    if (process.env.SHOTS) await page.locator('#jobs-pop').screenshot({ path: `${process.env.SHOTS}/queue-when-window-idle.png` });
+    await page.evaluate(() => closeJobsPop());
+  } finally {
+    await page.unroute('**/api/queue');
+    await page.unroute('**/api/queue/paused');
+    await page.unroute('**/api/queue/*/run-now');
+    await page.evaluate(() => loadQueue().catch(() => {}));
+  }
+});
+
+// «Настройки → Общие → Фоновая обработка»: the rows of the condition chosen, saved at once; its list sits where the
+// other lists of the tab sit
+await step('background processing settings', async () => {
+  await page.evaluate(() => openModal('settings', 'general'));
+  await sleep(400);
+  const shown = id => page.evaluate(x => { const el = document.getElementById(x); return !!el && !el.classList.contains('hidden') && !!el.offsetParent; }, id);
+  try {
+    await page.selectOption('#set-queue-when', 'always');
+    await sleep(200);
+    expect(!(await shown('queue-load-row')) && !(await shown('queue-schedule-row')), '«Сразу» shows no condition');
+    await page.selectOption('#set-queue-when', 'schedule');
+    await sleep(200);
+    expect(await shown('queue-schedule-row') && !(await shown('queue-load-row')), '«По расписанию» shows the schedule alone');
+    await page.selectOption('#set-queue-from', '20:00');
+    await page.selectOption('#set-queue-to', '07:30');
+    let saved = {};
+    for (let i = 0; i < 40 && !(saved.queue_when === 'schedule' && saved.queue_from === '20:00' && saved.queue_to === '07:30'); i++) {
+      await sleep(150);
+      saved = await page.evaluate(() => fetch('/api/system').then(r => r.json()).then(d => d.settings));
+    }
+    expect(saved.queue_when === 'schedule' && saved.queue_from === '20:00' && saved.queue_to === '07:30',
+      `not saved: ${saved.queue_when} ${saved.queue_from} ${saved.queue_to}`);
+    await page.selectOption('#set-queue-when', 'idle_or_schedule');
+    await sleep(200);
+    expect(await shown('queue-schedule-row') && await shown('queue-load-row'), 'either shows both conditions');
+    // the list at the right edge as the other lists of the tab (measured, not by eye)
+    const edges = await page.evaluate(() => ['set-queue-when', 'set-economy-for', 'set-queue-to', 'set-queue-gpu-max']
+      .map(id => Math.round(document.getElementById(id).getBoundingClientRect().right)));
+    expect(edges.every(x => Math.abs(x - edges[0]) <= 1), `the right edges: ${edges}`);
+    // the time and the percent lists of one width, the label column of the load row not squeezed
+    const w = await page.evaluate(() => ['set-queue-from', 'set-queue-to', 'set-queue-cpu-max', 'set-queue-gpu-max']
+      .map(id => Math.round(document.getElementById(id).getBoundingClientRect().width)));
+    expect(w.every(x => x === w[0]), `the widths: ${w}`);
+    const text = await page.evaluate(() => Math.round(document.querySelector('#queue-load-row .sx-row-text').getBoundingClientRect().width));
+    expect(text >= 200, `the text of the load row is squeezed to ${text}px`);
+    if (process.env.SHOTS) {
+      await page.evaluate(() => document.getElementById('set-queue-when').closest('.settings-card').scrollIntoView({ block: 'center' }));
+      await sleep(200);
+      await page.locator('#set-queue-when >> xpath=ancestor::div[contains(@class,"settings-card")]').screenshot({ path: `${process.env.SHOTS}/queue-when-settings.png` });
+    }
+  } finally {
+    await page.selectOption('#set-queue-when', 'always').catch(() => {});
+    await sleep(600);
+    await page.evaluate(() => closeModal('settings')).catch(() => {});
   }
 });
 
@@ -2985,10 +3523,10 @@ await step('strip hint ends with an ellipsis', async () => {
   const r = await page.evaluate(() => {
     const g = document.getElementById('strip-grow'), meta = document.getElementById('strip-meta');
     return { text: g.textContent, cut: g.scrollWidth > g.clientWidth, ell: getComputedStyle(g).textOverflow, meta: meta.textContent,
-      kind: strip.kind };
+      kind: strip.kind, configured: strip.configured };
   });
   await page.setViewportSize({ width: 1300, height: 860 });
-  if (r.kind !== 'free') return;  // a calendar in the data: no hint
+  if (r.kind !== 'free' || r.configured) return;  // a calendar in the data (an earlier step adds the demo one): no hint
   expect(r.text.includes('календар') && !r.meta && r.ell === 'ellipsis', `the hint: ${JSON.stringify(r)}`);
 });
 

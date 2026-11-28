@@ -249,9 +249,18 @@ function openActiveRecordingMenu(e) {
   if (state.activeMeeting) openRecordingContextMenu(e, state.activeMeeting.id);
 }
 
+// Opened from the keyboard (Enter on «⋯», the menu key in «Записи»): a click of the keyboard has no point (0, 0)
+function vxFromKeys(e) {
+  return !!e && (!!e.vxKeys || e.type === 'keydown' || (e.type === 'click' && e.detail === 0)
+    || (e.type === 'contextmenu' && !e.clientX && !e.clientY));
+}
+const vxCtx = { opener: null };  // what opened the recording's menu from the keyboard: the focus goes back to it
+
 function openRecordingContextMenu(e, meetingId) {
   e.preventDefault();
   e.stopPropagation();
+  // a submenu of the menu opened before (for another recording) must not stay at its old place
+  closeSubmenus(false);
   document.getElementById('export-menu')?.classList.add('hidden');
 
   // Right-click on one of several selected recordings: the actions for all of them
@@ -269,7 +278,18 @@ function openRecordingContextMenu(e, meetingId) {
   const menu = document.getElementById('recording-context-menu');
   menu.classList.remove('hidden');
 
-  placeMenuAt(menu, e);
+  if (!vxFromKeys(e)) { vxCtx.opener = null; placeMenuAt(menu, e); return; }
+  // from the keyboard: under the button (or the row) that opened it, above it where it does not fit below; the
+  // focus on its first item, so ↑ ↓ → ← Esc work at once
+  const t0 = e.target instanceof Element ? e.target : null;
+  const opener = e.vxOpener || (t0 && t0.closest('button, [tabindex]')) || document.activeElement;
+  const anchor = e.vxAnchor || (opener instanceof Element && opener !== document.body ? opener : null);
+  if (anchor) {
+    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight * uiZoom();
+    placeMenuAt(menu, { clientX: r.left, clientY: r.bottom + 4 + h <= window.innerHeight - 8 ? r.bottom + 4 : r.top - 4 });
+  } else placeMenuAt(menu, e);
+  vxCtx.opener = opener instanceof HTMLElement && opener !== document.body ? opener : null;
+  vxSubItems(menu)[0]?.focus({ preventScroll: true });
 }
 
 function openBulkMenu(e) {
@@ -362,10 +382,212 @@ function ctxMoveToFolder(e) {
   if (m) openMoveRecordMenu(m, { right: r.right, bottom: r.top - 4 + Math.min(r.height, 60) });
 }
 
+// The submenu closes without taking the focus to its row (the menu is going); the focus in the menu goes back to
+// what opened it from the keyboard (it fell to the page)
 function hideContextMenu() {
   const menu = document.getElementById('recording-context-menu');
+  const f = document.activeElement;
+  const inside = !!f && f !== document.body && (!!menu?.contains(f) || !!vxSub.menu?.contains(f));
+  closeSubmenus(false);
   if (menu) hideWithExit(menu);
+  const back = vxCtx.opener;
+  vxCtx.opener = null;
+  if (inside && back && back.isConnected) back.focus({ preventScroll: true });
 }
+
+// --- Submenus: a row of a menu with data-submenu="<id>" (and a «›» in the place of the shortcut) opens the menu
+// of that id beside it — the recording's «Экспорт ›», «Нарезка ›», «Ещё ›». It opens on a short hover, a click,
+// Enter, Space or →, which also moves the focus into it; ←, Esc (the layer «vx-submenu» in static/js/core.js) and
+// leaving it close it. It stands to the right of its menu, or to the left where there is no room, and inside the
+// window. The submenu is a separate element after its menu (not inside it: the menu scrolls in a low window and
+// would cut it off). One submenu is open at a time
+// While a submenu is open, a move over another row switches only after a pause, and not while the pointer heads for
+// the open submenu (inside the triangle from where it was to the submenu's near edge): the way from «Экспорт ›» to
+// its items crosses «Нарезка ›»
+const VX_SUB_OPEN_MS = 180, VX_SUB_CLOSE_MS = 300, VX_SUB_AIM_MS = 400;
+const vxSub = { trigger: null, menu: null, openT: 0, closeT: 0, want: null, pts: [] };
+
+function vxSubItems(menu) {
+  return [...menu.querySelectorAll('button.macos-menu-item')].filter(b => !b.classList.contains('hidden') && !b.disabled);
+}
+
+function openSubmenu(trigger, focusFirst) {
+  clearTimeout(vxSub.openT);
+  clearTimeout(vxSub.closeT);
+  vxSub.want = null;
+  const sub = document.getElementById(trigger.dataset.submenu);
+  const parent = trigger.closest('.macos-menu');
+  if (!sub || !parent || parent.classList.contains('hidden')) return;
+  if (vxSub.trigger !== trigger) closeSubmenus();
+  sub.classList.remove('hidden');
+  trigger.setAttribute('aria-expanded', 'true');
+  vxSub.trigger = trigger;
+  vxSub.menu = sub;
+  placeSubmenu(sub, trigger, parent);
+  if (focusFirst) vxSubItems(sub)[0]?.focus();
+}
+
+// Beside the row: its first item level with the row, to the right of the menu or, where it does not fit, to the left
+function placeSubmenu(sub, trigger, parent) {
+  sub.style.maxHeight = '';
+  sub.style.overflowY = '';
+  const W = window.innerWidth, H = window.innerHeight, m = 8;
+  const p = parent.getBoundingClientRect(), t = trigger.getBoundingClientRect();
+  // the sizes of the layout, not of the box on screen: the submenu is drawn scaled down as it appears (vx-pop)
+  const z = uiZoom();
+  const size = () => ({ width: sub.offsetWidth * z, height: sub.offsetHeight * z });
+  let r = size();
+  if (r.height > H - 2 * m) {
+    sub.style.maxHeight = `${zpx(H - 2 * m)}px`;
+    sub.style.overflowY = 'auto';
+    r = size();
+  }
+  const first = sub.querySelector('.macos-menu-item');
+  const inset = first ? first.offsetTop * z : 0;
+  let left = p.right - 2, toLeft = false;
+  if (left + r.width > W - m) {
+    toLeft = p.left - r.width + 2 >= m;
+    left = toLeft ? p.left - r.width + 2 : Math.max(m, W - m - r.width);
+  }
+  const top = Math.max(m, Math.min(t.top - inset, H - m - r.height));
+  sub.style.left = `${zpx(left)}px`;
+  sub.style.top = `${zpx(top)}px`;
+  sub.style.transformOrigin = `${toLeft ? 'right' : 'left'} top`;
+}
+
+// back: the focus that was in the submenu goes to its row (not when the menu itself is closing: hideContextMenu)
+function closeSubmenus(back = true) {
+  clearTimeout(vxSub.openT);
+  clearTimeout(vxSub.closeT);
+  vxSub.want = null;
+  const { trigger, menu } = vxSub;
+  vxSub.trigger = vxSub.menu = null;
+  if (!menu) return;
+  const hadFocus = menu.contains(document.activeElement);
+  menu.classList.add('hidden');
+  if (!trigger) return;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (back !== false && hadFocus && trigger.isConnected && !trigger.closest('.hidden, .is-leaving')) trigger.focus();
+}
+
+function vxSubCloseSoon() {
+  clearTimeout(vxSub.closeT);
+  vxSub.closeT = setTimeout(closeSubmenus, VX_SUB_CLOSE_MS);
+}
+
+// The row the pointer is over while another row's submenu is open: its submenu (or none) after `ms`
+function vxSubSwitchSoon(row, ms) {
+  clearTimeout(vxSub.openT);
+  clearTimeout(vxSub.closeT);
+  vxSub.want = row;
+  vxSub.openT = setTimeout(() => {
+    vxSub.want = null;
+    if (row.dataset.submenu && row.isConnected) openSubmenu(row, false); else closeSubmenus();
+  }, ms);
+}
+
+// Is the pointer at (x, y) heading for the open submenu: inside the triangle from where it was a moment ago to the
+// submenu's near edge (a little taller than the submenu, for a hand that is not exact)
+function vxSubAiming(x, y) {
+  const sub = vxSub.menu, parent = vxSub.trigger?.closest('.macos-menu');
+  if (!sub || !parent) return false;
+  const now = performance.now();
+  const from = vxSub.pts.find(p => now - p.t < 200 && (p.x !== x || p.y !== y));
+  if (!from) return false;
+  const s = sub.getBoundingClientRect(), p = parent.getBoundingClientRect();
+  const right = s.left >= p.left + p.width / 2;
+  if (right ? x <= from.x : x >= from.x) return false;
+  const ex = right ? s.left : s.right;
+  const A = from, B = { x: ex, y: s.top - 8 }, C = { x: ex, y: s.bottom + 8 };
+  const cross = (a, b) => (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+  const d = [cross(A, B), cross(B, C), cross(C, A)];
+  return !(d.some(v => v < 0) && d.some(v => v > 0));
+}
+
+// ↑ ↓ move along the items (of a menu or a submenu), → Enter Space on a row with a submenu open it, ← in a submenu
+// goes back to its row
+function vxMenuKeys(e, menu, trigger) {
+  const at = document.activeElement;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const items = vxSubItems(menu);
+    if (!items.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const i = items.indexOf(at), n = items.length, down = e.key === 'ArrowDown';
+    items[i < 0 ? (down ? 0 : n - 1) : (i + (down ? 1 : n - 1)) % n].focus();
+  } else if (at && at.dataset && at.dataset.submenu && menu.contains(at) && ['ArrowRight', 'Enter', ' '].includes(e.key)) {
+    e.preventDefault();
+    e.stopPropagation();
+    openSubmenu(at, true);
+  } else if (trigger && e.key === 'ArrowLeft') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeSubmenus();
+  }
+}
+
+function vxSubmenus(menu) {
+  if (!menu || menu._vxSubmenus) return;
+  menu._vxSubmenus = true;
+  menu.addEventListener('pointermove', (e) => {
+    vxSub.pts.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+    if (vxSub.pts.length > 8) vxSub.pts.shift();
+    // still heading for the open submenu over another row: the switch waits on
+    if (vxSub.want && vxSub.menu && vxSubAiming(e.clientX, e.clientY)) vxSubSwitchSoon(vxSub.want, VX_SUB_AIM_MS);
+  });
+  menu.addEventListener('pointerover', (e) => {
+    const row = e.target.closest('.macos-menu-item');
+    if (!row || !menu.contains(row)) return;
+    if (vxSub.menu) {
+      if (vxSub.trigger === row) { clearTimeout(vxSub.openT); clearTimeout(vxSub.closeT); vxSub.want = null; return; }
+      if (vxSub.want === row) return;  // a part of the same row: its pause runs on
+      vxSubSwitchSoon(row, vxSubAiming(e.clientX, e.clientY) ? VX_SUB_AIM_MS : row.dataset.submenu ? VX_SUB_OPEN_MS : VX_SUB_CLOSE_MS);
+      return;
+    }
+    clearTimeout(vxSub.openT);
+    if (row.dataset.submenu) vxSub.openT = setTimeout(() => openSubmenu(row, false), VX_SUB_OPEN_MS);
+  });
+  menu.addEventListener('pointerleave', (e) => {
+    clearTimeout(vxSub.openT);
+    vxSub.want = null;
+    if (vxSub.menu && !vxSub.menu.contains(e.relatedTarget)) vxSubCloseSoon();
+  });
+  // the menu scrolling in a low window (vxFitInView): the submenu follows its row, or closes once the row is out of sight
+  // (once a frame, and again at the end of a smooth scroll)
+  let follow = 0;
+  const followRow = () => {
+    follow = 0;
+    const { trigger, menu: sub } = vxSub;
+    if (!sub || !trigger || !menu.contains(trigger)) return;
+    const m = menu.getBoundingClientRect(), r = trigger.getBoundingClientRect();
+    if (r.bottom <= m.top || r.top >= m.bottom) { closeSubmenus(); return; }
+    placeSubmenu(sub, trigger, menu);
+    // a smooth scroll may end without a last event: the row looked at once more next frame, followed while it moves
+    requestAnimationFrame(() => {
+      if (!follow && vxSub.trigger === trigger && Math.abs(trigger.getBoundingClientRect().top - r.top) > 0.5) {
+        follow = requestAnimationFrame(followRow);
+      }
+    });
+  };
+  menu.addEventListener('scroll', () => { if (!follow) follow = requestAnimationFrame(followRow); }, { passive: true });
+  menu.addEventListener('scrollend', followRow, { passive: true });
+  menu.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-submenu]');
+    if (row && menu.contains(row)) openSubmenu(row, e.detail === 0);
+  });
+  menu.addEventListener('keydown', (e) => vxMenuKeys(e, menu, null));
+  for (const trigger of menu.querySelectorAll('[data-submenu]')) {
+    const sub = document.getElementById(trigger.dataset.submenu);
+    if (!sub || sub._vxSubmenu) continue;
+    sub._vxSubmenu = true;
+    sub.addEventListener('pointerenter', () => { clearTimeout(vxSub.closeT); clearTimeout(vxSub.openT); vxSub.want = null; });
+    sub.addEventListener('pointerleave', (e) => { if (vxSub.menu === sub && !trigger.contains(e.relatedTarget)) vxSubCloseSoon(); });
+    sub.addEventListener('keydown', (e) => vxMenuKeys(e, sub, trigger));
+  }
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => vxSubmenus(document.getElementById('recording-context-menu')));
+else vxSubmenus(document.getElementById('recording-context-menu'));
 
 document.addEventListener('click', () => {
   hideContextMenu();

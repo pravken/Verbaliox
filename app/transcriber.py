@@ -88,7 +88,11 @@ class _PriorityExecutor:
                     item = None
                     if self._heap and not _paused[0] and not economy.on():
                         hold = _meeting_holds()
-                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3], e[4]))]
+                        # «Фоновая обработка» (app/queue_window.py): the automatic jobs wait for the computer to
+                        # be free or for the schedule; what the user started by hand does not
+                        window = _window_holds()
+                        ready = [e for e in self._heap if not (hold and _waits_for_meeting(e[3], e[4]))
+                                 and not (window and _waits_for_window(e[3], e[4]))]
                         captions = {_job_meeting(e[3], e[4]) for e in ready if _waits_for_captions(e[3], e[4])}
                         _captions_said(captions)
                         ready = [e for e in ready if not (captions and _job_meeting(e[3], e[4]) in captions)]
@@ -122,6 +126,26 @@ def _waits_for_meeting(fn: Callable, args: tuple = ()) -> bool:
     return fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper"
 
 
+# Transcriptions the user asked for by hand (the import window, «Повторить», «Расшифровать», a link): «Фоновая
+# обработка» does not hold them (a meeting still does, as before). Dropped when the job ends
+_manual: Set[int] = set()
+
+
+def _waits_for_window(fn: Callable, args: tuple = ()) -> bool:
+    """The automatic work waits for the computer to be free or for the schedule (app/queue_window.py): a
+    transcription queued by itself (after a recording, from the watched folder, resumed at start), the load of its
+    model, and the analysis that waited for a meeting. Not after «Начать сейчас», nor what the user asked for."""
+    fn = getattr(fn, "func", fn)
+    if fn is _run_job:
+        return bool(args) and args[0] not in _forced and args[0] not in _manual
+    if getattr(fn, "__name__", "") == "_preload_whisper":
+        return True
+    if fn is _run_side_job and len(args) > 2 and args[2] is _analysis_runner:
+        asked = bool(args[3]) if len(args) > 3 else False
+        return not asked and args[0] not in _forced
+    return False
+
+
 def run_now(meeting_id: int) -> bool:
     """«Начать сейчас»: the transcription of this recording no longer waits for what the queue's window says it
     waits for — the end of the meeting, or, once the meeting has let it go (or none goes on), the end of the live
@@ -129,7 +153,8 @@ def run_now(meeting_id: int) -> bool:
     with _jobs_lock:
         if meeting_id not in _active_jobs:
             return False
-        meeting_first = _held_said[0] and int(meeting_id) not in _forced
+        # held by a meeting, or by «Фоновая обработка»: it goes now; else it was the captions it waited for
+        meeting_first = (_held_said[0] or bool(_window_said[0])) and int(meeting_id) not in _forced
         _forced.add(int(meeting_id))
         if not meeting_first:
             _forced_captions.add(int(meeting_id))
@@ -250,6 +275,70 @@ def meeting_holds() -> bool:
     return _held_said[0]
 
 
+_window_said: List[str] = [""]  # what «Фоновая обработка» holds the automatic jobs for: "idle", "schedule" or ""
+
+
+def _window_holds() -> bool:
+    try:
+        from app import meeting_guard
+
+        kind = str(meeting_guard.window_hold().get("kind") or "")
+    except Exception:
+        kind = ""
+    if kind != _window_said[0]:
+        was = _window_said[0]
+        _window_said[0] = kind
+        print(f"[queue] {'the automatic jobs wait: ' + kind if kind else 'the automatic jobs may start'}", flush=True)
+        _publish_queue_changed()
+        if kind and not was:  # called under the queue's lock: the analyses waiting are parked on a thread of their own
+            threading.Thread(target=park_window_analyses, daemon=True, name="queue_park").start()
+    return bool(kind)
+
+
+WINDOW_ANALYSIS_TEXT = "Анализ ждёт «Фоновой обработки»"
+
+
+def park_window_analyses() -> List[int]:
+    """The automatic analyses waiting in the queue while «Фоновая обработка» holds it go back to the marks of the
+    analyses to do later (app/meeting_guard.deferred_analysis), as an analysis a meeting deferred: one held in the
+    queue for hours counted as processing, and «Повторить», a new split, a cut… answered «Запись уже
+    обрабатывается» until the schedule. meeting_guard.check queues them again once nothing holds them."""
+    from app import meeting_guard
+
+    parked = []
+    with _jobs_lock:
+        for q in list(_queue):
+            mid = q["id"]
+            if (q["kind"] != "analysis" or not q.get("auto") or q.get("started_at") or _running_id == mid
+                    or mid in _forced or mid in _cancel_requested):
+                continue
+            _queue.remove(q)
+            _active_jobs.discard(mid)
+            _dropped.add(q["n"])  # its run in the executor is skipped when its turn comes
+            parked.append((mid, q.get("back") or "completed"))
+    for mid, back in parked:
+        meeting_guard.defer(mid)
+        meeting_guard.sent_again(mid)
+        update_meeting_progress(mid, status=back, progress=100, stage_text=WINDOW_ANALYSIS_TEXT, error_message="")
+        print(f"[queue] meeting {mid}: the automatic analysis waits for «Фоновая обработка» out of the queue", flush=True)
+    if parked:
+        _publish_queue_changed()
+    return [mid for mid, _back in parked]
+
+
+def waits_for_window(meeting_id: int) -> bool:
+    """The automatic transcription of this recording waits in the queue for «Фоновая обработка» (not begun)."""
+    with _jobs_lock:
+        if not _window_said[0] or _running_id == meeting_id or meeting_id in _forced or meeting_id in _manual:
+            return False
+        return any(q["id"] == meeting_id and q["kind"] == "transcribe" and not q.get("started_at") for q in _queue)
+
+
+def window_holds() -> str:
+    """For the page: what the automatic jobs wait for ("idle", "schedule"), "" when nothing."""
+    return _window_said[0]
+
+
 def _job_priority(fn: Callable, args: tuple) -> int:
     if fn is _run_job or getattr(fn, "__name__", "") == "_preload_whisper":
         return KIND_PRIORITY["transcribe"]
@@ -364,6 +453,7 @@ def cancel_waiting(meeting_id: int) -> bool:
         _forced.discard(meeting_id)
         _forced_captions.discard(meeting_id)
         _gpu_failed.discard(meeting_id)
+        _manual.discard(meeting_id)
         _dropped.add(entry["n"])
     from app.database import update_meeting_progress
 
@@ -470,6 +560,13 @@ def queue_snapshot() -> List[Dict[str, Any]]:
     waiting_pos = 0
     with _jobs_lock:
         forced = set(_forced)
+        manual = set(_manual)
+    try:
+        from app import meeting_guard
+
+        window = bool(meeting_guard.window_hold())
+    except Exception:
+        window = False
     for q in items:
         m = meetings.get(q["id"])
         if not m:
@@ -480,10 +577,14 @@ def queue_snapshot() -> List[Dict[str, Any]]:
         # what holds a waiting transcription besides a meeting: "captions" (waits_for_captions); forced: the user
         # let it go during the meeting («Начать сейчас»)
         captions = not is_running and q["kind"] == "transcribe" and waits_for_captions(q["id"])
+        # held by «Фоновая обработка» (app/queue_window.py): an automatic transcription or analysis
+        auto = (q["kind"] == "transcribe" and q["id"] not in manual) or (q["kind"] == "analysis" and q.get("auto"))
+        held = window and not is_running and bool(auto) and q["id"] not in forced
         out.append(
             {
                 **q,
                 "hold": "captions" if captions else "",
+                "window": held,
                 "forced": q["id"] in forced,
                 "title": m.get("title") or "",
                 "state": "running" if is_running else "waiting",
@@ -566,13 +667,18 @@ def clean_meeting_transcript(meeting_id: int) -> Dict[str, Any]:
     return {"meeting": updated, "removed_count": removed_box[0]}
 
 
-def enqueue_meeting_job(meeting_id: int) -> bool:
-    """Queues a job unless the same recording is already queued or being processed."""
+def enqueue_meeting_job(meeting_id: int, manual: bool = False) -> bool:
+    """Queues a job unless the same recording is already queued or being processed. manual: the user asked for
+    it (the import window, «Повторить»): «Фоновая обработка» does not hold it."""
     with _jobs_lock:
         if meeting_id in _active_jobs:
             return False
         _active_jobs.add(meeting_id)
         _cancel_requested.discard(meeting_id)
+        if manual:
+            _manual.add(int(meeting_id))
+        else:
+            _manual.discard(int(meeting_id))
         token = _queue_add(meeting_id, "transcribe")
     _submit_job(token, _run_job, meeting_id)
     _publish_queue_changed()
@@ -596,12 +702,13 @@ def _run_job(meeting_id: int, token: Optional[int] = None) -> None:
             if not again:  # queued again it keeps «Начать сейчас» given during the meeting, and the processor
                 _forced.discard(meeting_id)
                 _gpu_failed.discard(meeting_id)
+                _manual.discard(meeting_id)
             _forced_captions.discard(meeting_id)
             queue_empty = not _active_jobs
         if again:
             print(f"[queue] meeting {meeting_id}: the video card failed; queued again to wait for the live captions "
                   f"(their model would be loaded twice on the processor)", flush=True)
-            enqueue_meeting_job(meeting_id)
+            enqueue_meeting_job(meeting_id, manual=meeting_id in _manual)
             return  # exports wait for the transcript
         if queue_empty:
             try:  # a driver failing here (after sleep) must not skip the exports below
@@ -753,6 +860,7 @@ def _run_side_job(meeting_id: int, back: str, runner, *args, token: Optional[int
         with _jobs_lock:
             _active_jobs.discard(meeting_id)
             _cancel_requested.discard(meeting_id)
+            _forced.discard(meeting_id)  # «Начать сейчас» of a waiting analysis: for this run only
         _run_pending_exports(meeting_id)
 
 
@@ -1015,14 +1123,17 @@ def enqueue_resplit_job(meeting_id: int, num_speakers: int = 0) -> bool:
                              _resplit_runner, num_speakers)
 
 
-def _analysis_runner(meeting_id: int) -> str:
+def _analysis_runner(meeting_id: int, asked: bool = False) -> str:
     """The analysis that waited for the end of a meeting (app/meeting_guard.py), with what needs the model
-    after it: the title by content, the suggested features, the note in Obsidian."""
+    after it: the title by content, the suggested features, the note in Obsidian. asked: the user asked for it
+    («Обработать всё» in «Записи», app/pending.py), whatever «Анализ после расшифровки» says."""
     from app import cancel_scope, meeting_guard
     from app.database import get_all_settings
 
     settings = get_all_settings()
     if meeting_guard.busy(settings):  # a meeting began while it waited in the queue
+        if asked:
+            meeting_guard.defer(meeting_id, asked=True)  # done when it ends, still as asked
         return "Анализ — после окончания встречи"
     m = get_meeting(meeting_id) or {}
     segments, speakers = m.get("segments") or [], m.get("speakers") or {}
@@ -1031,7 +1142,7 @@ def _analysis_runner(meeting_id: int) -> str:
         return "Нет расшифровки для анализа"
     lang = m.get("language") or "ru"
     processing = m.get("processing") or {}
-    want_summary = processing.get("summary", settings.get("auto_summary", "true").lower() == "true")
+    want_summary = asked or processing.get("summary", settings.get("auto_summary", "true").lower() == "true")
     if want_summary:
         from app import llm
 
@@ -1047,6 +1158,8 @@ def _analysis_runner(meeting_id: int) -> str:
     if meeting_guard.interrupted(meeting_id):
         meeting_guard.clear_interrupted(meeting_id)
         cancel_scope.reset(threading.get_ident())
+        if asked:  # one asked for has no mark of its own yet
+            meeting_guard.defer(meeting_id, asked=True)
         return "Анализ — после окончания встречи"  # still marked: done when the meeting ends
     meeting_guard.done(meeting_id)
     notes = _after_transcription(meeting_id, segments, speakers, lang, settings, first=False)
@@ -1112,9 +1225,23 @@ def enqueue_complete_job(meeting_id: int) -> bool:
     return _enqueue_side_job(meeting_id, "complete", "", "summarizing", "Дополнение заметки в очереди...", _complete_runner)
 
 
-def enqueue_analysis_job(meeting_id: int) -> bool:
-    """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time)."""
-    return _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner)
+def enqueue_analysis_job(meeting_id: int, asked: bool = False) -> bool:
+    """The analysis of a recording that waited for a meeting to end, in the queue (one model at a time);
+    asked: one the user asked for (app/pending.py). An automatic one is not queued while «Фоновая обработка» holds
+    the automatic work: it stays marked (app/meeting_guard), queued when nothing holds it (see park_window_analyses)."""
+    if not asked:
+        from app import meeting_guard
+
+        if meeting_guard.window_hold():
+            meeting_guard.defer(meeting_id)
+            return False
+    if not _enqueue_side_job(meeting_id, "analysis", "", "summarizing", "Анализ в очереди...", _analysis_runner, asked):
+        return False
+    with _jobs_lock:
+        for q in _queue:
+            if q["id"] == meeting_id and q["kind"] == "analysis":
+                q["auto"] = not asked  # «Фоновая обработка» holds it (_waits_for_window)
+    return True
 
 
 # runner -> (name for error messages, text after a cancel)
@@ -1347,7 +1474,7 @@ def enqueue_whisper_preload(model_name: Optional[str] = None) -> bool:
 
     if economy.on():  # recording only: no model is loaded ahead
         return False
-    if _paused[0] or _meeting_holds():
+    if _paused[0] or _meeting_holds() or _window_holds():
         # the worker would not take it until the queue goes on, and the load waiting counted as work all that
         # time: no model was unloaded for idleness, memory or «Только запись» (found in an audit)
         return False

@@ -165,11 +165,90 @@ function ltFaces(m, max = 3) {
     + (ps.length > max ? `<span class="lt-av lt-av-more">+${ps.length - max}</span>` : '') + '</span>';
 }
 
+// What the status of a recording offers on hover: «Распознать» without a text, «Анализ» for a transcript
+// without an analysis; nothing while it is processed or once analysed
+function ltStatusAction(m) {
+  if (LT_UNTRANSCRIBED.includes(m.status)) return 'transcribe';
+  if (m.status === 'completed' && m.has_transcript && !m.has_summary) return 'analyse';
+  return '';
+}
+
 function ltStatusChip(m) {
   const [label, color] = ltStatus(m);
   const tip = m.status === 'failed' && m.error_message ? humanError(m.error_message).short : label;
   const tick = mixWaiting(m) ? mixTickAttrs(m, 'chip') : '';
-  return `<span class="lt-st" style="--st:${color}" title="${escapeHtml(mixWaiting(m) ? mixWaitTip(m) : tip)}"><i></i><span class="lt-ell"${tick}>${escapeHtml(label)}</span></span>`;
+  const act = ltStatusAction(m);
+  if (!act) return `<span class="lt-st" style="--st:${color}" title="${escapeHtml(mixWaiting(m) ? mixWaitTip(m) : tip)}"><i></i><span class="lt-ell"${tick}>${escapeHtml(label)}</span></span>`;
+  // a button with both texts in one cell of a grid: the wider one sets the width, so the hover changes no width
+  const word = t(act === 'analyse' ? 'ltStAnalyse' : 'ltStTranscribe');
+  const what = t(act === 'analyse' ? 'ltStAnalyseTip' : 'ltStTranscribeTip');
+  return `<button type="button" class="lt-st lt-st-act" data-st-act="${act}" data-st-id="${m.id}" style="--st:${color}" title="${escapeHtml(`${tip} · ${what}`)}" aria-label="${escapeHtml(`${label}. ${what}`)}">`
+    + `<i></i><span class="lt-st-sw"><span class="lt-ell lt-st-l">${escapeHtml(label)}</span><span class="lt-ell lt-st-a" aria-hidden="true">${escapeHtml(word)}</span></span></button>`;
+}
+
+// The action of one recording's status: «Распознать» as «Повторить» of the recording, «Анализ» to the queue of
+// the analysis (app/pending.py, as «Обработать всё» for this one)
+async function ltStatusDo(kind, id) {
+  if (kind === 'transcribe') {
+    if (!requireRecognitionModel()) return;
+    // what «Обработать всё» leaves alone on purpose (app/pending.py): results deleted by hand, or a failed or cancelled
+    // run of a recording that has a text: asked first, the text is replaced
+    const m = (state.meetings || []).find(x => x.id === id);
+    const cleared = m && m.status === 'cleared';
+    if (m && (cleared || (['failed', 'cancelled'].includes(m.status) && m.transcript_model))
+      && !(await confirmDialog(t('txTranscribeAgainTitle'), t(cleared ? 'ltStRedoCleared' : 'ltStRedoText'), t('txTranscribeAgain'), false))) return;
+    const res = await fetch(`/api/meetings/${id}/retry`, { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) { showError(await bulkWhy(res)); return; }
+    await loadMeetingsList();
+    showToast(t('ltQueuedN').replace('{n}', () => plural(1, t('ltCountForms'))), null, 'success');
+    return;
+  }
+  const out = await ltPost('/api/library/process-pending', { ids: [id], transcribe: false });
+  if (!out) return;
+  if (Number(out.analysis_waiting)) { showWarning(t('anNeedModel')); return; }
+  await loadMeetingsList();
+  // nothing queued and nothing waiting for a model: the analysis is queued or running already
+  if (Number(out.analyse)) showToast(t('ltAnalysisQueued'), null, 'success');
+  else showToast(t('ltAnalysisBusy'));
+}
+
+// «Фича»: the feature, or «—»; on hover and focus «Выбрать фичу» (or «Изменить фичу») in the same place opens the
+// menu of the features, as «Фича» of the selection bar does for one recording. Both share one cell of a grid,
+// so the wider sets the width and the hover moves nothing
+function ltFeatureCell(m) {
+  const chip = libFeatureChip(m);
+  const word = t(chip ? 'ltFtChange' : 'ltFtChoose');
+  return `<button type="button" class="lt-fpick" data-ft-pick="${m.id}" title="${escapeHtml(word)}" aria-haspopup="menu" aria-label="${escapeHtml(word)}">`
+    + `<span class="lt-fpick-v">${chip ? `<span class="lt-ft">${chip}</span>` : LT_DASH}</span>`
+    + `<span class="lt-fpick-a lt-ell" aria-hidden="true">${escapeHtml(word)}</span></button>`;
+}
+
+// The buttons of the rows (a status's action, the feature cell, a place found) are in the order of Tab for the current
+// row only (LT.cur): ↑ ↓ move the row, Tab reaches its buttons (150 rows were 300 stops of Tab)
+function ltRove() {
+  const body = document.getElementById('lt-body');
+  if (!body) return;
+  for (const b of body.querySelectorAll('[data-mid] button')) b.tabIndex = -1;
+  const row = LT.cur == null ? null : body.querySelector(`[data-mid="${LT.cur}"]`);
+  if (row) for (const b of row.querySelectorAll('button')) b.tabIndex = 0;
+}
+
+// The focus on a button of a row before the row is drawn again (a progress, the list read after an action), and
+// where it goes after: the same button of the same row, or the table, so the arrows still work (it fell to the page)
+function ltFocusMark() {
+  const a = document.activeElement;
+  const row = a instanceof Element && a !== document.body ? a.closest('#lt-body [data-mid]') : null;
+  if (!row) return null;
+  const kind = ['[data-st-act]', '[data-ft-pick]', '.lt-snip'].find(k => a.matches(k)) || '';
+  return { id: Number(row.dataset.mid), kind };
+}
+function ltFocusBack(mark) {
+  if (!mark) return;
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;  // the focus went elsewhere on purpose (a dialog)
+  const row = document.querySelector(`#lt-body [data-mid="${mark.id}"]`);
+  const el = (row && mark.kind && row.querySelector(mark.kind)) || document.getElementById('lt-scroll');
+  el?.focus({ preventScroll: true });
 }
 
 // The name, with the places the search found in the text under it
@@ -189,10 +268,7 @@ function ltSnips(m) {
 function ltCell(col, m) {
   switch (col) {
     case 'name': return ltNameCell(m);
-    case 'feature': {
-      const chip = libFeatureChip(m);
-      return chip ? `<span class="lt-ft">${chip}</span>` : LT_DASH;
-    }
+    case 'feature': return ltFeatureCell(m);
     case 'date': return `<span class="lt-mono">${escapeHtml(ltDate(m.recorded_at || m.created_at, ltByDay()))}</span>`;
     case 'added': return `<span class="lt-mono">${escapeHtml(ltDate(m.created_at))}</span>`;
     case 'duration': return m.duration ? `<span class="lt-mono">${escapeHtml(formatTime(m.duration))}</span>` : LT_DASH;
@@ -428,6 +504,7 @@ async function ltDropOnFolder(e, folderId) {
 // not made again under the pointer
 function renderLibTableLive(rows) {
   if (state.appView !== 'libtable') return;
+  syncLibProcessButton();
   if (LT.pressed) { LT.later = true; return; }
   if (rows && [...rows].every(ltRenderRowState)) return;
   renderLibTable({ live: true });
@@ -437,7 +514,11 @@ function ltRenderRowState(id) {
   const m = (state.meetings || []).find(x => x.id === id);
   if (!m) return false;
   const row = document.querySelector(`#lt-body [data-mid="${id}"]`);
-  if (row) row.querySelectorAll('.lt-st').forEach(el => { el.outerHTML = ltStatusChip(m); });
+  if (!row) return true;
+  const mark = ltFocusMark();
+  row.querySelectorAll('.lt-st').forEach(el => { el.outerHTML = ltStatusChip(m); });
+  if (LT.cur !== id) row.querySelectorAll('.lt-st-act').forEach(b => { b.tabIndex = -1; });
+  ltFocusBack(mark);
   return true;  // a row not shown: its progress does not change what is shown
 }
 
@@ -500,7 +581,10 @@ function renderLibTable(opts = {}) {
   box.className = `lt-body lt-v-${p.view}${p.dense ? ' lt-dense' : ''}`;
   box.style.setProperty('--lt-tpl', tpl || 'none');
   box.style.minWidth = minW ? `${minW}px` : '';
+  const mark = ltFocusMark();
   box.innerHTML = html + (LT.rest.length ? '<div id="lt-more" class="lt-more" aria-hidden="true"></div>' : '');
+  ltRove();
+  ltFocusBack(mark);
   LT.drawn = LT.ids.length - LT.rest.length;
   ltWatchEnd();
   const empty = document.getElementById('lt-empty');
@@ -541,6 +625,7 @@ function ltRenderMore(until) {
     }
   }
   LT.drawn += take.length;
+  ltRove();
   ltWatchEnd();
   return true;
 }
@@ -563,6 +648,7 @@ function ltWatchEnd() {
 
 // Beside the title: how many recordings, or what the search found in the texts
 function renderLibTableCount(all, shown) {
+  syncLibProcessButton();
   const el = document.getElementById('lt-count');
   if (!el) return;
   const q = LT.q.trim();
@@ -578,6 +664,60 @@ function renderLibTableCount(all, shown) {
   el.textContent = shown.length === all.length
     ? plural(all.length, t('ltCountForms'))
     : t('ltCountOf').replace('{n}', () => shown.length).replace('{all}', () => all.length);
+}
+
+// «Обработать всё» in the head: on while a recording has no text or a transcribed one has no analysis (the server
+// counts exactly, app/pending.py: the files that are there, the jobs already queued)
+function ltPendingCounts() {
+  let tr = 0, an = 0;
+  for (const m of state.meetings || []) {
+    if (m.status === 'added' || (['failed', 'cancelled'].includes(m.status) && !m.transcript_model)) tr++;
+    else if (m.status === 'completed' && m.has_transcript && !m.has_summary) an++;
+  }
+  return { tr, an };
+}
+
+function syncLibProcessButton() {
+  const b = document.getElementById('lt-process');
+  if (!b) return;
+  const { tr, an } = ltPendingCounts();
+  b.disabled = !(tr || an) || !!LT.processing;
+  b.title = tr || an ? t('ltProcessTip') : t('ltProcessNone');
+}
+
+async function ltPost(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  const data = res ? await readJson(res) : {};
+  if (!res || !res.ok) { showError(res ? errorText(data, res) : t('errorGeneric')); return null; }
+  return data;
+}
+
+async function ltProcessPending() {
+  if (LT.processing) return;
+  LT.processing = true;
+  syncLibProcessButton();
+  try {
+    const plan = await ltPost('/api/library/process-pending', { dry_run: true });
+    if (!plan) return;
+    const tr = Number(plan.transcribe) || 0, an = Number(plan.analyse) || 0;
+    if (!tr && !an) { showWarning(t('ltProcessNone')); return; }
+    const asr = !!document.getElementById('upload-model')?.value;  // a recognition model is downloaded
+    const ai = !!plan.analysis_ready;
+    if ((!tr || !asr) && (!an || !ai)) { showWarning(tr && !asr ? t('noModelInstalled') : t('anNeedModel')); return; }
+    const lines = [];
+    if (tr) lines.push(`${t('ltProcessTr')}: ${tr}${asr ? '' : ` (${t('ltProcessNoAsr')})`}`);
+    if (an) lines.push(`${t('ltProcessAn')}: ${an}${ai ? '' : ` (${t('ltProcessNoAi')})`}`);
+    if (!await confirmDialog(t('ltProcessQ'), lines.join('\n'), t('ltProcessGo'), false)) return;
+    const out = await ltPost('/api/library/process-pending', { transcribe: asr, analyse: ai });
+    if (!out) return;
+    await loadMeetingsList();
+    const done = t('ltProcessDone').replace('{tr}', () => Number(out.transcribe) || 0).replace('{an}', () => Number(out.analyse) || 0);
+    const left = Number(out.analysis_waiting) || 0;
+    showToast(left ? `${done}. ${t('anNeedModel')}` : done, null, left ? 'warning' : 'success');
+  } finally {
+    LT.processing = false;
+    syncLibProcessButton();
+  }
 }
 
 // --- The bar under the title: the filters and the views, or the selection in their place (one height:
@@ -841,6 +981,7 @@ function ltPaintPick() {
     const box = el.querySelector('.lt-cbx');
     if (box) { box.classList.toggle('on', on); box.setAttribute('aria-checked', String(on)); }
   }
+  ltRove();
   renderMeetingsSidebar();
   renderLibTableBar();
 }
@@ -850,6 +991,8 @@ function ltMove(step) {
   const i = LT.ids.indexOf(LT.cur);
   LT.cur = LT.ids[Math.max(0, Math.min(LT.ids.length - 1, i < 0 ? 0 : i + step))];
   if (!document.querySelector(`#lt-body [data-mid="${LT.cur}"]`)) ltRenderMore(LT.cur);  // a row not drawn yet
+  // the focus on a button of the row left: back to the table, so Tab reaches the buttons of the new current row
+  if (document.activeElement?.closest?.('#lt-body [data-mid]')) document.getElementById('lt-scroll')?.focus({ preventScroll: true });
   ltPaintPick();
   document.querySelector(`#lt-body [data-mid="${LT.cur}"]`)?.scrollIntoView({ block: 'nearest' });
 }
@@ -875,6 +1018,22 @@ function ltOpen(id) {
       const c = hc.dataset.col, p = ltPrefs();
       ltSave(p.sort === c ? { dir: p.dir === 'asc' ? 'desc' : 'asc' } : { sort: c, dir: ['name', 'feature', 'people', 'lang', 'model', 'folder'].includes(c) ? 'asc' : 'desc' });
       renderLibTable();
+      return;
+    }
+    // the feature cell and the status's action; with Shift, Ctrl or ⌘ they are a click on their row (the selection).
+    // The menus left open close first (the click goes no further: the document's click would close the feature menu)
+    const fp = e.target.closest('[data-ft-pick]');
+    const act = e.target.closest('[data-st-act]');
+    if ((fp || act) && !(e.ctrlKey || e.metaKey || e.shiftKey)) {
+      e.stopPropagation();
+      closeAllMenus(fp ? VX_LAYERS.find(l => l.name === 'text-menu') : null);
+      if (fp) {
+        // a selected row while several are selected: the feature for all of them, as «Фича» of the selection bar
+        const id = Number(fp.dataset.ftPick);
+        ltFeaturePick(fp, id, state.multi.size > 1 && state.multi.has(id) ? ltSelected() : null);
+      } else {
+        ltStatusDo(act.dataset.stAct, Number(act.dataset.stId));  // this recording only; the selection stays
+      }
       return;
     }
     const hit = e.target.closest('.lt-snip');
@@ -907,11 +1066,22 @@ function ltOpen(id) {
   scroll.addEventListener('pointerdown', () => scroll.classList.remove('lt-kbd'));
   scroll.addEventListener('keydown', (e) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+    // Enter and Space on a button of a row (a status's action, a place found) press that button, not the row
+    if ((e.key === 'Enter' || e.key === ' ') && e.target !== scroll && e.target.closest?.('button')) return;
     if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Home', 'End'].includes(e.key)) scroll.classList.add('lt-kbd');
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ltMove(e.key === 'ArrowDown' ? 1 : -1); }
     else if (e.key === 'Enter' && LT.cur != null) { e.preventDefault(); ltOpen(LT.cur); }
     else if (e.key === ' ' && LT.cur != null) { e.preventDefault(); ltToggle(LT.cur); ltPaintPick(); }
     else if (e.key === 'Escape' && state.multi.size) { e.preventDefault(); clearLibSelection(); }
+    else if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && LT.cur != null) {
+      // the recording's menu from the keyboard: under the current row, the focus in it and back here after
+      e.preventDefault();
+      const row = document.querySelector(`#lt-body [data-mid="${LT.cur}"]`);
+      if (!row) return;
+      const at = row.querySelector('.lt-c-name') || row, r = at.getBoundingClientRect();
+      openRecordingContextMenu({ type: 'keydown', vxKeys: true, vxOpener: document.activeElement, vxAnchor: at, target: row,
+        clientX: r.left, clientY: r.bottom, preventDefault() {}, stopPropagation() {} }, LT.cur);
+    }
     else if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') {
       e.preventDefault();
       state.multi = new Set(LT.ids);
@@ -1004,9 +1174,20 @@ async function ltSetFeatures(list, mode, fid) {
 
 // A feature on all of them, or off all of them when they all have it already
 function ltBulkFeature(e) {
-  const list = ltSelected();
+  ltMenuUnder(e, ltFeatureItems(ltSelected()));
+}
+
+// The same menu for one recording (or the selection it is in), under its «Фича» cell
+function ltFeaturePick(el, id, list) {
+  const m = (state.meetings || []).find(x => x.id === id);
+  if (!m) return;
+  const r = el.getBoundingClientRect();
+  openTextMenuAt(ltFeatureItems(list && list.length ? list : [m]), r.left, r.bottom + 4);
+}
+
+function ltFeatureItems(list) {
   const feats = (state.features || []).slice().sort((a, b) => _libCollator.compare(a.name, b.name));
-  ltMenuUnder(e, [
+  return [
     ...feats.map(f => {
       const all = list.every(m => (m.features || []).includes(f.id));
       return { label: f.name, on: all, run: () => ltSetFeatures(list, all ? 'remove' : 'add', f.id) };
@@ -1022,7 +1203,7 @@ function ltBulkFeature(e) {
       await ltSetFeatures(list, 'add', data.id);
     } },
     { label: t('ltFeatureClear'), disabled: !list.some(m => (m.features || []).length), run: () => ltSetFeatures(list, 'clear') },
-  ]);
+  ];
 }
 
 function ltBulkExport(e) {

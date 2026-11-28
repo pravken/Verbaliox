@@ -190,6 +190,8 @@ async function loadQueue() {
     // a meeting goes on, or the pause after it: its end counted on this clock (the window counts down to it)
     const h = paused.hold || {};
     state.queueHold = { kind: h.kind || '', end: h.kind === 'pause' ? Date.now() + Math.max(0, Number(h.left) || 0) * 1000 : 0 };
+    // «Фоновая обработка»: {kind: "idle"|"schedule", from: "HH:MM"} while the automatic jobs wait (app/queue_window.py)
+    state.queueWindow = paused.window && paused.window.kind ? { kind: paused.window.kind, from: paused.window.from || '' } : null;
     holdTick();
   }
   renderQueuePanel();

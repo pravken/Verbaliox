@@ -20,6 +20,9 @@ a job is running. What the user starts by hand in the queue (a translation, a du
 
 What the user starts by hand (the «Анализ» button, a question) is never held back.
 Settings → «Не мешать на встречах» (analysis_after_meetings, on by default).
+
+Besides a meeting, «Фоновая обработка» (app/queue_window.py, window_hold) may hold the automatic work until the
+computer is free or the schedule begins: the queue and the mix ask both.
 """
 
 import threading
@@ -27,7 +30,7 @@ import time
 import traceback
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 POLL_SEC = 20.0
 QUIET_SEC = 120.0  # without a meeting this long: the next one did not start right after, the analysis can go
@@ -132,19 +135,35 @@ def busy(settings: Optional[Dict[str, str]] = None, cached_calendar: bool = Fals
 
 # --- the recordings to analyse later ---
 def _table(conn) -> None:
-    conn.execute("CREATE TABLE IF NOT EXISTS deferred_analysis (meeting_id INTEGER PRIMARY KEY, since TEXT NOT NULL)")
+    # asked: the user asked for this analysis («Обработать всё», app/pending.py): when the meeting is over it runs
+    # as asked — whatever «Анализ после расшифровки» says, and «Фоновая обработка» does not hold it
+    conn.execute("CREATE TABLE IF NOT EXISTS deferred_analysis (meeting_id INTEGER PRIMARY KEY, since TEXT NOT NULL, "
+                 "asked INTEGER NOT NULL DEFAULT 0)")
+    if "asked" not in {r[1] for r in conn.execute("PRAGMA table_info(deferred_analysis)")}:  # a database of before
+        conn.execute("ALTER TABLE deferred_analysis ADD COLUMN asked INTEGER NOT NULL DEFAULT 0")
 
 
-def defer(meeting_id: int) -> None:
+def defer(meeting_id: int, asked: bool = False) -> None:
+    """Marks the recording to be analysed when the meeting is over; asked stays once given (a mark the
+    automatic analysis made does not take it from the user's own request)."""
     from app.database import _db_lock, get_connection
 
     with _db_lock:
         conn = get_connection()
         _table(conn)
-        conn.execute("INSERT OR IGNORE INTO deferred_analysis (meeting_id, since) VALUES (?, datetime('now'))", (int(meeting_id),))
+        conn.execute("INSERT INTO deferred_analysis (meeting_id, since, asked) VALUES (?, datetime('now'), ?) "
+                     "ON CONFLICT(meeting_id) DO UPDATE SET asked = MAX(asked, excluded.asked)",
+                     (int(meeting_id), 1 if asked else 0))
         conn.commit()
         conn.close()
     print(f"[meeting_guard] meeting {meeting_id}: the analysis waits for the end of the meeting", flush=True)
+
+
+def sent_again(meeting_id: int) -> None:
+    """The recording sent to the queue came back out of it (app/transcriber.park_window_analyses): check() may send
+    it again before the next meeting."""
+    with _lock:
+        _sent.discard(int(meeting_id))
 
 
 def done(meeting_id: int) -> None:
@@ -158,19 +177,26 @@ def done(meeting_id: int) -> None:
         conn.close()
 
 
-def pending() -> List[int]:
-    """The marked recordings that still exist, oldest first (a deleted one is forgotten)."""
+def pending_asked() -> List[Tuple[int, bool]]:
+    """The marked recordings that still exist, oldest first (a deleted one is forgotten), each with whether the
+    user asked for its analysis (defer(asked=True))."""
     from app.database import _db_lock, get_connection
 
     with _db_lock:
         conn = get_connection()
         _table(conn)
-        ids = [int(r[0]) for r in conn.execute(
-            "SELECT d.meeting_id FROM deferred_analysis d JOIN meetings m ON m.id = d.meeting_id ORDER BY d.since, d.meeting_id")]
+        rows = [(int(r[0]), bool(r[1])) for r in conn.execute(
+            "SELECT d.meeting_id, d.asked FROM deferred_analysis d JOIN meetings m ON m.id = d.meeting_id "
+            "ORDER BY d.since, d.meeting_id")]
         conn.execute("DELETE FROM deferred_analysis WHERE meeting_id NOT IN (SELECT id FROM meetings)")
         conn.commit()
         conn.close()
-    return ids
+    return rows
+
+
+def pending() -> List[int]:
+    """The marked recordings that still exist, oldest first."""
+    return [mid for mid, _asked in pending_asked()]
 
 
 # --- the analysis running now ---
@@ -290,15 +316,29 @@ def hold_until(now: Optional[float] = None) -> Optional[float]:
     return None
 
 
+def window_hold(now: Optional[float] = None) -> Dict[str, Any]:
+    """What holds the automatic work besides a meeting («Фоновая обработка», app/queue_window.py):
+    {"kind": "idle"} — until the computer is free; {"kind": "schedule", "from": "HH:MM", "until", "left"} — until
+    the schedule begins; {"kind": "idle", "from", "until", "left"} — either. {} when nothing (or not known).
+    «Только запись» holds everything by itself (app/economy)."""
+    try:
+        from app import queue_window
+
+        return queue_window.hold(now)
+    except Exception:
+        traceback.print_exc()
+        return {}
+
+
 def hold_state(now: Optional[float] = None) -> Dict[str, Any]:
     """What the queue's window says (asked by the user: «ждёт конца встречи» stood under a voice note while no
     meeting went on): {"kind": "meeting", "reason": "recording"|"call"|"calendar", …} while a meeting goes on;
     {"kind": "pause", "until": time, "left": seconds, "reason": what the meeting was} during the pause after
-    it; {} when nothing holds the queue."""
+    it; else what «Фоновая обработка» holds (window_hold: "idle" or "schedule"); {} when nothing holds the queue."""
     now = time.time() if now is None else now
     until = hold_until(now)
     if until is None:
-        return {}
+        return window_hold(now)
     if not until:
         out: Dict[str, Any] = {"kind": "meeting"}
         out.update({("reason" if k == "kind" else k): v for k, v in hold_reason().items()})
@@ -356,11 +396,16 @@ def check(now: Optional[float] = None) -> str:
     if not reason and quiet_for >= QUIET_SEC:
         from app import transcriber
 
-        for meeting_id in pending():
+        window = None
+        for meeting_id, asked in pending_asked():
             with _lock:
                 if meeting_id in _sent:
                     continue
-            if not transcriber.is_job_active(meeting_id) and transcriber.enqueue_analysis_job(meeting_id):
+            if not asked:  # «Фоновая обработка» holds the automatic ones: they stay marked meanwhile
+                window = window_hold(now) if window is None else window
+                if window:
+                    continue
+            if not transcriber.is_job_active(meeting_id) and transcriber.enqueue_analysis_job(meeting_id, asked):
                 with _lock:
                     _sent.add(meeting_id)
     return reason
@@ -402,3 +447,6 @@ def start() -> None:
             return
         _state["started"] = True
     threading.Thread(target=_loop, daemon=True, name="meeting_guard").start()
+    from app import queue_window
+
+    queue_window.start()  # «Фоновая обработка»: the load and the schedule, looked at on a thread of their own
