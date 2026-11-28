@@ -6,6 +6,46 @@ Betas (`vX.Y.Z-beta.N`) show the sections of their coming version.
 Описание каждой версии берётся отсюда в страницу релиза (раздел с её номером): сначала английский, затем
 русский. Бета-версии (`vX.Y.Z-beta.N`) показывают раздел своей будущей версии.
 
+## 0.9.6 — English
+
+
+### Recording of calendar meetings
+
+- **An online meeting is recorded once its call is joined**: a call app or a browser holding the microphone for 8 s,
+  from two minutes before the meeting to its end. A computer woken from sleep at the time of a meeting nobody joined
+  no longer records silence; joined late, the meeting is still recorded. An in-person meeting starts by the clock as
+  before. While it waits, the strip says «Waiting for the call».
+- **A call running past its meeting keeps the recording** until it lets go of the microphone (at most 4 hours past
+  the end in the calendar); the next meeting no longer cuts it and starts a recording of its own.
+- **A stop is respected**: a recording stopped by hand during a meeting is not started again by itself, and ✕ on the
+  strip («Do not record») keeps the meeting from being recorded when its call is joined. A dropped call joined again
+  records again.
+
+### Background processing
+
+- **Settings → General → «Background processing»**: the automatic transcription, analysis and mix of the tracks start
+  at once (as before), when the computer is free, on a schedule (19:00–08:00 by default), or either. «Free» is the
+  load of the other programs below the thresholds (processor and video card, 30 % by default) for 2 minutes; the
+  program's own work, its tools and Ollama do not count. A job running is never interrupted; what is started by hand
+  («Transcribe», «Process all», «Start now», «Mix now») does not wait. The queue window and the recording's card say
+  why the work waits.
+
+### Recordings
+
+- **«Process all»** in the head of «Recordings» queues the transcription of every recording not transcribed and the
+  analysis of every transcribed one without it, after a confirmation with the numbers.
+- **The status and the feature of a row act on hover**: «Transcribe» or «Analyse» on the status, «Choose feature» or
+  «Change feature» in the feature cell; Shift and Ctrl clicks still select rows.
+- **The recording's menu is shorter**: four groups, with «Export ›», «Clips ›» and «More ›» as submenus; it opens under
+  its button from the keyboard and works with the arrow keys.
+
+### Interface
+
+- **«Studio» in the recording button at any time**: «● Record | Studio | ▾» opens the studio without starting a
+  recording.
+- **The meeting strip keeps only what is needed**: the state, the meeting and one action; «Join» only before the call
+  is joined, «Do not record» is the ✕, the queue shows «+N».
+
 ## 0.9.5 — English
 
 
@@ -1438,6 +1478,45 @@ Everything of the 0.6.0 betas (Python 3.11, the audit fixes, the new look), and:
   Speech synthesis. The one GPL package (pykakasi) has left the environment.
 - The synthesis settings have one «Reference adherence» (1–3) instead of Chatterbox's expressiveness and CFG.
 - Dubbing environment: transformers 5.22 closes four vulnerability advisories.
+
+## 0.9.6
+
+
+### Запись встреч из календаря
+
+- **Онлайн-встреча записывается после подключения к звонку**: программа звонка или браузер держат микрофон 8 с, от двух
+  минут до начала встречи до её конца. Компьютер, вышедший из сна во время встречи, к которой никто не подключился, больше
+  не записывает тишину; при опоздании встреча всё равно записывается. Очная встреча начинается по времени, как раньше. Пока
+  запись ждёт, полоса встречи показывает «Ждёт звонка».
+- **Звонок дольше встречи не обрывает запись**: она идёт, пока звонок держит микрофон (не дольше 4 часов после конца по
+  календарю), и следующая встреча больше не прерывает её своей записью.
+- **Остановка учитывается**: запись, остановленная вручную во время встречи, не начинается снова сама, а ✕ в полосе
+  («Не записывать») отменяет автозапись встречи и при подключении к звонку. После обрыва звонка и повторного подключения
+  запись начинается снова.
+
+### Фоновая обработка
+
+- **Настройки → Общие → «Фоновая обработка»**: автоматическая расшифровка, анализ и сведение дорожек запускаются сразу
+  (как раньше), когда компьютер свободен, по расписанию (по умолчанию 19:00–08:00) или в любом из этих случаев.
+  «Свободен» — нагрузка других программ ниже порогов (процессор и видеокарта, по умолчанию 30 %) 2 минуты подряд;
+  работа самой программы, её инструментов и Ollama не учитывается. Начатая задача не прерывается; запущенное вручную
+  («Распознать», «Обработать всё», «Начать сейчас», «Свести сейчас») не ждёт. Окно очереди и карточка записи сообщают,
+  чего ждёт обработка.
+
+### Записи
+
+- **«Обработать всё»** в шапке «Записей» ставит в очередь расшифровку всех нераспознанных записей и анализ всех
+  расшифрованных без анализа — после подтверждения с числами.
+- **Статус и фича строки — действия при наведении**: «Распознать» или «Анализ» на статусе, «Выбрать фичу» или «Изменить
+  фичу» в колонке фичи; щелчок с Shift и Ctrl по-прежнему выбирает строки.
+- **Меню записи короче**: четыре группы, «Экспорт ›», «Нарезка ›» и «Ещё ›» — подменю; с клавиатуры меню открывается под
+  своей кнопкой и работает со стрелками.
+
+### Интерфейс
+
+- **«Студия» в кнопке записи всегда**: «● Запись | Студия | ▾» открывает студию без начала записи.
+- **В полосе встречи — только нужное**: состояние, встреча и одно действие; «Подключиться» — только до подключения к
+  звонку, «Не записывать» — ✕, очередь показывает «+N».
 
 ## 0.9.5
 
