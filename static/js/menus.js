@@ -560,7 +560,14 @@ function vxSubmenus(menu) {
     const { trigger, menu: sub } = vxSub;
     if (!sub || !trigger || !menu.contains(trigger)) return;
     const m = menu.getBoundingClientRect(), r = trigger.getBoundingClientRect();
-    if (r.bottom <= m.top || r.top >= m.bottom) closeSubmenus(); else placeSubmenu(sub, trigger, menu);
+    if (r.bottom <= m.top || r.top >= m.bottom) { closeSubmenus(); return; }
+    placeSubmenu(sub, trigger, menu);
+    // a smooth scroll may end without a last event: the row looked at once more next frame, followed while it moves
+    requestAnimationFrame(() => {
+      if (!follow && vxSub.trigger === trigger && Math.abs(trigger.getBoundingClientRect().top - r.top) > 0.5) {
+        follow = requestAnimationFrame(followRow);
+      }
+    });
   };
   menu.addEventListener('scroll', () => { if (!follow) follow = requestAnimationFrame(followRow); }, { passive: true });
   menu.addEventListener('scrollend', followRow, { passive: true });
