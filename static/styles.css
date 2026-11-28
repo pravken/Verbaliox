@@ -4625,6 +4625,9 @@ button.sc-at:hover { color: var(--accent-text); }
    (reported by the user: a bare round dot was not the button made on the try-on page) */
 .tb-rec-wrap { height: 32px; box-sizing: border-box; border-radius: 8px; }
 .tb-rec-wrap .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { width: auto; height: 30px; gap: 8px; padding: 0 12px; border-radius: 7px 0 0 7px; }
+/* idle, «Студия» beside it: the hover of «Запись» is a rounded patch inside the capsule (asked by the user: its square
+   right edge stood against the rounded chip) */
+.tb-rec-wrap:not(.tb-rec-live) .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) { height: 26px; margin-left: 2px; padding: 0 10px; border-radius: 6px; }
 .tb-rec:not(.tb-rec-on):not(.tb-rec-busy) #tb-rec-label { display: inline; color: #FFD7D3; font-size: var(--fs-ui); font-weight: 600; }
 .tb-rec-wrap .tb-rec-dot { width: 10px; height: 10px; border-radius: 5px; }
 .tb-rec-more { height: 30px; width: 26px; border-radius: 0 7px 7px 0; }
