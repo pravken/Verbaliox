@@ -165,10 +165,12 @@ class OwnLoadTest(unittest.TestCase):
         self.assertEqual(sorted(procstat.descendants(10, parents)), [10, 11, 12])
 
     def test_the_processor_less_the_program(self):
+        # the reading of /proc (cpu_times) is faked: the Windows branch of CpuTracker opens real processes instead
         cpu = {10: 0.0, 11: 0.0, 99: 0.0}
         clock = [1000.0]
         with mock.patch("app.sysinfo._cpu_times", side_effect=[(0, 0), (40, 100)]), \
                 mock.patch("app.procstat.cpu_times", side_effect=lambda pid: (cpu[pid], 1.0) if pid in cpu else None), \
+                mock.patch("app.procstat.sys.platform", "linux"), \
                 mock.patch("app.queue_window.time.monotonic", side_effect=lambda: clock[0]), \
                 mock.patch("os.cpu_count", return_value=4):
             self.assertIsNone(queue_window._cpu_other({10, 11}))  # the first look: nothing to compare
